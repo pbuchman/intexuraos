@@ -205,7 +205,8 @@ describe('prepareExecutionMemoryContext', () => {
       retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: expect.stringContaining('Fix the Auth0 callback route'),
     });
-    expect(result?.topCandidates).toBeDefined();
+    expect(result?.topCandidates).toHaveLength(1);
+    expect(result?.topCandidates?.[0]).toMatchObject({ memoryId: 'mem-low', passedThreshold: false });
     expect(executionMemoryApplicationRepo.create).toHaveBeenCalledWith(expect.objectContaining({
       status: 'no_match',
       queryText: expect.stringContaining('Fix the Auth0 callback route'),
@@ -415,7 +416,8 @@ describe('prepareExecutionMemoryContext', () => {
       retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: expect.stringContaining('Fix the Auth0 callback route'),
     });
-    expect(result?.topCandidates).toBeDefined();
+    expect(result?.topCandidates).toHaveLength(1);
+    expect(result?.topCandidates?.[0]).toMatchObject({ memoryId: 'mem-low', passedThreshold: false });
     expect(logger.warn).toHaveBeenCalledTimes(2);
   });
 
@@ -770,13 +772,13 @@ describe('prepareExecutionMemoryContext', () => {
       });
 
       // Verify topCandidates in return value
-      expect(result?.topCandidates).toBeDefined();
-      expect(result?.topCandidates).toHaveLength(2);
-      expect(result?.topCandidates?.[0]).toMatchObject({
+      const candidates = result?.topCandidates;
+      expect(candidates).toHaveLength(2);
+      expect(candidates?.[0]).toMatchObject({
         memoryId: 'mem-high',
         passedThreshold: true,
       });
-      expect(result?.topCandidates?.[1]).toMatchObject({
+      expect(candidates?.[1]).toMatchObject({
         memoryId: 'mem-low',
         passedThreshold: false,
       });
@@ -832,9 +834,9 @@ describe('prepareExecutionMemoryContext', () => {
       });
 
       expect(result?.status).toBe('none');
-      expect(result?.topCandidates).toBeDefined();
-      expect(result?.topCandidates).toHaveLength(1);
-      expect(result?.topCandidates?.[0]).toMatchObject({
+      const candidates = result?.topCandidates;
+      expect(candidates).toHaveLength(1);
+      expect(candidates?.[0]).toMatchObject({
         memoryId: 'mem-miss',
         passedThreshold: false,
       });

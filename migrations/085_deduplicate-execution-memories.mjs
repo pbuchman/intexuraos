@@ -52,7 +52,9 @@ export async function up(context) {
 
       group.sort((a, b) => b.qualityScore - a.qualityScore);
       const keeper = group[0];
-      console.log(`  [${type}] Keeping "${keeper.title}" (quality=${keeper.qualityScore.toFixed(3)}), suppressing ${group.length - 1} dupes with fingerprint ${fingerprint.slice(0, 12)}...`);
+      console.log(
+        `  [${type}] Keeping "${keeper.title}" (quality=${keeper.qualityScore.toFixed(3)}), suppressing ${group.length - 1} dupes with fingerprint ${fingerprint.slice(0, 12)}...`
+      );
 
       for (let i = 1; i < group.length; i++) {
         batch.update(collection.doc(group[i].id), {
