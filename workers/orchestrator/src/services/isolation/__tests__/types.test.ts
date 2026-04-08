@@ -71,7 +71,7 @@ describe('WORKER_TYPES configuration', () => {
     expect(WORKER_TYPES['openrouter-free'].runtime).toBe('claude');
     expect(WORKER_TYPES['openrouter-free'].apiBaseUrl).toBe('https://openrouter.ai/api');
     expect(WORKER_TYPES['openrouter-free'].apiKeyEnvVar).toBe('OPENROUTER_API_KEY');
-    expect(WORKER_TYPES['openrouter-free'].model).toBe('qwen/qwen3.6-plus:free');
+    expect(WORKER_TYPES['openrouter-free'].model).toBe('google/gemma-4-31b-it:free');
     expect(WORKER_TYPES['openrouter-free'].effort).toBe('high');
     expect(WORKER_TYPES['openrouter-free'].disableExperimentalBetas).toBe(true);
   });
