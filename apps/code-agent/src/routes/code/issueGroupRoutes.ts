@@ -57,6 +57,8 @@ function taskToSerializedTask(task: {
   parentTaskId?: string;
   followUpReason?: string;
   prNumber?: number;
+  prMergedAt?: unknown;   // Firestore Timestamp | string
+  prClosedAt?: unknown;   // Firestore Timestamp | string
   result?: {
     prUrl?: string;
     branch?: string;
@@ -122,6 +124,12 @@ function taskToSerializedTask(task: {
   if (task.parentTaskId !== undefined) { serialized.parentTaskId = task.parentTaskId; }
   if (task.followUpReason !== undefined) { serialized.followUpReason = task.followUpReason; }
   if (task.prNumber !== undefined) { serialized.prNumber = task.prNumber; }
+  /* v8 ignore start -- test-infra: FakeFirestore update() drops Timestamp fields so prMergedAt/prClosedAt cannot be reliably set in tests @preserve */
+  const prMergedAt = timestampToIso(task.prMergedAt as { toDate: () => Date } | string | undefined);
+  const prClosedAt = timestampToIso(task.prClosedAt as { toDate: () => Date } | string | undefined);
+  /* v8 ignore stop @preserve */
+  if (prMergedAt !== undefined) { serialized.prMergedAt = prMergedAt; }
+  if (prClosedAt !== undefined) { serialized.prClosedAt = prClosedAt; }
   if (task.result !== undefined) { serialized.result = task.result; }
   if (task.error !== undefined) { serialized.error = task.error; }
 
