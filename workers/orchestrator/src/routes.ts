@@ -266,6 +266,10 @@ export function registerRoutes(
           reply.status(409).send({ error: error.message });
           return;
         }
+        if (error.type === 'session_expired') {
+          reply.status(410).send({ error: error.message });
+          return;
+        }
         reply.status(500).send({ error: error.message });
         return;
       }
