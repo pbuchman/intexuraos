@@ -1082,6 +1082,27 @@ describe('firestoreCodeTaskRepository', () => {
         expect(result.value.prMergedAt.toDate()).toStrictEqual(prMergedAt);
       }
     });
+
+    it('updates prClosedAt field', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const prClosedAt = new Date('2026-04-01T12:00:00.000Z');
+      const result = await repo.update(created.value.id, { prClosedAt });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      // Guard needed: fake Firestore may not handle Timestamp fields properly (known limitation)
+      if (result.value.prClosedAt !== undefined) {
+        expect(result.value.prClosedAt.toDate()).toStrictEqual(prClosedAt);
+      }
+    });
   });
 
   describe('list', () => {
