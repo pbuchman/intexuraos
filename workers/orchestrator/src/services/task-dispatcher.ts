@@ -24,6 +24,7 @@ import type { ApiKeyValidator } from './api-key-validator.js';
 import type { WorkerAuthProvider, WorkerAuthRegistry } from './worker-auth/index.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { stripDockerHeaders } from './log-formatter.js';
+import { ActivityTimeoutManager } from './activity-timeout-manager.js';
 import {
   type CompletionAgentType,
   type CompletionVerifier,
@@ -61,6 +62,12 @@ const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
 const IMAGE_PULL_TIMEOUT_MS = 900_000; // 15 minutes — image pulls are network-bound
 const CONTAINER_CREATE_TIMEOUT_MS = 120_000; // 2 minutes
 const ZOMBIE_CLEANUP_TIMEOUT_MS = 30_000; // 30s — generous limit for best-effort destroy
+const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes — no output triggers kill+restart
+const MAX_INACTIVITY_RESTARTS = 3; // max consecutive restarts before task is failed
+
+const INACTIVITY_RESTART_PROMPT = `Your previous session became unresponsive (no output for 10 minutes) and was terminated.
+Continue working on the task from where you left off. Review your progress so far and
+resume the next incomplete step.`;
 
 export interface DispatchError {
   type:
@@ -102,6 +109,11 @@ export interface CompletionControlConfig {
   maxAttempts: number;
   verifier: CompletionVerifier;
   preserveWorkerContainers?: boolean;
+  /** Override inactivity timeout settings. Defaults: 10 min timeout, 3 max restarts. */
+  activityTimeout?: {
+    timeoutMs: number;
+    maxRestarts: number;
+  };
 }
 
 export class TaskDispatcher {
@@ -117,6 +129,7 @@ export class TaskDispatcher {
   private readonly completionMaxAttempts: number;
   private readonly completionVerifier: CompletionVerifier;
   private readonly preserveWorkerContainers: boolean;
+  private readonly activityTimeoutManager: ActivityTimeoutManager;
 
   constructor(
     private readonly config: OrchestratorConfig,
@@ -134,6 +147,20 @@ export class TaskDispatcher {
     this.completionMaxAttempts = completionControl.maxAttempts;
     this.completionVerifier = completionControl.verifier;
     this.preserveWorkerContainers = completionControl.preserveWorkerContainers ?? false;
+    /* v8 ignore start -- ts-type: defensive fallback for optional activityTimeout; TypeScript narrows via optional chaining + nullish coalescing @preserve */
+    this.activityTimeoutManager = new ActivityTimeoutManager(
+      {
+        timeoutMs: completionControl.activityTimeout?.timeoutMs ?? INACTIVITY_TIMEOUT_MS,
+        maxRestarts: completionControl.activityTimeout?.maxRestarts ?? MAX_INACTIVITY_RESTARTS,
+        logger,
+      },
+      /* v8 ignore stop @preserve */
+      (taskId) => {
+        void this.handleInactivityRestart(taskId).catch((error: unknown) => {
+          this.logger.error({ taskId, error }, 'Error in inactivity restart handler');
+        });
+      }
+    );
   }
 
   private checkDockerAvailability(): Result<void, DispatchError> | null {
@@ -799,6 +826,9 @@ export class TaskDispatcher {
 
           this.logger.warn({ taskId }, 'Task timeout - killing');
 
+          // Stop inactivity timeout early to prevent restart during hard kill
+          this.activityTimeoutManager.stop(taskId);
+
           // Kill Docker container
           await this.isolation.provider.destroyWorker(taskId);
 
@@ -850,6 +880,121 @@ export class TaskDispatcher {
     }, TASK_TIMEOUT_KILL_MS);
 
     this.activeTasks.set(`${taskId}-kill`, timeout);
+  }
+
+  private async handleInactivityRestart(taskId: string): Promise<void> {
+    // Guard: skip if completion is already in progress
+    if (this.completionInProgress.has(taskId)) {
+      this.logger.debug({ taskId }, 'Inactivity restart skipped: completion already in progress');
+      return;
+    }
+
+    const task = await this.getTask(taskId);
+    /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
+    if (task?.status !== 'running') {
+      return;
+    }
+    /* v8 ignore stop @preserve */
+
+    const canRestart = this.activityTimeoutManager.recordRestart(taskId);
+    if (!canRestart) {
+      // Max consecutive restarts exceeded — fail the task
+      this.activityTimeoutManager.stop(taskId);
+
+      this.appendTaggedTaskLog(
+        taskId,
+        'system',
+        `Inactivity timeout: worker unresponsive after ${String(MAX_INACTIVITY_RESTARTS)} consecutive restarts — failing task`
+      );
+      this.logger.error(
+        { taskId, maxRestarts: MAX_INACTIVITY_RESTARTS },
+        'Max inactivity restarts exceeded — failing task'
+      );
+
+      const result = await this.checkForResult(task);
+      const error: TaskError = {
+        code: 'TASK_INACTIVITY_TIMEOUT',
+        message: `Worker unresponsive after ${String(MAX_INACTIVITY_RESTARTS)} consecutive inactivity restarts`,
+        remediation: { action: 'retry' },
+      };
+      /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
+      await this.finalizeTask(task, 'failed', {
+        ...(result !== undefined && { result }),
+        error,
+      });
+      /* v8 ignore stop @preserve */
+      return;
+    }
+
+    const restartCount = this.activityTimeoutManager.getRestartCount(taskId);
+    // Note: do NOT call stop() here — it would clear the consecutive restart counter.
+    // The counter must persist across restarts. The timer is reset when
+    // startWorkerAttempt() calls activityTimeoutManager.start(), which calls
+    // clearTimer() internally before creating a new timer.
+
+    this.appendTaggedTaskLog(
+      taskId,
+      'system',
+      `Inactivity timeout: no output for ${String(INACTIVITY_TIMEOUT_MS / 1000)}s — killing worker and restarting (restart ${String(restartCount)}/${String(MAX_INACTIVITY_RESTARTS)})`
+    );
+    this.logger.info(
+      { taskId, restartCount, maxRestarts: MAX_INACTIVITY_RESTARTS },
+      'Inactivity restart triggered'
+    );
+
+    try {
+      await this.isolation.provider.destroyWorker(taskId);
+    } catch (destroyError) {
+      this.logger.warn(
+        { taskId, error: destroyError },
+        'Failed to destroy worker for inactivity restart'
+      );
+    }
+    this.appendOrchestratorTaskLog(taskId, 'Worker destroyed for inactivity restart');
+
+    await this.teardownAttempt(taskId, true);
+
+    // Re-fetch to avoid race with completion monitor: if status is no longer
+    // 'running', the task was finalized by another handler and we must bail out.
+    const reloadedTask = await this.getTask(taskId);
+    /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
+    if (reloadedTask?.status !== 'running') {
+      this.logger.debug({ taskId }, 'Inactivity restart bailed out: task no longer running');
+      return;
+    }
+    /* v8 ignore stop @preserve */
+
+    this.appendTaggedTaskLog(taskId, 'prompt', INACTIVITY_RESTART_PROMPT);
+    const startResult = await this.startWorkerAttempt(task, {
+      prompt: INACTIVITY_RESTART_PROMPT,
+      continueSession: true,
+    });
+
+    if (!startResult.ok) {
+      this.logger.error(
+        { taskId, error: startResult.error },
+        'Failed to restart worker after inactivity timeout'
+      );
+      const error: TaskError = {
+        code: 'TASK_INACTIVITY_RESTART_FAILED',
+        message: 'Failed to restart worker after inactivity timeout',
+        remediation: { action: 'retry' },
+      };
+      const result = await this.checkForResult(task);
+      /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
+      await this.finalizeTask(task, 'failed', {
+        ...(result !== undefined && { result }),
+        error,
+      });
+      /* v8 ignore stop @preserve */
+      return;
+    }
+
+    task.containerId = startResult.containerId;
+    task.inactivityRestartCount = (task.inactivityRestartCount ?? 0) + 1;
+    await this.saveTask(task);
+
+    this.appendOrchestratorTaskLog(taskId, `Inactivity restart attempt started: taskId=${taskId}`);
   }
 
   private startCompletionMonitoring(taskId: string): void {
@@ -1861,6 +2006,7 @@ export class TaskDispatcher {
       onLog: (chunk) => {
         const cleaned = stripDockerHeaders(chunk);
         this.lastOutputAt.set(task.taskId, Date.now());
+        this.activityTimeoutManager.touch(task.taskId);
         void this.handleRuntimeEvents(task, runtime.processLogChunk(runtimeAttemptState, cleaned));
       },
       onComplete: (exitCode) => {
@@ -1948,6 +2094,7 @@ export class TaskDispatcher {
           );
         });
 
+      this.activityTimeoutManager.start(task.taskId);
       return { ok: true, containerId: handle.containerId };
     } catch (error) {
       // If the timeout fired but createWorker is still in-flight, it may
@@ -2541,6 +2688,7 @@ export class TaskDispatcher {
         this.activeTasks.delete(key);
       }
     }
+    this.activityTimeoutManager.stop(taskId);
     this.completionInProgress.delete(taskId);
     this.attemptCompletionSignals.delete(taskId);
   }

@@ -98,6 +98,11 @@ export interface Task {
    * Allows startup recovery to restart the accepted resume instead of interrupting it.
    */
   pendingResumeStart?: PendingResumeStart;
+  /**
+   * Total number of inactivity restarts for this task (persisted to Firestore).
+   * Tracks lifetime restarts for observability — never reset.
+   */
+  inactivityRestartCount?: number;
 }
 
 export interface TaskResult {
