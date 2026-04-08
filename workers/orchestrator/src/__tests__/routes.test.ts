@@ -1206,6 +1206,32 @@ describe('Routes', () => {
 
       expect(response.statusCode).toBe(401);
     });
+
+    it('should return 410 for session_expired error', async () => {
+      vi.mocked(dispatcher.sendMessage).mockResolvedValueOnce({
+        ok: false,
+        error: {
+          type: 'session_expired',
+          message:
+            'Session has expired — the worker container was cleaned up. Please start a new session.',
+        },
+      });
+
+      const { headers, body } = createSignedRequest({ message: 'Follow-up' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks/expired-session/message',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(410);
+      expect(response.json()).toEqual({
+        error:
+          'Session has expired — the worker container was cleaned up. Please start a new session.',
+      });
+    });
   });
 
   describe('POST /admin/shutdown', () => {
