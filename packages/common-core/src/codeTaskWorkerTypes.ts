@@ -3,6 +3,7 @@ export const CODE_TASK_WORKER_TYPES = [
   'opus',
   'sonnet',
   'minimax',
+  'mimo-pro',
   'glm',
   'qwen',
   'kimi',

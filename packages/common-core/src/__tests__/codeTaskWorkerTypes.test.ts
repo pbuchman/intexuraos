@@ -5,6 +5,7 @@ const EXPECTED_CODE_TASK_WORKER_TYPES = [
   'opus',
   'sonnet',
   'minimax',
+  'mimo-pro',
   'glm',
   'qwen',
   'kimi',
