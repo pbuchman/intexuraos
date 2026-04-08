@@ -465,14 +465,14 @@ export function generateShareableHtml(input: HtmlGeneratorInput): string {
   <meta property="og:url" content="${escapeHtml(shareUrl)}">
   ${ogImageMeta}
 
-  <link rel="icon" type="image/png" href="${staticAssetsUrl}/branding/exports/icon-dark.png">
+  <link rel="icon" type="image/png" href="${staticAssetsUrl}/branding/icon-dark.png">
 
   <style>${PROSE_STYLES}</style>
 </head>
 <body>
   <div class="container">
     <header>
-      <img src="${staticAssetsUrl}/branding/exports/logo-primary-dark.png" alt="IntexuraOS">
+      <img src="${staticAssetsUrl}/branding/logo-primary-dark.png" alt="IntexuraOS">
       <span>IntexuraOS</span>
     </header>
 
