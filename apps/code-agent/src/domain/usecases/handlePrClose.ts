@@ -146,6 +146,26 @@ export async function handlePrClose(deps: HandlePrCloseDeps, input: HandlePrClos
     }
   }
 
+  // --- Set prClosedAt on discovered tasks (INT-1316) ---
+  if (!isMerged) {
+    const closedAt = new Date(sourceTimestamp);
+    const taskIdsToMark = new Set<string>();
+
+    if (findByPRResult.ok && findByPRResult.value !== null) {
+      taskIdsToMark.add(findByPRResult.value.id);
+    }
+    if (findLatestResult.ok && findLatestResult.value !== null) {
+      taskIdsToMark.add(findLatestResult.value.id);
+    }
+
+    for (const taskId of taskIdsToMark) {
+      void codeTaskRepo.update(taskId, { prClosedAt: closedAt }).catch((updateErr: unknown) => {
+        logger.warn({ taskId, prNumber, error: updateErr },
+          'handlePrClose: failed to set prClosedAt (best-effort)');
+      });
+    }
+  }
+
   // --- Transition / Label Cleanup ---
 
   if (issueMap.size === 0) {
