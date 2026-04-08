@@ -4605,6 +4605,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         if (error.code === 'worker_not_configured') {
           return reply.fail('MISCONFIGURED' as ErrorCode, error.message);
         }
+        if (error.code === 'session_expired') {
+          return reply.fail('SESSION_EXPIRED', error.message);
+        }
         if (error.code === 'worker_unavailable') {
           return reply.fail('WORKER_UNAVAILABLE', error.message);
         }
