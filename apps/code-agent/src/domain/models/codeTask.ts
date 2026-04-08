@@ -114,6 +114,7 @@ export interface ExecutionMemoryContext {
   matchedAt?: Timestamp;
   matchedMemories?: ExecutionMemoryContextMemory[];
   topCandidates?: ExecutionMemoryApplicationCandidate[];
+  totalSearchResults?: number;
   errorCode?: string;
   errorMessage?: string;
 }
