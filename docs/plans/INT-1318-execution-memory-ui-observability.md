@@ -21,7 +21,7 @@
 | Modify   | `apps/web/src/components/code-tasks/TaskHeader.tsx:40-46`                             | Update chip text to show injected/shown counts                        |
 | Modify   | `apps/web/src/__tests__/CodeTaskViewPage.executionMemory.test.tsx`                    | Update tests for new UI structure                                     |
 | Modify   | `apps/web/src/components/code-tasks/__tests__/TaskHeader.executionMemory.test.tsx`    | Update tests for new chip text                                        |
-| Modify   | `apps/code-agent/src/domain/usecases/__tests__/prepareExecutionMemoryContext.test.ts` | Add test for `totalSearchResults` population                          |
+| Modify   | `apps/code-agent/src/__tests__/domain/useCases/prepareExecutionMemoryContext.test.ts` | Add test for `totalSearchResults` population                          |
 
 ---
 
@@ -64,7 +64,7 @@ git commit -m "feat(code-agent): add totalSearchResults to ExecutionMemoryContex
 
 **Files:**
 - Modify: `apps/code-agent/src/domain/usecases/prepareExecutionMemoryContext.ts:172-238`
-- Test: `apps/code-agent/src/domain/usecases/__tests__/prepareExecutionMemoryContext.test.ts`
+- Test: `apps/code-agent/src/__tests__/domain/useCases/prepareExecutionMemoryContext.test.ts`
 
 - [ ] **Step 1: Write a failing test for `totalSearchResults` in the matched path**
 
@@ -150,7 +150,7 @@ Expected: PASS
 
 ```bash
 git add apps/code-agent/src/domain/usecases/prepareExecutionMemoryContext.ts
-git add apps/code-agent/src/domain/usecases/__tests__/prepareExecutionMemoryContext.test.ts
+git add apps/code-agent/src/__tests__/domain/useCases/prepareExecutionMemoryContext.test.ts
 git commit -m "feat(code-agent): populate totalSearchResults from reranked candidate count"
 ```
 
