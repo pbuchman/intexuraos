@@ -37,13 +37,20 @@ export function TaskHeader({ task, workerStatusTag }: TaskHeaderProps): React.JS
   // Runtime guard: Firestore data may contain status values outside the CodeTaskStatus union
   const status = (STATUS_MAP[task.status] as StatusConfig | undefined) ?? { ...FALLBACK_STATUS, label: task.status };
   const StatusIcon = ICON_MAP[status.icon];
-  const executionMemoryChip = task.executionMemoryContext === undefined
-    ? null
-    : task.executionMemoryContext.status === 'matched'
-      ? `Memory: ${String(task.executionMemoryContext.matchedMemories?.length ?? 0)} matches`
-      : task.executionMemoryContext.status === 'none'
-        ? 'Memory: none'
-        : 'Memory: error';
+
+  // Compute execution memory chip text based on status and candidates
+  const getExecutionMemoryChip = (ctx: typeof task.executionMemoryContext): string | null => {
+    if (ctx === undefined) return null;
+    if (ctx.status === 'matched' || ctx.status === 'none') {
+      const candidates = ctx.topCandidates ?? [];
+      const injected = candidates.filter((c) => c.passedThreshold).length;
+      return candidates.length > 0
+        ? `Memory: ${String(injected)} injected, ${String(candidates.length)} shown`
+        : 'Memory: none';
+    }
+    return 'Memory: error';
+  };
+  const executionMemoryChip = getExecutionMemoryChip(task.executionMemoryContext);
 
   const executionMemoryTooltip =
     task.executionMemoryContext?.status === 'error'

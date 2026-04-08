@@ -5,6 +5,7 @@ import { StructuredLogUsageSink } from '@intexuraos/llm-pricing';
 import { z } from 'zod';
 import { stripDockerHeaders } from './log-formatter.js';
 import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
+import type { ExecutionMemoryPromptContext } from '../types/execution-memory.js';
 
 export type CompletionAgentType =
   | 'planning'
@@ -20,6 +21,7 @@ export interface CompletionVerifierInput {
   maxAttempts: number;
   agentType: CompletionAgentType;
   rawLogs: string;
+  executionMemoryContext?: ExecutionMemoryPromptContext;
 }
 
 export interface CompletionVerifierTrace {
@@ -51,6 +53,9 @@ export interface PlanningAgentData {
   has_plan_doc: '0' | '1';
   subtask_urls: string;
   pr_url: string;
+  memory_ids_used: string;
+  memory_ids_rejected: string;
+  memory_usage_summary: string;
   summary: string;
   unclear_clarification: string;
 }
@@ -72,6 +77,9 @@ export interface PullRequestAgentData {
   gh_pr_url: string;
   comments_replied: 'yes' | 'no';
   tracking_comment_id: string;
+  memory_ids_used: string;
+  memory_ids_rejected: string;
+  memory_usage_summary: string;
   summary: string;
 }
 
@@ -81,6 +89,9 @@ export interface ReviewAgentData {
   review_id?: string | undefined;
   review_comments_posted: string;
   review_types: string;
+  memory_ids_used: string;
+  memory_ids_rejected: string;
+  memory_usage_summary: string;
   requirements_tracker_updated: string;
   gh_actions_status: string;
   needs_remediation: string;
@@ -93,6 +104,9 @@ export interface RemediationAgentData {
   agentType: 'remediation';
   outcome: 'implemented' | 'already_completed';
   gh_pr_url: string;
+  memory_ids_used: string;
+  memory_ids_rejected: string;
+  memory_usage_summary: string;
   requires_re_review: string;
   summary: string;
 }
@@ -118,6 +132,9 @@ export const PLANNING_SCHEMA = z
     has_plan_doc: z.enum(['0', '1']),
     subtask_urls: z.string(),
     pr_url: z.string(),
+    memory_ids_used: z.string().optional().default(''),
+    memory_ids_rejected: z.string().optional().default(''),
+    memory_usage_summary: z.string().optional().default(''),
     summary: z.string(),
     unclear_clarification: z.string(),
   })
@@ -146,6 +163,9 @@ export const PULL_REQUEST_SCHEMA = z.object({
   gh_pr_url: z.string(),
   comments_replied: z.enum(['yes', 'no']),
   tracking_comment_id: z.string().min(1),
+  memory_ids_used: z.string().optional().default(''),
+  memory_ids_rejected: z.string().optional().default(''),
+  memory_usage_summary: z.string().optional().default(''),
   summary: z.string(),
 });
 
@@ -159,6 +179,9 @@ export const REVIEW_SCHEMA = z.object({
     .string()
     .regex(/^\d+$/, 'review_comments_posted must be a numeric string'),
   review_types: z.string().trim().min(1, 'review_types must not be empty'),
+  memory_ids_used: z.string().optional().default(''),
+  memory_ids_rejected: z.string().optional().default(''),
+  memory_usage_summary: z.string().optional().default(''),
   requirements_tracker_updated: z.string().optional().default(''),
   gh_actions_status: z.string().optional().default(''),
   needs_remediation: z
@@ -175,6 +198,9 @@ export const REMEDIATION_SCHEMA = z
   .object({
     outcome: z.enum(['implemented', 'already_completed']),
     gh_pr_url: z.string(),
+    memory_ids_used: z.string().optional().default(''),
+    memory_ids_rejected: z.string().optional().default(''),
+    memory_usage_summary: z.string().optional().default(''),
     requires_re_review: z.string().regex(/^[01]$/, 'requires_re_review must be "0" or "1"'),
     summary: z.string(),
   })
@@ -251,11 +277,14 @@ export function buildPlanningPrompt(transcript: string): string {
     '- has_plan_doc: "1" if the agent created a plan document in docs/plans/, "0" otherwise',
     '- subtask_urls: comma-separated Linear issue URLs for all subtasks created (string, empty string if none)',
     '- pr_url: the GitHub Pull Request URL — REQUIRED for "planned" outcome (ALL planned tasks must produce a PR, including simple ones). Empty string ONLY for "unclear" outcome.',
+    '- memory_ids_used: comma-separated injected memory IDs the agent reported using (string, empty string if none)',
+    '- memory_ids_rejected: comma-separated injected memory IDs the agent reported rejecting (string, empty string if none)',
+    '- memory_usage_summary: one-sentence summary of how injected memories influenced the plan, or empty string if none were injected',
     '- summary: concise bullet-point summary (markdown *, max 5-6 points) of what happened — the LLM agent typically states this clearly as a summary block in its final output',
     '- unclear_clarification: required when outcome is "unclear" — the message explaining why; empty string if outcome is "planned"',
     '',
     'Example valid response:',
-    '{"outcome":"planned","superpowers_writing_plans":"used","linear_url":"https://linear.app/pbuchman/issue/INT-631/feature-introduce-github-webhook-agent-ownership-orchestration","is_complex":"1","has_plan_doc":"1","subtask_urls":"https://linear.app/pbuchman/issue/INT-632/subtask-one,https://linear.app/pbuchman/issue/INT-633/subtask-two","pr_url":"https://github.com/pbuchman/intexuraos/pull/944","summary":"* Analyzed task requirements for the GitHub webhook agent ownership feature\\n* Decided on a complex implementation requiring parallel subtasks\\n* Created 5 child issues covering API endpoints, database schema, and test strategy\\n* Produced a plan PR with the full implementation design","unclear_clarification":""}',
+    '{"outcome":"planned","superpowers_writing_plans":"used","linear_url":"https://linear.app/pbuchman/issue/INT-631/feature-introduce-github-webhook-agent-ownership-orchestration","is_complex":"1","has_plan_doc":"1","subtask_urls":"https://linear.app/pbuchman/issue/INT-632/subtask-one,https://linear.app/pbuchman/issue/INT-633/subtask-two","pr_url":"https://github.com/pbuchman/intexuraos/pull/944","memory_ids_used":"mem_142","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the planning memory to keep the implementation split aligned with prior architecture.","summary":"* Analyzed task requirements for the GitHub webhook agent ownership feature\\n* Decided on a complex implementation requiring parallel subtasks\\n* Created 5 child issues covering API endpoints, database schema, and test strategy\\n* Produced a plan PR with the full implementation design","unclear_clarification":""}',
     '',
     'Transcript (last 50 lines):',
     transcript,
@@ -299,10 +328,13 @@ export function buildPullRequestPrompt(transcript: string): string {
     '- gh_pr_url: the GitHub Pull Request URL (string, empty string if not found)',
     '- comments_replied: "yes" if the agent replied to PR comments, "no" otherwise',
     '- tracking_comment_id: the numeric GitHub comment ID from the tracking comment POST response (string, must not be empty)',
+    '- memory_ids_used: comma-separated injected memory IDs the agent reported using (string, empty string if none)',
+    '- memory_ids_rejected: comma-separated injected memory IDs the agent reported rejecting (string, empty string if none)',
+    '- memory_usage_summary: one-sentence summary of how injected memories influenced the PR work, or empty string if none were injected',
     '- summary: concise bullet-point summary (markdown *, max 5-6 points) of what was done — the LLM agent typically states this clearly as a summary block in its final output',
     '',
     'Example valid response:',
-    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","comments_replied":"yes","tracking_comment_id":"2345678","summary":"* Addressed 3 review comments on PR #901\\n* Pushed code changes and CI passed\\n* All reviewer feedback resolved"}',
+    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","comments_replied":"yes","tracking_comment_id":"2345678","memory_ids_used":"mem_142","memory_ids_rejected":"","memory_usage_summary":"Used the injected PR memory to keep the replies aligned with existing workflow expectations.","summary":"* Addressed 3 review comments on PR #901\\n* Pushed code changes and CI passed\\n* All reviewer feedback resolved"}',
     '',
     'Transcript (last 50 lines):',
     transcript,
@@ -321,13 +353,16 @@ export function buildReviewPrompt(transcript: string): string {
     '- review_id: numeric review identifier returned by the single POST /reviews API call (string, omit when not found)',
     '- review_comments_posted: number of review comments posted as a string (e.g., "3")',
     '- review_types: comma-separated list of review types performed (e.g., "code_quality,security")',
+    '- memory_ids_used: comma-separated injected memory IDs the agent reported using (string, empty string if none)',
+    '- memory_ids_rejected: comma-separated injected memory IDs the agent reported rejecting (string, empty string if none)',
+    '- memory_usage_summary: one-sentence summary of how injected memories influenced the review, or empty string if none were injected',
     '- requirements_tracker_updated: "yes" if tracker comment was created/updated, "no" if skipped, empty string if no requirements available',
     '- gh_actions_status: GitHub Actions check result (e.g., "all passed", "2 failed", "pending", "not yet triggered")',
     '- needs_remediation: "0" if the PR is clean or all findings are informational only, "1" if any finding requires code changes',
     '- summary: concise bullet-point summary (markdown *, max 5-6 points) of the review findings — the LLM agent typically states this clearly as a summary block in its final output',
     '',
     'Example valid response:',
-    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","review_id":"321654987","review_comments_posted":"3","review_types":"code_quality,security","requirements_tracker_updated":"yes","gh_actions_status":"all passed","needs_remediation":"1","summary":"* Reviewed PR #901 for code quality and security issues\\n* Found 3 issues: missing null check, unused import, and potential XSS vulnerability\\n* All findings posted as inline review comments"}',
+    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","review_id":"321654987","review_comments_posted":"3","review_types":"code_quality,security","memory_ids_used":"mem_142","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the injected review memory to validate the architecture findings against prior incidents.","requirements_tracker_updated":"yes","gh_actions_status":"all passed","needs_remediation":"1","summary":"* Reviewed PR #901 for code quality and security issues\\n* Found 3 issues: missing null check, unused import, and potential XSS vulnerability\\n* All findings posted as inline review comments"}',
     '',
     'The review_id must be the numeric GitHub review ID created by the single POST /reviews call, not a comment ID. If the transcript does not contain it, omit review_id instead of inventing or blanking it.',
     '',
@@ -346,12 +381,15 @@ export function buildRemediationPrompt(transcript: string): string {
     'Fields:',
     '- outcome: "implemented" if the agent pushed remediation changes, "already_completed" if it determined the findings were already addressed',
     '- gh_pr_url: the GitHub Pull Request URL — REQUIRED for "implemented" outcome. Empty string ONLY for "already_completed" outcome.',
+    '- memory_ids_used: comma-separated injected memory IDs the agent reported using (string, empty string if none)',
+    '- memory_ids_rejected: comma-separated injected memory IDs the agent reported rejecting (string, empty string if none)',
+    '- memory_usage_summary: one-sentence summary of how injected memories influenced the remediation, or empty string if none were injected',
     '- requires_re_review: "1" if the agent decided the PR must be re-reviewed after the changes, "0" otherwise',
     '- summary: concise bullet-point summary (markdown *, max 5-6 points) of the remediation work — the LLM agent typically states this clearly as a summary block in its final output',
     '',
     'Example valid responses:',
-    '{"outcome":"implemented","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","requires_re_review":"1","summary":"* Addressed review findings on the existing PR branch and updated affected tests\\n* Pushed fixes to the PR\\n* Marked for re-review due to changes in reviewed areas"}',
-    '{"outcome":"already_completed","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","requires_re_review":"0","summary":"* Verified reported findings were already resolved on the PR branch\\n* No new code changes or push required"}',
+    '{"outcome":"implemented","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","memory_ids_used":"mem_142","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the remediation memory to keep the fix scoped to the reviewed invariant.","requires_re_review":"1","summary":"* Addressed review findings on the existing PR branch and updated affected tests\\n* Pushed fixes to the PR\\n* Marked for re-review due to changes in reviewed areas"}',
+    '{"outcome":"already_completed","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","memory_ids_used":"","memory_ids_rejected":"mem_188","memory_usage_summary":"Rejected the supplied remediation memory because the fix was already present on the branch.","requires_re_review":"0","summary":"* Verified reported findings were already resolved on the PR branch\\n* No new code changes or push required"}',
     '',
     'Transcript (last 50 lines):',
     transcript,
@@ -451,6 +489,74 @@ function extractAndParseJson(content: string): unknown {
   }
 
   throw new Error('LLM verifier response is not valid JSON');
+}
+
+function normalizeMemoryCsv(value: string): string[] {
+  const trimmed = value.trim();
+  if (trimmed === '' || trimmed.toLowerCase() === 'none') {
+    return [];
+  }
+  return trimmed
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part !== '');
+}
+
+function validateMemoryReporting(
+  rawLogs: string,
+  executionMemoryContext: ExecutionMemoryPromptContext,
+  agentData: {
+    memory_ids_used?: string;
+    memory_ids_rejected?: string;
+    memory_usage_summary?: string;
+  }
+): string[] {
+  const injectedIds = executionMemoryContext.matchedMemories.map((memory) => memory.memoryId);
+  if (injectedIds.length === 0) {
+    return [];
+  }
+
+  const normalizedLogs = stripDockerHeaders(rawLogs);
+  const missingFields: string[] = [];
+  const hasAcknowledgment =
+    normalizedLogs.includes('Execution Memories Received') &&
+    injectedIds.every((memoryId) => normalizedLogs.includes(`[${memoryId}]`));
+  if (!hasAcknowledgment) {
+    missingFields.push('memory_acknowledgment');
+  }
+
+  /* v8 ignore start -- schema: Zod schema defaults always provide strings; helper stays optional for structural typing across agent variants @preserve */
+  const usedIds = normalizeMemoryCsv(agentData.memory_ids_used ?? '');
+  const rejectedIds = normalizeMemoryCsv(agentData.memory_ids_rejected ?? '');
+  const injectedSet = new Set(injectedIds);
+  const usedSet = new Set(usedIds);
+  const rejectedSet = new Set(rejectedIds);
+
+  if ((agentData.memory_usage_summary ?? '').trim() === '') {
+    missingFields.push('memory_usage_summary');
+  }
+  /* v8 ignore stop @preserve */
+
+  if (usedIds.some((memoryId) => !injectedSet.has(memoryId))) {
+    missingFields.push('memory_ids_used_invalid');
+  }
+
+  if (rejectedIds.some((memoryId) => !injectedSet.has(memoryId))) {
+    missingFields.push('memory_ids_rejected_invalid');
+  }
+
+  if (usedIds.some((memoryId) => rejectedSet.has(memoryId))) {
+    missingFields.push('memory_ids_overlap');
+  }
+
+  const unaccountedIds = injectedIds.filter(
+    (memoryId) => !usedSet.has(memoryId) && !rejectedSet.has(memoryId)
+  );
+  if (unaccountedIds.length > 0) {
+    missingFields.push('memory_ids_unaccounted');
+  }
+
+  return missingFields;
 }
 
 export class OrchestratorCompletionVerifier implements CompletionVerifier {
@@ -592,6 +698,27 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     }
 
     const agentData = toAgentData(input.agentType, parseResult.data);
+    const memoryValidationFailures =
+      input.executionMemoryContext !== undefined
+        ? validateMemoryReporting(input.rawLogs, input.executionMemoryContext, agentData)
+        : [];
+    if (memoryValidationFailures.length > 0) {
+      this.logger.warn(
+        {
+          taskId: input.taskId,
+          attempt: input.attempt,
+          model: this.model,
+          memoryValidationFailures,
+        },
+        'Gemini completion verifier memory validation failed'
+      );
+      return {
+        passed: false,
+        missingFields: memoryValidationFailures,
+        verifierFailure: false,
+        trace: { transcript, prompt, response: generated.value.content },
+      };
+    }
 
     this.logger.info(
       {

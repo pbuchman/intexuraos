@@ -170,6 +170,7 @@ export async function prepareExecutionMemoryContext(
   }
 
   const reranked = rerankMemories(nearestResult.value, normalization);
+  const totalSearchResults = reranked.length;
   const matchedMemories = reranked
     .filter((candidate) => candidate.rerankScore >= MIN_RERANK_SCORE)
     .slice(0, MAX_MATCHES);
@@ -215,6 +216,7 @@ export async function prepareExecutionMemoryContext(
       retrievalVersion: RETRIEVAL_VERSION,
       querySummary: normalization.summary,
       topCandidates,
+      totalSearchResults,
     };
   }
 
@@ -224,6 +226,7 @@ export async function prepareExecutionMemoryContext(
     retrievalVersion: RETRIEVAL_VERSION,
     querySummary: normalization.summary,
     topCandidates,
+    totalSearchResults,
     matchedAt: Timestamp.now(),
     matchedMemories: matchedMemories.map((match) => ({
       memoryId: match.memory.id,
