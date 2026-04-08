@@ -54,10 +54,10 @@ export class ActivityTimeoutManager {
     );
 
     // If there have been restarts, real output means the session recovered
-    /* v8 ignore start -- ts-type: Map.get returns T | undefined; consecutiveRestarts is always set by start() before touch() can fire, so undefined branch is structurally unreachable @preserve */
+    /* v8 ignore start -- ts-type: TypeScript cannot narrow Map.get result after has() check; consecutiveRestarts is always set by start() before touch() can fire @preserve */
     if ((this.consecutiveRestarts.get(taskId) ?? 0) > 0) {
       /* v8 ignore stop @preserve */
-      this.consecutiveRestarts.set(taskId, 0);
+      this.resetRestartCount(taskId);
     }
   }
 

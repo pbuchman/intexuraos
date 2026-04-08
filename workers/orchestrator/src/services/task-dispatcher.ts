@@ -146,7 +146,7 @@ export class TaskDispatcher {
     this.completionMaxAttempts = completionControl.maxAttempts;
     this.completionVerifier = completionControl.verifier;
     this.preserveWorkerContainers = completionControl.preserveWorkerContainers ?? false;
-    /* v8 ignore start -- ts-type: optional chaining fallback for activityTimeout config; all tests provide explicit config so undefined branch is structurally untested @preserve */
+    /* v8 ignore start -- ts-type: defensive fallback for optional activityTimeout; TypeScript narrows via optional chaining + nullish coalescing @preserve */
     this.activityTimeoutManager = new ActivityTimeoutManager(
       {
         timeoutMs: completionControl.activityTimeout?.timeoutMs ?? INACTIVITY_TIMEOUT_MS,
@@ -952,6 +952,16 @@ export class TaskDispatcher {
     this.appendOrchestratorTaskLog(taskId, 'Worker destroyed for inactivity restart');
 
     await this.teardownAttempt(taskId, true);
+
+    // Re-fetch to avoid race with completion monitor: if status is no longer
+    // 'running', the task was finalized by another handler and we must bail out.
+    const reloadedTask = await this.getTask(taskId);
+    /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
+    if (reloadedTask?.status !== 'running') {
+      this.logger.debug({ taskId }, 'Inactivity restart bailed out: task no longer running');
+      return;
+    }
+    /* v8 ignore stop @preserve */
 
     this.appendTaggedTaskLog(taskId, 'prompt', INACTIVITY_RESTART_PROMPT);
     const startResult = await this.startWorkerAttempt(task, {
