@@ -90,6 +90,7 @@ export interface IsolationConfig {
     LINEAR_API_KEY: string;
     SENTRY_AUTH_TOKEN: string;
     MINIMAX_API_KEY: string;
+    MIMO_API_KEY: string;
     DASHSCOPE_API_KEY: string;
     OPENROUTER_API_KEY: string;
   };
