@@ -453,6 +453,15 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       });
 
       if (!response.ok) {
+        // HTTP 410 Gone indicates the session has expired - the worker container was cleaned up
+        if (response.status === 410) {
+          const errorText = await response.text().catch(() => 'Session expired');
+          const errorMessage = extractErrorMessage(errorText);
+          return err({
+            code: 'session_expired',
+            message: errorMessage.length > 0 ? errorMessage : 'Session has expired — the worker container was cleaned up.',
+          });
+        }
         // 502/503/504 and Cloudflare 520-530 are transient infrastructure errors
         if (isRetryableInfraStatus(response.status)) {
           return err({
