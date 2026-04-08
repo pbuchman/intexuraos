@@ -30,6 +30,7 @@ export interface WorkerTypeConfig {
   apiKeyEnvVar?:
     | 'ANTHROPIC_API_KEY'
     | 'MINIMAX_API_KEY'
+    | 'MIMO_API_KEY'
     | 'DASHSCOPE_API_KEY'
     | 'OPENROUTER_API_KEY';
   model?: string;
@@ -61,6 +62,12 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     apiBaseUrl: 'https://api.minimax.io/anthropic',
     apiKeyEnvVar: 'MINIMAX_API_KEY',
     model: 'MiniMax-M2.7',
+  },
+  'mimo-pro': {
+    runtime: 'claude',
+    apiBaseUrl: 'https://token-plan-sgp.xiaomimimo.com/anthropic',
+    apiKeyEnvVar: 'MIMO_API_KEY',
+    model: 'mimo-v2-pro',
   },
   glm: {
     runtime: 'claude',
@@ -104,6 +111,7 @@ export interface WorkerSecrets {
   LINEAR_API_KEY: string;
   SENTRY_AUTH_TOKEN: string;
   MINIMAX_API_KEY: string;
+  MIMO_API_KEY: string;
   DASHSCOPE_API_KEY: string;
   OPENROUTER_API_KEY: string;
 }
