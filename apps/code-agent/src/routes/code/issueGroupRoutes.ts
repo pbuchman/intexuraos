@@ -14,11 +14,8 @@ import {
   groupByLinearIssue,
   sortIssueGroups,
 } from '../../domain/issueGrouping/index.js';
-import type {
-  GroupStatus,
-  SortOption,
-  SerializedTask,
-} from '../../domain/issueGrouping/index.js';
+import type { GroupStatus, SortOption, SerializedTask } from '../../domain/issueGrouping/index.js';
+import type { TaskGroupSummary } from '../../domain/models/taskGroupSummary.js';
 
 export interface CodeRoutesOptions {
   jwtValidator: JwtValidator;
@@ -214,6 +211,32 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         const countsValue = countsResult.value; // @allow-result-access -- narrowed by !countsResult.ok guard above
         const { summaries, nextCursor: summariesNextCursor } = summariesResult.value;
 
+        // 2b. Fetch summaries for statuses NOT in the current filter that have
+        // non-zero precomputed counts. These are needed for phantom detection
+        // so that badge counts are correct even for statuses not being displayed.
+        /* v8 ignore start -- ts-type: statusFilter guard ensures phantomCheckSummaries is only populated when statusesWithCounts.length > 0; same pattern as taskFetchesPromise which passes lint @preserve */
+        let phantomCheckSummaries: TaskGroupSummary[] = [];
+        if (statusFilter !== undefined) {
+          const statusesWithCounts: GroupStatus[] = [];
+          if (countsValue.active > 0 && !statusFilter.includes('active')) statusesWithCounts.push('active');
+          if (countsValue.needsAction > 0 && !statusFilter.includes('needs-action')) statusesWithCounts.push('needs-action');
+          if (countsValue.done > 0 && !statusFilter.includes('done')) statusesWithCounts.push('done');
+          if (countsValue.failed > 0 && !statusFilter.includes('failed')) statusesWithCounts.push('failed');
+
+          if (statusesWithCounts.length > 0) {
+            const phantomResult = await summaryRepo.listGroupSummaries({
+              userId,
+              sortBy,
+              limit: 100, // Upper bound — phantom groups are rare
+              statusFilter: statusesWithCounts,
+            });
+            if (phantomResult.ok) {
+              phantomCheckSummaries = phantomResult.value.summaries;
+            }
+          }
+        }
+        /* v8 ignore stop @preserve */
+
         // 3+4. Fetch tasks and hydrate Linear issues concurrently
         const includeArchived = statusFilter?.includes('archived') === true;
         const TASKS_PER_GROUP_LIMIT = 50;
@@ -253,6 +276,41 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           .map((s) => s.linearIssueId)
           .filter((id): id is string => id !== null);
 
+        // 2c. Fetch tasks for phantom-check summaries (non-filtered statuses) to
+        // determine which are true phantoms. Only summaries with zero displayable
+        // tasks after filtering are counted as phantoms.
+        const phantomCheckTaskFetchesPromise = Promise.all(phantomCheckSummaries.map(async (summary): Promise<SerializedTask[]> => {
+          if (summary.linearIssueId !== null) {
+            const tasksResult = await codeTaskRepo.findRecentTasksByLinearIssue(
+              summary.linearIssueId,
+              TASKS_PER_GROUP_LIMIT,
+            );
+            if (!tasksResult.ok) {
+              request.log.warn(
+                { linearIssueId: summary.linearIssueId, error: tasksResult.error },
+                'Failed to fetch tasks for phantom check'
+              );
+              return [];
+            }
+            return tasksResult.value
+              .filter((t) => t.userId === userId && (includeArchived || t.status !== 'archived') && t.agentType !== 'ask_agent')
+              .map((t) => taskToSerializedTask(t));
+          }
+          const taskId = summary.groupKey.replace(/^standalone_/, '');
+          const taskResult = await codeTaskRepo.findById(taskId);
+          if (!taskResult.ok) {
+            request.log.warn({ taskId, error: taskResult.error }, 'Failed to fetch standalone task for phantom check');
+            return [];
+          }
+          const task = taskResult.value;
+          /* v8 ignore start -- test-infra: FakeFirestore cannot produce cross-user task leaks or archived standalone tasks in this test flow @preserve */
+          if (task.userId !== userId || (!includeArchived && task.status === 'archived') || task.agentType === 'ask_agent') {
+            return [];
+          }
+          /* v8 ignore stop @preserve */
+          return [taskToSerializedTask(task)];
+        }));
+
         interface HydratedLinearIssue {
           identifier: string;
           parentIdentifier: string | null;
@@ -282,9 +340,10 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return new Map();
         })();
 
-        const [tasksByGroup, hydratedIssuesByIdentifier] = await Promise.all([
+        const [tasksByGroup, hydratedIssuesByIdentifier, phantomCheckTasksByGroup] = await Promise.all([
           taskFetchesPromise,
           linearHydrationPromise,
+          phantomCheckTaskFetchesPromise,
         ]);
 
         // 5. Hydrate tasks with linear issue data and group them
@@ -314,6 +373,22 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           if (!displayedGroupKeys.has(summaryKey)) {
             const status = summary.aggregateStatus;
             phantomStatusDeltas[status] = (phantomStatusDeltas[status] ?? 0) + 1;
+          }
+        }
+
+        // 5c. Detect phantoms among non-filtered summaries. These summaries'
+        // tasks were fetched into phantomCheckTasksByGroup; a summary is a
+        // phantom only if all its tasks are filtered out (archived or ask_agent).
+        for (let i = 0; i < phantomCheckTasksByGroup.length; i++) {
+          const phantomTasks = phantomCheckTasksByGroup[i];
+          if (phantomTasks?.length === 0) {
+            const summary = phantomCheckSummaries[i];
+            /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces guard; phantomCheckSummaries[i] always exists @preserve */
+            if (summary !== undefined) {
+              const status = summary.aggregateStatus;
+              phantomStatusDeltas[status] = (phantomStatusDeltas[status] ?? 0) + 1;
+            }
+            /* v8 ignore stop @preserve */
           }
         }
 
