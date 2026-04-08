@@ -128,6 +128,25 @@ const executionMemoryContextSchema = {
         required: ['memoryId', 'title', 'memoryType', 'score', 'appliesWhen', 'action', 'avoid', 'verification'],
       },
     },
+    topCandidates: {
+      type: 'array',
+      nullable: true,
+      items: {
+        type: 'object',
+        properties: {
+          memoryId: { type: 'string' },
+          title: { type: 'string' },
+          memoryType: { type: 'string', enum: ['implementation_pattern', 'verification_pattern', 'pitfall_pattern', 'decomposition_pattern', 'planning_decision', 'review_finding'] },
+          vectorScore: { type: 'number' },
+          rerankScore: { type: 'number' },
+          componentOverlap: { type: 'number' },
+          effectiveness: { type: 'number' },
+          passedThreshold: { type: 'boolean' },
+        },
+        required: ['memoryId', 'title', 'memoryType', 'vectorScore', 'rerankScore', 'componentOverlap', 'effectiveness', 'passedThreshold'],
+      },
+    },
+    totalSearchResults: { type: 'number', nullable: true },
     errorCode: { type: 'string', nullable: true },
     errorMessage: { type: 'string', nullable: true },
   },
@@ -382,6 +401,17 @@ function taskToApiResponse(task: {
       avoid: string;
       verification: string;
     }[];
+    topCandidates?: {
+      memoryId: string;
+      title: string;
+      memoryType: ExecutionMemoryType;
+      vectorScore: number;
+      rerankScore: number;
+      componentOverlap: number;
+      effectiveness: number;
+      passedThreshold: boolean;
+    }[];
+    totalSearchResults?: number;
     errorCode?: string;
     errorMessage?: string;
   };
