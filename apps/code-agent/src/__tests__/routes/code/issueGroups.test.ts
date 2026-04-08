@@ -2181,5 +2181,94 @@ describe('GET /code/issue-groups', () => {
       expect(body.data.counts['done']).toBe(0);
       expect(body.data.groups).toHaveLength(0);
     });
+
+    it('correctly returns standalone task when findById succeeds', async () => {
+      // Standalone summary with valid task that exists → findById returns ok(task) → success path
+      const standaloneTaskId = 'standalone-success-task';
+
+      const standaloneSummary: TaskGroupSummary = {
+        userId: 'test-user-id',
+        linearIssueId: null,
+        groupKey: `standalone_${standaloneTaskId}`,
+        taskCount: 1,
+        activeTaskCount: 1,
+        latestTaskStatus: 'implemented',
+        latestTaskUpdatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
+        agentTypesPresent: ['execution'],
+        hasCompletedPlanning: false,
+        hasCompletedExecution: false,
+        hasCompletedExecutionAgent: false,
+        hasImplementationTaskId: false,
+        hasPrUrl: false,
+        prNumber: null,
+        latestReviewNeedsRemediation: null,
+        oldestTaskCreatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
+        mostRecentDispatchedAt: null,
+        aggregateStatus: 'done',
+        updatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
+      };
+
+      mockCounts = { ...mockCounts, done: 1, totalGroups: 1 };
+
+      const mockTask = {
+        id: standaloneTaskId,
+        traceId: 'trace-123',
+        userId: 'test-user-id',
+        workerType: 'sonnet' as const,
+        workerLocation: 'test-loc',
+        status: 'implemented' as const,
+        prompt: 'test prompt',
+        sanitizedPrompt: 'test prompt',
+        systemPromptHash: 'hash',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        callbackReceived: false,
+        dedupKey: 'dedup',
+        createdAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
+        updatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
+        agentType: 'execution' as const,
+      };
+
+      const successfulCodeTaskRepo: CodeTaskRepository = {
+        ...codeTaskRepo,
+        findById: async (taskId: string) => {
+          if (taskId === standaloneTaskId) {
+            return ok(mockTask);
+          }
+          return err({ code: 'NOT_FOUND' as const, message: 'Task not found' });
+        },
+      };
+
+      const summaryRepo = makeGroupSummaryRepo({
+        getUserGroupCounts: async () => ok(mockCounts),
+        listGroupSummaries: async (input) => {
+          if (input.statusFilter?.includes('done') === true) {
+            return ok({ summaries: [standaloneSummary] });
+          }
+          return ok({ summaries: [] });
+        },
+      });
+
+      setServices(makeBaseServices({
+        codeTaskRepo: successfulCodeTaskRepo,
+        groupSummaryRepo: summaryRepo,
+      }));
+      await server.close();
+      server = await buildServer();
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/issue-groups?groupStatus=active,needs-action,failed',
+        headers: { authorization: 'Bearer test-jwt' },
+      });
+
+      // Success path: task exists and passes filters → included in groups
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload) as {
+        data: { groups: unknown[]; counts: Record<string, number>; totalGroups: number };
+      };
+      // Task is not a phantom (it exists), so done count stays at 1
+      expect(body.data.counts['done']).toBe(1);
+    });
   });
 });
