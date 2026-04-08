@@ -93,7 +93,7 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     runtime: 'claude',
     apiBaseUrl: 'https://openrouter.ai/api',
     apiKeyEnvVar: 'OPENROUTER_API_KEY',
-    model: 'qwen/qwen3.6-plus:free',
+    model: 'google/gemma-4-31b-it:free',
     effort: 'high',
     disableExperimentalBetas: true,
   },
