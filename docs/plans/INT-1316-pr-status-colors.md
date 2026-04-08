@@ -14,7 +14,7 @@
 
 | PR State      | When                                       | Background                            | Text                                   | Border                                           | GitHub Analog        |
 | ------------- | ------------------------------------------ | ------------------------------------- | -------------------------------------- | ------------------------------------------------ | -------------------- |
-| **mergeable** | Merge button shown (solid green)           | `bg-green-600`                        | `text-white`                           | none                                             | Green "Merge" button |
+| **mergeable** | Merge button shown (solid green)           | `bg-green-500/10`                     | `text-green-600`                       | `border-green-500/30`                            | Green "Merge" button |
 | **open**      | PR exists, no merge action                 | `bg-green-100 dark:bg-green-900/30`   | `text-green-700 dark:text-green-400`   | `border-green-300/50 dark:border-green-600/30`   | Green open badge     |
 | **merged**    | PR was merged (`prMergedAt` set)           | `bg-purple-100 dark:bg-purple-900/30` | `text-purple-700 dark:text-purple-400` | `border-purple-300/50 dark:border-purple-600/30` | Purple merged badge  |
 | **closed**    | PR closed without merge (`prClosedAt` set) | `bg-red-100 dark:bg-red-900/30`       | `text-red-700 dark:text-red-400`       | `border-red-300/50 dark:border-red-600/30`       | Red closed badge     |
@@ -34,7 +34,7 @@
 | `apps/web/src/types/issueGroups.ts`                                             | Modify   | Add `status` to frontend `PipelineState.pr` type                                      |
 | `apps/web/src/components/code-tasks/IssueGroupRow.tsx`                          | Modify   | Apply status-based CSS classes to PR badge                                            |
 | `apps/code-agent/src/__tests__/domain/issueGrouping/groupByLinearIssue.test.ts` | Modify   | Add tests for `pr.status` derivation                                                  |
-| `apps/code-agent/src/__tests__/domain/usecases/handlePrClose.test.ts`           | Modify   | Add test for `prClosedAt`                                                             |
+| `apps/code-agent/src/__tests__/domain/useCases/handlePrClose.test.ts`           | Modify   | Add test for `prClosedAt`                                                             |
 | `apps/code-agent/src/__tests__/routes/code/issueGroups.test.ts`                 | Modify   | Add test for serialized `prMergedAt`/`prClosedAt`                                     |
 
 ## Endpoint Changes
@@ -54,7 +54,7 @@
 
 - [ ] **Step 1: Write failing test for `handlePrClose` setting `prClosedAt`**
 
-Open `apps/code-agent/src/__tests__/domain/usecases/handlePrClose.test.ts` and add a test case that verifies when `isMerged` is `false`, the `prClosedAt` field is set on discovered tasks. Follow the existing test pattern for `prMergedAt`.
+Open `apps/code-agent/src/__tests__/domain/useCases/handlePrClose.test.ts` and add a test case that verifies when `isMerged` is `false`, the `prClosedAt` field is set on discovered tasks. Follow the existing test pattern for `prMergedAt`.
 
 ```typescript
 it('sets prClosedAt on discovered tasks when PR is closed without merge', async () => {
@@ -121,7 +121,7 @@ Expected: PASS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/models/codeTask.ts apps/code-agent/src/domain/repositories/codeTaskRepository.ts apps/code-agent/src/domain/usecases/handlePrClose.ts apps/code-agent/src/__tests__/domain/usecases/handlePrClose.test.ts
+git add apps/code-agent/src/domain/models/codeTask.ts apps/code-agent/src/domain/repositories/codeTaskRepository.ts apps/code-agent/src/domain/usecases/handlePrClose.ts apps/code-agent/src/__tests__/domain/useCases/handlePrClose.test.ts
 git commit -m "feat(code-agent): add prClosedAt tracking for closed PRs (INT-1316)"
 ```
 
@@ -192,12 +192,12 @@ In `apps/code-agent/src/routes/code/issueGroupRoutes.ts`:
 2. Add serialization logic after the `prNumber` line (line 124), inside the optional-field block:
 
 ```typescript
-  /* v8 ignore start -- test-infra: FakeFirestore update() drops Timestamp fields (isFieldValueDelete matches Timestamp.isEqual) so prMergedAt/prClosedAt cannot be reliably set in tests @preserve */
+  /* v8 ignore start -- test-infra: FakeFirestore update() drops Timestamp fields so prMergedAt/prClosedAt cannot be reliably set in tests @preserve */
   const prMergedAt = timestampToIso(task.prMergedAt as { toDate: () => Date } | string | undefined);
   const prClosedAt = timestampToIso(task.prClosedAt as { toDate: () => Date } | string | undefined);
+  /* v8 ignore stop @preserve */
   if (prMergedAt !== undefined) { serialized.prMergedAt = prMergedAt; }
   if (prClosedAt !== undefined) { serialized.prClosedAt = prClosedAt; }
-  /* v8 ignore stop @preserve */
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -382,7 +382,7 @@ function getPrBadgeClasses(status: 'open' | 'merged' | 'closed' | 'mergeable'): 
     case 'open':
       return 'border border-green-300/50 bg-green-100 text-green-700 hover:bg-green-200 dark:border-green-600/30 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50';
     case 'mergeable':
-      return 'border border-green-500/30 bg-green-500/10 text-green-600 hover:bg-green-500/20 dark:text-green-400';
+      return 'border border-green-500/30 bg-green-500/10 text-green-600 hover:bg-green-500/20 dark:bg-green-500/20 dark:border-green-500/30 dark:text-green-400';
   }
 }
 ```
@@ -436,6 +436,6 @@ If CI fails, read the output carefully and fix. Common issues:
 - [ ] **Step 4: Final commit if needed**
 
 ```bash
-git add -A
+git add apps/code-agent/src/domain/models/codeTask.ts apps/code-agent/src/domain/repositories/codeTaskRepository.ts apps/code-agent/src/domain/usecases/handlePrClose.ts apps/code-agent/src/__tests__/domain/useCases/handlePrClose.test.ts apps/code-agent/src/domain/issueGrouping/types.ts apps/code-agent/src/routes/code/issueGroupRoutes.ts apps/code-agent/src/__tests__/routes/code/issueGroups.test.ts apps/code-agent/src/domain/issueGrouping/groupByLinearIssue.ts apps/code-agent/src/__tests__/domain/issueGrouping/groupByLinearIssue.test.ts apps/web/src/types/issueGroups.ts apps/web/src/components/code-tasks/IssueGroupRow.tsx
 git commit -m "fix: address CI feedback for PR status colors (INT-1316)"
 ```
