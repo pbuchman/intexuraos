@@ -330,6 +330,9 @@ describe('TaskDispatcher', () => {
             has_plan_doc: '0',
             subtask_urls: '',
             pr_url: '',
+            memory_ids_used: '',
+            memory_ids_rejected: '',
+            memory_usage_summary: '',
             summary: 'Task completed',
             unclear_clarification: '',
           },
@@ -1182,6 +1185,56 @@ describe('TaskDispatcher', () => {
       const task = await dispatcher.getTask('test-task-execution-memory-context');
       expect(task?.executionMemoryContext).toEqual(request.executionMemoryContext);
     });
+
+    it('passes executionMemoryContext into completion verification when present', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        executionFinalAssistantLog()
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'task-verify-memory-context',
+        workerType: 'auto',
+        prompt: 'Use execution memory during completion verification',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        agentType: 'execution',
+        executionMemoryContext: {
+          applicationId: 'app-123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Route logging and verification',
+          matchedMemories: [
+            {
+              memoryId: 'mem-1',
+              title: 'Verify route serialization',
+              memoryType: 'verification_pattern',
+              score: 0.91,
+              appliesWhen: 'Route schema changes',
+              action: 'Add app.inject coverage',
+              avoid: 'Do not skip serialization',
+              verification: 'Check task detail response shape',
+            },
+          ],
+        },
+      };
+
+      await dispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(singleAttemptCompletionControl.verifier.verify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-verify-memory-context',
+          executionMemoryContext: request.executionMemoryContext,
+        })
+      );
+
+      vi.useRealTimers();
+    });
   });
 
   describe('Error handling edge cases', () => {
@@ -1705,6 +1758,9 @@ describe('TaskDispatcher', () => {
           agentType: 'remediation',
           outcome: 'implemented',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           requires_re_review: '1',
           summary: 'Remediation completed',
         },
@@ -1952,6 +2008,9 @@ describe('TaskDispatcher', () => {
           is_complex: '0',
           subtask_urls: '',
           pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Task completed',
           unclear_clarification: '',
           has_plan_doc: '0',
@@ -1999,6 +2058,9 @@ describe('TaskDispatcher', () => {
           is_complex: '0',
           subtask_urls: '',
           pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Task completed',
           unclear_clarification: '',
           has_plan_doc: '0',
@@ -2058,6 +2120,9 @@ describe('TaskDispatcher', () => {
           is_complex: '0',
           subtask_urls: '',
           pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Task completed',
           unclear_clarification: '',
           has_plan_doc: '0',
@@ -2102,6 +2167,9 @@ describe('TaskDispatcher', () => {
           is_complex: '0',
           subtask_urls: '',
           pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Task completed',
           unclear_clarification: '',
           has_plan_doc: '0',
@@ -2181,6 +2249,45 @@ describe('TaskDispatcher', () => {
         trace: dummyTrace,
       });
       expect(result).toEqual(gitResult);
+    });
+
+    it('buildResultFromVerification carries shared memory reporting for remediation tasks', () => {
+      const internal = agentDispatcher as unknown as {
+        buildResultFromVerification: (
+          task: Task,
+          gitResult: TaskResult | undefined,
+          verification: CompletionVerifierVerdict
+        ) => TaskResult;
+      };
+      const fakeTask = { taskId: 'remediation-memory', linearIssueLabels: [] } as unknown as Task;
+      const gitResult: TaskResult = { branch: 'task/remediation-memory' };
+      const result = internal.buildResultFromVerification(fakeTask, gitResult, {
+        agentData: {
+          agentType: 'remediation',
+          outcome: 'implemented',
+          gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
+          memory_ids_used: 'mem_142',
+          memory_ids_rejected: 'mem_188',
+          memory_usage_summary: 'Used remediation memory to keep the fix scoped.',
+          requires_re_review: '1',
+          summary: 'Done.',
+        },
+        passed: true,
+        missingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+
+      expect(result).toMatchObject({
+        branch: 'task/remediation-memory',
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/123',
+        execution_outcome_label: 'implemented',
+        execution_memory_ids_used: 'mem_142',
+        execution_memory_ids_rejected: 'mem_188',
+        execution_memory_usage_summary: 'Used remediation memory to keep the fix scoped.',
+        requires_re_review: '1',
+        summary: 'Done.',
+      });
     });
 
     it('finalizeTask skips lifecycle event when finalStatus is not completed/failed/interrupted', async () => {
@@ -5003,6 +5110,9 @@ describe('TaskDispatcher', () => {
           has_plan_doc: '0',
           subtask_urls: '',
           pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Planned',
           unclear_clarification: '',
         },
