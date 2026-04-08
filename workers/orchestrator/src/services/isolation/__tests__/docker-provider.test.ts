@@ -185,6 +185,7 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
     LINEAR_API_KEY: 'test-linear-key',
     SENTRY_AUTH_TOKEN: 'test-sentry-token',
     MINIMAX_API_KEY: 'test-minimax-key',
+    MIMO_API_KEY: 'test-mimo-key',
     DASHSCOPE_API_KEY: 'test-dashscope-key',
     OPENROUTER_API_KEY: 'test-openrouter-key',
   },

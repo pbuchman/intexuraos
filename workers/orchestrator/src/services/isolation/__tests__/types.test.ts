@@ -82,6 +82,7 @@ describe('WORKER_TYPES configuration', () => {
       'LINEAR_API_KEY',
       'SENTRY_AUTH_TOKEN',
       'MINIMAX_API_KEY',
+      'MIMO_API_KEY',
       'DASHSCOPE_API_KEY',
       'OPENROUTER_API_KEY',
     ]);
