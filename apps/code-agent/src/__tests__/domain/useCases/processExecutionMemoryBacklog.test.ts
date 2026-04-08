@@ -1194,6 +1194,65 @@ describe('processExecutionMemoryBacklog', () => {
     expect(executionMemoryRepo.create).not.toHaveBeenCalled();
   });
 
+  it('merges near-duplicate with vectorScore 0.90 (above lowered 0.88 threshold)', async () => {
+    const distillation = ok({
+      content: JSON.stringify({
+        decision: 'create',
+        evidenceSummary: 'Learned a reusable verification pattern.',
+        memories: [
+          {
+            memoryType: 'verification_pattern',
+            title: 'New near-dup memory',
+            appliesWhen: 'route changes',
+            action: 'add tests',
+            avoid: 'skip tests',
+            verification: 'run route tests',
+            evidenceSummary: 'evidence',
+            retrievalText: 'near dup memory text',
+            keywords: [],
+            componentHints: [],
+            confidence: 0.85,
+          },
+        ],
+      }),
+    });
+    distillerClient.generate.mockResolvedValue(distillation);
+    embeddingClient.embed.mockResolvedValueOnce(ok([0.5, 0.6]));
+    executionMemoryRepo.findByFingerprint.mockResolvedValueOnce(ok(null));
+    executionMemoryRepo.findNearest.mockResolvedValueOnce(ok([
+      {
+        ...createMemory({ id: 'mem-near-dup', applicationCount: 2, positiveCount: 1 }),
+        vectorScore: 0.90,
+      },
+    ]));
+    executionMemoryRepo.update.mockResolvedValue(ok(createMemory({ id: 'mem-near-dup' })));
+
+    const result = await processExecutionMemoryBacklogTestables.processOneTask(
+      createTask({
+        executionMemoryContext: { status: 'none' },
+      }),
+      {
+        logger,
+        codeTaskRepo: codeTaskRepo as never,
+        logLineRepo: logLineRepo as never,
+        turnMetricsRepo: turnMetricsRepo as never,
+        linearAgentClient: linearAgentClient as never,
+        executionMemoryRepo: executionMemoryRepo as never,
+        executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+        distillerClient: distillerClient as never,
+        embeddingClient: embeddingClient as never,
+        limit: 10,
+      }
+    );
+
+    expect(result.generatedMemoryIds).toEqual(['mem-near-dup']);
+    expect(executionMemoryRepo.update).toHaveBeenCalledWith('mem-near-dup', expect.objectContaining({
+      title: 'New near-dup memory',
+      sourceTaskId: 'task-1',
+    }));
+    expect(executionMemoryRepo.create).not.toHaveBeenCalled();
+  });
+
   it('covers skip branches and dependency failures inside processOneTask', async () => {
     await expect(
       processExecutionMemoryBacklogTestables.processOneTask(
