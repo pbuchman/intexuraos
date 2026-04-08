@@ -35,9 +35,9 @@ describe('generateShareableHtml', () => {
     const html = generateShareableHtml(baseInput);
 
     expect(html).toContain(
-      'https://storage.googleapis.com/bucket/branding/exports/logo-primary-dark.png'
+      'https://storage.googleapis.com/bucket/branding/logo-primary-dark.png'
     );
-    expect(html).toContain('https://storage.googleapis.com/bucket/branding/exports/icon-dark.png');
+    expect(html).toContain('https://storage.googleapis.com/bucket/branding/icon-dark.png');
   });
 
   it('escapes HTML in title', () => {
