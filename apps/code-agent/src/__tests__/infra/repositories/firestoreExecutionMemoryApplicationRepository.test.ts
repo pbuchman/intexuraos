@@ -44,6 +44,16 @@ describe('firestoreExecutionMemoryApplicationRepository', () => {
     status: 'matched';
     memoryIdsUsed: string[];
     memoryIdsRejected: string[];
+    topCandidates: {
+      memoryId: string;
+      title: string;
+      memoryType: 'pitfall_pattern';
+      vectorScore: number;
+      rerankScore: number;
+      componentOverlap: number;
+      effectiveness: number;
+      passedThreshold: boolean;
+    }[];
   } => ({
     taskId: 'task-123',
     repository: 'pbuchman/intexuraos',
@@ -65,6 +75,18 @@ describe('firestoreExecutionMemoryApplicationRepository', () => {
     status: 'matched' as const,
     memoryIdsUsed: [],
     memoryIdsRejected: [],
+    topCandidates: [
+      {
+        memoryId: 'mem-1',
+        title: 'Always log incoming requests',
+        memoryType: 'pitfall_pattern' as const,
+        vectorScore: 0.87,
+        rerankScore: 0.81,
+        componentOverlap: 0.5,
+        effectiveness: 0.6,
+        passedThreshold: true,
+      },
+    ],
   });
 
   it('creates an application record and finds it by id', async () => {
@@ -172,6 +194,18 @@ describe('firestoreExecutionMemoryApplicationRepository', () => {
             confidence: 0.9,
           },
         ],
+        topCandidates: [
+          {
+            memoryId: 'mem-1',
+            title: 'Test memory',
+            memoryType: 'pitfall_pattern',
+            vectorScore: 0.92,
+            rerankScore: 0.85,
+            componentOverlap: 0.75,
+            effectiveness: 0.6,
+            passedThreshold: true,
+          },
+        ],
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
         completedAt,
@@ -191,6 +225,9 @@ describe('firestoreExecutionMemoryApplicationRepository', () => {
     expect(found.value.completedAt).toBe(completedAt);
     expect(found.value.evaluationSummary).toBe('Worked well');
     expect(found.value.perMemoryOutcome).toHaveLength(1);
+    expect(found.value.topCandidates).toHaveLength(1);
+    expect(found.value.topCandidates?.[0]?.memoryId).toBe('mem-1');
+    expect(found.value.topCandidates?.[0]?.passedThreshold).toBe(true);
   });
 
   it('handles missing optional fields and malformed stored values when reading an application', async () => {
@@ -240,6 +277,7 @@ describe('firestoreExecutionMemoryApplicationRepository', () => {
     expect(found.value.linearIssueId).toBeUndefined();
     expect(found.value.evaluationSummary).toBeUndefined();
     expect(found.value.perMemoryOutcome).toBeUndefined();
+    expect(found.value.topCandidates).toBeUndefined();
     expect(found.value.completedAt).toBeUndefined();
   });
 

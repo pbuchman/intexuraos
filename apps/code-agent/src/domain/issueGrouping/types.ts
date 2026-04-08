@@ -15,7 +15,7 @@ export interface PipelineStepData {
 
 export interface PipelineState {
   steps: PipelineStepData[];
-  pr: { url: string; number: string } | null;
+  pr: { url: string; number: string; status: 'open' | 'merged' | 'closed' | 'mergeable' } | null;
   failedAttempts: number;
   archivedCount: number;
 }
@@ -51,6 +51,8 @@ export interface SerializedTask {
   parentTaskId?: string;
   followUpReason?: string;
   prNumber?: number;
+  prMergedAt?: string; // ISO timestamp — set when PR was merged
+  prClosedAt?: string; // ISO timestamp — set when PR was closed without merge
   result?: {
     prUrl?: string;
     branch?: string;

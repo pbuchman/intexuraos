@@ -24,6 +24,9 @@ function toExecutionMemoryApplication(doc: {
   const perMemoryOutcome = Array.isArray(data['perMemoryOutcome'])
     ? data['perMemoryOutcome'] as ExecutionMemoryApplication['perMemoryOutcome']
     : undefined;
+  const topCandidates = Array.isArray(data['topCandidates'])
+    ? data['topCandidates'] as NonNullable<ExecutionMemoryApplication['topCandidates']>
+    : undefined;
   const completedAt = data['completedAt'] !== undefined
     ? data['completedAt'] as Timestamp
     : undefined;
@@ -48,6 +51,7 @@ function toExecutionMemoryApplication(doc: {
       ? { evaluationSummary: data['evaluationSummary'] }
       : {}),
     ...(perMemoryOutcome !== undefined ? { perMemoryOutcome } : {}),
+    ...(topCandidates !== undefined ? { topCandidates } : {}),
     createdAt: data['createdAt'] as Timestamp,
     updatedAt: data['updatedAt'] as Timestamp,
     ...(completedAt !== undefined ? { completedAt } : {}),

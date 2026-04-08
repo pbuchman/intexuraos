@@ -76,6 +76,7 @@ export interface UpdateTaskInput {
   prNumber?: number;
   prBranch?: string;
   prMergedAt?: Date;  // When PR was merged (INT-1174)
+  prClosedAt?: Date;  // When PR was closed without merge (INT-1316)
   executionMemoryContext?: CodeTask['executionMemoryContext'];
   executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
 
