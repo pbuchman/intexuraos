@@ -1188,6 +1188,9 @@ export class TaskDispatcher {
       maxAttempts,
       agentType: completionAgentType,
       rawLogs,
+      ...(task.executionMemoryContext !== undefined && {
+        executionMemoryContext: task.executionMemoryContext,
+      }),
     });
     this.appendOrchestratorTaskLog(
       task.taskId,
@@ -1252,6 +1255,9 @@ export class TaskDispatcher {
           maxAttempts,
           agentType: completionAgentType,
           rawLogs,
+          ...(task.executionMemoryContext !== undefined && {
+            executionMemoryContext: task.executionMemoryContext,
+          }),
         });
         task.verificationHistory = [
           ...(task.verificationHistory ?? []),
@@ -1529,6 +1535,11 @@ export class TaskDispatcher {
     if (agentData === undefined) return base;
 
     base.summary = agentData.summary;
+    if ('memory_ids_used' in agentData) {
+      base.execution_memory_ids_used = agentData.memory_ids_used;
+      base.execution_memory_ids_rejected = agentData.memory_ids_rejected;
+      base.execution_memory_usage_summary = agentData.memory_usage_summary;
+    }
 
     /* v8 ignore start -- upstream: FakeCompletionVerifier always returns planning agentData; execution/review/remediation/pull_request variants require agent-type specific verifier responses not producible with unit test fakes @preserve */
     if (agentData.agentType === 'planning') {
@@ -1549,9 +1560,6 @@ export class TaskDispatcher {
         agentData.superpowers_subagent_driven_dev === 'used' ? '1' : '0';
       base.execution_superpowers_requesting_code_review_used =
         agentData.superpowers_requesting_code_review === 'used' ? '1' : '0';
-      base.execution_memory_ids_used = agentData.memory_ids_used;
-      base.execution_memory_ids_rejected = agentData.memory_ids_rejected;
-      base.execution_memory_usage_summary = agentData.memory_usage_summary;
       if (agentData.gh_pr_url !== '') {
         base.prUrl = agentData.gh_pr_url;
       }
