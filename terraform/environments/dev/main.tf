@@ -1782,7 +1782,6 @@ module "cloud_build" {
   github_connection_name = var.github_connection_name
 
   artifact_registry_url   = module.artifact_registry.repository_url
-  static_assets_bucket    = module.static_assets.bucket_name
   web_app_bucket          = module.web_app.bucket_name
   functions_source_bucket = google_storage_bucket.cloud_functions_source.name
 
