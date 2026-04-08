@@ -82,7 +82,7 @@ it('returns session_expired when worktree exists but container is gone', async (
   });
 
   fakeWorktreeManager.setExists(taskId, true);
-  fakeIsolationProvider.setResumeAvailable(taskId, false);
+  vi.mocked(fakeIsolationProvider.isResumeAvailable).mockResolvedValueOnce(false);
 
   const result = await dispatcher.sendMessage(taskId, 'follow-up question');
 
@@ -127,7 +127,8 @@ In `workers/orchestrator/src/services/task-dispatcher.ts`, after the `worktreeEx
 // Check if the container (or its session) is still available for resume.
 // If only the worktree survives but the container is gone, --continue will
 // start a fresh session with no context — worse than rejecting outright.
-const canResume = await this.isolation.provider.isResumeAvailable(taskId);
+// Use optional chaining + ?? true for fail-open on providers that don't implement this method.
+const canResume = await this.isolation.provider.isResumeAvailable?.(taskId) ?? true;
 if (!canResume) {
   return {
     ok: false,
@@ -382,7 +383,7 @@ In `apps/web/src/pages/AskAgentPage.tsx`, update the `onSendMessage` prop on `Co
 {...(taskId !== null && !sessionExpired ? { onSendMessage: sendMessage } : {})}
 ```
 
-This removes the message input entirely when the session is expired, preventing the user from trying again.
+This removes `MessageInput` entirely when the session is expired, so the `SESSION_EXPIRED` inline banner in `MessageInput` (Step 1) is only visible on `CodeTaskViewPage`. `AskAgentPage` shows the banner via Step 3 instead — choose one pattern per surface.
 
 - [ ] **Step 5: Also show session-expired state in CodeTaskViewPage**
 
