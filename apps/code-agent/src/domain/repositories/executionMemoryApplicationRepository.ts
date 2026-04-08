@@ -1,6 +1,7 @@
 import type { Result } from '@intexuraos/common-core';
 import type {
   ExecutionMemoryApplication,
+  ExecutionMemoryApplicationCandidate,
   ExecutionMemoryApplicationMatch,
   ExecutionMemoryApplicationStatus,
   ExecutionMemoryPerMemoryOutcome,
@@ -19,6 +20,7 @@ export interface CreateExecutionMemoryApplicationInput {
   status: ExecutionMemoryApplicationStatus;
   memoryIdsUsed: string[];
   memoryIdsRejected: string[];
+  topCandidates?: ExecutionMemoryApplicationCandidate[];
   evaluationSummary?: string;
   perMemoryOutcome?: ExecutionMemoryPerMemoryOutcome[];
 }

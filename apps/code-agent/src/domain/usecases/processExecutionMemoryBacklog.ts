@@ -276,7 +276,7 @@ async function processOneTask(
     }
 
     const mergeCandidate = nearDuplicateResult.value.find((candidate) =>
-      candidate.memoryType === memory.memoryType && candidate.vectorScore >= 0.94
+      candidate.memoryType === memory.memoryType && candidate.vectorScore >= 0.88
     );
     if (mergeCandidate !== undefined) {
       const updatedId = await updateExistingMemory(
