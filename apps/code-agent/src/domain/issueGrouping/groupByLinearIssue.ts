@@ -133,8 +133,23 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     if (prUrl !== undefined) {
       const match = PR_URL_REGEX.exec(prUrl);
       if (match?.[1] !== undefined) {
-        // TODO(INT-1316): derive status from prMergedAt/prClosedAt in Task 3
-        pr = { url: prUrl, number: match[1], status: 'open' };
+        // Derive PR status from task data
+        const hasMergeStep = steps.some((s) => s.agentType === 'merge' && s.state === 'actionable');
+        const isMerged = tasks.some((t) => t.prMergedAt !== undefined);
+        const isClosed = tasks.some((t) => t.prClosedAt !== undefined);
+
+        let status: 'open' | 'merged' | 'closed' | 'mergeable';
+        if (isMerged) {
+          status = 'merged';
+        } else if (isClosed) {
+          status = 'closed';
+        } else if (hasMergeStep) {
+          status = 'mergeable';
+        } else {
+          status = 'open';
+        }
+
+        pr = { url: prUrl, number: match[1], status };
         break;
       }
     }

@@ -1105,3 +1105,70 @@ describe('cursor encoding/decoding', () => {
     expect(() => decodeCursor(bad)).toThrow('Invalid cursor index');
   });
 });
+
+describe('derivePipeline pr.status', () => {
+  it('returns status "merged" when any task has prMergedAt', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-1',
+        agentType: 'execution',
+        status: 'implemented',
+        prMergedAt: '2026-03-01T12:00:00.000Z',
+        result: { prUrl: 'https://github.com/owner/repo/pull/42' },
+      }),
+    ];
+    const pipeline = derivePipeline(tasks);
+    expect(pipeline.pr?.status).toBe('merged');
+  });
+
+  it('returns status "closed" when any task has prClosedAt and no prMergedAt', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-1',
+        agentType: 'execution',
+        status: 'implemented',
+        prClosedAt: '2026-03-01T12:00:00.000Z',
+        result: { prUrl: 'https://github.com/owner/repo/pull/42' },
+      }),
+    ];
+    const pipeline = derivePipeline(tasks);
+    expect(pipeline.pr?.status).toBe('closed');
+  });
+
+  it('returns status "mergeable" when merge step is actionable', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-1',
+        agentType: 'execution',
+        status: 'implemented',
+        result: { prUrl: 'https://github.com/owner/repo/pull/42' },
+        linearIssue: {
+          identifier: 'INT-100',
+          title: 'Test',
+          state: { name: 'In Progress', type: 'started' },
+          priority: 2,
+          assignee: null,
+          labels: [{ name: 'ready-to-merge' }],
+          url: 'https://linear.app/test/INT-100',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      }),
+    ];
+    const pipeline = derivePipeline(tasks);
+    expect(pipeline.pr?.status).toBe('mergeable');
+  });
+
+  it('returns status "open" when PR exists but not merged, closed, or mergeable', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-1',
+        agentType: 'execution',
+        status: 'implemented',
+        result: { prUrl: 'https://github.com/owner/repo/pull/42' },
+      }),
+    ];
+    const pipeline = derivePipeline(tasks);
+    expect(pipeline.pr?.status).toBe('open');
+  });
+});
