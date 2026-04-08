@@ -307,8 +307,12 @@ describe('TaskDispatcher', () => {
   type VerifierMockResult = CompletionVerifierVerdict;
   const dummyTrace = { transcript: '', prompt: '', response: '' };
 
+  // Activity timeout set to 4 hours so it never fires in tests that don't test it explicitly
+  const disabledActivityTimeout = { timeoutMs: 4 * 60 * 60 * 1000, maxRestarts: 3 };
+
   const singleAttemptCompletionControl = {
     maxAttempts: 1,
+    activityTimeout: disabledActivityTimeout,
     verifier: {
       verify: vi.fn(
         async (_input: unknown): Promise<VerifierMockResult> => ({
@@ -2830,6 +2834,7 @@ describe('TaskDispatcher', () => {
         mockIsolationConfig,
         {
           maxAttempts: 2,
+          activityTimeout: disabledActivityTimeout,
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: false }),
@@ -2924,6 +2929,7 @@ describe('TaskDispatcher', () => {
         mockIsolationConfig,
         {
           maxAttempts: 3,
+          activityTimeout: disabledActivityTimeout,
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: true }),
@@ -3026,6 +3032,7 @@ describe('TaskDispatcher', () => {
         localIsolation,
         {
           maxAttempts: 2,
+          activityTimeout: disabledActivityTimeout,
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: false }),
@@ -3168,6 +3175,7 @@ describe('TaskDispatcher', () => {
         localIsolation,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           preserveWorkerContainers: true,
           verifier: {
             verify,
@@ -3227,6 +3235,7 @@ describe('TaskDispatcher', () => {
         localIsolation,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           preserveWorkerContainers: true,
           verifier: {
             verify: vi.fn().mockResolvedValue({
@@ -3310,6 +3319,7 @@ describe('TaskDispatcher', () => {
         isolation,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           preserveWorkerContainers: true,
           verifier: {
             verify: vi.fn().mockResolvedValue({
@@ -3498,6 +3508,7 @@ describe('TaskDispatcher', () => {
         isolation,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           preserveWorkerContainers: true,
           verifier: {
             verify: vi.fn().mockResolvedValue({
@@ -3605,6 +3616,7 @@ describe('TaskDispatcher', () => {
         isolation,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           preserveWorkerContainers: true,
           verifier: {
             verify: vi.fn().mockResolvedValue({
@@ -3686,6 +3698,7 @@ describe('TaskDispatcher', () => {
         isolation,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           preserveWorkerContainers: true,
           verifier: {
             verify: vi.fn().mockResolvedValue({
@@ -3767,6 +3780,7 @@ describe('TaskDispatcher', () => {
         isolation,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           preserveWorkerContainers: true,
           verifier: {
             verify: vi.fn().mockResolvedValue({
@@ -3840,6 +3854,7 @@ describe('TaskDispatcher', () => {
         mockIsolationConfig,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: false }),
@@ -3964,6 +3979,7 @@ describe('TaskDispatcher', () => {
           localIsolation,
           {
             maxAttempts: 3,
+            activityTimeout: disabledActivityTimeout,
             verifier: {
               verify,
               describe: (): { enabled: boolean } => ({ enabled: false }),
@@ -4345,6 +4361,7 @@ describe('TaskDispatcher', () => {
         mockIsolationConfig,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           verifier: {
             verify: vi.fn().mockResolvedValue({
               passed: true,
@@ -6680,6 +6697,7 @@ describe('TaskDispatcher', () => {
         mockIsolationConfig,
         {
           maxAttempts: 2,
+          activityTimeout: disabledActivityTimeout,
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: false }),
@@ -8858,6 +8876,534 @@ describe('TaskDispatcher', () => {
       expect(() => {
         internal.clearTaskTimers('nonexistent-task');
       }).not.toThrow();
+    });
+  });
+
+  describe('inactivity timeout restart', () => {
+    it('triggers restart after 10 minutes of no output', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const inactivityState = createStatePersistence();
+      const inactivityDispatcher = new TaskDispatcher(
+        mockConfig,
+        inactivityState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'inactivity-restart-test',
+        workerType: 'auto',
+        prompt: 'Test inactivity restart',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await inactivityDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Advance 10 minutes — inactivity timeout fires
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0); // flush microtasks
+
+      // Verify destroyWorker was called (initial create + restart destroy)
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('inactivity-restart-test');
+
+      // Verify a new worker was created with continueSession: true
+      const createWorkerCalls = vi.mocked(mockIsolationProvider.createWorker).mock.calls;
+      const lastCall = createWorkerCalls.at(-1);
+      expect(lastCall?.[0]?.continueSession).toBe(true);
+      expect(lastCall?.[0]?.prompt).toContain('previous session became unresponsive');
+
+      // Verify task is still running
+      const task = await inactivityDispatcher.getTask('inactivity-restart-test');
+      expect(task?.status).toBe('running');
+      expect(task?.inactivityRestartCount).toBe(1);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('does not restart when worker produces output', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const noRestartState = createStatePersistence();
+      const noRestartDispatcher = new TaskDispatcher(
+        mockConfig,
+        noRestartState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'no-restart-test',
+        workerType: 'auto',
+        prompt: 'Test no restart',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await noRestartDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Simulate output every 5 minutes to keep the timeout from firing
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      expect(onLog).toBeDefined();
+
+      // Advance 5 minutes and produce output
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      onLog?.('some output\n');
+
+      // Advance another 5 minutes and produce output
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      onLog?.('more output\n');
+
+      // Advance another 5 minutes — 15 min total, but only 5 min since last output
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+      // destroyWorker should only have been called once (for initial image pull verification, not for restart)
+      // Task should still be running without restart
+      const task = await noRestartDispatcher.getTask('no-restart-test');
+      expect(task?.status).toBe('running');
+      expect(task?.inactivityRestartCount).toBeUndefined();
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('fails task after max consecutive restarts exceeded', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const maxRestartState = createStatePersistence();
+      const maxRestartDispatcher = new TaskDispatcher(
+        mockConfig,
+        maxRestartState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'max-restart-test',
+        workerType: 'auto',
+        prompt: 'Test max restarts',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await maxRestartDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Advance through 3 restart cycles (10 min each)
+      for (let i = 0; i < 3; i++) {
+        await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+        await vi.advanceTimersByTimeAsync(0);
+      }
+
+      // After 3 restarts, the 4th timeout triggers max exceeded
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const task = await maxRestartDispatcher.getTask('max-restart-test');
+      expect(task?.status).toBe('failed');
+
+      // Verify webhook was sent with TASK_INACTIVITY_TIMEOUT error
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'max-restart-test',
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_INACTIVITY_TIMEOUT',
+            }),
+          }),
+        })
+      );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('does not increment attemptCount on inactivity restart', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const attemptState = createStatePersistence();
+      const attemptDispatcher = new TaskDispatcher(
+        mockConfig,
+        attemptState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 5,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'attempt-count-test',
+        workerType: 'auto',
+        prompt: 'Test attempt count',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await attemptDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const beforeTask = await attemptDispatcher.getTask('attempt-count-test');
+      expect(beforeTask?.attemptCount).toBe(1);
+
+      // Trigger inactivity restart
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // attemptCount should NOT be incremented
+      const afterTask = await attemptDispatcher.getTask('attempt-count-test');
+      expect(afterTask?.attemptCount).toBe(1);
+      expect(afterTask?.inactivityRestartCount).toBe(1);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('resets consecutive restart counter when output resumes after restart', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const resetState = createStatePersistence();
+      const resetDispatcher = new TaskDispatcher(
+        mockConfig,
+        resetState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 2 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'reset-counter-test',
+        workerType: 'auto',
+        prompt: 'Test counter reset',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resetDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // First inactivity restart (restart 1/2)
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      let task = await resetDispatcher.getTask('reset-counter-test');
+      expect(task?.status).toBe('running');
+      expect(task?.inactivityRestartCount).toBe(1);
+
+      // Simulate output from the restarted worker — this resets the consecutive counter
+      const createWorkerCalls = vi.mocked(mockIsolationProvider.createWorker).mock.calls;
+      const lastOnLog = createWorkerCalls.at(-1)?.[0]?.onLog;
+      expect(lastOnLog).toBeDefined();
+      lastOnLog?.('output after restart\n');
+
+      // Second inactivity restart (restart 1/2 again because counter was reset)
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      task = await resetDispatcher.getTask('reset-counter-test');
+      expect(task?.status).toBe('running');
+      expect(task?.inactivityRestartCount).toBe(2);
+
+      // Third inactivity restart (restart 2/2, should still succeed)
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      task = await resetDispatcher.getTask('reset-counter-test');
+      expect(task?.status).toBe('running');
+      expect(task?.inactivityRestartCount).toBe(3);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('skips restart when completion is already in progress', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const completionState = createStatePersistence();
+      const completionDispatcher = new TaskDispatcher(
+        mockConfig,
+        completionState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'completion-guard-test',
+        workerType: 'auto',
+        prompt: 'Test completion guard',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await completionDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Simulate completion in progress
+      const internal = completionDispatcher as unknown as {
+        completionInProgress: Set<string>;
+      };
+      internal.completionInProgress.add('completion-guard-test');
+
+      vi.mocked(mockIsolationProvider.destroyWorker).mockClear();
+
+      // Advance 10 minutes — inactivity timeout fires but should be skipped
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // destroyWorker should NOT have been called for inactivity restart
+      expect(mockIsolationProvider.destroyWorker).not.toHaveBeenCalled();
+
+      const task = await completionDispatcher.getTask('completion-guard-test');
+      expect(task?.status).toBe('running');
+      expect(task?.inactivityRestartCount).toBeUndefined();
+
+      internal.completionInProgress.delete('completion-guard-test');
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('handles inactivity restart error gracefully', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const errorState = createStatePersistence();
+      const errorDispatcher = new TaskDispatcher(
+        mockConfig,
+        errorState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'restart-error-test',
+        workerType: 'auto',
+        prompt: 'Test restart error',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await errorDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Make getTask reject to trigger error handling in handler
+      vi.spyOn(errorDispatcher, 'getTask').mockRejectedValue(new Error('DB error'));
+      const errorSpy = vi.spyOn(mockLogger, 'error');
+
+      // Advance 10 minutes — inactivity timeout fires but getTask fails
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Error should be logged (caught by the .catch in the constructor callback)
+      expect(errorSpy).toHaveBeenCalledWith(
+        { taskId: 'restart-error-test', error: expect.any(Error) },
+        'Error in inactivity restart handler'
+      );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('logs restart prompt in task logs', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const logState = createStatePersistence();
+      const logDispatcher = new TaskDispatcher(
+        mockConfig,
+        logState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'log-test',
+        workerType: 'auto',
+        prompt: 'Test logging',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await logDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+
+      // Advance 10 minutes
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Verify system log about inactivity
+      const appendCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls;
+      const systemLog = appendCalls.find(
+        (call) =>
+          call[0] === 'log-test' &&
+          typeof call[1] === 'string' &&
+          call[1].includes('[system]') &&
+          call[1].includes('Inactivity timeout')
+      );
+      expect(systemLog).toBeDefined();
+
+      // Verify prompt log
+      const promptLog = appendCalls.find(
+        (call) =>
+          call[0] === 'log-test' &&
+          typeof call[1] === 'string' &&
+          call[1].includes('[prompt]') &&
+          call[1].includes('previous session became unresponsive')
+      );
+      expect(promptLog).toBeDefined();
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('fails task when worker restart fails', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const restartFailState = createStatePersistence();
+      const restartFailDispatcher = new TaskDispatcher(
+        mockConfig,
+        restartFailState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'restart-fail-test',
+        workerType: 'auto',
+        prompt: 'Test restart failure',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await restartFailDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Make createWorker reject on the next call (the restart attempt)
+      vi.mocked(mockIsolationProvider.createWorker).mockRejectedValueOnce(
+        new Error('Container creation failed')
+      );
+
+      // Advance 10 minutes — inactivity timeout fires, restart fails
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const task = await restartFailDispatcher.getTask('restart-fail-test');
+      expect(task?.status).toBe('failed');
+
+      // Verify webhook sent with TASK_INACTIVITY_RESTART_FAILED error
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'restart-fail-test',
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_INACTIVITY_RESTART_FAILED',
+            }),
+          }),
+        })
+      );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
     });
   });
 
