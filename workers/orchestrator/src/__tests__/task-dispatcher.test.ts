@@ -8425,6 +8425,93 @@ describe('TaskDispatcher', () => {
       expect(promptEntry).toContain('\u2026'); // ellipsis = truncation occurred
       expect(promptEntry).not.toContain('B'.repeat(250)); // full message not present
     });
+
+    it('returns session_expired when worktree exists but container is gone', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-session-expired-task',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      // Set task to completed state (resumable)
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-session-expired-task'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await statePersistence.save(state);
+
+      // Worktree exists (so resume should be possible)
+      vi.mocked(mockWorktreeManager.worktreeExists).mockResolvedValueOnce(true);
+
+      // But container session is gone (should reject resume)
+      const isResumeAvailableMock = mockIsolationProvider.isResumeAvailable;
+      /* v8 ignore next -- ts-type: non-null assertion for mock defined at line 213 @preserve */
+      if (!isResumeAvailableMock) throw new Error('isResumeAvailable mock not defined');
+      vi.mocked(isResumeAvailableMock).mockResolvedValueOnce(false);
+
+      const result = await dispatcher.sendMessage('msg-session-expired-task', 'Follow-up');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('session_expired');
+        expect(result.error.message).toContain('session');
+      }
+    });
+
+    it('allows resume when provider does not implement isResumeAvailable (fail-open)', async () => {
+      // Create a dispatcher with an isolation provider that doesn't have isResumeAvailable
+      // Use omit to properly exclude the property for exactOptionalPropertyTypes compatibility
+      const { isResumeAvailable: _, ...providerWithoutResume } = mockIsolationProvider;
+      const isolationWithoutResume: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: providerWithoutResume as IsolationProvider,
+      };
+      const failOpenDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        isolationWithoutResume,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'msg-fail-open-resume',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await failOpenDispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-fail-open-resume'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await statePersistence.save(state);
+
+      vi.mocked(mockWorktreeManager.worktreeExists).mockResolvedValueOnce(true);
+
+      const result = await failOpenDispatcher.sendMessage('msg-fail-open-resume', 'Follow-up');
+
+      // Should succeed (fail-open behavior when isResumeAvailable is not implemented)
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'resumed' });
+      }
+    });
   });
 
   describe('resumeTaskWithUserMessage pendingResumeStart guard', () => {

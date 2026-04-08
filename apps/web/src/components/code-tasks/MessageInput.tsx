@@ -88,7 +88,11 @@ export function MessageInput({ onSendMessage, sending, sendError, messageStatus,
         </p>
       ) : null}
       {sendError !== null ? (
-        sendError.code === 'WORKER_UNAVAILABLE' ? (
+        sendError.code === 'SESSION_EXPIRED' ? (
+          <div className="mt-2 flex items-center gap-2 rounded border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            <span>Session expired — the worker was cleaned up. Clear this session and start a new one.</span>
+          </div>
+        ) : sendError.code === 'WORKER_UNAVAILABLE' ? (
           <div className="mt-2 flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 dark:border-amber-800/50 dark:bg-amber-900/30 dark:text-amber-300">
             <WifiOff className="h-3.5 w-3.5 shrink-0" />
             <span>Worker <strong>{workerName}</strong> is offline — task can only be continued when this worker is back online</span>

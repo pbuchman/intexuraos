@@ -643,6 +643,22 @@ export class TaskDispatcher {
         };
       }
 
+      // Check if the container (or its session) is still available for resume.
+      // If only the worktree survives but the container is gone, --continue will
+      // start a fresh session with no context — worse than rejecting outright.
+      // Use optional chaining + ?? true for fail-open on providers that don't implement this method.
+      const canResume = (await this.isolation.provider.isResumeAvailable?.(taskId)) ?? true;
+      if (!canResume) {
+        return {
+          ok: false,
+          error: {
+            type: 'session_expired',
+            message:
+              'Session has expired — the worker container was cleaned up. Please start a new session.',
+          },
+        };
+      }
+
       const wasCompleted = task.status === 'completed';
       await this.teardownAttempt(taskId, true);
 
