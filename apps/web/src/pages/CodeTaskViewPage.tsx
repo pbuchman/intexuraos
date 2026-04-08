@@ -261,10 +261,9 @@ const MemoExecutionMemoryCard = memo(function ExecutionMemoryCard({ task }: { ta
           <div className="mb-4 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             {context?.totalSearchResults !== undefined ? (
               <>
-                {String(context.totalSearchResults)} memories searched
-                {' '}
+                {String(context.totalSearchResults)} memories searched{' · '}
                 <span className="text-emerald-600 dark:text-emerald-400">{String(injectedCount)} injected</span>
-                {' '}
+                {' · '}
                 <span className="text-slate-500 dark:text-slate-400">{String(belowThresholdCount)} below threshold</span>
               </>
             ) : (
