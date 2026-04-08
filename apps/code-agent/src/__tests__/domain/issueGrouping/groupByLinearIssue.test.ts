@@ -666,7 +666,7 @@ describe('derivePipeline', () => {
 
     const pipeline = derivePipeline(tasks);
 
-    expect(pipeline.pr).toEqual({ url: 'https://github.com/owner/repo/pull/42', number: '42' });
+    expect(pipeline.pr).toEqual({ url: 'https://github.com/owner/repo/pull/42', number: '42', status: 'open' });
   });
 
   it('sets pr to null when no task has a valid prUrl', () => {
