@@ -2011,5 +2011,175 @@ describe('GET /code/issue-groups', () => {
       // done count should remain 1 — real group, not a phantom
       expect(body.data.counts['done']).toBe(1);
     });
+
+    it('handles error gracefully when phantom-check findRecentTasksByLinearIssue fails', async () => {
+      // When phantom-check task fetch fails, the summary has no tasks → treated as phantom
+      // The route handles the error gracefully (warn + returns []) rather than failing
+      const failingCodeTaskRepo: CodeTaskRepository = {
+        ...codeTaskRepo,
+        findRecentTasksByLinearIssue: async () => err({ code: 'FIRESTORE_ERROR' as const, message: 'DB error' }),
+      };
+
+      const phantomDoneSummary = makeSummary({
+        linearIssueId: 'INT-PHANTOM-ERR',
+        aggregateStatus: 'done',
+        taskCount: 1,
+      });
+
+      mockCounts = { ...mockCounts, done: 1, totalGroups: 1 };
+
+      const summaryRepo = makeGroupSummaryRepo({
+        getUserGroupCounts: async () => ok(mockCounts),
+        listGroupSummaries: async (input) => {
+          if (input.statusFilter?.includes('done') === true) {
+            return ok({ summaries: [phantomDoneSummary] });
+          }
+          return ok({ summaries: [] });
+        },
+      });
+
+      setServices(makeBaseServices({
+        codeTaskRepo: failingCodeTaskRepo,
+        groupSummaryRepo: summaryRepo,
+      }));
+      await server.close();
+      server = await buildServer();
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/issue-groups?groupStatus=active,needs-action,failed',
+        headers: { authorization: 'Bearer test-jwt' },
+      });
+
+      // Error is non-fatal — logged as warn, summary treated as phantom (no tasks)
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload) as {
+        data: { groups: unknown[]; counts: Record<string, number>; totalGroups: number };
+      };
+      expect(body.data.counts['done']).toBe(0); // Phantom detected due to error → empty tasks
+    });
+
+    it('handles error gracefully when phantom-check findById fails for standalone', async () => {
+      // Standalone phantom summary with error in findById → treated as phantom
+      const failingCodeTaskRepo: CodeTaskRepository = {
+        ...codeTaskRepo,
+        findById: async () => err({ code: 'NOT_FOUND' as const, message: 'Task not found' }),
+      };
+
+      const standalonePhantomSummary: TaskGroupSummary = {
+        userId: 'test-user-id',
+        linearIssueId: null,
+        groupKey: 'standalone_phantom-err-task',
+        taskCount: 1,
+        activeTaskCount: 1,
+        latestTaskStatus: 'queued',
+        latestTaskUpdatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
+        agentTypesPresent: [],
+        hasCompletedPlanning: false,
+        hasCompletedExecution: false,
+        hasCompletedExecutionAgent: false,
+        hasImplementationTaskId: false,
+        hasPrUrl: false,
+        prNumber: null,
+        latestReviewNeedsRemediation: null,
+        oldestTaskCreatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
+        mostRecentDispatchedAt: null,
+        aggregateStatus: 'done',
+        updatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
+      };
+
+      mockCounts = { ...mockCounts, done: 1, totalGroups: 1 };
+
+      const summaryRepo = makeGroupSummaryRepo({
+        getUserGroupCounts: async () => ok(mockCounts),
+        listGroupSummaries: async (input) => {
+          if (input.statusFilter?.includes('done') === true) {
+            return ok({ summaries: [standalonePhantomSummary] });
+          }
+          return ok({ summaries: [] });
+        },
+      });
+
+      setServices(makeBaseServices({
+        codeTaskRepo: failingCodeTaskRepo,
+        groupSummaryRepo: summaryRepo,
+      }));
+      await server.close();
+      server = await buildServer();
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/issue-groups?groupStatus=active,needs-action,failed',
+        headers: { authorization: 'Bearer test-jwt' },
+      });
+
+      // Error is non-fatal — logged as warn, summary treated as phantom
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload) as {
+        data: { groups: unknown[]; counts: Record<string, number>; totalGroups: number };
+      };
+      expect(body.data.counts['done']).toBe(0); // Phantom detected due to error → empty tasks
+    });
+
+    it('correctly detects standalone phantom (linearIssueId=null) as phantom', async () => {
+      // Standalone summary (linearIssueId=null) with no corresponding task → findById returns NOT_FOUND
+      // This should be detected as a phantom: error returns [] → 0 tasks → phantom
+      const standaloneTaskId = 'standalone-phantom-test-task';
+
+      const standalonePhantomSummary: TaskGroupSummary = {
+        userId: 'test-user-id',
+        linearIssueId: null,
+        groupKey: `standalone_${standaloneTaskId}`,
+        taskCount: 1,
+        activeTaskCount: 1,
+        latestTaskStatus: 'queued',
+        latestTaskUpdatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
+        agentTypesPresent: [],
+        hasCompletedPlanning: false,
+        hasCompletedExecution: false,
+        hasCompletedExecutionAgent: false,
+        hasImplementationTaskId: false,
+        hasPrUrl: false,
+        prNumber: null,
+        latestReviewNeedsRemediation: null,
+        oldestTaskCreatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
+        mostRecentDispatchedAt: null,
+        aggregateStatus: 'done',
+        updatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
+      };
+
+      mockCounts = { ...mockCounts, done: 1, totalGroups: 1 };
+
+      // No task is created for this standalone phantom, so findById returns NOT_FOUND
+      const summaryRepo = makeGroupSummaryRepo({
+        getUserGroupCounts: async () => ok(mockCounts),
+        listGroupSummaries: async (input) => {
+          if (input.statusFilter?.includes('done') === true) {
+            return ok({ summaries: [standalonePhantomSummary] });
+          }
+          return ok({ summaries: [] });
+        },
+      });
+
+      setServices(makeBaseServices({
+        groupSummaryRepo: summaryRepo,
+      }));
+      await server.close();
+      server = await buildServer();
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/issue-groups?groupStatus=active,needs-action,failed',
+        headers: { authorization: 'Bearer test-jwt' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload) as {
+        data: { groups: unknown[]; counts: Record<string, number>; totalGroups: number };
+      };
+      // Standalone phantom should be detected: no task exists → NOT_FOUND → error returns [] → phantom
+      expect(body.data.counts['done']).toBe(0);
+      expect(body.data.groups).toHaveLength(0);
+    });
   });
 });
