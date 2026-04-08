@@ -298,12 +298,10 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           }
           const taskId = summary.groupKey.replace(/^standalone_/, '');
           const taskResult = await codeTaskRepo.findById(taskId);
-          /* v8 ignore start -- module-init: FakeCodeTaskRepo cannot simulate NOT_FOUND for standalone phantom-check at repo initialization @preserve */
           if (!taskResult.ok) {
             request.log.warn({ taskId, error: taskResult.error }, 'Failed to fetch standalone task for phantom check');
             return [];
           }
-          /* v8 ignore stop @preserve */
           const task = taskResult.value;
           /* v8 ignore start -- test-infra: FakeFirestore cannot produce cross-user task leaks or archived standalone tasks in this test flow @preserve */
           if (task.userId !== userId || (!includeArchived && task.status === 'archived') || task.agentType === 'ask_agent') {
