@@ -4,6 +4,19 @@ import type { ActioningType, IssueGroup, StepState } from '@/types/issueGroups';
 import { formatRelative } from '@/utils/dateFormat';
 import { IssueTimeline } from '@/components/code-tasks/IssueTimeline';
 
+function getPrBadgeClasses(status: 'open' | 'merged' | 'closed' | 'mergeable'): string {
+  switch (status) {
+    case 'merged':
+      return 'border border-purple-300/50 bg-purple-100 text-purple-700 hover:bg-purple-200 dark:border-purple-600/30 dark:bg-purple-900/30 dark:text-purple-400 dark:hover:bg-purple-900/50';
+    case 'closed':
+      return 'border border-red-300/50 bg-red-100 text-red-700 hover:bg-red-200 dark:border-red-600/30 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50';
+    case 'open':
+      return 'border border-green-300/50 bg-green-100 text-green-700 hover:bg-green-200 dark:border-green-600/30 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50';
+    case 'mergeable':
+      return 'border border-green-500/30 bg-green-500/10 text-green-600 hover:bg-green-500/20 dark:bg-green-500/20 dark:border-green-500/30 dark:text-green-400';
+  }
+}
+
 interface IssueGroupRowProps {
   group: IssueGroup;
   timeTick: number;
@@ -359,7 +372,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e): void => { e.stopPropagation(); }}
-          className={`${OUTPUT_CHIP} inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 ${px} py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-500/20 dark:text-blue-400`}
+          className={`${OUTPUT_CHIP} inline-flex items-center gap-1 rounded-full ${getPrBadgeClasses(pipeline.pr.status)} ${px} py-1 text-xs font-medium transition-colors`}
         >
           <ExternalLink className="h-3 w-3" />
           #{pipeline.pr.number}
@@ -676,6 +689,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
     return s.state === n?.state && s.agentType === n.agentType;
   }) &&
   prev.group.pipeline.pr?.number === next.group.pipeline.pr?.number &&
+  prev.group.pipeline.pr?.status === next.group.pipeline.pr?.status &&
   prev.group.pipeline.failedAttempts === next.group.pipeline.failedAttempts &&
   prev.group.mostRecentDispatchedAt === next.group.mostRecentDispatchedAt &&
   prev.actioningTaskId === next.actioningTaskId &&
