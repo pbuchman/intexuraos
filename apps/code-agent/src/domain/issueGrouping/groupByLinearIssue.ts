@@ -133,7 +133,8 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     if (prUrl !== undefined) {
       const match = PR_URL_REGEX.exec(prUrl);
       if (match?.[1] !== undefined) {
-        pr = { url: prUrl, number: match[1] };
+        // TODO(INT-1316): derive status from prMergedAt/prClosedAt in Task 3
+        pr = { url: prUrl, number: match[1], status: 'open' };
         break;
       }
     }

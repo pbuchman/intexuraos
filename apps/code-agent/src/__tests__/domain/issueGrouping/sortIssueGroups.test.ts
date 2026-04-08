@@ -115,7 +115,7 @@ describe('sortIssueGroups', () => {
     it('sorts groups with PRs first, higher PR numbers first', () => {
       const prPipeline = (num: string): PipelineState => ({
         steps: [],
-        pr: { url: `https://github.com/owner/repo/pull/${num}`, number: num },
+        pr: { url: `https://github.com/owner/repo/pull/${num}`, number: num, status: 'open' },
         failedAttempts: 0,
         archivedCount: 0,
       });
@@ -253,7 +253,7 @@ describe('sortIssueGroups', () => {
       // multiple times ensuring both `aNum !== null` and `bNum !== null` branches are hit.
       const prPipeline = (num: string): PipelineState => ({
         steps: [],
-        pr: { url: `https://github.com/owner/repo/pull/${num}`, number: num },
+        pr: { url: `https://github.com/owner/repo/pull/${num}`, number: num, status: 'open' },
         failedAttempts: 0,
         archivedCount: 0,
       });
@@ -277,7 +277,7 @@ describe('sortIssueGroups', () => {
     it('exercises bNum-only branch when first element has no PR', () => {
       const prPipeline = (num: string): PipelineState => ({
         steps: [],
-        pr: { url: `https://github.com/owner/repo/pull/${num}`, number: num },
+        pr: { url: `https://github.com/owner/repo/pull/${num}`, number: num, status: 'open' },
         failedAttempts: 0,
         archivedCount: 0,
       });
@@ -342,7 +342,7 @@ describe('sortIssueGroups', () => {
 describe('comparePrNumber (direct comparator)', () => {
   const prPipeline = (num: string): PipelineState => ({
     steps: [],
-    pr: { url: `https://github.com/owner/repo/pull/${num}`, number: num },
+    pr: { url: `https://github.com/owner/repo/pull/${num}`, number: num, status: 'open' },
     failedAttempts: 0,
     archivedCount: 0,
   });
