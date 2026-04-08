@@ -217,6 +217,24 @@ describe('PLANNING_SCHEMA', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it('accepts memory reporting fields for planning tasks', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      outcome: 'planned',
+      superpowers_writing_plans: 'used',
+      linear_url: 'https://linear.app/pbuchman/issue/INT-100/test',
+      is_complex: '0',
+      has_plan_doc: '0',
+      subtask_urls: '',
+      pr_url: 'https://github.com/pbuchman/intexuraos/pull/101',
+      memory_ids_used: 'mem_142',
+      memory_ids_rejected: 'mem_188',
+      memory_usage_summary: 'Used the prior planning memory to keep the plan aligned.',
+      summary: 'test',
+      unclear_clarification: '',
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe('EXECUTION_SCHEMA', () => {
@@ -329,6 +347,19 @@ describe('PULL_REQUEST_SCHEMA', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('accepts memory reporting fields for pull request tasks', () => {
+    const result = PULL_REQUEST_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      comments_replied: 'yes',
+      tracking_comment_id: '12345678',
+      memory_ids_used: 'mem_142',
+      memory_ids_rejected: 'mem_188',
+      memory_usage_summary: 'Used the review-thread memory to keep replies consistent.',
+      summary: 'Addressed review comments.',
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe('REVIEW_SCHEMA', () => {
@@ -338,6 +369,20 @@ describe('REVIEW_SCHEMA', () => {
       review_id: '123',
       review_comments_posted: '3',
       review_types: 'code_quality,security',
+      summary: 'Reviewed the PR for code quality and security issues.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts memory reporting fields for review tasks', () => {
+    const result = REVIEW_SCHEMA.safeParse({
+      gh_pr_url: 'https://github.com/org/repo/pull/42',
+      review_id: '123',
+      review_comments_posted: '3',
+      review_types: 'code_quality,security',
+      memory_ids_used: 'mem_142',
+      memory_ids_rejected: 'mem_188',
+      memory_usage_summary: 'Used the injected review memories to focus the findings.',
       summary: 'Reviewed the PR for code quality and security issues.',
     });
     expect(result.success).toBe(true);
@@ -527,6 +572,9 @@ describe('REMEDIATION_SCHEMA', () => {
     const result = REMEDIATION_SCHEMA.safeParse({
       outcome: 'implemented',
       gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/901',
+      memory_ids_used: 'mem_142',
+      memory_ids_rejected: 'mem_188',
+      memory_usage_summary: 'Used remediation memories to stay within PR scope.',
       requires_re_review: '1',
       summary: 'Fixed review findings.',
     });
@@ -794,6 +842,9 @@ describe('OrchestratorCompletionVerifier', () => {
         has_plan_doc: '0',
         subtask_urls: '',
         pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
+        memory_ids_used: '',
+        memory_ids_rejected: '',
+        memory_usage_summary: '',
         summary: 'The agent planned successfully.',
         unclear_clarification: '',
       });
@@ -890,6 +941,159 @@ describe('OrchestratorCompletionVerifier', () => {
         response: validExecutionResponse,
       });
     });
+
+    it('fails when injected memories are not acknowledged or reported with valid ids', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/org/repo/pull/901',
+            memory_ids_used: 'mem_142,mem_unknown',
+            memory_ids_rejected: '',
+            memory_usage_summary: '',
+            summary: 'Implemented the feature.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-memory-enforcement',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'execution',
+        rawLogs: '[claude] Work started\n[claude] Finished without memory block\n',
+        executionMemoryContext: {
+          applicationId: 'app-123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Route logging',
+          matchedMemories: [
+            {
+              memoryId: 'mem_142',
+              title: 'Route logging',
+              memoryType: 'pitfall_pattern',
+              score: 0.94,
+              appliesWhen: 'Callback route changes',
+              action: 'Update request logging',
+              avoid: 'Do not use stale branches',
+              verification: 'Add route coverage',
+            },
+            {
+              memoryId: 'mem_155',
+              title: 'Route coverage',
+              memoryType: 'verification_pattern',
+              score: 0.92,
+              appliesWhen: 'Route schema work',
+              action: 'Add app.inject coverage',
+              avoid: 'Do not skip serialization checks',
+              verification: 'Verify response body',
+            },
+          ],
+        },
+      });
+      expect(result.passed).toBe(false);
+      expect(result.missingFields).toEqual(
+        expect.arrayContaining([
+          'memory_acknowledgment',
+          'memory_ids_used_invalid',
+          'memory_usage_summary',
+        ])
+      );
+    });
+
+    it('fails when rejected ids are invalid, overlap with used ids, or leave memories unaccounted', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/org/repo/pull/901',
+            memory_ids_used: 'mem_142',
+            memory_ids_rejected: 'mem_142,mem_unknown',
+            memory_usage_summary: 'Used one memory and rejected the rest.',
+            summary: 'Implemented the feature.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-memory-overlap',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'execution',
+        rawLogs: [
+          '[claude] 📋 **Execution Memories Received:**',
+          '[claude] - [mem_142] Route logging',
+          '[claude] - [mem_155] Route coverage',
+        ].join('\n'),
+        executionMemoryContext: {
+          applicationId: 'app-123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Route logging',
+          matchedMemories: [
+            {
+              memoryId: 'mem_142',
+              title: 'Route logging',
+              memoryType: 'pitfall_pattern',
+              score: 0.94,
+              appliesWhen: 'Callback route changes',
+              action: 'Update request logging',
+              avoid: 'Do not use stale branches',
+              verification: 'Add route coverage',
+            },
+            {
+              memoryId: 'mem_155',
+              title: 'Route coverage',
+              memoryType: 'verification_pattern',
+              score: 0.92,
+              appliesWhen: 'Route schema work',
+              action: 'Add app.inject coverage',
+              avoid: 'Do not skip serialization checks',
+              verification: 'Verify response body',
+            },
+          ],
+        },
+      });
+      expect(result.passed).toBe(false);
+      expect(result.missingFields).toEqual(
+        expect.arrayContaining([
+          'memory_ids_rejected_invalid',
+          'memory_ids_overlap',
+          'memory_ids_unaccounted',
+        ])
+      );
+    });
+
+    it('skips memory validation when no memories were injected', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: validExecutionResponse,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-no-injected-memories',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'execution',
+        rawLogs: '[claude] Finished without memory block\n',
+        executionMemoryContext: {
+          applicationId: 'app-123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Route logging',
+          matchedMemories: [],
+        },
+      });
+      expect(result.passed).toBe(true);
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -926,12 +1130,71 @@ describe('OrchestratorCompletionVerifier', () => {
         gh_pr_url: 'https://github.com/org/repo/pull/42',
         comments_replied: 'yes',
         tracking_comment_id: '2345678',
+        memory_ids_used: '',
+        memory_ids_rejected: '',
+        memory_usage_summary: '',
         summary: 'Addressed review comments.',
       });
       expect(result.trace).toEqual({
         transcript: expect.any(String),
         prompt: expect.any(String),
         response: validPRResponse,
+      });
+    });
+
+    it('returns passed with shared memory reporting for pull request tasks', async () => {
+      const response = JSON.stringify({
+        gh_pr_url: 'https://github.com/org/repo/pull/42',
+        comments_replied: 'yes',
+        tracking_comment_id: '2345678',
+        memory_ids_used: 'mem_142',
+        memory_ids_rejected: '',
+        memory_usage_summary: 'Used the injected memory to keep PR replies aligned.',
+        summary: 'Addressed review comments.',
+      });
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: response,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-pr-memory',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'pull_request',
+        rawLogs:
+          '[claude] 📋 **Execution Memories Received:**\n[claude] - [mem_142] PR reply pattern\n',
+        executionMemoryContext: {
+          applicationId: 'app-123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'PR review replies',
+          matchedMemories: [
+            {
+              memoryId: 'mem_142',
+              title: 'PR reply pattern',
+              memoryType: 'review_finding',
+              score: 0.9,
+              appliesWhen: 'Responding to review comments',
+              action: 'Reply in thread with concrete changes',
+              avoid: 'Do not post top-level replies for inline comments',
+              verification: 'Check the review thread',
+            },
+          ],
+        },
+      });
+      expect(result.passed).toBe(true);
+      expect(result.agentData).toEqual({
+        agentType: 'pull_request',
+        gh_pr_url: 'https://github.com/org/repo/pull/42',
+        comments_replied: 'yes',
+        tracking_comment_id: '2345678',
+        memory_ids_used: 'mem_142',
+        memory_ids_rejected: '',
+        memory_usage_summary: 'Used the injected memory to keep PR replies aligned.',
+        summary: 'Addressed review comments.',
       });
     });
   });
@@ -968,6 +1231,9 @@ describe('OrchestratorCompletionVerifier', () => {
         review_id: '123',
         review_comments_posted: '3',
         review_types: 'code_quality,security',
+        memory_ids_used: '',
+        memory_ids_rejected: '',
+        memory_usage_summary: '',
         requirements_tracker_updated: '',
         gh_actions_status: '',
         needs_remediation: '1',
@@ -1004,6 +1270,9 @@ describe('OrchestratorCompletionVerifier', () => {
         gh_pr_url: 'https://github.com/org/repo/pull/42',
         review_comments_posted: '3',
         review_types: 'code_quality,security',
+        memory_ids_used: '',
+        memory_ids_rejected: '',
+        memory_usage_summary: '',
         requirements_tracker_updated: '',
         gh_actions_status: '',
         needs_remediation: '1',
@@ -1043,6 +1312,9 @@ describe('OrchestratorCompletionVerifier', () => {
         agentType: 'remediation',
         outcome: 'implemented',
         gh_pr_url: 'https://github.com/org/repo/pull/77',
+        memory_ids_used: '',
+        memory_ids_rejected: '',
+        memory_usage_summary: '',
         requires_re_review: '0',
         summary: 'Fixed the reported review findings and pushed to the PR branch.',
       });

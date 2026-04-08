@@ -389,6 +389,104 @@ describe('codeRoutes', () => {
       expect(body.data.result.review_types).toBe('code_quality,architecture');
     });
 
+    it('returns execution memory candidates and search counts when present', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Review execution memory contract',
+        sanitizedPrompt: 'review execution memory contract',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-memory-123',
+        executionMemoryContext: {
+          status: 'matched',
+          applicationId: 'app-123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Route logging and verification work',
+          matchedAt: Timestamp.now(),
+          matchedMemories: [
+            {
+              memoryId: 'mem-1',
+              title: 'Verify route serialization',
+              memoryType: 'verification_pattern',
+              score: 0.91,
+              appliesWhen: 'Route schema changes',
+              action: 'Add app.inject coverage',
+              avoid: 'Do not skip serialization',
+              verification: 'Check task detail response shape',
+            },
+          ],
+          topCandidates: [
+            {
+              memoryId: 'mem-1',
+              title: 'Verify route serialization',
+              memoryType: 'verification_pattern',
+              vectorScore: 0.85,
+              rerankScore: 0.91,
+              componentOverlap: 0.72,
+              effectiveness: 0.65,
+              passedThreshold: true,
+            },
+            {
+              memoryId: 'mem-2',
+              title: 'Route logging',
+              memoryType: 'pitfall_pattern',
+              vectorScore: 0.80,
+              rerankScore: 0.74,
+              componentOverlap: 0.63,
+              effectiveness: 0.51,
+              passedThreshold: false,
+            },
+          ],
+          totalSearchResults: 9,
+        },
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const response = await server.inject({
+        method: 'GET',
+        url: `/code/tasks/${created.value.id}`,
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.executionMemoryContext.topCandidates).toEqual([
+        {
+          memoryId: 'mem-1',
+          title: 'Verify route serialization',
+          memoryType: 'verification_pattern',
+          vectorScore: 0.85,
+          rerankScore: 0.91,
+          componentOverlap: 0.72,
+          effectiveness: 0.65,
+          passedThreshold: true,
+        },
+        {
+          memoryId: 'mem-2',
+          title: 'Route logging',
+          memoryType: 'pitfall_pattern',
+          vectorScore: 0.8,
+          rerankScore: 0.74,
+          componentOverlap: 0.63,
+          effectiveness: 0.51,
+          passedThreshold: false,
+        },
+      ]);
+      expect(body.data.executionMemoryContext.totalSearchResults).toBe(9);
+    });
+
     it('returns 404 for other user\'s task', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
