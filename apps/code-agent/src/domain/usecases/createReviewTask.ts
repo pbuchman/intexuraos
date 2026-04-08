@@ -249,21 +249,32 @@ function buildReviewPrompt(request: CreateReviewTaskRequest & {
   }
 
   if (request.reReviewCommitSha !== undefined) {
+    lines.push('', '## Re-review Context', '');
+
+    if (reviewComment !== undefined) {
+      lines.push(
+        'This is a re-review for this PR. Focus on the user\'s specific request in the review comment below.',
+        `The prior review commit SHA (${request.reReviewCommitSha}) and commit range (${request.reReviewCommitSha}..HEAD) are helpful context only.`,
+        '',
+        '### Re-review Guidance',
+        'Review the full PR while prioritizing the user\'s specific request.',
+      );
+    } else {
+      lines.push(
+        'This is a re-review for this PR. Review the full PR scope.',
+        `The PR was previously reviewed up to commit ${request.reReviewCommitSha}.`,
+        `Prior review context: ${request.reReviewCommitSha}..HEAD.`,
+      );
+    }
+
     lines.push(
       '',
-      '## Re-review Context',
-      '',
-      'This is a re-review for this PR. Your review MUST focus on changes',
-      `since commit ${request.reReviewCommitSha}.`,
-      '',
-      '### Review Scope',
-      `Commits since last review: ${request.reReviewCommitSha}..HEAD`,
-      '',
       'IMPORTANT: Do NOT re-flag findings from the previous review unless they',
-      'are still present in the new changes. If a finding was flagged before and',
-      'the relevant code has not changed in the diff, assume it is being tracked',
-      'separately. Focus your review on NEW code, CHANGED code, and whether',
-      'prior findings were correctly addressed.',
+      'are still present in the code you are reviewing. If a finding was flagged',
+      'before and the relevant code has not changed in the diff, assume it is',
+      'being tracked separately and do not treat it as a new finding. Use the',
+      'prior review as context, but keep the current review aligned to the',
+      'request and scope described above.',
     );
   }
 
@@ -563,4 +574,3 @@ export async function createReviewTask(
 
   return ok({ status: 'queued' as const, taskId: task.id, workerType: effectiveWorkerType });
 }
-
