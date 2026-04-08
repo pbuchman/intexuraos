@@ -194,6 +194,7 @@ export interface CodeTask {
   prNumber?: number;           // GitHub PR number (populated on completion)
   prBranch?: string;           // Branch name (queryable, redundant with result.branch)
   prMergedAt?: Timestamp;      // When the PR was merged (set by handlePrClose webhook, INT-1174)
+  prClosedAt?: Timestamp;      // When PR was closed without merge (set by handlePrClose webhook, INT-1316)
 
   // Resume/Follow-up tracking (for PR comment auto-response - INT-465)
   parentTaskId?: string;       // If this task is a follow-up to another
