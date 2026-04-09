@@ -191,10 +191,11 @@ Requirements:
 Requirements:
 
 - call `logIncomingRequest()` before auth and request validation
-- use the existing orchestrator webhook signature pattern
+- implement the existing orchestrator webhook signature pattern locally inside `llm-usage-service`; do not import from `apps/code-agent`
 - validate `X-Request-Timestamp`
 - validate `X-Request-Signature`
 - reject callers trying to use internal auth instead of webhook auth
+- keep any shared-package extraction explicitly out of scope for this task
 
 - [ ] **Step 3: Enforce ingress-specific business rules**
 

@@ -57,7 +57,7 @@ The implementation must reuse existing repo patterns instead of inventing new on
 
 - Service scaffolding: `.claude/commands/create-service.md`
 - Internal auth: `validateInternalAuth(...)` from `@intexuraos/common-http`
-- Orchestrator webhook auth: current `validateOrchestratorSignature(...)` pattern
+- Orchestrator webhook auth: current `validateOrchestratorSignature(...)` pattern, implemented locally in `llm-usage-service` because apps cannot import from `apps/code-agent`
 - Internal client style: `packages/internal-clients/src/user-service/*`
 - Response envelope style: `reply.ok(...)` and `reply.fail(...)`
 - Route logging: `logIncomingRequest()` on every endpoint before auth and use-case execution
@@ -171,6 +171,7 @@ Headers:
 Validation:
 
 - reuse the existing orchestrator webhook signing model
+- implement the HMAC validation locally inside `llm-usage-service` by following the existing `code-agent` pattern; do not import from `apps/code-agent`
 - signature input must match the existing repo pattern: `${timestamp}.${JSON.stringify(body)}`
 - reject requests older than 15 minutes
 - use `INTEXURAOS_ORCHESTRATOR_SECRET`
@@ -785,6 +786,12 @@ Recommended orchestrator implementation when rollout happens later:
 
 - create a small local sender that posts to `/internal/webhooks/usage-events`
 - reuse the existing HMAC signing helper pattern
+
+Implementation note for stage 1:
+
+- keep the webhook validator local to `llm-usage-service/src/infra/` even if the logic mirrors `apps/code-agent/src/infra/webhookValidation.ts`
+- do not introduce a cross-app import
+- do not expand scope by extracting the validator to a shared package in this task; that cleanup can happen later if multiple services need the same helper
 
 ## Future `LLMClient` Integration Contract
 
