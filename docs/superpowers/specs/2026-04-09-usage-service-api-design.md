@@ -60,7 +60,9 @@ The implementation must reuse existing repo patterns instead of inventing new on
 - Orchestrator webhook auth: current `validateOrchestratorSignature(...)` pattern
 - Internal client style: `packages/internal-clients/src/user-service/*`
 - Response envelope style: `reply.ok(...)` and `reply.fail(...)`
+- Route logging: `logIncomingRequest()` on every endpoint before auth and use-case execution
 - Service structure: routes + domain + infra with clean architecture boundaries
+- Firestore registry: `firestore-collections.json` ownership registration for every new collection
 
 ## Required Service Scaffolding Command
 
@@ -125,6 +127,17 @@ It is **not** responsible for:
 | GET    | `/health`                          | none                    | Standard service health endpoint |
 
 There must be **no** user-scoped public endpoint in this stage.
+
+## Route Conventions
+
+Every route in this service must call `logIncomingRequest()` before authentication and before invoking the use case.
+
+This applies to:
+
+- `POST /internal/usage/events`
+- `POST /internal/webhooks/usage-events`
+- `POST /internal/usage/query`
+- `GET /health`
 
 ## Authentication Design
 
@@ -448,6 +461,8 @@ This endpoint exists so internal systems can answer questions like:
 - `sortBy.field` must be one of the returned metric fields
 - query must run against aggregate documents, not by scanning raw events directly
 - if `groupBy` is empty, return one totals row only
+- prefer a date-range aggregate fetch plus in-memory regrouping so the first implementation does not depend on multi-field Firestore queries
+- if later filtering requires multi-field Firestore queries, add the required composite index migration in `migrations/*.mjs`
 
 ## Canonical Event Schema
 
@@ -470,7 +485,7 @@ interface UsageEvent {
     service: string;
     component: string;
     client: string;
-    environment: 'local' | 'dev' | 'prod' | 'test';
+    environment: 'dev' | 'prod' | 'test';
   };
 
   request: {
@@ -525,6 +540,10 @@ interface UsageEvent {
 }
 ```
 
+### Provider Values
+
+`request.provider` stays a closed union in stage 1. Unknown providers should be rejected instead of silently accepted, and adding a new provider is a deliberate schema update rather than an implicit string expansion.
+
 ## Concrete Firestore Data Model
 
 Use Firestore in stage 1 because it matches existing repo infrastructure and avoids inventing a new storage dependency.
@@ -543,6 +562,7 @@ Rules:
 - document is immutable after successful create
 - if create fails because the document already exists, treat as duplicate
 - this collection is the source of truth for ingestion history and deduplication
+- register `llm_usage_events` in `firestore-collections.json` with `owner: "llm-usage-service"`
 
 Required stored fields:
 
@@ -578,7 +598,14 @@ Recommended `aggregateId` shape:
 {date}__{ownerType}__{ownerIdHash}__{service}__{component}__{client}__{provider}__{modelHash}__{operation}__{success}
 ```
 
-The exact encoding is implementation detail, but it must be deterministic and collision-safe.
+Deterministic encoding rules:
+
+- normalize `owner.id` and `request.model` exactly as received
+- compute `ownerIdHash` as lowercase hex SHA-256 truncated to 32 characters
+- compute `modelHash` as lowercase hex SHA-256 truncated to 32 characters
+- keep the unhashed dimensions human-readable in the aggregate ID
+
+This keeps the key deterministic, avoids delimiter collisions from values like `auth0|abc123`, and still leaves enough readable context for debugging.
 
 Required aggregate fields:
 
@@ -618,6 +645,8 @@ interface DailyUsageAggregate {
   updatedAt: string;
 }
 ```
+
+Register `llm_usage_daily_aggregates` in `firestore-collections.json` with `owner: "llm-usage-service"`.
 
 ### Aggregate Write Rule
 
@@ -736,7 +765,8 @@ interface UsageServiceError {
 
 ### Client Implementation Rules
 
-- reuse `fetchWithAuth(...)` from `packages/internal-clients/src/shared/errors.ts`
+- mirror the method surface and error envelope of the user-service client
+- use `fetchWithAuth(...)` from `packages/internal-clients/src/shared/errors.ts` even though the older user-service client still uses inline `fetch()`; `fetchWithAuth` is the newer preferred shared pattern
 - keep the success envelope consistent with existing internal clients
 - support optional `traceId`
 - do not add orchestrator webhook auth to this package

@@ -12,6 +12,20 @@
 
 **Out of Scope:** migration, replacing current callers, dashboards, user-scoped endpoints, Claude/Codex runtime turn metrics
 
+## Endpoint Changes
+
+**Created:**
+- `POST /internal/usage/events` — internal service ingest
+- `POST /internal/webhooks/usage-events` — orchestrator webhook ingest
+- `POST /internal/usage/query` — internal aggregate query
+
+**Modified:** none
+
+**Removed:** none
+
+**Unchanged:**
+- `GET /health` — standard scaffolded health endpoint remains in place
+
 ---
 
 ### Task 1: Scaffold `llm-usage-service` with the standard service command
@@ -49,6 +63,8 @@ Adjust the scaffold so the new service validates the env vars it actually needs 
 - `INTEXURAOS_INTERNAL_AUTH_TOKEN`
 - `INTEXURAOS_ORCHESTRATOR_SECRET`
 - standard Sentry/environment vars already used by the repo
+- register the new service and required env-var wiring in `ecosystem.config.cjs`
+- update `terraform/environments/dev/main.tf` alongside `apps/llm-usage-service/src/index.ts` when new service env vars are introduced, per repo convention
 
 - [ ] **Step 4: Verify the service still boots with the scaffolded health route**
 
@@ -98,6 +114,7 @@ Required use cases:
 
 The use cases should:
 
+- accept `logger: Logger` as a required dependency
 - validate allowed `groupBy` and `sortBy` values
 - handle duplicate events correctly
 - keep route/controller logic thin
@@ -124,6 +141,7 @@ Requirements:
 Requirements:
 
 - aggregate dimensions match the spec exactly
+- `ownerIdHash` and `modelHash` use lowercase hex SHA-256 truncated to 32 characters
 - counters increment only for newly accepted raw events
 - date granularity is daily
 
@@ -142,6 +160,13 @@ Required test cases:
 - multiple events on same day and same dimensions increment one aggregate doc
 - same day but different component or model creates separate aggregate docs
 
+- [ ] **Step 5: Register Firestore collection ownership**
+
+Requirements:
+
+- add `llm_usage_events` to `firestore-collections.json` with `owner: "llm-usage-service"`
+- add `llm_usage_daily_aggregates` to `firestore-collections.json` with `owner: "llm-usage-service"`
+
 ---
 
 ### Task 4: Implement the authenticated ingest endpoints
@@ -155,6 +180,7 @@ Required test cases:
 
 Requirements:
 
+- call `logIncomingRequest()` before auth and request validation
 - authenticate with `validateInternalAuth(...)`
 - validate request body against the spec
 - return partial acceptance information
@@ -164,6 +190,7 @@ Requirements:
 
 Requirements:
 
+- call `logIncomingRequest()` before auth and request validation
 - use the existing orchestrator webhook signature pattern
 - validate `X-Request-Timestamp`
 - validate `X-Request-Signature`
@@ -198,6 +225,7 @@ Required test cases:
 
 Requirements:
 
+- call `logIncomingRequest()` before auth and request validation
 - internal auth only
 - validate `timeRange`, `filters`, `groupBy`, `sortBy`, and `limit`
 - reject unsupported dimensions clearly
@@ -210,6 +238,7 @@ The implementation should:
 - regroup in memory according to `groupBy`
 - compute `rows` and `totals`
 - support sort descending by `costUsd` for “where is the spend” questions
+- prefer this in-memory regrouping path over multi-field Firestore queries; if the final query strategy needs composite indexes, add the required migration in `migrations/*.mjs`
 
 - [ ] **Step 3: Add query tests**
 
@@ -259,7 +288,7 @@ Use:
 
 - [ ] **Step 1: Implement `createUsageServiceClient(...)`**
 
-Mirror the shape of the user-service client and reuse `fetchWithAuth(...)`.
+Mirror the shape of the user-service client, but use `fetchWithAuth(...)` as the preferred shared implementation pattern even though the older user-service client still uses inline `fetch()`.
 
 - [ ] **Step 2: Implement typed methods**
 
@@ -351,6 +380,7 @@ Double-check that the implementation did **not**:
 ### Delivery Checklist
 
 - [ ] `llm-usage-service` exists as a new app
+- [ ] `firestore-collections.json` registers `llm_usage_events` and `llm_usage_daily_aggregates` to `llm-usage-service`
 - [ ] `/internal/usage/events` implemented
 - [ ] `/internal/webhooks/usage-events` implemented
 - [ ] `/internal/usage/query` implemented
