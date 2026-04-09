@@ -42,6 +42,7 @@ import type { ExecutionAgentData } from './completion-verifier.js';
 import { readSessionTranscript } from './transcript-reader.js';
 import { formatTranscript } from './transcript-formatter.js';
 import { extractPrNumber } from './deep-validator-helpers.js';
+import { fetchDispatchMetadata } from './dispatch-metadata-client.js';
 
 const execAsync = promisify(exec);
 
@@ -600,7 +601,11 @@ export class TaskDispatcher {
     const task = loadResult.tasks[taskId];
 
     if (task === undefined) {
-      // TODO(INT-1130): call code-agent /internal/tasks/:id/dispatch-metadata when task not in state
+      const recovered = await this.tryRecoverMissingTask(taskId, message);
+      if (recovered !== null) {
+        return recovered;
+      }
+
       return { ok: false, error: { type: 'not_found', message: 'Task not found' } };
     }
 
@@ -770,6 +775,109 @@ export class TaskDispatcher {
     await this.statePersistence.modify((state) => {
       state.tasks[task.taskId] = task;
     });
+  }
+
+  private async tryRecoverMissingTask(
+    taskId: string,
+    message: string
+  ): Promise<Result<SendMessageResult, SendMessageError> | null> {
+    const metadata = await fetchDispatchMetadata(
+      {
+        codeAgentUrl: this.config.codeAgentUrl,
+        internalAuthToken: this.config.internalAuthToken,
+      },
+      taskId
+    );
+
+    if (metadata === null) {
+      return null;
+    }
+
+    if (metadata.webhookSecret === null) {
+      return null;
+    }
+
+    if (metadata.agentType === 'review' || metadata.agentType === 'remediation') {
+      return {
+        ok: false,
+        error: {
+          type: 'invalid_agent_type',
+          message: 'Cannot send messages to review/remediation tasks',
+        },
+      };
+    }
+
+    const task: Task = {
+      taskId: metadata.taskId,
+      workerType: metadata.workerType,
+      runtime: WORKER_TYPES[metadata.workerType].runtime,
+      prompt: metadata.prompt,
+      repository: metadata.repository,
+      baseBranch: metadata.baseBranch,
+      linearIssueLabels: [],
+      webhookUrl: metadata.webhookUrl,
+      webhookSecret: metadata.webhookSecret,
+      status: 'running',
+      worktreePath: '',
+      containerId: '',
+      startedAt: new Date().toISOString(),
+      attemptCount: 1,
+      maxAttempts: this.completionMaxAttempts,
+      verificationHistory: [],
+      ...(metadata.agentType !== null && { agentType: metadata.agentType }),
+      ...(metadata.linearIssueId !== null && { linearIssueId: metadata.linearIssueId }),
+      ...(metadata.trackingCommentId !== null && {
+        trackingCommentId: metadata.trackingCommentId,
+      }),
+      ...(metadata.prNumber !== null && { prNumber: metadata.prNumber }),
+      ...(metadata.continuationPrBranch !== null && {
+        continuationPrBranch: metadata.continuationPrBranch,
+      }),
+    };
+
+    this.logForwarder.registerTask(taskId, task.webhookSecret);
+    this.appendOrchestratorTaskLog(
+      taskId,
+      'Recreating task from dispatch metadata with user message'
+    );
+    this.appendTaggedTaskLog(
+      taskId,
+      'prompt',
+      message.length > 200 ? message.slice(0, 200) + '\u2026' : message
+    );
+
+    const prompt =
+      task.agentType === 'ask_agent' ? message : this.buildResumePreamble(task) + message;
+    task.pendingResumeStart = {
+      prompt,
+      acceptedAt: new Date().toISOString(),
+    };
+    await this.saveTask(task);
+
+    this.runningCount++;
+    void this.recreateTaskFromDispatchMetadata(task).catch((error: unknown) => {
+      void this.failAcceptedResume(task, error);
+    });
+    this.logger.info({ taskId }, 'Task resume accepted after dispatch metadata recovery');
+
+    return { ok: true, value: { action: 'resumed' } };
+  }
+
+  private async recreateTaskFromDispatchMetadata(task: Task): Promise<void> {
+    try {
+      task.worktreePath =
+        task.continuationPrBranch === undefined
+          ? await this.worktreeManager.createWorktree(task.taskId, task.baseBranch)
+          : await this.worktreeManager.createWorktree(
+              task.taskId,
+              task.baseBranch,
+              task.continuationPrBranch
+            );
+      await this.saveTask(task);
+      await this.resumeTaskWithUserMessage(task);
+    } catch (error) {
+      await this.failAcceptedResume(task, error);
+    }
   }
 
   private async resumeTaskWithUserMessage(task: Task): Promise<void> {

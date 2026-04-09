@@ -367,6 +367,7 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
             LINEAR_API_KEY: 'test-linear',
             SENTRY_AUTH_TOKEN: 'test-sentry',
             MINIMAX_API_KEY: 'test-minimax',
+            MIMO_API_KEY: 'test-mimo',
             DASHSCOPE_API_KEY: 'test-dashscope',
             OPENROUTER_API_KEY: 'test-openrouter',
           },

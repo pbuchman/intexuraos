@@ -363,8 +363,24 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               linearIssueId: { type: ['string', 'null'] },
               webhookSecret: { type: ['string', 'null'] },
               prNumber: { type: ['number', 'null'] },
+              webhookUrl: { type: 'string' },
+              continuationPrBranch: { type: ['string', 'null'] },
+              trackingCommentId: { type: ['string', 'null'] },
             },
-            required: ['taskId', 'prompt', 'repository', 'baseBranch', 'agentType', 'workerType', 'linearIssueId', 'webhookSecret', 'prNumber'],
+            required: [
+              'taskId',
+              'prompt',
+              'repository',
+              'baseBranch',
+              'agentType',
+              'workerType',
+              'linearIssueId',
+              'webhookSecret',
+              'prNumber',
+              'webhookUrl',
+              'continuationPrBranch',
+              'trackingCommentId',
+            ],
           },
           401: {
             description: 'Unauthorized',
@@ -412,7 +428,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const { taskId } = request.params;
-      const { codeTaskRepo } = getServices();
+      const { codeTaskRepo, serviceUrl } = getServices();
 
       const findResult = await codeTaskRepo.findById(taskId);
       if (!findResult.ok) {
@@ -432,6 +448,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         linearIssueId: task.linearIssueId ?? null,
         webhookSecret: task.webhookSecret ?? null,
         prNumber: task.prNumber ?? null,
+        webhookUrl: `${serviceUrl ?? loadConfig().serviceUrl}/internal/webhooks/task-complete`,
+        continuationPrBranch: task.prBranch ?? null,
+        trackingCommentId: task.trackingCommentId ?? null,
       });
     }
   );
