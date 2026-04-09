@@ -1381,7 +1381,7 @@ describe('DockerProvider', () => {
       const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
       expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://openrouter.ai/api');
       const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
-      expect(modelEntry).toBe('ANTHROPIC_MODEL=qwen/qwen3.6-plus:free');
+      expect(modelEntry).toBe('ANTHROPIC_MODEL=google/gemma-4-31b-it:free');
       const effortEntry = envArr.find((e: string) => e.startsWith('CLAUDE_CODE_EFFORT_LEVEL='));
       expect(effortEntry).toBe('CLAUDE_CODE_EFFORT_LEVEL=high');
       const betasEntry = envArr.find((e: string) =>
