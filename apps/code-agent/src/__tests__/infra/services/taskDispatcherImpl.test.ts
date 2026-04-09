@@ -236,6 +236,46 @@ describe('taskDispatcherImpl', () => {
         expect(result.error.message).toContain('Bad Request');
       }
     });
+
+    it('returns session_expired for HTTP 410 Gone', async () => {
+      const service = createTaskDispatcherService(deps);
+
+      nock(WORKER_URL)
+        .post('/tasks/task-410/message')
+        .reply(410, { error: 'Session has expired — the worker container was cleaned up.' });
+
+      const result = await service.sendMessageToWorker(
+        'task-410',
+        'test message',
+        workerCredentials
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('session_expired');
+        expect(result.error.message).toContain('Session has expired');
+      }
+    });
+
+    it('returns session_expired with default message when HTTP 410 has empty body', async () => {
+      const service = createTaskDispatcherService(deps);
+
+      nock(WORKER_URL)
+        .post('/tasks/task-410-empty/message')
+        .reply(410, '');
+
+      const result = await service.sendMessageToWorker(
+        'task-410-empty',
+        'test message',
+        workerCredentials
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('session_expired');
+        expect(result.error.message).toBe('Session has expired — the worker container was cleaned up.');
+      }
+    });
   });
 
   describe('dispatch includes reviewTypes when provided', () => {

@@ -1191,6 +1191,7 @@ export interface CodeTaskExecutionMemoryContext {
   matchedAt?: string;
   matchedMemories?: CodeTaskExecutionMemoryMatch[];
   topCandidates?: CodeTaskExecutionMemoryCandidate[];
+  totalSearchResults?: number;
   errorCode?: string;
   errorMessage?: string;
 }

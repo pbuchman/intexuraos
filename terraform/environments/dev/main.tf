@@ -512,6 +512,7 @@ module "secret_manager" {
     # LLM API keys
     "INTEXURAOS_OPENAI_APP_API_KEY"     = "OpenAI API key for chat-agent"
     "INTEXURAOS_MINIMAX_APP_API_KEY"    = "MiniMax API key for orchestrator worker containers"
+    "INTEXURAOS_MIMO_APP_API_KEY"       = "MiMo Pro API key for orchestrator worker containers"
     "INTEXURAOS_GEMINI_APP_API_KEY"     = "Gemini API key for orchestrator completion verifier"
     "INTEXURAOS_DASHSCOPE_APP_API_KEY"  = "Dashscope API key for orchestrator glm and qwen worker containers"
     "INTEXURAOS_OPENROUTER_APP_API_KEY" = "OpenRouter API key for agent compliance validator"
@@ -1782,7 +1783,6 @@ module "cloud_build" {
   github_connection_name = var.github_connection_name
 
   artifact_registry_url   = module.artifact_registry.repository_url
-  static_assets_bucket    = module.static_assets.bucket_name
   web_app_bucket          = module.web_app.bucket_name
   functions_source_bucket = google_storage_bucket.cloud_functions_source.name
 

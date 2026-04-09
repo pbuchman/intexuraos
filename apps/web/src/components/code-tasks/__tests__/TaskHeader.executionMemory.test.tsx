@@ -57,15 +57,39 @@ describe('TaskHeader execution memory chip', () => {
                 verification: 'Inspect logs',
               },
             ],
+            topCandidates: [
+              { memoryId: 'mem-1', title: 'M1', memoryType: 'verification_pattern', vectorScore: 0.8, rerankScore: 0.91, componentOverlap: 0.5, effectiveness: 0.7, passedThreshold: true },
+              { memoryId: 'mem-2', title: 'M2', memoryType: 'pitfall_pattern', vectorScore: 0.6, rerankScore: 0.83, componentOverlap: 0.3, effectiveness: 0.4, passedThreshold: true },
+              { memoryId: 'mem-3', title: 'M3', memoryType: 'pitfall_pattern', vectorScore: 0.5, rerankScore: 0.40, componentOverlap: 0.2, effectiveness: 0.3, passedThreshold: false },
+            ],
           },
         })}
         workerStatusTag={null}
       />
     );
 
-    const matchedChip = screen.getByText('Memory: 2 matches');
+    const matchedChip = screen.getByText('Memory: 2 injected, 3 shown');
     expect(matchedChip).toBeInTheDocument();
     expect(matchedChip.className).toContain('bg-emerald-100');
+
+    rerender(
+      <TaskHeader
+        task={createTask({
+          executionMemoryContext: {
+            status: 'none',
+            topCandidates: [
+              { memoryId: 'mem-1', title: 'M1', memoryType: 'verification_pattern', vectorScore: 0.5, rerankScore: 0.40, componentOverlap: 0.2, effectiveness: 0.3, passedThreshold: false },
+              { memoryId: 'mem-2', title: 'M2', memoryType: 'pitfall_pattern', vectorScore: 0.4, rerankScore: 0.35, componentOverlap: 0.1, effectiveness: 0.2, passedThreshold: false },
+            ],
+          },
+        })}
+        workerStatusTag={null}
+      />
+    );
+
+    const noneChipWithCandidates = screen.getByText('Memory: 0 injected, 2 shown');
+    expect(noneChipWithCandidates).toBeInTheDocument();
+    expect(noneChipWithCandidates.className).toContain('bg-slate-100');
 
     rerender(
       <TaskHeader

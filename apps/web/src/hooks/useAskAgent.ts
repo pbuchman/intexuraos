@@ -33,6 +33,8 @@ export interface AskAgentState {
   canCancel: boolean;
   /** Whether we can clear (session idle) */
   canClear: boolean;
+  /** Whether the session has expired (container cleaned up) */
+  sessionExpired: boolean;
 
   // --- Message input state (from useTaskView) ---
   sending: boolean;
@@ -111,6 +113,7 @@ export function useAskAgent(): AskAgentState {
   const canStart = !isAgentRunning && !starting;
   const canCancel = isAgentRunning;
   const canClear = isSessionIdle && !starting;
+  const sessionExpired = sendError !== null && sendError.code === 'SESSION_EXPIRED';
 
   const start = useCallback(async (prompt: string): Promise<void> => {
     userStartedRef.current = true;
@@ -169,6 +172,7 @@ export function useAskAgent(): AskAgentState {
     canStart,
     canCancel,
     canClear,
+    sessionExpired,
     sending,
     sendError,
     messageStatus,

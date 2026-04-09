@@ -306,6 +306,7 @@ function logWorkerAuthStartupStatus(
 async function validateWorkerApiKeys(
   workerAuthRegistry: WorkerAuthRegistry,
   minimaxKey: string,
+  mimoKey: string,
   dashscopeKey: string,
   openRouterKey: string,
   logger: pino.Logger
@@ -344,6 +345,9 @@ async function validateWorkerApiKeys(
   await Promise.all([
     minimaxKey !== ''
       ? validateThirdPartyApiKey('minimax', minimaxKey, suffix, logger)
+      : Promise.resolve(),
+    mimoKey !== ''
+      ? validateThirdPartyApiKey('mimo-pro', mimoKey, suffix, logger)
       : Promise.resolve(),
     dashscopeKey !== ''
       ? validateThirdPartyApiKey('qwen', dashscopeKey, suffix, logger)
@@ -676,6 +680,7 @@ async function bootstrap(): Promise<void> {
     LINEAR_API_KEY: getRequiredEnv('INTEXURAOS_LINEAR_API_KEY'),
     SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
     MINIMAX_API_KEY: getRequiredEnv('INTEXURAOS_MINIMAX_APP_API_KEY'),
+    MIMO_API_KEY: getRequiredEnv('INTEXURAOS_MIMO_APP_API_KEY'),
     DASHSCOPE_API_KEY: getRequiredEnv('INTEXURAOS_DASHSCOPE_APP_API_KEY'),
     OPENROUTER_API_KEY: process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '',
   };
@@ -701,6 +706,7 @@ async function bootstrap(): Promise<void> {
   void validateWorkerApiKeys(
     workerAuthRegistry,
     secrets.MINIMAX_API_KEY,
+    secrets.MIMO_API_KEY,
     secrets.DASHSCOPE_API_KEY,
     secrets.OPENROUTER_API_KEY,
     logger

@@ -32,6 +32,7 @@ export type SendTaskMessageErrorCode =
   | 'invalid_status'
   | 'worker_not_configured'
   | 'worker_unavailable'
+  | 'session_expired'
   | 'worker_error'
   | 'internal_error';
 
@@ -152,6 +153,14 @@ export async function sendTaskMessage(
   });
 
   if (!forwardResult.ok) {
+    // Handle session_expired specially - this is an expected condition when container is cleaned up
+    if (forwardResult.error.code === 'session_expired') {
+      logger.info({ taskId }, 'Session expired — container cleaned up');
+      return err({
+        code: 'session_expired',
+        message: forwardResult.error.message,
+      });
+    }
     const errorCode = forwardResult.error.code === 'worker_unavailable' ? 'worker_unavailable' : 'worker_error';
     logger.error({ taskId, error: forwardResult.error }, 'Failed to forward message to worker');
     return err({
