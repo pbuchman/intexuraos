@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
-import { fetchDispatchMetadata } from '../services/dispatch-metadata-client.js';
+import {
+  fetchDispatchMetadata,
+  type DispatchMetadata,
+} from '../services/dispatch-metadata-client.js';
 
 describe('fetchDispatchMetadata', () => {
   const codeAgentUrl = 'http://localhost:8080';
@@ -38,7 +41,7 @@ describe('fetchDispatchMetadata', () => {
       'task-123'
     );
 
-    expect(result).toEqual({
+    const expected: DispatchMetadata = {
       taskId: 'task-123',
       prompt: 'Resume work',
       repository: 'pbuchman/intexuraos',
@@ -51,7 +54,9 @@ describe('fetchDispatchMetadata', () => {
       webhookUrl: 'http://localhost:8086/internal/webhooks/task-complete',
       continuationPrBranch: 'task_existing_pr_branch',
       trackingCommentId: 'comment-123',
-    });
+    };
+
+    expect(result).toEqual(expected);
   });
 
   it('returns null for 404 responses', async () => {

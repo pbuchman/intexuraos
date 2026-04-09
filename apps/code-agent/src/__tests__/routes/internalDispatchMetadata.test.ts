@@ -246,4 +246,27 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
     expect(body.continuationPrBranch).toBeNull();
     expect(body.trackingCommentId).toBeNull();
   });
+
+  it('falls back to configured serviceUrl when services do not provide one', async () => {
+    process.env['INTEXURAOS_SERVICE_URL'] = 'https://configured-code-agent.example';
+
+    const services = getServices();
+    const { serviceUrl: _unusedServiceUrl, ...servicesWithoutServiceUrl } = services;
+    setServices(servicesWithoutServiceUrl);
+
+    const task = await createTask();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/internal/tasks/${task.id}/dispatch-metadata`,
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const body = JSON.parse(response.body) as { webhookUrl: string };
+    expect(body.webhookUrl).toBe(
+      'https://configured-code-agent.example/internal/webhooks/task-complete'
+    );
+  });
 });
