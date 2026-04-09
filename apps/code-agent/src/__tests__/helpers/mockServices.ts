@@ -200,6 +200,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
   const container: ServiceContainer = {
     firestore: fakeFirestore,
     logger,
+    serviceUrl: 'http://localhost:8080',
     codeTaskRepo,
     logChunkRepo: createFirestoreLogChunkRepository({
       firestore: fakeFirestore,

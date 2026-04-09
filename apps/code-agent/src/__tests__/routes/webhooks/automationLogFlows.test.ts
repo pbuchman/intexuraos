@@ -204,6 +204,7 @@ describe('Automation log integration flows', () => {
     const mockServices: ServiceContainer = {
       firestore: fakeFirestore as unknown as Firestore,
       logger,
+      serviceUrl: 'http://localhost:8080',
       codeTaskRepo: {} as never,
       logChunkRepo: {} as never,
       logLineRepo: {} as never,

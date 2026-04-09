@@ -153,6 +153,9 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
       linearIssueId: string | null;
       webhookSecret: string | null;
       prNumber: number | null;
+      webhookUrl: string;
+      continuationPrBranch: string | null;
+      trackingCommentId: string | null;
     }
 
     const body = JSON.parse(response.body) as DispatchMetadata;
@@ -165,6 +168,9 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
     expect(body.linearIssueId).toBe('INT-999');
     expect(body.webhookSecret).toBe('secret-abc');
     expect(body.prNumber).toBe(42);
+    expect(body.webhookUrl).toBe('http://localhost:8080/internal/webhooks/task-complete');
+    expect(body.continuationPrBranch).toBeNull();
+    expect(body.trackingCommentId).toBeNull();
   });
 
   it('returns null for optional fields when not set on the task', async () => {
@@ -179,6 +185,8 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
       repository: 'intexuraos/minimal',
       baseBranch: 'development',
       traceId: 'trace-2',
+      prBranch: 'task_existing_pr_branch',
+      trackingCommentId: 'comment-123',
       // no agentType, linearIssueId, webhookSecret, prNumber
     });
     if (!result.ok) {
@@ -200,6 +208,9 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
       linearIssueId: string | null;
       webhookSecret: string | null;
       prNumber: number | null;
+      webhookUrl: string;
+      continuationPrBranch: string | null;
+      trackingCommentId: string | null;
     }
 
     const body = JSON.parse(response.body) as DispatchMetadata;
@@ -208,5 +219,31 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
     expect(body.linearIssueId).toBeNull();
     expect(body.webhookSecret).toBeNull();
     expect(body.prNumber).toBeNull();
+    expect(body.webhookUrl).toBe('http://localhost:8080/internal/webhooks/task-complete');
+    expect(body.continuationPrBranch).toBe('task_existing_pr_branch');
+    expect(body.trackingCommentId).toBe('comment-123');
+  });
+
+  it('returns null for continuationPrBranch and trackingCommentId when not set', async () => {
+    const task = await createTask();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/internal/tasks/${task.id}/dispatch-metadata`,
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    interface DispatchMetadata {
+      webhookUrl: string;
+      continuationPrBranch: string | null;
+      trackingCommentId: string | null;
+    }
+
+    const body = JSON.parse(response.body) as DispatchMetadata;
+    expect(body.webhookUrl).toBe('http://localhost:8080/internal/webhooks/task-complete');
+    expect(body.continuationPrBranch).toBeNull();
+    expect(body.trackingCommentId).toBeNull();
   });
 });

@@ -102,6 +102,7 @@ const EXECUTION_MEMORY_USER_ID = 'system:execution-memory';
 export interface ServiceContainer {
   firestore: Firestore;
   logger: Logger;
+  serviceUrl?: string;
   codeTaskRepo: CodeTaskRepository;
   logChunkRepo: LogChunkRepository;
   logLineRepo: LogLineRepository;
@@ -575,6 +576,7 @@ export function initServices(config: ServiceConfig): void {
   container = {
     firestore,
     logger,
+    serviceUrl: config.serviceUrl,
     codeTaskRepo,
     logChunkRepo: createFirestoreLogChunkRepository({ firestore, logger }),
     logLineRepo,
