@@ -7953,6 +7953,26 @@ describe('TaskDispatcher', () => {
   });
 
   describe('sendMessage', () => {
+    const createDispatchMetadataResponse = (overrides: Record<string, unknown> = {}): Response =>
+      new Response(
+        JSON.stringify({
+          taskId: 'recovered-task',
+          prompt: 'Original prompt',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          agentType: 'execution',
+          workerType: 'auto',
+          linearIssueId: 'INT-1134',
+          webhookSecret: 'secret-from-code-agent',
+          prNumber: 42,
+          webhookUrl: 'https://example.com/internal/webhooks/task-complete',
+          continuationPrBranch: null,
+          trackingCommentId: null,
+          ...overrides,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+
     it('queues message for running task', async () => {
       const request: CreateTaskRequest = {
         taskId: 'msg-running-task',
@@ -8037,25 +8057,99 @@ describe('TaskDispatcher', () => {
       }
     });
 
+    it('returns not_found when recovered dispatch metadata has no webhook secret', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        createDispatchMetadataResponse({
+          taskId: 'missing-webhook-secret-task',
+          webhookSecret: null,
+        })
+      );
+
+      const result = await dispatcher.sendMessage('missing-webhook-secret-task', 'Hello');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('not_found');
+      }
+      expect(mockWorktreeManager.createWorktree).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['planning', true],
+      ['pull_request', true],
+      ['ask_agent', false],
+    ] as const)(
+      'recreates a missing %s task from dispatch metadata with the expected resume prompt',
+      async (agentType, expectsResumePreamble) => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+          createDispatchMetadataResponse({
+            taskId: `${agentType}-task`,
+            agentType,
+            continuationPrBranch: 'task_existing_pr_branch',
+          })
+        );
+
+        const result = await dispatcher.sendMessage(`${agentType}-task`, 'Hello');
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value).toEqual({ action: 'resumed' });
+        }
+
+        expect(mockWorktreeManager.createWorktree).toHaveBeenCalledWith(
+          `${agentType}-task`,
+          'development',
+          'task_existing_pr_branch'
+        );
+
+        const recoveredTask = await dispatcher.getTask(`${agentType}-task`);
+        expect(recoveredTask?.agentType).toBe(agentType);
+        expect(recoveredTask?.continuationPrBranch).toBe('task_existing_pr_branch');
+        expect(recoveredTask?.pendingResumeStart?.prompt).toContain('Hello');
+
+        if (expectsResumePreamble) {
+          expect(recoveredTask?.pendingResumeStart?.prompt).toContain('RESUME PRE-FLIGHT');
+        } else {
+          expect(recoveredTask?.pendingResumeStart?.prompt).toBe('Hello');
+        }
+      }
+    );
+
+    it('truncates long recovered user messages in the prompt log entry', async () => {
+      const longMessage = 'a'.repeat(250);
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        createDispatchMetadataResponse({
+          taskId: 'long-message-task',
+        })
+      );
+
+      const result = await dispatcher.sendMessage('long-message-task', longMessage);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'resumed' });
+      }
+
+      const promptLogCall = vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.find(
+          (call) =>
+            call[0] === 'long-message-task' &&
+            typeof call[1] === 'string' &&
+            call[1].includes('[prompt]')
+        );
+
+      expect(promptLogCall).toBeDefined();
+      expect(promptLogCall?.[1]).toContain(`${longMessage.slice(0, 200)}…`);
+    });
+
     it('rejects fallback recreation for review tasks recovered from dispatch metadata', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            taskId: 'review-task',
-            prompt: 'Original prompt',
-            repository: 'pbuchman/intexuraos',
-            baseBranch: 'development',
-            agentType: 'review',
-            workerType: 'auto',
-            linearIssueId: 'INT-1134',
-            webhookSecret: 'secret-from-code-agent',
-            prNumber: 42,
-            webhookUrl: 'https://example.com/internal/webhooks/task-complete',
-            continuationPrBranch: null,
-            trackingCommentId: null,
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } }
-        )
+        createDispatchMetadataResponse({
+          taskId: 'review-task',
+          agentType: 'review',
+        })
       );
 
       const result = await dispatcher.sendMessage('review-task', 'Hello');
@@ -8068,23 +8162,9 @@ describe('TaskDispatcher', () => {
 
     it('marks a recovered task as failed when fallback startup fails after acceptance', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            taskId: 'failing-fallback-task',
-            prompt: 'Original prompt',
-            repository: 'pbuchman/intexuraos',
-            baseBranch: 'development',
-            agentType: 'execution',
-            workerType: 'auto',
-            linearIssueId: 'INT-1134',
-            webhookSecret: 'secret-from-code-agent',
-            prNumber: 42,
-            webhookUrl: 'https://example.com/internal/webhooks/task-complete',
-            continuationPrBranch: null,
-            trackingCommentId: null,
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } }
-        )
+        createDispatchMetadataResponse({
+          taskId: 'failing-fallback-task',
+        })
       );
       vi.mocked(mockIsolationProvider.createWorker).mockRejectedValueOnce(
         new Error('container startup failed')
