@@ -588,6 +588,28 @@ describe('sendTaskMessage', () => {
         expect.any(String)
       );
     });
+
+    it('should return session_expired when worker reports session expired', async () => {
+      const task = createMockTask({ status: 'running' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
+      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
+      setupWorkerSettings();
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
+        err({ code: 'session_expired', message: 'Session has expired — the worker container was cleaned up.' })
+      );
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('session_expired');
+        expect(result.error.message).toBe('Session has expired — the worker container was cleaned up.');
+      }
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId }),
+        'Session expired — container cleaned up'
+      );
+    });
   });
 
   describe('graceful degradation', () => {

@@ -194,7 +194,7 @@ function createShareStorageAndConfig(): {
 } {
   const bucketName = process.env['INTEXURAOS_SHARED_CONTENT_BUCKET'];
   const shareBaseUrl = process.env['INTEXURAOS_SHARE_BASE_URL'];
-  const gcpProjectId = process.env['INTEXURAOS_GCP_PROJECT_ID'];
+  const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
 
   if (
     bucketName !== undefined &&
@@ -202,7 +202,7 @@ function createShareStorageAndConfig(): {
     shareBaseUrl !== undefined &&
     shareBaseUrl !== ''
   ) {
-    const staticAssetsUrl = `https://storage.googleapis.com/intexuraos-static-assets-${gcpProjectId?.includes('dev') === true ? 'dev' : 'prod'}`;
+    const staticAssetsUrl = webAppUrl ?? '';
 
     return {
       shareStorage: createShareStorage({ bucketName }),

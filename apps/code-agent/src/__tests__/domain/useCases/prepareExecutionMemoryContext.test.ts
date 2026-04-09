@@ -158,6 +158,7 @@ describe('prepareExecutionMemoryContext', () => {
       applicationId: 'app-123',
       retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: 'Auth callback route changes with logging and route verification work',
+      totalSearchResults: 3,
       matchedMemories: [
         expect.objectContaining({ memoryId: 'mem-1' }),
         expect.objectContaining({ memoryId: 'mem-2' }),
@@ -204,6 +205,7 @@ describe('prepareExecutionMemoryContext', () => {
       applicationId: 'app-no-match',
       retrievalVersion: 'execution-memory-retrieval@3.0.0',
       querySummary: expect.stringContaining('Fix the Auth0 callback route'),
+      totalSearchResults: 1,
     });
     expect(result?.topCandidates).toHaveLength(1);
     expect(result?.topCandidates?.[0]).toMatchObject({ memoryId: 'mem-low', passedThreshold: false });
@@ -774,6 +776,7 @@ describe('prepareExecutionMemoryContext', () => {
       // Verify topCandidates in return value
       const candidates = result?.topCandidates;
       expect(candidates).toHaveLength(2);
+      expect(result?.totalSearchResults).toBe(2);
       expect(candidates?.[0]).toMatchObject({
         memoryId: 'mem-high',
         passedThreshold: true,
@@ -834,6 +837,7 @@ describe('prepareExecutionMemoryContext', () => {
       });
 
       expect(result?.status).toBe('none');
+      expect(result?.totalSearchResults).toBe(1);
       const candidates = result?.topCandidates;
       expect(candidates).toHaveLength(1);
       expect(candidates?.[0]).toMatchObject({

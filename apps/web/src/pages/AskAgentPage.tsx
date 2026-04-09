@@ -20,6 +20,7 @@ export function AskAgentPage(): React.JSX.Element {
     sending,
     sendError,
     messageStatus,
+    sessionExpired,
     start,
     sendMessage,
     cancel,
@@ -77,6 +78,24 @@ export function AskAgentPage(): React.JSX.Element {
         </Card>
       ) : null}
 
+      {sessionExpired ? (
+        <Card className="mb-4 border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-900/30">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-amber-800 dark:text-amber-300">
+              This session has expired — the worker container was cleaned up after inactivity.
+              Clear this session and start a new conversation.
+            </p>
+            <button
+              type="button"
+              onClick={handleClear}
+              className="ml-4 shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600"
+            >
+              Clear &amp; Start New
+            </button>
+          </div>
+        </Card>
+      ) : null}
+
       {/* Log viewer — reuses the same component as code task view */}
       <CodeTaskLogViewer
         logs={logs}
@@ -84,7 +103,7 @@ export function AskAgentPage(): React.JSX.Element {
         listenerHealthy={listenerHealthy}
         taskStatus={task?.status ?? 'queued'}
         agentType="ask_agent"
-        {...(taskId !== null ? { onSendMessage: sendMessage } : {})}
+        {...(taskId !== null && !sessionExpired ? { onSendMessage: sendMessage } : {})}
         sending={sending}
         sendError={sendError}
         messageStatus={messageStatus}

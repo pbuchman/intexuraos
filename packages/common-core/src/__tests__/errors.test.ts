@@ -60,6 +60,7 @@ describe('Error utilities', () => {
         'DOWNSTREAM_ERROR',
         'INTERNAL_ERROR',
         'MISCONFIGURED',
+        'SESSION_EXPIRED',
         'NOTION_NOT_CONNECTED',
         'PAGE_NOT_CONFIGURED',
         'RESEARCH_NOT_COMPLETED',

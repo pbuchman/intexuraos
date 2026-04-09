@@ -1810,6 +1810,24 @@ describe('codeRoutes branch coverage', () => {
       expect(body.error.code).toBe('WORKER_UNAVAILABLE');
     });
 
+    it('returns SESSION_EXPIRED for session_expired', async () => {
+      mockedSendTaskMessage.mockResolvedValue(err({
+        code: 'session_expired',
+        message: 'Session has expired — the worker container was cleaned up.',
+      }));
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/tasks/task-123/messages',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { message: 'Hello' },
+      });
+
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('SESSION_EXPIRED');
+      expect(response.statusCode).toBe(410);
+    });
+
     it('returns INTERNAL_ERROR for unknown error', async () => {
       mockedSendTaskMessage.mockResolvedValue(err({
         code: 'worker_error',
