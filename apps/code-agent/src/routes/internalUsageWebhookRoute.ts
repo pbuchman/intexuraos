@@ -142,7 +142,8 @@ export const internalUsageWebhookRoute: FastifyPluginCallback = (fastify, _opts,
         orchestratorSecret: loadConfig().orchestratorSecret,
       });
       if (!hmacResult.ok) {
-        return await reply.fail('UNAUTHORIZED', `HMAC validation failed: ${hmacResult.error.message}`);
+        request.log.warn({ error: hmacResult.error }, 'HMAC validation failed for usage-events webhook');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
       // Check that usageServiceClient is configured

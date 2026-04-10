@@ -1,3 +1,4 @@
+// IMPORTANT: Must remain `import type` — @intexuraos/internal-clients is a devDependency (type-checking only).
 import type { UsageEventInput } from '@intexuraos/internal-clients';
 import type { UsageLogParams } from './usageLogger.js';
 
