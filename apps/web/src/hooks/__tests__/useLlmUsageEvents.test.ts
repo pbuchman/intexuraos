@@ -244,6 +244,29 @@ describe('useLlmUsageEvents', () => {
     expect(mockListLlmUsageEvents.mock.calls.length).toBeGreaterThan(callsBefore);
   });
 
+  it('skips all API calls when enabled is false', async () => {
+    mockListLlmUsageEvents.mockResolvedValue(makeResponse());
+
+    const { result } = renderHook(() =>
+      useLlmUsageEvents({ ...defaultOptions, enabled: false }),
+    );
+
+    // Should not be loading and should not have called the API
+    expect(result.current.loading).toBe(false);
+    expect(result.current.events).toEqual([]);
+    expect(result.current.totalMatched).toBe(0);
+    expect(result.current.error).toBeNull();
+    expect(result.current.hasMore).toBe(false);
+    expect(mockListLlmUsageEvents).not.toHaveBeenCalled();
+
+    // Advance timers past poll interval — still no calls
+    await act(async () => {
+      vi.advanceTimersByTime(60000);
+    });
+
+    expect(mockListLlmUsageEvents).not.toHaveBeenCalled();
+  });
+
   it('re-fetches when options change', async () => {
     mockListLlmUsageEvents.mockResolvedValue(makeResponse());
 

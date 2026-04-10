@@ -133,6 +133,21 @@ describe('useLlmUsageQuery', () => {
     expect(result.current.totals).toEqual(newTotals);
   });
 
+  it('skips all API calls when enabled is false', async () => {
+    mockQueryLlmUsage.mockResolvedValue(makeResponse());
+
+    const { result } = renderHook(() =>
+      useLlmUsageQuery({ ...defaultOptions, enabled: false }),
+    );
+
+    // Should not be loading and should not have called the API
+    expect(result.current.loading).toBe(false);
+    expect(result.current.rows).toEqual([]);
+    expect(result.current.totals).toBeNull();
+    expect(result.current.error).toBeNull();
+    expect(mockQueryLlmUsage).not.toHaveBeenCalled();
+  });
+
   it('re-fetches when options change', async () => {
     mockQueryLlmUsage.mockResolvedValue(makeResponse());
 

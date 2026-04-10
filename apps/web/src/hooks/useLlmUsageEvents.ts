@@ -12,6 +12,8 @@ export interface UseLlmUsageEventsOptions {
   timeRange: ResolvedTimeRange;
   filters: UsageEventFilters;
   sortBy: { field: UsageEventSortField; direction: 'asc' | 'desc' };
+  /** When false, the hook skips all API calls and returns empty initial state. Defaults to true. */
+  enabled?: boolean;
 }
 
 export interface UseLlmUsageEventsResult {
@@ -25,7 +27,21 @@ export interface UseLlmUsageEventsResult {
   refresh: () => Promise<void>;
 }
 
+const NOOP_ASYNC = (): Promise<void> => Promise.resolve();
+
+const DISABLED_RESULT: UseLlmUsageEventsResult = {
+  events: [],
+  totalMatched: 0,
+  loading: false,
+  loadingMore: false,
+  error: null,
+  hasMore: false,
+  loadMore: NOOP_ASYNC,
+  refresh: NOOP_ASYNC,
+};
+
 export function useLlmUsageEvents(options: UseLlmUsageEventsOptions): UseLlmUsageEventsResult {
+  const enabled = options.enabled !== false;
   const { getAccessToken } = useAuth();
   const [events, setEvents] = useState<UsageEvent[]>([]);
   const [totalMatched, setTotalMatched] = useState(0);
@@ -82,6 +98,7 @@ export function useLlmUsageEvents(options: UseLlmUsageEventsOptions): UseLlmUsag
 
   // Initial load + options-change refresh
   useEffect(() => {
+    if (!enabled) return;
     if (optionsJson === optionsJsonRef.current) return;
     optionsJsonRef.current = optionsJson;
     isMountedRef.current = true;
@@ -89,10 +106,12 @@ export function useLlmUsageEvents(options: UseLlmUsageEventsOptions): UseLlmUsag
     return (): void => {
       isMountedRef.current = false;
     };
-  }, [optionsJson, refresh]);
+  }, [enabled, optionsJson, refresh]);
 
   // Tab visibility refresh
   useEffect(() => {
+    if (!enabled) return;
+
     const handleVisibilityChange = (): void => {
       if (document.visibilityState === 'visible' && !isInitialLoadRef.current) {
         void refresh(true);
@@ -104,10 +123,12 @@ export function useLlmUsageEvents(options: UseLlmUsageEventsOptions): UseLlmUsag
     return (): void => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [refresh]);
+  }, [enabled, refresh]);
 
   // Polling: 30s interval when document is visible
   useEffect(() => {
+    if (!enabled) return;
+
     const pollId = setInterval(() => {
       if (document.visibilityState === 'visible') {
         void refresh(true);
@@ -116,7 +137,7 @@ export function useLlmUsageEvents(options: UseLlmUsageEventsOptions): UseLlmUsag
     return (): void => {
       clearInterval(pollId);
     };
-  }, [refresh]);
+  }, [enabled, refresh]);
 
   const loadMore = useCallback(async (): Promise<void> => {
     if (!hasMore || loading || loadingMore) return;
@@ -156,6 +177,10 @@ export function useLlmUsageEvents(options: UseLlmUsageEventsOptions): UseLlmUsag
   const publicRefresh = useCallback(async (): Promise<void> => {
     await refresh();
   }, [refresh]);
+
+  if (!enabled) {
+    return DISABLED_RESULT;
+  }
 
   return {
     events,

@@ -75,15 +75,22 @@ export class FirestoreUsageEventRepository implements UsageEventRepository {
       query = filteredQuery;
 
       // Determine sort
-      // TODO: Composite indexes for costUsd / totalTokens sort fields are created
-      // in the Task 3 migration file. They must exist before these routes go live.
+      // Composite indexes for costUsd / totalTokens sort fields: see migrations/086_llm-usage-events-list-indexes.mjs
       const domainSortField: SortField = params.sortBy?.field ?? 'occurredAt';
       const sortField = SORT_FIELD_MAP[domainSortField];
       const sortDirection = params.sortBy?.direction ?? 'desc';
 
-      // Count query (same where clauses, no ordering/limit)
-      const countSnapshot = await query.count().get();
-      const totalMatched = countSnapshot.data().count;
+      // Count query (same where clauses, no ordering/limit).
+      // When in-memory filters are active the Firestore .count() only reflects
+      // the server-side filter, so the result would be inaccurate. Return -1
+      // as a sentinel meaning "unknown count" (see ListUsageEventsResult docs).
+      let totalMatched: number;
+      if (inMemoryFilters.length > 0) {
+        totalMatched = -1;
+      } else {
+        const countSnapshot = await query.count().get();
+        totalMatched = countSnapshot.data().count;
+      }
 
       // Apply ordering
       query = query.orderBy(sortField, sortDirection).orderBy('__name__', sortDirection);
