@@ -566,6 +566,7 @@ function validateMemoryReporting(
 export class OrchestratorCompletionVerifier implements CompletionVerifier {
   private readonly llmClient: LlmGenerateClient;
   private readonly model: string;
+  private currentTaskId: string | null = null;
 
   constructor(
     private readonly logger: Logger,
@@ -584,6 +585,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
   }
 
   async verify(input: CompletionVerifierInput): Promise<CompletionVerifierVerdict> {
+    this.currentTaskId = input.taskId;
     const transcript = getLast50Lines(input.rawLogs);
 
     const fatalExitCode = detectFatalExitCode(input.rawLogs);
@@ -744,6 +746,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
   }
 
   async extractResumeSummary(taskId: string, rawLogs: string): Promise<string | undefined> {
+    this.currentTaskId = taskId;
     const transcript = getLast20Lines(rawLogs);
     const prompt = buildResumeSummaryPrompt(transcript);
 
@@ -818,6 +821,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         service: 'orchestrator',
         component: 'completion-verifier',
         logger: this.logger,
+        getCorrelationTaskId: (): string | null => this.currentTaskId,
       }),
     });
   }

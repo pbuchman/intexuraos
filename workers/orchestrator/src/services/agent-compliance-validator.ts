@@ -287,6 +287,7 @@ export interface AgentComplianceValidator {
 export class OrchestratorAgentComplianceValidator implements AgentComplianceValidator {
   private readonly client: OpenRouterClient;
   private readonly model: string;
+  private currentTaskId: string | null = null;
   constructor(
     private readonly logger: Logger,
     config: AgentComplianceValidatorConfig
@@ -305,6 +306,7 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
         service: 'orchestrator',
         component: 'agent-compliance-validator',
         logger,
+        getCorrelationTaskId: (): string | null => this.currentTaskId,
       }),
     });
   }
@@ -312,6 +314,7 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
     input: ComplianceValidationInput,
     onProgress?: (message: string) => void
   ): Promise<ComplianceValidationResult | null> {
+    this.currentTaskId = input.taskId;
     const promptResult = buildCompliancePrompt({
       formattedTranscript: input.formattedTranscript,
       agentClaims: input.agentClaims,
