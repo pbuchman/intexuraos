@@ -119,12 +119,12 @@ It is **not** responsible for:
 
 ## API Surface
 
-| Method | Path                               | Auth                    | Purpose |
-| ------ | ---------------------------------- | ----------------------- | ------- |
-| POST   | `/internal/usage/events`           | `X-Internal-Auth`       | Ingest usage events from normal services |
+| Method | Path                               | Auth                    | Purpose                                                                        |
+| ------ | ---------------------------------- | ----------------------- | ------------------------------------------------------------------------------ |
+| POST   | `/internal/usage/events`           | `X-Internal-Auth`       | Ingest usage events from normal services                                       |
 | POST   | `/internal/webhooks/usage-events`  | Orchestrator HMAC       | Ingest usage events from orchestrator without exposing the internal auth token |
-| POST   | `/internal/usage/query`            | `X-Internal-Auth`       | Query aggregated usage and cost concentration |
-| GET    | `/health`                          | none                    | Standard service health endpoint |
+| POST   | `/internal/usage/query`            | `X-Internal-Auth`       | Query aggregated usage and cost concentration                                  |
+| GET    | `/health`                          | none                    | Standard service health endpoint                                               |
 
 There must be **no** user-scoped public endpoint in this stage.
 
