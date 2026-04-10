@@ -703,7 +703,7 @@ The client is split into three focused modules:
 | `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | GCP project identifier                |
 | `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User service for LLM keys             |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Service-to-service auth               |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | LLM pricing context source            |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | LLM pricing context source            |
 | `INTEXURAOS_CODE_AGENT_URL`           | Yes      | Code agent for auto-trigger on assign |
 | `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | Auth0 JWKS endpoint                   |
 | `INTEXURAOS_AUTH_ISSUER`              | Yes      | Auth0 issuer                          |

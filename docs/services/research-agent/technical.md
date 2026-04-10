@@ -320,7 +320,7 @@ sequenceDiagram
 | `INTEXURAOS_USER_SERVICE_URL`              | Base URL of user-service                            | Yes      |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`           | Shared secret for X-Internal-Auth header            | Yes      |
 | `INTEXURAOS_WEB_APP_URL`                   | Base URL of web app (used in share links)           | Yes      |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`      | Base URL of app-settings-service for pricing fetch  | Yes      |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`         | Base URL of llm-usage-service for pricing fetch     | Yes      |
 | `INTEXURAOS_NOTION_SERVICE_URL`            | Base URL of notion-service                          | Yes      |
 | `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`         | Public CDN base URL for generated images            | Yes      |
 | `INTEXURAOS_IMAGE_SERVICE_URL`             | Base URL of image-service                           | Yes      |

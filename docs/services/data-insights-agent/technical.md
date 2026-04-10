@@ -278,7 +278,7 @@ sequenceDiagram
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`              | Yes      | Internal service auth token                           |
 | `INTEXURAOS_USER_SERVICE_URL`                 | Yes      | user-service base URL                                 |
 | `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | Yes      | mobile-notifications base URL                         |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`         | Yes      | app-settings base URL (for pricing)                   |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`            | Yes      | llm-usage-service base URL (for pricing)              |
 | `INTEXURAOS_SENTRY_DSN`                       | No       | Sentry DSN for error tracking (omit to disable)       |
 | `INTEXURAOS_ENVIRONMENT`                      | No       | Environment name for Sentry (default: `development`)  |
 | `INTEXURAOS_GEMINI_APP_API_KEY`               | No       | Platform-level Gemini API key (fallback LLM provider) |

@@ -308,7 +308,7 @@ interface GeneratePreviewMessage {
 | `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience for auth validation        |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth         |
 | `INTEXURAOS_USER_SERVICE_URL`         | Yes      | user-service base URL                   |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | app-settings-service URL for pricing    |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | llm-usage-service URL for pricing       |
 | `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry DSN for error reporting          |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini LLM API key (fallback)  |
 | `INTEXURAOS_ENVIRONMENT`              | No       | Environment name (default: development) |

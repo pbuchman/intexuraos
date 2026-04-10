@@ -256,6 +256,22 @@ describe('pricingRoutes', () => {
       expect(body.success).toBe(true);
       expect(body.data.provider).toBe(LlmProviders.OpenRouter);
     });
+
+    it('returns 500 when repository write fails', async () => {
+      pricingRepo.failOnWrite = true;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/pricing',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: mockGooglePricing,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
   });
 
   // -------------------------------------------------------------------------
