@@ -14,7 +14,7 @@ export function createUsageServiceClient(config: UsageServiceConfig): UsageServi
   return {
     async ingestEvents(
       request: UsageIngestRequest,
-      options?: { traceId?: string },
+      options?: { traceId?: string }
     ): Promise<Result<UsageIngestResponse, UsageServiceError>> {
       try {
         const headers: Record<string, string> = {
@@ -50,7 +50,7 @@ export function createUsageServiceClient(config: UsageServiceConfig): UsageServi
 
     async queryUsage(
       request: UsageQueryRequest,
-      options?: { traceId?: string },
+      options?: { traceId?: string }
     ): Promise<Result<UsageQueryResponse, UsageServiceError>> {
       try {
         const headers: Record<string, string> = {
