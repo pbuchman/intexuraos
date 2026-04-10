@@ -729,6 +729,9 @@ async function bootstrap(): Promise<void> {
     model: LlmModels.Gemini25Flash,
     geminiApiKey: geminiVerifierKey,
     auditLogPath: llmAuditLogPath,
+    codeAgentUrl: config.codeAgentUrl,
+    orchestratorSecret: config.orchestratorSecret,
+    internalAuthToken: config.internalAuthToken,
   });
 
   const completionControl: CompletionControlConfig = {
@@ -780,6 +783,9 @@ async function bootstrap(): Promise<void> {
             outputPricePerMillion: 3.0,
           },
           auditLogPath: llmAuditLogPath,
+          codeAgentUrl: config.codeAgentUrl,
+          orchestratorSecret: config.orchestratorSecret,
+          internalAuthToken: config.internalAuthToken,
         })
       : undefined;
 

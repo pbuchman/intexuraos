@@ -46,6 +46,9 @@ const defaultConfig = {
     outputPricePerMillion: 15.0,
   },
   auditLogPath: '/tmp/compliance-validator-audit.test.log',
+  codeAgentUrl: 'http://localhost:8128',
+  orchestratorSecret: 'test-secret',
+  internalAuthToken: 'test-token',
 };
 
 const defaultClaims = {
