@@ -30,6 +30,8 @@ export { ShareTargetPage } from './ShareTargetPage.js';
 export { TodosListPage } from './TodosListPage.js';
 export { LlmPricingPage } from './LlmPricingPage.js';
 export { LlmCostsPage } from './LlmCostsPage.js';
+export { LlmUsagePage } from './LlmUsagePage.js';
+export { LlmUsageViewPage } from './LlmUsageViewPage.js';
 export { CodeTasksPage } from './CodeTasksPage.js';
 export { DispatchQueuePage } from './DispatchQueuePage.js';
 export { MergeQueuePage } from './MergeQueuePage.js';

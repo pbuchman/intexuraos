@@ -1,5 +1,8 @@
 import type { LlmProvider } from '@intexuraos/llm-contract';
 
+export const MAX_LIST_LIMIT = 200;
+export const DEFAULT_LIST_LIMIT = 50;
+
 /** UsageEvent - canonical stored event */
 export interface UsageEvent {
   schemaVersion: 1;
