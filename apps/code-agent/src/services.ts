@@ -58,8 +58,8 @@ import type { GitHubPRSummaryRepository } from './domain/repositories/gitHubPRSu
 import { createFirestoreGitHubPRSummariesRepository } from './infra/firestore/gitHubPRSummariesRepository.js';
 import type { GitHubPRClient } from './domain/ports/gitHubPRClient.js';
 import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
-import type { UserServiceClient } from '@intexuraos/internal-clients';
-import { createUserServiceClient } from '@intexuraos/internal-clients';
+import type { UserServiceClient, UsageServiceClient } from '@intexuraos/internal-clients';
+import { createUserServiceClient, createUsageServiceClient } from '@intexuraos/internal-clients';
 import { createGitHubUsernameResolver } from './infra/services/gitHubUsernameResolverImpl.js';
 import { CodeWorkerOutputRule, ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, CIFailureRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
 import { createWebhookDispatchService, type WebhookDispatchService, type CIFailureDispatchService } from './domain/services/gitHubDispatchService.js';
@@ -147,6 +147,7 @@ export interface ServiceContainer {
   executionMemoryDistillerClient?: LlmGenerateClient;
   executionMemoryEvaluatorClient?: LlmGenerateClient;
   executionMemoryEmbeddingClient?: EmbeddingClient;
+  usageServiceClient?: UsageServiceClient;
   // Optional so existing setServices() call sites in tests don't need updating
   groupSummaryRepo?: TaskGroupSummaryRepository;
   createRemediationTaskFn?: (logger: Logger, request: CreateRemediationTaskRequest) => Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
@@ -168,6 +169,7 @@ export interface ServiceConfig {
   // GitHub Agent (INT-743)
   geminiAppApiKey: string;
   openaiAppApiKey: string;
+  llmUsageServiceUrl: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -365,6 +367,14 @@ export function initServices(config: ServiceConfig): void {
       getModelsWithPricing() { return []; },
     },
   });
+
+  const usageServiceClient = config.llmUsageServiceUrl !== ''
+    ? createUsageServiceClient({
+        baseUrl: config.llmUsageServiceUrl,
+        internalAuthToken: config.internalAuthToken,
+        logger,
+      })
+    : undefined;
 
   const rawCodeTaskRepo = createFirestoreCodeTaskRepository({ firestore, logger });
   const groupSummaryRepo = createTaskGroupSummaryFirestoreRepository({ firestore, logger });
@@ -637,6 +647,7 @@ export function initServices(config: ServiceConfig): void {
     ...(executionMemoryDistillerClient !== undefined && { executionMemoryDistillerClient }),
     ...(executionMemoryEvaluatorClient !== undefined && { executionMemoryEvaluatorClient }),
     ...(executionMemoryEmbeddingClient !== undefined && { executionMemoryEmbeddingClient }),
+    ...(usageServiceClient !== undefined && { usageServiceClient }),
     groupSummaryRepo,
     createRemediationTaskFn: (taskLogger: Logger, request: CreateRemediationTaskRequest): Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>> => createRemediationTask(
       {
