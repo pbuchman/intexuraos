@@ -30,9 +30,9 @@ The `api-docs-hub` app exists at `apps/api-docs-hub/` and is referenced in Terra
 - **Default assumption:** Do not include api-docs-hub in the Hetzner PM2 config. Keep the Terraform env var pointing at Cloud Run (or set to empty). Revisit after migration.
 - **Alternative:** Add it to the Hetzner PM2 config — adds one port and one nginx route.
 
-**Decision 2: Let's Encrypt challenge method**
+**Decision 2: Let's Encrypt challenge method** ✅ RESOLVED 2026-04-10
 `intexuraos.cloud` currently resolves to the GCP load balancer IP. The HTTP-01 ACME challenge requires the domain to resolve to the Hetzner VM, which creates a chicken-and-egg problem: you can't get the cert before the cutover, but you can't cut over without a cert.
-- **Default assumption:** Use **DNS-01 challenge** via certbot. This requires your DNS provider to be supported by a certbot DNS plugin (Cloudflare, Route53, Google Cloud DNS, Hetzner DNS, etc.). User must confirm which DNS provider is used for `intexuraos.cloud`.
+- **Resolution:** DNS provider confirmed as **Cloudflare** via `dig NS intexuraos.cloud +short` → `khloe.ns.cloudflare.com.`, `rocco.ns.cloudflare.com.`. Use **DNS-01 challenge via `certbot-dns-cloudflare`**. The user must create a scoped Cloudflare API token (Zone:Read + DNS:Edit on `intexuraos.cloud` zone only) and store it in GCP Secret Manager under `INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN` for Phase 6 consumption.
 - **Fallback:** Use a temporary subdomain `new.intexuraos.cloud` → Hetzner IP, obtain a cert for that first to validate the stack end-to-end, then use DNS-01 for the real cert at cutover time.
 
 **Decision 3: Shared Firestore database**
@@ -343,6 +343,8 @@ git commit -m "feat(terraform): configure gcs backend for prod (INT-750)"
 - Create: `terraform/environments/prod/main.tf`
 - Create: `terraform/environments/prod/outputs.tf`
 
+> **Plan defect corrected 2026-04-10:** The original plan used a `data "google_firestore_database" "shared"` block, but the hashicorp/google v5.x provider does **not** expose Firestore as a data source (confirmed by introspecting the provider schema: 279 data sources total, zero Firestore). That data source was added in v6.x. For v5.x, the database name `"(default)"` is treated as a GCP-API-level constant in a local, and downstream resources that need to reference it hardcode the string.
+
 - [ ] **Step 1: Create `terraform/environments/prod/main.tf`** with shared locals only
 
 ```hcl
@@ -356,40 +358,46 @@ locals {
     component   = "prod-hetzner"
   }
 
-  # Shared Firestore (default) — owned by the dev environment, referenced here.
+  # Shared Firestore (default) — owned by the dev environment.
+  # The database name is a GCP-API-level constant, not a Terraform-managed value,
+  # so downstream resources hardcode "(default)" when they need to reference it.
   # See Decision 3 in the migration plan.
-}
-
-# Data source: reference the existing (default) Firestore database without owning it.
-data "google_firestore_database" "shared" {
-  project = var.project_id
-  name    = "(default)"
+  firestore_database_id = "(default)"
 }
 ```
 
 - [ ] **Step 2: Create `terraform/environments/prod/outputs.tf`**
 
 ```hcl
-output "firestore_database" {
-  description = "Shared Firestore database (owned by dev env)"
-  value       = data.google_firestore_database.shared.name
+output "firestore_database_id" {
+  description = "Shared Firestore database name (owned by dev env, hardcoded constant)"
+  value       = local.firestore_database_id
+}
+
+output "environment" {
+  description = "Environment name"
+  value       = var.environment
 }
 ```
 
-- [ ] **Step 3: Plan (should show zero changes — only data sources)**
+- [ ] **Step 3: Plan**
+
+Export env vars first to avoid accidentally hitting emulators (required by the repo's pre-tool-use hook):
 
 ```bash
 cd terraform/environments/prod
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS="$HOME/.config/gcloud/sa-key.json" \
 terraform plan
 ```
 
-Expected: `No changes. Your infrastructure matches the configuration.` The data source does not create anything.
+Expected: `Changes to Outputs:` showing only the two new output values (`environment = "prod"`, `firestore_database_id = "(default)"`). Zero resource changes.
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add terraform/environments/prod/main.tf terraform/environments/prod/outputs.tf
-git commit -m "feat(terraform): prod env scaffold with shared firestore data source (INT-750)"
+git commit -m "feat(terraform): prod env scaffold main and outputs (INT-750)"
 ```
 
 ⏸ **CHECKPOINT 1:** Prod Terraform environment exists with an empty state and a clean plan. Nothing is provisioned yet.
