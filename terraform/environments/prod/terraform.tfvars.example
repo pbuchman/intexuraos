@@ -1,0 +1,17 @@
+# Copy to terraform.tfvars and fill in values.
+# DO NOT commit terraform.tfvars — it is excluded by .gitignore.
+
+project_id = "intexuraos-dev-pbuchman"
+# region defaults to europe-central2
+
+# Public SSH key for deploy user on the VM.
+# Generated in Phase 0.2: ~/.ssh/intexuraos_hetzner_deploy.pub
+# Example: "ssh-ed25519 AAAA... intexuraos-hetzner-deploy"
+deploy_ssh_public_key = "ssh-ed25519 AAAA... intexuraos-hetzner-deploy"
+
+# Source IPs allowed to SSH. Use CIDR notation.
+# Discover your public IP: curl -s https://ifconfig.me
+# Example: your home IP + office IP
+admin_ssh_source_ips = [
+  "203.0.113.42/32",
+]
