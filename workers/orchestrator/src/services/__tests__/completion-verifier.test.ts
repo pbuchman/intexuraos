@@ -809,44 +809,55 @@ describe('OrchestratorCompletionVerifier', () => {
     });
   });
 
-  describe('correlation.taskId wiring', () => {
-    it('wires getCorrelationTaskId to reflect current taskId after verify()', async () => {
-      generateMock.mockResolvedValueOnce({
-        ok: true,
-        value: {
-          content: JSON.stringify({
-            outcome: 'planned',
-            superpowers_writing_plans: 'used',
-            linear_url: 'https://linear.app/pbuchman/issue/INT-100',
-            is_complex: '0',
-            has_plan_doc: '0',
-            subtask_urls: '',
-            pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
-            summary: 'The agent planned successfully.',
-            unclear_clarification: '',
-          }),
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
-        },
-      });
-      const verifier = createVerifier();
+  describe('correlation.taskId wiring via AsyncLocalStorage', () => {
+    it('getCorrelationTaskId returns null outside of verify/extractResumeSummary context', () => {
+      createVerifier();
 
-      // Capture the usageSink passed to createLlmClient
       const clientConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
       expect(clientConfig).toBeDefined();
       const sink = clientConfig['usageSink'] as Record<string, unknown>;
       expect(sink).toBeDefined();
 
-      // Access config to verify the callback
       const sinkConfig = (sink as { config: { getCorrelationTaskId?: () => string | null } })[
         'config'
       ];
       const getTaskId = sinkConfig?.getCorrelationTaskId;
       expect(getTaskId).toBeDefined();
 
-      // Before verify(), taskId should be null
+      // Outside any verify/extractResumeSummary context, taskId should be null
       expect(getTaskId?.()).toBeNull();
+    });
 
-      // After verify(), taskId should reflect the input
+    it('getCorrelationTaskId returns the correct taskId during verify()', async () => {
+      let capturedTaskId: string | null | undefined;
+      generateMock.mockImplementationOnce(() => {
+        // Capture taskId during generate() — this is when the usage sink would call getCorrelationTaskId
+        const clientConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
+        const sink = clientConfig['usageSink'] as Record<string, unknown>;
+        const sinkConfig = (sink as { config: { getCorrelationTaskId?: () => string | null } })[
+          'config'
+        ];
+        capturedTaskId = sinkConfig?.getCorrelationTaskId?.();
+        return Promise.resolve({
+          ok: true as const,
+          value: {
+            content: JSON.stringify({
+              outcome: 'planned',
+              superpowers_writing_plans: 'used',
+              linear_url: 'https://linear.app/pbuchman/issue/INT-100',
+              is_complex: '0',
+              has_plan_doc: '0',
+              subtask_urls: '',
+              pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
+              summary: 'The agent planned successfully.',
+              unclear_clarification: '',
+            }),
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+          },
+        });
+      });
+      const verifier = createVerifier();
+
       await verifier.verify({
         taskId: 'task-correlation-test',
         attempt: 1,
@@ -854,29 +865,33 @@ describe('OrchestratorCompletionVerifier', () => {
         agentType: 'planning',
         rawLogs: 'test logs',
       });
-      expect(getTaskId?.()).toBe('task-correlation-test');
+
+      // The callback should have returned the correct taskId during generate()
+      expect(capturedTaskId).toBe('task-correlation-test');
     });
 
-    it('wires getCorrelationTaskId to reflect taskId in extractResumeSummary()', async () => {
-      generateMock.mockResolvedValueOnce({
-        ok: true,
-        value: {
-          content: JSON.stringify({ summary: 'Resume summary text.' }),
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
-        },
+    it('getCorrelationTaskId returns the correct taskId during extractResumeSummary()', async () => {
+      let capturedTaskId: string | null | undefined;
+      generateMock.mockImplementationOnce(() => {
+        const clientConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
+        const sink = clientConfig['usageSink'] as Record<string, unknown>;
+        const sinkConfig = (sink as { config: { getCorrelationTaskId?: () => string | null } })[
+          'config'
+        ];
+        capturedTaskId = sinkConfig?.getCorrelationTaskId?.();
+        return Promise.resolve({
+          ok: true as const,
+          value: {
+            content: JSON.stringify({ summary: 'Resume summary text.' }),
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+          },
+        });
       });
       const verifier = createVerifier();
 
-      const clientConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
-      const sink = clientConfig['usageSink'] as Record<string, unknown>;
-      const sinkConfig = (sink as { config: { getCorrelationTaskId?: () => string | null } })[
-        'config'
-      ];
-      const getTaskId = sinkConfig?.getCorrelationTaskId;
-      expect(getTaskId).toBeDefined();
-
       await verifier.extractResumeSummary('task-resume-test', 'some logs');
-      expect(getTaskId?.()).toBe('task-resume-test');
+
+      expect(capturedTaskId).toBe('task-resume-test');
     });
   });
 

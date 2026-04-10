@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
 import { LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
@@ -6,6 +7,8 @@ import { z } from 'zod';
 import { stripDockerHeaders } from './log-formatter.js';
 import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 import type { ExecutionMemoryPromptContext } from '../types/execution-memory.js';
+
+const verifierTaskIdStorage = new AsyncLocalStorage<string>();
 
 export type CompletionAgentType =
   | 'planning'
@@ -566,7 +569,6 @@ function validateMemoryReporting(
 export class OrchestratorCompletionVerifier implements CompletionVerifier {
   private readonly llmClient: LlmGenerateClient;
   private readonly model: string;
-  private currentTaskId: string | null = null;
 
   constructor(
     private readonly logger: Logger,
@@ -585,7 +587,10 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
   }
 
   async verify(input: CompletionVerifierInput): Promise<CompletionVerifierVerdict> {
-    this.currentTaskId = input.taskId;
+    return await verifierTaskIdStorage.run(input.taskId, () => this.doVerify(input));
+  }
+
+  private async doVerify(input: CompletionVerifierInput): Promise<CompletionVerifierVerdict> {
     const transcript = getLast50Lines(input.rawLogs);
 
     const fatalExitCode = detectFatalExitCode(input.rawLogs);
@@ -746,7 +751,15 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
   }
 
   async extractResumeSummary(taskId: string, rawLogs: string): Promise<string | undefined> {
-    this.currentTaskId = taskId;
+    return await verifierTaskIdStorage.run(taskId, () =>
+      this.doExtractResumeSummary(taskId, rawLogs)
+    );
+  }
+
+  private async doExtractResumeSummary(
+    taskId: string,
+    rawLogs: string
+  ): Promise<string | undefined> {
     const transcript = getLast20Lines(rawLogs);
     const prompt = buildResumeSummaryPrompt(transcript);
 
@@ -821,7 +834,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         service: 'orchestrator',
         component: 'completion-verifier',
         logger: this.logger,
-        getCorrelationTaskId: (): string | null => this.currentTaskId,
+        getCorrelationTaskId: (): string | null => verifierTaskIdStorage.getStore() ?? null,
       }),
     });
   }

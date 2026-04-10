@@ -527,35 +527,44 @@ describe('OrchestratorAgentComplianceValidator', () => {
     expect(progressCalls).toContain('PR comment failed (see server logs)');
   });
 
-  it('wires getCorrelationTaskId to reflect current taskId after validate()', async () => {
-    generateMock.mockResolvedValue({
-      ok: true,
-      value: {
-        content: JSON.stringify(validReport),
-        usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.042 },
-      },
+  it('getCorrelationTaskId returns correct taskId during validate() via AsyncLocalStorage', async () => {
+    let capturedTaskId: string | null | undefined;
+    generateMock.mockImplementation(() => {
+      // Capture taskId during generate() — this is when the usage sink would call getCorrelationTaskId
+      const clientConfig = createOpenRouterClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      const sink = clientConfig['usageSink'] as Record<string, unknown>;
+      const sinkConfig = (sink as { config: { getCorrelationTaskId?: () => string | null } })[
+        'config'
+      ];
+      capturedTaskId = sinkConfig?.getCorrelationTaskId?.();
+      return Promise.resolve({
+        ok: true as const,
+        value: {
+          content: JSON.stringify(validReport),
+          usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.042 },
+        },
+      });
     });
     const validator = new OrchestratorAgentComplianceValidator(logger, defaultConfig);
 
-    // Capture the usageSink passed to createOpenRouterClient
+    // Capture the usageSink and verify callback exists
     const clientConfig = createOpenRouterClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(clientConfig).toBeDefined();
     const sink = clientConfig['usageSink'] as Record<string, unknown>;
     expect(sink).toBeDefined();
-
-    // Access the private config via type coercion to verify the callback
     const sinkConfig = (sink as { config: { getCorrelationTaskId?: () => string | null } })[
       'config'
     ];
     const getTaskId = sinkConfig?.getCorrelationTaskId;
     expect(getTaskId).toBeDefined();
 
-    // Before validate(), taskId should be null
+    // Outside validate() context, taskId should be null
     expect(getTaskId?.()).toBeNull();
 
-    // After validate(), taskId should reflect the input
     await validator.validate(defaultInput);
-    expect(getTaskId?.()).toBe('task_abc');
+
+    // The callback should have returned the correct taskId during generate()
+    expect(capturedTaskId).toBe('task_abc');
   });
 
   it('logs stderr from gh command errors', async () => {
