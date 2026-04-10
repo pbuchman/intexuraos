@@ -1790,10 +1790,12 @@ export class TaskDispatcher {
     const workerTypeConfig = WORKER_TYPES[task.workerType];
     const runtime = getRuntime(runtimeName);
     const runtimeAttemptState = runtime.createAttemptState(task.taskId, this.logger);
-    if (params.continueSession && runtimeName === 'codex' && task.runtimeSessionId === undefined) {
+    if (params.continueSession && task.runtimeSessionId === undefined) {
       return {
         ok: false,
-        error: new Error('Codex resume requires a persisted runtime session ID'),
+        error: new Error(
+          `${runtimeName === 'codex' ? 'Codex' : 'Claude'} resume requires a persisted runtime session ID`
+        ),
       };
     }
     this.appendOrchestratorTaskLog(
