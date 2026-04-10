@@ -549,6 +549,110 @@ describe('ingestUsageEvents', () => {
     expect(result.rejected[0]?.code).toBe('INVALID_TOTAL_TOKENS');
   });
 
+  it('rejects events with invalid occurredAt timestamp', async () => {
+    const events = [createTestEventInput({ occurredAt: 'not-a-date' })];
+    const result = await ingestUsageEvents(
+      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
+      events,
+      'internal',
+    );
+
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0]?.code).toBe('INVALID_OCCURRED_AT');
+    expect(result.rejected[0]?.message).toBe('occurredAt must be a valid ISO timestamp');
+  });
+
+  it('rejects events with negative cacheReadTokens', async () => {
+    const input = createTestEventInput();
+    const events = [{ ...input, usage: { ...input.usage, cacheReadTokens: -1 } }];
+    const result = await ingestUsageEvents(
+      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
+      events,
+      'internal',
+    );
+
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0]?.code).toBe('INVALID_CACHE_READ_TOKENS');
+  });
+
+  it('rejects events with negative cacheWriteTokens', async () => {
+    const input = createTestEventInput();
+    const events = [{ ...input, usage: { ...input.usage, cacheWriteTokens: -1 } }];
+    const result = await ingestUsageEvents(
+      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
+      events,
+      'internal',
+    );
+
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0]?.code).toBe('INVALID_CACHE_WRITE_TOKENS');
+  });
+
+  it('rejects events with negative cachedTokens', async () => {
+    const input = createTestEventInput();
+    const events = [{ ...input, usage: { ...input.usage, cachedTokens: -1 } }];
+    const result = await ingestUsageEvents(
+      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
+      events,
+      'internal',
+    );
+
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0]?.code).toBe('INVALID_CACHED_TOKENS');
+  });
+
+  it('rejects events with negative reasoningTokens', async () => {
+    const input = createTestEventInput();
+    const events = [{ ...input, usage: { ...input.usage, reasoningTokens: -1 } }];
+    const result = await ingestUsageEvents(
+      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
+      events,
+      'internal',
+    );
+
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0]?.code).toBe('INVALID_REASONING_TOKENS');
+  });
+
+  it('rejects events with negative thinkingTokens', async () => {
+    const input = createTestEventInput();
+    const events = [{ ...input, usage: { ...input.usage, thinkingTokens: -1 } }];
+    const result = await ingestUsageEvents(
+      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
+      events,
+      'internal',
+    );
+
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0]?.code).toBe('INVALID_THINKING_TOKENS');
+  });
+
+  it('rejects events with negative webSearchCalls', async () => {
+    const input = createTestEventInput();
+    const events = [{ ...input, usage: { ...input.usage, webSearchCalls: -1 } }];
+    const result = await ingestUsageEvents(
+      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
+      events,
+      'internal',
+    );
+
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0]?.code).toBe('INVALID_WEB_SEARCH_CALLS');
+  });
+
+  it('rejects events with negative imageCount', async () => {
+    const input = createTestEventInput();
+    const events = [{ ...input, usage: { ...input.usage, imageCount: -1 } }];
+    const result = await ingestUsageEvents(
+      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
+      events,
+      'internal',
+    );
+
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0]?.code).toBe('INVALID_IMAGE_COUNT');
+  });
+
   it('rejects events with non-number billedUsd', async () => {
     const input = createTestEventInput();
     const events = [{ ...input, cost: { ...input.cost, billedUsd: 'cheap' as unknown as number } }];

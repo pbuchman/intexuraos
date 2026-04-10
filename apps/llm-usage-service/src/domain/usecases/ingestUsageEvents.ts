@@ -35,6 +35,11 @@ function validateEvent(typedInput: UsageEventInput, index: number): RejectedEven
     return { index, code: 'INVALID_OCCURRED_AT', message: 'occurredAt is required and must be a non-empty ISO timestamp' };
   }
 
+  const parsedDate = new Date(input['occurredAt']);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return { index, code: 'INVALID_OCCURRED_AT', message: 'occurredAt must be a valid ISO timestamp' };
+  }
+
   // Validate owner
   const owner = input['owner'] as Record<string, unknown> | undefined | null;
   if (owner === undefined || owner === null) {
@@ -99,6 +104,27 @@ function validateEvent(typedInput: UsageEventInput, index: number): RejectedEven
   }
   if (typeof usage['totalTokens'] !== 'number' || usage['totalTokens'] < 0) {
     return { index, code: 'INVALID_TOTAL_TOKENS', message: 'usage.totalTokens must be a non-negative number' };
+  }
+  if (typeof usage['cacheReadTokens'] !== 'number' || usage['cacheReadTokens'] < 0) {
+    return { index, code: 'INVALID_CACHE_READ_TOKENS', message: 'usage.cacheReadTokens must be >= 0' };
+  }
+  if (typeof usage['cacheWriteTokens'] !== 'number' || usage['cacheWriteTokens'] < 0) {
+    return { index, code: 'INVALID_CACHE_WRITE_TOKENS', message: 'usage.cacheWriteTokens must be >= 0' };
+  }
+  if (typeof usage['cachedTokens'] !== 'number' || usage['cachedTokens'] < 0) {
+    return { index, code: 'INVALID_CACHED_TOKENS', message: 'usage.cachedTokens must be >= 0' };
+  }
+  if (typeof usage['reasoningTokens'] !== 'number' || usage['reasoningTokens'] < 0) {
+    return { index, code: 'INVALID_REASONING_TOKENS', message: 'usage.reasoningTokens must be >= 0' };
+  }
+  if (typeof usage['thinkingTokens'] !== 'number' || usage['thinkingTokens'] < 0) {
+    return { index, code: 'INVALID_THINKING_TOKENS', message: 'usage.thinkingTokens must be >= 0' };
+  }
+  if (typeof usage['webSearchCalls'] !== 'number' || usage['webSearchCalls'] < 0) {
+    return { index, code: 'INVALID_WEB_SEARCH_CALLS', message: 'usage.webSearchCalls must be >= 0' };
+  }
+  if (typeof usage['imageCount'] !== 'number' || usage['imageCount'] < 0) {
+    return { index, code: 'INVALID_IMAGE_COUNT', message: 'usage.imageCount must be >= 0' };
   }
 
   // Validate cost
