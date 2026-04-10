@@ -46,7 +46,7 @@ export interface Services {
 export interface ServiceConfig {
   userServiceUrl: string;
   actionsAgentUrl: string;
-  appSettingsServiceUrl: string;
+  llmUsageServiceUrl: string;
   internalAuthToken: string;
   gcpProjectId: string;
 }
@@ -63,9 +63,9 @@ const CLASSIFIER_MODELS = [
 export async function initServices(config: ServiceConfig): Promise<void> {
   const logger = createAppLogger({ name: 'commands-agent' });
 
-  // Fetch pricing data from app-settings-service
+  // Fetch pricing data from llm-usage-service
   const pricingResult = await fetchAllPricing(
-    config.appSettingsServiceUrl,
+    config.llmUsageServiceUrl,
     config.internalAuthToken
   );
 

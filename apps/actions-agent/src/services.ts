@@ -162,7 +162,7 @@ export interface ServiceConfig {
   calendarAgentUrl: string;
   linearAgentUrl: string;
   codeAgentUrl: string;
-  appSettingsServiceUrl: string;
+  llmUsageServiceUrl: string;
   internalAuthToken: string;
   gcpProjectId: string;
   whatsappSendTopic: string;
@@ -172,9 +172,9 @@ export interface ServiceConfig {
 let container: Services | null = null;
 
 export async function initServices(config: ServiceConfig): Promise<void> {
-  // Fetch pricing from app-settings-service
+  // Fetch pricing from llm-usage-service
   const pricingResult = await fetchAllPricing(
-    config.appSettingsServiceUrl,
+    config.llmUsageServiceUrl,
     config.internalAuthToken
   );
 

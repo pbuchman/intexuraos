@@ -115,11 +115,18 @@ describe('pricingClient', () => {
 
   // ZAI removed - no mockZaiPricing
 
+  const mockOpenrouterPricing: ProviderPricing = {
+    provider: LlmProviders.OpenRouter,
+    models: {},
+    updatedAt: '2026-01-05T12:00:00Z',
+  };
+
   const completeAllPricing: AllPricingResponse = {
     google: mockGooglePricing,
     openai: mockOpenaiPricing,
     anthropic: mockAnthropicPricing,
     perplexity: mockPerplexityPricing,
+    openrouter: mockOpenrouterPricing,
   };
 
   describe('fetchAllPricing', () => {
@@ -153,7 +160,7 @@ describe('pricingClient', () => {
         expect(result.value.openai).toEqual(completeAllPricing.openai);
       }
 
-      expect(fetch).toHaveBeenCalledWith(`${mockBaseUrl}/internal/settings/pricing`, {
+      expect(fetch).toHaveBeenCalledWith(`${mockBaseUrl}/internal/pricing`, {
         headers: { 'X-Internal-Auth': mockAuthToken },
       });
     });
@@ -274,6 +281,7 @@ describe('pricingClient', () => {
         openai: { provider: LlmProviders.OpenAI, models: {}, updatedAt: '' },
         anthropic: mockAnthropicPricing,
         perplexity: mockPerplexityPricing,
+        openrouter: mockOpenrouterPricing,
       };
       const context = new PricingContext(incompletePricing);
 
@@ -310,6 +318,7 @@ describe('pricingClient', () => {
         openai: { provider: LlmProviders.OpenAI, models: {}, updatedAt: '' },
         anthropic: { provider: LlmProviders.Anthropic, models: {}, updatedAt: '' },
         perplexity: { provider: LlmProviders.Perplexity, models: {}, updatedAt: '' },
+        openrouter: { provider: LlmProviders.OpenRouter, models: {}, updatedAt: '' },
       };
 
       const context = new PricingContext(pricingWithInvalidModel);
@@ -329,6 +338,7 @@ describe('pricingClient', () => {
         openai: { provider: LlmProviders.OpenAI, models: {}, updatedAt: '' },
         anthropic: mockAnthropicPricing,
         perplexity: mockPerplexityPricing,
+        openrouter: mockOpenrouterPricing,
       };
       const context = new PricingContext(incompletePricing);
 
@@ -347,6 +357,7 @@ describe('pricingClient', () => {
         openai: mockOpenaiPricing,
         anthropic: mockAnthropicPricing,
         perplexity: mockPerplexityPricing,
+        openrouter: mockOpenrouterPricing,
       };
 
       expect(() => createPricingContext(incompletePricing)).toThrow('Missing pricing for models');
@@ -368,6 +379,7 @@ describe('pricingClient', () => {
         openai: { provider: LlmProviders.OpenAI, models: {}, updatedAt: '' },
         anthropic: { provider: LlmProviders.Anthropic, models: {}, updatedAt: '' },
         perplexity: { provider: LlmProviders.Perplexity, models: {}, updatedAt: '' },
+        openrouter: { provider: LlmProviders.OpenRouter, models: {}, updatedAt: '' },
       };
 
       // Should not throw when only validating gemini-2.5-flash

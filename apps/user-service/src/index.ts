@@ -16,7 +16,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_TOKEN_ENCRYPTION_KEY',
   'INTEXURAOS_ENCRYPTION_KEY',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-  'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
+  'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'INTEXURAOS_WEB_APP_URL',
   'INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID',
   'INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET',
@@ -45,11 +45,11 @@ const REQUIRED_MODELS: ValidationModel[] = [
 ];
 
 async function main(): Promise<void> {
-  const appSettingsUrl = process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] ?? '';
+  const usageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '';
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
 
-  process.stdout.write(`Fetching pricing from ${appSettingsUrl}\n`);
-  const pricingResult = await fetchAllPricing(appSettingsUrl, internalAuthToken);
+  process.stdout.write(`Fetching pricing from ${usageServiceUrl}\n`);
+  const pricingResult = await fetchAllPricing(usageServiceUrl, internalAuthToken);
   if (!pricingResult.ok) {
     throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
   }
