@@ -42,17 +42,18 @@ describe('aggregateKeyUtils', () => {
       const id = computeAggregateId(event);
       const parts = id.split('__');
 
-      expect(parts).toHaveLength(10);
+      expect(parts).toHaveLength(11);
       expect(parts[0]).toBe('2026-04-10');
       expect(parts[1]).toBe('user');
       expect(parts[2]).toBe(sha256Truncated('user_abc'));
       expect(parts[3]).toBe('orchestrator');
       expect(parts[4]).toBe('research');
       expect(parts[5]).toBe('web');
-      expect(parts[6]).toBe(LlmProviders.Anthropic);
-      expect(parts[7]).toBe(sha256Truncated('claude-sonnet-4-20250514'));
-      expect(parts[8]).toBe('generate');
-      expect(parts[9]).toBe('true');
+      expect(parts[6]).toBe('dev');
+      expect(parts[7]).toBe(LlmProviders.Anthropic);
+      expect(parts[8]).toBe(sha256Truncated('claude-sonnet-4-20250514'));
+      expect(parts[9]).toBe('generate');
+      expect(parts[10]).toBe('true');
     });
 
     it('uses false for unsuccessful requests', () => {

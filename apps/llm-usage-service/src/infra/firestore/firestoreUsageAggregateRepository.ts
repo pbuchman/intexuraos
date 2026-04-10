@@ -16,12 +16,35 @@ export class FirestoreUsageAggregateRepository implements UsageAggregateReposito
     const now = new Date().toISOString();
 
     try {
-      await docRef.set(
-        {
+      const doc = await docRef.get();
+
+      const counterFields = {
+        calls: FieldValue.increment(1),
+        costUsd: FieldValue.increment(event.cost.billedUsd),
+        inputTokens: FieldValue.increment(event.usage.inputTokens),
+        outputTokens: FieldValue.increment(event.usage.outputTokens),
+        totalTokens: FieldValue.increment(event.usage.totalTokens),
+        cacheReadTokens: FieldValue.increment(event.usage.cacheReadTokens),
+        cacheWriteTokens: FieldValue.increment(event.usage.cacheWriteTokens),
+        cachedTokens: FieldValue.increment(event.usage.cachedTokens),
+        reasoningTokens: FieldValue.increment(event.usage.reasoningTokens),
+        thinkingTokens: FieldValue.increment(event.usage.thinkingTokens),
+        webSearchCalls: FieldValue.increment(event.usage.webSearchCalls),
+        imageCount: FieldValue.increment(event.usage.imageCount),
+      };
+
+      if (doc.exists) {
+        await docRef.update({
+          ...counterFields,
+          lastOccurredAt: event.occurredAt,
+          updatedAt: now,
+        });
+      } else {
+        await docRef.set({
           aggregateId,
           date: toDateString(event.occurredAt),
 
-          // Dimension fields (idempotent on every write)
+          // Dimension fields
           ownerType: event.owner.type,
           ownerId: event.owner.id,
           sourceService: event.source.service,
@@ -33,27 +56,16 @@ export class FirestoreUsageAggregateRepository implements UsageAggregateReposito
           operation: event.request.operation,
           success: event.request.success,
 
-          // Counter fields (incremented atomically)
-          calls: FieldValue.increment(1),
-          costUsd: FieldValue.increment(event.cost.billedUsd),
-          inputTokens: FieldValue.increment(event.usage.inputTokens),
-          outputTokens: FieldValue.increment(event.usage.outputTokens),
-          totalTokens: FieldValue.increment(event.usage.totalTokens),
-          cacheReadTokens: FieldValue.increment(event.usage.cacheReadTokens),
-          cacheWriteTokens: FieldValue.increment(event.usage.cacheWriteTokens),
-          cachedTokens: FieldValue.increment(event.usage.cachedTokens),
-          reasoningTokens: FieldValue.increment(event.usage.reasoningTokens),
-          thinkingTokens: FieldValue.increment(event.usage.thinkingTokens),
-          webSearchCalls: FieldValue.increment(event.usage.webSearchCalls),
-          imageCount: FieldValue.increment(event.usage.imageCount),
+          // Counter fields
+          ...counterFields,
 
-          // Timestamps
+          // Timestamps — firstOccurredAt only set on creation
           firstOccurredAt: event.occurredAt,
           lastOccurredAt: event.occurredAt,
           updatedAt: now,
-        },
-        { merge: true },
-      );
+        });
+      }
+
       return ok(undefined);
     } catch (error: unknown) {
       const firestoreError = error as { code?: number; message?: string };

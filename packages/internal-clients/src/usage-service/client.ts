@@ -1,5 +1,6 @@
 import type { Result } from '@intexuraos/common-core';
-import { err, getErrorMessage, ok } from '@intexuraos/common-core';
+import { err, ok } from '@intexuraos/common-core';
+import { fetchWithAuth } from '../shared/errors.js';
 import type {
   UsageServiceConfig,
   UsageServiceError,
@@ -10,78 +11,51 @@ import type {
   UsageQueryResponse,
 } from './types.js';
 
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+}
+
 export function createUsageServiceClient(config: UsageServiceConfig): UsageServiceClient {
   return {
     async ingestEvents(
       request: UsageIngestRequest,
       options?: { traceId?: string }
     ): Promise<Result<UsageIngestResponse, UsageServiceError>> {
-      try {
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'X-Internal-Auth': config.internalAuthToken,
-        };
-        if (options?.traceId !== undefined) {
-          headers['X-Trace-Id'] = options.traceId;
-        }
-
-        const response = await fetch(`${config.baseUrl}/internal/usage/events`, {
+      const result = await fetchWithAuth<ApiResponse<UsageIngestResponse>>(
+        config,
+        '/internal/usage/events',
+        {
           method: 'POST',
-          headers,
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(request),
-        });
-
-        if (!response.ok) {
-          return err({
-            code: 'API_ERROR' as const,
-            message: `HTTP ${String(response.status)}`,
-          });
+          ...(options?.traceId !== undefined ? { traceId: options.traceId } : {}),
         }
-
-        const body = (await response.json()) as { success: boolean; data: UsageIngestResponse };
-        return ok(body.data);
-      } catch (error) {
-        return err({
-          code: 'NETWORK_ERROR' as const,
-          message: getErrorMessage(error),
-        });
+      );
+      if (!result.ok) {
+        return err({ code: result.error.code, message: result.error.message });
       }
+      return ok(result.value.data);
     },
 
     async queryUsage(
       request: UsageQueryRequest,
       options?: { traceId?: string }
     ): Promise<Result<UsageQueryResponse, UsageServiceError>> {
-      try {
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'X-Internal-Auth': config.internalAuthToken,
-        };
-        if (options?.traceId !== undefined) {
-          headers['X-Trace-Id'] = options.traceId;
-        }
-
-        const response = await fetch(`${config.baseUrl}/internal/usage/query`, {
+      const result = await fetchWithAuth<ApiResponse<UsageQueryResponse>>(
+        config,
+        '/internal/usage/query',
+        {
           method: 'POST',
-          headers,
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(request),
-        });
-
-        if (!response.ok) {
-          return err({
-            code: 'API_ERROR' as const,
-            message: `HTTP ${String(response.status)}`,
-          });
+          ...(options?.traceId !== undefined ? { traceId: options.traceId } : {}),
         }
-
-        const body = (await response.json()) as { success: boolean; data: UsageQueryResponse };
-        return ok(body.data);
-      } catch (error) {
-        return err({
-          code: 'NETWORK_ERROR' as const,
-          message: getErrorMessage(error),
-        });
+      );
+      if (!result.ok) {
+        return err({ code: result.error.code, message: result.error.message });
       }
+      return ok(result.value.data);
     },
   };
 }

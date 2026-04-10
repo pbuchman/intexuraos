@@ -18,7 +18,7 @@ export function toDateString(isoTimestamp: string): string {
 /**
  * Compute the aggregate document ID from event dimensions.
  *
- * Format: {date}__{ownerType}__{ownerIdHash}__{service}__{component}__{client}__{provider}__{modelHash}__{operation}__{success}
+ * Format: {date}__{ownerType}__{ownerIdHash}__{service}__{component}__{client}__{environment}__{provider}__{modelHash}__{operation}__{success}
  */
 export function computeAggregateId(event: UsageEvent): string {
   const date = toDateString(event.occurredAt);
@@ -33,6 +33,7 @@ export function computeAggregateId(event: UsageEvent): string {
     event.source.service,
     event.source.component,
     event.source.client,
+    event.source.environment,
     event.request.provider,
     modelHash,
     event.request.operation,

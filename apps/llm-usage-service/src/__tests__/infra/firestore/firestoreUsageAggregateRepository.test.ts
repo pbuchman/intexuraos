@@ -12,9 +12,11 @@ vi.mock('firebase-admin/firestore', () => ({
 
 // Mock getFirestore
 const mockSet = vi.fn();
+const mockUpdate = vi.fn();
+const mockDocGet = vi.fn();
 const mockGet = vi.fn();
 const mockWhere = vi.fn();
-const mockDoc = vi.fn().mockReturnValue({ set: mockSet });
+const mockDoc = vi.fn().mockReturnValue({ set: mockSet, update: mockUpdate, get: mockDocGet });
 const mockCollection = vi.fn().mockReturnValue({ doc: mockDoc, where: mockWhere });
 
 vi.mock('@intexuraos/infra-firestore', () => ({
@@ -27,13 +29,15 @@ describe('FirestoreUsageAggregateRepository', () => {
   beforeEach(() => {
     repo = new FirestoreUsageAggregateRepository();
     vi.clearAllMocks();
-    mockDoc.mockReturnValue({ set: mockSet });
+    mockDoc.mockReturnValue({ set: mockSet, update: mockUpdate, get: mockDocGet });
     mockCollection.mockReturnValue({ doc: mockDoc, where: mockWhere });
     mockWhere.mockReturnValue({ where: mockWhere, get: mockGet });
+    mockDocGet.mockResolvedValue({ exists: false });
   });
 
   describe('incrementAggregate', () => {
-    it('calls set with merge:true on success', async () => {
+    it('calls set when doc does not exist (new aggregate)', async () => {
+      mockDocGet.mockResolvedValue({ exists: false });
       mockSet.mockResolvedValue(undefined);
       const event = createTestEvent();
 
@@ -46,12 +50,34 @@ describe('FirestoreUsageAggregateRepository', () => {
           ownerId: 'user_123',
           sourceService: 'orchestrator',
           provider: LlmProviders.Anthropic,
+          firstOccurredAt: event.occurredAt,
+          lastOccurredAt: event.occurredAt,
         }),
-        { merge: true },
       );
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it('calls update when doc exists (preserves firstOccurredAt)', async () => {
+      mockDocGet.mockResolvedValue({ exists: true });
+      mockUpdate.mockResolvedValue(undefined);
+      const event = createTestEvent();
+
+      const result = await repo.incrementAggregate(event);
+
+      expect(result.ok).toBe(true);
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lastOccurredAt: event.occurredAt,
+        }),
+      );
+      // firstOccurredAt should NOT be in the update call
+      const updateArg = mockUpdate.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(updateArg).not.toHaveProperty('firstOccurredAt');
+      expect(mockSet).not.toHaveBeenCalled();
     });
 
     it('returns error on Firestore failure', async () => {
+      mockDocGet.mockResolvedValue({ exists: false });
       mockSet.mockRejectedValue({ code: 13, message: 'Internal error' });
       const event = createTestEvent();
 
@@ -64,6 +90,7 @@ describe('FirestoreUsageAggregateRepository', () => {
     });
 
     it('handles errors without code or message', async () => {
+      mockDocGet.mockResolvedValue({ exists: false });
       mockSet.mockRejectedValue({});
       const event = createTestEvent();
 
@@ -72,6 +99,18 @@ describe('FirestoreUsageAggregateRepository', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('UNKNOWN');
+      }
+    });
+
+    it('returns error when get fails', async () => {
+      mockDocGet.mockRejectedValue({ code: 14, message: 'Unavailable' });
+      const event = createTestEvent();
+
+      const result = await repo.incrementAggregate(event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('14');
       }
     });
   });
