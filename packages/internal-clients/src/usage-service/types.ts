@@ -1,0 +1,175 @@
+import type { Logger, Result } from '@intexuraos/common-core';
+import type { LlmProvider } from '@intexuraos/llm-contract';
+
+export interface UsageServiceConfig {
+  baseUrl: string;
+  internalAuthToken: string;
+  logger: Logger;
+}
+
+// Re-use the event types inline (don't import from llm-usage-service app)
+// Define minimal types needed for the client
+
+export interface UsageEventOwner {
+  type: 'user' | 'system';
+  id: string;
+}
+
+export interface UsageEventSource {
+  service: string;
+  component: string;
+  client: string;
+  environment: 'dev' | 'prod' | 'test';
+}
+
+export interface UsageEventRequest {
+  provider: LlmProvider;
+  model: string;
+  operation:
+    | 'research'
+    | 'generate'
+    | 'image_generation'
+    | 'tool_calling'
+    | 'visualization_insights'
+    | 'visualization_vegalite'
+    | 'other';
+  success: boolean;
+  durationMs: number;
+}
+
+export interface UsageEventUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  cachedTokens: number;
+  reasoningTokens: number;
+  thinkingTokens: number;
+  webSearchCalls: number;
+  groundingEnabled: boolean;
+  imageCount: number;
+}
+
+export interface UsageEventCost {
+  billedUsd: number;
+  providerReportedUsd: number | null;
+  calculatedUsd: number | null;
+  pricingSource: 'provider_reported' | 'calculated' | 'mixed' | 'external';
+}
+
+export interface UsageEventCorrelation {
+  requestId: string | null;
+  traceId: string | null;
+  taskId: string | null;
+  researchId: string | null;
+  attempt: number | null;
+  sessionId: string | null;
+}
+
+export interface UsageEventError {
+  code: string | null;
+  message: string | null;
+}
+
+export interface UsageEventInput {
+  schemaVersion: 1;
+  eventId: string;
+  occurredAt: string;
+  owner: UsageEventOwner;
+  source: UsageEventSource;
+  request: UsageEventRequest;
+  usage: UsageEventUsage;
+  cost: UsageEventCost;
+  correlation: UsageEventCorrelation;
+  error: UsageEventError | null;
+}
+
+export interface UsageIngestRequest {
+  schemaVersion: 1;
+  events: UsageEventInput[];
+}
+
+export interface RejectedEvent {
+  index: number;
+  code: string;
+  message: string;
+}
+
+export interface UsageIngestResponse {
+  accepted: number;
+  duplicates: number;
+  rejected: RejectedEvent[];
+}
+
+export interface UsageQueryTimeRange {
+  from: string;
+  to: string;
+}
+
+export interface UsageQueryFilters {
+  ownerTypes?: ('user' | 'system')[];
+  ownerIds?: string[];
+  services?: string[];
+  components?: string[];
+  clients?: string[];
+  providers?: string[];
+  models?: string[];
+  operations?: string[];
+  success?: boolean;
+}
+
+export interface UsageQuerySortBy {
+  field: string;
+  direction: 'asc' | 'desc';
+}
+
+export interface UsageQueryRequest {
+  timeRange: UsageQueryTimeRange;
+  filters?: UsageQueryFilters;
+  groupBy?: string[];
+  sortBy?: UsageQuerySortBy;
+  limit?: number;
+}
+
+export interface AggregateMetrics {
+  calls: number;
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  cachedTokens: number;
+  reasoningTokens: number;
+  thinkingTokens: number;
+  webSearchCalls: number;
+  imageCount: number;
+}
+
+export interface UsageQueryRow {
+  group: Record<string, string | boolean>;
+  metrics: AggregateMetrics;
+}
+
+export interface UsageQueryResponse {
+  rows: UsageQueryRow[];
+  totals: AggregateMetrics;
+}
+
+export interface UsageServiceError {
+  code: 'NETWORK_ERROR' | 'API_ERROR' | 'VALIDATION_ERROR';
+  message: string;
+}
+
+export interface UsageServiceClient {
+  ingestEvents(
+    request: UsageIngestRequest,
+    options?: { traceId?: string }
+  ): Promise<Result<UsageIngestResponse, UsageServiceError>>;
+
+  queryUsage(
+    request: UsageQueryRequest,
+    options?: { traceId?: string }
+  ): Promise<Result<UsageQueryResponse, UsageServiceError>>;
+}
