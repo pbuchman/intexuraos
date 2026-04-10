@@ -46,11 +46,16 @@ apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
 
 log "[2/10] Install base packages"
+# lua-cjson note: required by lua-resty-openidc at runtime but NOT pulled in
+# by `luarocks install lua-resty-openidc` — the rockspec assumes cjson is
+# provided by the host distribution. Ubuntu's lua-cjson package installs to
+# /usr/lib/x86_64-linux-gnu/lua/5.1/cjson.so which is on the nginx-lua
+# module's default search path.
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
   curl ca-certificates git build-essential unzip \
   ufw fail2ban \
   nginx libnginx-mod-http-lua \
-  lua5.1 luarocks \
+  lua5.1 luarocks lua-cjson \
   certbot python3-certbot-nginx python3-certbot-dns-cloudflare \
   jq
 
