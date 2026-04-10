@@ -809,6 +809,77 @@ describe('OrchestratorCompletionVerifier', () => {
     });
   });
 
+  describe('correlation.taskId wiring', () => {
+    it('wires getCorrelationTaskId to reflect current taskId after verify()', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'planned',
+            superpowers_writing_plans: 'used',
+            linear_url: 'https://linear.app/pbuchman/issue/INT-100',
+            is_complex: '0',
+            has_plan_doc: '0',
+            subtask_urls: '',
+            pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
+            summary: 'The agent planned successfully.',
+            unclear_clarification: '',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+
+      // Capture the usageSink passed to createLlmClient
+      const clientConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(clientConfig).toBeDefined();
+      const sink = clientConfig['usageSink'] as Record<string, unknown>;
+      expect(sink).toBeDefined();
+
+      // Access config to verify the callback
+      const sinkConfig = (sink as { config: { getCorrelationTaskId?: () => string | null } })[
+        'config'
+      ];
+      const getTaskId = sinkConfig?.getCorrelationTaskId;
+      expect(getTaskId).toBeDefined();
+
+      // Before verify(), taskId should be null
+      expect(getTaskId?.()).toBeNull();
+
+      // After verify(), taskId should reflect the input
+      await verifier.verify({
+        taskId: 'task-correlation-test',
+        attempt: 1,
+        maxAttempts: 1,
+        agentType: 'planning',
+        rawLogs: 'test logs',
+      });
+      expect(getTaskId?.()).toBe('task-correlation-test');
+    });
+
+    it('wires getCorrelationTaskId to reflect taskId in extractResumeSummary()', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({ summary: 'Resume summary text.' }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+
+      const clientConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      const sink = clientConfig['usageSink'] as Record<string, unknown>;
+      const sinkConfig = (sink as { config: { getCorrelationTaskId?: () => string | null } })[
+        'config'
+      ];
+      const getTaskId = sinkConfig?.getCorrelationTaskId;
+      expect(getTaskId).toBeDefined();
+
+      await verifier.extractResumeSummary('task-resume-test', 'some logs');
+      expect(getTaskId?.()).toBe('task-resume-test');
+    });
+  });
+
   // ---------------------------------------------------------------------------
   // verify — planning agent
   // ---------------------------------------------------------------------------
