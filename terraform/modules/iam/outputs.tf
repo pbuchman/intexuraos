@@ -22,6 +22,7 @@ output "service_accounts" {
     code_agent                   = google_service_account.code_agent.email
     cron_agent                   = google_service_account.cron_agent.email
     hellscript_agent             = google_service_account.hellscript_agent.email
+    llm_usage_service            = google_service_account.llm_usage_service.email
   }
 }
 
@@ -128,4 +129,9 @@ output "cron_agent_sa" {
 output "hellscript_agent_sa" {
   description = "Hellscript Agent service account email"
   value       = google_service_account.hellscript_agent.email
+}
+
+output "llm_usage_service_sa" {
+  description = "LLM Usage Service service account email"
+  value       = google_service_account.llm_usage_service.email
 }
