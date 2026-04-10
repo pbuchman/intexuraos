@@ -134,12 +134,18 @@ function formatTokens(n: number): string {
 // --- PageHeader ---
 
 interface PageHeaderProps {
+  displayedCount: number;
   totalMatched: number;
   loading: boolean;
 }
 
-function PageHeader({ totalMatched, loading }: PageHeaderProps): React.JSX.Element {
-  const countText = totalMatched === -1 ? 'Events' : `Showing ${String(totalMatched)} events`;
+function PageHeader({ displayedCount, totalMatched, loading }: PageHeaderProps): React.JSX.Element {
+  let countText: string;
+  if (totalMatched === -1) {
+    countText = `Showing ${String(displayedCount)} events`;
+  } else {
+    countText = `Showing ${String(displayedCount)} of ${String(totalMatched)} events`;
+  }
   return (
     <div className="mb-6">
       <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">LLM Usage</h2>
@@ -341,7 +347,9 @@ function RawEventsList({ events, loading, loadingMore, hasMore, error, onLoadMor
         <thead>
           <tr className="border-b border-slate-200 dark:border-slate-700">
             <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">Time</th>
-            <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">Provider / Model</th>
+            <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">Owner</th>
+            <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">Provider</th>
+            <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">Model</th>
             <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">Component</th>
             <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">Service</th>
             <th className="py-2 pr-4 text-right font-medium text-slate-500 dark:text-slate-400">Tokens</th>
@@ -356,11 +364,9 @@ function RawEventsList({ events, loading, loadingMore, hasMore, error, onLoadMor
                   {formatRelative(event.occurredAt)}
                 </Link>
               </td>
-              <td className="py-2.5 pr-4">
-                <span className="text-slate-900 dark:text-slate-100">{event.request.provider}</span>
-                <span className="text-slate-400 dark:text-slate-500"> / </span>
-                <span className="text-slate-600 dark:text-slate-300">{event.request.model}</span>
-              </td>
+              <td className="py-2.5 pr-4 text-slate-600 dark:text-slate-300">{event.owner.id}</td>
+              <td className="py-2.5 pr-4 text-slate-900 dark:text-slate-100">{event.request.provider}</td>
+              <td className="py-2.5 pr-4 text-slate-600 dark:text-slate-300">{event.request.model}</td>
               <td className="py-2.5 pr-4 text-slate-600 dark:text-slate-300">{event.source.component}</td>
               <td className="py-2.5 pr-4 text-slate-600 dark:text-slate-300">{event.source.service}</td>
               <td className="py-2.5 pr-4 text-right font-mono text-slate-700 dark:text-slate-300">{formatTokens(event.usage.totalTokens)}</td>
@@ -535,11 +541,12 @@ export function LlmUsagePage(): React.JSX.Element {
   });
 
   const totalMatched = isRawMode ? eventsResult.totalMatched : (queryResult.totals?.calls ?? 0);
+  const displayedCount = isRawMode ? eventsResult.events.length : queryResult.rows.length;
   const isLoading = isRawMode ? eventsResult.loading : queryResult.loading;
 
   return (
     <Layout>
-      <PageHeader totalMatched={totalMatched} loading={isLoading} />
+      <PageHeader displayedCount={displayedCount} totalMatched={totalMatched} loading={isLoading} />
       <TimeRangePicker timeRange={timeRange} onChange={handleTimeRangeChange} />
       <ProviderFilters activeProviders={activeProviders} onToggle={handleToggleProvider} />
       <GroupBySelector groupBy={groupBy} onChange={handleGroupByChange} />

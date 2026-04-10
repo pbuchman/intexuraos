@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { LlmProviders } from '@intexuraos/llm-contract';
 import { listUsageEvents } from '../../../domain/usecases/listUsageEvents.js';
 import { encodeCursor } from '../../../domain/models/cursor.js';
-import { DEFAULT_LIST_LIMIT } from '../../../domain/models/usageEvent.js';
+import { DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT } from '../../../domain/models/usageEvent.js';
 import { FakeUsageEventRepository } from '../../fakeUsageEventRepository.js';
 import { createTestEvent } from '../../helpers.js';
 
@@ -36,6 +36,15 @@ describe('listUsageEvents', () => {
   });
 
   it('clamps limit to MAX_LIST_LIMIT', async () => {
+    // Create MAX_LIST_LIMIT + 5 events to prove the limit is actually clamped
+    for (let i = 0; i < MAX_LIST_LIMIT + 5; i++) {
+      const event = createTestEvent({
+        eventId: `evt_clamp_${String(i).padStart(4, '0')}`,
+        occurredAt: '2026-04-10T12:00:00.000Z',
+      });
+      await eventRepo.createEvent(event);
+    }
+
     const result = await listUsageEvents(
       { logger, usageEventRepository: eventRepo },
       {
@@ -45,11 +54,9 @@ describe('listUsageEvents', () => {
     );
 
     expect(result.ok).toBe(true);
-    // We can verify the clamping happened by ensuring no error was thrown.
-    // The repo receives the clamped limit internally; adding >MAX_LIST_LIMIT events would prove it,
-    // but the use case just delegates. We verify no error is returned.
     if (result.ok) {
-      expect(result.value.events).toHaveLength(0);
+      // Should return exactly MAX_LIST_LIMIT events, not 999
+      expect(result.value.events).toHaveLength(MAX_LIST_LIMIT);
     }
   });
 
