@@ -1,7 +1,7 @@
 /**
  * Pricing types for LLM cost calculation.
  *
- * Used by app-settings-service (for fetching/storing prices) and infra-*
+ * Used by llm-usage-service (for fetching/storing prices) and infra-*
  * packages (for calculating request costs).
  *
  * @packageDocumentation
@@ -69,7 +69,7 @@ export interface ModelPricing {
 /**
  * Pricing configuration for all models from a single provider.
  *
- * Used by app-settings-service to store and retrieve pricing data.
+ * Used by llm-usage-service to store and retrieve pricing data.
  * The `updatedAt` field is used to invalidate stale pricing.
  */
 export interface ProviderPricing {
