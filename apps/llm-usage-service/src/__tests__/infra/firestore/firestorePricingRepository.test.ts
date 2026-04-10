@@ -62,6 +62,36 @@ describe('FirestorePricingRepository', () => {
         updatedAt: '2026-04-10T00:00:00Z',
       });
     });
+
+    it('round-trips provider-level OpenRouter metadata (useProviderCost, costSource)', async () => {
+      const pricing: ProviderPricing = {
+        provider: LlmProviders.OpenRouter,
+        models: {
+          _placeholder: {
+            inputPricePerMillion: 0,
+            outputPricePerMillion: 0,
+            useProviderCost: true,
+          },
+        },
+        updatedAt: '2026-04-10T00:00:00Z',
+        useProviderCost: true,
+        costSource: 'provider_reported',
+      };
+      mockGet.mockResolvedValue({
+        exists: true,
+        data: (): typeof pricing => pricing,
+      });
+
+      const result = await repo.getByProvider(LlmProviders.OpenRouter);
+
+      expect(result).toEqual({
+        provider: LlmProviders.OpenRouter,
+        models: pricing.models,
+        updatedAt: '2026-04-10T00:00:00Z',
+        useProviderCost: true,
+        costSource: 'provider_reported',
+      });
+    });
   });
 
   describe('getAll', () => {
@@ -129,6 +159,33 @@ describe('FirestorePricingRepository', () => {
         provider: LlmProviders.Anthropic,
         models: pricing.models,
         updatedAt: '2026-04-10T00:00:00Z',
+      });
+    });
+
+    it('persists provider-level metadata for OpenRouter', async () => {
+      mockSet.mockResolvedValue(undefined);
+      const pricing: ProviderPricing = {
+        provider: LlmProviders.OpenRouter,
+        models: {
+          _placeholder: {
+            inputPricePerMillion: 0,
+            outputPricePerMillion: 0,
+            useProviderCost: true,
+          },
+        },
+        updatedAt: '2026-04-10T00:00:00Z',
+        useProviderCost: true,
+        costSource: 'provider_reported',
+      };
+
+      await repo.setByProvider(LlmProviders.OpenRouter, pricing);
+
+      expect(mockSet).toHaveBeenCalledWith({
+        provider: LlmProviders.OpenRouter,
+        models: pricing.models,
+        updatedAt: '2026-04-10T00:00:00Z',
+        useProviderCost: true,
+        costSource: 'provider_reported',
       });
     });
   });
