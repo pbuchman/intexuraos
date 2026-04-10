@@ -156,8 +156,62 @@ Expected: a list that includes at minimum the secrets named in `terraform/enviro
 
 - [ ] **Step 2:** Verify the SA key at `$HOME/.config/gcloud/sa-key.json` has permission to read them
 
-Run: `gcloud --impersonate-service-account=$(jq -r .client_email "$HOME/.config/gcloud/sa-key.json") secrets versions access latest --secret=INTEXURAOS_AUTH_JWKS_URL --project=intexuraos-dev-pbuchman`
-Expected: returns the secret value. If permission denied, the engineer must grant `roles/secretmanager.secretAccessor` to the SA before continuing.
+Run: `gcloud secrets versions describe latest --secret=INTEXURAOS_AUTH_JWKS_URL --project=intexuraos-dev-pbuchman --format='value(state,createTime)'` (use `describe`, not `access`, to avoid printing the secret value to your terminal).
+Expected: prints `ENABLED\t<ISO-8601 timestamp>`. If permission denied, the engineer must grant `roles/secretmanager.secretAccessor` to the SA before continuing.
+
+### Task 0.5: Create `INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN` via Terraform
+
+> **Rule (hard):** All secret *resources* in this codebase are managed by Terraform — never `gcloud secrets create`. The `.claude/hooks/validate-gcloud-resources.sh` PreToolUse hook enforces this mechanically. The split is: Terraform owns the secret shell (via the `secret_manager` module's `secrets = { ... }` map in `terraform/environments/dev/main.tf`); `gcloud secrets versions add` populates the value out-of-band. See `docs/setup/02-terraform-bootstrap.md:94-150` and `terraform/modules/secret-manager/main.tf` (the module comment explains the split).
+
+**Files:**
+- Modify: `terraform/environments/dev/main.tf` (add one line to the `secrets = { ... }` map inside `module "secret_manager"`, under the existing `# Cloudflare Browser Rendering API` section)
+
+- [ ] **Step 1:** Add the secret declaration
+
+In `terraform/environments/dev/main.tf`, inside the `secrets = { ... }` map around line 519, add this line next to the existing Cloudflare entries:
+
+```hcl
+    "INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN" = "Cloudflare API token (Zone:Read + DNS:Edit on intexuraos.cloud) for certbot DNS-01 challenge in Hetzner prod Phase 6"
+```
+
+Open a PR with just this one-line change. Short PR body referencing INT-750. This is deliberately a separate PR from the Hetzner scaffold so the secret declaration lands cleanly and can be applied independently.
+
+- [ ] **Step 2:** After the PR merges, run `terraform apply` in the dev env
+
+```bash
+cd terraform/environments/dev
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS="$HOME/.config/gcloud/sa-key.json" \
+terraform apply
+```
+
+Expected plan: `+ module.secret_manager.google_secret_manager_secret.secrets["INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN"]` — exactly one resource to add. Confirm and approve.
+
+- [ ] **Step 3:** Populate the value (use `versions add`, NOT `create`)
+
+You must have the Cloudflare token in a password manager from Phase 0 Decision 2 setup. With the token in your clipboard/buffer:
+
+```bash
+printf '%s' '<paste-token-here>' | \
+  STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+  GOOGLE_APPLICATION_CREDENTIALS="$HOME/.config/gcloud/sa-key.json" \
+  gcloud secrets versions add INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN \
+    --project=intexuraos-dev-pbuchman \
+    --data-file=-
+```
+
+Use `printf` not `echo` — a trailing newline will make certbot's Cloudflare API call fail with a cryptic 401. Or use the canonical interactive flow: `./scripts/sync-secrets.sh --add-new` (prompts for any secret without a version).
+
+- [ ] **Step 4:** Verify the secret has a version
+
+```bash
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS="$HOME/.config/gcloud/sa-key.json" \
+gcloud secrets versions list INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN \
+  --project=intexuraos-dev-pbuchman --format='value(name,state,createTime)'
+```
+
+Expected: one row with `state=ENABLED` and a recent `createTime`. Phase 6 consumes this secret.
 
 ⏸ **CHECKPOINT 0:** Do not continue to Phase 1 until all Phase 0 tasks are green. Phase 1 provisions real infrastructure and incurs real cost.
 
