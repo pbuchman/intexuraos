@@ -6,12 +6,18 @@ import type { UsageAggregateRepository } from '../domain/repositories/usageAggre
 export class FakeUsageAggregateRepository implements UsageAggregateRepository {
   private readonly aggregates: DailyUsageAggregate[] = [];
   private failWith: { code: string; message: string } | null = null;
+  private incrementCallCount = 0;
 
   async incrementAggregate(_event: UsageEvent): Promise<Result<void, { code: string; message: string }>> {
     if (this.failWith !== null) {
       return err(this.failWith);
     }
+    this.incrementCallCount++;
     return ok(undefined);
+  }
+
+  getIncrementCallCount(): number {
+    return this.incrementCallCount;
   }
 
   async queryAggregates(_from: string, _to: string): Promise<Result<DailyUsageAggregate[], { code: string; message: string }>> {
@@ -32,5 +38,6 @@ export class FakeUsageAggregateRepository implements UsageAggregateRepository {
   clear(): void {
     this.aggregates.length = 0;
     this.failWith = null;
+    this.incrementCallCount = 0;
   }
 }

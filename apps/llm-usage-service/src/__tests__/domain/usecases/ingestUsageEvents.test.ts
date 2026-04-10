@@ -29,7 +29,7 @@ describe('ingestUsageEvents', () => {
     expect(result.rejected).toHaveLength(0);
   });
 
-  it('detects duplicate events', async () => {
+  it('detects duplicate events and does not double-increment aggregate', async () => {
     const events = [
       createTestEventInput({ eventId: 'evt_dup' }),
       createTestEventInput({ eventId: 'evt_dup' }),
@@ -42,6 +42,7 @@ describe('ingestUsageEvents', () => {
 
     expect(result.accepted).toBe(1);
     expect(result.duplicates).toBe(1);
+    expect(aggregateRepo.getIncrementCallCount()).toBe(1);
   });
 
   it('rejects events with invalid schemaVersion', async () => {
@@ -651,6 +652,48 @@ describe('ingestUsageEvents', () => {
 
     expect(result.rejected).toHaveLength(1);
     expect(result.rejected[0]?.code).toBe('INVALID_IMAGE_COUNT');
+  });
+
+  it('handles mixed batch (valid + duplicate + invalid)', async () => {
+    // Pre-seed the duplicate
+    await ingestUsageEvents(
+      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
+      [createTestEventInput({ eventId: 'evt_dup' })],
+      'internal',
+    );
+
+    // Reset aggregate counter after pre-seed
+    const preIncrementCount = aggregateRepo.getIncrementCallCount();
+
+    const result = await ingestUsageEvents(
+      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
+      [
+        createTestEventInput({ eventId: 'evt_new' }),  // valid
+        createTestEventInput({ eventId: 'evt_dup' }),  // duplicate
+        createTestEventInput({ eventId: '' }),          // invalid
+      ],
+      'internal',
+    );
+
+    expect(result.accepted).toBe(1);
+    expect(result.duplicates).toBe(1);
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0]?.code).toBe('INVALID_EVENT_ID');
+    // Only the valid event should have incremented the aggregate
+    expect(aggregateRepo.getIncrementCallCount()).toBe(preIncrementCount + 1);
+  });
+
+  it('rejects events with non-boolean groundingEnabled', async () => {
+    const input = createTestEventInput();
+    const events = [{ ...input, usage: { ...input.usage, groundingEnabled: 'yes' as unknown as boolean } }];
+    const result = await ingestUsageEvents(
+      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
+      events,
+      'internal',
+    );
+
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0]?.code).toBe('INVALID_GROUNDING_ENABLED');
   });
 
   it('rejects events with non-number billedUsd', async () => {
