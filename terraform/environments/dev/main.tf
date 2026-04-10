@@ -515,8 +515,9 @@ module "secret_manager" {
     "INTEXURAOS_SENTRY_DSN"     = "Sentry Data Source Name for error tracking (backend services)"
     "INTEXURAOS_SENTRY_DSN_WEB" = "Sentry Data Source Name for error tracking (web app)"
     # Cloudflare Browser Rendering API
-    "INTEXURAOS_CLOUDFLARE_ACCOUNT_ID" = "Cloudflare account ID for Browser Rendering API"
-    "INTEXURAOS_CLOUDFLARE_API_TOKEN"  = "Cloudflare API token with Browser Rendering Edit permission"
+    "INTEXURAOS_CLOUDFLARE_ACCOUNT_ID"    = "Cloudflare account ID for Browser Rendering API"
+    "INTEXURAOS_CLOUDFLARE_API_TOKEN"     = "Cloudflare API token with Browser Rendering Edit permission"
+    "INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN" = "Cloudflare API token (Zone:Read + DNS:Edit on intexuraos.cloud) for certbot DNS-01 in Hetzner prod (INT-750 Phase 6)"
     # LLM API keys
     "INTEXURAOS_OPENAI_APP_API_KEY"     = "OpenAI API key for chat-agent"
     "INTEXURAOS_MINIMAX_APP_API_KEY"    = "MiniMax API key for orchestrator worker containers"
