@@ -1,7 +1,7 @@
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import { createOpenRouterClient, type OpenRouterClient } from '@intexuraos/infra-openrouter';
 import type { ModelPricing } from '@intexuraos/llm-contract';
-import { StructuredLogUsageSink } from '@intexuraos/llm-pricing';
+import { HttpWebhookUsageSink } from '@intexuraos/llm-pricing';
 import { createLlmParseError, formatZodErrors, logLlmParseError } from '@intexuraos/llm-utils';
 import { execFile } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -257,6 +257,9 @@ export interface AgentComplianceValidatorConfig {
   model: string;
   pricing: ModelPricing;
   auditLogPath: string;
+  codeAgentUrl: string;
+  orchestratorSecret: string;
+  internalAuthToken: string;
 }
 export interface ComplianceValidationInput {
   taskId: string;
@@ -294,7 +297,14 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
       userId: 'orchestrator-compliance-validator',
       pricing: config.pricing,
       logger,
-      usageSink: new StructuredLogUsageSink({ logger }),
+      usageSink: new HttpWebhookUsageSink({
+        webhookUrl: `${config.codeAgentUrl}/internal/webhooks/usage-events`,
+        webhookSecret: config.orchestratorSecret,
+        internalAuthToken: config.internalAuthToken,
+        service: 'orchestrator',
+        component: 'agent-compliance-validator',
+        logger,
+      }),
     });
   }
   async validate(

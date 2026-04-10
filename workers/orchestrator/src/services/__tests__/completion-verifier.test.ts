@@ -45,10 +45,20 @@ const defaultConfig = {
   model: LlmModels.Gemini25Flash,
   geminiApiKey: 'gemini-key',
   auditLogPath: '/tmp/orchestrator-llm-audit.test.log',
+  codeAgentUrl: 'http://localhost:8128',
+  orchestratorSecret: 'test-secret',
+  internalAuthToken: 'test-token',
 } as const;
 
 function createVerifier(
-  overrides: Partial<{ model: string; geminiApiKey: string; auditLogPath: string }> = {}
+  overrides: Partial<{
+    model: string;
+    geminiApiKey: string;
+    auditLogPath: string;
+    codeAgentUrl: string;
+    orchestratorSecret: string;
+    internalAuthToken: string;
+  }> = {}
 ): InstanceType<typeof OrchestratorCompletionVerifier> {
   return new OrchestratorCompletionVerifier(logger, { ...defaultConfig, ...overrides });
 }

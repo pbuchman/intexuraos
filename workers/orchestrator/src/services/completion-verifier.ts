@@ -1,7 +1,7 @@
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
 import { LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
-import { StructuredLogUsageSink } from '@intexuraos/llm-pricing';
+import { HttpWebhookUsageSink } from '@intexuraos/llm-pricing';
 import { z } from 'zod';
 import { stripDockerHeaders } from './log-formatter.js';
 import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
@@ -121,6 +121,9 @@ export interface CompletionVerifierConfig {
   model: string;
   geminiApiKey: string;
   auditLogPath: string;
+  codeAgentUrl: string;
+  orchestratorSecret: string;
+  internalAuthToken: string;
 }
 
 export const PLANNING_SCHEMA = z
@@ -807,7 +810,14 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         logger: this.logger,
         auditLogPath: config.auditLogPath,
       }),
-      usageSink: new StructuredLogUsageSink({ logger: this.logger }),
+      usageSink: new HttpWebhookUsageSink({
+        webhookUrl: `${config.codeAgentUrl}/internal/webhooks/usage-events`,
+        webhookSecret: config.orchestratorSecret,
+        internalAuthToken: config.internalAuthToken,
+        service: 'orchestrator',
+        component: 'completion-verifier',
+        logger: this.logger,
+      }),
     });
   }
 }
