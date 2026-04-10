@@ -93,12 +93,6 @@ variable "audit_llms" {
   default     = true
 }
 
-variable "alert_email" {
-  description = "Email address for monitoring alerts. Set to null to disable alerts."
-  type        = string
-  default     = null
-}
-
 # -----------------------------------------------------------------------------
 # Data Sources
 # -----------------------------------------------------------------------------
@@ -1851,22 +1845,6 @@ module "github_wif" {
 }
 
 # -----------------------------------------------------------------------------
-# Monitoring Dashboard & Alerts
-# -----------------------------------------------------------------------------
-
-module "monitoring" {
-  source = "../../modules/monitoring"
-
-  project_id  = var.project_id
-  environment = var.environment
-  alert_email = var.alert_email
-
-  depends_on = [
-    google_project_service.apis,
-  ]
-}
-
-# -----------------------------------------------------------------------------
 # Cloud Scheduler - Retry Pending Commands
 # -----------------------------------------------------------------------------
 
@@ -2819,11 +2797,6 @@ output "bookmarks_agent_url" {
 output "calendar_agent_url" {
   description = "Calendar Agent URL"
   value       = module.calendar_agent.service_url
-}
-
-output "monitoring_dashboard_id" {
-  description = "Monitoring dashboard ID"
-  value       = module.monitoring.dashboard_id
 }
 
 output "claude_code_dev_service_account" {
