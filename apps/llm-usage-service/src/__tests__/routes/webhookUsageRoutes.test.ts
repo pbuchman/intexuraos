@@ -140,8 +140,7 @@ describe('webhookUsageRoutes', () => {
         payload,
       });
 
-      // Schema validation may reject, or our handler catches it
-      expect(response.statusCode).toBeGreaterThanOrEqual(400);
+      expect(response.statusCode).toBe(400);
     });
   });
 });

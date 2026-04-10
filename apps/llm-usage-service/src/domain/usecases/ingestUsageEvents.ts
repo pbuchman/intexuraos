@@ -123,6 +123,9 @@ function validateEvent(typedInput: UsageEventInput, index: number): RejectedEven
   if (typeof usage['webSearchCalls'] !== 'number' || usage['webSearchCalls'] < 0) {
     return { index, code: 'INVALID_WEB_SEARCH_CALLS', message: 'usage.webSearchCalls must be >= 0' };
   }
+  if (typeof usage['groundingEnabled'] !== 'boolean') {
+    return { index, code: 'INVALID_GROUNDING_ENABLED', message: 'usage.groundingEnabled must be a boolean' };
+  }
   if (typeof usage['imageCount'] !== 'number' || usage['imageCount'] < 0) {
     return { index, code: 'INVALID_IMAGE_COUNT', message: 'usage.imageCount must be >= 0' };
   }

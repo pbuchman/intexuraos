@@ -28,12 +28,9 @@ const REQUIRED_SECRETS = [
 ];
 
 function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
+  const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'http://localhost:8080';
   const servers = [
-    {
-      url: 'https://intexuraos-llm-usage-service-cj44trunra-lm.a.run.app',
-      description: 'Cloud (Development)',
-    },
-    { url: 'http://localhost:8080', description: 'Local' },
+    { url: serviceUrl, description: serviceUrl.includes('localhost') ? 'Local' : 'Cloud' },
   ];
 
   return {

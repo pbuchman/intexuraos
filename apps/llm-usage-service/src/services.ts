@@ -19,10 +19,15 @@ export function getServices(): ServiceContainer {
 }
 
 export function initializeServices(): void {
+  const orchestratorSecret = process.env['INTEXURAOS_ORCHESTRATOR_SECRET'];
+  if (orchestratorSecret === undefined || orchestratorSecret === '') {
+    throw new Error('INTEXURAOS_ORCHESTRATOR_SECRET is required');
+  }
+
   container = {
     usageEventRepository: new FirestoreUsageEventRepository(),
     usageAggregateRepository: new FirestoreUsageAggregateRepository(),
-    orchestratorSecret: process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] ?? '',
+    orchestratorSecret,
   };
 }
 

@@ -80,8 +80,7 @@ describe('internalUsageRoutes', () => {
         },
       });
 
-      // Schema validation may reject it before our handler
-      expect(response.statusCode).toBeGreaterThanOrEqual(400);
+      expect(response.statusCode).toBe(400);
     });
   });
 
