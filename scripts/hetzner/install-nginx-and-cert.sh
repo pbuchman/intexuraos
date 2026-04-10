@@ -131,10 +131,21 @@ rm -f /etc/nginx/sites-enabled/default
 # Create the web app static root (populated in Phase 9)
 install -d -o deploy -g deploy -m 755 /var/www/intexuraos/web/dist
 
-# ---- 5. Validate and reload nginx ----------------------------------------
-log "[5/6] Validating nginx config and reloading"
+# ---- 5. Validate and reload/start nginx ----------------------------------
+# If nginx is currently active, reload gracefully (no dropped connections).
+# If inactive (e.g., post-reboot after a prior broken config that failed to
+# boot), restart to clear the failed state and start fresh. Either path
+# exits non-zero on config errors, so `nginx -t` first gives the clearest
+# error message before systemd's more opaque failure output.
+log "[5/6] Validating nginx config and reloading/starting"
 nginx -t || fail "nginx -t failed — check $NGINX_DST"
-systemctl reload nginx
+if systemctl is-active --quiet nginx; then
+  systemctl reload nginx
+  log "    nginx reloaded (was active)"
+else
+  systemctl restart nginx
+  log "    nginx restarted (was inactive — likely failed state from a prior broken config)"
+fi
 
 # ---- 6. Extend deploy sudoers for future Hetzner scripts -----------------
 log "[6/6] Writing $SUDOERS_FILE to unlock Phases 7-9 from deploy"
