@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import { createOpenRouterClient, type OpenRouterClient } from '@intexuraos/infra-openrouter';
 import type { ModelPricing } from '@intexuraos/llm-contract';
@@ -8,6 +9,8 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+
+const validatorTaskIdStorage = new AsyncLocalStorage<string>();
 import type { ExecutionAgentData } from './completion-verifier.js';
 import {
   AgentComplianceReportSchema,
@@ -287,7 +290,6 @@ export interface AgentComplianceValidator {
 export class OrchestratorAgentComplianceValidator implements AgentComplianceValidator {
   private readonly client: OpenRouterClient;
   private readonly model: string;
-  private currentTaskId: string | null = null;
   constructor(
     private readonly logger: Logger,
     config: AgentComplianceValidatorConfig
@@ -306,7 +308,7 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
         service: 'orchestrator',
         component: 'agent-compliance-validator',
         logger,
-        getCorrelationTaskId: (): string | null => this.currentTaskId,
+        getCorrelationTaskId: (): string | null => validatorTaskIdStorage.getStore() ?? null,
       }),
     });
   }
@@ -314,7 +316,13 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
     input: ComplianceValidationInput,
     onProgress?: (message: string) => void
   ): Promise<ComplianceValidationResult | null> {
-    this.currentTaskId = input.taskId;
+    return await validatorTaskIdStorage.run(input.taskId, () => this.doValidate(input, onProgress));
+  }
+
+  private async doValidate(
+    input: ComplianceValidationInput,
+    onProgress?: (message: string) => void
+  ): Promise<ComplianceValidationResult | null> {
     const promptResult = buildCompliancePrompt({
       formattedTranscript: input.formattedTranscript,
       agentClaims: input.agentClaims,

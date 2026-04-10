@@ -294,6 +294,60 @@ describe('POST /internal/webhooks/usage-events', () => {
     expect(response.statusCode).toBe(400);
   });
 
+  it('returns 400 when occurredAt is not a valid date-time', async () => {
+    const validPayload = buildValidPayload();
+    const events = (validPayload as { events: Record<string, unknown>[] }).events;
+    const firstEvent = events[0];
+    if (firstEvent !== undefined) {
+      firstEvent['occurredAt'] = 'not-a-date';
+    }
+    const response = await sendUsageEvents(validPayload);
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('returns 400 when eventId is an empty string', async () => {
+    const validPayload = buildValidPayload();
+    const events = (validPayload as { events: Record<string, unknown>[] }).events;
+    const firstEvent = events[0];
+    if (firstEvent !== undefined) {
+      firstEvent['eventId'] = '';
+    }
+    const response = await sendUsageEvents(validPayload);
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('returns 400 when usage tokens are negative', async () => {
+    const validPayload = buildValidPayload();
+    const events = (validPayload as { events: Record<string, unknown>[] }).events;
+    const firstEvent = events[0];
+    if (firstEvent !== undefined) {
+      (firstEvent as { usage: Record<string, unknown> }).usage = {
+        ...(firstEvent as { usage: Record<string, unknown> }).usage,
+        inputTokens: -1,
+      };
+    }
+    const response = await sendUsageEvents(validPayload);
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('returns 400 when cost billedUsd is negative', async () => {
+    const validPayload = buildValidPayload();
+    const events = (validPayload as { events: Record<string, unknown>[] }).events;
+    const firstEvent = events[0];
+    if (firstEvent !== undefined) {
+      (firstEvent as { cost: Record<string, unknown> }).cost = {
+        ...(firstEvent as { cost: Record<string, unknown> }).cost,
+        billedUsd: -0.5,
+      };
+    }
+    const response = await sendUsageEvents(validPayload);
+
+    expect(response.statusCode).toBe(400);
+  });
+
   it('returns 400 when event has invalid provider enum value', async () => {
     const validPayload = buildValidPayload();
     const events = (validPayload as { events: Record<string, unknown>[] }).events;
