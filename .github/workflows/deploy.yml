@@ -161,6 +161,7 @@ jobs:
           bash cloudbuild/scripts/build-push-monitored.sh chat-agent apps/chat-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh cron-agent apps/cron-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh hellscript-agent apps/hellscript-agent/Dockerfile &
+          bash cloudbuild/scripts/build-push-monitored.sh llm-usage-service apps/llm-usage-service/Dockerfile &
           wait
 
       - name: Build workers
@@ -174,6 +175,7 @@ jobs:
             commands-agent actions-agent data-insights-agent notes-agent
             todos-agent bookmarks-agent calendar-agent linear-agent
             web-agent code-agent chat-agent cron-agent hellscript-agent
+            llm-usage-service
           )
           for svc in "${SERVICES[@]}"; do
             bash "cloudbuild/scripts/deploy-${svc}.sh" &
