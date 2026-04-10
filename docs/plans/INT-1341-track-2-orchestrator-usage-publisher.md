@@ -2,1150 +2,577 @@
 
 ## Status
 
-- Linear issue: INT-1341
-- Parent epic: INT-1338 (LLM Usage Service Phase 2)
-- Dependencies: **INT-1339 (Track 4 — server-side cost calculation)** — MUST be merged and deployed to dev before flipping the feature flag on.
-- Blocks: INT-1342 (Track 3 — shares the HMAC webhook HTTP client pattern this track establishes)
-- Plan version: 1.0
+- Linear issue: **INT-1341**
+- Parent epic: **INT-1338** (LLM Usage Service Phase 2)
+- Dependencies: none — Track 2 is independent and starts in Phase 1 parallel (alongside Track 1 and Track 4)
+- Blocks: **INT-1342** (Track 3 — reuses `HttpInternalAuthUsageSink` shipped here)
+- Plan version: **2.0** (full rewrite — 2026-04-10; supersedes v1.0 which described JSONL parsing)
 - Author: Claude (agent thread)
-- Target file: `workers/orchestrator/src/services/usage-publisher.ts` (new) and small edits to `turn-metrics-collector.ts` + `start.ts`.
+- Authority: `docs/plans/INT-1338-decisions.md` Part 2 is the source of truth for all scope decisions.
 
 ---
 
 ## Executive summary
 
-The orchestrator already parses on-disk Claude Code session JSONL files after every turn to produce
-summed-per-turn resource metrics and posts them to `code-agent/internal/turn-metrics`. The per-call
-token usage is aggregated away in that pipeline; nothing is sent to `llm-usage-service`. This track
-adds a parallel code path that extracts the **same** JSONL entries and emits **one
-`UsageEventInput` per entry containing `message.usage`** (preserving per-call granularity), batches
-them into a single HTTP POST to `llm-usage-service/internal/webhooks/usage-events`, and reuses the
-existing `WebhookClient` for HMAC signing, retries, and the pending-queue failover.
+Two places in the orchestrator make LLM calls using the `LLMClient` interface directly:
 
-Two design points distinguish this from a naive implementation:
+1. `workers/orchestrator/src/services/agent-compliance-validator.ts:297` — `createOpenRouterClient({ usageSink: new StructuredLogUsageSink({ logger }) })`
+2. `workers/orchestrator/src/services/completion-verifier.ts:810` — `createLlmClient({ usageSink: new StructuredLogUsageSink({ logger }) })`
 
-1. **No orchestrator-side pricing.** Events are emitted with `cost.billedUsd = 0`,
-   `cost.providerReportedUsd = null`, `cost.calculatedUsd = null`, `cost.pricingSource =
-   'calculated'`. The service (INT-1339) computes the cost server-side from its pricing table.
-   This is why this track is blocked on Track 4.
-2. **Deterministic event IDs.** The same JSONL file is re-read on retry (e.g., adoption) so events
-   must be idempotent: `eventId = sha256("${taskId}:${attempt}:${entryIndex}:${timestamp}").slice(0, 24)`.
+Both currently use `StructuredLogUsageSink` — log-only, no Firestore writes, no usage tracking. This track replaces both with `HttpWebhookUsageSink`, a new sink in `packages/llm-pricing` that HMAC-signs usage events and POSTs them to `code-agent/internal/webhooks/usage-events`. Code-agent validates the HMAC (using `INTEXURAOS_ORCHESTRATOR_SECRET`, which it already holds), then forwards the events to `llm-usage-service/internal/usage/events` using `X-Internal-Auth`.
 
-The orchestrator is **not** containerized and **not** managed by Terraform — it runs as a systemd
-unit on home-dev and a LaunchAgent on macOS hosts. Env var plumbing therefore touches `start.ts`
-REQUIRED_ENV, the host `.envrc`, and (for future Cloud Run deployment parity) the dev Terraform
-`common_service_env_vars` block. There is **no ecosystem.config.cjs entry to update** — the
-orchestrator is absent from that file (confirmed by grep).
+This track also ships `HttpInternalAuthUsageSink` — a second new sink for in-cluster apps (not the orchestrator) that call `llm-usage-service` directly with `X-Internal-Auth`. Track 3 reuses this sink when migrating all `FirestoreUsageSink` call sites.
+
+**What this track explicitly does NOT do:**
+- Parse JSONL session files or touch `turn-metrics-collector.ts`
+- Add server-side cost calculation (all pricing is client-side, using the existing `PricingContext`)
+- Add a feature flag
+- Add a `UsagePublisher` class
 
 ---
 
 ## Pre-flight checks
 
-Run these **before** opening a PR branch. Each item is a hard blocker.
+Run these before opening a PR branch. Each is a hard blocker.
 
-1. **Verify INT-1339 is deployed to dev.**
+1. **Establish a green CI baseline.**
    ```bash
-   curl -s https://<dev-llm-usage-service-url>/internal/pricing \
-     -H "X-Internal-Auth: $INTEXURAOS_INTERNAL_AUTH_TOKEN" \
-     | jq '.data | keys'
+   pnpm run ci:tracked | tee /tmp/int-1341-baseline.txt
    ```
-   Must return a non-empty object with at least `claude-sonnet-4-5-20250929` and
-   `claude-opus-4-5-20251101`. If it returns `404` or empty, stop — Track 4 is not ready.
+   Do not proceed if anything fails.
 
-2. **Verify the `/internal/webhooks/usage-events` endpoint is live in dev.** POST an empty events
-   array with a valid HMAC and expect `200 {success: true, data: {accepted: 0, duplicates: 0,
-   rejected: []}}`. If you get `401`, the `INTEXURAOS_ORCHESTRATOR_SECRET` on the orchestrator and
-   the llm-usage-service do not match — fix that before proceeding.
+2. **Verify `packages/llm-pricing/dist/` exists.** The new sinks import from this package; `tsc` will fail with `Cannot find module` if dist is stale.
+   ```bash
+   pnpm build
+   ```
 
-3. **Read an actual JSONL session file from a recent dev task** (see Phase 1 for the exact
-   mechanics). This verifies the `message.model` location hypothesis. **Do not skip this step** —
-   it is the single highest-risk unknown in this plan.
+3. **Re-read the two call sites before writing any code** to confirm line numbers have not drifted:
+   - `workers/orchestrator/src/services/agent-compliance-validator.ts` — search for `usageSink: new StructuredLogUsageSink`
+   - `workers/orchestrator/src/services/completion-verifier.ts` — same search
 
-4. **Confirm `pnpm run ci:tracked` currently passes on `development`.** You are about to add a
-   new service that imports from `@intexuraos/llm-contract` — any pre-existing green baseline
-   makes diagnosing new failures trivial.
+4. **Confirm code-agent already has `INTEXURAOS_ORCHESTRATOR_SECRET` in `REQUIRED_ENV`.**
+   Verified at plan time: `apps/code-agent/src/index.ts` line 18 includes `'INTEXURAOS_ORCHESTRATOR_SECRET'`. No env var change needed for code-agent.
 
-5. **Locate the orchestrator's runtime environment file.** On home-dev this is typically
-   `~/.code-orchestrator/.envrc` or loaded via `direnv allow` on the repo root `.envrc`. Confirm
-   with `systemctl show --no-pager -p Environment code-orchestrator` (or the LaunchAgent plist on
-   macOS). You need write access before Phase 8 can complete.
+5. **Confirm code-agent does NOT yet have `INTEXURAOS_LLM_USAGE_SERVICE_URL`.** Verified at plan time — this env var is absent from `apps/code-agent/src/index.ts` and `apps/code-agent/src/services.ts`. Track 2 adds it (see Phase 3 env var wiring).
+
+6. **Check the orchestrator's `INTEXURAOS_INTERNAL_AUTH_TOKEN`.** The orchestrator already reads this env var at `workers/orchestrator/src/start.ts:442`. It is passed to `WebhookClient` at line 541 and forwarded as `X-Internal-Auth` on all webhook calls. No new env var needed for the orchestrator.
 
 ---
 
-## Context files (with line numbers)
+## Context files
 
-**Source files to modify:**
+### Files to create (new)
 
-- `workers/orchestrator/src/services/turn-metrics-collector.ts` (360 lines)
-  - Lines 41–53: `SessionEntry` interface — needs an optional `message.model` field after Phase 1.
-  - Lines 201–229: `parseSessionJsonl` — already reads all entries; no change needed, but the
-    extraction function will consume the same `entries` array in a sibling method.
-  - Lines 305–330: `aggregateTokens` — **do not modify**; the new `extractUsageEvents` function
-    runs in parallel and operates on the same input.
-  - Lines 77–152: `collectAndPublish` — this is where the new `UsagePublisher.publishTurnUsage()`
-    call is wired in, right after the existing `publish(metrics)` call at line 133.
-  - Lines 146–151: the exact `try/catch` swallow-and-warn pattern to mirror for non-fatal failures.
+- `packages/llm-pricing/src/httpWebhookUsageSink.ts` — new `HttpWebhookUsageSink` class implementing `UsageSink`. HMAC-signs usage events in `{timestamp}.{body}` format (matching `signPayload()` in `webhook-client.ts:24-27`) and POSTs to the target URL.
+- `packages/llm-pricing/src/httpInternalAuthUsageSink.ts` — new `HttpInternalAuthUsageSink` class implementing `UsageSink`. Sends usage events to llm-usage-service using `X-Internal-Auth`. Ships here so Track 3 can immediately import it from `@intexuraos/llm-pricing`.
+- `apps/code-agent/src/routes/internalUsageWebhookRoute.ts` — new Fastify plugin exposing `POST /internal/webhooks/usage-events`. Validates `X-Internal-Auth`, validates HMAC with `validateOrchestratorSignature`, delegates to `forwardUsageEvents` use case.
+- `apps/code-agent/src/domain/usecases/forwardUsageEvents.ts` — use case that calls `UsageServiceClient.ingestEvents()` and returns `Result`.
 
-- `workers/orchestrator/src/services/webhook-client.ts` (274 lines)
-  - Lines 24–27: `signPayload()` — matches exactly the HMAC format validated at
-    `apps/llm-usage-service/src/infra/webhookValidation.ts:60` (`timestamp.body` HMAC-SHA256 hex).
-  - Lines 29–107: `WebhookClient.send()` — **reuse directly**; has retries, 4xx short-circuit,
-    pending-queue failover, Result<void, WebhookError> return type.
-  - Lines 183–219: `deliver()` — already sets `X-Internal-Auth`, `X-Request-Timestamp`,
-    `X-Request-Signature` headers exactly as the service expects.
+### Files to modify
 
-- `workers/orchestrator/src/services/isolation/types.ts` (249 lines)
-  - Lines 25, 41–107: `WORKER_TYPES` — source of truth for provider mapping. Contains 11 worker
-    types. Note `glm`/`qwen`/`kimi` all share the same DashScope base URL but different models.
+- `packages/llm-pricing/src/index.ts` — export the two new sink classes and their config types.
+- `workers/orchestrator/src/services/agent-compliance-validator.ts:291-298` — replace `StructuredLogUsageSink` with `HttpWebhookUsageSink`.
+- `workers/orchestrator/src/services/completion-verifier.ts:800-815` — replace `StructuredLogUsageSink` with `HttpWebhookUsageSink`.
+- `apps/code-agent/src/services.ts` — add `usageServiceClient: UsageServiceClient` to `ServiceContainer` and `ServiceConfig`; initialize with `createUsageServiceClient(...)` in the factory; add `INTEXURAOS_LLM_USAGE_SERVICE_URL` to `ServiceConfig`.
+- `apps/code-agent/src/index.ts` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL` to `REQUIRED_ENV`.
+- `apps/code-agent/src/config.ts` (or wherever `loadConfig()` lives) — add `llmUsageServiceUrl: string` from `process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL']`.
+- `apps/code-agent/src/server.ts` (or equivalent route-registration entry point) — register `internalUsageWebhookRoute` plugin.
+- `terraform/environments/dev/main.tf` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL` to code-agent's service env block (already defined as a terraform local at line 310; just add it to code-agent's var map).
+- `ecosystem.config.cjs` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL: 'http://localhost:8132'` to code-agent's PM2 env block.
+- `firestore-collections.json` — no change (no new collections).
 
-- `workers/orchestrator/src/start.ts` (863 lines)
-  - Lines 441–456: REQUIRED_ENV block — add `INTEXURAOS_LLM_USAGE_SERVICE_URL`.
-  - Lines 750–759: `TurnMetricsCollector` construction site — inject the new `UsagePublisher`
-    either as a sibling service passed to the collector, or as a field on
-    `TurnMetricsCollectorConfig`. **Decision: inject as constructor arg #3 on
-    `TurnMetricsCollector`.** See Phase 6.
+### Reference files (read-only)
 
-- `workers/orchestrator/src/main.ts` — no changes needed (wiring happens in `start.ts` only).
-
-**Files to read but not modify:**
-
-- `workers/orchestrator/src/services/runtime/processors/claude-log-processor.ts` (191 lines) —
-  **confirmed wrong hook point**. It only processes the stream-JSON format which contains `type:
-  system/subtype: init` messages with model name, plus `type: result` messages. It has **no**
-  access to `message.usage` per-call data, which lives only in the on-disk JSONL. Stay in
-  `turn-metrics-collector.ts`.
-
-- `workers/orchestrator/src/services/isolation/docker-provider.ts` (1679 lines)
-  - Line 135, 439, 624–716: shows how `workerType` is passed into the container and how
-    `ANTHROPIC_BASE_URL`/`ANTHROPIC_MODEL` are set. The orchestrator knows the worker type at
-    task dispatch time; `TurnMetricsCollector.collectAndPublish` receives `taskId`/`attempt` but
-    **not** `workerType`. Phase 7 must add `workerType` to the `collectAndPublish` params.
-
-- `workers/orchestrator/src/types/task.ts` (157 lines) — `Task.workerType: WorkerType` is the
-  field to plumb through.
-
-- `apps/llm-usage-service/src/routes/schemas/usageEventSchema.ts` (207 lines)
-  - Lines 16–164: **strict** base schema with `additionalProperties: false` at every level.
-  - Lines 176–194: `OrchestratorUsageEventInput` — requires `source.service === 'orchestrator'`
-    and `source.workerLocation` (non-empty string).
-  - Lines 107–117: `usage` object requires **all 11 fields** including ones we cannot populate
-    from JSONL (`reasoningTokens`, `thinkingTokens`, `webSearchCalls`, `groundingEnabled`,
-    `imageCount`). These all become `0`/`false`.
-  - Lines 136–147: `correlation` requires **all 6 fields** with `null` as the default for
-    `requestId`, `traceId`, `researchId`, `sessionId`. We populate `taskId` and `attempt`.
-
-- `apps/llm-usage-service/src/routes/webhookUsageRoutes.ts` (88 lines)
-  - Line 79: ingress tag is `'orchestrator_webhook'` (hardcoded by the route) — we cannot set it
-    from the orchestrator side, and we don't need to.
-
-- `apps/llm-usage-service/src/infra/webhookValidation.ts` (78 lines)
-  - Line 48: **15-minute replay window** — our signature's timestamp must be within 15 minutes
-    of the service's clock. `WebhookClient.deliver()` already generates the timestamp at send
-    time, so this is fine unless pending-queue retries sit longer than 15 minutes. See Risks.
-
-- `packages/internal-clients/src/usage-service/types.ts` (182 lines) — the `UsageEventInput`
-  type we build is exactly this type. Do **not** use `UsageServiceClient.ingestEvents()` — that
-  client targets the `/internal/usage/events` route (without the `webhooks/` prefix) which uses
-  a different auth scheme (`X-Internal-Auth` only, no HMAC). This track uses the HMAC-signed
-  webhook path directly.
-
-- `packages/llm-contract/src/supportedModels.ts:133–139` — `LlmProviders` constants. Note:
-  `'google'`, `'openai'`, `'anthropic'`, `'perplexity'`, `'openrouter'`. **There is no `'zai'`,
-  `'dashscope'`, `'minimax'`, `'mimo'`, or `'xiaomi'` provider.** The schema will reject
-  anything else. Phase 5 handles mapping these to the closest allowed value.
-
-- `workers/orchestrator/src/__tests__/turn-metrics-collector.test.ts` (723 lines) — existing
-  test patterns. Uses `vi.mock('node:fs/promises')` + inline JSONL string fixtures. This plan
-  keeps the same pattern and adds a separate `describe('extractUsageEvents')` block plus a
-  new `describe('UsagePublisher')` block in a new test file.
-
-- `terraform/environments/dev/main.tf:310` — `INTEXURAOS_LLM_USAGE_SERVICE_URL` already defined
-  in `common_service_env_vars` for Cloud Run services. Orchestrator is not Cloud Run, so this
-  block **does not apply to it at runtime**, but the plan must still document where the URL
-  originates for future hosted orchestrator deployment. See Phase 8 for the specific three-place
-  plumbing this orchestrator needs (which is different from the standard apps three-place
-  pattern).
-
-- `ecosystem.config.cjs` — **confirmed absent**: grep for `orchestrator` returns no matches.
-  PM2 does not run the orchestrator. **Skip this file in Phase 8.**
+- `workers/orchestrator/src/services/webhook-client.ts:24-27` — `signPayload()`: `HMAC-SHA256(secret, "${timestamp}.${body}")`, hex-encoded. `HttpWebhookUsageSink` must sign with this exact format.
+- `workers/orchestrator/src/services/webhook-client.ts:183-219` — `deliver()`: sets `X-Internal-Auth`, `X-Request-Timestamp`, `X-Request-Signature` headers.
+- `apps/code-agent/src/infra/webhookValidation.ts:45-95` — `validateOrchestratorSignature()`: validates `X-Request-Timestamp` and `X-Request-Signature` headers using `INTEXURAOS_ORCHESTRATOR_SECRET`. The new route reuses this function exactly.
+- `apps/code-agent/src/routes/webhookRoutes.ts:2045-2103` — turn-metrics webhook: the exact auth + HMAC validation pattern to mirror in the new route.
+- `packages/internal-clients/src/usage-service/client.ts` — `createUsageServiceClient()` and `UsageServiceClient.ingestEvents()`. The forwarding use case calls this.
+- `packages/internal-clients/src/usage-service/types.ts:81-97` — `UsageEventInput` and `UsageIngestRequest` shapes. The webhook body must deserialize to these types.
+- `packages/llm-pricing/src/usageLogger.ts:105-107` — `UsageSink` interface: `log(params: UsageLogParams): Promise<void>`. Both new sinks implement this.
+- `packages/llm-pricing/src/usageLogger.ts:83-107` — `UsageLogParams` fields: `userId`, `provider`, `model`, `callType`, `usage` (NormalizedUsage), `success`, `errorMessage?`. The new sinks map these to `UsageEventInput`.
+- `apps/code-agent/src/routes/internalRoutes.ts:1-10` — reference for how internal routes start (logIncomingRequest, validateInternalAuth pattern).
 
 ---
 
 ## Endpoint changes
 
-### Modified
-- None. No existing endpoint is altered.
-
 ### Created
-- None. The orchestrator gains no new incoming routes.
 
-### Outgoing HTTP (new)
-- `POST <INTEXURAOS_LLM_USAGE_SERVICE_URL>/internal/webhooks/usage-events`
-  - Auth: HMAC-SHA256 over `${timestamp}.${rawJsonBody}` using
-    `INTEXURAOS_ORCHESTRATOR_SECRET`, plus the existing `X-Internal-Auth` bearer.
-  - Body: `{ schemaVersion: 1, events: UsageEventInput[] }`.
-  - Retries: 3 attempts, 5s/15s/45s backoff (inherited from `WebhookClient`).
-  - On 4xx: no retry, dropped with `warn` log (matches existing `WebhookClient` behavior).
-  - On 5xx/network/timeout: queued into `pendingWebhooks` state file for background retry.
-
-### Removed
-- None. The existing `POST /internal/turn-metrics` on `code-agent` is **kept as-is**; both
-  posts happen on every turn. No cleanup is part of this track.
+- `POST /internal/webhooks/usage-events` on `code-agent` — receives HMAC-signed usage events from the orchestrator, validates the shared `INTEXURAOS_ORCHESTRATOR_SECRET`, and forwards to `llm-usage-service`. Body: `UsageIngestRequest` (same schema as `POST /internal/usage/events` on llm-usage-service). Response: `{ success: true, data: { accepted: number, duplicates: number, rejected: RejectedEvent[] } }`. Auth: `X-Internal-Auth` (step 1) + HMAC (step 2, same as turn-metrics webhook).
 
 ### Unchanged
-- `POST <codeAgentUrl>/internal/turn-metrics` — still populated from `aggregateTokens()` summed
-  data, still using the same HMAC pattern.
+
+- `POST /internal/usage/events` on `llm-usage-service` — existing ingest endpoint, called by code-agent after HMAC validation. No schema changes in this track.
+- All other `code-agent` and `llm-usage-service` routes — untouched.
+
+### Removed
+
+None.
 
 ---
 
 ## Step-by-step implementation
 
-### Phase 1 — Verify JSONL shape (DO NOT SKIP)
+### Phase 1 — `HttpWebhookUsageSink` in `packages/llm-pricing`
 
-This is the single highest-risk unknown. The `SessionEntry` interface declares no `message.model`
-field, but the Anthropic SDK format typically includes it. Before writing any code, confirm the
-exact JSON path.
+**Goal:** A `UsageSink` that HMAC-signs events and POSTs them to a configurable URL.
 
-**Steps:**
+#### Step 1.1 — Write a failing test first
 
-1. SSH to home-dev (or the dev host running the orchestrator).
-2. Find a recent Claude session directory:
-   ```bash
-   ls -lt ~/.code-orchestrator/secrets/claude-session-* | head -5
-   ```
-3. Pick the most recent task that ran successfully and print one assistant entry:
-   ```bash
-   SESSION=~/.code-orchestrator/secrets/claude-session-task_<id>
-   find "$SESSION/projects" -name '*.jsonl' | head -1 \
-     | xargs -I{} head -100 {} \
-     | jq -c 'select(.message.usage != null) | {type, timestamp, model: .message.model, model_alt: .message.metadata.model, usage: .message.usage}' \
-     | head -5
-   ```
-4. Record the findings in the PR description under a "JSONL shape verification" heading:
-   - Is `message.model` present? (Almost certainly **yes** — confirmed by
-     `claude-log-processor.ts:37` which extracts `model` from the stream init message.)
-   - Is `message.id` (Anthropic request ID) present? If so, we can use it as a more stable
-     `eventId` ingredient.
-   - Is `message.stop_reason` present? Useful for `operation` classification later.
-   - Are there user entries (`type: "user"`) that also have `message.usage`? (Possible for tool
-     results that include cache hits.)
-   - Does GLM produce the same shape, or does it have provider-specific fields? (Verify by
-     submitting a trivial GLM task first.)
+Create `packages/llm-pricing/src/__tests__/httpWebhookUsageSink.test.ts`.
 
-5. **⚠ DECISION NEEDED:** if `message.model` is **missing** from JSONL (unlikely but possible if
-   `ANTHROPIC_MODEL=opus` override changes the format), fall back to
-   `WORKER_TYPES[workerType].model ?? 'unknown'` as the model name. Document the fallback in the
-   PR body so reviewers know why the model string may be coarser than expected.
+The test must:
+- Use `nock` to intercept the POST request to a fake webhook URL.
+- Assert that `X-Request-Timestamp` and `X-Request-Signature` headers are present.
+- Assert that the signature matches `HMAC-SHA256(secret, "${timestamp}.${body}")` hex-encoded.
+- Assert the request body matches the `UsageIngestRequest` schema (one event per `log()` call).
+- Assert a successful `log()` call resolves without error when the server responds `200 { success: true, data: { accepted: 1, ... } }`.
+- Assert a failed `log()` call (5xx response) logs a warning (using a fake logger) but does **not** throw — non-fatal per existing `StructuredLogUsageSink` behavior.
 
-6. **⚠ DECISION NEEDED:** if GLM's JSONL deviates in structure (e.g., nested differently under
-   `message.raw_response`), the `extractUsageEvents` function must branch on `workerType` or
-   operate on a provider-specific normalizer. Prefer branching on `workerType` over sniffing the
-   JSON shape.
+Run the test, confirm it fails with "module not found".
 
-Do not proceed to Phase 2 until these decisions are logged in the PR description.
+#### Step 1.2 — Implement `httpWebhookUsageSink.ts`
 
-### Phase 2 — Extend SessionEntry type
+```
+packages/llm-pricing/src/httpWebhookUsageSink.ts
+```
 
-Given Phase 1 confirms `message.model` exists, extend the interface in
-`workers/orchestrator/src/services/turn-metrics-collector.ts`:
-
+Config interface:
 ```ts
-interface SessionEntry {
-  type: string;
-  timestamp?: string;
-  subtype?: string;
-  message?: {
-    id?: string;            // Anthropic request ID if present
-    model?: string;         // Model name, e.g. "claude-sonnet-4-5-20250929"
-    stop_reason?: string;   // "end_turn" | "tool_use" | "max_tokens" | ...
-    usage?: {
-      input_tokens?: number;
-      output_tokens?: number;
-      cache_read_input_tokens?: number;
-      cache_creation_input_tokens?: number;
-    };
-  };
+export interface HttpWebhookUsageSinkConfig {
+  webhookUrl: string;
+  webhookSecret: string;
+  service: string;       // fills source.service in UsageEventInput
+  component: string;     // fills source.component
+  logger: Logger;
 }
 ```
 
-Leave all existing consumers untouched — the added fields are optional so
-`classifyTime` and `aggregateTokens` compile without change.
+Implementation notes:
+- Import `createHmac` from `node:crypto`.
+- `log(params: UsageLogParams): Promise<void>` maps `UsageLogParams` → `UsageEventInput`:
+  - `eventId`: generate a random UUID or use `crypto.randomUUID()` — determinism is not required here since these are live calls, not JSONL replays.
+  - `occurredAt`: `new Date().toISOString()`
+  - `owner`: `{ type: 'system', id: params.userId }` (orchestrator calls are system-level; userId here is the task identifier passed through by the infra layer)
+  - `source.service`: from config
+  - `source.component`: from config
+  - `source.client`: `params.model`
+  - `source.environment`: read from `process.env['NODE_ENV'] === 'production' ? 'prod' : 'dev'`
+  - `request.provider`: `params.provider`
+  - `request.model`: `params.model`
+  - `request.operation`: `params.callType` (types overlap exactly — both use the same union)
+  - `request.success`: `params.success`
+  - `request.durationMs`: `0` (not tracked at this level; NormalizedUsage doesn't include duration)
+  - `usage`: map `NormalizedUsage` fields directly (inputTokens, outputTokens, totalTokens, cacheReadTokens, cacheWriteTokens, cachedTokens, reasoningTokens, thinkingTokens, webSearchCalls, groundingEnabled, imageCount)
+  - `cost.billedUsd`: `params.usage.costUsd` (already calculated client-side by PricingContext)
+  - `cost.providerReportedUsd`: `null`
+  - `cost.calculatedUsd`: `params.usage.costUsd`
+  - `cost.pricingSource`: `'calculated'`
+  - `correlation`: all `null` fields; set `sessionId: null`, `taskId: null`, `requestId: null`, `traceId: null`, `attempt: null`, `researchId: null`
+  - `error`: `params.success === false ? { code: null, message: params.errorMessage ?? null } : null`
+- Sign and POST:
+  ```ts
+  const body = JSON.stringify({ schemaVersion: 1, events: [event] });
+  const timestamp = Math.floor(Date.now() / 1000);
+  const message = `${String(timestamp)}.${body}`;
+  const signature = createHmac('sha256', config.webhookSecret).update(message).digest('hex');
+  ```
+  Headers: `X-Request-Timestamp: ${timestamp}`, `X-Request-Signature: ${signature}`, `X-Internal-Auth: ${config.internalAuthToken}`, `Content-Type: application/json`.
 
-### Phase 3 — Write failing tests FIRST (test-driven)
+  Wait — the webhook route on code-agent validates BOTH `X-Internal-Auth` (step 1) and HMAC (step 2). The `HttpWebhookUsageSink` must send both. Add `internalAuthToken: string` to `HttpWebhookUsageSinkConfig`.
 
-#### 3a. Create the fixture directory
+- Failure handling: wrap the fetch in try/catch. On any non-2xx or network error, call `config.logger.warn(...)` and return without throwing. The orchestrator must not fail a compliance validation or completion verification because of a usage reporting side effect.
 
-Check if `workers/orchestrator/src/__tests__/fixtures/` exists. If not, create it with one file:
+#### Step 1.3 — Export from `packages/llm-pricing/src/index.ts`
 
-**Path:** `workers/orchestrator/src/__tests__/fixtures/session-jsonl-sample.jsonl`
-
-**Content:** a realistic two-call sample matching the shape confirmed in Phase 1. Example
-(sanitized; update after Phase 1 verification):
-
-```jsonl
-{"type":"user","timestamp":"2026-04-10T12:00:00.000Z","message":{"role":"user","content":"ping"}}
-{"type":"assistant","timestamp":"2026-04-10T12:00:02.500Z","message":{"id":"msg_01abc","model":"claude-sonnet-4-5-20250929","stop_reason":"end_turn","usage":{"input_tokens":120,"output_tokens":45,"cache_read_input_tokens":1000,"cache_creation_input_tokens":200}}}
-{"type":"user","timestamp":"2026-04-10T12:00:03.000Z","message":{"role":"user","content":"follow up"}}
-{"type":"assistant","timestamp":"2026-04-10T12:00:05.100Z","message":{"id":"msg_02def","model":"claude-sonnet-4-5-20250929","stop_reason":"tool_use","usage":{"input_tokens":85,"output_tokens":12,"cache_read_input_tokens":1100,"cache_creation_input_tokens":0}}}
+Add:
+```ts
+export {
+  HttpWebhookUsageSink,
+  type HttpWebhookUsageSinkConfig,
+} from './httpWebhookUsageSink.js';
 ```
 
-#### 3b. Add tests to the existing `turn-metrics-collector.test.ts` file
+Run the test from Step 1.1 — it must pass. Then run `pnpm run verify:workspace:tracked -- llm-pricing`.
 
-New top-level `describe` block to add (near the end of the file, before the closing `});`):
+---
 
-```ts
-describe('extractUsageEvents', () => {
-  const taskId = 'task_test_123';
-  const attempt = 1;
-  const workerLocation = 'home-dev';
-  const environment = 'dev' as const;
+### Phase 2 — `HttpInternalAuthUsageSink` in `packages/llm-pricing`
 
-  it('emits one event per entry with message.usage', () => {
-    const entries = [
-      { type: 'user', timestamp: '2026-04-10T12:00:00.000Z' },
-      {
-        type: 'assistant',
-        timestamp: '2026-04-10T12:00:02.500Z',
-        message: {
-          id: 'msg_01',
-          model: 'claude-sonnet-4-5-20250929',
-          usage: {
-            input_tokens: 120,
-            output_tokens: 45,
-            cache_read_input_tokens: 1000,
-            cache_creation_input_tokens: 200,
-          },
-        },
-      },
-    ];
+**Goal:** A `UsageSink` for in-cluster apps that call `llm-usage-service` directly using `X-Internal-Auth`. Ships here so Track 3 can import it without waiting.
 
-    const events = collector.extractUsageEvents(entries, {
-      taskId, attempt, workerType: 'opus', workerLocation, environment,
-    });
+#### Step 2.1 — Write a failing test first
 
-    expect(events).toHaveLength(1);
-    expect(events[0]?.usage.inputTokens).toBe(120);
-    expect(events[0]?.usage.outputTokens).toBe(45);
-    expect(events[0]?.usage.cacheReadTokens).toBe(1000);
-    expect(events[0]?.usage.cacheWriteTokens).toBe(200);
-    expect(events[0]?.usage.totalTokens).toBe(120 + 45 + 1000 + 200);
-    expect(events[0]?.request.provider).toBe('anthropic');
-    expect(events[0]?.request.model).toBe('claude-sonnet-4-5-20250929');
-    expect(events[0]?.request.operation).toBe('other');
-    expect(events[0]?.cost.billedUsd).toBe(0);
-    expect(events[0]?.cost.pricingSource).toBe('calculated');
-    expect(events[0]?.source.service).toBe('orchestrator');
-    expect(events[0]?.source.workerLocation).toBe('home-dev');
-    expect(events[0]?.correlation.taskId).toBe(taskId);
-    expect(events[0]?.correlation.attempt).toBe(attempt);
-  });
+Create `packages/llm-pricing/src/__tests__/httpInternalAuthUsageSink.test.ts`.
 
-  it('skips entries without message.usage', () => {
-    const entries = [
-      { type: 'user', timestamp: '2026-04-10T12:00:00.000Z' },
-      { type: 'system', subtype: 'progress', timestamp: '2026-04-10T12:00:01.000Z' },
-    ];
-    const events = collector.extractUsageEvents(entries, {
-      taskId, attempt, workerType: 'opus', workerLocation, environment,
-    });
-    expect(events).toHaveLength(0);
-  });
+Similar to Phase 1 but simpler — no HMAC. Use `nock` to intercept the POST to `llm-usage-service/internal/usage/events`. Assert `X-Internal-Auth` header. Assert body matches `UsageIngestRequest`. Assert non-fatal on 5xx.
 
-  it('handles missing cache tokens as zero', () => {
-    const entries = [{
-      type: 'assistant',
-      timestamp: '2026-04-10T12:00:02.500Z',
-      message: { model: 'claude-sonnet-4-5-20250929', usage: { input_tokens: 50, output_tokens: 25 } },
-    }];
-    const events = collector.extractUsageEvents(entries, {
-      taskId, attempt, workerType: 'opus', workerLocation, environment,
-    });
-    expect(events[0]?.usage.cacheReadTokens).toBe(0);
-    expect(events[0]?.usage.cacheWriteTokens).toBe(0);
-    expect(events[0]?.usage.totalTokens).toBe(75);
-  });
+#### Step 2.2 — Implement `httpInternalAuthUsageSink.ts`
 
-  it('falls back to workerType model when message.model missing', () => {
-    const entries = [{
-      type: 'assistant',
-      timestamp: '2026-04-10T12:00:02.500Z',
-      message: { usage: { input_tokens: 10, output_tokens: 5 } },
-    }];
-    const events = collector.extractUsageEvents(entries, {
-      taskId, attempt, workerType: 'glm', workerLocation, environment,
-    });
-    expect(events[0]?.request.model).toBe('glm-5'); // WORKER_TYPES.glm.model
-  });
-
-  it('falls back to "unknown" when neither message.model nor WORKER_TYPES model is set', () => {
-    const entries = [{
-      type: 'assistant',
-      timestamp: '2026-04-10T12:00:02.500Z',
-      message: { usage: { input_tokens: 10, output_tokens: 5 } },
-    }];
-    const events = collector.extractUsageEvents(entries, {
-      taskId, attempt, workerType: 'auto', workerLocation, environment,
-    });
-    // WORKER_TYPES.auto.model is undefined
-    expect(events[0]?.request.model).toBe('unknown');
-  });
-
-  it('uses occurredAt = entry.timestamp when present', () => {
-    const entries = [{
-      type: 'assistant',
-      timestamp: '2026-04-10T12:00:02.500Z',
-      message: { model: 'claude-sonnet-4-5-20250929', usage: { input_tokens: 1, output_tokens: 1 } },
-    }];
-    const events = collector.extractUsageEvents(entries, {
-      taskId, attempt, workerType: 'opus', workerLocation, environment,
-    });
-    expect(events[0]?.occurredAt).toBe('2026-04-10T12:00:02.500Z');
-  });
-
-  it('falls back to now() when entry.timestamp missing', () => {
-    const before = new Date().toISOString();
-    const entries = [{
-      type: 'assistant',
-      message: { model: 'claude-sonnet-4-5-20250929', usage: { input_tokens: 1, output_tokens: 1 } },
-    }];
-    const events = collector.extractUsageEvents(entries, {
-      taskId, attempt, workerType: 'opus', workerLocation, environment,
-    });
-    const after = new Date().toISOString();
-    expect(events[0]?.occurredAt >= before).toBe(true);
-    expect(events[0]?.occurredAt <= after).toBe(true);
-  });
-
-  it('produces deterministic eventId for the same entry', () => {
-    const entries = [{
-      type: 'assistant',
-      timestamp: '2026-04-10T12:00:02.500Z',
-      message: { model: 'claude-sonnet-4-5-20250929', usage: { input_tokens: 1, output_tokens: 1 } },
-    }];
-    const a = collector.extractUsageEvents(entries, {
-      taskId, attempt, workerType: 'opus', workerLocation, environment,
-    });
-    const b = collector.extractUsageEvents(entries, {
-      taskId, attempt, workerType: 'opus', workerLocation, environment,
-    });
-    expect(a[0]?.eventId).toBe(b[0]?.eventId);
-  });
-
-  it('produces different eventIds for different entries in the same turn', () => {
-    const entries = [
-      {
-        type: 'assistant',
-        timestamp: '2026-04-10T12:00:02.500Z',
-        message: { model: 'claude-sonnet-4-5-20250929', usage: { input_tokens: 1, output_tokens: 1 } },
-      },
-      {
-        type: 'assistant',
-        timestamp: '2026-04-10T12:00:05.100Z',
-        message: { model: 'claude-sonnet-4-5-20250929', usage: { input_tokens: 2, output_tokens: 2 } },
-      },
-    ];
-    const events = collector.extractUsageEvents(entries, {
-      taskId, attempt, workerType: 'opus', workerLocation, environment,
-    });
-    expect(events).toHaveLength(2);
-    expect(events[0]?.eventId).not.toBe(events[1]?.eventId);
-  });
-
-  it.each([
-    ['opus', 'anthropic'],
-    ['auto', 'anthropic'],
-    ['sonnet', 'anthropic'],
-    ['minimax', 'anthropic'],    // see DECISION NEEDED below
-    ['mimo-pro', 'anthropic'],
-    ['glm', 'anthropic'],
-    ['qwen', 'anthropic'],
-    ['kimi', 'anthropic'],
-    ['openrouter-free', 'openrouter'],
-  ] as const)('maps worker type %s to provider %s', (workerType, expectedProvider) => {
-    const entries = [{
-      type: 'assistant',
-      timestamp: '2026-04-10T12:00:02.500Z',
-      message: { model: 'm', usage: { input_tokens: 1, output_tokens: 1 } },
-    }];
-    const events = collector.extractUsageEvents(entries, {
-      taskId, attempt, workerType, workerLocation, environment,
-    });
-    expect(events[0]?.request.provider).toBe(expectedProvider);
-  });
-});
+```
+packages/llm-pricing/src/httpInternalAuthUsageSink.ts
 ```
 
-> ⚠ DECISION NEEDED (resolved provisionally above): the llm-usage-service schema hardcodes
-> `PROVIDER_VALUES = Object.values(LlmProviders)` which contains only
-> `google|openai|anthropic|perplexity|openrouter`. There is no provider name that matches GLM,
-> Qwen, Kimi, MiniMax, or MiMo. **Provisional decision: map all Anthropic-compatible proxy
-> providers (i.e., any `WORKER_TYPES[*].apiBaseUrl` that exposes the `/v1/messages` endpoint) to
-> `'anthropic'`**, because the JSONL format and model names are Anthropic-shaped. The service's
-> pricing table will need entries for these model names (`glm-5`, `qwen3.5-plus`, `kimi-k2.5`,
-> `MiniMax-M2.7`, `mimo-v2-pro`) tagged under provider `anthropic`, or fall back to
-> `pricingSource: 'external'` with `billedUsd = 0`. **Confirm with the INT-1339 author before
-> merging.** If the pricing service needs distinct providers, an INT-1338-followup must extend
-> `LlmProviders` first.
->
-> Codex worker type (`codex`, `codex-xhigh`) is **skipped** by this extractor — Codex uses a
-> different runtime (`runtime: 'codex'`) that does not write the Claude JSONL format.
-> `extractUsageEvents` should return `[]` for Codex worker types and log an info message at the
-> call site. Add a test:
->
-> ```ts
-> it('returns empty array for codex worker type', () => {
->   const events = collector.extractUsageEvents(entries, { ...base, workerType: 'codex' });
->   expect(events).toEqual([]);
-> });
-> ```
-
-Run `pnpm --filter orchestrator test` — **all new tests must fail with "extractUsageEvents is
-not a function"** before you move to Phase 4.
-
-### Phase 4 — Implement `extractUsageEvents`
-
-Add a new public method on `TurnMetricsCollector` (in
-`turn-metrics-collector.ts`). Import the `UsageEventInput` type, the `LlmProviders` constant,
-and the `WORKER_TYPES` lookup.
-
+Config interface:
 ```ts
-import { createHash, createHmac } from 'node:crypto';
-import type { UsageEventInput } from '@intexuraos/internal-clients/usage-service';
-import { LlmProviders, type LlmProvider } from '@intexuraos/llm-contract';
-import { WORKER_TYPES, type WorkerType } from './isolation/types.js';
-
-export interface ExtractUsageEventsParams {
-  taskId: string;
-  attempt: number;
-  workerType: WorkerType;
-  workerLocation: string;
-  environment: 'dev' | 'prod' | 'test';
-}
-
-/**
- * Extract one UsageEventInput per JSONL entry that has `message.usage`.
- * Idempotent: the same (entries, params) input produces the same eventIds.
- * Returns [] for codex worker type (different runtime, not Claude JSONL).
- */
-extractUsageEvents(
-  entries: SessionEntry[],
-  params: ExtractUsageEventsParams,
-): UsageEventInput[] {
-  const workerTypeConfig = WORKER_TYPES[params.workerType];
-  if (workerTypeConfig.runtime !== 'claude') {
-    return [];
-  }
-
-  const provider = selectProvider(params.workerType);
-  const fallbackModel = workerTypeConfig.model ?? 'unknown';
-
-  const events: UsageEventInput[] = [];
-  for (let idx = 0; idx < entries.length; idx++) {
-    const entry = entries[idx];
-    /* v8 ignore next -- ts-type: noUncheckedIndexedAccess undefined narrowing */
-    if (entry === undefined) continue;
-    const usage = entry.message?.usage;
-    if (usage === undefined) continue;
-
-    const occurredAt = entry.timestamp ?? new Date().toISOString();
-    const model = entry.message?.model ?? fallbackModel;
-
-    const inputTokens = usage.input_tokens ?? 0;
-    const outputTokens = usage.output_tokens ?? 0;
-    const cacheReadTokens = usage.cache_read_input_tokens ?? 0;
-    const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0;
-    const totalTokens = inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens;
-
-    const eventId = deriveEventId({
-      taskId: params.taskId,
-      attempt: params.attempt,
-      entryIndex: idx,
-      timestamp: occurredAt,
-    });
-
-    events.push({
-      schemaVersion: 1,
-      eventId,
-      occurredAt,
-      owner: {
-        type: 'system',
-        id: `orchestrator:${params.taskId}`,
-      },
-      source: {
-        service: 'orchestrator',
-        component: 'turn-metrics-collector',
-        client: 'claude-code',
-        environment: params.environment,
-        workerLocation: params.workerLocation,
-      },
-      request: {
-        provider,
-        model,
-        operation: 'other',
-        success: true,
-        durationMs: 0,
-      },
-      usage: {
-        inputTokens,
-        outputTokens,
-        totalTokens,
-        cacheReadTokens,
-        cacheWriteTokens,
-        cachedTokens: 0,
-        reasoningTokens: 0,
-        thinkingTokens: 0,
-        webSearchCalls: 0,
-        groundingEnabled: false,
-        imageCount: 0,
-      },
-      cost: {
-        billedUsd: 0,
-        providerReportedUsd: null,
-        calculatedUsd: null,
-        pricingSource: 'calculated',
-      },
-      correlation: {
-        requestId: entry.message?.id ?? null,
-        traceId: null,
-        taskId: params.taskId,
-        researchId: null,
-        attempt: params.attempt,
-        sessionId: null,
-      },
-      error: null,
-    });
-  }
-  return events;
-}
-```
-
-Helper (file-scoped, below the class):
-
-```ts
-function deriveEventId(params: {
-  taskId: string;
-  attempt: number;
-  entryIndex: number;
-  timestamp: string;
-}): string {
-  const input = `${params.taskId}:${String(params.attempt)}:${String(params.entryIndex)}:${params.timestamp}`;
-  return createHash('sha256').update(input).digest('hex').slice(0, 24);
-}
-```
-
-`operation: 'other'` — Phase 1 can revise this to classify `stop_reason === 'tool_use'` as
-`'tool_calling'`, but the first version ships `'other'` for everything to minimize risk. **Do
-not change this without explicit user sign-off.**
-
-`durationMs: 0` — the JSONL does not record per-call latency. The service will need to aggregate
-across events; if we later want per-call duration we must hook `claude-log-processor.ts` on
-`type: result` and pair it with the preceding assistant entry, which is out of scope.
-
-### Phase 5 — Provider selection
-
-Add below the class:
-
-```ts
-function selectProvider(workerType: WorkerType): LlmProvider {
-  switch (workerType) {
-    case 'openrouter-free':
-      return LlmProviders.OpenRouter;
-    case 'opus':
-    case 'auto':
-    case 'sonnet':
-    case 'minimax':
-    case 'mimo-pro':
-    case 'glm':
-    case 'qwen':
-    case 'kimi':
-      // All use the Anthropic /v1/messages wire format (confirmed via WORKER_TYPES apiBaseUrl
-      // suffixes: /anthropic). Map to 'anthropic' so the event passes the schema's provider
-      // enum. Model name (e.g. 'glm-5') carries the disambiguation for the pricing table.
-      return LlmProviders.Anthropic;
-    case 'codex':
-    case 'codex-xhigh':
-      // Unreachable: runtime !== 'claude' check in extractUsageEvents short-circuits.
-      /* v8 ignore next -- auth-guard: codex worker types filtered out upstream @preserve */
-      return LlmProviders.OpenAI;
-  }
-}
-```
-
-Exhaustive switch — TypeScript will fail the build if a new worker type is added to
-`WORKER_TYPES` without updating this function. Do **not** add a `default` branch — that would
-defeat the compile-time safety net.
-
-### Phase 6 — Create the UsagePublisher service
-
-**New file:** `workers/orchestrator/src/services/usage-publisher.ts`
-
-```ts
-import type { Logger } from '@intexuraos/common-core';
-import type { UsageEventInput } from '@intexuraos/internal-clients/usage-service';
-import type { WebhookClient } from './webhook-client.js';
-
-export interface UsagePublisherConfig {
+export interface HttpInternalAuthUsageSinkConfig {
   usageServiceUrl: string;
-  orchestratorSecret: string;
-  enabled: boolean;
-}
-
-export class UsagePublisher {
-  constructor(
-    private readonly config: UsagePublisherConfig,
-    private readonly webhookClient: WebhookClient,
-    private readonly logger: Logger,
-  ) {}
-
-  async publishTurnUsage(params: {
-    taskId: string;
-    events: UsageEventInput[];
-  }): Promise<void> {
-    if (!this.config.enabled) {
-      this.logger.debug(
-        { taskId: params.taskId, count: params.events.length },
-        'UsagePublisher disabled by feature flag — skipping',
-      );
-      return;
-    }
-
-    if (params.events.length === 0) {
-      return;
-    }
-
-    const url = `${this.config.usageServiceUrl}/internal/webhooks/usage-events`;
-    const payload = {
-      schemaVersion: 1 as const,
-      events: params.events,
-    };
-
-    const result = await this.webhookClient.send({
-      url,
-      secret: this.config.orchestratorSecret,
-      payload,
-      taskId: params.taskId,
-    });
-
-    if (!result.ok) {
-      // WebhookClient.send() already queues non-4xx failures to pendingWebhooks.
-      // 4xx errors are permanent — schema mismatch, invalid provider, etc. — and must surface
-      // in logs loudly so we notice. Non-fatal by design: the turn metrics still landed.
-      this.logger.warn(
-        {
-          taskId: params.taskId,
-          errorType: result.error.type,
-          errorMessage: result.error.message,
-          eventCount: params.events.length,
-        },
-        'UsagePublisher delivery failed (non-fatal, may be queued)',
-      );
-      return;
-    }
-
-    this.logger.info(
-      { taskId: params.taskId, eventCount: params.events.length },
-      'Published per-call usage events to llm-usage-service',
-    );
-  }
-}
-```
-
-**Test file:** `workers/orchestrator/src/__tests__/usage-publisher.test.ts`
-
-Tests to include:
-
-- `publishTurnUsage` returns early when `enabled: false`, does not call `webhookClient.send`.
-- `publishTurnUsage` returns early when `events.length === 0`, does not call `webhookClient.send`.
-- `publishTurnUsage` calls `webhookClient.send` with the expected `url`, `payload`,
-  `taskId`, and `secret` when enabled and events are non-empty.
-- `publishTurnUsage` logs a warn (and does not throw) when `webhookClient.send` returns
-  `{ok: false, error: {type: '5xx', ...}}`.
-- `publishTurnUsage` logs a warn when the error is `4xx` (distinct from 5xx so we see the
-  "permanent schema error" signal separately).
-- `publishTurnUsage` logs an info with correct eventCount on success.
-
-Use a `FakeWebhookClient` implementing `{ send: vi.fn() }` — **do not** instantiate the real
-`WebhookClient`, which requires `StatePersistence`.
-
-### Phase 7 — Wire into `collectAndPublish`
-
-Update `TurnMetricsCollector` constructor signature and `collectAndPublish` method.
-
-1. Add `workerType` and `workerLocation` to `TurnMetricsCollectorConfig`:
-
-```ts
-export interface TurnMetricsCollectorConfig {
-  codeAgentUrl: string;
-  orchestratorSecret: string;
   internalAuthToken: string;
-  secretsBasePath: string;
-  sharedCredsPath?: string;
-  workerLocation: string;          // NEW — e.g. 'home-dev', 'mac-dev'
-  environment: 'dev' | 'prod' | 'test';  // NEW
+  service: string;
+  component: string;
+  logger: Logger;
 }
 ```
 
-2. Inject `UsagePublisher` as a constructor parameter:
+Implementation notes:
+- Same `UsageLogParams` → `UsageEventInput` mapping as `HttpWebhookUsageSink` (extract to a shared private `buildUsageEvent()` helper or inline — fine to duplicate given the files are in the same package).
+- POST to `${config.usageServiceUrl}/internal/usage/events` with `X-Internal-Auth: ${config.internalAuthToken}`.
+- Same non-fatal failure handling (warn and return).
 
+#### Step 2.3 — Export from `packages/llm-pricing/src/index.ts`
+
+Add:
 ```ts
-export class TurnMetricsCollector {
-  constructor(
-    private readonly config: TurnMetricsCollectorConfig,
-    private readonly logger: Logger,
-    private readonly usagePublisher?: UsagePublisher,  // optional for backward-compat in tests
-  ) {}
+export {
+  HttpInternalAuthUsageSink,
+  type HttpInternalAuthUsageSinkConfig,
+} from './httpInternalAuthUsageSink.js';
 ```
 
-3. Add `workerType` to `collectAndPublish` params:
+Run `pnpm run verify:workspace:tracked -- llm-pricing` — must stay green.
 
-```ts
-async collectAndPublish(params: {
-  taskId: string;
-  containerId: string;
-  attempt: number;
-  startedAt: string;
-  completedAt: string;
-  workerType: WorkerType;          // NEW
-}): Promise<void> {
-```
+---
 
-4. At the end of `collectAndPublish`, **after** the existing `await this.publish(metrics)` call
-   (currently line 133), add:
+### Phase 3 — code-agent: add `UsageServiceClient` to service container
 
-```ts
-      if (this.usagePublisher !== undefined) {
-        try {
-          // Re-read the entries — we don't plumb them out of parseSessionJsonl today.
-          // Cheapest fix: call parseSessionJsonl again? No — expensive I/O. Better:
-          // refactor parseSessionJsonl to return entries alongside timeClassification and tokens.
-          // See step 5 below.
-          const events = this.extractUsageEvents(sessionData.entries, {
-            taskId: params.taskId,
-            attempt: params.attempt,
-            workerType: params.workerType,
-            workerLocation: this.config.workerLocation,
-            environment: this.config.environment,
-          });
-          await this.usagePublisher.publishTurnUsage({
-            taskId: params.taskId,
-            events,
-          });
-        } catch (error) {
-          this.logger.warn(
-            { taskId: params.taskId, error },
-            'UsagePublisher extract/publish failed (non-fatal)',
-          );
-        }
-      }
-```
+**Goal:** Wire `createUsageServiceClient` into code-agent's DI container so the forwarding use case can call it.
 
-5. **Refactor `parseSessionJsonl`** to return `entries` alongside existing fields:
+#### Step 3.1 — Add env var to all three required locations
 
-```ts
-async parseSessionJsonl(...): Promise<{
-  entries: SessionEntry[];
-  timeClassification: TimeClassification;
-  tokens: TokenAggregation;
-}> {
-  // ... existing code ...
-  return {
-    entries,
-    timeClassification: this.classifyTime(entries),
-    tokens: this.aggregateTokens(entries),
-  };
-}
-```
+Per CLAUDE.md env-vars rule, a new env var requires changes in three files:
 
-Update existing tests that destructure `parseSessionJsonl` return — all currently call
-`result.tokens.*` and `result.timeClassification.*`, so adding a third field is additive.
+1. `apps/code-agent/src/index.ts` — add `'INTEXURAOS_LLM_USAGE_SERVICE_URL'` to `REQUIRED_ENV` array.
+2. `terraform/environments/dev/main.tf` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL = "https://${local.services.llm_usage_service.name}-${local.cloud_run_url_suffix}"` to code-agent's service env block (the local value is already defined at line 310 and used by other services; just add it to code-agent's map).
+3. `ecosystem.config.cjs` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL: 'http://localhost:8132'` to code-agent's PM2 `env` block.
 
-6. Update `task-dispatcher.ts` callers of `collectAndPublish` to pass `workerType: task.workerType`.
-   Grep for `collectAndPublish(` to find call sites — expected to be one location.
+#### Step 3.2 — Update `ServiceContainer` and `ServiceConfig`
 
-### Phase 8 — Env var plumbing
-
-The orchestrator's three-location pattern differs from standard apps because (a) it runs outside
-PM2 and (b) it is outside Terraform management. The actual three locations for this track:
-
-#### Location 1: `workers/orchestrator/src/start.ts`
-
-Add to the REQUIRED_ENV block near line 441–456:
-
-```ts
-const llmUsageServiceUrl = getRequiredEnv('INTEXURAOS_LLM_USAGE_SERVICE_URL');
-const workerLocation = getRequiredEnv('INTEXURAOS_WORKER_LOCATION');
-// environment: reuse existing or add a new required env
-const environment = getRequiredEnv('INTEXURAOS_ENVIRONMENT') as 'dev' | 'prod' | 'test';
-```
-
-Validate `environment` is one of the three allowed values; throw a precondition error otherwise
-(match the existing style that writes to stderr and `process.exit(1)`).
-
-Feature flag (non-required, default off):
-
-```ts
-const usagePublisherEnabled = getOptionalEnv('INTEXURAOS_USAGE_PUBLISHER_ENABLED', '0') === '1';
-```
-
-Wire the service construction after `webhookClient` is created:
-
-```ts
-const usagePublisher = new UsagePublisher(
-  {
-    usageServiceUrl: llmUsageServiceUrl,
-    orchestratorSecret,
-    enabled: usagePublisherEnabled,
-  },
-  webhookClient,
-  logger,
-);
-```
-
-Pass it into `TurnMetricsCollector`:
-
-```ts
-const turnMetricsCollector = new TurnMetricsCollector(
-  {
-    codeAgentUrl: config.codeAgentUrl,
-    orchestratorSecret: config.orchestratorSecret,
+In `apps/code-agent/src/services.ts`:
+- Add `usageServiceClient: UsageServiceClient` to `ServiceContainer` (not optional — all tests must provide it).
+- Add `llmUsageServiceUrl: string` to `ServiceConfig`.
+- In the factory function (wherever `setServices` is initialized from config), add:
+  ```ts
+  usageServiceClient: createUsageServiceClient({
+    baseUrl: config.llmUsageServiceUrl,
     internalAuthToken: config.internalAuthToken,
-    secretsBasePath,
-    sharedCredsPath,
-    workerLocation,
-    environment,
-  },
-  logger,
-  usagePublisher,
-);
+    logger,
+  }),
+  ```
+- Import `createUsageServiceClient` from `@intexuraos/internal-clients`.
+
+#### Step 3.3 — Update config loading
+
+In `apps/code-agent/src/config.ts` (or equivalent), add `llmUsageServiceUrl: string` field loaded from `process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL']`.
+
+#### Step 3.4 — Update all `setServices()` calls in tests
+
+Search for every `setServices({` call in `apps/code-agent/src/__tests__/`:
+```
+Grep: pattern="setServices\(" path="apps/code-agent/src/__tests__"
+```
+Every call site must add `usageServiceClient: fakeUsageServiceClient`. Create a `fakeUsageServiceClient` helper in the test utilities (a minimal in-memory fake that records calls and returns `ok({ accepted: 1, duplicates: 0, rejected: [] })`).
+
+Run `pnpm run verify:workspace:tracked -- code-agent` after this step — expect TypeScript errors on the `setServices` call sites until all are updated.
+
+---
+
+### Phase 4 — code-agent: `forwardUsageEvents` use case
+
+#### Step 4.1 — Write a failing test first
+
+Create `apps/code-agent/src/__tests__/domain/usecases/forwardUsageEvents.test.ts`.
+
+Test matrix:
+- Happy path: `usageServiceClient.ingestEvents()` returns `ok(...)` → use case returns `ok(...)`.
+- Service error: `usageServiceClient.ingestEvents()` returns `err(...)` → use case returns `err(...)`.
+
+#### Step 4.2 — Implement `forwardUsageEvents.ts`
+
+Create `apps/code-agent/src/domain/usecases/forwardUsageEvents.ts`:
+
+```ts
+import type { Logger, Result } from '@intexuraos/common-core';
+import type { UsageServiceClient, UsageIngestRequest, UsageIngestResponse, UsageServiceError } from '@intexuraos/internal-clients';
+
+export interface ForwardUsageEventsDeps {
+  usageServiceClient: UsageServiceClient;
+  logger: Logger;
+}
+
+export async function forwardUsageEvents(
+  request: UsageIngestRequest,
+  deps: ForwardUsageEventsDeps
+): Promise<Result<UsageIngestResponse, UsageServiceError>> {
+  const result = await deps.usageServiceClient.ingestEvents(request);
+  if (!result.ok) {
+    deps.logger.error({ error: result.error }, 'Failed to forward usage events to llm-usage-service');
+    return result;
+  }
+  deps.logger.info(
+    { accepted: result.value.accepted, duplicates: result.value.duplicates },
+    'Usage events forwarded to llm-usage-service'
+  );
+  return result;
+}
 ```
 
-#### Location 2: `.envrc` (repo root + orchestrator host `.envrc`)
+Run the test from Step 4.1 — it must pass.
 
-Add (with a comment block):
+---
+
+### Phase 5 — code-agent: `internalUsageWebhookRoute`
+
+#### Step 5.1 — Write a failing test first
+
+Create `apps/code-agent/src/__tests__/routes/internalUsageWebhookRoute.test.ts`.
+
+Use `app.inject()` to POST to `/internal/webhooks/usage-events`.
+
+Test matrix:
+- Missing `X-Internal-Auth` → 401.
+- Valid `X-Internal-Auth` but missing `X-Request-Signature` → 401.
+- Valid `X-Internal-Auth` but invalid HMAC → 401.
+- Valid `X-Internal-Auth` + valid HMAC + valid body → 200 `{ success: true, data: { accepted: 1, duplicates: 0, rejected: [] } }`.
+- Valid auth but `usageServiceClient.ingestEvents()` returns error → 500.
+- Valid auth + valid body with zero events → 200 `{ success: true, data: { accepted: 0, duplicates: 0, rejected: [] } }`.
+
+For the HMAC tests, compute the expected signature as `HMAC-SHA256(orchestratorSecret, "${timestamp}.${body}")` in the test setup.
+
+#### Step 5.2 — Implement `internalUsageWebhookRoute.ts`
+
+Create `apps/code-agent/src/routes/internalUsageWebhookRoute.ts`:
+
+```ts
+import type { FastifyPluginCallback } from 'fastify';
+import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
+import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
+import { loadConfig } from '../config.js';
+import { getServices } from '../services.js';
+import { forwardUsageEvents } from '../domain/usecases/forwardUsageEvents.js';
+
+export const internalUsageWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) => {
+  fastify.post('/internal/webhooks/usage-events', {
+    schema: { /* ... see below */ },
+  }, async (request, reply) => {
+    logIncomingRequest(request);
+
+    // Step 1: Validate X-Internal-Auth
+    const authResult = validateInternalAuth(request);
+    if (!authResult.valid) {
+      request.log.warn({ reason: authResult.reason }, 'Internal auth failed for usage-events webhook');
+      return reply.fail('UNAUTHORIZED', 'Internal authentication failed');
+    }
+
+    // Step 2: Validate orchestrator HMAC signature
+    const signatureResult = validateOrchestratorSignature(request, {
+      orchestratorSecret: loadConfig().orchestratorSecret,
+    });
+    if (!signatureResult.ok) {
+      request.log.warn({ error: signatureResult.error }, 'HMAC validation failed for usage-events webhook');
+      return reply.fail('UNAUTHORIZED', 'Unauthorized');
+    }
+
+    // Step 3: Forward to llm-usage-service
+    const { usageServiceClient, logger } = getServices();
+    const result = await forwardUsageEvents(request.body, { usageServiceClient, logger });
+    if (!result.ok) {
+      return reply.fail('INTERNAL_ERROR', result.error.message);
+    }
+
+    return reply.ok(result.value);
+  });
+
+  done();
+};
+```
+
+Schema for the route: body is `UsageIngestRequest` shape (`schemaVersion: 1`, `events: array`). Response 200 is `{ success: true, data: { accepted: number, duplicates: number, rejected: array } }`. Response 401 and 500 follow the standard error shape.
+
+**Note on `reply.fail` / `reply.ok`:** Use whatever reply helpers code-agent uses in existing routes (`webhookRoutes.ts` uses `reply.fail(code, message)` — use the same).
+
+#### Step 5.3 — Register the route
+
+In `apps/code-agent/src/server.ts` (or wherever routes are registered), add:
+```ts
+import { internalUsageWebhookRoute } from './routes/internalUsageWebhookRoute.js';
+// ...
+server.register(internalUsageWebhookRoute);
+```
+
+Run `pnpm run verify:workspace:tracked -- code-agent` — all tests must pass.
+
+---
+
+### Phase 6 — Orchestrator: swap `StructuredLogUsageSink` for `HttpWebhookUsageSink`
+
+#### Step 6.1 — Confirm orchestrator's env vars
+
+The orchestrator already reads at `workers/orchestrator/src/start.ts`:
+- `INTEXURAOS_CODE_AGENT_URL` (line 441)
+- `INTEXURAOS_ORCHESTRATOR_SECRET` (line 443)
+- `INTEXURAOS_INTERNAL_AUTH_TOKEN` (line 442)
+
+No new env vars needed for the orchestrator itself.
+
+#### Step 6.2 — Update `agent-compliance-validator.ts`
+
+In `workers/orchestrator/src/services/agent-compliance-validator.ts`, update the constructor or factory method that creates the client (around line 291):
+
+Before:
+```ts
+import { StructuredLogUsageSink } from '@intexuraos/llm-pricing';
+// ...
+usageSink: new StructuredLogUsageSink({ logger }),
+```
+
+After:
+```ts
+import { HttpWebhookUsageSink } from '@intexuraos/llm-pricing';
+// ...
+usageSink: new HttpWebhookUsageSink({
+  webhookUrl: `${config.codeAgentUrl}/internal/webhooks/usage-events`,
+  webhookSecret: config.orchestratorSecret,
+  internalAuthToken: config.internalAuthToken,
+  service: 'orchestrator',
+  component: 'agent-compliance-validator',
+  logger,
+}),
+```
+
+Where `config` is the object already available in scope (it contains `codeAgentUrl` and `orchestratorSecret` per `start.ts` wiring).
+
+#### Step 6.3 — Update `completion-verifier.ts`
+
+In `workers/orchestrator/src/services/completion-verifier.ts`, update the `createLlmClient` call (around line 800):
+
+Before:
+```ts
+import { StructuredLogUsageSink } from '@intexuraos/llm-pricing';
+// ...
+usageSink: new StructuredLogUsageSink({ logger: this.logger }),
+```
+
+After:
+```ts
+import { HttpWebhookUsageSink } from '@intexuraos/llm-pricing';
+// ...
+usageSink: new HttpWebhookUsageSink({
+  webhookUrl: `${this.config.codeAgentUrl}/internal/webhooks/usage-events`,
+  webhookSecret: this.config.orchestratorSecret,
+  internalAuthToken: this.config.internalAuthToken,
+  service: 'orchestrator',
+  component: 'completion-verifier',
+  logger: this.logger,
+}),
+```
+
+Verify that `CompletionVerifierConfig` (or its constructor) already holds `codeAgentUrl`, `orchestratorSecret`, and `internalAuthToken`. If not, thread them through from the `start.ts` wiring at lines 752-754.
+
+#### Step 6.4 — Verify orchestrator tests still pass
 
 ```bash
-# --- Track 2 (INT-1341): orchestrator → llm-usage-service webhook ---
-export INTEXURAOS_LLM_USAGE_SERVICE_URL="http://localhost:8132"  # dev default; override on home-dev
-export INTEXURAOS_WORKER_LOCATION="home-dev"                     # or 'mac-dev', 'office-pc'
-export INTEXURAOS_ENVIRONMENT="dev"
-export INTEXURAOS_USAGE_PUBLISHER_ENABLED="0"                    # flip to 1 after Phase 10 verification
+pnpm run verify:workspace:tracked -- orchestrator
 ```
 
-On home-dev, the `.envrc` at `~/` or wherever direnv loads is **the** source of truth. Confirm
-with `ssh home-dev 'direnv exec . printenv | grep INTEXURAOS_LLM_USAGE_SERVICE_URL'` after
-making the change.
+The orchestrator tests use `FakeWebhookClient` for webhook interactions. The new `HttpWebhookUsageSink` is tested separately in `packages/llm-pricing`. Orchestrator tests that construct `AgentComplianceValidator` or `CompletionVerifier` will need a stub `HttpWebhookUsageSink` (use `NoopUsageSink` or a test-specific `HttpWebhookUsageSink` with a `nock`-intercepted URL). If the existing tests pass `usageSink` as a constructor arg, swap them; if the sink is constructed internally, pass a `NoopUsageSink` via config or use `nock`.
 
-For prod orchestrator (future): `INTEXURAOS_LLM_USAGE_SERVICE_URL` should point to the Cloud Run
-URL of `llm-usage-service` (same value as
-`https://${local.services.llm_usage_service.name}-${local.cloud_run_url_suffix}` in
-`terraform/environments/dev/main.tf:310`).
+---
 
-#### Location 3: `terraform/environments/dev/main.tf` — documentation comment only
+### Phase 7 — Final verification
 
-The orchestrator is not a Terraform-managed service. Do **not** add the orchestrator to the
-Cloud Run service list. Do add a **comment** in the `common_service_env_vars` block noting that
-the orchestrator consumes `INTEXURAOS_LLM_USAGE_SERVICE_URL` from its host `.envrc` and must be
-kept in sync with the Cloud Run value:
-
-```hcl
-    INTEXURAOS_LLM_USAGE_SERVICE_URL            = "https://${local.services.llm_usage_service.name}-${local.cloud_run_url_suffix}"
-    # NOTE: orchestrator (workers/orchestrator) reads the same env var from its host .envrc on
-    # home-dev / mac-dev. Keep in sync — see workers/orchestrator/DEPLOYMENT.md.
+```bash
+pnpm run ci:tracked | tee /tmp/int-1341-final.txt
 ```
 
-**`ecosystem.config.cjs` is NOT touched** — orchestrator is not present in that file
-(verified by grep).
-
-### Phase 9 — Idempotency / eventId strategy
-
-Already covered inline in Phase 4's `deriveEventId`. Reasoning:
-
-- **Why include `taskId`:** isolates different tasks that happen to reuse the same attempt
-  number.
-- **Why include `attempt`:** the same `taskId` can have multiple retry attempts, each with its
-  own JSONL entries at the same index.
-- **Why include `entryIndex`:** the file may contain many entries with the same timestamp (they
-  are written at burst speed). Index disambiguates within a single file read.
-- **Why include `timestamp`:** guards against off-by-one errors in the index if the file is
-  re-read after new lines appended (adoption flow reads the file mid-flight).
-- **Why NOT include `message.id`:** confirmed-present fields are better than optional ones for a
-  primary key. If Phase 1 shows `message.id` is reliable, we can switch to
-  `sha256("${taskId}:${attempt}:${message.id}")` in a follow-up.
-- **Why `sha256(...).slice(0, 24)`:** llm-usage-service schema requires non-empty string; 24 hex
-  chars give 96 bits of entropy (birthday collision floor ≈ 2^48 entries, well above our
-  lifetime volume). Full 64-char hashes work too but bloat the payload.
-
-**Idempotency guarantee:** if the orchestrator restarts mid-turn, adopts a running container,
-and re-parses the JSONL file, it will produce the same eventIds → the service's dedup logic
-(INT-1339 Phase 2) returns `duplicates > 0` and `accepted` reflects only net-new events.
-
-### Phase 10 — Integration test against a real llm-usage-service in dev
-
-**Pre-condition:** Phase 1–9 complete, CI green, feature flag `INTEXURAOS_USAGE_PUBLISHER_ENABLED=1`
-set on one orchestrator instance (home-dev).
-
-1. Restart the orchestrator: `sudo systemctl restart code-orchestrator` (Linux) or
-   `launchctl kickstart -k gui/$(id -u)/com.intexuraos.orchestrator` (macOS).
-2. Verify the new env var was picked up:
-   ```bash
-   journalctl -u code-orchestrator -n 50 | grep -E 'INTEXURAOS_LLM_USAGE_SERVICE_URL|UsagePublisher'
-   ```
-   Expect a log line like `Starting orchestrator` followed by the service construction
-   succeeding (no precondition failures).
-3. Submit a trivial planning task via the web UI or `curl code-agent` — pick the smallest
-   possible task so the session has <5 assistant entries.
-4. Tail orchestrator logs and look for:
-   ```
-   Published per-call usage events to llm-usage-service (eventCount=N)
-   ```
-5. Query llm-usage-service for the events:
-   ```bash
-   curl -sS \
-     -H "X-Internal-Auth: $INTEXURAOS_INTERNAL_AUTH_TOKEN" \
-     -H "Content-Type: application/json" \
-     -d '{"timeRange":{"from":"2026-04-10T00:00:00Z","to":"2026-04-11T00:00:00Z"},"filters":{"services":["orchestrator"]}}' \
-     "$INTEXURAOS_LLM_USAGE_SERVICE_URL/internal/usage/query" | jq
-   ```
-   Expect `rows` count matching the number of assistant turns in the session and `totals.calls`
-   matching the `apiCallCount` from the turn metrics publish.
-6. Verify dedup: submit the same task again. The second submission creates a new session (fresh
-   taskId), so events should all be `accepted`, not `duplicates`. To test dedup specifically,
-   kill-and-restart the orchestrator mid-turn and confirm adoption reuses the same taskId — the
-   next `publishTurnUsage` call should have `duplicates > 0`.
-7. Verify `cost.billedUsd > 0` server-side: the service should compute cost from the pricing
-   table. If all events show `billedUsd = 0`, INT-1339 is missing pricing rows for that model —
-   file a blocker.
-8. Verify schema compliance: check for any `rejected` events in the webhook response logs on the
-   llm-usage-service side:
-   ```bash
-   gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="llm-usage-service" AND textPayload:"rejected"' \
-     --project=intexuraos-dev-pbuchman --limit=20 --format=json
-   ```
-   Any rejection with `code: 'FST_ERR_VALIDATION'` means the orchestrator sent a schema
-   violation — fix before flipping the flag globally.
-
-If any step fails, **revert the feature flag** (`INTEXURAOS_USAGE_PUBLISHER_ENABLED=0`) and
-restart. The orchestrator stays functional because the publisher is gated.
+Expected: zero failures across all workspaces. Verify:
+- `packages/llm-pricing` — new sink tests pass, coverage ≥ 95%.
+- `apps/code-agent` — new route tests pass, coverage ≥ 95%.
+- `workers/orchestrator` — no regressions.
 
 ---
 
 ## Test plan
 
-| File                                                                                 | What it covers                                                                                                                                                                                                                                                                                                                                              |
-| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workers/orchestrator/src/__tests__/turn-metrics-collector.test.ts`                  | Extended with `describe('extractUsageEvents')` — all cases enumerated in Phase 3b (10+ tests). Covers empty entries, missing `message.usage`, all cache-token variants, missing `timestamp`, model fallback chain (`message.model` → `WORKER_TYPES[workerType].model` → `'unknown'`), deterministic eventId, codex early-return, provider selection switch. |
-| `workers/orchestrator/src/__tests__/usage-publisher.test.ts` (NEW)                   | `UsagePublisher.publishTurnUsage` — feature flag gate, empty events short-circuit, webhookClient invocation args, 4xx/5xx warn logs, success info log. Uses a `FakeWebhookClient` matching the interface.                                                                                                                                                   |
-| `workers/orchestrator/src/__tests__/fixtures/session-jsonl-sample.jsonl` (NEW)       | Golden JSONL sample matching Phase 1 verified shape. Loaded by turn-metrics-collector tests via `readFile` mock.                                                                                                                                                                                                                                            |
-| `workers/orchestrator/src/__tests__/turn-metrics-collector.test.ts` (existing tests) | Must continue to pass after adding `workerLocation`/`environment` to `TurnMetricsCollectorConfig`. Update the `const config` fixture at the top of the file to include the new required fields.                                                                                                                                                             |
-| `workers/orchestrator/src/__tests__/start.test.ts` (if it exists)                    | Add assertion that `INTEXURAOS_LLM_USAGE_SERVICE_URL` is required; missing value causes `process.exit(1)`. Likely skip this if the file is covered by `v8 ignore module-init` already.                                                                                                                                                                      |
+### `packages/llm-pricing`
 
-**Coverage goal:** 95% branch coverage on `extractUsageEvents`, `selectProvider`, and the full
-`UsagePublisher` class. The `codex` early-return branch in `extractUsageEvents` is covered by
-one test; the `workerType` switch in `selectProvider` is covered by the `it.each` table.
+| Test file                           | Scenario                                        | Coverage target                  |
+| ----------------------------------- | ----------------------------------------------- | -------------------------------- |
+| `httpWebhookUsageSink.test.ts`      | Successful POST, correct HMAC headers           | HMAC signing, body serialization |
+| `httpWebhookUsageSink.test.ts`      | 5xx response — non-fatal, logs warning          | Failure path                     |
+| `httpWebhookUsageSink.test.ts`      | Network error — non-fatal, logs warning         | Failure path                     |
+| `httpInternalAuthUsageSink.test.ts` | Successful POST, correct X-Internal-Auth header | Happy path                       |
+| `httpInternalAuthUsageSink.test.ts` | 5xx response — non-fatal, logs warning          | Failure path                     |
 
-**Run locally before PR:**
+### `apps/code-agent`
 
-```bash
-pnpm --filter orchestrator test
-pnpm run verify:workspace:tracked -- orchestrator
-pnpm run ci:tracked
-```
+| Test file                           | Scenario                                          | Coverage target  |
+| ----------------------------------- | ------------------------------------------------- | ---------------- |
+| `forwardUsageEvents.test.ts`        | `ingestEvents` returns ok → use case returns ok   | Happy path       |
+| `forwardUsageEvents.test.ts`        | `ingestEvents` returns err → use case returns err | Error path       |
+| `internalUsageWebhookRoute.test.ts` | Missing X-Internal-Auth → 401                     | Auth guard       |
+| `internalUsageWebhookRoute.test.ts` | Invalid HMAC → 401                                | HMAC guard       |
+| `internalUsageWebhookRoute.test.ts` | Valid auth + valid body → 200                     | Happy path       |
+| `internalUsageWebhookRoute.test.ts` | Valid auth + usageServiceClient error → 500       | Error path       |
+| `internalUsageWebhookRoute.test.ts` | Valid auth + empty events array → 200             | Edge case        |
 
 ---
 
 ## Rollout plan
 
-1. **Merge with flag OFF.** `INTEXURAOS_USAGE_PUBLISHER_ENABLED=0` is the default in `.envrc`.
-   Code ships dark. No behavior change.
-2. **Flip flag on home-dev only.** Edit home-dev's `.envrc`, restart orchestrator. Run Phase 10
-   integration test. Observe for 24 hours. Watch for: (a) increased 5xx from llm-usage-service,
-   (b) pendingWebhooks queue growth, (c) orchestrator memory growth, (d) unexpected `rejected`
-   events in llm-usage-service logs.
-3. **Flip flag on mac-dev (if applicable).** Same verification.
-4. **Flip flag globally** by changing the default in `.envrc.local.example` to `1` and updating
-   team onboarding docs.
-5. **After 1 week of stability**, remove the flag entirely: delete the
-   `INTEXURAOS_USAGE_PUBLISHER_ENABLED` check in `UsagePublisher.publishTurnUsage` and the env
-   var read in `start.ts`. File this cleanup as a separate small PR.
+Track 2 is pure additive — no existing behavior changes until the orchestrator deploys with `HttpWebhookUsageSink` active.
+
+1. **PR merge order:** `packages/llm-pricing` changes (Phases 1-2) must be built and published (or at least built in the monorepo) before the apps that import them. In this monorepo, `pnpm build` handles this — just ensure the build order is correct before opening the PR.
+2. **Deploy code-agent first.** The new `POST /internal/webhooks/usage-events` route is additive. Deploy code-agent with `INTEXURAOS_LLM_USAGE_SERVICE_URL` set. Verify the route returns 401 on an unsigned test request (smoke test).
+3. **Deploy orchestrator second.** Once code-agent is live with the webhook route, deploy the orchestrator with `HttpWebhookUsageSink`. On the next compliance validation or completion verification, a usage event will be POSTed.
+4. **Verify end-to-end.** Trigger a code task to completion (or run a manual compliance validation). Check `llm_usage_events` Firestore collection in `intexuraos-dev-pbuchman` — expect one event per LLM call with `source.service = 'orchestrator'`.
+5. **No rollback complexity.** The only observable change is: usage events from orchestrator start appearing in Firestore. If the webhook route or forwarding fails, `HttpWebhookUsageSink` logs a warning and returns — the orchestrator task continues. Zero user-visible impact on failure.
 
 ---
 
 ## Acceptance criteria
 
-- [ ] Phase 1 JSONL shape verification documented in PR body (model field location, GLM
-      deviation notes).
-- [ ] `extractUsageEvents` function produces valid `UsageEventInput[]` conforming to
-      `OrchestratorUsageEventInput` schema (checked against schema JSON in local Ajv test).
-- [ ] Deterministic `eventId` — two calls with the same input produce the same eventIds
-      (proven by unit test).
-- [ ] `collectAndPublish` invokes `UsagePublisher.publishTurnUsage` after the existing
-      `publish(metrics)` call, inside the same try/catch swallow-and-warn envelope.
-- [ ] `pnpm run ci:tracked` green.
-- [ ] `pnpm --filter orchestrator test` green with 95%+ branch coverage on new code.
-- [ ] `INTEXURAOS_LLM_USAGE_SERVICE_URL` is a hard REQUIRED_ENV in `start.ts`; missing value
-      causes precondition failure at startup.
-- [ ] `INTEXURAOS_USAGE_PUBLISHER_ENABLED=0` by default; the publisher is a no-op when disabled.
-- [ ] Phase 10 integration test passes on home-dev: events visible via
-      `/internal/usage/query`, `cost.billedUsd > 0` (requires INT-1339).
-- [ ] When `llm-usage-service` is down, the orchestrator does NOT crash — confirmed by fault-
-      injection test (temporarily point `INTEXURAOS_LLM_USAGE_SERVICE_URL` at a closed port).
-- [ ] PR title contains `INT-1341`; PR body contains `Fixes INT-1341`.
+- [ ] `packages/llm-pricing` exports `HttpWebhookUsageSink` and `HttpInternalAuthUsageSink`.
+- [ ] `POST /internal/webhooks/usage-events` on code-agent returns 401 for missing/invalid auth/HMAC.
+- [ ] `POST /internal/webhooks/usage-events` on code-agent returns 200 and forwards events to llm-usage-service for valid requests.
+- [ ] `agent-compliance-validator.ts` no longer imports `StructuredLogUsageSink`.
+- [ ] `completion-verifier.ts` no longer imports `StructuredLogUsageSink`.
+- [ ] `pnpm run ci:tracked` passes with zero failures.
+- [ ] A real or simulated compliance validation or completion verification produces a `llm_usage_events` document in Firestore with `source.service = 'orchestrator'`.
+- [ ] No new feature flags added.
+- [ ] `turn-metrics-collector.ts` is not modified.
 
 ---
 
-## Risks and mitigations
+## Risks
 
-| Risk                                                                          | Likelihood           | Impact                                                                                                                       | Mitigation                                                                                                                                                                                                   |
-| ----------------------------------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `message.model` field is absent from GLM/Qwen/Kimi JSONL                      | Medium               | Events tagged with fallback `WORKER_TYPES[*].model` (coarser granularity, model name still present)                          | Phase 1 verification; fallback chain `message.model → WORKER_TYPES.model → 'unknown'`                                                                                                                        |
-| Provider enum does not accept `dashscope`/`glm`/`minimax`                     | **High — confirmed** | Schema rejects entire batch with 400                                                                                         | Map to `'anthropic'` in `selectProvider`; **⚠ DECISION NEEDED**: coordinate with INT-1339 pricing table to list these models under provider `anthropic`, or extend `LlmProviders` enum in a prerequisite PR  |
-| Pending webhook queue grows unbounded during llm-usage-service outage         | Low                  | Disk growth; 24h TTL drops events                                                                                            | `WebhookClient.PENDING_WEBHOOK_TTL = 24h` (already implemented at `webhook-client.ts:22`); at high volume, the queue is in-memory + state file so the orchestrator can monitor `getPendingCount()` and alert |
-| Duplicate events on orchestrator restart + container adoption                 | Medium               | Inflated call counts server-side                                                                                             | Deterministic `eventId` — service dedups. Verified by Phase 10 step 6.                                                                                                                                       |
-| 15-minute HMAC replay window expires for pending-queue retries                | Medium               | Retries fail as `401 expired_signature`                                                                                      | `WebhookClient.retryPending` at `webhook-client.ts:131` regenerates `timestamp = Math.floor(now / 1000)` and re-signs — confirmed safe                                                                       |
-| Breaking the existing turn-metrics publish to `code-agent` during refactor    | Low                  | Lost turn metrics visibility                                                                                                 | `publishTurnUsage` is **additive** — the existing `this.publish(metrics)` call is unchanged and runs first; publisher runs after in its own try/catch                                                        |
-| `parseSessionJsonl` now returns a third field, breaks existing tests          | Low                  | Test failures                                                                                                                | Update the 2 existing `parseSessionJsonl` test assertions to destructure `{ entries, timeClassification, tokens }` — covered in Phase 7 step 5                                                               |
-| Env var missing on one host but not another → orchestrator crashes at startup | Medium               | Orchestrator down on that host                                                                                               | Use `getOptionalEnv` for the feature flag only. Use `getRequiredEnv` for `INTEXURAOS_LLM_USAGE_SERVICE_URL` so missing config is loud and fast                                                               |
-| Unknown model string (e.g. future Claude 5) fails pricing lookup              | Medium               | Cost stays 0 for those events                                                                                                | Service-side responsibility (INT-1339); orchestrator sends the raw model string and lets the service decide pricing-source fallback                                                                          |
-| I/O cost of re-reading JSONL                                                  | Low                  | Negligible — already read once per turn in `parseSessionJsonl`; the refactor returns `entries` so no additional read happens | N/A                                                                                                                                                                                                          |
-| Shipping without INT-1339 live                                                | **High**             | Events land but `cost.billedUsd` stays 0                                                                                     | Pre-flight check #1; feature flag default OFF protects against this                                                                                                                                          |
+| Risk                                                                                                          | Likelihood  | Mitigation                                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `HttpWebhookUsageSink` send failure causes orchestrator regression                                            | Low         | Non-fatal by design — failure is logged and swallowed, matching `StructuredLogUsageSink` semantics                                    |
+| `UsageLogParams` fields do not map cleanly to `UsageEventInput` (e.g., missing correlation fields)            | Low         | Verified at plan time: all required fields in `UsageEventInput` are either derivable from `UsageLogParams` or set to `null`/`0`       |
+| Code-agent `ServiceContainer` tests break because `usageServiceClient` is now required                        | Medium      | Fully mitigated in Phase 3.4 — all `setServices()` calls updated with a fake client before any code lands                             |
+| `CompletionVerifier` or `AgentComplianceValidator` config does not expose `codeAgentUrl`/`orchestratorSecret` | Low         | Verified at plan time: `start.ts` lines 561-563 and 752-754 pass both fields to both services                                         |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL` not set on home-dev code-agent process (PM2)                               | Medium      | Mitigated by adding to `ecosystem.config.cjs`; if process was already running, `pm2 restart code-agent` is needed after config update |
 
 ---
 
 ## Out of scope
 
-- **Streaming per-call events** (as they arrive in `claude-log-processor.ts`). Post-turn batch
-  only. Real-time streaming is INT-13xx-TBD follow-up.
-- **Backfill of historical sessions.** The orchestrator has `claude-session-*` directories
-  going back weeks — a one-off backfill script is out of scope. If needed, do it as a separate
-  `scripts/backfill-usage-events.ts` PR.
-- **Per-call operation detection** (tool_calling vs generate). All events use `operation:
-  'other'` until we have a use case that requires finer classification. Do not add
-  `stop_reason`-based classification speculatively.
-- **Modifying `code-agent/internal/turn-metrics`.** The existing summed-per-turn publish stays.
-  Track 2 is additive.
-- **Extending `LlmProviders` enum** to add `'zai'`, `'dashscope'`, etc. If Phase 1 shows this
-  is required, file a separate blocker issue under INT-1338 first.
-- **Per-event `durationMs`.** JSONL has no per-call latency. `durationMs: 0` is a known limitation.
-- **Per-event `owner.id` = real user ID.** The orchestrator does not have user context at the
-  turn-metrics collection point. `owner.id = "orchestrator:${taskId}"` is the best we can do
-  without plumbing user IDs through `code-agent → orchestrator → turn-metrics-collector`.
-- **Cloud Run deployment of the orchestrator.** Orchestrator remains a native Node.js process
-  on home-dev/mac-dev for this track.
-- **Deleting the feature flag.** Rollout plan step 5 files a separate cleanup PR after 1 week
-  of stability.
-
----
-
-## Summary of ⚠ DECISION NEEDED items
-
-1. **Phase 1 — GLM JSONL shape.** If GLM deviates from the Claude format, `extractUsageEvents`
-   must branch on `workerType`. Blocker on verification.
-2. **Phase 3/5 — Provider enum for non-Anthropic proxies.** Provisional decision: map all
-   Anthropic-compatible proxies (`minimax`, `mimo-pro`, `glm`, `qwen`, `kimi`) to
-   `LlmProviders.Anthropic`. Must be confirmed with INT-1339 author before merge, because it
-   implies the pricing table lists `glm-5` etc. under the `anthropic` provider column.
-3. **Phase 4 — Should `operation` classify `stop_reason === 'tool_use'` as `'tool_calling'`?**
-   Provisional decision: **No** — ship `'other'` first, revisit after a week of data.
-4. **Phase 9 — Use `message.id` (Anthropic request ID) as eventId input?** Provisional
-   decision: **No** — use the positional hash first because presence is guaranteed, revisit
-   when Phase 1 confirms `message.id` is always populated.
+- `workers/orchestrator/src/services/turn-metrics-collector.ts` — untouched.
+- JSONL session file parsing of any kind.
+- `UsagePublisher` class or any orchestrator-level batching abstraction.
+- Server-side cost calculation (Track 4 dropped it entirely; client-side `PricingContext` is sufficient).
+- Feature flag of any kind.
+- Changes to `llm-usage-service` ingest endpoint schema.
+- Migration of `FirestoreUsageSink` call sites in other services — that is Track 3 (INT-1342), which reuses `HttpInternalAuthUsageSink` from this track.
+- `INTEXURAOS_ORCHESTRATOR_SECRET` env var management — already present in orchestrator and code-agent.
