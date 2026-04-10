@@ -259,6 +259,64 @@ describe('pricingRoutes', () => {
   });
 
   // -------------------------------------------------------------------------
+  // GET /internal/pricing
+  // -------------------------------------------------------------------------
+  describe('GET /internal/pricing', () => {
+    it('returns 401 for missing X-Internal-Auth header', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/pricing',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 200 with all provider pricing when fully populated', async () => {
+      populateAllProviders(pricingRepo);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/pricing',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: Record<string, ProviderPricing>;
+      };
+      expect(body.success).toBe(true);
+      expect(body.data[LlmProviders.Google]?.provider).toBe(LlmProviders.Google);
+      expect(body.data[LlmProviders.OpenAI]?.provider).toBe(LlmProviders.OpenAI);
+      expect(body.data[LlmProviders.Anthropic]?.provider).toBe(LlmProviders.Anthropic);
+      expect(body.data[LlmProviders.Perplexity]?.provider).toBe(LlmProviders.Perplexity);
+      expect(body.data[LlmProviders.OpenRouter]?.provider).toBe(LlmProviders.OpenRouter);
+    });
+
+    it('returns 500 when a provider is missing from the repository', async () => {
+      // Only populate 4 out of 5 providers — missing openrouter
+      pricingRepo.byProvider.set(LlmProviders.Google, mockGooglePricing);
+      pricingRepo.byProvider.set(LlmProviders.OpenAI, mockOpenaiPricing);
+      pricingRepo.byProvider.set(LlmProviders.Anthropic, mockAnthropicPricing);
+      pricingRepo.byProvider.set(LlmProviders.Perplexity, mockPerplexityPricing);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/pricing',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // GET /llm-usage/pricing
   // -------------------------------------------------------------------------
   describe('GET /llm-usage/pricing', () => {

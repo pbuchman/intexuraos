@@ -48,6 +48,68 @@ export const pricingRoutes: FastifyPluginCallback = (app, _opts, done) => {
     },
   );
 
+  // GET /internal/pricing — read all pricing (internal, X-Internal-Auth)
+  // This is the endpoint consumer apps call via fetchAllPricing() at boot.
+  app.get(
+    '/internal/pricing',
+    {
+      schema: {
+        operationId: 'internalGetAllPricing',
+        summary: 'Get all LLM pricing (internal)',
+        description: 'Internal endpoint for consumer apps to fetch pricing at boot via fetchAllPricing().',
+        tags: ['pricing'],
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                required: ['google', 'openai', 'anthropic', 'perplexity', 'openrouter'],
+                properties: {
+                  google: { $ref: 'ProviderPricing#' },
+                  openai: { $ref: 'ProviderPricing#' },
+                  anthropic: { $ref: 'ProviderPricing#' },
+                  perplexity: { $ref: 'ProviderPricing#' },
+                  openrouter: { $ref: 'ProviderPricing#' },
+                },
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            type: 'object',
+            properties: { success: { type: 'boolean', const: false }, error: { $ref: 'ErrorBody#' } },
+            required: ['success', 'error'],
+          },
+          500: {
+            type: 'object',
+            properties: { success: { type: 'boolean', const: false }, error: { $ref: 'ErrorBody#' } },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'Internal pricing read' });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for pricing read');
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed');
+      }
+
+      const { pricingRepository } = getServices();
+      try {
+        const all = await pricingRepository.getAll();
+        return await reply.ok(all);
+      } catch (error) {
+        request.log.error({ err: error }, 'Failed to read pricing');
+        return await reply.fail('INTERNAL_ERROR', 'Failed to read pricing');
+      }
+    },
+  );
+
   // GET /llm-usage/pricing — read all pricing (public, Auth0 bearer)
   app.get(
     '/llm-usage/pricing',
