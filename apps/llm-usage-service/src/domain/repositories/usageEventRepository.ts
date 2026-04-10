@@ -15,11 +15,13 @@ export interface UsageEventFilters {
   success?: boolean;
 }
 
+export type SortField = 'occurredAt' | 'costUsd' | 'totalTokens';
+
 export interface ListUsageEventsParams {
   timeRange: { from: string; to: string };
   filters?: UsageEventFilters;
   sortBy?: {
-    field: 'occurredAt' | 'costUsd' | 'totalTokens';
+    field: SortField;
     direction: 'asc' | 'desc';
   };
   limit: number;
