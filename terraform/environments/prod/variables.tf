@@ -40,15 +40,6 @@ variable "deploy_ssh_public_key" {
   }
 }
 
-variable "admin_ssh_source_ips" {
-  description = "CIDR blocks allowed to SSH into the Hetzner VM (port 22). Default: restricted to nothing — operator MUST supply their IPs."
-  type        = list(string)
-  validation {
-    condition     = length(var.admin_ssh_source_ips) > 0
-    error_message = "admin_ssh_source_ips must contain at least one CIDR — the VM would be inaccessible without SSH."
-  }
-}
-
 variable "domain" {
   description = "Public domain for prod"
   type        = string
