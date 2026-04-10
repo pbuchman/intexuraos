@@ -25,6 +25,16 @@ Examples:
 
 ## App Creation Steps
 
+> ## MANDATORY FINAL STEP — READ THIS FIRST
+>
+> **This command is NOT complete until `scripts/verify-service-scaffolding.sh <service-name>` exits 0.**
+>
+> The numbered steps below tell you WHAT to create. Step 14 is the only thing that tells you whether you actually did it. History is unambiguous: previous runs of `/create-service` have silently dropped IAM service accounts, deploy scripts, `docker_services` entries, and per-service `cloudbuild.yaml` files — not because the instructions were missing, but because the executor felt "done" after the visible terraform module was written and skipped the rest.
+>
+> **The verifier is the gate. Not running it = the service is not created.** No exceptions. No "I'm pretty sure I did everything." Run the script. If it exits non-zero, go back and fix what it reports, then re-run until it exits 0.
+>
+> See **Step 14** below for the exact command.
+
 ### 1. Create App Directory Structure
 
 ```
@@ -696,17 +706,15 @@ export function getConfig(): AppConfig {
 
 **Note:** Backend services already get all service URLs via `local.common_service_env_vars` in Terraform, so this step is only needed if the web frontend specifically needs to call your service.
 
-### 12. Add to Root tsconfig.json
+### 12. Verify tsconfig.json Coverage (automatic — nothing to edit)
 
-Edit `tsconfig.json`:
+The root `tsconfig.json` uses a glob include (`apps/*/src/**/*.ts`), so any new service under `apps/<service-name>/src/` is picked up automatically. **Do not edit `tsconfig.json`.** There is no `references[]` array to append to — if you find yourself adding one, you are editing the wrong file.
 
-```json
-{
-  "references": [
-    // ... existing references ...
-    { "path": "./apps/<service-name>" }
-  ]
-}
+Verify the glob is intact (Step 14's verifier also checks this):
+
+```bash
+grep "apps/\*/src" tsconfig.json
+# Expected output: "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", ...]
 ```
 
 ### 13. Add to Local Dev Setup
@@ -758,13 +766,33 @@ export INTEXURAOS_<SERVICE_NAME>_SERVICE_URL=http://localhost:81XX
 
 This ensures developers can run the service locally with proper configuration.
 
-### 14. Run Verification
+### 14. MANDATORY: Run the Scaffolding Verifier
+
+**This is the gate. Do not claim the service is created until this script exits 0. No exceptions.**
+
+```bash
+bash scripts/verify-service-scaffolding.sh <service-name>
+```
+
+The script checks every required file, terraform block, cloudbuild entry, IAM binding, and GitHub Actions wiring produced by the steps above (25+ checks). **Exit 0 = done. Any other exit = not done.** If it reports missing items, go fix them and re-run the verifier until it passes. Do not proceed to commit, do not mark the task complete, do not move on.
+
+**Why this is mandatory, not optional:** The prose steps above are easy to skim under attention pressure. Previous runs of `/create-service` have silently dropped the IAM service account, the deploy script, the `docker_services` list entry, and the per-service `cloudbuild.yaml` — all because the executor created the terraform module and felt "done." The verifier replaces "I think I did it" with an exit code. Running it is the only way to know.
+
+**Anti-patterns to reject:**
+
+- "I already went through the steps carefully, I don't need to run it" — run it anyway. Past-you was wrong before.
+- "The verifier is flagging something that doesn't apply to my service" — then fix the verifier. Do not bypass it.
+- "I'll run it later" — later never comes. Run it now, before the next action.
+
+**After the verifier exits 0**, run the standard pre-commit checks:
 
 ```bash
 pnpm install
 pnpm run ci
 cd terraform && terraform fmt -recursive && terraform validate
 ```
+
+Only after **both** the verifier AND the CI checks pass is the service considered scaffolded. Only then should you commit.
 
 ### 15. Update Domain Docs Registry (if service has domain layer)
 
@@ -987,35 +1015,34 @@ terraform fmt -check -recursive && terraform validate
 
 ---
 
-## App Requirements Checklist
+## App Scaffolding Verification
 
-- [ ] OpenAPI spec at `/openapi.json`
-- [ ] Swagger UI at `/docs`
-- [ ] Health endpoint at `/health`
-- [ ] CORS enabled
-- [ ] `@intexuraos/infra-otel` in package.json dependencies
-- [ ] Dockerfile includes `COPY otel-register.js`, `ENV OTEL_SERVICE_NAME`, and `--import` in CMD
-- [ ] Added to `local.services` map in Terraform
-- [ ] Added service URL to `local.common_service_env_vars` in Terraform
-- [ ] Terraform module created with `local.common_service_secrets` and `local.common_service_env_vars`
-- [ ] Service account in IAM module
-- [ ] Build steps added to `cloudbuild/cloudbuild.yaml`
-- [ ] Per-service `apps/<service>/cloudbuild.yaml` created
-- [ ] Deploy script `cloudbuild/scripts/deploy-<service>.sh` created
-- [ ] Added to `docker_services` in `terraform/modules/cloud-build/main.tf`
-- [ ] Added to GitHub Actions deploy workflow (`.github/workflows/deploy.yml`) — all 4 places:
-  - [ ] Docker build list (`build-push-monitored.sh` step)
-  - [ ] SERVICES deploy array
-  - [ ] CLOUD_RUN_SERVICES array in "Fetch web config" step (monolith deploy)
-  - [ ] CLOUD_RUN_SERVICES array in individual web deploy (`web)` case block)
-- [ ] Registered in api-docs-hub
-- [ ] Added to `CLOUD_RUN_SERVICES` in Cloud Build files (`cloudbuild/cloudbuild.yaml`, `apps/web/cloudbuild.yaml`)
-- [ ] Added to `.envrc.local.example`
-- [ ] Added to root tsconfig.json
-- [ ] Added to local dev setup (`ecosystem.config.cjs`)
-- [ ] Updated domain docs registry
-- [ ] `pnpm run ci` passes
-- [ ] `terraform validate` passes
+**There is no manual checklist. Run the verifier.**
+
+```bash
+bash scripts/verify-service-scaffolding.sh <service-name>
+```
+
+This **replaces** the decorative `- [ ]` checklist that used to live here. A checklist you tick off from memory is not a gate — it's a wish list. The verifier is the gate: it runs real `grep`/`test` commands against the filesystem and reports observed state, not intention.
+
+### What the verifier enforces
+
+- **App files:** directory, `package.json`, `Dockerfile`, `src/index.ts`, per-service `cloudbuild.yaml`
+- **Dockerfile contents:** `otel-register.js` copy, `OTEL_SERVICE_NAME` env, `--import` in CMD
+- **Deploy script:** exists, has `--cpu-throttling`, does not set `--allow-unauthenticated`
+- **Terraform:** `local.services.<name>` map entry, `module "<name>"` block, `common_service_secrets` wiring, `INTEXURAOS_<NAME>_URL` env var
+- **IAM:** `google_service_account.<name>` resource
+- **Cloud Build trigger list:** `docker_services` array contains the service
+- **cloudbuild.yaml:** `build-push-<name>` and `deploy-<name>` steps
+- **GitHub Actions `deploy.yml`:** docker build line, SERVICES array, 2× `CLOUD_RUN_SERVICES` entries
+- **Monorepo wiring:** `tsconfig.json` glob intact, `ecosystem.config.cjs` (createServiceConfig + URL), `.envrc.local.example` URL
+- **Optional (soft warnings):** api-docs-hub registration, web-facing `CLOUD_RUN_SERVICES` entry
+
+Exit 0 = all required items present. Any other exit = missing items; fix and re-run.
+
+> ## REMINDER: THE VERIFIER IS MANDATORY
+>
+> If you have not run `scripts/verify-service-scaffolding.sh <service-name>` and seen exit 0, **the service is not created** — regardless of how many steps above you followed. This is the third time this document says so. It will not say so a fourth time. Run the script.
 
 ---
 
