@@ -18,6 +18,7 @@ import {
 } from '@intexuraos/http-server';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { registerRoutes } from './routes/index.js';
+import { registerUsageSchemas } from './routes/schemas/usageEventSchema.js';
 
 const SERVICE_NAME = 'llm-usage-service';
 const SERVICE_VERSION = '0.0.1';
@@ -138,6 +139,17 @@ export async function buildServer(): Promise<FastifyInstance> {
             stream: createLogStream(),
           },
     disableRequestLogging: true,
+    // Override Fastify's default `removeAdditional: true` so that
+    // `additionalProperties: false` on the UsageEventInput schema actually
+    // rejects unknown fields with a 400, rather than silently stripping them.
+    // All other body schemas in this service use the default additionalProperties: true
+    // (e.g. query `filters: { type: 'object' }`), so this change only affects schemas
+    // that explicitly opt into strict mode.
+    ajv: {
+      customOptions: {
+        removeAdditional: false,
+      },
+    },
   });
 
   registerQuietHealthCheckLogging(app);
@@ -155,6 +167,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   setupSentryErrorHandler(app as unknown as FastifyInstance);
 
   registerCoreSchemas(app);
+  registerUsageSchemas(app);
 
   await app.register(fastifySwagger, buildOpenApiOptions());
   await app.register(fastifySwaggerUi, {

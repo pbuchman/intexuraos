@@ -38,7 +38,7 @@ export const internalUsageRoutes: FastifyPluginCallback = (app, _opts, done) => 
             schemaVersion: { type: 'integer', enum: [1] },
             events: {
               type: 'array',
-              items: { type: 'object' },
+              items: { $ref: 'UsageEventInput#' },
             },
           },
         },

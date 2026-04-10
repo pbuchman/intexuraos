@@ -48,12 +48,11 @@ describe('webhookUsageRoutes', () => {
 
   describe('POST /internal/webhooks/usage-events', () => {
     it('returns 200 for valid signed request with orchestrator events', async () => {
+      // Factory default already produces an orchestrator event with workerLocation,
+      // so no source override needed.
       const payload = {
         schemaVersion: 1,
-        events: [createTestEventInput({
-          eventId: 'evt_wh_1',
-          source: { service: 'orchestrator', component: 'research', client: 'web', environment: 'dev' },
-        })],
+        events: [createTestEventInput({ eventId: 'evt_wh_1' })],
       };
       const { timestamp, signature } = signPayload(payload);
 
@@ -102,11 +101,18 @@ describe('webhookUsageRoutes', () => {
     });
 
     it('rejects events with non-orchestrator source.service', async () => {
+      // workerLocation is included so the ONLY violation is the const: 'orchestrator' constraint
       const payload = {
         schemaVersion: 1,
         events: [createTestEventInput({
           eventId: 'evt_wh_bad',
-          source: { service: 'other-service', component: 'research', client: 'web', environment: 'dev' },
+          source: {
+            service: 'other-service',
+            component: 'research',
+            client: 'web',
+            environment: 'dev',
+            workerLocation: 'home-dev',
+          },
         })],
       };
       const { timestamp, signature } = signPayload(payload);
@@ -122,8 +128,57 @@ describe('webhookUsageRoutes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as { error: { message: string } };
-      expect(body.error.message).toContain('orchestrator');
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: {
+          code: string;
+          message: string;
+          details?: { errors?: { path: string; message: string }[] };
+        };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      // Assertion on the envelope-shaped error path; 'source/service' indicates the const constraint fired
+      const errors = body.error.details?.errors ?? [];
+      expect(errors.some((e) => e.path.includes('source/service') || e.path.includes('service'))).toBe(true);
+      expect(eventRepo.getStoredEvents()).toHaveLength(0);
+    });
+
+    it('rejects orchestrator webhook payload missing source.workerLocation', async () => {
+      // orchestrator event but source override drops workerLocation
+      const payload = {
+        schemaVersion: 1,
+        events: [createTestEventInput({
+          eventId: 'evt_wh_no_loc',
+          source: {
+            service: 'orchestrator',
+            component: 'research',
+            client: 'web',
+            environment: 'dev',
+            // workerLocation intentionally omitted
+          },
+        })],
+      };
+      const { timestamp, signature } = signPayload(payload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/usage-events',
+        headers: {
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; details?: { errors?: { path: string }[] } };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(eventRepo.getStoredEvents()).toHaveLength(0);
     });
 
     it('returns 400 for invalid schemaVersion', async () => {
