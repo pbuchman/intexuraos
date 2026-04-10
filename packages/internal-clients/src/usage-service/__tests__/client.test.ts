@@ -1,5 +1,6 @@
 import nock from 'nock';
 import { describe, it, expect, afterEach } from 'vitest';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { createUsageServiceClient } from '../client.js';
 import type { UsageServiceConfig, UsageIngestRequest, UsageQueryRequest } from '../types.js';
 
@@ -26,8 +27,8 @@ const sampleIngestRequest: UsageIngestRequest = {
       owner: { type: 'user', id: 'u1' },
       source: { service: 'research', component: 'agent', client: 'web', environment: 'dev' },
       request: {
-        provider: 'google',
-        model: 'gemini-2.5-flash',
+        provider: LlmProviders.Google,
+        model: LlmModels.Gemini25Flash,
         operation: 'research',
         success: true,
         durationMs: 1200,
@@ -83,7 +84,7 @@ const sampleQueryRequest: UsageQueryRequest = {
 const sampleQueryResponse = {
   rows: [
     {
-      group: { provider: 'google' },
+      group: { provider: LlmProviders.Google },
       metrics: {
         calls: 10,
         costUsd: 0.05,
@@ -174,9 +175,7 @@ describe('createUsageServiceClient', () => {
     });
 
     it('returns NETWORK_ERROR on fetch failure', async () => {
-      nock(BASE_URL)
-        .post('/internal/usage/events')
-        .replyWithError('connection refused');
+      nock(BASE_URL).post('/internal/usage/events').replyWithError('connection refused');
 
       const client = createUsageServiceClient(config);
       const result = await client.ingestEvents(sampleIngestRequest);
@@ -241,9 +240,7 @@ describe('createUsageServiceClient', () => {
     });
 
     it('returns NETWORK_ERROR on fetch failure', async () => {
-      nock(BASE_URL)
-        .post('/internal/usage/query')
-        .replyWithError('connection refused');
+      nock(BASE_URL).post('/internal/usage/query').replyWithError('connection refused');
 
       const client = createUsageServiceClient(config);
       const result = await client.queryUsage(sampleQueryRequest);

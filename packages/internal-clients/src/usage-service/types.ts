@@ -1,4 +1,5 @@
 import type { Logger, Result } from '@intexuraos/common-core';
+import type { LlmProvider } from '@intexuraos/llm-contract';
 
 export interface UsageServiceConfig {
   baseUrl: string;
@@ -22,7 +23,7 @@ export interface UsageEventSource {
 }
 
 export interface UsageEventRequest {
-  provider: 'google' | 'openai' | 'anthropic' | 'perplexity' | 'openrouter';
+  provider: LlmProvider;
   model: string;
   operation:
     | 'research'
@@ -164,11 +165,11 @@ export interface UsageServiceError {
 export interface UsageServiceClient {
   ingestEvents(
     request: UsageIngestRequest,
-    options?: { traceId?: string },
+    options?: { traceId?: string }
   ): Promise<Result<UsageIngestResponse, UsageServiceError>>;
 
   queryUsage(
     request: UsageQueryRequest,
-    options?: { traceId?: string },
+    options?: { traceId?: string }
   ): Promise<Result<UsageQueryResponse, UsageServiceError>>;
 }
