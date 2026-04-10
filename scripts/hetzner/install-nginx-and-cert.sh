@@ -55,10 +55,14 @@ if [[ $EUID -ne 0 ]]; then
   fail "must run as root (got uid $EUID)"
 fi
 
-if [[ $# -lt 1 ]]; then
-  fail "usage: $0 <email-for-letsencrypt-registration>"
-fi
-readonly EMAIL="$1"
+# Email defaults to the project owner's address so the script can be run
+# without arguments. This matters for the sudoers rule in
+# /etc/sudoers.d/deploy-hetzner-scripts: that rule matches
+# `/bin/bash /opt/intexuraos/scripts/hetzner/*.sh` with exactly one
+# positional argument (the script path). Any additional arg (like a
+# command-line email) would break the sudoers match and require a
+# password. Hardcoding the default keeps the calling convention clean.
+readonly EMAIL="${1:-kontakt@pbuchman.com}"
 
 # ---- 0. Fix ownership of /opt/intexuraos after root git pull -------------
 # The caller likely ran `git pull` as root inside VNC to fetch this script,
