@@ -11,8 +11,7 @@ export function buildUsageEvent(
   params: UsageLogParams,
   source: { service: string; component: string }
 ): UsageEventInput {
-  const environment: 'dev' | 'prod' =
-    process.env['NODE_ENV'] === 'production' ? 'prod' : 'dev';
+  const environment: 'dev' | 'prod' = process.env['NODE_ENV'] === 'production' ? 'prod' : 'dev';
 
   return {
     schemaVersion: 1,
@@ -61,8 +60,6 @@ export function buildUsageEvent(
       attempt: null,
       sessionId: null,
     },
-    error: params.success
-      ? null
-      : { code: null, message: params.errorMessage ?? null },
+    error: params.success ? null : { code: null, message: params.errorMessage ?? null },
   };
 }

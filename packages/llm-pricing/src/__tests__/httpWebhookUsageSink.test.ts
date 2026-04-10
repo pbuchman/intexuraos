@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import nock from 'nock';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
+import { LlmProviders } from '@intexuraos/llm-contract';
 import type { UsageLogParams } from '../usageLogger.js';
 import { HttpWebhookUsageSink } from '../httpWebhookUsageSink.js';
 import type { HttpWebhookUsageSinkConfig } from '../httpWebhookUsageSink.js';
@@ -83,7 +84,7 @@ function parseBody(raw: string | undefined): CapturedBody {
 
 const baseParams: UsageLogParams = {
   userId: 'user-123',
-  provider: 'anthropic',
+  provider: LlmProviders.Anthropic,
   model: 'claude-sonnet-4-5',
   callType: 'research',
   usage: {
@@ -153,7 +154,7 @@ describe('HttpWebhookUsageSink', () => {
         environment: 'dev',
       });
       expect(event?.request).toEqual({
-        provider: 'anthropic',
+        provider: LlmProviders.Anthropic,
         model: 'claude-sonnet-4-5',
         operation: 'research',
         success: true,
@@ -217,7 +218,7 @@ describe('HttpWebhookUsageSink', () => {
 
       const minimalParams: UsageLogParams = {
         userId: 'user-456',
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4o',
         callType: 'generate',
         usage: {

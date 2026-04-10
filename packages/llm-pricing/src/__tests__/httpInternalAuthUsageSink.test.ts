@@ -1,6 +1,7 @@
 import nock from 'nock';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { UsageLogParams } from '../usageLogger.js';
 import { HttpInternalAuthUsageSink } from '../httpInternalAuthUsageSink.js';
 import type { HttpInternalAuthUsageSinkConfig } from '../httpInternalAuthUsageSink.js';
@@ -82,8 +83,8 @@ function parseBody(raw: string | undefined): CapturedBody {
 
 const baseParams: UsageLogParams = {
   userId: 'user-123',
-  provider: 'google',
-  model: 'gemini-2.5-flash',
+  provider: LlmProviders.Google,
+  model: LlmModels.Gemini25Flash,
   callType: 'research',
   usage: {
     inputTokens: 1000,
@@ -155,12 +156,12 @@ describe('HttpInternalAuthUsageSink', () => {
       expect(event?.source).toEqual({
         service: 'research-agent',
         component: 'llm-client',
-        client: 'gemini-2.5-flash',
+        client: LlmModels.Gemini25Flash,
         environment: 'dev',
       });
       expect(event?.request).toEqual({
-        provider: 'google',
-        model: 'gemini-2.5-flash',
+        provider: LlmProviders.Google,
+        model: LlmModels.Gemini25Flash,
         operation: 'research',
         success: true,
         durationMs: 0,
@@ -210,7 +211,7 @@ describe('HttpInternalAuthUsageSink', () => {
 
       const minimalParams: UsageLogParams = {
         userId: 'user-456',
-        provider: 'openai',
+        provider: LlmProviders.OpenAI,
         model: 'gpt-4o',
         callType: 'generate',
         usage: {
