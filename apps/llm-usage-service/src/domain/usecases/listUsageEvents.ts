@@ -39,8 +39,8 @@ export async function listUsageEvents(
     });
   }
 
-  // Validate sortBy field
-  const sortField: SortField = 'occurredAt';
+  // Validate and resolve sortBy
+  let validatedSortField: SortField = 'occurredAt';
   let sortDirection: 'asc' | 'desc' = 'desc';
 
   if (request.sortBy !== undefined) {
@@ -50,12 +50,9 @@ export async function listUsageEvents(
         message: `Invalid sortBy field: ${request.sortBy.field}. Allowed: ${ALLOWED_SORT_FIELDS.join(', ')}`,
       });
     }
+    validatedSortField = request.sortBy.field as SortField;
     sortDirection = request.sortBy.direction;
   }
-
-  const validatedSortField: SortField = request.sortBy !== undefined
-    ? (request.sortBy.field as SortField)
-    : sortField;
 
   // Clamp limit
   const limit = Math.min(request.limit ?? DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
