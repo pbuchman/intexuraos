@@ -13,8 +13,7 @@
 export const metadata = {
   id: '086',
   name: 'migrate_pricing_to_llm_usage_service',
-  description:
-    'Copy LLM pricing into the new llm_pricing collection owned by llm-usage-service',
+  description: 'Copy LLM pricing into the new llm_pricing collection owned by llm-usage-service',
   createdAt: '2026-04-10',
 };
 
@@ -24,9 +23,7 @@ export async function up(context) {
   let copied = 0;
 
   for (const p of providers) {
-    const srcSnap = await context.firestore
-      .doc(`settings/llm_pricing/providers/${p}`)
-      .get();
+    const srcSnap = await context.firestore.doc(`settings/llm_pricing/providers/${p}`).get();
 
     if (!srcSnap.exists) {
       // OpenRouter may not have been in the original pricing collection.

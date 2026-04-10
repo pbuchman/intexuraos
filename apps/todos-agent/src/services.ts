@@ -22,14 +22,14 @@ export interface ServiceConfig {
   todosProcessingTopic: string;
   internalAuthKey: string;
   userServiceUrl: string;
-  appSettingsServiceUrl: string;
+  llmUsageServiceUrl: string;
 }
 
 let container: ServiceContainer | null = null;
 
 export async function initServices(config: ServiceConfig): Promise<void> {
   const pricingResult = await fetchAllPricing(
-    config.appSettingsServiceUrl,
+    config.llmUsageServiceUrl,
     config.internalAuthKey
   );
 
