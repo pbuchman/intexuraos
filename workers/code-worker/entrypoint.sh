@@ -165,7 +165,11 @@ run_claude_attempt() {
 
     local continue_flag="${WORKER_CONTINUE:-0}"
     if [ "$continue_flag" = "1" ]; then
-        echo "[entrypoint] Resuming previous Claude session with --continue"
+        if [ -z "${CLAUDE_SESSION_ID:-}" ]; then
+            echo "[entrypoint] ERROR: CLAUDE_SESSION_ID is required for resumed Claude attempts" >&2
+            return 1
+        fi
+        echo "[entrypoint] Resuming previous Claude session with --resume ${CLAUDE_SESSION_ID}"
     fi
 
     echo "[entrypoint] Starting Claude in --print mode..."
@@ -176,7 +180,7 @@ run_claude_attempt() {
             claude --print --verbose --output-format stream-json \
                 --dangerously-skip-permissions \
                 --system-prompt "$system_prompt" \
-                --continue \
+                --resume "$CLAUDE_SESSION_ID" \
                 < /secrets/user-prompt.txt 2>&1 | tee -a "${attempt_forensics_dir}/claude-stream.log"
         else
             claude --print --verbose --output-format stream-json \
@@ -189,7 +193,7 @@ run_claude_attempt() {
             claude --print --verbose --output-format stream-json \
                 --dangerously-skip-permissions \
                 --system-prompt "$system_prompt" \
-                --continue \
+                --resume "$CLAUDE_SESSION_ID" \
                 < /secrets/user-prompt.txt
         else
             claude --print --verbose --output-format stream-json \

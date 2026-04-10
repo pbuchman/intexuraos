@@ -602,6 +602,50 @@ describe('DockerProvider', () => {
       expect(mocks.mockContainer.exec).toHaveBeenCalledTimes(4);
     });
 
+    it('passes CLAUDE_SESSION_ID env var to exec when claude runtime is resumed with a session id', async () => {
+      const initialConfig = createTestConfig({ continueSession: false });
+      await provider.createWorker(initialConfig);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      mocks.mockContainer.exec.mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          continueSession: true,
+          runtimeSessionId: 'e0a48ae3-4f90-422e-ae42-5accb61ee3fc',
+          prompt: 'Follow-up message',
+          systemPrompt: 'Second attempt system prompt',
+        })
+      );
+
+      const execCalls = mocks.mockContainer.exec.mock.calls;
+      const runAttemptCall = execCalls.find(
+        (call) => (call[0]?.Cmd as string[] | undefined)?.join(' ') === '/entrypoint.sh run-attempt'
+      );
+      expect(runAttemptCall).toBeDefined();
+      const env = runAttemptCall?.[0]?.Env as string[];
+      expect(env).toContainEqual('CLAUDE_SESSION_ID=e0a48ae3-4f90-422e-ae42-5accb61ee3fc');
+      expect(env.some((e) => e.startsWith('CODEX_THREAD_ID='))).toBe(false);
+    });
+
+    it('omits CLAUDE_SESSION_ID when continueSession is false (fresh attempt)', async () => {
+      mocks.mockContainer.exec.mockClear();
+      await provider.createWorker(
+        createTestConfig({
+          continueSession: false,
+          runtimeSessionId: 'should-be-ignored-on-fresh-start',
+        })
+      );
+
+      const execCalls = mocks.mockContainer.exec.mock.calls;
+      const runAttemptCall = execCalls.find(
+        (call) => (call[0]?.Cmd as string[] | undefined)?.join(' ') === '/entrypoint.sh run-attempt'
+      );
+      expect(runAttemptCall).toBeDefined();
+      const env = (runAttemptCall ?? [])[0]?.Env as string[];
+      expect(env.some((e) => e.startsWith('CLAUDE_SESSION_ID='))).toBe(false);
+    });
+
     it('does not set CLAUDE_CODE_EXIT_AFTER_STOP_DELAY env var', async () => {
       const config = createTestConfig();
       await provider.createWorker(config);

@@ -1561,6 +1561,11 @@ export class DockerProvider implements IsolationProvider {
           ...(worker.runtime === 'codex' && config.runtimeSessionId !== undefined
             ? [`CODEX_THREAD_ID=${config.runtimeSessionId}`]
             : []),
+          ...(worker.runtime === 'claude' &&
+          config.continueSession === true &&
+          config.runtimeSessionId !== undefined
+            ? [`CLAUDE_SESSION_ID=${config.runtimeSessionId}`]
+            : []),
         ],
       });
 
