@@ -1614,13 +1614,13 @@ git commit -m "feat(nginx): add lua jwt verifier for pubsub push (INT-750)"
         # /internal/todos/*    → todos_agent
         # Else: 404
 
-        location ~ ^/internal/whatsapp/  { access_by_lua_file /etc/nginx/lua/jwt-verify.lua; proxy_pass http://whatsapp_service; }
-        location ~ ^/internal/actions/   { access_by_lua_file /etc/nginx/lua/jwt-verify.lua; proxy_pass http://actions_agent; }
-        location ~ ^/internal/llm/       { access_by_lua_file /etc/nginx/lua/jwt-verify.lua; proxy_pass http://research_agent; }
-        location ~ ^/internal/commands   { access_by_lua_file /etc/nginx/lua/jwt-verify.lua; proxy_pass http://commands_agent; }
-        location ~ ^/internal/calendar/  { access_by_lua_file /etc/nginx/lua/jwt-verify.lua; proxy_pass http://calendar_agent; }
-        location ~ ^/internal/bookmarks/ { access_by_lua_file /etc/nginx/lua/jwt-verify.lua; proxy_pass http://bookmarks_agent; }
-        location ~ ^/internal/todos/     { access_by_lua_file /etc/nginx/lua/jwt-verify.lua; proxy_pass http://todos_agent; }
+        location ~ ^/internal/whatsapp/  { proxy_pass http://whatsapp_service; }
+        location ~ ^/internal/actions/   { proxy_pass http://actions_agent; }
+        location ~ ^/internal/llm/       { proxy_pass http://research_agent; }
+        location ~ ^/internal/commands   { proxy_pass http://commands_agent; }
+        location ~ ^/internal/calendar/  { proxy_pass http://calendar_agent; }
+        location ~ ^/internal/bookmarks/ { proxy_pass http://bookmarks_agent; }
+        location ~ ^/internal/todos/     { proxy_pass http://todos_agent; }
 
         return 404;
     }
@@ -1711,13 +1711,13 @@ locals {
   # Service account emails — these SAs already exist (created by dev env's iam module).
   # We data-source them to avoid hardcoding email strings.
   sa_names = {
-    whatsapp_service = "whatsapp-service"
-    commands_agent   = "commands-agent"
-    actions_agent    = "actions-agent"
-    research_agent   = "research-agent"
-    calendar_agent   = "calendar-agent"
-    bookmarks_agent  = "bookmarks-agent"
-    todos_agent      = "todos-agent"
+    whatsapp_service = "intexuraos-whatsapp-svc-dev"
+    commands_agent   = "intexuraos-commands-agents-dev"
+    actions_agent    = "intexuraos-actions-dev"
+    research_agent   = "intexuraos-research-agent-dev"
+    calendar_agent   = "intexuraos-calendar-dev"
+    bookmarks_agent  = "intexuraos-bookmarks-dev"
+    todos_agent      = "intexuraos-todos-dev"
   }
 }
 
@@ -2077,6 +2077,35 @@ resource "google_pubsub_subscription" "prod_todos_processing" {
 
   dead_letter_policy {
     dead_letter_topic     = "projects/${var.project_id}/topics/${local.topics.todos_processing}-dlq"
+    max_delivery_attempts = 5
+  }
+
+  expiration_policy { ttl = "" }
+}
+
+# -----------------------------------------------------------------------------
+# Approval reply (whatsapp-service → actions-agent)
+# -----------------------------------------------------------------------------
+
+resource "google_pubsub_subscription" "prod_approval_reply" {
+  name    = "intexuraos-approval-reply-prod-hetzner"
+  project = var.project_id
+  topic   = "projects/${var.project_id}/topics/${local.topics.approval_reply}"
+  labels  = local.common_labels
+
+  ack_deadline_seconds       = 60
+  message_retention_duration = "604800s"
+
+  push_config {
+    push_endpoint = "${local.prod_audience}/internal/actions/approval-reply"
+    oidc_token {
+      service_account_email = data.google_service_account.actions_agent.email
+      audience              = local.prod_audience
+    }
+  }
+
+  dead_letter_policy {
+    dead_letter_topic     = "projects/${var.project_id}/topics/${local.topics.approval_reply}-dlq"
     max_delivery_attempts = 5
   }
 
