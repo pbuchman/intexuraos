@@ -441,6 +441,7 @@ async function bootstrap(): Promise<void> {
   const codeAgentUrl = getRequiredEnv('INTEXURAOS_CODE_AGENT_URL');
   const internalAuthToken = getRequiredEnv('INTEXURAOS_INTERNAL_AUTH_TOKEN');
   const orchestratorSecret = getRequiredEnv('INTEXURAOS_ORCHESTRATOR_SECRET');
+  const usageWebhookUrl = getRequiredEnv('INTEXURAOS_USAGE_WEBHOOK_URL');
   const githubAppId = getRequiredEnv('INTEXURAOS_GITHUB_APP_ID');
   const githubInstallationId = getRequiredEnv('INTEXURAOS_GITHUB_INSTALLATION_ID');
   const projectId = getRequiredEnv('INTEXURAOS_PROJECT_ID');
@@ -730,6 +731,7 @@ async function bootstrap(): Promise<void> {
     geminiApiKey: geminiVerifierKey,
     auditLogPath: llmAuditLogPath,
     codeAgentUrl: config.codeAgentUrl,
+    usageWebhookUrl,
     orchestratorSecret: config.orchestratorSecret,
     internalAuthToken: config.internalAuthToken,
   });
@@ -784,6 +786,7 @@ async function bootstrap(): Promise<void> {
           },
           auditLogPath: llmAuditLogPath,
           codeAgentUrl: config.codeAgentUrl,
+          usageWebhookUrl,
           orchestratorSecret: config.orchestratorSecret,
           internalAuthToken: config.internalAuthToken,
         })

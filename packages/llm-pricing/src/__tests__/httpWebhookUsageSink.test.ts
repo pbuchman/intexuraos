@@ -317,6 +317,73 @@ describe('HttpWebhookUsageSink', () => {
     });
   });
 
+  describe('correlation overrides', () => {
+    it('populates correlation.taskId from getCorrelationTaskId callback', async () => {
+      const config = makeConfig({
+        getCorrelationTaskId: () => 'task_abc-123',
+      });
+      const sink = new HttpWebhookUsageSink(config);
+
+      let capturedBody: string | undefined;
+
+      const scope = nock('http://localhost:9999')
+        .post('/webhook/usage', (body: unknown) => {
+          capturedBody = JSON.stringify(body);
+          return true;
+        })
+        .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
+
+      await sink.log(baseParams);
+
+      expect(scope.isDone()).toBe(true);
+
+      const parsedBody = parseBody(capturedBody);
+      const event = parsedBody.events[0];
+      expect(event).toBeDefined();
+      expect(event?.correlation.taskId).toBe('task_abc-123');
+    });
+
+    it('defaults correlation.taskId to null when getCorrelationTaskId returns null', async () => {
+      const config = makeConfig({
+        getCorrelationTaskId: () => null,
+      });
+      const sink = new HttpWebhookUsageSink(config);
+
+      let capturedBody: string | undefined;
+
+      nock('http://localhost:9999')
+        .post('/webhook/usage', (body: unknown) => {
+          capturedBody = JSON.stringify(body);
+          return true;
+        })
+        .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
+
+      await sink.log(baseParams);
+
+      const parsedBody = parseBody(capturedBody);
+      expect(parsedBody.events[0]?.correlation.taskId).toBeNull();
+    });
+
+    it('defaults correlation.taskId to null when getCorrelationTaskId is not provided', async () => {
+      const config = makeConfig();
+      const sink = new HttpWebhookUsageSink(config);
+
+      let capturedBody: string | undefined;
+
+      nock('http://localhost:9999')
+        .post('/webhook/usage', (body: unknown) => {
+          capturedBody = JSON.stringify(body);
+          return true;
+        })
+        .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
+
+      await sink.log(baseParams);
+
+      const parsedBody = parseBody(capturedBody);
+      expect(parsedBody.events[0]?.correlation.taskId).toBeNull();
+    });
+  });
+
   describe('non-fatal error handling', () => {
     it('logs warning and does not throw on 5xx response', async () => {
       const config = makeConfig();

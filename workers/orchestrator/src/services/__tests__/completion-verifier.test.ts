@@ -46,6 +46,7 @@ const defaultConfig = {
   geminiApiKey: 'gemini-key',
   auditLogPath: '/tmp/orchestrator-llm-audit.test.log',
   codeAgentUrl: 'http://localhost:8128',
+  usageWebhookUrl: 'http://localhost:8128/internal/webhooks/usage-events',
   orchestratorSecret: 'test-secret',
   internalAuthToken: 'test-token',
 } as const;
@@ -56,6 +57,7 @@ function createVerifier(
     geminiApiKey: string;
     auditLogPath: string;
     codeAgentUrl: string;
+    usageWebhookUrl: string;
     orchestratorSecret: string;
     internalAuthToken: string;
   }> = {}
