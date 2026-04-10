@@ -52,20 +52,23 @@ function addMetrics(target: AggregateMetrics, agg: DailyUsageAggregate): void {
   target.imageCount += agg.imageCount;
 }
 
+const GROUP_KEY_EXTRACTORS: Record<string, (agg: DailyUsageAggregate) => string | boolean> = {
+  'day': (agg) => agg.date,
+  'owner.type': (agg) => agg.ownerType,
+  'owner.id': (agg) => agg.ownerId,
+  'source.service': (agg) => agg.sourceService,
+  'source.component': (agg) => agg.sourceComponent,
+  'source.client': (agg) => agg.sourceClient,
+  'request.provider': (agg) => agg.provider,
+  'request.model': (agg) => agg.model,
+  'request.operation': (agg) => agg.operation,
+  'request.success': (agg) => agg.success,
+};
+
 function getGroupKey(agg: DailyUsageAggregate, field: string): string | boolean {
-  switch (field) {
-    case 'day': return agg.date;
-    case 'owner.type': return agg.ownerType;
-    case 'owner.id': return agg.ownerId;
-    case 'source.service': return agg.sourceService;
-    case 'source.component': return agg.sourceComponent;
-    case 'source.client': return agg.sourceClient;
-    case 'request.provider': return agg.provider;
-    case 'request.model': return agg.model;
-    case 'request.operation': return agg.operation;
-    case 'request.success': return agg.success;
-    default: return '';
-  }
+  // Field is validated against ALLOWED_GROUP_BY before reaching this function
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- field validated by ALLOWED_GROUP_BY check above
+  return GROUP_KEY_EXTRACTORS[field]!(agg);
 }
 
 function matchesFilters(agg: DailyUsageAggregate, filters: UsageQueryRequest['filters']): boolean {
@@ -104,22 +107,25 @@ function matchesFilters(agg: DailyUsageAggregate, filters: UsageQueryRequest['fi
   return true;
 }
 
+const METRIC_EXTRACTORS: Record<string, (metrics: AggregateMetrics) => number> = {
+  'calls': (m) => m.calls,
+  'costUsd': (m) => m.costUsd,
+  'inputTokens': (m) => m.inputTokens,
+  'outputTokens': (m) => m.outputTokens,
+  'totalTokens': (m) => m.totalTokens,
+  'cacheReadTokens': (m) => m.cacheReadTokens,
+  'cacheWriteTokens': (m) => m.cacheWriteTokens,
+  'cachedTokens': (m) => m.cachedTokens,
+  'reasoningTokens': (m) => m.reasoningTokens,
+  'thinkingTokens': (m) => m.thinkingTokens,
+  'webSearchCalls': (m) => m.webSearchCalls,
+  'imageCount': (m) => m.imageCount,
+};
+
 function getMetricValue(metrics: AggregateMetrics, field: string): number {
-  switch (field) {
-    case 'calls': return metrics.calls;
-    case 'costUsd': return metrics.costUsd;
-    case 'inputTokens': return metrics.inputTokens;
-    case 'outputTokens': return metrics.outputTokens;
-    case 'totalTokens': return metrics.totalTokens;
-    case 'cacheReadTokens': return metrics.cacheReadTokens;
-    case 'cacheWriteTokens': return metrics.cacheWriteTokens;
-    case 'cachedTokens': return metrics.cachedTokens;
-    case 'reasoningTokens': return metrics.reasoningTokens;
-    case 'thinkingTokens': return metrics.thinkingTokens;
-    case 'webSearchCalls': return metrics.webSearchCalls;
-    case 'imageCount': return metrics.imageCount;
-    default: return 0;
-  }
+  // Field is validated against ALLOWED_SORT_FIELDS before reaching this function
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- field validated by ALLOWED_SORT_FIELDS check above
+  return METRIC_EXTRACTORS[field]!(metrics);
 }
 
 export async function queryUsage(
