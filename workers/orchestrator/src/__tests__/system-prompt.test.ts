@@ -337,6 +337,23 @@ describe('pullRequestPrompt', () => {
   });
 });
 
+describe('askAgentPrompt', () => {
+  it('instructs ask-agent that resumed sessions carry prior turns without naming a specific CLI flag', () => {
+    const result = buildSystemPrompt({
+      taskId: 'task_test',
+      linearIssueLabels: [],
+      workerType: 'opus',
+      taskUrl: 'https://intexuraos.cloud/#/code-tasks/task_test',
+      agentType: 'ask_agent',
+    });
+
+    expect(result).toContain('Session Continuity');
+    expect(result).not.toContain('--continue');
+    expect(result).not.toContain('--resume');
+    expect(result).toMatch(/prior (conversation|turns|context)/i);
+  });
+});
+
 describe('prompt versions', () => {
   it('reviewPrompt version is 9.1.0', () => {
     expect(reviewPrompt.version).toBe('9.1.0');

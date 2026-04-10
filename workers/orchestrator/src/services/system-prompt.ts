@@ -1158,7 +1158,7 @@ After this block, stop. Do not append any other checklist or schema payload.`
 export const askAgentPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-ask-agent',
   description: 'Ask Agent system prompt for interactive code assistance',
-  version: '1.1.0',
+  version: '1.2.0',
   build(params: SystemPromptParams): string {
     // Intentionally omits linearIssueId/linearIssueTitle — ask_agent is an
     // interactive assistant session that doesn't operate on a specific issue.
@@ -1195,8 +1195,9 @@ watching your session. You MUST complete your work autonomously.
 - Deliver complete, actionable answers in every response
 
 ### Session Continuity
-If this session was started with --continue, you have context from previous turns.
-Review any prior conversation context before responding.
+If this is a resumed session, prior conversation turns from earlier in the
+conversation will be present in your context. Read them before responding so
+your answers build on what was already discussed.
 
 ### Worker Type
 Worker type: \`${workerType ?? WORKER_TYPE_FALLBACK}\``;
