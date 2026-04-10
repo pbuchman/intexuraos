@@ -5,47 +5,36 @@
 - Parent epic: INT-1338 (LLM Usage Service Phase 2)
 - Dependencies: none (independent; builds directly on Phase 1)
 - Blocks: INT-1343 (Track 5 — pricing UI relocation, which reuses the new `/llm-usage` nav section as the mount point for pricing)
-- Plan version: 1.0
+- Plan version: 2.0 (updated 2026-04-10 — aligned with INT-1338 decisions doc: no BFF, public Auth0 routes on llm-usage-service, `/llm-usage/*` prefix, web app uses `llmUsageServiceUrl` directly)
 
 ## Executive summary
 
 This track delivers the first end-user surface for the new `llm-usage-service`. Phase 1 shipped the ingestion pipeline, daily aggregates, and an internal `POST /internal/usage/query` endpoint, but the web app currently has no way to view or drill into the resulting data. The legacy `LlmCostsPage` reads an old `llm_usage_stats` collection via `app-settings-service` and is completely disconnected from the new `llm_usage_events` / `llm_usage_daily_aggregates` collections owned by `llm-usage-service`. Users therefore cannot answer basic questions like "what did the orchestrator spend on Claude yesterday" without hitting Firestore directly.
 
-Track 1 closes that gap by delivering a new top-level **LLM Usage** nav section with a list view of raw events, a detail view for a single event, and an aggregate/grouping view driven by the existing `/internal/usage/query` endpoint. Because Phase 1 does not expose raw events (the existing query endpoint only returns grouped aggregates), this track **also** adds two new backend endpoints — `POST /internal/usage/events/list` and `GET /internal/usage/events/:eventId` — together with the supporting repository methods, Firestore composite indexes, internal-client extensions, and BFF proxies on `app-settings-service`.
+Track 1 closes that gap by delivering a new top-level **LLM Usage** nav section with a list view of raw events, a detail view for a single event, and an aggregate/grouping view. Because Phase 1 does not expose raw events (the existing query endpoint only returns grouped aggregates), this track **also** adds three new **public** endpoints directly on `llm-usage-service` — `POST /llm-usage/events/list`, `GET /llm-usage/events/:eventId`, and `POST /llm-usage/query` — secured with Auth0 bearer auth (the same middleware all other user-facing services use). The web app calls `llm-usage-service` directly using `config.llmUsageServiceUrl`; there is no BFF layer.
 
 The design mirrors the existing code-tasks list and detail pages as closely as possible: identical Tailwind conventions, identical filter-tab strip, identical localStorage persistence, identical hash routing, identical `*Keyed` detail-page pattern. The intent is that a user landing on `/#/llm-usage` immediately recognizes the UX vocabulary from `/#/code-tasks` and does not need to learn a new mental model.
 
 ## Pre-flight checks
 
-1. Confirm Phase 1 is merged and green: `apps/llm-usage-service` exists and `POST /internal/usage/query` passes its tests.
+1. Confirm Phase 1 is merged and green: `apps/llm-usage-service` exists and its tests pass. Note: `POST /internal/usage/query` from Phase 1 will be removed in this track and replaced by the public `POST /llm-usage/query`.
 2. Confirm `firestore-collections.json` lists `llm_usage_events` with `"owner": "llm-usage-service"` (already present — verified).
-3. Confirm `packages/internal-clients/src/usage-service/client.ts` exports `createUsageServiceClient` and has exactly two methods today (`ingestEvents`, `queryUsage`). Any additional methods already merged mean this plan is stale — stop and re-read.
-4. Confirm the web app uses `HashRouter` and reads service URLs from `apps/web/src/config.ts` (verified: `import.meta.env.INTEXURAOS_*`).
-5. Confirm `app-settings-service` currently serves `/settings/usage-costs` and therefore already has auth, services.ts DI, and public-routes plumbing that can be extended (verified).
-6. Read the `UsageEventInput` TS type in `apps/llm-usage-service/src/domain/models/usageEvent.ts` **before** writing the list-item view model — the event shape is deeply nested (`owner.*`, `source.*`, `request.*`, `usage.*`, `cost.*`, `correlation.*`, `error`) and the detail-view card hierarchy must match.
-7. Run `pnpm run ci:tracked` at the start of the branch to establish a clean baseline.
+3. Confirm the web app uses `HashRouter` and reads service URLs from `apps/web/src/config.ts` (verified: `import.meta.env.INTEXURAOS_*`).
+4. Confirm `apps/web/src/config.ts` does NOT yet have `llmUsageServiceUrl` — this track adds it. If it already exists, check the value and skip the config step in Phase 5.
+5. Read the `UsageEventInput` TS type in `apps/llm-usage-service/src/domain/models/usageEvent.ts` **before** writing the list-item view model — the event shape is deeply nested (`owner.*`, `source.*`, `request.*`, `usage.*`, `cost.*`, `correlation.*`, `error`) and the detail-view card hierarchy must match.
+6. Run `pnpm run ci:tracked` at the start of the branch to establish a clean baseline.
 
 ## Context files
 
 ### Read before touching the backend
-- `apps/llm-usage-service/src/routes/internalUsageRoutes.ts` — both new routes live here alongside `/internal/usage/query`.
+- `apps/llm-usage-service/src/routes/internalUsageRoutes.ts` — read to understand the existing route pattern. The three new public routes go in a new file `publicUsageRoutes.ts` (or alongside the existing routes file — match the naming convention used in that service).
 - `apps/llm-usage-service/src/domain/repositories/usageEventRepository.ts` — interface extended with `list()` and `getById()`.
 - `apps/llm-usage-service/src/infra/firestore/firestoreUsageEventRepository.ts` — Firestore implementation for the new methods.
 - `apps/llm-usage-service/src/domain/models/usageEvent.ts` — canonical `UsageEvent` shape (the list-items return the full event; no projection).
 - `apps/llm-usage-service/src/domain/models/usageQuery.ts` — reuses `AggregateMetrics` / `UsageQueryFilters` vocabulary for the list filters.
-- `apps/llm-usage-service/src/__tests__/routes/internalUsageRoutes.test.ts` — mirror this test layout (beforeAll/beforeEach/afterEach, `app.inject()`, fake repos via `setServices`).
+- `apps/llm-usage-service/src/__tests__/routes/internalUsageRoutes.test.ts` — mirror this test layout (beforeAll/beforeEach/afterEach, `app.inject()`, fake repos via `setServices`). Create a parallel `publicUsageRoutes.test.ts` for the public routes.
 - `apps/llm-usage-service/src/__tests__/fakeUsageEventRepository.ts` — extend with in-memory `list()` and `getById()` for tests.
-
-### Read before touching the internal client
-- `packages/internal-clients/src/usage-service/client.ts` — add two methods next to `queryUsage`.
-- `packages/internal-clients/src/usage-service/types.ts` — add request/response DTOs for list/getById; re-export the full `UsageEvent` shape.
-- `packages/internal-clients/src/usage-service/__tests__/client.test.ts` — extend with `nock`-based tests for the new methods.
-
-### Read before touching the BFF
-- `apps/app-settings-service/src/routes/publicRoutes.ts` — add `GET /settings/llm-usage/events` and `GET /settings/llm-usage/events/:eventId` and `POST /settings/llm-usage/query` alongside `/settings/usage-costs`.
-- `apps/app-settings-service/src/services.ts` — add a `usageServiceClient` to the DI container.
-- `apps/app-settings-service/src/index.ts` — add `INTEXURAOS_LLM_USAGE_SERVICE_URL` + `INTEXURAOS_INTERNAL_AUTH_TOKEN` to `REQUIRED_ENV`.
-- `apps/app-settings-service/src/__tests__/routes/publicRoutes.test.ts` — mirror for new routes with a fake `UsageServiceClient`.
+- Check how `llm-usage-service` registers Auth0 bearer auth middleware — it should already exist from Phase 1 (the service serves public pricing). If Auth0 middleware is not yet wired, look at another service (e.g. `app-settings-service`) for the pattern.
 
 ### Read before touching the web app
 - `apps/web/src/pages/CodeTasksPage.tsx` — design reference for list page. Copy the header, filter-tab strip, sort selector, and localStorage patterns verbatim.
@@ -56,8 +45,8 @@ The design mirrors the existing code-tasks list and detail pages as closely as p
 - `apps/web/src/services/issueGroupsApi.ts` — blueprint for the new `llmUsageApi.ts`.
 - `apps/web/src/services/apiClient.ts` — shared `apiRequest` helper; do not reinvent.
 - `apps/web/src/hooks/useApiClient.ts` — `useApiClient()` hook that wraps `apiRequest` with the current access token.
-- `apps/web/src/config.ts` — the `appSettingsServiceUrl` field already exists; new pages use it (the llm-usage-service is NOT exposed directly to the SPA).
-- `apps/web/vite.config.ts` — the `/api/settings` proxy (port 8122) already exists and is reused as-is. **No new vite proxy entry is needed** because all web traffic goes through `app-settings-service`, which in turn calls `llm-usage-service` server-to-server.
+- `apps/web/src/config.ts` — add a new `llmUsageServiceUrl` config key (the web app calls `llm-usage-service` directly; there is no BFF).
+- `apps/web/vite.config.ts` — add a new proxy entry for `/api/llm-usage` pointing to the `llm-usage-service` dev port. Do NOT reuse the `/api/settings` proxy.
 
 ### Read before touching Firestore indexes
 - `firestore-collections.json` — confirm ownership of `llm_usage_events` stays with `llm-usage-service`.
@@ -69,23 +58,17 @@ The design mirrors the existing code-tasks list and detail pages as closely as p
 - (none — no existing endpoints change contract)
 
 ### Created
-**Backend (`apps/llm-usage-service`)**
-- `POST /internal/usage/events/list` — paginated raw events. Body: `{ timeRange: { from, to }, filters?: UsageEventFilters, sortBy?: { field, direction }, limit?, cursor? }`. Response: `{ events: UsageEvent[], nextCursor?: string, totalMatched: number }`. Auth: `X-Internal-Auth`.
-- `GET /internal/usage/events/:eventId` — single raw event. Response: `{ event: UsageEvent }` or 404. Auth: `X-Internal-Auth`.
-
-**BFF (`apps/app-settings-service`)**
-- `POST /settings/llm-usage/events` — proxies `POST /internal/usage/events/list` on `llm-usage-service`. Auth: user bearer token via `requireAuth`; no user-scoping is applied at the BFF layer in this track (see "Out of scope"). Response mirrors the upstream.
-- `GET /settings/llm-usage/events/:eventId` — proxies `GET /internal/usage/events/:eventId`. Auth: user bearer token.
-- `POST /settings/llm-usage/query` — proxies the existing `POST /internal/usage/query`. Auth: user bearer token. (Added now so the web app has a single BFF entry point per concern; avoids coupling the SPA to two different service URLs.)
+**Public routes (`apps/llm-usage-service`) — Auth0 bearer**
+- `POST /llm-usage/events/list` — paginated raw events. Body: `{ timeRange: { from, to }, filters?: UsageEventFilters, sortBy?: { field, direction }, limit?, cursor? }`. Response: `{ events: UsageEvent[], nextCursor?: string, totalMatched: number }`. Auth: Auth0 bearer token.
+- `GET /llm-usage/events/:eventId` — single raw event. Response: `{ event: UsageEvent }` or 404. Auth: Auth0 bearer token.
+- `POST /llm-usage/query` — aggregate query with groupBy. Replaces both the existing internal query endpoint and the previously planned public version. Auth: Auth0 bearer token.
 
 ### Removed
-- (none)
+- `POST /internal/usage/query` — removed entirely. Only the public `POST /llm-usage/query` exists. The web app calls the public endpoint directly with its Auth0 bearer token.
 
 ### Unchanged
-- `POST /internal/usage/events` (webhook ingest)
-- `POST /internal/usage/events/orchestrator` (orchestrator webhook)
-- `POST /internal/usage/query` (still internal; the BFF above is a thin wrapper, not a replacement)
-- All existing `app-settings-service` public routes (`/settings/pricing`, `/settings/usage-costs`, etc.)
+- `POST /internal/usage/events` (ingest — internal, X-Internal-Auth)
+- All existing `app-settings-service` public routes (no changes to that service in this track)
 
 ## Step-by-step implementation
 
@@ -178,11 +161,11 @@ For `totalMatched`, run a **separate** `.count()` aggregation query with the sam
 
 **`getById` implementation:** `db.collection('llm_usage_events').doc(eventId).get()`; return `ok(null)` on `!snapshot.exists` (NOT `err`); return `ok(snapshot.data() as UsageEvent)` on success.
 
-### Phase 2 — Backend: new list + getById routes (test-first)
+### Phase 2 — Backend: new list, getById, and query public routes (test-first)
 
-Write failing tests first in `apps/llm-usage-service/src/__tests__/routes/internalUsageRoutes.test.ts`. The existing file is the template; add new `describe` blocks:
+Write failing tests first in a new file `apps/llm-usage-service/src/__tests__/routes/publicUsageRoutes.test.ts`. Model it on `internalUsageRoutes.test.ts` but use a valid Auth0 bearer token (use the test auth helper pattern already present in the service) instead of `X-Internal-Auth`. Add new `describe` blocks:
 
-- `POST /internal/usage/events/list`
+- `POST /llm-usage/events/list`
   - returns 200 with paginated events when filters match
   - returns 200 with empty `events` array when no filters match
   - returns 200 with a `nextCursor` when more results exist
@@ -196,24 +179,30 @@ Write failing tests first in `apps/llm-usage-service/src/__tests__/routes/intern
   - returns 400 for invalid `sortBy.field`
   - returns 400 for malformed cursor (decodeCursor returns null)
   - returns 400 when `timeRange.from > timeRange.to`
-  - returns 401 for missing `X-Internal-Auth` header
+  - returns 401 for missing or invalid bearer token
 
-- `GET /internal/usage/events/:eventId`
+- `GET /llm-usage/events/:eventId`
   - returns 200 with full event when found
   - returns 404 when not found
-  - returns 401 for missing `X-Internal-Auth` header
+  - returns 401 for missing or invalid bearer token
 
-Only after all of the above are red, implement the route handlers. Skeleton:
+- `POST /llm-usage/query`
+  - returns 200 with aggregate rows on valid request
+  - returns 400 for invalid groupBy value
+  - returns 401 for missing or invalid bearer token
+
+Only after all of the above are red, implement the route handlers. Create a new file `apps/llm-usage-service/src/routes/publicUsageRoutes.ts`. Skeleton:
 
 ```ts
-// apps/llm-usage-service/src/routes/internalUsageRoutes.ts  (new routes)
+// apps/llm-usage-service/src/routes/publicUsageRoutes.ts
 app.post(
-  '/internal/usage/events/list',
+  '/llm-usage/events/list',
   {
     schema: {
-      operationId: 'internalListUsageEvents',
-      summary: 'List raw usage events (internal, paginated)',
+      operationId: 'listUsageEvents',
+      summary: 'List raw usage events (paginated)',
       tags: ['usage'],
+      security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
         required: ['timeRange'],
@@ -239,16 +228,14 @@ app.post(
           cursor: { type: 'string', minLength: 1 },
         },
       },
-      response: { /* 200, 400, 401 as in existing routes */ },
+      response: { /* 200, 400, 401 as in existing public routes */ },
     },
   },
   async (request, reply) => {
-    logIncomingRequest(request, { message: 'Internal usage events list' });
-    const authResult = validateInternalAuth(request);
-    if (!authResult.valid) {
-      request.log.warn({ reason: authResult.reason }, 'Internal auth failed');
-      return await reply.fail('UNAUTHORIZED', 'Internal auth failed');
-    }
+    logIncomingRequest(request, { message: 'Public usage events list' });
+    // Auth0 bearer auth is applied via the shared requireAuth middleware
+    // registered at the route or plugin level — match the pattern used in
+    // other public routes on this service.
     const body = request.body as ListUsageEventsBody;
     const { usageEventRepository } = getServices();
     const result = await listUsageEvents(
@@ -263,14 +250,10 @@ app.post(
 );
 
 app.get<{ Params: { eventId: string } }>(
-  '/internal/usage/events/:eventId',
+  '/llm-usage/events/:eventId',
   { schema: { /* ... */ } },
   async (request, reply) => {
-    logIncomingRequest(request, { message: 'Internal usage event get' });
-    const authResult = validateInternalAuth(request);
-    if (!authResult.valid) {
-      return await reply.fail('UNAUTHORIZED', 'Internal auth failed');
-    }
+    logIncomingRequest(request, { message: 'Public usage event get' });
     const { usageEventRepository } = getServices();
     const result = await usageEventRepository.getById(request.params.eventId);
     if (!result.ok) {
@@ -282,7 +265,25 @@ app.get<{ Params: { eventId: string } }>(
     return await reply.ok({ event: result.value });
   },
 );
+
+app.post(
+  '/llm-usage/query',
+  { schema: { /* mirror the former /internal/usage/query schema */ } },
+  async (request, reply) => {
+    logIncomingRequest(request, { message: 'Public usage aggregate query' });
+    // delegate to the existing queryUsage use case
+    const body = request.body as UsageQueryBody;
+    const { usageEventRepository } = getServices();
+    const result = await queryUsage({ logger: request.log, usageEventRepository }, body);
+    if (!result.ok) {
+      return await reply.fail('INVALID_REQUEST', result.error.message);
+    }
+    return await reply.ok(result.value);
+  },
+);
 ```
+
+**Remove `POST /internal/usage/query`**: delete the internal query route handler from `internalUsageRoutes.ts` in the same PR. Only the public endpoint above exists going forward.
 
 Create a use case file `apps/llm-usage-service/src/domain/usecases/listUsageEvents.ts` (mirrors `queryUsage.ts`) that does validation, clamping, and delegation to the repo.
 
@@ -388,7 +389,43 @@ export async function down(context) {
 
 Alternative: tell the user they can't combine certain filters. The recommendation above is less user-hostile.
 
-### Phase 4 — Internal client extension
+### Phase 4 — Web app config and Vite proxy
+
+**Web app config (`apps/web/src/config.ts`):** Add `llmUsageServiceUrl` alongside the other service URL keys:
+
+```ts
+// apps/web/src/config.ts
+export const config = {
+  // ... existing keys ...
+  llmUsageServiceUrl: import.meta.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '',
+};
+```
+
+Add the env var in the three required locations:
+1. `apps/web/src/index.ts` (or wherever the web app validates required env) — add `'INTEXURAOS_LLM_USAGE_SERVICE_URL'` to the list.
+2. `terraform/environments/dev/main.tf` — add to the web app container's env block. Value: the Cloud Run URL of `llm-usage-service` (already exists as a Terraform output from Phase 1).
+3. `ecosystem.config.cjs` — add to the web app PM2 entry's `env` section with the local dev URL (e.g. `http://localhost:8130` or whatever port llm-usage-service listens on in home-dev).
+
+**Vite proxy (`apps/web/vite.config.ts`):** Add a new proxy entry for `/api/llm-usage`:
+
+```ts
+// vite.config.ts proxy block
+'/api/llm-usage': {
+  target: 'http://localhost:<LLM_USAGE_PORT>',
+  changeOrigin: true,
+  rewrite: (path) => path.replace(/^\/api\/llm-usage/, ''),
+},
+```
+
+Look up the actual port from `ecosystem.config.cjs` for the `llm-usage-service` entry before filling in the value.
+
+### Phase 5 — (Removed — no BFF layer)
+
+The original Phase 5 described BFF proxy routes on `app-settings-service`. Per the decisions doc (Decision #3), all public routes go directly on `llm-usage-service` with Auth0 bearer auth. The web app calls `llm-usage-service` directly. No changes to `app-settings-service` in this track.
+
+### Phase 5a — Internal client extension (backend-to-backend only)
+
+This phase documents what gets added to the internal client for **backend services** (e.g. code-agent forwarding usage events). The web app does NOT use `packages/internal-clients` — it uses `llmUsageApi.ts` with the public endpoints.
 
 Extend `packages/internal-clients/src/usage-service/types.ts`:
 
@@ -437,54 +474,9 @@ export interface UsageServiceClient {
 }
 ```
 
-Note: the client returns `UsageEventInput` rather than `UsageEvent` to avoid leaking the `receivedAt`/`ingress` internals into the BFF DTO. If the UI needs those fields, widen the type — but verify the caller actually uses them first.
+Note: the internal client is used by backend services (e.g. code-agent) calling `POST /internal/usage/events` to ingest events. The web app does NOT use this client — it calls the public `/llm-usage/*` endpoints directly using `llmUsageApi.ts`.
 
-Extend `client.ts` with `listEvents` and `getEvent` methods modeled on `queryUsage`. Add `nock`-based tests to `__tests__/client.test.ts` for all three: happy path, non-2xx, network error.
-
-### Phase 5 — Web app BFF proxy routes
-
-Add to `apps/app-settings-service/src/services.ts`:
-
-```ts
-import { createUsageServiceClient } from '@intexuraos/internal-clients/usage-service';
-import type { UsageServiceClient } from '@intexuraos/internal-clients/usage-service';
-
-export interface ServiceContainer {
-  pricingRepository: PricingRepository;
-  usageStatsRepository: UsageStatsRepository;
-  usageServiceClient: UsageServiceClient;
-}
-
-export function getServices(): ServiceContainer {
-  container ??= {
-    pricingRepository: new FirestorePricingRepository(),
-    usageStatsRepository: new FirestoreUsageStatsRepository(),
-    usageServiceClient: createUsageServiceClient({
-      baseUrl: process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL']!,
-      internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN']!,
-      logger: createAppLogger({ name: 'app-settings-service.usageServiceClient' }),
-    }),
-  };
-  return container;
-}
-```
-
-Add to `apps/app-settings-service/src/routes/publicRoutes.ts` (next to `/settings/usage-costs`):
-
-- `POST /settings/llm-usage/events` — validates body with Fastify JSON schema mirroring `ListUsageEventsRequest`, calls `usageServiceClient.listEvents(body, { traceId: request.id })`, returns 200 with `{ events, nextCursor, totalMatched }`. No user-scoping in this track.
-- `GET /settings/llm-usage/events/:eventId` — calls `usageServiceClient.getEvent(eventId)`, returns 200 `{ event }` or 404.
-- `POST /settings/llm-usage/query` — calls `usageServiceClient.queryUsage(body)`. Pass through the response verbatim.
-
-Every new route MUST call `logIncomingRequest(request, { message: '...' })` and `requireAuth(request, reply)` (not `validateInternalAuth` — this is the public-facing BFF).
-
-Add env vars in three places (per CLAUDE.md rules):
-1. `apps/app-settings-service/src/index.ts` — add `'INTEXURAOS_LLM_USAGE_SERVICE_URL'` and `'INTEXURAOS_INTERNAL_AUTH_TOKEN'` to `REQUIRED_ENV` (the second may already be present — check before adding).
-2. `terraform/environments/dev/main.tf` — add the same vars to the `app-settings-service` Cloud Run container's `env` block. The URL should point to the `llm-usage-service` Cloud Run service URL output.
-3. `ecosystem.config.cjs` — add to the `app-settings-service` PM2 entry's `env` section for home-dev.
-
-⚠ **DECISION NEEDED**: `INTEXURAOS_LLM_USAGE_SERVICE_URL` for the dev environment. Look up the actual service URL from `terraform/environments/dev/main.tf` — it likely exists as a Terraform output from the Phase 1 deployment. If it doesn't yet, add the output first.
-
-Write tests in `apps/app-settings-service/src/__tests__/routes/publicRoutes.test.ts` using a `FakeUsageServiceClient` that implements the `UsageServiceClient` interface with in-memory data. Tests must cover: happy path, upstream 404 → BFF 404, upstream 500 → BFF 500, missing auth → BFF 401, invalid body → BFF 400.
+Extend `client.ts` with `listEvents` and `getEvent` methods if needed by backend consumers. Add `nock`-based tests to `__tests__/client.test.ts` for any new methods: happy path, non-2xx, network error.
 
 ### Phase 6 — Web app API service module
 
@@ -506,8 +498,8 @@ export async function listLlmUsageEvents(
   request: ListLlmUsageEventsRequest,
 ): Promise<ListLlmUsageEventsResponse> {
   return await apiRequest<ListLlmUsageEventsResponse>(
-    config.appSettingsServiceUrl,
-    '/settings/llm-usage/events',
+    config.llmUsageServiceUrl,
+    '/llm-usage/events/list',
     accessToken,
     { method: 'POST', body: request },
   );
@@ -518,8 +510,8 @@ export async function getLlmUsageEvent(
   eventId: string,
 ): Promise<{ event: UsageEvent }> {
   return await apiRequest<{ event: UsageEvent }>(
-    config.appSettingsServiceUrl,
-    `/settings/llm-usage/events/${encodeURIComponent(eventId)}`,
+    config.llmUsageServiceUrl,
+    `/llm-usage/events/${encodeURIComponent(eventId)}`,
     accessToken,
   );
 }
@@ -529,8 +521,8 @@ export async function queryLlmUsage(
   request: LlmUsageQueryRequest,
 ): Promise<LlmUsageQueryResponse> {
   return await apiRequest<LlmUsageQueryResponse>(
-    config.appSettingsServiceUrl,
-    '/settings/llm-usage/query',
+    config.llmUsageServiceUrl,
+    '/llm-usage/query',
     accessToken,
     { method: 'POST', body: request },
   );
@@ -847,26 +839,24 @@ Walk through each target scenario end-to-end to prove the UI shape is correct. *
 4. User clicks `claude-worker` in the Component filter strip → `filters.components = ['claude-worker']`.
 5. User clicks `orchestrator` in the Service filter strip → `filters.services = ['orchestrator']`.
 6. User clicks "day" in the Group by selector → UI switches to the `AggregateTable` (driven by `useLlmUsageQuery`).
-7. Under the hood: the web app calls `POST /settings/llm-usage/query` with body `{ timeRange: {from, to}, filters: { providers: ['anthropic'], components: ['claude-worker'], services: ['orchestrator'] }, groupBy: ['day'] }`.
-8. The BFF forwards to `POST /internal/usage/query` on `llm-usage-service`.
-9. Result: a single row with `group.day = '2026-04-10'` and aggregated metrics.
+7. Under the hood: the web app calls `POST /llm-usage/query` directly on `llm-usage-service` with body `{ timeRange: {from, to}, filters: { providers: ['anthropic'], components: ['claude-worker'], services: ['orchestrator'] }, groupBy: ['day'] }`.
+8. Result: a single row with `group.day = '2026-04-10'` and aggregated metrics.
 
 **Use case 2: "Show all Gemini calls without grouping"**
 1. User selects "Last 7 days" time range.
 2. User clicks `google` in the Provider filter strip → `filters.providers = ['google']`.
 3. User confirms Group by is "none" (default).
 4. User confirms Sort is "occurredAt desc" (default).
-5. Under the hood: the web app calls `POST /settings/llm-usage/events` with body `{ timeRange, filters: { providers: ['google'] }, sortBy: { field: 'occurredAt', direction: 'desc' }, limit: 50 }`.
-6. The BFF forwards to `POST /internal/usage/events/list` on `llm-usage-service`.
-7. Result: up to 50 events in a raw list, newest first, with a "Load more" button if `nextCursor` is present.
-8. User clicks any event row → navigates to `/#/llm-usage/{eventId}` → detail page loads via `GET /settings/llm-usage/events/{eventId}`.
+5. Under the hood: the web app calls `POST /llm-usage/events/list` directly on `llm-usage-service` with body `{ timeRange, filters: { providers: ['google'] }, sortBy: { field: 'occurredAt', direction: 'desc' }, limit: 50 }`.
+6. Result: up to 50 events in a raw list, newest first, with a "Load more" button if `nextCursor` is present.
+7. User clicks any event row → navigates to `/#/llm-usage/{eventId}` → detail page loads via `GET /llm-usage/events/{eventId}` directly on `llm-usage-service`.
 
 **Use case 3: "Show cost per LLM from the orchestrator this week, grouped by model"**
 1. User picks "Last 7 days".
 2. User clicks `orchestrator` in the Service filter strip → `filters.services = ['orchestrator']`.
 3. User clicks "model" in the Group by selector → switches to `AggregateTable`.
 4. The sort selector is hidden (grouping defaults to `costUsd desc` for the aggregate endpoint).
-5. Under the hood: `POST /settings/llm-usage/query` body `{ timeRange, filters: { services: ['orchestrator'] }, groupBy: ['request.model'], sortBy: { field: 'costUsd', direction: 'desc' } }`.
+5. Under the hood: the web app calls `POST /llm-usage/query` directly on `llm-usage-service` with body `{ timeRange, filters: { services: ['orchestrator'] }, groupBy: ['request.model'], sortBy: { field: 'costUsd', direction: 'desc' } }`.
 6. Result: one row per model, sorted by cost descending. The `totals` are rendered in a "Grand total" footer row.
 
 All three cases must work on the first deployment of this track. If any of them require extra endpoints or filters not listed in Phase 2/4/5, the plan is incomplete — escalate.
@@ -874,27 +864,13 @@ All three cases must work on the first deployment of this track. If any of them 
 ## Test plan
 
 ### Backend (`apps/llm-usage-service`)
-- `src/__tests__/routes/internalUsageRoutes.test.ts` — extended with 15+ new test cases covering list + getById happy paths, filters, sorting, cursor roundtrip, error cases, auth.
+- `src/__tests__/routes/publicUsageRoutes.test.ts` — new file with 15+ test cases covering list, getById, and query happy paths, filters, sorting, cursor roundtrip, error cases, and Auth0 bearer auth.
 - `src/__tests__/domain/usecases/listUsageEvents.test.ts` — new file, unit tests for validation + limit clamping + cursor encode/decode.
 - `src/__tests__/fakeUsageEventRepository.ts` — extend with in-memory `list()` and `getById()` implementing the same semantics as the Firestore version.
 - `src/__tests__/infra/firestoreUsageEventRepository.test.ts` — if an emulator-backed test already exists, extend it; otherwise rely on the fake-repo tests + manual smoke test in staging.
 
-### Internal client (`packages/internal-clients`)
-- `src/usage-service/__tests__/client.test.ts` — extend with 6 new `nock`-backed tests: listEvents happy, listEvents 404, listEvents network error, getEvent happy, getEvent not-found, getEvent network error.
-
-### BFF (`apps/app-settings-service`)
-- `src/__tests__/routes/publicRoutes.test.ts` — extend with a new `describe('/settings/llm-usage/*')` block:
-  - POST /settings/llm-usage/events happy path
-  - POST /settings/llm-usage/events upstream error
-  - GET /settings/llm-usage/events/:eventId happy path
-  - GET /settings/llm-usage/events/:eventId 404
-  - POST /settings/llm-usage/query happy path
-  - All routes: 401 when no bearer
-  - All routes: 400 when body invalid (Fastify schema)
-- Add `FakeUsageServiceClient` helper in `src/__tests__/fakes/fakeUsageServiceClient.ts`.
-
 ### Web app
-- `src/services/__tests__/llmUsageApi.test.ts` — required (services/ is in the enforced-coverage zone).
+- `src/services/__tests__/llmUsageApi.test.ts` — required (services/ is in the enforced-coverage zone). Tests call `llm-usage-service` directly at `config.llmUsageServiceUrl` — use nock against the llm-usage-service port.
 - `src/hooks/__tests__/useLlmUsageEvents.test.ts` — required (hooks/ is enforced).
 - `src/hooks/__tests__/useLlmUsageQuery.test.ts` — required.
 - `src/hooks/__tests__/useLlmUsageEvent.test.ts` — required.
@@ -908,28 +884,27 @@ All three cases must work on the first deployment of this track. If any of them 
 
 ## Rollout plan
 
-1. **Backend first:** merge the llm-usage-service changes (Phases 1–3) and the new migration alone. Deploy to dev. Verify the new endpoints return correct data against real Firestore.
+1. **Backend first:** merge the llm-usage-service changes (Phases 1–3) and the new migration alone. Deploy to dev. Verify the new public endpoints return correct data using curl with a valid bearer token.
 2. **Run the migration:** `node migrations/086_llm-usage-events-list-indexes.mjs up` from the repo root on dev. Wait for index builds to finish (monitor via `gcloud firestore indexes composite list --project=intexuraos-dev-pbuchman`). This can take 5–30 minutes on non-empty collections.
-3. **Internal client + BFF:** merge Phases 4–5. Redeploy `app-settings-service` to dev. Hit `POST /settings/llm-usage/events` with curl using a fresh bearer token and verify it round-trips.
-4. **Web app:** merge Phases 6–10. Verify in dev UI that all three use cases from Phase 11 work end-to-end.
-5. **Promote to prod** in the same order (backend → BFF → web app) only after dev has soaked for 24h without errors in Sentry or Cloud Run logs.
-6. Update the Linear issue INT-1340 with a link to the merged PR and screenshots of the three use cases.
+3. **Web app:** merge Phases 4–10 (config, vite proxy, API service, hooks, pages, nav). Verify in dev UI that all three use cases from Phase 11 work end-to-end.
+4. **Promote to prod** in the same order (backend → web app) only after dev has soaked for 24h without errors in Sentry or Cloud Run logs.
+5. Update the Linear issue INT-1340 with a link to the merged PR and screenshots of the three use cases.
 
 ## Acceptance criteria
 
-- [ ] `POST /internal/usage/events/list` exists, accepts `{ timeRange, filters, sortBy, limit, cursor }`, returns `{ events, nextCursor, totalMatched }`, has ≥95% branch coverage.
-- [ ] `GET /internal/usage/events/:eventId` exists, returns full `UsageEvent` or 404.
+- [ ] `POST /llm-usage/events/list` exists on `llm-usage-service`, accepts `{ timeRange, filters, sortBy, limit, cursor }`, returns `{ events, nextCursor, totalMatched }`, secured with Auth0 bearer auth, has ≥95% branch coverage.
+- [ ] `GET /llm-usage/events/:eventId` exists on `llm-usage-service`, returns full `UsageEvent` or 404, secured with Auth0 bearer auth.
+- [ ] `POST /llm-usage/query` exists on `llm-usage-service` as the single (public) aggregate query endpoint; `POST /internal/usage/query` is removed.
 - [ ] Firestore composite indexes for the seven filter+sort combinations in Phase 3 exist in `migrations/086_*.mjs` and are deployed to dev.
-- [ ] `UsageServiceClient.listEvents` and `UsageServiceClient.getEvent` are exported and tested with nock.
-- [ ] `app-settings-service` proxies `POST /settings/llm-usage/events`, `GET /settings/llm-usage/events/:eventId`, `POST /settings/llm-usage/query` to `llm-usage-service` via the internal client.
 - [ ] The web app has a new top-level "LLM Usage" nav section with an "Events" sub-item.
 - [ ] `/#/llm-usage` renders the list page with four filter strips (provider, component, service, model), a time-range picker, a group-by selector, and a sort selector.
 - [ ] The list page persists filter/sort/groupBy/timeRange choices to localStorage under `llm-usage-*` keys.
 - [ ] `/#/llm-usage/{eventId}` renders the detail page with cards for request, usage, cost, source+owner, correlation, error, and raw JSON.
 - [ ] Use cases 1, 2, and 3 from Phase 11 work end-to-end against real data in dev.
 - [ ] `pnpm run ci:tracked` passes green.
-- [ ] No existing endpoints change contract.
-- [ ] `INTEXURAOS_LLM_USAGE_SERVICE_URL` is declared in all three required locations.
+- [ ] No existing endpoints change contract (except removal of `POST /internal/usage/query` which is explicitly superseded).
+- [ ] `INTEXURAOS_LLM_USAGE_SERVICE_URL` is declared in all three required locations for the **web app** (not app-settings-service).
+- [ ] `apps/web/src/config.ts` has `llmUsageServiceUrl` and `vite.config.ts` has a proxy entry for `/api/llm-usage`.
 
 ## Risks
 
@@ -939,11 +914,11 @@ All three cases must work on the first deployment of this track. If any of them 
 
 3. **Index count explosion.** Every additional filter-sort combination needs its own composite index. Firestore caps at 200 composite indexes per project. We currently have ~85 migration files, each adding a few. **Mitigation:** Phase 3 limits indexes to single-filter + sort combinations. Multi-filter queries fall back to post-fetch in-memory filtering, which caps at `MAX_LIST_LIMIT` rows per Firestore read. Document this limitation clearly in the list use case.
 
-4. **BFF double-hop latency.** `web → app-settings-service → llm-usage-service → firestore` adds ~30ms over `web → llm-usage-service → firestore`. **Mitigation:** acceptable — matches the existing `/settings/pricing` and `/settings/usage-costs` patterns. Do not optimize prematurely.
+4. **Auth0 JWKS cold-start latency.** On llm-usage-service startup, the first request to a public route triggers JWKS key fetch. Subsequent requests use the cached keys. **Mitigation:** verify the Auth0 middleware has JWKS caching enabled (should already be the case on all other services); no additional work needed.
 
-5. **Schema drift between the stored `UsageEvent` and the client-side type mirror.** The internal client re-defines `UsageEventInput` to avoid cross-app imports. If the llm-usage-service team changes the schema without updating the mirror, the BFF will silently truncate fields. **Mitigation:** add a comment in `packages/internal-clients/src/usage-service/types.ts` pointing at the canonical source (`apps/llm-usage-service/src/domain/models/usageEvent.ts`) and a compile-time assertion via `satisfies` once the types are importable.
+5. **Schema drift between the stored `UsageEvent` and the web app type mirror.** `apps/web/src/types/llmUsage.ts` re-defines types to avoid cross-workspace imports. If the llm-usage-service team changes the schema without updating the mirror, the web app will silently truncate fields. **Mitigation:** add a comment in `apps/web/src/types/llmUsage.ts` pointing at the canonical source (`apps/llm-usage-service/src/domain/models/usageEvent.ts`).
 
-6. **Web app dev proxy assumes `/api/settings`.** The Vite proxy already routes `/api/settings` → port 8122. No change needed, but if a dev forgets to re-build `app-settings-service` after adding the new routes, they'll get 404s in dev. **Mitigation:** document in the PR description that `pnpm --filter app-settings-service build && pnpm dev` must be run in that order on first checkout.
+6. **Vite proxy for `/api/llm-usage` must point to the correct port.** If the port in `vite.config.ts` does not match the port llm-usage-service listens on in `ecosystem.config.cjs`, dev calls will return connection-refused errors. **Mitigation:** cross-check the port in `ecosystem.config.cjs` before writing the proxy entry; document in the PR description that `pnpm --filter llm-usage-service build && pnpm dev` must be run after checkout.
 
 7. **Composite index build time on a non-empty collection.** If `llm_usage_events` already has millions of docs in dev, building 7 new composite indexes can take 30+ minutes. **Mitigation:** run the migration at the start of the backend phase and proceed with web app work in parallel; don't block the PR on index builds.
 
@@ -954,7 +929,7 @@ All three cases must work on the first deployment of this track. If any of them 
 - **Real-time updates / SSE / websockets** — the list page polls every 30s on tab focus, like `CodeTasksPage`. No live stream.
 - **Per-user quota views** — the detail page shows cost but does not compare against a quota.
 - **Export to CSV / JSON** — a "copy raw JSON" button on the detail page is the only export mechanism.
-- **User-scoping in the BFF** — `/settings/llm-usage/*` returns ALL events the caller requests, with no implicit `ownerId = currentUser` filter. This is a deliberate choice because the dashboard is admin-facing (there is only one admin user). If that changes, Track 4 (observability + access control) will add the scoping.
+- **User-scoping on public routes** — `POST /llm-usage/events/list` returns ALL events the caller requests, with no implicit `ownerId = currentUser` filter. This is a deliberate choice because the dashboard is admin-facing (there is only one admin user). If that changes, a future track will add the scoping at the route handler level.
 - **Custom index-aware query planner** — multi-filter queries fall back to post-fetch filtering. A future track can add a proper planner.
 - **Soft delete / archiving of events** — events are immutable once ingested. No archive UI.
 - **Editing pricing on the detail page** — Track 5 handles pricing surface area.
@@ -967,23 +942,24 @@ All three cases must work on the first deployment of this track. If any of them 
 
 ## Appendix A — Open decisions flagged in this plan
 
-All `⚠ DECISION NEEDED` markers:
+All `⚠ DECISION NEEDED` markers have been resolved by the decisions doc (`INT-1338-decisions.md`):
 
-1. **Phase 1:** whether to ship with `.count()` enabled by default on the list endpoint (recommended: yes).
-2. **Phase 3:** whether to index single-filter or multi-filter combinations (recommended: single-filter only, document the limit).
-3. **Phase 5:** the exact value of `INTEXURAOS_LLM_USAGE_SERVICE_URL` for dev — pull from the existing Terraform output or add one if missing.
+1. **Phase 1 / `.count()` default:** ship enabled by default (Decision #9).
+2. **Phase 3 / composite index scope:** single-filter + sort combinations only (Decision #10 — research exact requirements via context7 before writing migration).
+3. **Auth model:** Auth0 bearer on all public routes, no BFF (Decision #3).
+4. **Route prefix:** `/llm-usage/*` (Decision #17).
+5. **Internal query endpoint:** removed; only public `POST /llm-usage/query` exists (Decision #14).
 
 ## Appendix B — Files to be created (summary list)
 
 **Backend:**
+- `apps/llm-usage-service/src/routes/publicUsageRoutes.ts`
 - `apps/llm-usage-service/src/domain/usecases/listUsageEvents.ts`
+- `apps/llm-usage-service/src/__tests__/routes/publicUsageRoutes.test.ts`
 - `apps/llm-usage-service/src/__tests__/domain/usecases/listUsageEvents.test.ts`
 
 **Migrations:**
 - `migrations/086_llm-usage-events-list-indexes.mjs`
-
-**BFF:**
-- `apps/app-settings-service/src/__tests__/fakes/fakeUsageServiceClient.ts`
 
 **Web app:**
 - `apps/web/src/pages/LlmUsagePage.tsx`
@@ -1003,21 +979,15 @@ All `⚠ DECISION NEEDED` markers:
 - `apps/web/src/types/llmUsage.ts`
 
 **Files to be modified (summary list):**
-- `apps/llm-usage-service/src/routes/internalUsageRoutes.ts`
+- `apps/llm-usage-service/src/routes/internalUsageRoutes.ts` (remove `POST /internal/usage/query`)
 - `apps/llm-usage-service/src/domain/repositories/usageEventRepository.ts`
 - `apps/llm-usage-service/src/infra/firestore/firestoreUsageEventRepository.ts`
 - `apps/llm-usage-service/src/domain/models/usageEvent.ts` (add MAX_LIST_LIMIT / DEFAULT_LIST_LIMIT)
-- `apps/llm-usage-service/src/__tests__/routes/internalUsageRoutes.test.ts`
 - `apps/llm-usage-service/src/__tests__/fakeUsageEventRepository.ts`
-- `packages/internal-clients/src/usage-service/client.ts`
-- `packages/internal-clients/src/usage-service/types.ts`
-- `packages/internal-clients/src/usage-service/__tests__/client.test.ts`
-- `apps/app-settings-service/src/services.ts`
-- `apps/app-settings-service/src/routes/publicRoutes.ts`
-- `apps/app-settings-service/src/index.ts` (REQUIRED_ENV)
-- `apps/app-settings-service/src/__tests__/routes/publicRoutes.test.ts`
+- `apps/web/src/config.ts` (add `llmUsageServiceUrl`)
 - `apps/web/src/App.tsx`
 - `apps/web/src/components/Sidebar.tsx`
 - `apps/web/src/pages/index.ts`
-- `terraform/environments/dev/main.tf`
-- `ecosystem.config.cjs`
+- `apps/web/vite.config.ts` (add `/api/llm-usage` proxy)
+- `terraform/environments/dev/main.tf` (add `INTEXURAOS_LLM_USAGE_SERVICE_URL` to web app env)
+- `ecosystem.config.cjs` (add `INTEXURAOS_LLM_USAGE_SERVICE_URL` to web app PM2 entry)
