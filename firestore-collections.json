@@ -248,6 +248,14 @@
       "owner": "hellscript-agent",
       "description": "User-level writing configuration with style instructions per category",
       "subcollections": ["writing_samples"]
+    },
+    "llm_usage_events": {
+      "owner": "llm-usage-service",
+      "description": "Raw LLM usage events with per-call token, cost, and correlation data"
+    },
+    "llm_usage_daily_aggregates": {
+      "owner": "llm-usage-service",
+      "description": "Daily aggregated LLM usage metrics by owner, service, provider, model, and operation"
     }
   }
 }

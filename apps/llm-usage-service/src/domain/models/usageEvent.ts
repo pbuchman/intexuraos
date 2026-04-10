@@ -1,3 +1,5 @@
+import type { LlmProvider } from '@intexuraos/llm-contract';
+
 /** UsageEvent - canonical stored event */
 export interface UsageEvent {
   schemaVersion: 1;
@@ -19,7 +21,7 @@ export interface UsageEvent {
   };
 
   request: {
-    provider: 'google' | 'openai' | 'anthropic' | 'perplexity' | 'openrouter';
+    provider: LlmProvider;
     model: string;
     operation:
       | 'research'

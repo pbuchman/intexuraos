@@ -4,7 +4,7 @@ export interface UsageQueryRequest {
     to: string;
   };
   filters?: {
-    ownerTypes?: Array<'user' | 'system'>;
+    ownerTypes?: ('user' | 'system')[];
     ownerIds?: string[];
     services?: string[];
     components?: string[];
