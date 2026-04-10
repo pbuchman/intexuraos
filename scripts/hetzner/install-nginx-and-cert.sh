@@ -60,6 +60,15 @@ if [[ $# -lt 1 ]]; then
 fi
 readonly EMAIL="$1"
 
+# ---- 0. Fix ownership of /opt/intexuraos after root git pull -------------
+# The caller likely ran `git pull` as root inside VNC to fetch this script,
+# which leaves new/modified files owned by root:root instead of deploy:deploy.
+# PM2 runs as deploy and reads files from /opt/intexuraos, so anything it
+# needs to write (pm2 logs, .pm2 state) has to stay deploy-owned. Restore
+# ownership across the tree — cheap to run even if nothing changed.
+log "[0/6] Restoring /opt/intexuraos ownership to deploy:deploy"
+chown -R deploy:deploy /opt/intexuraos
+
 # ---- 1. Extract Cloudflare DNS API token from .env.prod ------------------
 log "[1/6] Reading INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN from $ENV_FILE"
 [[ -r "$ENV_FILE" ]] || fail "$ENV_FILE not readable"
