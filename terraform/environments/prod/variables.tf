@@ -40,15 +40,6 @@ variable "deploy_ssh_public_key" {
   }
 }
 
-variable "admin_ssh_source_ips" {
-  description = "Source IPs allowed to SSH (port 22) to the VM"
-  type        = list(string)
-  validation {
-    condition     = alltrue([for ip in var.admin_ssh_source_ips : !contains(["0.0.0.0/0", "::/0"], ip)])
-    error_message = "admin_ssh_source_ips must not include 0.0.0.0/0 or ::/0 — SSH must be IP-restricted."
-  }
-}
-
 variable "domain" {
   description = "Public domain for prod"
   type        = string

@@ -9,9 +9,9 @@ project_id = "intexuraos-dev-pbuchman"
 # Example: "ssh-ed25519 AAAA... intexuraos-hetzner-deploy"
 deploy_ssh_public_key = "ssh-ed25519 AAAA... intexuraos-hetzner-deploy"
 
-# Source IPs allowed to SSH. Use CIDR notation.
-# Discover your public IP: curl -s https://ifconfig.me
-# Example: your home IP + office IP
-admin_ssh_source_ips = [
-  "203.0.113.42/32",
-]
+# NOTE: SSH (port 22) is open to the world in the firewall.
+# Security relies on:
+#   - SSH key-only auth (PasswordAuthentication no)
+#   - AllowUsers deploy (only the deploy user can log in)
+#   - AuthenticationMethods publickey (no other methods accepted)
+# See scripts/hetzner/provision.sh for the hardened sshd_config.
