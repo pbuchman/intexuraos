@@ -18,6 +18,12 @@ export interface UsageEvent {
     component: string;
     client: string;
     environment: 'dev' | 'prod' | 'test';
+    /**
+     * Physical location identifier of the orchestrator that produced this event
+     * (e.g. 'home-dev', 'mac-dev', 'office-pc'). Required at the webhook endpoint
+     * (enforced by OrchestratorUsageEventInput schema); optional on the internal endpoint.
+     */
+    workerLocation?: string;
   };
 
   request: {
