@@ -55,6 +55,13 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
   jq
 
 log "[3/10] Install Node ${NODE_VERSION} via fnm"
+# FNM_DIR controls where fnm stores installed Node versions. Without this,
+# fnm defaults to $HOME/.local/share/fnm = /root/.local/share/fnm when run
+# as root, which is mode 700 and unreachable by the deploy user. Forcing
+# /opt/fnm co-locates the fnm binary and its data under a world-readable
+# path (chmod a+rX below makes traversal explicit).
+export FNM_DIR="/opt/fnm"
+
 if [[ ! -x /opt/fnm/fnm ]]; then
   curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir /opt/fnm --skip-shell
 fi
@@ -72,6 +79,14 @@ fi
 NODE_DIR="$(dirname "$NODE_BIN")"
 log "    node installed at $NODE_BIN"
 
+# Sanity check: node path must live under /opt/fnm — if it landed anywhere
+# under /root the deploy user cannot traverse to it. Fail loudly rather
+# than create dangling symlinks.
+case "$NODE_BIN" in
+  /opt/fnm/*) ;;
+  *) fail "node installed outside /opt/fnm ($NODE_BIN) — check FNM_DIR export above" ;;
+esac
+
 # Symlink node, npm, npx into /usr/local/bin for system-wide PATH
 for binname in node npm npx; do
   ln -sf "$NODE_DIR/$binname" "/usr/local/bin/$binname"
@@ -88,6 +103,13 @@ for binname in pnpm pm2; do
     fail "$binname not found at $NODE_DIR/$binname after npm install -g"
   fi
 done
+
+# Make the entire fnm tree world-readable/traversable so deploy can exec
+# node via the /usr/local/bin symlinks. /opt itself is already 755 on
+# Ubuntu, but fnm's subdirs are created 755 by default for files and 700
+# for some intermediate dirs — `a+rX` adds read to files and exec-if-dir
+# without touching existing perms on regular files.
+chmod -R a+rX /opt/fnm
 
 log "[5/10] Install lua-resty-openidc (JWT verification)"
 # lua-resty-openidc pulls in lua-resty-jwt, lua-resty-http, lua-resty-session,
@@ -129,7 +151,26 @@ install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 700 "/home/$DEPLOY_USER/.ssh"
 install -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 600 \
   /root/.ssh/authorized_keys "/home/$DEPLOY_USER/.ssh/authorized_keys"
 
-log "[8/10] Harden sshd + pre-reload and post-reload assertions"
+log "[8/10] Configure ufw (defense in depth behind hcloud_firewall)"
+ufw --force reset
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow 22/tcp  comment 'SSH'
+ufw allow 80/tcp  comment 'HTTP'
+ufw allow 443/tcp comment 'HTTPS'
+ufw --force enable
+
+log "[9/10] Setup PM2 startup for deploy user"
+# Running pm2 startup as root with -u / --hp installs the systemd unit
+# directly (no stdout-to-bash piping needed).
+env PATH="/usr/local/bin:$PATH" pm2 startup systemd -u "$DEPLOY_USER" --hp "/home/$DEPLOY_USER"
+
+log "[10/10] Harden sshd + pre-reload and post-reload assertions"
+# NOTE: sshd hardening is intentionally the LAST step. Every earlier step
+# needs full root over SSH; this step flips root login off. If it were run
+# before ufw/pm2-startup, a failure partway through would leave the VM
+# locked down with no way to finish provisioning short of a script re-run
+# from the root session still in flight.
 
 # --- PRE-RELOAD ASSERTION ---
 # Refuse to reload sshd unless the deploy user's authorized_keys is usable.
@@ -194,16 +235,17 @@ chmod 644 /etc/ssh/sshd_config.d/00-intexuraos-hardening.conf
 # Fails fast on typos — the current session stays alive.
 sshd -t || fail "sshd -t syntax check failed"
 
-# Reload sshd. Established connections survive; only new connections pick
-# up the new policy.
-if systemctl list-units --type=service --all | grep -qE '^\s*ssh\.service'; then
-  systemctl reload ssh
-else
-  systemctl reload sshd
+# Reload sshd. Ubuntu 24.04 uses `ssh.service` as the unit name; older
+# distros use `sshd.service`. Try both. Established connections survive
+# the reload; only new connections pick up the new policy.
+if ! systemctl reload ssh 2>/dev/null; then
+  systemctl reload sshd || fail "failed to reload sshd via either ssh.service or sshd.service"
 fi
 
 # --- POST-RELOAD VERIFICATION ---
-# `sshd -T` prints the fully resolved effective config. This catches:
+# `sshd -T` prints the fully resolved effective config (re-parsed from
+# files — not the running daemon's live state, but equivalent after a
+# successful reload). This catches:
 #   - typos that sshd -t accepted (e.g., `AllowUser deploy` singular)
 #   - other drop-ins overriding ours (cloud-init 50-cloud-init.conf)
 #   - precedence surprises from the main sshd_config
@@ -225,20 +267,6 @@ log "    sshd is hardened and effective — root login is now blocked"
 # Enable fail2ban (default jail includes sshd)
 systemctl enable fail2ban
 systemctl restart fail2ban
-
-log "[9/10] Configure ufw (defense in depth behind hcloud_firewall)"
-ufw --force reset
-ufw default deny incoming
-ufw default allow outgoing
-ufw allow 22/tcp  comment 'SSH'
-ufw allow 80/tcp  comment 'HTTP'
-ufw allow 443/tcp comment 'HTTPS'
-ufw --force enable
-
-log "[10/10] Setup PM2 startup for deploy user"
-# Running pm2 startup as root with -u / --hp installs the systemd unit
-# directly (no stdout-to-bash piping needed).
-env PATH="/usr/local/bin:$PATH" pm2 startup systemd -u "$DEPLOY_USER" --hp "/home/$DEPLOY_USER"
 
 log "Provisioning complete"
 printf '\n'
