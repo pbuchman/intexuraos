@@ -82,6 +82,107 @@ describe('internalUsageRoutes', () => {
 
       expect(response.statusCode).toBe(400);
     });
+
+    it('rejects events missing source.environment', async () => {
+      const validEvent = createTestEventInput({ eventId: 'evt_missing_env' });
+      const { environment: _omitted, ...sourceWithoutEnv } = validEvent.source;
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/events',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: {
+          schemaVersion: 1,
+          events: [{ ...validEvent, source: sourceWithoutEnv }],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: {
+          code: string;
+          message: string;
+          details?: { errors?: { path: string; message: string }[] };
+        };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      const errors = body.error.details?.errors ?? [];
+      expect(
+        errors.some((e) => e.path.includes('source/environment') || e.path.includes('environment') || e.path.endsWith('source'))
+      ).toBe(true);
+      expect(eventRepo.getStoredEvents()).toHaveLength(0);
+    });
+
+    it('rejects events with invalid source.environment enum value', async () => {
+      const validEvent = createTestEventInput({ eventId: 'evt_bad_env' });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/events',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: {
+          schemaVersion: 1,
+          events: [{
+            ...validEvent,
+            source: { ...validEvent.source, environment: 'staging' },
+          }],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; details?: { errors?: { path: string }[] } };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(eventRepo.getStoredEvents()).toHaveLength(0);
+    });
+
+    it('rejects events with unknown top-level field (additionalProperties: false)', async () => {
+      const validEvent = createTestEventInput({ eventId: 'evt_bogus' });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/events',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: {
+          schemaVersion: 1,
+          events: [{ ...validEvent, bogus: 1 }],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(eventRepo.getStoredEvents()).toHaveLength(0);
+    });
+
+    it('rejects entire batch when any single event is malformed (full-batch rejection)', async () => {
+      const validEvent1 = createTestEventInput({ eventId: 'evt_batch_1' });
+      const validEvent3 = createTestEventInput({ eventId: 'evt_batch_3' });
+      const malformedEvent = {
+        ...validEvent1,
+        eventId: 'evt_batch_2_bad',
+        usage: { ...validEvent1.usage, inputTokens: -5 },
+      };
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/events',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: {
+          schemaVersion: 1,
+          events: [validEvent1, malformedEvent, validEvent3],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      // Full-batch rejection: zero events persisted even though events[0] and events[2] were valid
+      expect(eventRepo.getStoredEvents()).toHaveLength(0);
+    });
   });
 
   describe('POST /internal/usage/query', () => {

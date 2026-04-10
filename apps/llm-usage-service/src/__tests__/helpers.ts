@@ -15,6 +15,7 @@ export function createTestEventInput(overrides?: Partial<UsageEventInput>): Usag
       component: 'research',
       client: 'web',
       environment: 'dev',
+      workerLocation: 'home-dev',
     },
     request: {
       provider: LlmProviders.Anthropic,
