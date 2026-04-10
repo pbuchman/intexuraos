@@ -28,3 +28,11 @@ export {
   FakePricingContext,
   createFakePricingContext,
 } from './testFixtures.js';
+export {
+  HttpWebhookUsageSink,
+  type HttpWebhookUsageSinkConfig,
+} from './httpWebhookUsageSink.js';
+export {
+  HttpInternalAuthUsageSink,
+  type HttpInternalAuthUsageSinkConfig,
+} from './httpInternalAuthUsageSink.js';
