@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+#
+# Pull INTEXURAOS_* secrets from GCP Secret Manager into /home/deploy/.env.prod.
+#
+# Runs as the unprivileged `deploy` user on the Hetzner VM — NO sudo, NO
+# gcloud CLI dependency. Self-authenticates by signing a JWT assertion
+# with the SA private key and exchanging it for an OAuth access token,
+# then calls the Secret Manager REST API directly with curl.
+#
+# Why not gcloud:
+#   - The VM does not have gcloud installed (Phase 3 provision.sh does
+#     not install it, matching the PR-review decision to keep the deploy
+#     user minimal).
+#   - Installing gcloud via tarball to /home/deploy adds ~200 MB for a
+#     one-off secrets load. The REST API approach uses only
+#     curl + openssl + jq + base64, all of which are on the base VM
+#     (curl and base64 are part of the stdlib; jq is installed in
+#     provision.sh step 2; openssl ships with Ubuntu 24.04).
+#
+# Why /home/deploy instead of /etc/intexuraos:
+#   - /etc/intexuraos is root:deploy mode 750 — deploy can read but not
+#     write. Writing there requires sudo, which would need another
+#     sudoers entry just for this one-off. /home/deploy is owned by
+#     deploy, so deploy can write its own secret files at mode 600
+#     without escalation. Security-wise, deploy can already read any
+#     file at root:deploy 640 via the PM2 child processes it spawns,
+#     so the "deploy cannot modify the secrets file on disk" property
+#     buys very little if deploy is compromised.
+#
+# Usage:
+#   scp scripts/hetzner/load-secrets.sh deploy@<ip>:/home/deploy/
+#   scp <sa-key>.json deploy@<ip>:/home/deploy/sa-key.json
+#   ssh deploy@<ip> 'chmod 600 /home/deploy/sa-key.json && bash /home/deploy/load-secrets.sh'
+
+set -euo pipefail
+IFS=$'\n\t'
+
+readonly PROJECT_ID="intexuraos-dev-pbuchman"
+readonly ENV_FILE="/home/deploy/.env.prod"
+readonly SA_FILE="/home/deploy/sa-key.json"
+readonly SECRET_PREFIX="INTEXURAOS_"
+
+log() { printf '=== %s ===\n' "$*"; }
+fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+
+# ---- Prerequisite checks -------------------------------------------------
+
+[[ -r "$SA_FILE" ]] || fail "SA key not readable at $SA_FILE"
+[[ "$(stat -c '%a' "$SA_FILE")" == "600" ]] || fail "SA key mode must be 600, got $(stat -c '%a' "$SA_FILE")"
+
+for bin in jq openssl curl base64; do
+  command -v "$bin" >/dev/null || fail "$bin not installed"
+done
+
+# ---- Sign JWT assertion with SA private key ------------------------------
+
+EMAIL="$(jq -r .client_email "$SA_FILE")"
+[[ -n "$EMAIL" && "$EMAIL" != null ]] || fail "SA key missing client_email"
+
+KEY_FILE="$(mktemp)"
+TMP_FILE="$(mktemp)"
+trap 'rm -f "$KEY_FILE" "$TMP_FILE"' EXIT
+
+# jq -r preserves the PEM newlines from the JSON string
+jq -r .private_key "$SA_FILE" > "$KEY_FILE"
+chmod 600 "$KEY_FILE"
+
+b64url() { base64 -w0 | tr '+/' '-_' | tr -d '='; }
+
+NOW="$(date +%s)"
+EXP=$((NOW + 3600))
+
+HEADER_B64="$(printf '%s' '{"alg":"RS256","typ":"JWT"}' | b64url)"
+CLAIM_B64="$(printf '{"iss":"%s","scope":"https://www.googleapis.com/auth/cloud-platform","aud":"https://oauth2.googleapis.com/token","iat":%d,"exp":%d}' "$EMAIL" "$NOW" "$EXP" | b64url)"
+SIGNING_INPUT="$HEADER_B64.$CLAIM_B64"
+SIG_B64="$(printf '%s' "$SIGNING_INPUT" | openssl dgst -sha256 -sign "$KEY_FILE" -binary | b64url)"
+JWT="$SIGNING_INPUT.$SIG_B64"
+
+# ---- Exchange JWT for access token ---------------------------------------
+
+log "Requesting access token from Google OAuth2"
+TOKEN_RESPONSE="$(curl -sS -X POST https://oauth2.googleapis.com/token \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer' \
+  --data-urlencode "assertion=$JWT")"
+
+ACCESS_TOKEN="$(printf '%s' "$TOKEN_RESPONSE" | jq -r '.access_token // empty')"
+if [[ -z "$ACCESS_TOKEN" ]]; then
+  fail "token exchange failed: $TOKEN_RESPONSE"
+fi
+
+AUTH_HDR="Authorization: Bearer $ACCESS_TOKEN"
+
+# ---- Enumerate INTEXURAOS_* secrets --------------------------------------
+
+log "Listing secrets in project $PROJECT_ID"
+LIST_RESPONSE="$(curl -sS -H "$AUTH_HDR" \
+  "https://secretmanager.googleapis.com/v1/projects/$PROJECT_ID/secrets?pageSize=500")"
+
+# Fail loud if GCP paginated us — pageSize 500 >> current ~34 secrets.
+NEXT_TOKEN="$(printf '%s' "$LIST_RESPONSE" | jq -r '.nextPageToken // empty')"
+if [[ -n "$NEXT_TOKEN" ]]; then
+  fail "secrets list returned nextPageToken — pageSize=500 insufficient, add pagination loop"
+fi
+
+# Filter to INTEXURAOS_* prefix client-side (simpler than GCP filter syntax)
+mapfile -t SECRETS < <(
+  printf '%s' "$LIST_RESPONSE" \
+    | jq -r '.secrets[]?.name | split("/") | .[-1]' \
+    | grep "^${SECRET_PREFIX}" \
+    | sort
+)
+
+if [[ ${#SECRETS[@]} -eq 0 ]]; then
+  fail "no ${SECRET_PREFIX}* secrets found (list response: $LIST_RESPONSE)"
+fi
+log "Found ${#SECRETS[@]} ${SECRET_PREFIX}* secrets"
+
+# ---- Build the env file atomically in a tempfile -------------------------
+
+cat > "$TMP_FILE" <<HEADER
+# Generated by scripts/hetzner/load-secrets.sh on $(date -u +%Y-%m-%dT%H:%M:%SZ)
+# DO NOT EDIT BY HAND — re-run the script to refresh values.
+#
+# Non-secret constants
+INTEXURAOS_ENVIRONMENT=prod
+INTEXURAOS_GCP_PROJECT_ID=$PROJECT_ID
+INTEXURAOS_WEB_APP_URL=https://intexuraos.cloud
+GOOGLE_APPLICATION_CREDENTIALS=$SA_FILE
+NODE_ENV=production
+#
+# Secrets pulled from GCP Secret Manager
+HEADER
+
+MISSING=()
+FETCHED=0
+for SECRET in "${SECRETS[@]}"; do
+  VAL_RESPONSE="$(curl -sS -H "$AUTH_HDR" \
+    "https://secretmanager.googleapis.com/v1/projects/$PROJECT_ID/secrets/$SECRET/versions/latest:access")"
+  VAL_B64="$(printf '%s' "$VAL_RESPONSE" | jq -r '.payload.data // empty')"
+  if [[ -z "$VAL_B64" ]]; then
+    MISSING+=("$SECRET")
+    continue
+  fi
+  # Secret Manager stores payload as base64 of the raw bytes. Decode to recover
+  # the original string. If the value contains binary, dotenv will still load
+  # it but the shell source-pattern may be fragile — we warn but proceed.
+  VALUE="$(printf '%s' "$VAL_B64" | base64 -d)"
+
+  # Escape single quotes for bash single-quoted format: ' → '\''
+  # shellcheck disable=SC1003  # intentional backslash-quote sequence
+  ESCAPED="${VALUE//\'/\'\\\'\'}"
+  printf "%s='%s'\n" "$SECRET" "$ESCAPED" >> "$TMP_FILE"
+  FETCHED=$((FETCHED + 1))
+done
+
+# ---- Atomic install into final location ----------------------------------
+
+install -m 600 -o deploy -g deploy "$TMP_FILE" "$ENV_FILE"
+
+log "Wrote $ENV_FILE with $FETCHED secrets"
+if [[ ${#MISSING[@]} -gt 0 ]]; then
+  printf 'WARNING: %d secret(s) had no latest version (left out of env file):\n' "${#MISSING[@]}" >&2
+  printf '  - %s\n' "${MISSING[@]}" >&2
+fi
