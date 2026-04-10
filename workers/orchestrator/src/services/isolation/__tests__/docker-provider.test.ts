@@ -640,10 +640,9 @@ describe('DockerProvider', () => {
       const runAttemptCall = execCalls.find(
         (call) => (call[0]?.Cmd as string[] | undefined)?.join(' ') === '/entrypoint.sh run-attempt'
       );
-      if (runAttemptCall !== undefined) {
-        const env = runAttemptCall[0]?.Env as string[];
-        expect(env.some((e) => e.startsWith('CLAUDE_SESSION_ID='))).toBe(false);
-      }
+      expect(runAttemptCall).toBeDefined();
+      const env = (runAttemptCall ?? [])[0]?.Env as string[];
+      expect(env.some((e) => e.startsWith('CLAUDE_SESSION_ID='))).toBe(false);
     });
 
     it('does not set CLAUDE_CODE_EXIT_AFTER_STOP_DELAY env var', async () => {
