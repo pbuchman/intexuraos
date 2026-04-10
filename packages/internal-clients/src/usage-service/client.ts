@@ -41,6 +41,13 @@ export function createUsageServiceClient(config: UsageServiceConfig): UsageServi
       return ok(result.value.data);
     },
 
+    /**
+     * Query aggregated usage data via `POST /llm-usage/query`.
+     *
+     * **Auth caveat:** This route requires an Auth0 bearer token (`requireAuth`),
+     * not `X-Internal-Auth`. These methods are intended for web-app consumption
+     * and are NOT usable from backend service-to-service contexts.
+     */
     async queryUsage(
       request: UsageQueryRequest,
       options?: { traceId?: string }
@@ -61,6 +68,13 @@ export function createUsageServiceClient(config: UsageServiceConfig): UsageServi
       return ok(result.value.data);
     },
 
+    /**
+     * List usage events via `POST /llm-usage/events/list`.
+     *
+     * **Auth caveat:** This route requires an Auth0 bearer token (`requireAuth`),
+     * not `X-Internal-Auth`. These methods are intended for web-app consumption
+     * and are NOT usable from backend service-to-service contexts.
+     */
     async listUsageEvents(
       request: UsageListEventsRequest,
       options?: { traceId?: string }
@@ -81,6 +95,13 @@ export function createUsageServiceClient(config: UsageServiceConfig): UsageServi
       return ok(result.value.data);
     },
 
+    /**
+     * Get a single usage event via `GET /llm-usage/events/:eventId`.
+     *
+     * **Auth caveat:** This route requires an Auth0 bearer token (`requireAuth`),
+     * not `X-Internal-Auth`. These methods are intended for web-app consumption
+     * and are NOT usable from backend service-to-service contexts.
+     */
     async getUsageEvent(
       eventId: string,
       options?: { traceId?: string }

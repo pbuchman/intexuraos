@@ -129,7 +129,7 @@ export class FirestoreUsageEventRepository implements UsageEventRepository {
 
       if (hasMore && events.length > 0) {
         const lastEvent = events[events.length - 1];
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — .length > 0 guarantees defined @preserve */
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess: FakeUsageEventRepository slice always has length = limit, so the undefined branch is structurally unreachable in tests @preserve */
         if (lastEvent !== undefined) {
           /* v8 ignore stop @preserve */
           const lastSortValue = getFirestoreSortValue(lastEvent, domainSortField);

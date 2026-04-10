@@ -1,9 +1,9 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth, logIncomingRequest } from '@intexuraos/common-http';
-import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { getServices } from '../services.js';
 import { listUsageEvents } from '../domain/usecases/listUsageEvents.js';
 import type { ListUsageEventsRequest } from '../domain/usecases/listUsageEvents.js';
+import { getUsageEvent } from '../domain/usecases/getUsageEvent.js';
 import { queryUsage } from '../domain/usecases/queryUsage.js';
 import type { UsageQueryRequest } from '../domain/models/usageQuery.js';
 
@@ -190,23 +190,20 @@ export const publicUsageRoutes: FastifyPluginCallback = (app, _opts, done) => {
       const { eventId } = request.params as { eventId: string };
       const { usageEventRepository } = getServices();
 
-      try {
-        const result = await usageEventRepository.getById(eventId);
+      const result = await getUsageEvent(
+        { logger: request.log, usageEventRepository },
+        eventId,
+      );
 
-        if (!result.ok) {
-          request.log.error({ eventId, error: result.error }, 'Failed to fetch usage event');
-          return await reply.fail('INTERNAL_ERROR', 'Failed to fetch usage event');
-        }
-
-        if (result.value === null) {
-          return await reply.fail('NOT_FOUND', `Usage event ${eventId} not found`);
-        }
-
-        return await reply.ok({ event: result.value });
-      } catch (error) {
-        request.log.error({ eventId, error: getErrorMessage(error) }, 'Unexpected error fetching usage event');
+      if (!result.ok) {
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch usage event');
       }
+
+      if (result.value === null) {
+        return await reply.fail('NOT_FOUND', `Usage event ${eventId} not found`);
+      }
+
+      return await reply.ok({ event: result.value });
     },
   );
 
