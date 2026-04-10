@@ -2071,9 +2071,7 @@ export class TaskDispatcher {
     if (params.continueSession && task.runtimeSessionId === undefined) {
       return {
         ok: false,
-        error: new Error(
-          `${runtimeName} resume requires a persisted runtime session ID`
-        ),
+        error: new Error(`${runtimeName} resume requires a persisted runtime session ID`),
       };
     }
     this.appendOrchestratorTaskLog(

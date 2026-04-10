@@ -2256,7 +2256,7 @@ describe('TaskDispatcher', () => {
       const internal = agentDispatcher as unknown as {
         buildResultFromVerification: (
           task: Task,
-          gitResult: TaskResult | undefined,
+          gitResult: TaskResult | undefined, // @allow-undefined-type -- function parameter type in as-cast block cannot use ?: syntax
           verification: CompletionVerifierVerdict
         ) => TaskResult;
       };
@@ -8333,14 +8333,19 @@ describe('TaskDispatcher', () => {
       }
     });
 
-    it('marks a recovered task as failed when fallback startup fails after acceptance', async () => {
+    it('marks a recovered task as failed when resume guard rejects missing runtimeSessionId', async () => {
+      // NOTE: Dispatch-metadata recovery does not currently propagate
+      // runtimeSessionId — DispatchMetadataSchema in dispatch-metadata-client.ts
+      // doesn't include it and tryRecoverMissingTask doesn't set it. So every
+      // recovered task hits the universal resume guard at
+      // task-dispatcher.ts:2071 (widened by 95eb9a64c) and is failed via
+      // failAcceptedResume with RESUME_ATTEMPT_FAILED. See INT-1334 for the
+      // follow-up that restores end-to-end recovery by carrying session ids
+      // through the metadata contract.
       vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
         createDispatchMetadataResponse({
           taskId: 'failing-fallback-task',
         })
-      );
-      vi.mocked(mockIsolationProvider.createWorker).mockRejectedValueOnce(
-        new Error('container startup failed')
       );
 
       const result = await dispatcher.sendMessage('failing-fallback-task', 'Hello');
@@ -9334,6 +9339,14 @@ describe('TaskDispatcher', () => {
   });
 
   describe('inactivity timeout restart', () => {
+    // Defensive: every test in this block uses vi.useFakeTimers(). If a test
+    // fails mid-flight, its trailing vi.useRealTimers() is skipped and fake
+    // timer state leaks into subsequent tests in the file. This local
+    // afterEach guarantees the timer lifecycle resets even on failure.
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('triggers restart after 10 minutes of no output', async () => {
       vi.useFakeTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
@@ -9366,6 +9379,18 @@ describe('TaskDispatcher', () => {
 
       await inactivityDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
+
+      // Seed runtimeSessionId so the universal resume guard at
+      // task-dispatcher.ts:2071 accepts the inactivity-restart call with
+      // continueSession: true. Production equivalent: entrypoint.sh captures
+      // the session id on first run.
+      {
+        const state = await inactivityState.load();
+        const task = state.tasks['inactivity-restart-test'];
+        if (!task) throw new Error('Task not found');
+        task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
+        await inactivityState.save(state);
+      }
 
       // Advance 10 minutes — inactivity timeout fires
       await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
@@ -9482,6 +9507,18 @@ describe('TaskDispatcher', () => {
       await maxRestartDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
 
+      // Seed runtimeSessionId so the universal resume guard at
+      // task-dispatcher.ts:2071 accepts the inactivity-restart call with
+      // continueSession: true. Production equivalent: entrypoint.sh captures
+      // the session id on first run.
+      {
+        const state = await maxRestartState.load();
+        const task = state.tasks['max-restart-test'];
+        if (!task) throw new Error('Task not found');
+        task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
+        await maxRestartState.save(state);
+      }
+
       // Advance through 3 restart cycles (10 min each)
       for (let i = 0; i < 3; i++) {
         await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
@@ -9545,6 +9582,18 @@ describe('TaskDispatcher', () => {
       await attemptDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
 
+      // Seed runtimeSessionId so the universal resume guard at
+      // task-dispatcher.ts:2071 accepts the inactivity-restart call with
+      // continueSession: true. Production equivalent: entrypoint.sh captures
+      // the session id on first run.
+      {
+        const state = await attemptState.load();
+        const task = state.tasks['attempt-count-test'];
+        if (!task) throw new Error('Task not found');
+        task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
+        await attemptState.save(state);
+      }
+
       const beforeTask = await attemptDispatcher.getTask('attempt-count-test');
       expect(beforeTask?.attemptCount).toBe(1);
 
@@ -9593,6 +9642,18 @@ describe('TaskDispatcher', () => {
 
       await resetDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
+
+      // Seed runtimeSessionId so the universal resume guard at
+      // task-dispatcher.ts:2071 accepts the inactivity-restart call with
+      // continueSession: true. Production equivalent: entrypoint.sh captures
+      // the session id on first run.
+      {
+        const state = await resetState.load();
+        const task = state.tasks['reset-counter-test'];
+        if (!task) throw new Error('Task not found');
+        task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
+        await resetState.save(state);
+      }
 
       // First inactivity restart (restart 1/2)
       await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
@@ -9831,6 +9892,18 @@ describe('TaskDispatcher', () => {
 
       await restartFailDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
+
+      // Seed runtimeSessionId so the universal resume guard at
+      // task-dispatcher.ts:2071 accepts the inactivity-restart call with
+      // continueSession: true, letting the mocked createWorker rejection
+      // below actually fire (this test's purpose).
+      {
+        const state = await restartFailState.load();
+        const task = state.tasks['restart-fail-test'];
+        if (!task) throw new Error('Task not found');
+        task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
+        await restartFailState.save(state);
+      }
 
       // Make createWorker reject on the next call (the restart attempt)
       vi.mocked(mockIsolationProvider.createWorker).mockRejectedValueOnce(
