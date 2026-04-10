@@ -4,7 +4,7 @@
 # Usage:
 #   bash scripts/verify-service-scaffolding.sh <service-name>
 #
-# Maps 1:1 to the "App Requirements Checklist" in .claude/commands/create-service.md.
+# Maps 1:1 to the "App Scaffolding Verification" in .claude/commands/create-service.md.
 # Exits non-zero if any required item is missing.
 #
 # Checks are HARD (must pass) or SOFT (warn only, e.g. api-docs-hub registration
@@ -31,10 +31,17 @@ FAIL=0
 WARN=0
 PASS=0
 
-red()   { printf '\033[31m%s\033[0m' "$1"; }
-green() { printf '\033[32m%s\033[0m' "$1"; }
-yellow(){ printf '\033[33m%s\033[0m' "$1"; }
-dim()   { printf '\033[2m%s\033[0m' "$1"; }
+if [[ -t 1 ]] && [[ "${NO_COLOR:-}" == "" ]]; then
+  red()   { printf '\033[31m%s\033[0m' "$1"; }
+  green() { printf '\033[32m%s\033[0m' "$1"; }
+  yellow(){ printf '\033[33m%s\033[0m' "$1"; }
+  dim()   { printf '\033[2m%s\033[0m' "$1"; }
+else
+  red()   { printf '%s' "$1"; }
+  green() { printf '%s' "$1"; }
+  yellow(){ printf '%s' "$1"; }
+  dim()   { printf '%s' "$1"; }
+fi
 
 check() {
   local label="$1"
@@ -141,7 +148,7 @@ check "module \"${SERVICE_SNAKE}\" block"                "$(grep_any "module \"$
 MODULE_USES_SECRETS=0
 if grep -qF "module \"${SERVICE_SNAKE}\"" "$DEV_TF" 2>/dev/null; then
   if awk -v mod="module \"${SERVICE_SNAKE}\"" '
-        $0 ~ mod {in_block=1; brace=0}
+        index($0, mod) > 0 {in_block=1; brace=0}
         in_block {
           for (i=1;i<=length($0);i++) {
             c=substr($0,i,1)
@@ -184,7 +191,7 @@ header ".github/workflows/deploy.yml (4 required places)"
 # Checklist lines 1006-1011:
 DEPLOY_YML=".github/workflows/deploy.yml"
 check "1/4 Docker build line"                            "$(grep_any "build-push-monitored.sh ${SERVICE} apps/${SERVICE}" "$DEPLOY_YML")"
-check "2/4 SERVICES array contains ${SERVICE}"           "$(grep_any " ${SERVICE} " "$DEPLOY_YML")"
+check "2/4 SERVICES array contains ${SERVICE}"           "$(grep -qE "(^|[[:space:]])${SERVICE}([[:space:]]|$)" "$DEPLOY_YML" && echo 1 || echo 0)"
 # CLOUD_RUN_SERVICES appears in 2 places in deploy.yml per checklist 1009/1010
 RUN_N="$(grep_count "\"${SERVICE}:${SERVICE_UPPER}\"" "$DEPLOY_YML")"
 check "3/4 + 4/4 CLOUD_RUN_SERVICES (2 entries)"         "$([[ "$RUN_N" -ge 2 ]] && echo 1 || echo 0)" \
