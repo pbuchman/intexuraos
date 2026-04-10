@@ -11,24 +11,43 @@ describe('cursor utilities', () => {
       expect(cursor).not.toMatch(/[+/=]/);
     });
 
-    it('encodes the correct JSON payload', () => {
+    it('encodes the correct JSON payload with a string sort value', () => {
       const cursor = encodeCursor('2026-04-10T12:00:00.000Z', 'evt_abc');
       const decoded = Buffer.from(cursor, 'base64url').toString('utf-8');
-      const parsed = JSON.parse(decoded) as { lastOccurredAt: string; lastEventId: string };
+      const parsed = JSON.parse(decoded) as { lastSortValue: string; lastEventId: string };
       expect(parsed).toEqual({
-        lastOccurredAt: '2026-04-10T12:00:00.000Z',
+        lastSortValue: '2026-04-10T12:00:00.000Z',
+        lastEventId: 'evt_abc',
+      });
+    });
+
+    it('encodes the correct JSON payload with a numeric sort value', () => {
+      const cursor = encodeCursor(0.0042, 'evt_abc');
+      const decoded = Buffer.from(cursor, 'base64url').toString('utf-8');
+      const parsed = JSON.parse(decoded) as { lastSortValue: number; lastEventId: string };
+      expect(parsed).toEqual({
+        lastSortValue: 0.0042,
         lastEventId: 'evt_abc',
       });
     });
   });
 
   describe('decodeCursor', () => {
-    it('decodes a valid cursor produced by encodeCursor', () => {
+    it('decodes a valid cursor with a string sort value', () => {
       const cursor = encodeCursor('2026-04-10T12:00:00.000Z', 'evt_456');
       const result = decodeCursor(cursor);
       expect(result).toEqual({
-        lastOccurredAt: '2026-04-10T12:00:00.000Z',
+        lastSortValue: '2026-04-10T12:00:00.000Z',
         lastEventId: 'evt_456',
+      });
+    });
+
+    it('decodes a valid cursor with a numeric sort value', () => {
+      const cursor = encodeCursor(1500, 'evt_789');
+      const result = decodeCursor(cursor);
+      expect(result).toEqual({
+        lastSortValue: 1500,
+        lastEventId: 'evt_789',
       });
     });
 
@@ -43,26 +62,26 @@ describe('cursor utilities', () => {
       expect(result).toBeNull();
     });
 
-    it('returns null when JSON is missing lastOccurredAt', () => {
+    it('returns null when JSON is missing lastSortValue', () => {
       const cursor = Buffer.from(JSON.stringify({ lastEventId: 'evt_1' })).toString('base64url');
       const result = decodeCursor(cursor);
       expect(result).toBeNull();
     });
 
     it('returns null when JSON is missing lastEventId', () => {
-      const cursor = Buffer.from(JSON.stringify({ lastOccurredAt: '2026-01-01T00:00:00Z' })).toString('base64url');
+      const cursor = Buffer.from(JSON.stringify({ lastSortValue: '2026-01-01T00:00:00Z' })).toString('base64url');
       const result = decodeCursor(cursor);
       expect(result).toBeNull();
     });
 
-    it('returns null when lastOccurredAt is not a string', () => {
-      const cursor = Buffer.from(JSON.stringify({ lastOccurredAt: 123, lastEventId: 'evt_1' })).toString('base64url');
+    it('returns null when lastSortValue is a boolean', () => {
+      const cursor = Buffer.from(JSON.stringify({ lastSortValue: true, lastEventId: 'evt_1' })).toString('base64url');
       const result = decodeCursor(cursor);
       expect(result).toBeNull();
     });
 
     it('returns null when lastEventId is not a string', () => {
-      const cursor = Buffer.from(JSON.stringify({ lastOccurredAt: '2026-01-01', lastEventId: 42 })).toString(
+      const cursor = Buffer.from(JSON.stringify({ lastSortValue: '2026-01-01', lastEventId: 42 })).toString(
         'base64url',
       );
       const result = decodeCursor(cursor);
@@ -81,13 +100,24 @@ describe('cursor utilities', () => {
       expect(result).toBeNull();
     });
 
-    it('roundtrips correctly with special characters', () => {
+    it('roundtrips correctly with string sort value and special characters', () => {
       const timestamp = '2026-12-31T23:59:59.999Z';
       const eventId = 'evt_special-chars_123/456';
       const cursor = encodeCursor(timestamp, eventId);
       const result = decodeCursor(cursor);
       expect(result).toEqual({
-        lastOccurredAt: timestamp,
+        lastSortValue: timestamp,
+        lastEventId: eventId,
+      });
+    });
+
+    it('roundtrips correctly with numeric sort value', () => {
+      const costUsd = 0.00325;
+      const eventId = 'evt_cost_001';
+      const cursor = encodeCursor(costUsd, eventId);
+      const result = decodeCursor(cursor);
+      expect(result).toEqual({
+        lastSortValue: costUsd,
         lastEventId: eventId,
       });
     });

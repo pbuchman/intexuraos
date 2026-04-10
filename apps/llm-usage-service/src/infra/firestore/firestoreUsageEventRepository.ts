@@ -84,7 +84,7 @@ export class FirestoreUsageEventRepository implements UsageEventRepository {
       if (params.cursor !== undefined) {
         const decoded = decodeCursor(params.cursor);
         if (decoded !== null) {
-          query = query.startAfter(decoded.lastOccurredAt, decoded.lastEventId);
+          query = query.startAfter(decoded.lastSortValue, decoded.lastEventId);
         }
       }
 
@@ -107,7 +107,8 @@ export class FirestoreUsageEventRepository implements UsageEventRepository {
       if (hasMore && events.length > 0) {
         const lastEvent = events[events.length - 1];
         if (lastEvent !== undefined) {
-          result.nextCursor = encodeCursor(lastEvent.occurredAt, lastEvent.eventId);
+          const lastSortValue = getFirestoreSortValue(lastEvent, sortField);
+          result.nextCursor = encodeCursor(lastSortValue, lastEvent.eventId);
         }
       }
 
@@ -139,6 +140,17 @@ export class FirestoreUsageEventRepository implements UsageEventRepository {
         message: firestoreError.message ?? 'Unknown Firestore error',
       });
     }
+  }
+}
+
+function getFirestoreSortValue(event: UsageEvent, firestoreField: string): string | number {
+  switch (firestoreField) {
+    case 'cost.billedUsd':
+      return event.cost.billedUsd;
+    case 'usage.totalTokens':
+      return event.usage.totalTokens;
+    default:
+      return event.occurredAt;
   }
 }
 

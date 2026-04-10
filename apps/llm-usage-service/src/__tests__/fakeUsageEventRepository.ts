@@ -104,7 +104,7 @@ export class FakeUsageEventRepository implements UsageEventRepository {
       if (decoded !== null) {
         const cursorIdx = filtered.findIndex((e) => {
           const val = getSortValue(e, sortField);
-          const cursorVal = decoded.lastOccurredAt;
+          const cursorVal = decoded.lastSortValue;
           if (sortDirection === 'desc') {
             return val < cursorVal || (val === cursorVal && e.eventId < decoded.lastEventId);
           }
@@ -130,7 +130,8 @@ export class FakeUsageEventRepository implements UsageEventRepository {
     if (hasMore && pageEvents.length > 0) {
       const lastEvent = pageEvents[pageEvents.length - 1];
       if (lastEvent !== undefined) {
-        result.nextCursor = encodeCursor(lastEvent.occurredAt, lastEvent.eventId);
+        const lastSortValue = getSortValue(lastEvent, sortField);
+        result.nextCursor = encodeCursor(lastSortValue, lastEvent.eventId);
       }
     }
 
