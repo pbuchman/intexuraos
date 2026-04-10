@@ -122,6 +122,7 @@ export interface CompletionVerifierConfig {
   geminiApiKey: string;
   auditLogPath: string;
   codeAgentUrl: string;
+  usageWebhookUrl: string;
   orchestratorSecret: string;
   internalAuthToken: string;
 }
@@ -811,7 +812,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         auditLogPath: config.auditLogPath,
       }),
       usageSink: new HttpWebhookUsageSink({
-        webhookUrl: `${config.codeAgentUrl}/internal/webhooks/usage-events`,
+        webhookUrl: config.usageWebhookUrl,
         webhookSecret: config.orchestratorSecret,
         internalAuthToken: config.internalAuthToken,
         service: 'orchestrator',

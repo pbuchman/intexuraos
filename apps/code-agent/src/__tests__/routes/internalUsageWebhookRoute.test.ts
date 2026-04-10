@@ -276,6 +276,40 @@ describe('POST /internal/webhooks/usage-events', () => {
   });
 
   // -----------------------------------------------------------------------
+  // Schema validation
+  // -----------------------------------------------------------------------
+
+  it('returns 400 when events contain malformed objects missing required fields', async () => {
+    const body = {
+      schemaVersion: 1,
+      events: [
+        {
+          // Missing all required fields — just an arbitrary object
+          foo: 'bar',
+        },
+      ],
+    };
+    const response = await sendUsageEvents(body);
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('returns 400 when event has invalid provider enum value', async () => {
+    const validPayload = buildValidPayload();
+    const events = (validPayload as { events: Record<string, unknown>[] }).events;
+    const firstEvent = events[0];
+    if (firstEvent !== undefined) {
+      (firstEvent as { request: Record<string, unknown> }).request = {
+        ...(firstEvent as { request: Record<string, unknown> }).request,
+        provider: 'invalid-provider',
+      };
+    }
+    const response = await sendUsageEvents(validPayload);
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  // -----------------------------------------------------------------------
   // Error path
   // -----------------------------------------------------------------------
 

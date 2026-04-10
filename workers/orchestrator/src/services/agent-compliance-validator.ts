@@ -258,6 +258,7 @@ export interface AgentComplianceValidatorConfig {
   pricing: ModelPricing;
   auditLogPath: string;
   codeAgentUrl: string;
+  usageWebhookUrl: string;
   orchestratorSecret: string;
   internalAuthToken: string;
 }
@@ -298,7 +299,7 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
       pricing: config.pricing,
       logger,
       usageSink: new HttpWebhookUsageSink({
-        webhookUrl: `${config.codeAgentUrl}/internal/webhooks/usage-events`,
+        webhookUrl: config.usageWebhookUrl,
         webhookSecret: config.orchestratorSecret,
         internalAuthToken: config.internalAuthToken,
         service: 'orchestrator',

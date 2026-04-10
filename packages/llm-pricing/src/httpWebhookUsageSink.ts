@@ -20,6 +20,8 @@ export interface HttpWebhookUsageSinkConfig {
   component: string;
   /** Logger for warning on delivery failures */
   logger: Logger;
+  /** Optional getter for task ID to populate correlation.taskId per request */
+  getCorrelationTaskId?: () => string | null;
 }
 
 /**
@@ -35,10 +37,15 @@ export class HttpWebhookUsageSink implements UsageSink {
   }
 
   async log(params: UsageLogParams): Promise<void> {
-    const event = buildUsageEvent(params, {
-      service: this.config.service,
-      component: this.config.component,
-    });
+    const taskId = this.config.getCorrelationTaskId?.() ?? null;
+    const event = buildUsageEvent(
+      params,
+      {
+        service: this.config.service,
+        component: this.config.component,
+      },
+      { taskId }
+    );
 
     const body = JSON.stringify({ schemaVersion: 1, events: [event] });
     const timestamp = Math.floor(Date.now() / 1000);

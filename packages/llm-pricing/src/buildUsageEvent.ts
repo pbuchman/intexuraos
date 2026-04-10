@@ -3,6 +3,17 @@ import type { UsageEventInput } from '@intexuraos/internal-clients';
 import type { UsageLogParams } from './usageLogger.js';
 
 /**
+ * Optional correlation overrides to populate task/session context in events.
+ * Sinks that have access to per-call context (e.g. task ID from orchestrator)
+ * pass these overrides to enrich event correlation fields.
+ */
+export interface CorrelationOverrides {
+  taskId?: string | null;
+  sessionId?: string | null;
+  requestId?: string | null;
+}
+
+/**
  * Shared helper that maps UsageLogParams to a UsageEventInput payload.
  * Used by both HttpWebhookUsageSink and HttpInternalAuthUsageSink to avoid duplication.
  *
@@ -10,7 +21,8 @@ import type { UsageLogParams } from './usageLogger.js';
  */
 export function buildUsageEvent(
   params: UsageLogParams,
-  source: { service: string; component: string }
+  source: { service: string; component: string },
+  correlationOverrides?: CorrelationOverrides
 ): UsageEventInput {
   const environment: 'dev' | 'prod' = process.env['NODE_ENV'] === 'production' ? 'prod' : 'dev';
 
@@ -51,15 +63,13 @@ export function buildUsageEvent(
       calculatedUsd: params.usage.costUsd,
       pricingSource: 'calculated',
     },
-    // Correlation IDs are not available at the UsageSink layer; callers (orchestrator)
-    // do not pass task/session context through UsageLogParams. Populated as null for now.
     correlation: {
-      requestId: null,
+      requestId: correlationOverrides?.requestId ?? null,
       traceId: null,
-      taskId: null,
+      taskId: correlationOverrides?.taskId ?? null,
       researchId: null,
       attempt: null,
-      sessionId: null,
+      sessionId: correlationOverrides?.sessionId ?? null,
     },
     error: params.success ? null : { code: null, message: params.errorMessage ?? null },
   };
