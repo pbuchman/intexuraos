@@ -24,6 +24,8 @@ export const providerPricingSchema = {
       },
     },
     updatedAt: { type: 'string' },
+    useProviderCost: { type: 'boolean' },
+    costSource: { type: 'string' },
   },
 } as const;
 

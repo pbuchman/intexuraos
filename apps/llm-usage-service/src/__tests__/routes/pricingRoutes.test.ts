@@ -104,6 +104,8 @@ const mockOpenRouterPricing: ProviderPricing = {
     },
   },
   updatedAt: '2026-04-10T12:00:00Z',
+  useProviderCost: true,
+  costSource: 'provider_reported',
 };
 
 function populateAllProviders(pricingRepo: FakePricingRepository): void {
@@ -310,6 +312,11 @@ describe('pricingRoutes', () => {
       expect(body.data[LlmProviders.Anthropic]?.provider).toBe(LlmProviders.Anthropic);
       expect(body.data[LlmProviders.Perplexity]?.provider).toBe(LlmProviders.Perplexity);
       expect(body.data[LlmProviders.OpenRouter]?.provider).toBe(LlmProviders.OpenRouter);
+
+      // Verify provider-level OpenRouter metadata flows through internal endpoint
+      const orPricing = body.data[LlmProviders.OpenRouter];
+      expect(orPricing?.useProviderCost).toBe(true);
+      expect(orPricing?.costSource).toBe('provider_reported');
     });
 
     it('returns 500 when a provider is missing from the repository', async () => {
@@ -375,6 +382,10 @@ describe('pricingRoutes', () => {
       const orModel = orPricing?.models['or:meta-llama/llama-3-70b'];
       expect(orModel).toBeDefined();
       expect(orModel?.useProviderCost).toBe(true);
+
+      // Verify provider-level OpenRouter metadata (acceptance criterion)
+      expect(orPricing?.useProviderCost).toBe(true);
+      expect(orPricing?.costSource).toBe('provider_reported');
     });
 
     it('returns 500 when a provider is missing from the repository', async () => {

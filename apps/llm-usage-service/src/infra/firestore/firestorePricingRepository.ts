@@ -8,6 +8,8 @@ interface ProviderPricingDoc {
   provider: LlmProvider;
   models: ProviderPricing['models'];
   updatedAt: string;
+  useProviderCost?: boolean;
+  costSource?: string;
 }
 
 export class FirestorePricingRepository implements PricingRepository {
@@ -16,7 +18,10 @@ export class FirestorePricingRepository implements PricingRepository {
     const snap = await db.collection(COLLECTION).doc(provider).get();
     if (!snap.exists) return null;
     const data = snap.data() as ProviderPricingDoc;
-    return { provider: data.provider, models: data.models, updatedAt: data.updatedAt };
+    const result: ProviderPricing = { provider: data.provider, models: data.models, updatedAt: data.updatedAt };
+    if (data.useProviderCost === true) result.useProviderCost = true;
+    if (data.costSource !== undefined) result.costSource = data.costSource;
+    return result;
   }
 
   async getAll(): Promise<Record<LlmProvider, ProviderPricing>> {
@@ -42,10 +47,13 @@ export class FirestorePricingRepository implements PricingRepository {
 
   async setByProvider(provider: LlmProvider, pricing: ProviderPricing): Promise<void> {
     const db = getFirestore();
-    await db.collection(COLLECTION).doc(provider).set({
+    const doc: ProviderPricingDoc = {
       provider: pricing.provider,
       models: pricing.models,
       updatedAt: pricing.updatedAt,
-    });
+    };
+    if (pricing.useProviderCost === true) doc.useProviderCost = true;
+    if (pricing.costSource !== undefined) doc.costSource = pricing.costSource;
+    await db.collection(COLLECTION).doc(provider).set(doc);
   }
 }
