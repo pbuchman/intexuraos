@@ -163,6 +163,30 @@ export interface UsageQueryResponse {
   totals: AggregateMetrics;
 }
 
+/** Stored event with server-populated fields (receivedAt, ingress) */
+export interface StoredUsageEvent extends UsageEventInput {
+  receivedAt: string;
+  ingress: 'internal' | 'orchestrator_webhook';
+}
+
+export interface UsageListEventsRequest {
+  timeRange: { from: string; to: string };
+  filters?: UsageQueryFilters;
+  sortBy?: { field: string; direction: 'asc' | 'desc' };
+  limit?: number;
+  cursor?: string;
+}
+
+export interface UsageListEventsResponse {
+  events: StoredUsageEvent[];
+  nextCursor?: string;
+  totalMatched: number;
+}
+
+export interface UsageGetEventResponse {
+  event: StoredUsageEvent;
+}
+
 export interface UsageServiceError {
   code: 'NETWORK_ERROR' | 'API_ERROR' | 'VALIDATION_ERROR';
   message: string;
@@ -208,4 +232,14 @@ export interface UsageServiceClient {
   ): Promise<Result<UsageQueryResponse, UsageServiceError>>;
 
   fetchPricing(options?: { traceId?: string }): Promise<Result<PricingResponse, UsageServiceError>>;
+
+  listUsageEvents(
+    request: UsageListEventsRequest,
+    options?: { traceId?: string }
+  ): Promise<Result<UsageListEventsResponse, UsageServiceError>>;
+
+  getUsageEvent(
+    eventId: string,
+    options?: { traceId?: string }
+  ): Promise<Result<UsageGetEventResponse, UsageServiceError>>;
 }
