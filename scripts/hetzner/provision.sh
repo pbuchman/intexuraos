@@ -7,7 +7,8 @@
 #   - pnpm 9, PM2 latest
 #   - nginx with lua module, lua-resty-openidc
 #   - certbot + cloudflare DNS plugin
-#   - unprivileged `deploy` user with scoped nginx-reload sudoers
+#   - gcloud CLI (for Secret Manager access)
+#   - unprivileged `deploy` user (no sudo access)
 #   - hardened sshd (key-only, AllowUsers deploy, PermitRootLogin no)
 #   - ufw + fail2ban
 #
@@ -41,11 +42,11 @@ if [[ $EUID -ne 0 ]]; then
   fail "must run as root (got uid $EUID)"
 fi
 
-log "[1/10] System update"
+log "[1/12] System update"
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
 
-log "[2/10] Install base packages"
+log "[2/12] Install base packages"
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
   curl ca-certificates git build-essential unzip \
   ufw fail2ban \
@@ -54,7 +55,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
   certbot python3-certbot-nginx python3-certbot-dns-cloudflare \
   jq
 
-log "[3/10] Install Node ${NODE_VERSION} via fnm"
+log "[3/12] Install Node ${NODE_VERSION} via fnm"
 if [[ ! -x /opt/fnm/fnm ]]; then
   curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir /opt/fnm --skip-shell
 fi
@@ -77,7 +78,7 @@ for binname in node npm npx; do
   ln -sf "$NODE_DIR/$binname" "/usr/local/bin/$binname"
 done
 
-log "[4/10] Install pnpm and PM2"
+log "[4/12] Install pnpm and PM2"
 /usr/local/bin/npm install -g pnpm@9 pm2@latest
 
 # pnpm + pm2 land in $NODE_DIR because that's where fnm's npm prefix points.
@@ -89,12 +90,23 @@ for binname in pnpm pm2; do
   fi
 done
 
-log "[5/10] Install lua-resty-openidc (JWT verification)"
+log "[5/12] Install lua-resty-openidc (JWT verification)"
 # lua-resty-openidc pulls in lua-resty-jwt, lua-resty-http, lua-resty-session,
 # and lua-cjson as transitive deps.
 luarocks install lua-resty-openidc
 
-log "[6/10] Create deploy user and directories"
+log "[6/12] Install gcloud CLI"
+if ! command -v gcloud >/dev/null 2>&1; then
+  curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+    | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+  echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+    | tee /etc/apt/sources.list.d/google-cloud-sdk.list
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y google-cloud-cli
+fi
+gcloud --version | head -1
+
+log "[7/12] Create deploy user and directories"
 if ! id -u "$DEPLOY_USER" >/dev/null 2>&1; then
   useradd --create-home --shell /bin/bash "$DEPLOY_USER"
 fi
@@ -103,15 +115,10 @@ install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 755 "$APP_DIR"
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 755 "$WEB_DIR"
 install -d -o root          -g "$DEPLOY_USER" -m 750 "$ETC_DIR"
 
-# Scoped sudoers: deploy user can reload nginx but nothing else.
-cat >/etc/sudoers.d/deploy-nginx <<SUDOERS
-# Allow the deploy user to reload nginx only (INT-750)
-$DEPLOY_USER ALL=(root) NOPASSWD: /usr/sbin/nginx -s reload, /usr/sbin/nginx -t, /bin/systemctl reload nginx
-SUDOERS
-chmod 440 /etc/sudoers.d/deploy-nginx
-visudo -c -f /etc/sudoers.d/deploy-nginx >/dev/null || fail "sudoers syntax check failed"
+# No sudoers for deploy user — nginx reload is handled by the deploy
+# workflow SSHing as root, or by systemd path/timer units configured here.
 
-log "[7/10] Seed deploy user SSH authorized_keys from root"
+log "[8/12] Seed deploy user SSH authorized_keys from root"
 # Hetzner cloud-init writes the hcloud_ssh_key public key to
 # /root/.ssh/authorized_keys on first boot. The hardened sshd config below
 # (AllowUsers deploy) means this file MUST also exist under deploy's home,
@@ -129,7 +136,7 @@ install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 700 "/home/$DEPLOY_USER/.ssh"
 install -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 600 \
   /root/.ssh/authorized_keys "/home/$DEPLOY_USER/.ssh/authorized_keys"
 
-log "[8/10] Harden sshd + pre-reload and post-reload assertions"
+log "[9/12] Harden sshd + pre-reload and post-reload assertions"
 
 # --- PRE-RELOAD ASSERTION ---
 # Refuse to reload sshd unless the deploy user's authorized_keys is usable.
@@ -226,7 +233,7 @@ log "    sshd is hardened and effective — root login is now blocked"
 systemctl enable fail2ban
 systemctl restart fail2ban
 
-log "[9/10] Configure ufw (defense in depth behind hcloud_firewall)"
+log "[10/12] Configure ufw (defense in depth behind hcloud_firewall)"
 ufw --force reset
 ufw default deny incoming
 ufw default allow outgoing
@@ -235,14 +242,23 @@ ufw allow 80/tcp  comment 'HTTP'
 ufw allow 443/tcp comment 'HTTPS'
 ufw --force enable
 
-log "[10/10] Setup PM2 startup for deploy user"
+log "[11/12] Setup PM2 startup for deploy user"
 # Running pm2 startup as root with -u / --hp installs the systemd unit
 # directly (no stdout-to-bash piping needed).
 env PATH="/usr/local/bin:$PATH" pm2 startup systemd -u "$DEPLOY_USER" --hp "/home/$DEPLOY_USER"
+
+log "[12/12] Clone repository into $APP_DIR"
+if [[ ! -d "$APP_DIR/.git" ]]; then
+  # Clone as deploy user so all files are owned correctly.
+  sudo -u "$DEPLOY_USER" git clone https://github.com/pbuchman/intexuraos.git "$APP_DIR"
+else
+  log "    repo already cloned — skipping"
+fi
 
 log "Provisioning complete"
 printf '\n'
 printf 'Next steps:\n'
 printf '  1. Verify deploy user login:  ssh deploy@<ip> whoami\n'
-printf '  2. Run load-secrets.sh (Phase 4)\n'
-printf '  3. Deploy code (Phase 5)\n'
+printf '  2. Copy GCP SA key:  scp sa-key.json root@<ip>:/etc/intexuraos/sa-key.json\n'
+printf '  3. Run load-secrets.sh (Phase 4)\n'
+printf '  4. Deploy code (Phase 5)\n'

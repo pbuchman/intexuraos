@@ -332,12 +332,9 @@ project_id = "intexuraos-dev-pbuchman"
 # Generated in Phase 0.2: ~/.ssh/intexuraos_hetzner_deploy.pub
 deploy_ssh_public_key = "ssh-ed25519 AAAA... intexuraos-hetzner-deploy"
 
-# NOTE: SSH (port 22) is open to the world in the firewall (see Phase 2 Task 2.2).
-# Security relies on sshd_config hardening applied in Phase 3:
-#   - PasswordAuthentication no
-#   - PermitRootLogin no
-#   - AllowUsers deploy
-#   - AuthenticationMethods publickey
+# CIDR blocks allowed to SSH into the Hetzner VM (port 22).
+# List your admin/home IPs here.
+admin_ssh_source_ips = ["203.0.113.42/32"]
 ```
 
 - [ ] **Step 3: Verify `.gitignore` already excludes `terraform.tfvars`**
@@ -529,8 +526,8 @@ resource "hcloud_firewall" "prod" {
     direction   = "in"
     protocol    = "tcp"
     port        = "22"
-    source_ips  = ["0.0.0.0/0", "::/0"]
-    description = "SSH (key-only, hardened sshd)"
+    source_ips  = var.admin_ssh_source_ips
+    description = "SSH (restricted to admin IPs, key-only auth)"
   }
 
   rule {
