@@ -306,11 +306,10 @@ variable "hetzner_server_type" {
 variable "deploy_ssh_public_key" {
   description = "Public SSH key for the deploy user on Hetzner VM"
   type        = string
-}
-
-variable "admin_ssh_source_ips" {
-  description = "Source IPs allowed to SSH (port 22) to the VM"
-  type        = list(string)
+  validation {
+    condition     = length(trimspace(var.deploy_ssh_public_key)) > 0
+    error_message = "deploy_ssh_public_key must not be empty — the VM would be inaccessible without an SSH key."
+  }
 }
 
 variable "domain" {
@@ -333,11 +332,12 @@ project_id = "intexuraos-dev-pbuchman"
 # Generated in Phase 0.2: ~/.ssh/intexuraos_hetzner_deploy.pub
 deploy_ssh_public_key = "ssh-ed25519 AAAA... intexuraos-hetzner-deploy"
 
-# Source IPs allowed to SSH. Use CIDR notation.
-# Example: your home IP + office IP
-admin_ssh_source_ips = [
-  "203.0.113.42/32",
-]
+# NOTE: SSH (port 22) is open to the world in the firewall (see Phase 2 Task 2.2).
+# Security relies on sshd_config hardening applied in Phase 3:
+#   - PasswordAuthentication no
+#   - PermitRootLogin no
+#   - AllowUsers deploy
+#   - AuthenticationMethods publickey
 ```
 
 - [ ] **Step 3: Verify `.gitignore` already excludes `terraform.tfvars`**
@@ -460,7 +460,9 @@ git commit -m "feat(terraform): prod env scaffold main and outputs (INT-750)"
 
 ## Phase 2: Hetzner Infrastructure
 
-**Goal:** One CX32 VM running Ubuntu 24.04, reachable via SSH from the allowlisted IPs, with ports 80/443 open.
+**Goal:** One CX32 VM running Ubuntu 24.04, reachable via SSH (open to world, hardened sshd + key-only auth) with ports 80/443 open.
+
+> **SSH scoping decision (2026-04-10):** SSH port 22 is intentionally open to `0.0.0.0/0` and `::/0` in the Hetzner firewall. Security relies on the sshd hardening applied in Phase 3 (`PasswordAuthentication no`, `PermitRootLogin no`, `AllowUsers deploy`, `AuthenticationMethods publickey`), NOT on IP allowlisting. Rationale: solo-operator setup with a dynamic home ISP; IP allowlist would cause more lockouts than it prevents attacks, since key-auth already eliminates brute-force. The `admin_ssh_source_ips` variable and its no-wildcard validation block (from an earlier security advisory commit on this branch) were removed as part of this decision.
 
 ### Task 2.1: SSH key and primary IP
 
@@ -524,11 +526,11 @@ resource "hcloud_firewall" "prod" {
   labels = local.common_labels
 
   rule {
-    direction  = "in"
-    protocol   = "tcp"
-    port       = "22"
-    source_ips = var.admin_ssh_source_ips
-    description = "SSH (restricted)"
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "22"
+    source_ips  = ["0.0.0.0/0", "::/0"]
+    description = "SSH (key-only, hardened sshd)"
   }
 
   rule {
@@ -714,7 +716,7 @@ echo "=== [5/8] Install lua-resty-openidc (for JWT verification) ==="
 # lua-resty-openidc depends on lua-resty-jwt, lua-resty-http, lua-resty-session, lua-cjson
 luarocks install lua-resty-openidc
 
-echo "=== [6/8] Create deploy user ==="
+echo "=== [6/10] Create deploy user ==="
 if ! id -u "\${DEPLOY_USER}" > /dev/null 2>&1; then
   useradd --create-home --shell /bin/bash "\${DEPLOY_USER}"
 fi
@@ -732,7 +734,49 @@ ${DEPLOY_USER} ALL=(root) NOPASSWD: /usr/sbin/nginx -s reload, /usr/sbin/nginx -
 EOF
 chmod 440 /etc/sudoers.d/deploy-nginx
 
-echo "=== [7/8] Configure ufw firewall (defense in depth with hcloud_firewall) ==="
+echo "=== [7/10] Copy cloud-init SSH key from root to deploy user ==="
+# Hetzner cloud-init writes the hcloud_ssh_key public key to /root/.ssh/authorized_keys
+# on first boot. For the hardened sshd config (AllowUsers deploy) to work, the deploy
+# user must have the same key in its authorized_keys. This copy is idempotent.
+DEPLOY_SSH_DIR="/home/\${DEPLOY_USER}/.ssh"
+mkdir -p "\${DEPLOY_SSH_DIR}"
+if [ -f /root/.ssh/authorized_keys ] && [ ! -f "\${DEPLOY_SSH_DIR}/authorized_keys" ]; then
+  cp /root/.ssh/authorized_keys "\${DEPLOY_SSH_DIR}/authorized_keys"
+fi
+chown -R "\${DEPLOY_USER}:\${DEPLOY_USER}" "\${DEPLOY_SSH_DIR}"
+chmod 700 "\${DEPLOY_SSH_DIR}"
+chmod 600 "\${DEPLOY_SSH_DIR}/authorized_keys" 2>/dev/null || true
+
+echo "=== [8/10] Harden sshd_config + enable fail2ban ==="
+# Drop-in config at /etc/ssh/sshd_config.d/ takes precedence over the main file.
+# The drop-in approach survives Ubuntu's sshd_config package upgrades.
+cat > /etc/ssh/sshd_config.d/00-intexuraos-hardening.conf <<'EOF'
+# IntexuraOS prod SSH hardening (INT-750)
+# Security boundary: key-only auth via deploy user. Port 22 is open to world
+# in the hcloud_firewall — this drop-in is what makes that safe.
+Port 22
+PermitRootLogin no
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+UsePAM yes
+PubkeyAuthentication yes
+AllowUsers deploy
+AuthenticationMethods publickey
+X11Forwarding no
+MaxAuthTries 3
+LoginGraceTime 30
+EOF
+chmod 644 /etc/ssh/sshd_config.d/00-intexuraos-hardening.conf
+
+# Test sshd config before reloading (fail-safe: broken config = no reload)
+sshd -t
+systemctl reload ssh || systemctl reload sshd
+
+# Enable fail2ban for auth log noise reduction. Default jail includes sshd.
+systemctl enable fail2ban
+systemctl restart fail2ban
+
+echo "=== [9/10] Configure ufw firewall (defense in depth with hcloud_firewall) ==="
 ufw --force reset
 ufw default deny incoming
 ufw default allow outgoing
@@ -741,7 +785,7 @@ ufw allow 80/tcp comment 'HTTP'
 ufw allow 443/tcp comment 'HTTPS'
 ufw --force enable
 
-echo "=== [8/8] Setup PM2 startup for deploy user ==="
+echo "=== [10/10] Setup PM2 startup for deploy user ==="
 su - "\${DEPLOY_USER}" -c 'pm2 startup systemd -u deploy --hp /home/deploy' | tail -1 | bash
 
 echo ""
