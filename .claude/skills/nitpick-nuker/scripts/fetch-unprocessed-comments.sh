@@ -29,8 +29,20 @@ REPO_INFO=$(gh repo view --json owner,name --jq '"\(.owner.login) \(.name)"')
 OWNER=$(echo "$REPO_INFO" | cut -d' ' -f1)
 REPO=$(echo "$REPO_INFO" | cut -d' ' -f2)
 
-# Get bot username (current authenticated user)
-BOT_USERNAME=$(gh api user --jq '.login')
+# Get the authenticated actor's login.
+#
+# We cannot use `gh api user` because GitHub App installation tokens (ghs_*)
+# return 403 "Resource not accessible by integration" on /user — installations
+# have no associated user. GraphQL `viewer` works for every token type gh
+# supports: user PATs (ghp_), fine-grained PATs (github_pat_), OAuth (gho_),
+# user-to-server (ghu_), and installation tokens (ghs_). The login string is
+# "<user>" for humans and "<app-slug>[bot]" for installations — both are safe
+# inside the jq --arg filters used below.
+BOT_USERNAME=$(gh api graphql -f query='query { viewer { login } }' --jq '.data.viewer.login')
+if [[ -z "$BOT_USERNAME" || "$BOT_USERNAME" == "null" ]]; then
+  echo "ERROR: could not determine authenticated actor via GraphQL viewer" >&2
+  exit 2
+fi
 
 # Function to check if comment has bot's laugh reaction
 has_bot_laugh() {
