@@ -172,6 +172,7 @@ locals {
     "code-agent",
     "cron-agent",
     "hellscript-agent",
+    "llm-usage-service",
   ]
 
   # Cloud Function workers (zip + upload to GCS)
