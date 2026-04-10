@@ -28,7 +28,7 @@ variable "hetzner_location" {
 variable "hetzner_server_type" {
   description = "Hetzner server type"
   type        = string
-  default     = "cx32" # 4 vCPU, 8GB RAM, 80GB NVMe
+  default     = "cx33" # 4 vCPU Intel, 8GB RAM, 80GB NVMe, ~EUR 6.49/month (nbg1)
 }
 
 variable "deploy_ssh_public_key" {

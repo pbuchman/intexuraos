@@ -300,7 +300,7 @@ variable "hetzner_location" {
 variable "hetzner_server_type" {
   description = "Hetzner server type"
   type        = string
-  default     = "cx32" # 4 vCPU, 8GB RAM, 80GB NVMe
+  default     = "cx33" # 4 vCPU Intel, 8GB RAM, 80GB NVMe, ~EUR 6.49/month (verified 2026-04-10 via Hetzner API; cx32 was the old name and no longer exists)
 }
 
 variable "deploy_ssh_public_key" {
@@ -642,7 +642,7 @@ Expected: `Linux intexuraos-prod ... Ubuntu ... x86_64 GNU/Linux`
 
 ```bash
 git add terraform/environments/prod/hetzner.tf terraform/environments/prod/outputs.tf
-git commit -m "feat(terraform): provision hetzner cx32 server (INT-750)"
+git commit -m "feat(terraform): provision hetzner cx33 server (INT-750)"
 ```
 
 ⏸ **CHECKPOINT 2:** Hetzner VM is running, reachable via SSH, firewalled correctly. Cost clock has started (~€6.80/mo prorated).
