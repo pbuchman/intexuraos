@@ -9,6 +9,7 @@ import type {
   UsageIngestResponse,
   UsageQueryRequest,
   UsageQueryResponse,
+  PricingResponse,
 } from './types.js';
 
 interface ApiResponse<T> {
@@ -49,6 +50,22 @@ export function createUsageServiceClient(config: UsageServiceConfig): UsageServi
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(request),
+          ...(options?.traceId !== undefined ? { traceId: options.traceId } : {}),
+        }
+      );
+      if (!result.ok) {
+        return err({ code: result.error.code, message: result.error.message });
+      }
+      return ok(result.value.data);
+    },
+
+    async fetchPricing(options?: {
+      traceId?: string;
+    }): Promise<Result<PricingResponse, UsageServiceError>> {
+      const result = await fetchWithAuth<ApiResponse<PricingResponse>>(
+        config,
+        '/internal/pricing',
+        {
           ...(options?.traceId !== undefined ? { traceId: options.traceId } : {}),
         }
       );
