@@ -2983,6 +2983,9 @@ describe('TaskDispatcher', () => {
       const resumeTask = resumeStateSnapshot.tasks['resume-success-task'];
       if (!resumeTask) throw new Error('Task not found');
       delete resumeTask.hasChildren;
+      // Simulate that the runtime session was captured during the first attempt
+      // so the resume guard (which now applies to all runtimes) allows the retry.
+      resumeTask.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
       await resumeState.save(resumeStateSnapshot);
 
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
@@ -5466,6 +5469,9 @@ describe('TaskDispatcher', () => {
       const task = state.tasks['active-goal-resume-test'];
       if (!task) throw new Error('Task not found');
       task.status = 'completed';
+      // Simulate that the runtime session was captured during the first run
+      // so the resume guard allows the resume.
+      task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
       await statePersistence.save(state);
 
       vi.mocked(mockIsolationProvider.createWorker).mockClear();
@@ -5537,6 +5543,10 @@ describe('TaskDispatcher', () => {
         if (!task) throw new Error('Task not found');
         task.status = 'completed';
         task.completedAt = new Date().toISOString();
+        // Simulate that the runtime session was captured so the resume guard
+        // allows the resume to reach the worker startup that the test wants
+        // to observe failing asynchronously.
+        task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
         await localStatePersistence.save(state);
         const internal = localDispatcher as unknown as {
           clearTaskTimers: (taskId: string) => void;
@@ -5816,6 +5826,8 @@ describe('TaskDispatcher', () => {
       const task = state.tasks['resumed-pending-msg-test'];
       if (!task) throw new Error('Task not found');
       task.resumedAfterSuccess = true;
+      // Simulate captured runtime session so the resume guard allows the retry.
+      task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
       await resumedStatePersistence.save(state);
 
       const internal = resumedDispatcher as unknown as {
@@ -6871,6 +6883,9 @@ describe('TaskDispatcher', () => {
       verificationHistory: [],
       linearIssueLabels: [],
       hasChildren: false,
+      // Simulate a captured runtime session so the resume guard allows adoption
+      // to call startWorkerAttempt with continueSession: true.
+      runtimeSessionId: 'aaaaaaaa-0000-4000-a000-000000000000',
       ...overrides,
     });
 
@@ -7019,6 +7034,8 @@ describe('TaskDispatcher', () => {
       linearIssueLabels: [],
       hasChildren: false,
       resumedAfterSuccess: true,
+      // Simulate captured runtime session so the resume guard allows recovery.
+      runtimeSessionId: 'aaaaaaaa-0000-4000-a000-000000000000',
       pendingResumeStart: {
         prompt: '[RESUME PRE-FLIGHT]\nUser follow-up message',
         acceptedAt: new Date().toISOString(),
@@ -7230,6 +7247,33 @@ describe('TaskDispatcher', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
+        expect(String(result.error)).toContain('persisted runtime session');
+      }
+      expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+    });
+
+    it('rejects claude resume when runtimeSessionId is missing', async () => {
+      const task = createCodexTask({
+        taskId: 'claude-runtime-task',
+        runtime: 'claude',
+        worktreePath: '/tmp/worktrees/claude-runtime-task',
+      });
+
+      const result = await (
+        dispatcher as unknown as {
+          startWorkerAttempt: (
+            task: Task,
+            params: { prompt: string; continueSession: boolean; injectActiveGoal?: boolean }
+          ) => Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }>;
+        }
+      ).startWorkerAttempt(task, {
+        prompt: 'Resume Claude work',
+        continueSession: true,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(String(result.error)).toContain('claude');
         expect(String(result.error)).toContain('persisted runtime session');
       }
       expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
@@ -8553,6 +8597,9 @@ describe('TaskDispatcher', () => {
       const task = state.tasks['msg-ask-agent-resume'];
       if (!task) throw new Error('Task not found');
       task.status = 'completed';
+      // Simulate captured runtime session so the resume guard allows resume
+      // into startWorkerAttempt, which is what this test observes.
+      task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
       await statePersistence.save(state);
 
       const result = await dispatcher.sendMessage(
