@@ -27,6 +27,11 @@ export const pricingRoutes: FastifyPluginCallback = (app, _opts, done) => {
             properties: { success: { type: 'boolean', const: false }, error: { $ref: 'ErrorBody#' } },
             required: ['success', 'error'],
           },
+          500: {
+            type: 'object',
+            properties: { success: { type: 'boolean', const: false }, error: { $ref: 'ErrorBody#' } },
+            required: ['success', 'error'],
+          },
         },
       },
     },
@@ -41,7 +46,12 @@ export const pricingRoutes: FastifyPluginCallback = (app, _opts, done) => {
 
       const body = request.body as ProviderPricing;
       const { pricingRepository } = getServices();
-      await pricingRepository.setByProvider(body.provider, body);
+      try {
+        await pricingRepository.setByProvider(body.provider, body);
+      } catch (error) {
+        request.log.error({ err: error, provider: body.provider }, 'Failed to write pricing');
+        return await reply.fail('INTERNAL_ERROR', 'Failed to write pricing');
+      }
 
       request.log.info({ provider: body.provider }, 'Pricing written successfully');
       return await reply.ok({ provider: body.provider });

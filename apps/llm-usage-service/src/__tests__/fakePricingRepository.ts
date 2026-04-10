@@ -3,6 +3,7 @@ import type { PricingRepository } from '../domain/repositories/pricingRepository
 
 export class FakePricingRepository implements PricingRepository {
   readonly byProvider = new Map<LlmProvider, ProviderPricing>();
+  failOnWrite = false;
 
   async getByProvider(provider: LlmProvider): Promise<ProviderPricing | null> {
     return this.byProvider.get(provider) ?? null;
@@ -28,6 +29,9 @@ export class FakePricingRepository implements PricingRepository {
   }
 
   async setByProvider(provider: LlmProvider, pricing: ProviderPricing): Promise<void> {
+    if (this.failOnWrite) {
+      throw new Error('Simulated write failure');
+    }
     this.byProvider.set(provider, pricing);
   }
 

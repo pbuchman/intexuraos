@@ -108,7 +108,7 @@
     },
     "settings": {
       "owner": "app-settings-service",
-      "description": "Application settings including LLM pricing per provider"
+      "description": "Application settings (usage statistics)"
     },
     "todos": {
       "owner": "todos-agent",
