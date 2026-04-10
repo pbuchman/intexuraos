@@ -48,3 +48,6 @@ export { useTimezone } from './useTimezone.js';
 export { useTimezoneAutoDetect } from './useTimezoneAutoDetect.js';
 export { useAskAgent } from './useAskAgent.js';
 export type { AskAgentState } from './useAskAgent.js';
+export { useLlmUsageEvents, type UseLlmUsageEventsOptions, type UseLlmUsageEventsResult } from './useLlmUsageEvents.js';
+export { useLlmUsageQuery, type UseLlmUsageQueryOptions, type UseLlmUsageQueryResult, EMPTY_TOTALS } from './useLlmUsageQuery.js';
+export { useLlmUsageEvent, type UseLlmUsageEventResult } from './useLlmUsageEvent.js';

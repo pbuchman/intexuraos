@@ -195,7 +195,7 @@ describe('createUsageServiceClient', () => {
   describe('queryUsage', () => {
     it('sends X-Internal-Auth header', async () => {
       const scope = nock(BASE_URL)
-        .post('/internal/usage/query')
+        .post('/llm-usage/query')
         .matchHeader('X-Internal-Auth', 'test-token')
         .reply(200, { success: true, data: sampleQueryResponse });
 
@@ -207,7 +207,7 @@ describe('createUsageServiceClient', () => {
 
     it('sends X-Trace-Id when provided', async () => {
       const scope = nock(BASE_URL)
-        .post('/internal/usage/query')
+        .post('/llm-usage/query')
         .matchHeader('X-Trace-Id', 'trace-xyz')
         .reply(200, { success: true, data: sampleQueryResponse });
 
@@ -219,7 +219,7 @@ describe('createUsageServiceClient', () => {
 
     it('parses success response correctly', async () => {
       nock(BASE_URL)
-        .post('/internal/usage/query')
+        .post('/llm-usage/query')
         .reply(200, { success: true, data: sampleQueryResponse });
 
       const client = createUsageServiceClient(config);
@@ -232,7 +232,7 @@ describe('createUsageServiceClient', () => {
     });
 
     it('returns API_ERROR on non-200 response', async () => {
-      nock(BASE_URL).post('/internal/usage/query').reply(403);
+      nock(BASE_URL).post('/llm-usage/query').reply(403);
 
       const client = createUsageServiceClient(config);
       const result = await client.queryUsage(sampleQueryRequest);
@@ -245,7 +245,7 @@ describe('createUsageServiceClient', () => {
     });
 
     it('returns NETWORK_ERROR on fetch failure', async () => {
-      nock(BASE_URL).post('/internal/usage/query').replyWithError('connection refused');
+      nock(BASE_URL).post('/llm-usage/query').replyWithError('connection refused');
 
       const client = createUsageServiceClient(config);
       const result = await client.queryUsage(sampleQueryRequest);
@@ -370,6 +370,230 @@ describe('createUsageServiceClient', () => {
 
       const client = createUsageServiceClient(config);
       const result = await client.fetchPricing();
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+      }
+    });
+  });
+
+  describe('listUsageEvents', () => {
+    const sampleListRequest = {
+      timeRange: { from: '2026-04-01T00:00:00Z', to: '2026-04-10T23:59:59Z' },
+      filters: { providers: ['anthropic'] },
+      sortBy: { field: 'occurredAt', direction: 'desc' as const },
+      limit: 50,
+    };
+
+    const sampleListResponse = {
+      events: [
+        {
+          schemaVersion: 1 as const,
+          eventId: 'evt_001',
+          occurredAt: '2026-04-10T00:00:00Z',
+          receivedAt: '2026-04-10T00:00:01Z',
+          ingress: 'internal' as const,
+          owner: { type: 'user' as const, id: 'u1' },
+          source: {
+            service: 'research',
+            component: 'agent',
+            client: 'web',
+            environment: 'dev' as const,
+          },
+          request: {
+            provider: LlmProviders.Anthropic,
+            model: 'claude-sonnet-4-20250514',
+            operation: 'research',
+            success: true,
+            durationMs: 1200,
+          },
+          usage: {
+            inputTokens: 100,
+            outputTokens: 50,
+            totalTokens: 150,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            cachedTokens: 0,
+            reasoningTokens: 0,
+            thinkingTokens: 0,
+            webSearchCalls: 0,
+            groundingEnabled: false,
+            imageCount: 0,
+          },
+          cost: {
+            billedUsd: 0.001,
+            providerReportedUsd: null,
+            calculatedUsd: 0.001,
+            pricingSource: 'calculated' as const,
+          },
+          correlation: {
+            requestId: null,
+            traceId: null,
+            taskId: null,
+            researchId: null,
+            attempt: null,
+            sessionId: null,
+          },
+          error: null,
+        },
+      ],
+      totalMatched: 1,
+    };
+
+    it('sends POST to /llm-usage/events/list with auth', async () => {
+      const scope = nock(BASE_URL)
+        .post('/llm-usage/events/list')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: sampleListResponse });
+
+      const client = createUsageServiceClient(config);
+      const result = await client.listUsageEvents(sampleListRequest);
+
+      expect(scope.isDone()).toBe(true);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.events).toHaveLength(1);
+        expect(result.value.totalMatched).toBe(1);
+      }
+    });
+
+    it('sends X-Trace-Id when provided', async () => {
+      const scope = nock(BASE_URL)
+        .post('/llm-usage/events/list')
+        .matchHeader('X-Trace-Id', 'trace-list')
+        .reply(200, { success: true, data: sampleListResponse });
+
+      const client = createUsageServiceClient(config);
+      await client.listUsageEvents(sampleListRequest, { traceId: 'trace-list' });
+
+      expect(scope.isDone()).toBe(true);
+    });
+
+    it('returns API_ERROR on non-200 response', async () => {
+      nock(BASE_URL).post('/llm-usage/events/list').reply(400);
+
+      const client = createUsageServiceClient(config);
+      const result = await client.listUsageEvents(sampleListRequest);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+
+    it('returns NETWORK_ERROR on fetch failure', async () => {
+      nock(BASE_URL).post('/llm-usage/events/list').replyWithError('connection refused');
+
+      const client = createUsageServiceClient(config);
+      const result = await client.listUsageEvents(sampleListRequest);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+      }
+    });
+  });
+
+  describe('getUsageEvent', () => {
+    const sampleGetResponse = {
+      event: {
+        schemaVersion: 1 as const,
+        eventId: 'evt_001',
+        occurredAt: '2026-04-10T00:00:00Z',
+        receivedAt: '2026-04-10T00:00:01Z',
+        ingress: 'internal' as const,
+        owner: { type: 'user' as const, id: 'u1' },
+        source: {
+          service: 'research',
+          component: 'agent',
+          client: 'web',
+          environment: 'dev' as const,
+        },
+        request: {
+          provider: LlmProviders.Anthropic,
+          model: 'claude-sonnet-4-20250514',
+          operation: 'research',
+          success: true,
+          durationMs: 1200,
+        },
+        usage: {
+          inputTokens: 100,
+          outputTokens: 50,
+          totalTokens: 150,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cachedTokens: 0,
+          reasoningTokens: 0,
+          thinkingTokens: 0,
+          webSearchCalls: 0,
+          groundingEnabled: false,
+          imageCount: 0,
+        },
+        cost: {
+          billedUsd: 0.001,
+          providerReportedUsd: null,
+          calculatedUsd: 0.001,
+          pricingSource: 'calculated' as const,
+        },
+        correlation: {
+          requestId: null,
+          traceId: null,
+          taskId: null,
+          researchId: null,
+          attempt: null,
+          sessionId: null,
+        },
+        error: null,
+      },
+    };
+
+    it('sends GET to /llm-usage/events/:eventId with auth', async () => {
+      const scope = nock(BASE_URL)
+        .get('/llm-usage/events/evt_001')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: sampleGetResponse });
+
+      const client = createUsageServiceClient(config);
+      const result = await client.getUsageEvent('evt_001');
+
+      expect(scope.isDone()).toBe(true);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.event.eventId).toBe('evt_001');
+      }
+    });
+
+    it('sends X-Trace-Id when provided', async () => {
+      const scope = nock(BASE_URL)
+        .get('/llm-usage/events/evt_001')
+        .matchHeader('X-Trace-Id', 'trace-get')
+        .reply(200, { success: true, data: sampleGetResponse });
+
+      const client = createUsageServiceClient(config);
+      await client.getUsageEvent('evt_001', { traceId: 'trace-get' });
+
+      expect(scope.isDone()).toBe(true);
+    });
+
+    it('returns API_ERROR on 404 response', async () => {
+      nock(BASE_URL).get('/llm-usage/events/not_found').reply(404);
+
+      const client = createUsageServiceClient(config);
+      const result = await client.getUsageEvent('not_found');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toBe('HTTP 404');
+      }
+    });
+
+    it('returns NETWORK_ERROR on fetch failure', async () => {
+      nock(BASE_URL).get('/llm-usage/events/evt_001').replyWithError('connection refused');
+
+      const client = createUsageServiceClient(config);
+      const result = await client.getUsageEvent('evt_001');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {

@@ -45,6 +45,8 @@ import {
   HomePage,
   InboxPage,
   LlmCostsPage,
+  LlmUsagePage,
+  LlmUsageViewPage,
   LinearConnectionPage,
   LinearIssuesPage,
   LinearPruneCandidatesPage,
@@ -149,6 +151,11 @@ function CodeTaskViewPageKeyed(): React.JSX.Element {
 function CodeTaskViewRedirect(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   return <Navigate to={`/code-tasks/${id ?? ''}`} replace />;
+}
+
+function LlmUsageViewPageKeyed(): React.JSX.Element {
+  const { eventId } = useParams<{ eventId: string }>();
+  return <LlmUsageViewPage key={eventId} />;
 }
 
 function AppRoutes(): React.JSX.Element {
@@ -355,6 +362,23 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <MergeQueuePage />
+          </ProtectedRoute>
+        }
+      />
+      {/* LLM Usage routes */}
+      <Route
+        path="/llm-usage"
+        element={
+          <ProtectedRoute>
+            <LlmUsagePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/llm-usage/:eventId"
+        element={
+          <ProtectedRoute>
+            <LlmUsageViewPageKeyed />
           </ProtectedRoute>
         }
       />
