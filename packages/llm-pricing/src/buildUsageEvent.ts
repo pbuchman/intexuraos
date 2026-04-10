@@ -30,7 +30,7 @@ export function buildUsageEvent(
       model: params.model,
       operation: params.callType,
       success: params.success,
-      durationMs: 0,
+      durationMs: 0, // Not tracked at the UsageLogParams level; NormalizedUsage carries token counts only
     },
     usage: {
       inputTokens: params.usage.inputTokens,
@@ -51,6 +51,8 @@ export function buildUsageEvent(
       calculatedUsd: params.usage.costUsd,
       pricingSource: 'calculated',
     },
+    // Correlation IDs are not available at the UsageSink layer; callers (orchestrator)
+    // do not pass task/session context through UsageLogParams. Populated as null for now.
     correlation: {
       requestId: null,
       traceId: null,

@@ -12,7 +12,7 @@ export interface HttpWebhookUsageSinkConfig {
   webhookUrl: string;
   /** Shared secret used to HMAC-sign payloads */
   webhookSecret: string;
-  /** Token sent as X-Internal-Auth header */
+  /** Token sent as X-Internal-Auth header (code-agent validates this first, then verifies the HMAC) */
   internalAuthToken: string;
   /** Fills source.service in UsageEventInput */
   service: string;
