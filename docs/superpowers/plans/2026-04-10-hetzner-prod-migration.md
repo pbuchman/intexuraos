@@ -1499,11 +1499,18 @@ git commit -m "feat(hetzner): add nginx config with upstream routing (INT-750)"
 ssh root@${SERVER_IP} "apt-get install -y python3-certbot-dns-cloudflare"
 ```
 
-- [ ] **Step 2: Write the DNS API credentials file**
+- [ ] **Step 2: Write the DNS API credentials file (from Secret Manager)**
+
+Pull the Cloudflare DNS API token from GCP Secret Manager (created in Task 0.5) and write it to the credentials file on the Hetzner VM:
 
 ```bash
-ssh root@${SERVER_IP} "install -m 600 /dev/stdin /etc/letsencrypt/cloudflare.ini <<'EOF'
-dns_cloudflare_api_token = <your-token>
+CF_TOKEN=$(STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+  GOOGLE_APPLICATION_CREDENTIALS=/etc/intexuraos/sa-key.json \
+  gcloud secrets versions access latest \
+    --secret=INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN \
+    --project=intexuraos-dev-pbuchman)
+ssh root@${SERVER_IP} "install -m 600 /dev/stdin /etc/letsencrypt/cloudflare.ini <<EOF
+dns_cloudflare_api_token = ${CF_TOKEN}
 EOF"
 ```
 
