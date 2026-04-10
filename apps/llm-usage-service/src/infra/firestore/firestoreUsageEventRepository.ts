@@ -6,6 +6,7 @@ import type {
   CreateEventResult,
   ListUsageEventsParams,
   ListUsageEventsResult,
+  SortField,
   UsageEventFilters,
   UsageEventRepository,
 } from '../../domain/repositories/usageEventRepository.js';
@@ -14,7 +15,7 @@ const COLLECTION = 'llm_usage_events';
 
 type FirestoreQuery = ReturnType<ReturnType<Firestore['collection']>['where']>;
 
-const SORT_FIELD_MAP: Record<string, string> = {
+const SORT_FIELD_MAP: Record<SortField, string> = {
   occurredAt: 'occurredAt',
   costUsd: 'cost.billedUsd',
   totalTokens: 'usage.totalTokens',
@@ -23,17 +24,18 @@ const SORT_FIELD_MAP: Record<string, string> = {
 interface FilterMapping {
   readonly filterKey: keyof UsageEventFilters;
   readonly firestoreField: string;
+  readonly getEventValue: (e: UsageEvent) => string;
 }
 
 const ARRAY_FILTER_MAPPINGS: readonly FilterMapping[] = [
-  { filterKey: 'services', firestoreField: 'source.service' },
-  { filterKey: 'components', firestoreField: 'source.component' },
-  { filterKey: 'clients', firestoreField: 'source.client' },
-  { filterKey: 'providers', firestoreField: 'request.provider' },
-  { filterKey: 'models', firestoreField: 'request.model' },
-  { filterKey: 'operations', firestoreField: 'request.operation' },
-  { filterKey: 'ownerIds', firestoreField: 'owner.id' },
-  { filterKey: 'ownerTypes', firestoreField: 'owner.type' },
+  { filterKey: 'services', firestoreField: 'source.service', getEventValue: (e) => e.source.service },
+  { filterKey: 'components', firestoreField: 'source.component', getEventValue: (e) => e.source.component },
+  { filterKey: 'clients', firestoreField: 'source.client', getEventValue: (e) => e.source.client },
+  { filterKey: 'providers', firestoreField: 'request.provider', getEventValue: (e) => e.request.provider },
+  { filterKey: 'models', firestoreField: 'request.model', getEventValue: (e) => e.request.model },
+  { filterKey: 'operations', firestoreField: 'request.operation', getEventValue: (e) => e.request.operation },
+  { filterKey: 'ownerIds', firestoreField: 'owner.id', getEventValue: (e) => e.owner.id },
+  { filterKey: 'ownerTypes', firestoreField: 'owner.type', getEventValue: (e) => e.owner.type },
 ];
 
 export class FirestoreUsageEventRepository implements UsageEventRepository {
@@ -66,11 +68,17 @@ export class FirestoreUsageEventRepository implements UsageEventRepository {
         .where('occurredAt', '>=', params.timeRange.from)
         .where('occurredAt', '<=', params.timeRange.to);
 
-      // Apply filters
-      query = applyFilters(query, params.filters);
+      // Apply filters — only the first populated array filter goes to Firestore;
+      // remaining array filters are applied in-memory after fetch.
+      // See applyFilters() for details on the disjunction-limit guard.
+      const { query: filteredQuery, inMemoryFilters } = applyFilters(query, params.filters);
+      query = filteredQuery;
 
       // Determine sort
-      const sortField = SORT_FIELD_MAP[params.sortBy?.field ?? 'occurredAt'] ?? 'occurredAt';
+      // TODO: Composite indexes for costUsd / totalTokens sort fields are created
+      // in the Task 3 migration file. They must exist before these routes go live.
+      const domainSortField: SortField = params.sortBy?.field ?? 'occurredAt';
+      const sortField = SORT_FIELD_MAP[domainSortField];
       const sortDirection = params.sortBy?.direction ?? 'desc';
 
       // Count query (same where clauses, no ordering/limit)
@@ -94,10 +102,18 @@ export class FirestoreUsageEventRepository implements UsageEventRepository {
 
       const snapshot = await query.get();
       const docs = snapshot.docs;
-      const hasMore = docs.length > params.limit;
-      const resultDocs = hasMore ? docs.slice(0, params.limit) : docs;
 
-      const events = resultDocs.map((doc) => doc.data() as UsageEvent);
+      // Apply in-memory filters for array filters not sent to Firestore.
+      // NOTE: Because we filter post-fetch, pages may be shorter than `limit`
+      // when in-memory filters discard rows. This is an accepted trade-off to
+      // stay within Firestore's 30-disjunction limit.
+      let allEvents = docs.map((doc) => doc.data() as UsageEvent);
+      for (const memFilter of inMemoryFilters) {
+        allEvents = allEvents.filter((e) => memFilter.values.includes(memFilter.getEventValue(e)));
+      }
+
+      const hasMore = allEvents.length > params.limit;
+      const events = hasMore ? allEvents.slice(0, params.limit) : allEvents;
 
       const result: ListUsageEventsResult = {
         events,
@@ -106,8 +122,10 @@ export class FirestoreUsageEventRepository implements UsageEventRepository {
 
       if (hasMore && events.length > 0) {
         const lastEvent = events[events.length - 1];
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard — .length > 0 guarantees defined @preserve */
         if (lastEvent !== undefined) {
-          const lastSortValue = getFirestoreSortValue(lastEvent, sortField);
+          /* v8 ignore stop @preserve */
+          const lastSortValue = getFirestoreSortValue(lastEvent, domainSortField);
           result.nextCursor = encodeCursor(lastSortValue, lastEvent.eventId);
         }
       }
@@ -143,28 +161,59 @@ export class FirestoreUsageEventRepository implements UsageEventRepository {
   }
 }
 
-function getFirestoreSortValue(event: UsageEvent, firestoreField: string): string | number {
-  switch (firestoreField) {
-    case 'cost.billedUsd':
-      return event.cost.billedUsd;
-    case 'usage.totalTokens':
-      return event.usage.totalTokens;
-    default:
+function getFirestoreSortValue(event: UsageEvent, field: SortField): string | number {
+  switch (field) {
+    case 'occurredAt':
       return event.occurredAt;
+    case 'costUsd':
+      return event.cost.billedUsd;
+    case 'totalTokens':
+      return event.usage.totalTokens;
   }
 }
 
-function applyFilters(query: FirestoreQuery, filters: UsageEventFilters | undefined): FirestoreQuery {
+interface InMemoryFilter {
+  readonly values: readonly string[];
+  readonly getEventValue: (e: UsageEvent) => string;
+}
+
+interface ApplyFiltersResult {
+  readonly query: FirestoreQuery;
+  readonly inMemoryFilters: readonly InMemoryFilter[];
+}
+
+/**
+ * Applies filters to a Firestore query with a disjunction-limit guard.
+ *
+ * Firestore limits queries to 30 disjunctions. Each `in` clause multiplies
+ * the disjunction count by its cardinality, so combining multiple `in`
+ * clauses can easily exceed the limit. To stay safe we push only the FIRST
+ * populated array filter to Firestore (as a `where('field', 'in', values)`)
+ * and apply all remaining array filters in-memory after fetch.
+ *
+ * The `success` filter is an equality (`==`) filter and does not contribute
+ * to the disjunction count, so it is always applied to Firestore.
+ */
+function applyFilters(query: FirestoreQuery, filters: UsageEventFilters | undefined): ApplyFiltersResult {
   if (filters === undefined) {
-    return query;
+    return { query, inMemoryFilters: [] };
   }
 
   let q = query;
+  let firestoreArrayFilterApplied = false;
+  const inMemoryFilters: InMemoryFilter[] = [];
 
   for (const mapping of ARRAY_FILTER_MAPPINGS) {
     const values = filters[mapping.filterKey];
     if (values !== undefined && Array.isArray(values) && values.length > 0) {
-      q = q.where(mapping.firestoreField, 'in', values);
+      if (!firestoreArrayFilterApplied) {
+        // First populated array filter goes to Firestore.
+        q = q.where(mapping.firestoreField, 'in', values);
+        firestoreArrayFilterApplied = true;
+      } else {
+        // Subsequent array filters are applied in-memory after fetch.
+        inMemoryFilters.push({ values, getEventValue: mapping.getEventValue });
+      }
     }
   }
 
@@ -172,5 +221,5 @@ function applyFilters(query: FirestoreQuery, filters: UsageEventFilters | undefi
     q = q.where('request.success', '==', filters.success);
   }
 
-  return q;
+  return { query: q, inMemoryFilters };
 }

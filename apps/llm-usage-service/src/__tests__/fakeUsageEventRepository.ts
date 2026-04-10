@@ -5,6 +5,7 @@ import type {
   CreateEventResult,
   ListUsageEventsParams,
   ListUsageEventsResult,
+  SortField,
   UsageEventRepository,
 } from '../domain/repositories/usageEventRepository.js';
 
@@ -165,7 +166,7 @@ export class FakeUsageEventRepository implements UsageEventRepository {
   }
 }
 
-function getSortValue(event: UsageEvent, field: 'occurredAt' | 'costUsd' | 'totalTokens'): string | number {
+function getSortValue(event: UsageEvent, field: SortField): string | number {
   switch (field) {
     case 'occurredAt':
       return event.occurredAt;
