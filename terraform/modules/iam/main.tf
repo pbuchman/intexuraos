@@ -636,3 +636,29 @@ resource "google_project_iam_member" "hellscript_agent_logging" {
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.hellscript_agent.email}"
 }
+
+# LLM Usage Service
+resource "google_service_account" "llm_usage_service" {
+  account_id   = "intexuraos-llm-usage-${var.environment}"
+  display_name = "IntexuraOS LLM Usage Service (${var.environment})"
+  description  = "Service account for llm-usage-service Cloud Run deployment"
+}
+
+resource "google_secret_manager_secret_iam_member" "llm_usage_service_secrets" {
+  for_each  = var.secret_ids
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.llm_usage_service.email}"
+}
+
+resource "google_project_iam_member" "llm_usage_service_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.llm_usage_service.email}"
+}
+
+resource "google_project_iam_member" "llm_usage_service_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.llm_usage_service.email}"
+}
