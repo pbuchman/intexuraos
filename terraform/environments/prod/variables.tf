@@ -34,11 +34,19 @@ variable "hetzner_server_type" {
 variable "deploy_ssh_public_key" {
   description = "Public SSH key for the deploy user on Hetzner VM"
   type        = string
+  validation {
+    condition     = length(trimspace(var.deploy_ssh_public_key)) > 0
+    error_message = "deploy_ssh_public_key must not be empty — the VM would be inaccessible without an SSH key."
+  }
 }
 
 variable "admin_ssh_source_ips" {
   description = "Source IPs allowed to SSH (port 22) to the VM"
   type        = list(string)
+  validation {
+    condition     = alltrue([for ip in var.admin_ssh_source_ips : !contains(["0.0.0.0/0", "::/0"], ip)])
+    error_message = "admin_ssh_source_ips must not include 0.0.0.0/0 or ::/0 — SSH must be IP-restricted."
+  }
 }
 
 variable "domain" {
