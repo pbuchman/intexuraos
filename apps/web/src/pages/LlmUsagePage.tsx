@@ -2,7 +2,7 @@
  * LLM Usage list page with filtering, sorting, grouping, and pagination.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { Layout } from '@/components';
@@ -139,11 +139,12 @@ interface PageHeaderProps {
 }
 
 function PageHeader({ totalMatched, loading }: PageHeaderProps): React.JSX.Element {
+  const countText = totalMatched === -1 ? 'Events' : `Showing ${String(totalMatched)} events`;
   return (
     <div className="mb-6">
       <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">LLM Usage</h2>
       <p className="text-sm text-slate-500 dark:text-slate-400">
-        {loading ? 'Loading...' : `Showing ${String(totalMatched)} events`}
+        {loading ? 'Loading...' : countText}
       </p>
     </div>
   );
@@ -442,8 +443,8 @@ function AggregateTable({ rows, totals, groupBy, loading, error }: AggregateTabl
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, idx) => (
-            <tr key={idx} className="border-b border-slate-100 dark:border-slate-700/50">
+          {rows.map((row) => (
+            <tr key={Object.values(row.group).join('|')} className="border-b border-slate-100 dark:border-slate-700/50">
               <td className="py-2.5 pr-4 text-slate-900 dark:text-slate-100">{getGroupLabel(row, groupBy)}</td>
               <td className="py-2.5 pr-4 text-right font-mono text-slate-700 dark:text-slate-300">{String(row.metrics.calls)}</td>
               <td className="py-2.5 pr-4 text-right font-mono text-slate-700 dark:text-slate-300">{formatCost(row.metrics.costUsd)}</td>
@@ -484,9 +485,9 @@ export function LlmUsagePage(): React.JSX.Element {
   useEffect(() => { saveToStorage(STORAGE_KEY_SORT, sortBy); }, [sortBy]);
   useEffect(() => { saveToStorage(STORAGE_KEY_GROUP_BY, groupBy); }, [groupBy]);
 
-  const resolvedTimeRange = useMemo(() => resolveTimeRange(timeRange), [timeRange]);
+  const resolvedTimeRange = resolveTimeRange(timeRange);
 
-  const activeProviders = useMemo(() => filters.providers ?? [], [filters.providers]);
+  const activeProviders = filters.providers ?? [];
 
   const handleToggleProvider = useCallback((provider: string): void => {
     setFilters((prev) => {
@@ -514,22 +515,25 @@ export function LlmUsagePage(): React.JSX.Element {
     setGroupBy(mode);
   }, []);
 
+  const isRawMode = groupBy === 'none';
+
   // Raw events hook (active when groupBy === 'none')
   const eventsResult = useLlmUsageEvents({
     timeRange: resolvedTimeRange,
     filters,
     sortBy,
+    enabled: isRawMode,
   });
 
   // Aggregate query hook (active when groupBy !== 'none')
-  const queryGroupBy = useMemo(() => GROUP_BY_MAP[groupBy], [groupBy]);
+  const queryGroupBy = GROUP_BY_MAP[groupBy];
   const queryResult = useLlmUsageQuery({
     timeRange: resolvedTimeRange,
     filters,
     groupBy: queryGroupBy,
+    enabled: !isRawMode,
   });
 
-  const isRawMode = groupBy === 'none';
   const totalMatched = isRawMode ? eventsResult.totalMatched : (queryResult.totals?.calls ?? 0);
   const isLoading = isRawMode ? eventsResult.loading : queryResult.loading;
 

@@ -9,6 +9,8 @@ export interface UseLlmUsageQueryOptions {
   timeRange: ResolvedTimeRange;
   filters: UsageEventFilters;
   groupBy: string[];
+  /** When false, the hook skips all API calls and returns empty initial state. Defaults to true. */
+  enabled?: boolean;
 }
 
 export interface UseLlmUsageQueryResult {
@@ -34,7 +36,18 @@ const EMPTY_TOTALS: AggregateMetrics = {
   imageCount: 0,
 };
 
+const NOOP_ASYNC = (): Promise<void> => Promise.resolve();
+
+const DISABLED_QUERY_RESULT: UseLlmUsageQueryResult = {
+  rows: [],
+  totals: null,
+  loading: false,
+  error: null,
+  refresh: NOOP_ASYNC,
+};
+
 export function useLlmUsageQuery(options: UseLlmUsageQueryOptions): UseLlmUsageQueryResult {
+  const enabled = options.enabled !== false;
   const { getAccessToken } = useAuth();
   const [rows, setRows] = useState<UsageQueryRow[]>([]);
   const [totals, setTotals] = useState<AggregateMetrics | null>(null);
@@ -79,6 +92,7 @@ export function useLlmUsageQuery(options: UseLlmUsageQueryOptions): UseLlmUsageQ
 
   // Initial load + options-change refetch
   useEffect(() => {
+    if (!enabled) return;
     if (optionsJson === optionsJsonRef.current) return;
     optionsJsonRef.current = optionsJson;
     isMountedRef.current = true;
@@ -86,7 +100,11 @@ export function useLlmUsageQuery(options: UseLlmUsageQueryOptions): UseLlmUsageQ
     return (): void => {
       isMountedRef.current = false;
     };
-  }, [optionsJson, refresh]);
+  }, [enabled, optionsJson, refresh]);
+
+  if (!enabled) {
+    return DISABLED_QUERY_RESULT;
+  }
 
   return {
     rows,

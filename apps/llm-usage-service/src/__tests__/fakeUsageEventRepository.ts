@@ -80,6 +80,10 @@ export class FakeUsageEventRepository implements UsageEventRepository {
       }
     }
 
+    // NOTE: The real FirestoreUsageEventRepository returns totalMatched = -1 when
+    // multiple array filters force in-memory post-filtering (the Firestore .count()
+    // would be inaccurate). The fake always filters in-memory so we can return the
+    // accurate count. See ListUsageEventsResult JSDoc for the -1 sentinel contract.
     const totalMatched = filtered.length;
 
     // Sort

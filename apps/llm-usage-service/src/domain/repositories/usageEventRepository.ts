@@ -31,6 +31,12 @@ export interface ListUsageEventsParams {
 export interface ListUsageEventsResult {
   events: UsageEvent[];
   nextCursor?: string;
+  /**
+   * Total number of events matching the query filters.
+   * When the value is `-1`, the exact count is unavailable because
+   * multiple array filters required in-memory post-filtering and the
+   * Firestore `.count()` only reflects the server-side subset.
+   */
   totalMatched: number;
 }
 
