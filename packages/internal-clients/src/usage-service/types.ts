@@ -168,6 +168,34 @@ export interface UsageServiceError {
   message: string;
 }
 
+/**
+ * Pricing data for a single LLM provider.
+ * Mirrors the ProviderPricing shape from @intexuraos/llm-contract.
+ */
+export interface PricingProviderEntry {
+  provider: string;
+  models: Record<string, PricingModelEntry>;
+  updatedAt: string;
+  useProviderCost?: boolean;
+  costSource?: string;
+}
+
+export interface PricingModelEntry {
+  inputPricePerMillion: number;
+  outputPricePerMillion: number;
+  cacheReadMultiplier?: number;
+  cacheWriteMultiplier?: number;
+  webSearchCostPerCall?: number;
+  groundingCostPerRequest?: number;
+  imagePricing?: Record<string, number>;
+  useProviderCost?: boolean;
+}
+
+/**
+ * Response shape for fetchPricing() — keyed by provider name.
+ */
+export type PricingResponse = Record<string, PricingProviderEntry>;
+
 export interface UsageServiceClient {
   ingestEvents(
     request: UsageIngestRequest,
@@ -178,4 +206,6 @@ export interface UsageServiceClient {
     request: UsageQueryRequest,
     options?: { traceId?: string }
   ): Promise<Result<UsageQueryResponse, UsageServiceError>>;
+
+  fetchPricing(options?: { traceId?: string }): Promise<Result<PricingResponse, UsageServiceError>>;
 }
