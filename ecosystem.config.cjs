@@ -54,6 +54,7 @@ const COMMON_SERVICE_URLS = {
   INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8127',
   INTEXURAOS_CRON_AGENT_URL: 'http://localhost:8130',
   INTEXURAOS_HELLSCRIPT_AGENT_URL: 'http://localhost:8131',
+  INTEXURAOS_LLM_USAGE_SERVICE_URL: 'http://localhost:8132',
 };
 
 // Service-specific env vars (Pub/Sub topics, non-URL config)
@@ -155,6 +156,9 @@ const SERVICE_ENV_MAPPINGS = {
     // OpenAI API key for embeddings (from .envrc)
     INTEXURAOS_OPENAI_APP_API_KEY: process.env.INTEXURAOS_OPENAI_APP_API_KEY,
   },
+  'llm-usage-service': {
+    INTEXURAOS_ORCHESTRATOR_SECRET: process.env.INTEXURAOS_ORCHESTRATOR_SECRET,
+  },
 };
 
 const path = require('path');
@@ -228,6 +232,7 @@ module.exports = {
     createServiceConfig('code-agent', 8128),
     createServiceConfig('cron-agent', 8130),
     createServiceConfig('hellscript-agent', 8131),
+    createServiceConfig('llm-usage-service', 8132),
 
     // Services that depend on app-settings-service (fetch pricing at startup)
     // Poll health endpoint until app-settings-service is ready (max 30s)
