@@ -7143,7 +7143,7 @@ describe('TaskDispatcher', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(String(result.error)).toContain('Claude');
+        expect(String(result.error)).toContain('claude');
         expect(String(result.error)).toContain('persisted runtime session');
       }
       expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();

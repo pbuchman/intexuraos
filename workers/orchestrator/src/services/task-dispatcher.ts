@@ -1794,7 +1794,7 @@ export class TaskDispatcher {
       return {
         ok: false,
         error: new Error(
-          `${runtimeName === 'codex' ? 'Codex' : 'Claude'} resume requires a persisted runtime session ID`
+          `${runtimeName} resume requires a persisted runtime session ID`
         ),
       };
     }
