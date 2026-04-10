@@ -39,14 +39,23 @@ else
   fail "cjson.so not found at $CJSON_PATH after apt install (package layout change?)"
 fi
 
-log "[3/4] Installing lua-resty-core + lua-resty-lrucache via luarocks"
-# lua-resty-http (transitively required by lua-resty-openidc) imports
-# resty.string which is part of lua-resty-core. OpenResty bundles these;
-# Ubuntu's stock libnginx-mod-http-lua does not. Install via luarocks.
-# lua-resty-lrucache is also used by several lua-resty-* modules for
-# in-process caching; install it too to avoid a second catch-up round.
+log "[3/4] Installing lua-resty-core + lrucache + string via luarocks"
+# Three separate modules, all bundled by OpenResty but NOT by Ubuntu's
+# stock libnginx-mod-http-lua:
+#   - lua-resty-core:     resty.core.* helpers (FFI-based nginx API)
+#   - lua-resty-lrucache: in-process LRU cache used by resty-core +
+#                         several other lua-resty-* modules
+#   - lua-resty-string:   resty.string module with to_hex / random /
+#                         uppercase, etc. lua-resty-http (transitively
+#                         pulled in by lua-resty-openidc) requires
+#                         `resty.string.to_hex` in http_connect.lua.
+# Historical note: resty.string lived inside lua-resty-core in very
+# old versions, but was split into its own package around 0.1.17.
+# luarocks.org ships 0.1.17 as the default version, so we need the
+# split-out lua-resty-string separately regardless.
 luarocks install --force lua-resty-core
 luarocks install --force lua-resty-lrucache
+luarocks install --force lua-resty-string
 
 log "[4/4] Reloading nginx so it picks up the new Lua module paths"
 # Note: technically the nginx-lua module re-evaluates `require` on every

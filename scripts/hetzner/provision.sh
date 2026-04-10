@@ -119,13 +119,15 @@ chmod -R a+rX /opt/fnm
 log "[5/10] Install lua-resty-openidc (JWT verification)"
 # lua-resty-openidc pulls in lua-resty-jwt, lua-resty-http, lua-resty-session
 # as transitive deps. It does NOT pull in lua-cjson (from apt, see step 2)
-# or lua-resty-core (FFI helpers). lua-resty-http requires `resty.string`
-# which lives in lua-resty-core — OpenResty bundles both by default, but
-# Ubuntu's stock libnginx-mod-http-lua does not, so we install them
-# explicitly via luarocks here.
+# nor the OpenResty runtime helpers (lua-resty-core, lua-resty-lrucache,
+# lua-resty-string). OpenResty bundles all of these by default, but Ubuntu's
+# stock libnginx-mod-http-lua does not, so we install them explicitly here.
+# lua-resty-http uses resty.string.to_hex in http_connect.lua, so the split-
+# out lua-resty-string package is non-optional.
 luarocks install lua-resty-openidc
 luarocks install lua-resty-core
 luarocks install lua-resty-lrucache
+luarocks install lua-resty-string
 
 log "[6/10] Create deploy user and directories"
 if ! id -u "$DEPLOY_USER" >/dev/null 2>&1; then
