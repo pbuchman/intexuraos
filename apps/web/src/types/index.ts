@@ -182,6 +182,7 @@ export interface AppConfig {
   cronAgentUrl: string;
   hellscriptAgentUrl: string;
   appSettingsServiceUrl: string;
+  llmUsageServiceUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
   firebaseAuthDomain: string;
@@ -1518,6 +1519,20 @@ export type {
   WritingSample,
 } from './hellscript.js';
 export { WRITING_CATEGORIES } from './hellscript.js';
+
+// LLM Usage types
+export type {
+  UsageEvent,
+  UsageEventSortField,
+  UsageEventFilters,
+  ListLlmUsageEventsRequest,
+  ListLlmUsageEventsResponse,
+  GetUsageEventResponse,
+  AggregateMetrics,
+  UsageQueryRow,
+  LlmUsageQueryRequest,
+  LlmUsageQueryResponse,
+} from './llmUsage.js';
 
 // Cron Agent types
 export type {

@@ -96,6 +96,7 @@ export default defineConfig(({ mode }) => {
     '/api/chat': { target: 'http://localhost:8129', rewrite: (p: string) => p.replace(/^\/api\/chat/, '') },
     '/api/cron-agent': { target: 'http://localhost:8130', rewrite: (p: string) => p.replace(/^\/api\/cron-agent/, '') },
     '/api/hellscript-agent': { target: 'http://localhost:8131', rewrite: (p: string) => p.replace(/^\/api\/hellscript-agent/, '') },
+    '/api/llm-usage': { target: 'http://localhost:8132', rewrite: (p: string) => p.replace(/^\/api\/llm-usage/, '') },
   };
 
   return {
