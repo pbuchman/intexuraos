@@ -614,12 +614,12 @@ describe('DockerProvider', () => {
           runtimeSessionId: 'e0a48ae3-4f90-422e-ae42-5accb61ee3fc',
           prompt: 'Follow-up message',
           systemPrompt: 'Second attempt system prompt',
-        }),
+        })
       );
 
       const execCalls = mocks.mockContainer.exec.mock.calls;
-      const runAttemptCall = execCalls.find((call) =>
-        (call[0]?.Cmd as string[] | undefined)?.join(' ') === '/entrypoint.sh run-attempt',
+      const runAttemptCall = execCalls.find(
+        (call) => (call[0]?.Cmd as string[] | undefined)?.join(' ') === '/entrypoint.sh run-attempt'
       );
       expect(runAttemptCall).toBeDefined();
       const env = runAttemptCall?.[0]?.Env as string[];
@@ -633,12 +633,12 @@ describe('DockerProvider', () => {
         createTestConfig({
           continueSession: false,
           runtimeSessionId: 'should-be-ignored-on-fresh-start',
-        }),
+        })
       );
 
       const execCalls = mocks.mockContainer.exec.mock.calls;
-      const runAttemptCall = execCalls.find((call) =>
-        (call[0]?.Cmd as string[] | undefined)?.join(' ') === '/entrypoint.sh run-attempt',
+      const runAttemptCall = execCalls.find(
+        (call) => (call[0]?.Cmd as string[] | undefined)?.join(' ') === '/entrypoint.sh run-attempt'
       );
       if (runAttemptCall !== undefined) {
         const env = runAttemptCall[0]?.Env as string[];
