@@ -19,6 +19,7 @@ import {
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { registerRoutes } from './routes/index.js';
 import { registerUsageSchemas } from './routes/schemas/usageEventSchema.js';
+import { registerPricingSchemas } from './routes/schemas/pricingSchema.js';
 
 const SERVICE_NAME = 'llm-usage-service';
 const SERVICE_VERSION = '0.0.1';
@@ -124,6 +125,7 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
       tags: [
         { name: 'system', description: 'System endpoints (health, docs)' },
         { name: 'usage', description: 'LLM usage tracking and querying' },
+        { name: 'pricing', description: 'LLM pricing management' },
       ],
     },
   };
@@ -168,6 +170,7 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   registerCoreSchemas(app);
   registerUsageSchemas(app);
+  registerPricingSchemas(app);
 
   await app.register(fastifySwagger, buildOpenApiOptions());
   await app.register(fastifySwaggerUi, {
