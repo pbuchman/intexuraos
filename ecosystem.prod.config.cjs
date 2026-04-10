@@ -18,6 +18,13 @@
  *   - Web SPA is NOT in this config — served as static files by nginx
  *     from /var/www/intexuraos/web/dist (see Phase 6 of INT-750).
  *
+ * SECURITY NOTE: `...process.env` in createServiceConfig spreads ALL secrets
+ * from .env.prod into every service process. This is pragmatic for a single-VM
+ * deployment but means a compromised service process has access to all secrets
+ * (e.g., chat-agent sees INTEXURAOS_TOKEN_ENCRYPTION_KEY). The per-service
+ * SERVICE_ENV_MAPPINGS below only adds service-specific overrides on top of
+ * the shared base — it does not restrict what each service can see.
+ *
  * Topic naming: the Hetzner prod VM shares the same GCP project as the
  * Cloud Run dev environment (intexuraos-dev-pbuchman per Decision 3 of
  * the migration plan). That means the topic names still carry the `-dev`

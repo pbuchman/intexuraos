@@ -18,15 +18,14 @@ resource "hcloud_primary_ip" "prod_ipv4" {
 }
 
 # -----------------------------------------------------------------------------
-# Firewall — SSH (port 22) is open to the world by design.
-# Security relies on sshd_config hardening applied by scripts/hetzner/provision.sh:
+# Firewall — SSH (port 22) restricted to admin_ssh_source_ips.
+# The variable has a validation rule that rejects 0.0.0.0/0 and ::/0 to
+# prevent accidentally opening SSH to the internet. Additional defense-in-
+# depth via sshd_config hardening (provision.sh):
 #   - PasswordAuthentication no
 #   - PermitRootLogin no
 #   - AllowUsers deploy
 #   - AuthenticationMethods publickey
-# See the migration plan Task 2.2 notes for the rationale (solo-operator setup,
-# dynamic ISP IPs make an IP allowlist cause more lockouts than it prevents
-# attacks, since key auth already handles brute force).
 # -----------------------------------------------------------------------------
 
 resource "hcloud_firewall" "prod" {
@@ -37,8 +36,8 @@ resource "hcloud_firewall" "prod" {
     direction   = "in"
     protocol    = "tcp"
     port        = "22"
-    source_ips  = ["0.0.0.0/0", "::/0"]
-    description = "SSH (key-only, hardened sshd)"
+    source_ips  = var.admin_ssh_source_ips
+    description = "SSH (restricted to admin IPs, key-only auth)"
   }
 
   rule {

@@ -77,12 +77,11 @@ chown -R deploy:deploy /opt/intexuraos
 log "[1/6] Reading INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN from $ENV_FILE"
 [[ -r "$ENV_FILE" ]] || fail "$ENV_FILE not readable"
 
-# Source the env file to load every INTEXURAOS_* var into this shell.
-# /home/deploy/.env.prod is bash-compatible (single-quoted values).
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-
-: "${INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN:?not set after sourcing $ENV_FILE}"
+# Extract only the Cloudflare token — do NOT source the entire file as root.
+# The deploy user owns .env.prod, so sourcing it as root is a shell injection
+# vector (a malicious value containing $(cmd) would execute as root).
+INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN="$(grep -E '^INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d "'")"
+[[ -n "$INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN" ]] || fail "INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN not found in $ENV_FILE"
 
 # ---- 2. Write Cloudflare credentials file for certbot --------------------
 log "[2/6] Writing $CF_CREDS"
@@ -153,6 +152,10 @@ log "[6/6] Writing $SUDOERS_FILE to unlock Phases 7-9 from deploy"
 # /opt/intexuraos/scripts/hetzner/ as root without further VNC sessions.
 # The path must be absolute in sudoers. Use `/bin/bash <path>` rather
 # than just <path> so sudoers can match the invocation pattern cleanly.
+#
+# TODO(post-migration): Move scripts to root-owned /usr/local/sbin/ to
+# close the privilege escalation path (deploy owns /opt/intexuraos and
+# can modify scripts before sudo-running them). Track in a separate issue.
 cat > "$SUDOERS_FILE" <<'SUDOERS'
 # INT-750 Phase 6 — allow deploy user to sudo-run Hetzner migration
 # scripts as root. Scripts must live under /opt/intexuraos/scripts/hetzner/

@@ -40,6 +40,17 @@ variable "deploy_ssh_public_key" {
   }
 }
 
+variable "admin_ssh_source_ips" {
+  description = "CIDR ranges allowed to SSH into the Hetzner VM (port 22). Must NOT contain 0.0.0.0/0 or ::/0 — use specific IPs or ranges."
+  type        = list(string)
+  validation {
+    condition = length(var.admin_ssh_source_ips) > 0 && !contains([
+      for ip in var.admin_ssh_source_ips : contains(["0.0.0.0/0", "::/0"], ip)
+    ], true)
+    error_message = "admin_ssh_source_ips must not be empty and must not contain 0.0.0.0/0 or ::/0 — restrict SSH to specific admin IPs."
+  }
+}
+
 variable "domain" {
   description = "Public domain for prod"
   type        = string

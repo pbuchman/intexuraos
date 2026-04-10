@@ -9,9 +9,7 @@ project_id = "intexuraos-dev-pbuchman"
 # Example: "ssh-ed25519 AAAA... intexuraos-hetzner-deploy"
 deploy_ssh_public_key = "ssh-ed25519 AAAA... intexuraos-hetzner-deploy"
 
-# NOTE: SSH (port 22) is open to the world in the firewall.
-# Security relies on:
-#   - SSH key-only auth (PasswordAuthentication no)
-#   - AllowUsers deploy (only the deploy user can log in)
-#   - AuthenticationMethods publickey (no other methods accepted)
-# See scripts/hetzner/provision.sh for the hardened sshd_config.
+# CIDR ranges allowed to SSH into the VM.
+# Wildcards (0.0.0.0/0, ::/0) are rejected by variable validation.
+# Use your admin IP(s), e.g.: ["203.0.113.42/32", "2001:db8::1/128"]
+admin_ssh_source_ips = ["203.0.113.42/32"]
