@@ -44,7 +44,6 @@ import {
   GoogleCalendarConnectionPage,
   HomePage,
   InboxPage,
-  LlmCostsPage,
   LlmUsagePage,
   LlmUsagePricingPage,
   LlmUsageViewPage,
@@ -224,14 +223,6 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <ApiKeysSettingsPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings/usage-costs"
-        element={
-          <ProtectedRoute>
-            <LlmCostsPage />
           </ProtectedRoute>
         }
       />
