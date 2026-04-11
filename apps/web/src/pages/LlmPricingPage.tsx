@@ -171,6 +171,7 @@ export function LlmPricingPage(): React.JSX.Element {
           <ProviderBlock provider={LlmProviders.OpenAI} pricing={pricing.openai} />
           <ProviderBlock provider={LlmProviders.Anthropic} pricing={pricing.anthropic} />
           <ProviderBlock provider={LlmProviders.Perplexity} pricing={pricing.perplexity} />
+          <ProviderBlock provider={LlmProviders.OpenRouter} pricing={pricing.openrouter} />
         </div>
       ) : error === null ? (
         <Card>
