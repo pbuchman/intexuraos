@@ -15,6 +15,8 @@
 import { readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+import { aggregateIndexes } from './migrate.mjs';
+
 const repoRoot = resolve(import.meta.dirname, '..');
 const migrationsDir = join(repoRoot, 'migrations');
 
@@ -30,31 +32,12 @@ async function loadMigrations() {
     migrations.push({
       file,
       indexes: module.indexes ?? [],
+      fieldOverrides: module.fieldOverrides ?? [],
       rules: module.rules ?? {},
     });
   }
 
   return migrations;
-}
-
-function aggregateIndexes(migrations) {
-  const allIndexes = [];
-  const seen = new Set();
-
-  for (const migration of migrations) {
-    for (const index of migration.indexes) {
-      const key = JSON.stringify(index);
-      if (!seen.has(key)) {
-        seen.add(key);
-        allIndexes.push(index);
-      }
-    }
-  }
-
-  return {
-    indexes: allIndexes,
-    fieldOverrides: [],
-  };
 }
 
 function aggregateRules(migrations) {
