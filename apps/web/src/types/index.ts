@@ -751,6 +751,7 @@ export interface AllProvidersPricing {
   openai: ProviderPricing;
   anthropic: ProviderPricing;
   perplexity: ProviderPricing;
+  openrouter: ProviderPricing;
 }
 
 /**
