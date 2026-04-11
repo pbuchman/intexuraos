@@ -6,6 +6,7 @@ import type {
   GetUsageEventResponse,
   LlmUsageQueryRequest,
   LlmUsageQueryResponse,
+  AllProvidersPricing,
 } from '@/types';
 
 export async function listLlmUsageEvents(
@@ -40,5 +41,13 @@ export async function queryLlmUsage(
     '/llm-usage/query',
     accessToken,
     { method: 'POST', body: request }
+  );
+}
+
+export async function getLlmPricing(accessToken: string): Promise<AllProvidersPricing> {
+  return await apiRequest<AllProvidersPricing>(
+    config.llmUsageServiceUrl,
+    '/llm-usage/pricing',
+    accessToken
   );
 }

@@ -98,10 +98,10 @@ describe('CronScheduleNewPage', () => {
   it('injects clicked tool templates into the instruction and sends preferredTools', async () => {
     render(<CronScheduleNewPage />);
 
-    fireEvent.change(screen.getByLabelText(/name/i), {
+    fireEvent.change(screen.getByLabelText(/^name/i), {
       target: { value: 'Code Cleanup' },
     });
-    fireEvent.change(screen.getByLabelText(/description/i), {
+    fireEvent.change(screen.getByLabelText(/^schedule/i), {
       target: { value: 'every 15 minutes' },
     });
 
@@ -119,7 +119,7 @@ describe('CronScheduleNewPage', () => {
     await waitFor(() => {
       expect(mockCreateSchedule).toHaveBeenCalledWith('test-token', {
         name: 'Code Cleanup',
-        description: 'every 15 minutes',
+        schedule: 'every 15 minutes',
         action: {
           services: ['code-agent'],
           instruction: expect.stringContaining('Preferred tool: code_agent__cleanupTaskLogs'),
