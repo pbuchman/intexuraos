@@ -39,7 +39,6 @@ import type { Logger } from 'pino';
 import type { CodeTaskRepository, CreateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
 import type { LinearAgentClient } from '../../../domain/ports/linearAgentClient.js';
 import type { TaskDispatcherService, DispatchResult, DispatchError } from '../../../domain/services/taskDispatcher.js';
-import type { RateLimitService } from '../../../domain/services/rateLimitService.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { Result } from '@intexuraos/common-core';
 import { createWhatsAppNotifier } from '../../../infra/services/whatsappNotifierImpl.js';
@@ -195,7 +194,6 @@ describe('GET /code/issue-groups', () => {
       logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
       actionsAgentClient: actionsClient,
       linearAgentClient: linearClient,
-      rateLimitService: { async checkLimits() { return ok(undefined); }, async recordTaskStart() { return; }, async recordTaskComplete() { return; } } as RateLimitService,
       linearIssueService: createLinearIssueService({ linearAgentClient: linearClient, logger }),
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({ actionsAgentClient: actionsClient, logger }),
@@ -273,12 +271,6 @@ describe('GET /code/issue-groups', () => {
       async sendMessageToWorker() { return ok({ action: 'queued' }); },
     };
 
-    const rateLimitService: RateLimitService = {
-      async checkLimits() { return ok(undefined); },
-      async recordTaskStart() { return; },
-      async recordTaskComplete() { return; },
-    };
-
     const linearAgentClient = makeLinearAgentClient();
 
     const actionsAgentClient = createActionsAgentClient({
@@ -314,7 +306,6 @@ describe('GET /code/issue-groups', () => {
       }),
       actionsAgentClient,
       linearAgentClient,
-      rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
@@ -1065,11 +1056,6 @@ describe('GET /code/issue-groups', () => {
         logger,
       }),
       linearAgentClient: makeLinearAgentClient(),
-      rateLimitService: {
-        async checkLimits() { return ok(undefined); },
-        async recordTaskStart() { return; },
-        async recordTaskComplete() { return; },
-      } as RateLimitService,
       linearIssueService: createLinearIssueService({
         linearAgentClient: makeLinearAgentClient(),
         logger,
@@ -1179,11 +1165,6 @@ describe('GET /code/issue-groups', () => {
         logger,
       }),
       linearAgentClient: failingLinearClient,
-      rateLimitService: {
-        async checkLimits() { return ok(undefined); },
-        async recordTaskStart() { return; },
-        async recordTaskComplete() { return; },
-      } as RateLimitService,
       linearIssueService: createLinearIssueService({
         linearAgentClient: failingLinearClient,
         logger,
@@ -1417,8 +1398,7 @@ describe('GET /code/issue-groups', () => {
         logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }),
         linearAgentClient: makeLinearAgentClient(),
-        rateLimitService: { async checkLimits() { return ok(undefined); }, async recordTaskStart() { return; }, async recordTaskComplete() { return; } } as RateLimitService,
-        linearIssueService: createLinearIssueService({ linearAgentClient: makeLinearAgentClient(), logger }),
+          linearIssueService: createLinearIssueService({ linearAgentClient: makeLinearAgentClient(), logger }),
         metricsClient: createNoOpMetricsClient(),
         statusMirrorService: createStatusMirrorService({ actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }), logger }),
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
@@ -1516,8 +1496,7 @@ describe('GET /code/issue-groups', () => {
         logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }),
         linearAgentClient: makeLinearAgentClient(),
-        rateLimitService: { async checkLimits() { return ok(undefined); }, async recordTaskStart() { return; }, async recordTaskComplete() { return; } } as RateLimitService,
-        linearIssueService: createLinearIssueService({ linearAgentClient: makeLinearAgentClient(), logger }),
+          linearIssueService: createLinearIssueService({ linearAgentClient: makeLinearAgentClient(), logger }),
         metricsClient: createNoOpMetricsClient(),
         statusMirrorService: createStatusMirrorService({ actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }), logger }),
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
@@ -1581,8 +1560,7 @@ describe('GET /code/issue-groups', () => {
         logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }),
         linearAgentClient: makeLinearAgentClient(),
-        rateLimitService: { async checkLimits() { return ok(undefined); }, async recordTaskStart() { return; }, async recordTaskComplete() { return; } } as RateLimitService,
-        linearIssueService: createLinearIssueService({ linearAgentClient: makeLinearAgentClient(), logger }),
+          linearIssueService: createLinearIssueService({ linearAgentClient: makeLinearAgentClient(), logger }),
         metricsClient: createNoOpMetricsClient(),
         statusMirrorService: createStatusMirrorService({ actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }), logger }),
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),

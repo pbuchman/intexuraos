@@ -21,7 +21,6 @@ import type { LogLineRepository } from './domain/repositories/logLineRepository.
 import type { TaskDispatcherService } from './domain/services/taskDispatcher.js';
 import type { WhatsAppNotifier } from './domain/services/whatsappNotifier.js';
 import type { ActionsAgentClient } from './infra/clients/actionsAgentClient.js';
-import type { RateLimitService } from './domain/services/rateLimitService.js';
 import type { WorkerSettingsRepository } from './domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from './domain/ports/workerHealthProbe.js';
 import type { UserLookupService } from './domain/ports/userLookupService.js';
@@ -31,8 +30,6 @@ import { createFirestoreLogLineRepository } from './infra/repositories/firestore
 import { createTaskDispatcherService } from './infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from './infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from './infra/clients/actionsAgentClient.js';
-import { createUserUsageFirestoreRepository } from './infra/firestore/userUsageFirestoreRepository.js';
-import { createRateLimitService } from './domain/services/rateLimitService.js';
 import { createLinearAgentHttpClient } from './infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService, type LinearIssueService } from './domain/services/linearIssueService.js';
 import type { LinearAgentClient, IssueContext, LinearAgentError } from './domain/ports/linearAgentClient.js';
@@ -110,7 +107,6 @@ export interface ServiceContainer {
   whatsappNotifier: WhatsAppNotifier;
   actionsAgentClient: ActionsAgentClient;
   linearAgentClient: LinearAgentClient;
-  rateLimitService: RateLimitService;
   linearIssueService: LinearIssueService;
   statusMirrorService: StatusMirrorService;
   processHeartbeat: ProcessHeartbeatUseCase;
@@ -595,10 +591,6 @@ export function initServices(config: ServiceConfig): void {
     actionsAgentClient,
     linearAgentClient,
     statusMirrorService,
-    rateLimitService: createRateLimitService({
-      userUsageRepository: createUserUsageFirestoreRepository(firestore, logger),
-      logger,
-    }),
     linearIssueService,
     processHeartbeat: createProcessHeartbeatUseCase({
       codeTaskRepository: codeTaskRepo,
