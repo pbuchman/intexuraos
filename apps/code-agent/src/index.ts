@@ -44,6 +44,7 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_GEMINI_APP_API_KEY',
   'INTEXURAOS_EXECUTION_MEMORY_ENABLED', // Feature flag for execution memory retrieval/distillation
   'INTEXURAOS_OPENAI_APP_API_KEY', // OpenAI embeddings for execution memory retrieval/distillation
+  'INTEXURAOS_LLM_USAGE_SERVICE_URL', // Usage event forwarding to llm-usage-service
 ];
 
 // In E2E mode, only validate core env vars; others have sensible defaults
@@ -78,6 +79,7 @@ async function main(): Promise<void> {
     userServiceUrl: config.userServiceUrl,
     geminiAppApiKey: config.geminiAppApiKey,
     openaiAppApiKey: config.openaiAppApiKey,
+    llmUsageServiceUrl: config.llmUsageServiceUrl,
   });
 
   const { firestore, logger } = getServices();

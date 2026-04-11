@@ -1,13 +1,16 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import { createOpenRouterClient, type OpenRouterClient } from '@intexuraos/infra-openrouter';
 import type { ModelPricing } from '@intexuraos/llm-contract';
-import { StructuredLogUsageSink } from '@intexuraos/llm-pricing';
+import { HttpWebhookUsageSink } from '@intexuraos/llm-pricing';
 import { createLlmParseError, formatZodErrors, logLlmParseError } from '@intexuraos/llm-utils';
 import { execFile } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+
+const validatorTaskIdStorage = new AsyncLocalStorage<string>();
 import type { ExecutionAgentData } from './completion-verifier.js';
 import {
   AgentComplianceReportSchema,
@@ -257,6 +260,10 @@ export interface AgentComplianceValidatorConfig {
   model: string;
   pricing: ModelPricing;
   auditLogPath: string;
+  codeAgentUrl: string;
+  usageWebhookUrl: string;
+  orchestratorSecret: string;
+  internalAuthToken: string;
 }
 export interface ComplianceValidationInput {
   taskId: string;
@@ -294,10 +301,25 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
       userId: 'orchestrator-compliance-validator',
       pricing: config.pricing,
       logger,
-      usageSink: new StructuredLogUsageSink({ logger }),
+      usageSink: new HttpWebhookUsageSink({
+        webhookUrl: config.usageWebhookUrl,
+        webhookSecret: config.orchestratorSecret,
+        internalAuthToken: config.internalAuthToken,
+        service: 'orchestrator',
+        component: 'agent-compliance-validator',
+        logger,
+        getCorrelationTaskId: (): string | null => validatorTaskIdStorage.getStore() ?? null,
+      }),
     });
   }
   async validate(
+    input: ComplianceValidationInput,
+    onProgress?: (message: string) => void
+  ): Promise<ComplianceValidationResult | null> {
+    return await validatorTaskIdStorage.run(input.taskId, () => this.doValidate(input, onProgress));
+  }
+
+  private async doValidate(
     input: ComplianceValidationInput,
     onProgress?: (message: string) => void
   ): Promise<ComplianceValidationResult | null> {
