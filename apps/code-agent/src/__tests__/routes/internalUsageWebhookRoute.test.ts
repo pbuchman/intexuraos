@@ -71,6 +71,9 @@ function createMockUsageServiceClient(): UsageServiceClient {
   return {
     ingestEvents: vi.fn<UsageServiceClient['ingestEvents']>(),
     queryUsage: vi.fn<UsageServiceClient['queryUsage']>(),
+    fetchPricing: vi.fn<UsageServiceClient['fetchPricing']>(),
+    listUsageEvents: vi.fn<UsageServiceClient['listUsageEvents']>(),
+    getUsageEvent: vi.fn<UsageServiceClient['getUsageEvent']>(),
   };
 }
 

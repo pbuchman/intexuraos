@@ -28,6 +28,9 @@ function createMockUsageServiceClient(
   return {
     ingestEvents: vi.fn().mockResolvedValue(ingestResult),
     queryUsage: vi.fn(),
+    fetchPricing: vi.fn(),
+    listUsageEvents: vi.fn(),
+    getUsageEvent: vi.fn(),
   };
 }
 
