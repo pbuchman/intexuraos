@@ -13,11 +13,13 @@ export {
 
 export {
   fetchAllPricing,
+  fetchAllPricingWithRetry,
   createPricingContext,
   PricingContext,
   type IPricingContext,
   type AllPricingResponse,
   type PricingClientError,
+  type PricingRetryOptions,
 } from './pricingClient.js';
 export {
   TEST_PRICING,

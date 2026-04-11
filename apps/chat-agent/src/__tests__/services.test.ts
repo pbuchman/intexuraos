@@ -44,7 +44,7 @@ const {
 });
 
 vi.mock('@intexuraos/llm-pricing', () => ({
-  fetchAllPricing: mockFetchAllPricing,
+  fetchAllPricingWithRetry: mockFetchAllPricing,
   createPricingContext: mockCreatePricingContext,
   HttpInternalAuthUsageSink: vi.fn().mockImplementation(function FakeSink() {
     return { log: vi.fn().mockResolvedValue(undefined) };

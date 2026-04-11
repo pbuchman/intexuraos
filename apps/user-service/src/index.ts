@@ -1,7 +1,7 @@
 import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
-import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
+import { fetchAllPricingWithRetry, createPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels, type ValidationModel } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { initializeServices } from './services.js';
@@ -49,7 +49,7 @@ async function main(): Promise<void> {
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
 
   process.stdout.write(`Fetching pricing from ${usageServiceUrl}\n`);
-  const pricingResult = await fetchAllPricing(usageServiceUrl, internalAuthToken);
+  const pricingResult = await fetchAllPricingWithRetry(usageServiceUrl, internalAuthToken);
   if (!pricingResult.ok) {
     throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
   }
