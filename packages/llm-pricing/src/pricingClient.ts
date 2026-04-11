@@ -97,6 +97,8 @@ export interface PricingClientError {
   code: 'NETWORK_ERROR' | 'API_ERROR' | 'VALIDATION_ERROR';
   /** Human-readable error message */
   message: string;
+  /** HTTP status code (set for API_ERROR from HTTP responses) */
+  statusCode?: number | undefined;
 }
 
 /**
@@ -149,6 +151,7 @@ export async function fetchAllPricing(
       return err({
         code: 'API_ERROR',
         message: `HTTP ${String(response.status)}${errorDetails}`,
+        statusCode: response.status,
       });
     }
 
@@ -206,13 +209,10 @@ function isTransientError(error: PricingClientError): boolean {
   if (error.code === 'NETWORK_ERROR') return true;
 
   // API_ERROR — check if the HTTP status is transient
-  // fetchAllPricing formats these as "HTTP <status>: ..."
-  const statusMatch = /^HTTP (\d+)/.exec(error.message);
-  if (statusMatch === null) return false;
+  if (error.statusCode === undefined) return false;
 
-  const status = Number(statusMatch[1]);
   // 404 = route not deployed yet; 5xx = server error
-  return status === 404 || status >= 500;
+  return error.statusCode === 404 || error.statusCode >= 500;
 }
 
 /**
