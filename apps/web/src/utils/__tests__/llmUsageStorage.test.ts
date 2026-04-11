@@ -13,6 +13,37 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((v) => typeof v === 'string');
 }
 
+// jsdom 26 in this environment ships a localStorage implementation that
+// lacks `.clear()`, breaking `beforeEach` resets. Stub a minimal in-memory
+// implementation so tests don't depend on the host's localStorage.
+function createMemoryStorage(): Storage {
+  const store = new Map<string, string>();
+  return {
+    get length(): number {
+      return store.size;
+    },
+    clear(): void {
+      store.clear();
+    },
+    getItem(key: string): string | null {
+      return store.get(key) ?? null;
+    },
+    setItem(key: string, value: string): void {
+      store.set(key, value);
+    },
+    removeItem(key: string): void {
+      store.delete(key);
+    },
+    key(index: number): string | null {
+      return Array.from(store.keys())[index] ?? null;
+    },
+  };
+}
+
+beforeEach(() => {
+  vi.stubGlobal('localStorage', createMemoryStorage());
+});
+
 describe('loadFromStorage', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -59,13 +90,10 @@ describe('saveToStorage', () => {
   });
 
   it('handles quota errors gracefully', () => {
-    const original = localStorage.setItem.bind(localStorage);
     vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
       throw new DOMException('quota exceeded', 'QuotaExceededError');
     });
 
     expect(() => saveToStorage('key', 'value')).not.toThrow();
-
-    localStorage.setItem = original;
   });
 });
