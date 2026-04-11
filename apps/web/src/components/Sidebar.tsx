@@ -59,7 +59,6 @@ const settingsItems: NavItem[] = [
   { to: '/settings/github', label: 'GitHub', icon: GitBranch },
   { to: '/settings/code', label: 'Code Settings', icon: Server },
   { to: '/settings/api-keys', label: 'API Keys', icon: Key },
-  { to: '/settings/usage-costs', label: 'Usage Costs', icon: TrendingUp },
 ];
 
 const researchAgentItems: NavItem[] = [
