@@ -191,6 +191,7 @@ export INTEXURAOS_REPOSITORY_URL=https://github.com/pbuchman/intexuraos.git
 # Orchestrator's own repo clone (separate from dev worktrees)
 export INTEXURAOS_REPOSITORY_PATH=$HOME/claude-orchestrator/intexuraos
 export INTEXURAOS_CODE_AGENT_URL=http://localhost:8128
+export INTEXURAOS_USAGE_WEBHOOK_URL=http://localhost:8128/internal/webhooks/usage-events
 export INTEXURAOS_CHAT_AGENT_URL=http://localhost:8129
 # Worker image reference for Claude containers (tag or digest)
 # Recommended in production: immutable digest (@sha256:...)
