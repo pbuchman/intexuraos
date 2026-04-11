@@ -1,7 +1,7 @@
 /**
  * Pricing types for LLM cost calculation.
  *
- * Used by app-settings-service (for fetching/storing prices) and infra-*
+ * Used by llm-usage-service (for fetching/storing prices) and infra-*
  * packages (for calculating request costs).
  *
  * @packageDocumentation
@@ -69,7 +69,7 @@ export interface ModelPricing {
 /**
  * Pricing configuration for all models from a single provider.
  *
- * Used by app-settings-service to store and retrieve pricing data.
+ * Used by llm-usage-service to store and retrieve pricing data.
  * The `updatedAt` field is used to invalidate stale pricing.
  */
 export interface ProviderPricing {
@@ -79,6 +79,16 @@ export interface ProviderPricing {
   models: Record<string, ModelPricing>;
   /** ISO timestamp of last pricing update */
   updatedAt: string;
+  /**
+   * When true, consumers should use provider-reported cost instead of calculating.
+   * Set on OpenRouter entries where cost comes from the provider API response.
+   */
+  useProviderCost?: boolean;
+  /**
+   * Source of cost data (e.g., 'provider_reported').
+   * Metadata marker for providers whose pricing table entries are informational only.
+   */
+  costSource?: string;
 }
 
 /**

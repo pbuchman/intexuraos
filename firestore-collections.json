@@ -108,7 +108,7 @@
     },
     "settings": {
       "owner": "app-settings-service",
-      "description": "Application settings including LLM pricing per provider"
+      "description": "Application settings (usage statistics)"
     },
     "todos": {
       "owner": "todos-agent",
@@ -256,6 +256,10 @@
     "llm_usage_daily_aggregates": {
       "owner": "llm-usage-service",
       "description": "Daily aggregated LLM usage metrics by owner, service, provider, model, and operation"
+    },
+    "llm_pricing": {
+      "owner": "llm-usage-service",
+      "description": "LLM pricing per provider (one doc per provider, keyed by provider ID)"
     }
   }
 }

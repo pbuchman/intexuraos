@@ -71,13 +71,13 @@ export function resetServices(): void {
 
 /**
  * Initialize the service container with all dependencies.
- * Fetches pricing data from app-settings-service at startup.
+ * Fetches pricing data from llm-usage-service at startup.
  */
 export async function initializeServices(): Promise<void> {
   const openaiApiKey = process.env['INTEXURAOS_OPENAI_APP_API_KEY'];
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'];
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
-  const appSettingsServiceUrl = process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'];
+  const llmUsageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
   const guestGeminiApiKey = process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
 
   if (openaiApiKey === undefined || openaiApiKey.length === 0) {
@@ -92,8 +92,8 @@ export async function initializeServices(): Promise<void> {
     throw new Error('INTEXURAOS_INTERNAL_AUTH_TOKEN environment variable is required');
   }
 
-  if (appSettingsServiceUrl === undefined || appSettingsServiceUrl.length === 0) {
-    throw new Error('INTEXURAOS_APP_SETTINGS_SERVICE_URL environment variable is required');
+  if (llmUsageServiceUrl === undefined || llmUsageServiceUrl.length === 0) {
+    throw new Error('INTEXURAOS_LLM_USAGE_SERVICE_URL environment variable is required');
   }
 
   if (guestGeminiApiKey === undefined || guestGeminiApiKey.length === 0) {
@@ -105,8 +105,8 @@ export async function initializeServices(): Promise<void> {
     level: (process.env['LOG_LEVEL'] ?? 'info') as 'error' | 'info' | 'warn' | 'debug' | 'silent',
   });
 
-  // Fetch pricing data from app-settings-service
-  const pricingResult = await fetchAllPricing(appSettingsServiceUrl, internalAuthToken);
+  // Fetch pricing data from llm-usage-service
+  const pricingResult = await fetchAllPricing(llmUsageServiceUrl, internalAuthToken);
 
   if (!pricingResult.ok) {
     throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);

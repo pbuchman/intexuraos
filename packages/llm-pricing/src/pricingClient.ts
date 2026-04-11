@@ -3,20 +3,20 @@
  *
  * @packageDocumentation
  *
- * Fetches LLM pricing from app-settings-service at startup and provides
+ * Fetches LLM pricing from llm-usage-service at startup and provides
  * runtime pricing lookups via {@link PricingContext}.
  *
  * @remarks
- * Pricing data is fetched from `/internal/settings/pricing` endpoint
+ * Pricing data is fetched from `/internal/pricing` endpoint
  * and cached in a `PricingContext` for efficient runtime access.
  *
  * @example
  * ```ts
  * import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
  *
- * // Fetch pricing from app-settings-service
+ * // Fetch pricing from llm-usage-service
  * const result = await fetchAllPricing(
- *   'http://app-settings-service/internal',
+ *   'http://llm-usage-service/internal',
  *   'internal-auth-token'
  * );
  *
@@ -38,7 +38,7 @@ import {
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 
 /**
- * Response from the app-settings-service pricing endpoint.
+ * Response from the llm-usage-service pricing endpoint.
  *
  * @remarks
  * Contains pricing data for all LLM providers. Each provider's pricing
@@ -71,6 +71,8 @@ export interface AllPricingResponse {
   anthropic: ProviderPricing;
   /** Perplexity pricing */
   perplexity: ProviderPricing;
+  /** OpenRouter pricing */
+  openrouter: ProviderPricing;
 }
 
 /**
@@ -98,20 +100,20 @@ export interface PricingClientError {
 }
 
 /**
- * Fetch all LLM pricing from app-settings-service.
+ * Fetch all LLM pricing from llm-usage-service.
  *
  * @remarks
- * Calls `/internal/settings/pricing` with `X-Internal-Auth` header.
+ * Calls `/internal/pricing` with `X-Internal-Auth` header.
  * Returns a {@link Result} type - use pattern matching to handle errors.
  *
- * @param baseUrl - Base URL of app-settings-service (e.g., `'http://app-settings-service/internal'`)
+ * @param baseUrl - Base URL of llm-usage-service (e.g., `'http://llm-usage-service'`)
  * @param authToken - Internal auth token for `X-Internal-Auth` header
  * @returns Result with all provider pricing or error
  *
  * @example
  * ```ts
  * const result = await fetchAllPricing(
- *   'http://app-settings-service/internal',
+ *   'http://llm-usage-service',
  *   process.env.INTERNAL_AUTH_TOKEN
  * );
  *
@@ -126,7 +128,7 @@ export async function fetchAllPricing(
   baseUrl: string,
   authToken: string
 ): Promise<Result<AllPricingResponse, PricingClientError>> {
-  const url = `${baseUrl}/internal/settings/pricing`;
+  const url = `${baseUrl}/internal/pricing`;
 
   try {
     const response = await fetch(url, {
@@ -192,7 +194,7 @@ export interface IPricingContext {
  * Runtime pricing lookup context.
  *
  * @remarks
- * Created at application startup with fetched pricing from app-settings-service.
+ * Created at application startup with fetched pricing from llm-usage-service.
  * Caches all pricing in a Map for O(1) lookups during LLM operations.
  *
  * @example
@@ -227,6 +229,7 @@ export class PricingContext implements IPricingContext {
       LlmProviders.OpenAI,
       LlmProviders.Anthropic,
       LlmProviders.Perplexity,
+      LlmProviders.OpenRouter,
     ] as const) {
       const providerPricing = allPricing[provider];
       for (const [model, pricing] of Object.entries(providerPricing.models)) {
@@ -269,7 +272,7 @@ export class PricingContext implements IPricingContext {
 
   /**
    * Validate that ALL LLM models have pricing defined.
-   * Used by app-settings-service at startup.
+   * Used by llm-usage-service at startup.
    * @throws Error listing missing models
    */
   validateAllModels(): void {
@@ -298,7 +301,7 @@ function isValidLLMModel(model: string): model is LLMModel {
  * Validates that all required models have pricing defined before returning.
  * Throws an error listing missing models if validation fails.
  *
- * @param allPricing - Pricing response from app-settings-service
+ * @param allPricing - Pricing response from llm-usage-service
  * @param requiredModels - Models that must have pricing (default: all models)
  * @returns Validated pricing context
  * @throws Error if any required model is missing pricing
@@ -307,7 +310,7 @@ function isValidLLMModel(model: string): model is LLMModel {
  * ```ts
  * import { createPricingContext } from '@intexuraos/llm-pricing';
  *
- * // Validate all models have pricing (for app-settings-service)
+ * // Validate all models have pricing (for llm-usage-service)
  * const context = createPricingContext(allPricing);
  *
  * // Validate only specific models (for client services)

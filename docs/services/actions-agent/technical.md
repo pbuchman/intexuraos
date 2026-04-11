@@ -481,7 +481,7 @@ const handler = registerActionHandler(createHandleXxxActionUseCase, deps);
 | `INTEXURAOS_CALENDAR_AGENT_URL`          | Yes      | Calendar-agent base URL                                   |
 | `INTEXURAOS_LINEAR_AGENT_URL`            | Yes      | Linear-agent base URL                                     |
 | `INTEXURAOS_CODE_AGENT_URL`              | Yes      | Code-agent base URL                                       |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`    | Yes      | App settings service URL (for LLM pricing)                |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`       | Yes      | LLM usage service URL (for LLM pricing)                   |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`         | Yes      | Shared secret for service-to-service calls                |
 | `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`        | Yes      | Unified actions queue topic name                          |
 | `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`  | Yes      | WhatsApp send topic                                       |
