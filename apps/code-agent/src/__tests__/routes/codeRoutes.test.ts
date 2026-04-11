@@ -33,7 +33,6 @@ import type { LogChunkRepository } from '../../domain/repositories/logChunkRepos
 import type { LogLineRepository } from '../../domain/repositories/logLineRepository.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
-import type { RateLimitService, RateLimitError } from '../../domain/services/rateLimitService.js';
 import { ok, type Result } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
@@ -149,18 +148,6 @@ describe('codeRoutes', () => {
       logger,
     });
 
-    const rateLimitService: RateLimitService = {
-      async checkLimits() {
-        return ok(undefined);
-      },
-      async recordTaskStart() {
-        return;
-      },
-      async recordTaskComplete() {
-        return;
-      },
-    };
-
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -182,7 +169,6 @@ describe('codeRoutes', () => {
       logLineRepo,
       actionsAgentClient,
       linearAgentClient,
-      rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
@@ -254,7 +240,6 @@ describe('codeRoutes', () => {
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;
-      rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
@@ -1207,46 +1192,6 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(404);
     });
 
-    it('calls recordTaskComplete when task status changes to completed', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      // Create a task first
-      const createResult = await repo.create({
-        userId: 'user-123',
-        prompt: 'Test',
-        sanitizedPrompt: 'Test',
-        systemPromptHash: 'default',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'test/repo',
-        baseBranch: 'main',
-        traceId: 'trace_123',
-      });
-      expect(createResult.ok).toBe(true);
-      if (!createResult.ok) return;
-      const task = createResult.value;
-
-      const { getServices } = await import('../../services.js');
-      const services = getServices();
-      const recordCompleteSpy = vi.spyOn(services.rateLimitService, 'recordTaskComplete');
-
-      const response = await server.inject({
-        method: 'PATCH',
-        url: `/internal/code-tasks/${task.id}`,
-        headers: { 'x-internal-auth': 'test-internal-token' },
-        payload: {
-          status: 'planned',
-          result: { branch: 'test', commits: 1, summary: 'Done' },
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(recordCompleteSpy).toHaveBeenCalledWith('user-123', undefined);
-    });
-
   });
 
   describe('POST /internal/code/process error handling', () => {
@@ -1449,90 +1394,6 @@ describe('codeRoutes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-    });
-
-    it('returns 429 when rate limit exceeded', async () => {
-      const rateLimitService = {
-        async checkLimits(): Promise<Result<void, RateLimitError>> {
-          return {
-            ok: false,
-            error: {
-              code: 'concurrent_limit',
-              message: 'Too many concurrent tasks',
-              retryAfter: '60',
-            },
-          };
-        },
-        async recordTaskStart(): Promise<void> {
-          return;
-        },
-        async recordTaskComplete(): Promise<void> {
-          return;
-        },
-      } satisfies RateLimitService;
-
-      setServices({
-        ...getServices(),
-        rateLimitService,
-      });
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {
-          prompt: 'Fix the login bug',
-        },
-      });
-
-      expect(response.statusCode).toBe(429);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('RATE_LIMITED');
-      expect(body.error.message).toContain('concurrent');
-    });
-
-    it('returns 503 when service unavailable', async () => {
-      const rateLimitService = {
-        async checkLimits(): Promise<Result<void, RateLimitError>> {
-          return {
-            ok: false,
-            error: {
-              code: 'service_unavailable',
-              message: 'Service temporarily unavailable',
-            },
-          };
-        },
-        async recordTaskStart(): Promise<void> {
-          return;
-        },
-        async recordTaskComplete(): Promise<void> {
-          return;
-        },
-      } satisfies RateLimitService;
-
-      setServices({
-        ...getServices(),
-        rateLimitService,
-      });
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {
-          prompt: 'Fix the login bug',
-        },
-      });
-
-      expect(response.statusCode).toBe(503);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('MISCONFIGURED');
     });
 
     it('returns 409 for duplicate prompt', async () => {
@@ -3558,84 +3419,6 @@ describe('codeRoutes', () => {
       expect(body.error.code).toBe('UNAUTHORIZED');
     });
 
-    it('returns 429 when rate limit exceeded', async () => {
-      const rateLimitService = {
-        async checkLimits(): Promise<Result<void, RateLimitError>> {
-          return {
-            ok: false,
-            error: {
-              code: 'concurrent_limit',
-              message: 'Too many concurrent tasks',
-              retryAfter: '60',
-            },
-          };
-        },
-        async recordTaskStart(): Promise<void> {
-          return;
-        },
-        async recordTaskComplete(): Promise<void> {
-          return;
-        },
-      } satisfies RateLimitService;
-
-      setServices({
-        ...getServices(),
-        rateLimitService,
-      });
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/code/tasks/task-123/implement',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {},
-      });
-
-      expect(response.statusCode).toBe(429);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('RATE_LIMITED');
-    });
-
-    it('returns 503 when rate limit service is unavailable', async () => {
-      const rateLimitService = {
-        async checkLimits(): Promise<Result<void, RateLimitError>> {
-          return {
-            ok: false,
-            error: {
-              code: 'service_unavailable',
-              message: 'Rate limit service unavailable',
-            },
-          };
-        },
-        async recordTaskStart(): Promise<void> {
-          return;
-        },
-        async recordTaskComplete(): Promise<void> {
-          return;
-        },
-      } satisfies RateLimitService;
-
-      setServices({
-        ...getServices(),
-        rateLimitService,
-      });
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/code/tasks/task-123/implement',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {},
-      });
-
-      expect(response.statusCode).toBe(503);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('MISCONFIGURED');
-    });
   });
 
   describe('POST /code/retry', () => {

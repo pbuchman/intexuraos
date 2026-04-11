@@ -167,10 +167,6 @@
       "owner": "code-agent",
       "description": "User cost tracking for rate limiting"
     },
-    "user_usage": {
-      "owner": "code-agent",
-      "description": "User rate limiting and cost tracking for code tasks (concurrent tasks, hourly limits, daily/monthly cost caps)"
-    },
     "code_worker_settings": {
       "owner": "code-agent",
       "description": "Per-user worker configuration with encrypted credentials (CF Access, dispatch signing) for Mac and VM workers"

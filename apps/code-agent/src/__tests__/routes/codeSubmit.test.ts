@@ -33,7 +33,6 @@ import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepos
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
-import type { RateLimitService } from '../../domain/services/rateLimitService.js';
 import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
 import { ok, err } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
@@ -116,18 +115,6 @@ describe('POST /code/submit', () => {
       logger,
     });
 
-    const rateLimitService: RateLimitService = {
-      async checkLimits() {
-        return ok(undefined);
-      },
-      async recordTaskStart() {
-        return;
-      },
-      async recordTaskComplete() {
-        return;
-      },
-    };
-
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -149,7 +136,6 @@ describe('POST /code/submit', () => {
       logLineRepo,
       actionsAgentClient,
       linearAgentClient,
-      rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
@@ -216,7 +202,6 @@ describe('POST /code/submit', () => {
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;
-      rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
@@ -452,198 +437,6 @@ describe('POST /code/submit', () => {
     });
   });
 
-  describe('rate limiting', () => {
-    it('returns 429 when hourly limit exceeded', async () => {
-      // Get the service container and mock rateLimitService to return error
-      const { getServices } = await import('../../services.js');
-      const services = getServices();
-
-      // Mock rateLimitService to return hourly limit error
-      vi.spyOn(services.rateLimitService, 'checkLimits').mockResolvedValueOnce({
-        ok: false,
-        error: {
-          code: 'hourly_limit',
-          message: 'Maximum 10 tasks per hour allowed',
-          retryAfter: 'in about 1 hour',
-        },
-      });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {
-          prompt: 'This should exceed the limit',
-        },
-      });
-
-      expect(response.statusCode).toBe(429);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('RATE_LIMITED');
-      expect(body.error.message).toContain('tasks per hour');
-    });
-
-    it('returns 429 when concurrent limit exceeded', async () => {
-      const { getServices } = await import('../../services.js');
-      const services = getServices();
-
-      vi.spyOn(services.rateLimitService, 'checkLimits').mockResolvedValueOnce({
-        ok: false,
-        error: {
-          code: 'concurrent_limit',
-          message: 'Maximum 3 concurrent tasks allowed',
-          retryAfter: 'when a task completes',
-        },
-      });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: { authorization: 'Bearer test-token' },
-        payload: { prompt: 'Test prompt' },
-      });
-
-      expect(response.statusCode).toBe(429);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('RATE_LIMITED');
-      expect(body.error.message).toContain('concurrent tasks');
-    });
-
-    it('returns 429 when prompt too long', async () => {
-      const { getServices } = await import('../../services.js');
-      const services = getServices();
-
-      vi.spyOn(services.rateLimitService, 'checkLimits').mockResolvedValueOnce({
-        ok: false,
-        error: {
-          code: 'prompt_too_long',
-          message: 'Prompt exceeds maximum length of 10000 characters',
-        },
-      });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: { authorization: 'Bearer test-token' },
-        payload: { prompt: 'Test prompt' },
-      });
-
-      expect(response.statusCode).toBe(429);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('RATE_LIMITED');
-      expect(body.error.message).toContain('maximum length');
-    });
-
-    it('returns 503 when service unavailable', async () => {
-      const { getServices } = await import('../../services.js');
-      const services = getServices();
-
-      vi.spyOn(services.rateLimitService, 'checkLimits').mockResolvedValueOnce({
-        ok: false,
-        error: {
-          code: 'service_unavailable',
-          message: 'Unable to verify rate limits. Please try again.',
-        },
-      });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: { authorization: 'Bearer test-token' },
-        payload: { prompt: 'Test prompt' },
-      });
-
-      expect(response.statusCode).toBe(503);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain('rate limits');
-    });
-
-    it('allows submissions when within limits', async () => {
-      // Mock Linear issue service (required for submit flow)
-      const linearService = getServices().linearIssueService;
-      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
-        linearIssueId: 'INT-123',
-        linearIssueTitle: 'This should be allowed',
-        linearIssueLabels: [],
-        hasChildren: false,
-        linearFallback: false,
-      });
-      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {
-          prompt: 'This should be allowed',
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-    });
-
-    it('does not create Linear issue when rate limit exceeded', async () => {
-      const { getServices } = await import('../../services.js');
-      const services = getServices();
-
-      vi.spyOn(services.rateLimitService, 'checkLimits').mockResolvedValueOnce({
-        ok: false,
-        error: {
-          code: 'concurrent_limit',
-          message: 'Maximum 3 concurrent tasks allowed',
-        },
-      });
-
-      const linearSpy = vi.spyOn(services.linearIssueService, 'ensureIssueExists');
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: { authorization: 'Bearer test-token' },
-        payload: { prompt: 'Test prompt', linearIssueId: 'INT-123' },
-      });
-
-      expect(response.statusCode).toBe(429);
-      expect(linearSpy).not.toHaveBeenCalled();
-    });
-
-    it('calls recordTaskStart when task is submitted successfully', async () => {
-      const { getServices } = await import('../../services.js');
-      const services = getServices();
-
-      // Mock Linear issue service (required for submit flow)
-      vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
-        linearIssueId: 'INT-456',
-        linearIssueTitle: 'Test prompt',
-        linearIssueLabels: [],
-        hasChildren: false,
-        linearFallback: false,
-      });
-      vi.spyOn(services.linearIssueService, 'markInProgress').mockResolvedValueOnce(undefined);
-
-      const recordStartSpy = vi.spyOn(services.rateLimitService, 'recordTaskStart');
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: { authorization: 'Bearer test-token' },
-        payload: { prompt: 'Test prompt' },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(recordStartSpy).toHaveBeenCalledTimes(1);
-    });
-  });
-
   describe('prompt deduplication', () => {
     it('returns 409 for duplicate prompt within 5 minutes', async () => {
       const prompt = 'Fix the login bug';
@@ -796,34 +589,6 @@ describe('POST /code/submit', () => {
       expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
-    it('does not call recordTaskStart when enqueue fails', async () => {
-      const services = getServices();
-      const linearService = services.linearIssueService;
-      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
-        linearIssueId: 'INT-123',
-        linearIssueTitle: 'Fix the bug',
-        linearIssueLabels: [],
-        hasChildren: false,
-        linearFallback: false,
-      });
-
-      const recordStartSpy = vi.spyOn(services.rateLimitService, 'recordTaskStart');
-
-      // Mock enqueue to return queue_full error
-      vi.mocked(taskEnqueueService.enqueue).mockResolvedValueOnce(
-        err({ code: 'queue_full', message: 'Queue is full' })
-      );
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: { authorization: 'Bearer test-token' },
-        payload: { prompt: 'Fix the bug' },
-      });
-
-      expect(response.statusCode).toBe(503);
-      expect(recordStartSpy).not.toHaveBeenCalled();
-    });
   });
 
   describe('input validation', () => {
