@@ -5,6 +5,7 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 export type {
   LLMError as GptError,
@@ -62,4 +63,6 @@ export interface GptConfig {
   imagePricing?: import('@intexuraos/llm-contract').ModelPricing;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
+  /** Optional usage sink override. Defaults to NoopUsageSink. */
+  usageSink?: UsageSink;
 }

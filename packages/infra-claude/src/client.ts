@@ -44,10 +44,8 @@
  * ```
  */
 
-import { randomUUID } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import {
   LlmProviders,
   type LLMClient,
@@ -90,27 +88,8 @@ const MAX_TOKENS = 8192;
  */
 export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   const client = new Anthropic({ apiKey: config.apiKey });
-  const { model, userId, researchId, pricing, logger } = config;
-  const usageLogger = createUsageLogger({ logger });
-
-  function createRequestContext(
-    method: string,
-    model: string,
-    prompt: string
-  ): { requestId: string; startTime: Date; auditContext: AuditContext } {
-    const requestId = randomUUID();
-    const startTime = new Date();
-    const auditContext = createAuditContext({
-      provider: LlmProviders.Anthropic,
-      model,
-      method,
-      prompt,
-      startedAt: startTime,
-      userId,
-      ...(researchId !== undefined && { researchId }),
-    });
-    return { requestId, startTime, auditContext };
-  }
+  const { model, userId, pricing, logger, usageSink } = config;
+  const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
   function trackUsage(
     callType: CallType,
@@ -147,8 +126,6 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, ClaudeError>> {
-      const { auditContext } = createRequestContext('research', model, prompt);
-
       try {
         const response = await client.messages.create({
           model,
@@ -173,21 +150,11 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           pricing
         );
 
-        const successParams: Parameters<typeof auditContext.success>[0] = {
-          response: content,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-        };
-        if (usage.webSearchCalls !== undefined) {
-          successParams.webSearchCalls = usage.webSearchCalls;
-        }
-        await auditContext.success(successParams);
         trackUsage('research', usage, true);
 
         return ok({ content, sources, usage });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
@@ -200,8 +167,6 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
     },
 
     async generate(prompt: string): Promise<Result<GenerateResult, ClaudeError>> {
-      const { auditContext } = createRequestContext('generate', model, prompt);
-
       try {
         const response = await client.messages.create({
           model,
@@ -223,17 +188,11 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           pricing
         );
 
-        await auditContext.success({
-          response: text,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-        });
         trackUsage('generate', usage, true);
 
         return ok({ content: text, usage });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
