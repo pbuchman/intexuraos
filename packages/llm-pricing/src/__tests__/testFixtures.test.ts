@@ -70,7 +70,7 @@ describe('testFixtures', () => {
       expect(() => context.validateAllModels()).not.toThrow();
     });
 
-    it('getModelsWithPricing returns all 14 models (no ZAI)', () => {
+    it('getModelsWithPricing returns all 14 models', () => {
       const context = new FakePricingContext();
 
       const models = context.getModelsWithPricing();
