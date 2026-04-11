@@ -1,6 +1,6 @@
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import {
-  fetchAllPricing,
+  fetchAllPricingWithRetry,
   createPricingContext,
   HttpInternalAuthUsageSink,
 } from '@intexuraos/llm-pricing';
@@ -68,7 +68,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   const logger = createAppLogger({ name: 'commands-agent' });
 
   // Fetch pricing data from llm-usage-service
-  const pricingResult = await fetchAllPricing(
+  const pricingResult = await fetchAllPricingWithRetry(
     config.llmUsageServiceUrl,
     config.internalAuthToken
   );

@@ -8,7 +8,7 @@ import {
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { createTodoItemExtractionService, type TodoItemExtractionService } from './infra/gemini/todoItemExtractionService.js';
 import {
-  fetchAllPricing,
+  fetchAllPricingWithRetry,
   createPricingContext,
   HttpInternalAuthUsageSink,
 } from '@intexuraos/llm-pricing';
@@ -32,7 +32,7 @@ export interface ServiceConfig {
 let container: ServiceContainer | null = null;
 
 export async function initServices(config: ServiceConfig): Promise<void> {
-  const pricingResult = await fetchAllPricing(
+  const pricingResult = await fetchAllPricingWithRetry(
     config.llmUsageServiceUrl,
     config.internalAuthKey
   );
