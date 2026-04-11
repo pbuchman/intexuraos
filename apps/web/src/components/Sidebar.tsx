@@ -60,7 +60,6 @@ const settingsItems: NavItem[] = [
   { to: '/settings/code', label: 'Code Settings', icon: Server },
   { to: '/settings/api-keys', label: 'API Keys', icon: Key },
   { to: '/settings/llm-pricing', label: 'LLM Pricing', icon: DollarSign },
-  { to: '/settings/usage-costs', label: 'Usage Costs', icon: TrendingUp },
 ];
 
 const researchAgentItems: NavItem[] = [
