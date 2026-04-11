@@ -59,7 +59,6 @@ const settingsItems: NavItem[] = [
   { to: '/settings/github', label: 'GitHub', icon: GitBranch },
   { to: '/settings/code', label: 'Code Settings', icon: Server },
   { to: '/settings/api-keys', label: 'API Keys', icon: Key },
-  { to: '/settings/llm-pricing', label: 'LLM Pricing', icon: DollarSign },
   { to: '/settings/usage-costs', label: 'Usage Costs', icon: TrendingUp },
 ];
 
@@ -97,6 +96,7 @@ const linearItems: NavItem[] = [
 
 const llmUsageItems: NavItem[] = [
   { to: '/llm-usage', label: 'Events', icon: List },
+  { to: '/llm-usage/pricing', label: 'Pricing', icon: DollarSign },
 ];
 
 const cronAgentItems: NavItem[] = [

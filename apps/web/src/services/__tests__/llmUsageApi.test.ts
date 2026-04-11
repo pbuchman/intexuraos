@@ -8,6 +8,7 @@ import {
   listLlmUsageEvents,
   getLlmUsageEvent,
   queryLlmUsage,
+  getLlmPricing,
 } from '../llmUsageApi.js';
 import type {
   ListLlmUsageEventsResponse,
@@ -15,6 +16,8 @@ import type {
   LlmUsageQueryResponse,
   UsageEvent,
   AggregateMetrics,
+  AllProvidersPricing,
+  ProviderPricing,
 } from '../../types/index.js';
 
 vi.mock('../apiClient.js', () => ({
@@ -56,6 +59,28 @@ function makeMetrics(overrides: Partial<AggregateMetrics> = {}): AggregateMetric
     cacheReadTokens: 0, cacheWriteTokens: 0, cachedTokens: 0,
     reasoningTokens: 0, thinkingTokens: 0, webSearchCalls: 0, imageCount: 0,
     ...overrides,
+  };
+}
+
+function makeProviderPricing(provider: ProviderPricing['provider']): ProviderPricing {
+  return {
+    provider,
+    models: {
+      'test-model': {
+        inputPricePerMillion: 1.0,
+        outputPricePerMillion: 2.0,
+      },
+    },
+    updatedAt: '2026-04-10T12:00:00Z',
+  };
+}
+
+function makeAllProvidersPricing(): AllProvidersPricing {
+  return {
+    google: makeProviderPricing(LlmProviders.Google),
+    openai: makeProviderPricing(LlmProviders.OpenAI),
+    anthropic: makeProviderPricing(LlmProviders.Anthropic),
+    perplexity: makeProviderPricing(LlmProviders.Perplexity),
   };
 }
 
@@ -215,6 +240,43 @@ describe('llmUsageApi', () => {
           timeRange: { from: '2026-04-01T00:00:00Z', to: '2026-04-10T23:59:59Z' },
         })
       ).rejects.toThrow('Bad request');
+    });
+  });
+
+  describe('getLlmPricing', () => {
+    it('GETs /llm-usage/pricing on llmUsageServiceUrl with bearer token', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      const mockResponse = makeAllProvidersPricing();
+      vi.mocked(apiRequest).mockResolvedValue(mockResponse);
+
+      const result = await getLlmPricing(mockAccessToken);
+
+      expect(apiRequest).toHaveBeenCalledWith(
+        'https://llm-usage.test',
+        '/llm-usage/pricing',
+        mockAccessToken
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('returns the parsed pricing payload with all four calculated-cost providers', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      const mockResponse = makeAllProvidersPricing();
+      vi.mocked(apiRequest).mockResolvedValue(mockResponse);
+
+      const result = await getLlmPricing(mockAccessToken);
+
+      expect(result.google.provider).toBe(LlmProviders.Google);
+      expect(result.openai.provider).toBe(LlmProviders.OpenAI);
+      expect(result.anthropic.provider).toBe(LlmProviders.Anthropic);
+      expect(result.perplexity.provider).toBe(LlmProviders.Perplexity);
+    });
+
+    it('propagates errors from apiRequest (e.g. 401 Unauthorized)', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      vi.mocked(apiRequest).mockRejectedValue(new Error('Unauthorized'));
+
+      await expect(getLlmPricing(mockAccessToken)).rejects.toThrow('Unauthorized');
     });
   });
 });
