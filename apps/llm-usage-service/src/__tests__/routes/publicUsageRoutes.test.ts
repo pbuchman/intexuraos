@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { setServices, resetServices, type ServiceContainer } from '../../services.js';
 import { FakeUsageEventRepository } from '../fakeUsageEventRepository.js';
 import { FakeUsageAggregateRepository } from '../fakeUsageAggregateRepository.js';
+import { FakePricingRepository } from '../fakePricingRepository.js';
 import { createTestEvent } from '../helpers.js';
 import { MAX_LIST_LIMIT, DEFAULT_LIST_LIMIT } from '../../domain/models/usageEvent.js';
 import type { DailyUsageAggregate } from '../../domain/models/dailyAggregate.js';
@@ -75,6 +76,7 @@ describe('publicUsageRoutes', () => {
     setServices({
       usageEventRepository: eventRepo,
       usageAggregateRepository: aggregateRepo,
+      pricingRepository: new FakePricingRepository(),
       orchestratorSecret: 'test-secret',
     } satisfies ServiceContainer);
   });
