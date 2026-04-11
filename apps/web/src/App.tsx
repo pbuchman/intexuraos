@@ -46,12 +46,12 @@ import {
   InboxPage,
   LlmCostsPage,
   LlmUsagePage,
+  LlmUsagePricingPage,
   LlmUsageViewPage,
   LinearConnectionPage,
   LinearIssuesPage,
   LinearPruneCandidatesPage,
   ResearchAgentPage,
-  LlmPricingPage,
   LoginPage,
   MobileNotificationsConnectionPage,
   MobileNotificationsListPage,
@@ -228,14 +228,6 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
-        path="/settings/llm-pricing"
-        element={
-          <ProtectedRoute>
-            <LlmPricingPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/settings/usage-costs"
         element={
           <ProtectedRoute>
@@ -371,6 +363,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <LlmUsagePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/llm-usage/pricing"
+        element={
+          <ProtectedRoute>
+            <LlmUsagePricingPage />
           </ProtectedRoute>
         }
       />
