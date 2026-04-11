@@ -205,6 +205,7 @@ jobs:
             "code-agent:CODE_AGENT"
             "cron-agent:CRON_AGENT"
             "hellscript-agent:HELLSCRIPT_AGENT"
+            "llm-usage-service:LLM_USAGE_SERVICE"
           )
 
           declare -A SERVICE_URLS
@@ -389,6 +390,7 @@ jobs:
                 "code-agent:CODE_AGENT"
                 "cron-agent:CRON_AGENT"
                 "hellscript-agent:HELLSCRIPT_AGENT"
+                "llm-usage-service:LLM_USAGE_SERVICE"
               )
 
               declare -A SERVICE_URLS
