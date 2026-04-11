@@ -105,7 +105,7 @@ import {
 } from '@intexuraos/infra-pubsub';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import {
-  fetchAllPricing,
+  fetchAllPricingWithRetry,
   createPricingContext,
   HttpInternalAuthUsageSink,
 } from '@intexuraos/llm-pricing';
@@ -177,7 +177,7 @@ let container: Services | null = null;
 
 export async function initServices(config: ServiceConfig): Promise<void> {
   // Fetch pricing from llm-usage-service
-  const pricingResult = await fetchAllPricing(
+  const pricingResult = await fetchAllPricingWithRetry(
     config.llmUsageServiceUrl,
     config.internalAuthToken
   );

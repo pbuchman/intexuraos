@@ -2,7 +2,7 @@ import { initSentry, createAppLogger } from '@intexuraos/infra-sentry';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import {
-  fetchAllPricing,
+  fetchAllPricingWithRetry,
   createPricingContext,
   HttpInternalAuthUsageSink,
 } from '@intexuraos/llm-pricing';
@@ -53,7 +53,7 @@ async function main(): Promise<void> {
 
   // Fetch pricing from llm-usage-service
   process.stdout.write(`Fetching pricing from ${config.llmUsageServiceUrl}\n`);
-  const pricingResult = await fetchAllPricing(
+  const pricingResult = await fetchAllPricingWithRetry(
     config.llmUsageServiceUrl,
     config.internalAuthToken
   );

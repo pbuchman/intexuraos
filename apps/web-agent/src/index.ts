@@ -1,7 +1,7 @@
 import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
-import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
+import { fetchAllPricingWithRetry, createPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels, type LLMModel } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
@@ -42,7 +42,7 @@ const REQUIRED_MODELS: LLMModel[] = [LlmModels.Gemini25Flash];
 async function main(): Promise<void> {
   // Fetch pricing from llm-usage-service
   process.stdout.write(`Fetching pricing from ${LLM_USAGE_SERVICE_URL}\n`);
-  const pricingResult = await fetchAllPricing(LLM_USAGE_SERVICE_URL, INTERNAL_AUTH_TOKEN);
+  const pricingResult = await fetchAllPricingWithRetry(LLM_USAGE_SERVICE_URL, INTERNAL_AUTH_TOKEN);
   if (!pricingResult.ok) {
     throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
   }
