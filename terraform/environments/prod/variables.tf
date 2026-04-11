@@ -25,10 +25,16 @@ variable "hetzner_location" {
   default     = "nbg1" # Nuremberg — closest to europe-central2
 }
 
+variable "hetzner_datacenter" {
+  description = "Hetzner datacenter for primary IP (must be within hetzner_location)"
+  type        = string
+  default     = "nbg1-dc3" # Primary datacenter in Nuremberg
+}
+
 variable "hetzner_server_type" {
   description = "Hetzner server type"
   type        = string
-  default     = "cx33" # 4 vCPU Intel, 8GB RAM, 80GB NVMe, ~EUR 6.49/month (nbg1)
+  default     = "cx32" # 4 vCPU, 8GB RAM, 80GB NVMe — per INT-750 plan decision (EUR ~6.80/month, nbg1)
 }
 
 variable "deploy_ssh_public_key" {

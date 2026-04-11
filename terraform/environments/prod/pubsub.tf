@@ -66,6 +66,7 @@ locals {
     bookmark_enrich            = "intexuraos-bookmark-enrich-dev"
     bookmark_summarize         = "intexuraos-bookmark-summarize-dev"
     todos_processing           = "intexuraos-todos-processing-dev"
+    whatsapp_send              = "intexuraos-whatsapp-send-dev"
     approval_reply             = "intexuraos-approval-reply-dev"
   }
 
@@ -427,6 +428,35 @@ resource "google_pubsub_subscription" "prod_todos_processing" {
 
   dead_letter_policy {
     dead_letter_topic     = "projects/${var.project_id}/topics/${local.pubsub_topics.todos_processing}-dlq"
+    max_delivery_attempts = 5
+  }
+
+  expiration_policy { ttl = "" }
+}
+
+# -----------------------------------------------------------------------------
+# Approval reply subscription (1) — whatsapp-service → actions-agent path
+# -----------------------------------------------------------------------------
+
+resource "google_pubsub_subscription" "prod_whatsapp_send" {
+  name    = "intexuraos-whatsapp-send-prod-hetzner"
+  project = var.project_id
+  topic   = "projects/${var.project_id}/topics/${local.pubsub_topics.whatsapp_send}"
+  labels  = local.common_labels
+
+  ack_deadline_seconds       = 60
+  message_retention_duration = "604800s"
+
+  push_config {
+    push_endpoint = "${local.prod_audience}/internal/whatsapp/pubsub/send-message"
+    oidc_token {
+      service_account_email = data.google_service_account.whatsapp_service.email
+      audience              = local.prod_audience
+    }
+  }
+
+  dead_letter_policy {
+    dead_letter_topic     = "projects/${var.project_id}/topics/${local.pubsub_topics.whatsapp_send}-dlq"
     max_delivery_attempts = 5
   }
 

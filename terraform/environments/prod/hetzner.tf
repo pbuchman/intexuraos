@@ -10,7 +10,7 @@ resource "hcloud_ssh_key" "deploy" {
 
 resource "hcloud_primary_ip" "prod_ipv4" {
   name          = "intexuraos-prod-ipv4"
-  datacenter    = "${var.hetzner_location}-dc3"
+  datacenter    = var.hetzner_datacenter
   type          = "ipv4"
   assignee_type = "server"
   auto_delete   = false
@@ -65,7 +65,7 @@ resource "hcloud_firewall" "prod" {
 }
 
 # -----------------------------------------------------------------------------
-# Server — CX32 (4 vCPU, 8GB RAM, 80GB NVMe) running Ubuntu 24.04 LTS
+# Server — var.hetzner_server_type (default CX32: 4 vCPU, 8GB RAM, 80GB NVMe) running Ubuntu 24.04 LTS
 # -----------------------------------------------------------------------------
 
 resource "hcloud_server" "prod" {

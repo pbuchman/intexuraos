@@ -215,9 +215,10 @@ log "    pre-reload assertion passed"
 cat >/etc/ssh/sshd_config.d/00-intexuraos-hardening.conf <<'SSHDCFG'
 # IntexuraOS prod SSH hardening (INT-750)
 #
-# Security model: SSH port 22 is open to the world in the Hetzner cloud
-# firewall, and this drop-in is what makes that safe. Brute-force attempts
-# are pointless because:
+# Security model: SSH port 22 is restricted to admin IPs in the Hetzner
+# cloud firewall (var.admin_ssh_source_ips); this drop-in provides
+# defense-in-depth. Even if firewall rules were misconfigured, brute-force
+# attempts would be pointless because:
 #   - PasswordAuthentication no     (no passwords ever)
 #   - PubkeyAuthentication yes      (only SSH keys)
 #   - AllowUsers deploy             (no root, no bot accounts)
