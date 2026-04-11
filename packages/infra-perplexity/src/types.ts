@@ -51,8 +51,8 @@ export interface PerplexityConfig {
   timeoutMs?: number;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
-  /** Optional usage sink override. Defaults to NoopUsageSink. */
-  usageSink?: UsageSink;
+  /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
+  usageSink: UsageSink;
 }
 
 /** Search context size for Perplexity requests */

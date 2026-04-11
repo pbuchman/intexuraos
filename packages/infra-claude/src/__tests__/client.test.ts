@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ModelPricing } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -8,6 +9,8 @@ const mockLogger: Logger = {
   warn: vi.fn(),
   debug: vi.fn(),
 };
+
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
 const mockMessagesCreate = vi.fn();
 
@@ -69,6 +72,7 @@ describe('createClaudeClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Tell me about AI');
 
@@ -95,6 +99,7 @@ describe('createClaudeClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -122,6 +127,7 @@ describe('createClaudeClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -154,6 +160,7 @@ describe('createClaudeClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -183,6 +190,7 @@ describe('createClaudeClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -213,6 +221,7 @@ describe('createClaudeClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -232,6 +241,7 @@ describe('createClaudeClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -251,6 +261,7 @@ describe('createClaudeClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -270,6 +281,7 @@ describe('createClaudeClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -289,6 +301,7 @@ describe('createClaudeClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -308,6 +321,7 @@ describe('createClaudeClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -327,6 +341,7 @@ describe('createClaudeClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -352,6 +367,7 @@ describe('createClaudeClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Generate something');
 
@@ -382,6 +398,7 @@ describe('createClaudeClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Test prompt');
 
@@ -401,6 +418,7 @@ describe('createClaudeClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Test prompt');
 

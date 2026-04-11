@@ -59,11 +59,21 @@ export interface ServiceConfig {
 let container: ServiceContainer | null = null;
 
 export function initServices(config: ServiceConfig): void {
+  const buildUsageSink = (component: string): HttpInternalAuthUsageSink =>
+    new HttpInternalAuthUsageSink({
+      usageServiceUrl: config.llmUsageServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+      service: 'linear-agent',
+      component,
+      logger,
+    });
+
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
     pricingContext: config.pricingContext,
     logger: logger,
+    usageSink: buildUsageSink('user-service-client'),
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
@@ -76,13 +86,6 @@ export function initServices(config: ServiceConfig): void {
 
   // Create issue pruning classifier using platform Gemini API key
   const geminiApiKey = process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
-  const pruningUsageSink = new HttpInternalAuthUsageSink({
-    usageServiceUrl: config.llmUsageServiceUrl,
-    internalAuthToken: config.internalAuthToken,
-    service: 'linear-agent',
-    component: 'issue-pruning',
-    logger,
-  });
   const geminiClient = geminiApiKey !== undefined && geminiApiKey !== ''
     ? createGeminiClient({
         apiKey: geminiApiKey,
@@ -90,7 +93,7 @@ export function initServices(config: ServiceConfig): void {
         userId: 'system:pruning',
         pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
         logger,
-        usageSink: pruningUsageSink,
+        usageSink: buildUsageSink('issue-pruning'),
       })
     : null;
 

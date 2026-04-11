@@ -22,6 +22,7 @@ describe('services', () => {
         cloudflareApiToken: 'test-api-token',
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
+        llmUsageServiceUrl: 'http://localhost:8132',
         pricingContext: mockPricingContext,
       });
 
@@ -53,6 +54,7 @@ describe('services', () => {
         cloudflareApiToken: 'test-api-token',
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
+        llmUsageServiceUrl: 'http://localhost:8132',
         pricingContext: mockPricingContext,
       });
 
@@ -90,6 +92,7 @@ describe('services', () => {
         cloudflareApiToken: 'test-api-token',
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
+        llmUsageServiceUrl: 'http://localhost:8132',
         pricingContext: mockPricingContext,
       });
       resetServices();

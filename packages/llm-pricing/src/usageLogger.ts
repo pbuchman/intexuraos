@@ -1,9 +1,12 @@
 /**
  * LLM Usage Logger.
  *
- * Logs LLM usage via a pluggable UsageSink. The default sink (NoopUsageSink)
- * discards events; in-cluster apps should wire up HttpInternalAuthUsageSink to
- * forward events to llm-usage-service.
+ * Logs LLM usage via a pluggable UsageSink. Every UsageLogger requires an
+ * explicit sink — there is no silent default. Production apps should wire up
+ * HttpInternalAuthUsageSink to forward events to llm-usage-service. Tests may
+ * pass a fake sink (e.g., FakeUsageSink). The legacy NoopUsageSink remains
+ * exported as a deliberate opt-out for CLI tools / scripts that genuinely do
+ * not want usage tracking.
  */
 
 import { getErrorMessage } from '@intexuraos/common-core';
@@ -101,9 +104,9 @@ export class StructuredLogUsageSink implements UsageSink {
 /**
  * Sink that discards all usage events.
  *
- * Default sink used when no explicit sink is provided. Apps that want usage
- * events persisted must pass HttpInternalAuthUsageSink (or another concrete
- * sink) when constructing their LLM clients.
+ * Deliberate opt-out for CLI tools, scripts, and other contexts that genuinely
+ * do not want usage tracking. No longer used as a silent default — every
+ * LLM client construction must pass an explicit sink.
  */
 export class NoopUsageSink implements UsageSink {
   log(): Promise<void> {
@@ -131,16 +134,17 @@ export function isUsageLoggingEnabled(): boolean {
  *
  * @remarks
  * Wraps a UsageSink and emits structured logs alongside delegation to the sink.
- * Requires a Logger instance. Sink is optional and defaults to NoopUsageSink —
- * production apps should pass an explicit sink (typically HttpInternalAuthUsageSink).
+ * Requires both a Logger and an explicit UsageSink — production apps should
+ * pass HttpInternalAuthUsageSink, tests should pass a fake, and CLI/script
+ * contexts that genuinely opt out can pass NoopUsageSink.
  */
 export class UsageLogger {
   readonly logger: Logger;
   readonly sink: UsageSink;
 
-  constructor(deps: { logger: Logger; sink?: UsageSink | undefined }) {
+  constructor(deps: { logger: Logger; sink: UsageSink }) {
     this.logger = deps.logger;
-    this.sink = deps.sink ?? new NoopUsageSink();
+    this.sink = deps.sink;
   }
 
   /**
@@ -180,26 +184,6 @@ export class UsageLogger {
 /**
  * Create a UsageLogger instance.
  */
-export function createUsageLogger(deps: {
-  logger: Logger;
-  sink?: UsageSink | undefined;
-}): UsageLogger {
+export function createUsageLogger(deps: { logger: Logger; sink: UsageSink }): UsageLogger {
   return new UsageLogger(deps);
-}
-
-/**
- * @deprecated Use {@link UsageLogger.log} or {@link createUsageLogger} instead.
- *
- * Legacy standalone function — always uses NoopUsageSink (no-op). Kept for
- * backward compatibility during the migration off FirestoreUsageSink.
- */
-export async function logUsage(params: UsageLogParams): Promise<void> {
-  const silentLogger: Logger = {
-    info: () => undefined,
-    warn: () => undefined,
-    error: () => undefined,
-    debug: () => undefined,
-  };
-  const usageLogger = new UsageLogger({ logger: silentLogger });
-  await usageLogger.log(params);
 }

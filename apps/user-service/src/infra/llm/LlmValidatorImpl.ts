@@ -9,6 +9,7 @@ import { createClaudeClient } from '@intexuraos/infra-claude';
 import { createPerplexityClient } from '@intexuraos/infra-perplexity';
 import { createOpenRouterClient, OPENROUTER_VALIDATION_MODEL } from '@intexuraos/infra-openrouter';
 import { LlmModels, LlmProviders, type ModelPricing } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import type {
   LlmProvider,
   LlmTestResponse,
@@ -44,10 +45,12 @@ export interface ValidationPricing {
 export class LlmValidatorImpl implements LlmValidator {
   private readonly pricing: ValidationPricing;
   private readonly logger: Logger;
+  private readonly usageSink: UsageSink;
 
-  constructor(pricing: ValidationPricing, logger: Logger) {
+  constructor(pricing: ValidationPricing, logger: Logger, usageSink: UsageSink) {
     this.pricing = pricing;
     this.logger = logger;
+    this.usageSink = usageSink;
   }
 
   async validateKey(
@@ -63,6 +66,7 @@ export class LlmValidatorImpl implements LlmValidator {
           userId,
           pricing: this.pricing.google,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
@@ -83,6 +87,7 @@ export class LlmValidatorImpl implements LlmValidator {
           userId,
           pricing: this.pricing.openai,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
@@ -103,6 +108,7 @@ export class LlmValidatorImpl implements LlmValidator {
           userId,
           pricing: this.pricing.anthropic,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
@@ -123,6 +129,7 @@ export class LlmValidatorImpl implements LlmValidator {
           userId,
           pricing: this.pricing.perplexity,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
@@ -144,6 +151,7 @@ export class LlmValidatorImpl implements LlmValidator {
           userId,
           pricing: this.pricing.openrouter,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
         const result = await client.validateKey(apiKey);
         if (!result.ok) {
@@ -174,6 +182,7 @@ export class LlmValidatorImpl implements LlmValidator {
           userId,
           pricing: this.pricing.google,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
         const result = await client.generate(prompt);
         if (!result.ok) {
@@ -191,6 +200,7 @@ export class LlmValidatorImpl implements LlmValidator {
           userId,
           pricing: this.pricing.openai,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
         const result = await client.generate(prompt);
         if (!result.ok) {
@@ -208,6 +218,7 @@ export class LlmValidatorImpl implements LlmValidator {
           userId,
           pricing: this.pricing.anthropic,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
         const result = await client.generate(prompt);
         if (!result.ok) {
@@ -225,6 +236,7 @@ export class LlmValidatorImpl implements LlmValidator {
           userId,
           pricing: this.pricing.perplexity,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
         const result = await client.generate(prompt);
         if (!result.ok) {
@@ -242,6 +254,7 @@ export class LlmValidatorImpl implements LlmValidator {
           userId,
           pricing: this.pricing.openrouter,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
         const result = await client.generate(prompt);
         if (!result.ok) {

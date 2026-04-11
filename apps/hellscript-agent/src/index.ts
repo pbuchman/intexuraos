@@ -3,6 +3,7 @@ import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { createGeminiClient, TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
 import { LlmModels } from '@intexuraos/llm-contract';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
 import { loadConfig } from './config.js';
@@ -14,6 +15,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_GEMINI_APP_API_KEY',
+  'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'INTEXURAOS_SENTRY_DSN',
 ];
 
@@ -41,6 +43,13 @@ async function main(): Promise<void> {
     userId: 'hellscript-agent-system',
     pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
     logger: createAppLogger({ name: 'gemini-client' }),
+    usageSink: new HttpInternalAuthUsageSink({
+      usageServiceUrl: config.llmUsageServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+      service: 'hellscript-agent',
+      component: 'gemini-client',
+      logger,
+    }),
   });
 
   initServices({

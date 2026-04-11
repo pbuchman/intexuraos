@@ -52,7 +52,8 @@ export interface ToolCallingClientConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
-  usageSink?: UsageSink;
+  /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
+  usageSink: UsageSink;
 }
 
 /**

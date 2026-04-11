@@ -6,6 +6,7 @@
 import { createGptClient, type GptClient } from '@intexuraos/infra-gpt';
 import type { Logger, Result } from '@intexuraos/common-core';
 import type { ModelPricing } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import { buildResearchPrompt, buildSynthesisPrompt, titlePrompt, type ResearchContext, type SynthesisContext } from '@intexuraos/llm-prompts';
 import type {
   LlmError,
@@ -27,6 +28,7 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     userId: string,
     pricing: ModelPricing,
     logger: Logger,
+    usageSink: UsageSink,
     researchId?: string
   ) {
     this.client = createGptClient({
@@ -36,6 +38,7 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
       ...(researchId !== undefined && { researchId }),
       pricing,
       logger,
+      usageSink,
     });
     this.model = model;
     this.logger = logger;

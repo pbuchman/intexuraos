@@ -1,6 +1,7 @@
 import { err, type Logger, type Result } from '@intexuraos/common-core';
 import { createGptClient } from '@intexuraos/infra-gpt';
 import type { ModelPricing } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import { generateThumbnailPrompt } from '@intexuraos/llm-prompts';
 import type { ThumbnailPrompt } from '../../domain/index.js';
 import type { PromptGenerationError, PromptGenerator } from '../../domain/ports/promptGenerator.js';
@@ -10,6 +11,7 @@ export interface GptPromptAdapterConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
+  usageSink: UsageSink;
   model?: string;
 }
 
@@ -21,6 +23,7 @@ export class GptPromptAdapter implements PromptGenerator {
   private readonly model: string;
   private readonly pricing: ModelPricing;
   private readonly logger: Logger;
+  private readonly usageSink: UsageSink;
 
   constructor(config: GptPromptAdapterConfig) {
     this.apiKey = config.apiKey;
@@ -28,6 +31,7 @@ export class GptPromptAdapter implements PromptGenerator {
     this.model = config.model ?? DEFAULT_MODEL;
     this.pricing = config.pricing;
     this.logger = config.logger;
+    this.usageSink = config.usageSink;
   }
 
   async generateThumbnailPrompt(
@@ -39,6 +43,7 @@ export class GptPromptAdapter implements PromptGenerator {
       userId: this.userId,
       pricing: this.pricing,
       logger: this.logger,
+      usageSink: this.usageSink,
     });
 
     const result = await generateThumbnailPrompt(client, text);

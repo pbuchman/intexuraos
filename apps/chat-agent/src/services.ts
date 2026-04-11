@@ -132,6 +132,14 @@ export async function initializeServices(): Promise<void> {
     logger,
   });
 
+  const userServiceUsageSink = new HttpInternalAuthUsageSink({
+    usageServiceUrl: llmUsageServiceUrl,
+    internalAuthToken,
+    service: 'chat-agent',
+    component: 'user-service-client',
+    logger,
+  });
+
   // Create guest LLM client with platform-owned Gemini API key
   const guestLlmClient = createLlmClient({
     apiKey: guestGeminiApiKey,
@@ -154,6 +162,7 @@ export async function initializeServices(): Promise<void> {
       internalAuthToken,
       pricingContext,
       logger,
+      usageSink: userServiceUsageSink,
       platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
     }),
     logger,
