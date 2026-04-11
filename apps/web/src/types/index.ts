@@ -744,14 +744,20 @@ export interface ProviderPricing {
 }
 
 /**
- * All providers pricing response
+ * All providers pricing response.
+ *
+ * Matches the shape returned by `llm-usage-service`'s `GET /llm-usage/pricing`
+ * (5 providers: google, openai, anthropic, perplexity, openrouter). The 4
+ * calculated-cost providers are required; openrouter is included by the
+ * backend but its cost comes from the provider's own API response, so the
+ * pricing UI only renders the 4 calculated-cost cards.
  */
 export interface AllProvidersPricing {
   google: ProviderPricing;
   openai: ProviderPricing;
   anthropic: ProviderPricing;
   perplexity: ProviderPricing;
-  zai: ProviderPricing;
+  openrouter?: ProviderPricing;
 }
 
 /**
