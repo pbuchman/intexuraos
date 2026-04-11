@@ -259,17 +259,15 @@ describe('llmUsageApi', () => {
       expect(result).toEqual(mockResponse);
     });
 
-    it('returns the parsed pricing payload with all four calculated-cost providers', async () => {
+    it('calls llmUsageServiceUrl, not the old appSettingsServiceUrl', async () => {
       const { apiRequest } = await import('../apiClient.js');
-      const mockResponse = makeAllProvidersPricing();
-      vi.mocked(apiRequest).mockResolvedValue(mockResponse);
+      vi.mocked(apiRequest).mockResolvedValue(makeAllProvidersPricing());
 
-      const result = await getLlmPricing(mockAccessToken);
+      await getLlmPricing(mockAccessToken);
 
-      expect(result.google.provider).toBe(LlmProviders.Google);
-      expect(result.openai.provider).toBe(LlmProviders.OpenAI);
-      expect(result.anthropic.provider).toBe(LlmProviders.Anthropic);
-      expect(result.perplexity.provider).toBe(LlmProviders.Perplexity);
+      const calledUrl = vi.mocked(apiRequest).mock.calls[0]?.[0] ?? '';
+      expect(calledUrl).toBe('https://llm-usage.test');
+      expect(calledUrl).not.toContain('settings');
     });
 
     it('propagates errors from apiRequest (e.g. 401 Unauthorized)', async () => {
