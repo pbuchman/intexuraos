@@ -16,7 +16,6 @@ import {
   type HealthCheck,
 } from '@intexuraos/http-server';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
-import { publicRoutes } from './routes/publicRoutes.js';
 
 const SERVICE_NAME = 'app-settings-service';
 const SERVICE_VERSION = '0.0.4';
@@ -92,68 +91,6 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
               downstreamRequestId: { type: 'string' },
             },
           },
-          MonthlyCost: {
-            type: 'object',
-            required: ['month', 'costUsd', 'calls', 'inputTokens', 'outputTokens', 'percentage'],
-            properties: {
-              month: { type: 'string' },
-              costUsd: { type: 'number' },
-              calls: { type: 'integer' },
-              inputTokens: { type: 'integer' },
-              outputTokens: { type: 'integer' },
-              percentage: { type: 'integer' },
-            },
-          },
-          ModelCost: {
-            type: 'object',
-            required: ['model', 'costUsd', 'calls', 'percentage'],
-            properties: {
-              model: { type: 'string' },
-              costUsd: { type: 'number' },
-              calls: { type: 'integer' },
-              percentage: { type: 'integer' },
-            },
-          },
-          CallTypeCost: {
-            type: 'object',
-            required: ['callType', 'costUsd', 'calls', 'percentage'],
-            properties: {
-              callType: { type: 'string' },
-              costUsd: { type: 'number' },
-              calls: { type: 'integer' },
-              percentage: { type: 'integer' },
-            },
-          },
-          AggregatedCosts: {
-            type: 'object',
-            required: [
-              'totalCostUsd',
-              'totalCalls',
-              'totalInputTokens',
-              'totalOutputTokens',
-              'monthlyBreakdown',
-              'byModel',
-              'byCallType',
-            ],
-            properties: {
-              totalCostUsd: { type: 'number' },
-              totalCalls: { type: 'integer' },
-              totalInputTokens: { type: 'integer' },
-              totalOutputTokens: { type: 'integer' },
-              monthlyBreakdown: {
-                type: 'array',
-                items: { $ref: '#/components/schemas/MonthlyCost' },
-              },
-              byModel: {
-                type: 'array',
-                items: { $ref: '#/components/schemas/ModelCost' },
-              },
-              byCallType: {
-                type: 'array',
-                items: { $ref: '#/components/schemas/CallTypeCost' },
-              },
-            },
-          },
         },
         securitySchemes: {
           bearerAuth: {
@@ -199,80 +136,6 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   registerCoreSchemas(app);
-
-  // Register service-specific schemas for Fastify serialization
-  app.addSchema({
-    $id: 'MonthlyCost',
-    type: 'object',
-    required: ['month', 'costUsd', 'calls', 'inputTokens', 'outputTokens', 'percentage'],
-    properties: {
-      month: { type: 'string' },
-      costUsd: { type: 'number' },
-      calls: { type: 'integer' },
-      inputTokens: { type: 'integer' },
-      outputTokens: { type: 'integer' },
-      percentage: { type: 'integer' },
-    },
-  });
-
-  app.addSchema({
-    $id: 'ModelCost',
-    type: 'object',
-    required: ['model', 'costUsd', 'calls', 'percentage'],
-    properties: {
-      model: { type: 'string' },
-      costUsd: { type: 'number' },
-      calls: { type: 'integer' },
-      percentage: { type: 'integer' },
-    },
-  });
-
-  app.addSchema({
-    $id: 'CallTypeCost',
-    type: 'object',
-    required: ['callType', 'costUsd', 'calls', 'percentage'],
-    properties: {
-      callType: { type: 'string' },
-      costUsd: { type: 'number' },
-      calls: { type: 'integer' },
-      percentage: { type: 'integer' },
-    },
-  });
-
-  app.addSchema({
-    $id: 'AggregatedCosts',
-    type: 'object',
-    required: [
-      'totalCostUsd',
-      'totalCalls',
-      'totalInputTokens',
-      'totalOutputTokens',
-      'monthlyBreakdown',
-      'byModel',
-      'byCallType',
-    ],
-    properties: {
-      totalCostUsd: { type: 'number' },
-      totalCalls: { type: 'integer' },
-      totalInputTokens: { type: 'integer' },
-      totalOutputTokens: { type: 'integer' },
-      monthlyBreakdown: {
-        type: 'array',
-        items: { $ref: 'MonthlyCost#' },
-      },
-      byModel: {
-        type: 'array',
-        items: { $ref: 'ModelCost#' },
-      },
-      byCallType: {
-        type: 'array',
-        items: { $ref: 'CallTypeCost#' },
-      },
-    },
-  });
-
-  // Register routes
-  await app.register(publicRoutes);
 
   // OpenAPI spec endpoint
   app.get(

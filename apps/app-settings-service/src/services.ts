@@ -2,15 +2,11 @@
  * Service wiring for app-settings-service.
  * Provides dependency injection for domain adapters.
  */
-import type { UsageStatsRepository } from './domain/ports/index.js';
-import { FirestoreUsageStatsRepository } from './infra/firestore/index.js';
 
 /**
  * Service container holding all adapter instances.
  */
-export interface ServiceContainer {
-  usageStatsRepository: UsageStatsRepository;
-}
+export type ServiceContainer = Record<string, never>;
 
 let container: ServiceContainer | null = null;
 
@@ -18,9 +14,7 @@ let container: ServiceContainer | null = null;
  * Get or create the service container.
  */
 export function getServices(): ServiceContainer {
-  container ??= {
-    usageStatsRepository: new FirestoreUsageStatsRepository(),
-  };
+  container ??= {};
   return container;
 }
 
