@@ -99,9 +99,11 @@ export function useLlmUsageEvents(options: UseLlmUsageEventsOptions): UseLlmUsag
   // Initial load + options-change refresh
   useEffect(() => {
     if (!enabled) return;
+    // Order matters: set BEFORE the optionsJson early-return so that under
+    // React 18 Strict Mode's double-invoke the second pass resets the ref.
+    isMountedRef.current = true;
     if (optionsJson === optionsJsonRef.current) return;
     optionsJsonRef.current = optionsJson;
-    isMountedRef.current = true;
     void refresh();
     return (): void => {
       isMountedRef.current = false;

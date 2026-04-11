@@ -2,7 +2,7 @@
  * LLM Usage list page with filtering, sorting, grouping, and pagination.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { Layout } from '@/components';
@@ -61,11 +61,14 @@ const GROUP_BY_OPTIONS: { key: GroupByMode; label: string }[] = [
   { key: 'model', label: 'Model' },
 ];
 
+// "Most expensive" / "Most tokens" sorts are intentionally omitted:
+// the composite index `(occurredAt, cost.billedUsd, __name__)` treats the
+// secondary field as a tiebreaker, and `occurredAt` is effectively unique
+// per event — so the displayed order would be identical to "Newest first".
+// A correct ranking requires aggregate-backed queries; tracked as a follow-up.
 const SORT_OPTIONS: { field: UsageEventSortField; direction: 'asc' | 'desc'; label: string }[] = [
   { field: 'occurredAt', direction: 'desc', label: 'Newest first' },
   { field: 'occurredAt', direction: 'asc', label: 'Oldest first' },
-  { field: 'costUsd', direction: 'desc', label: 'Most expensive' },
-  { field: 'totalTokens', direction: 'desc', label: 'Most tokens' },
 ];
 
 const PRESET_OPTIONS: { key: TimeRangePreset; label: string }[] = [
@@ -99,10 +102,12 @@ function isSortState(v: unknown): v is SortState {
   const obj = v as Record<string, unknown>;
   const field = obj['field'];
   const direction = obj['direction'];
+  // Stale 'costUsd' / 'totalTokens' values from localStorage fall through
+  // to DEFAULT_SORT after those options were removed from the UI.
   return (
     typeof field === 'string' &&
     typeof direction === 'string' &&
-    ['occurredAt', 'costUsd', 'totalTokens'].includes(field) &&
+    field === 'occurredAt' &&
     ['asc', 'desc'].includes(direction)
   );
 }
@@ -491,7 +496,9 @@ export function LlmUsagePage(): React.JSX.Element {
   useEffect(() => { saveToStorage(STORAGE_KEY_SORT, sortBy); }, [sortBy]);
   useEffect(() => { saveToStorage(STORAGE_KEY_GROUP_BY, groupBy); }, [groupBy]);
 
-  const resolvedTimeRange = resolveTimeRange(timeRange);
+  // Stable identity required — resolveTimeRange calls new Date(), which would
+  // otherwise tick on every render and defeat the hooks' JSON change guard.
+  const resolvedTimeRange = useMemo(() => resolveTimeRange(timeRange), [timeRange]);
 
   const activeProviders = filters.providers ?? [];
 
@@ -523,12 +530,19 @@ export function LlmUsagePage(): React.JSX.Element {
 
   const isRawMode = groupBy === 'none';
 
+  // Skip fetching when Custom preset is selected but the user has not yet
+  // picked both dates — resolveTimeRange would return empty strings, which
+  // the backend rejects with a date-time format error.
+  const isCustomIncomplete =
+    timeRange.preset === 'custom' &&
+    (timeRange.customFrom === undefined || timeRange.customTo === undefined);
+
   // Raw events hook (active when groupBy === 'none')
   const eventsResult = useLlmUsageEvents({
     timeRange: resolvedTimeRange,
     filters,
     sortBy,
-    enabled: isRawMode,
+    enabled: isRawMode && !isCustomIncomplete,
   });
 
   // Aggregate query hook (active when groupBy !== 'none')
@@ -537,7 +551,7 @@ export function LlmUsagePage(): React.JSX.Element {
     timeRange: resolvedTimeRange,
     filters,
     groupBy: queryGroupBy,
-    enabled: !isRawMode,
+    enabled: !isRawMode && !isCustomIncomplete,
   });
 
   const totalMatched = isRawMode ? eventsResult.totalMatched : (queryResult.totals?.calls ?? 0);
