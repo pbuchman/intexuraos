@@ -4,7 +4,7 @@ import { DollarSign } from 'lucide-react';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { Card, Layout } from '@/components';
 import { useAuth } from '@/context';
-import { getLlmPricing } from '@/services/settingsApi';
+import { getLlmPricing } from '@/services/llmUsageApi';
 import { formatDateTime } from '@/utils/dateFormat';
 import type { AllProvidersPricing, LlmProvider, ModelPricing, ProviderPricing } from '@/types';
 
@@ -123,7 +123,7 @@ function ProviderBlock({ provider, pricing }: ProviderBlockProps): React.JSX.Ele
   );
 }
 
-export function LlmPricingPage(): React.JSX.Element {
+export function LlmUsagePricingPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
   const [pricing, setPricing] = useState<AllProvidersPricing | null>(null);
   const [loading, setLoading] = useState(true);
