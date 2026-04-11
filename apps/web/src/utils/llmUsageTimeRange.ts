@@ -11,37 +11,41 @@ export interface ResolvedTimeRange {
   to: string;
 }
 
-function startOfDay(d: Date): string {
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function startOfUtcDay(d: Date): string {
   const c = new Date(d);
-  c.setHours(0, 0, 0, 0);
+  c.setUTCHours(0, 0, 0, 0);
   return c.toISOString();
 }
 
-function endOfDay(d: Date): string {
+function endOfUtcDay(d: Date): string {
   const c = new Date(d);
-  c.setHours(23, 59, 59, 999);
+  c.setUTCHours(23, 59, 59, 999);
   return c.toISOString();
 }
 
-/** Resolves a preset to { from, to } ISO strings at call time */
+/**
+ * Resolves a preset to { from, to } ISO strings at call time.
+ *
+ * All day boundaries and offsets are computed in UTC so results are
+ * deterministic across host timezones and DST transitions.
+ */
 export function resolveTimeRange(state: TimeRangeState): ResolvedTimeRange {
   const now = new Date();
   switch (state.preset) {
     case 'today':
-      return { from: startOfDay(now), to: now.toISOString() };
+      return { from: startOfUtcDay(now), to: now.toISOString() };
     case 'yesterday': {
-      const y = new Date(now);
-      y.setDate(y.getDate() - 1);
-      return { from: startOfDay(y), to: endOfDay(y) };
+      const y = new Date(now.getTime() - MS_PER_DAY);
+      return { from: startOfUtcDay(y), to: endOfUtcDay(y) };
     }
     case 'last7days': {
-      const d = new Date(now);
-      d.setDate(d.getDate() - 7);
+      const d = new Date(now.getTime() - 7 * MS_PER_DAY);
       return { from: d.toISOString(), to: now.toISOString() };
     }
     case 'last30days': {
-      const d = new Date(now);
-      d.setDate(d.getDate() - 30);
+      const d = new Date(now.getTime() - 30 * MS_PER_DAY);
       return { from: d.toISOString(), to: now.toISOString() };
     }
     case 'custom':
