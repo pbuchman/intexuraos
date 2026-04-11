@@ -790,12 +790,6 @@ describe('OrchestratorCompletionVerifier', () => {
         'INTEXURAOS_GEMINI_APP_API_KEY is required'
       );
     });
-
-    it('throws when auditLogPath is empty', () => {
-      expect(() => createVerifier({ auditLogPath: '' })).toThrow(
-        'Completion verifier auditLogPath is required'
-      );
-    });
   });
 
   describe('describe', () => {

@@ -5,6 +5,7 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 export type {
   LLMError as PerplexityError,
@@ -50,6 +51,8 @@ export interface PerplexityConfig {
   timeoutMs?: number;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
+  /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
+  usageSink: UsageSink;
 }
 
 /** Search context size for Perplexity requests */

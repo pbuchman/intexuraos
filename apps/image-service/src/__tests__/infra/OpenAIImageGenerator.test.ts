@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err, type Logger } from '@intexuraos/common-core';
 import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import { createGptClient } from '@intexuraos/infra-gpt';
 import {
   OpenAIImageGenerator,
@@ -45,6 +46,8 @@ const mockLogger: Logger = {
   warn: vi.fn(),
   debug: vi.fn(),
 };
+
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
 function createMockStorage(): ImageStorage & {
   uploadMock: ReturnType<
@@ -109,6 +112,7 @@ describe('OpenAIImageGenerator', () => {
         pricing: testPricing,
         imagePricing: testImagePricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -147,6 +151,7 @@ describe('OpenAIImageGenerator', () => {
         pricing: testPricing,
         imagePricing: testImagePricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       await generator.generate(testPrompt);
@@ -178,6 +183,7 @@ describe('OpenAIImageGenerator', () => {
         pricing: testPricing,
         imagePricing: testImagePricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await generator.generate(testPrompt, { slug: 'my-cool-image' });
@@ -205,6 +211,7 @@ describe('OpenAIImageGenerator', () => {
         pricing: testPricing,
         imagePricing: testImagePricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -241,6 +248,7 @@ describe('OpenAIImageGenerator', () => {
         pricing: testPricing,
         imagePricing: testImagePricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -265,6 +273,7 @@ describe('OpenAIImageGenerator', () => {
         pricing: testPricing,
         imagePricing: testImagePricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -290,6 +299,7 @@ describe('OpenAIImageGenerator', () => {
         pricing: testPricing,
         imagePricing: testImagePricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -313,6 +323,7 @@ describe('OpenAIImageGenerator', () => {
         pricing: testPricing,
         imagePricing: testImagePricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -338,6 +349,7 @@ describe('OpenAIImageGenerator', () => {
         pricing: testPricing,
         imagePricing: testImagePricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -366,6 +378,7 @@ describe('OpenAIImageGenerator', () => {
         pricing: testPricing,
         imagePricing: testImagePricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -399,6 +412,7 @@ describe('OpenAIImageGenerator', () => {
         pricing: testPricing,
         imagePricing: testImagePricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -423,6 +437,7 @@ describe('OpenAIImageGenerator', () => {
         pricing: testPricing,
         imagePricing: testImagePricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       expect(generator).toBeInstanceOf(OpenAIImageGenerator);

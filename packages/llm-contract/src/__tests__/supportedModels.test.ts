@@ -75,7 +75,7 @@ describe('getProviderForModel', () => {
 
 describe('supportedModels', () => {
   describe('ALL_LLM_MODELS', () => {
-    it('contains all 14 expected models (no ZAI)', () => {
+    it('contains all 14 expected models', () => {
       expect(ALL_LLM_MODELS).toHaveLength(14);
     });
 
@@ -103,11 +103,6 @@ describe('supportedModels', () => {
       expect(ALL_LLM_MODELS).toContain('sonar');
       expect(ALL_LLM_MODELS).toContain('sonar-pro');
       expect(ALL_LLM_MODELS).toContain('sonar-deep-research');
-    });
-
-    it('does NOT contain ZAI/GLM-4.7 models', () => {
-      expect(ALL_LLM_MODELS).not.toContain('glm-4.7');
-      expect(ALL_LLM_MODELS).not.toContain('glm-4.7-flash');
     });
   });
 

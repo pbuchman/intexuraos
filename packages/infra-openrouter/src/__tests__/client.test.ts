@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 import { type ModelPricing, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -10,12 +11,7 @@ const mockLogger: Logger = {
   debug: vi.fn(),
 };
 
-vi.mock('@intexuraos/llm-audit', () => ({
-  createAuditContext: vi.fn().mockReturnValue({
-    success: vi.fn().mockResolvedValue(undefined),
-    error: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
 const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
 
@@ -27,7 +23,6 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 }));
 
 const { createOpenRouterClient } = await import('../client.js');
-const { createAuditContext } = await import('@intexuraos/llm-audit');
 
 const API_BASE_URL = 'https://openrouter.ai/api/v1';
 const TEST_MODEL = 'anthropic/claude-sonnet-4.6';
@@ -50,83 +45,6 @@ describe('createOpenRouterClient', () => {
   });
 
   describe('research', () => {
-    it('includes userId and researchId in audit context', async () => {
-      nock(API_BASE_URL)
-        .post('/chat/completions')
-        .reply(200, {
-          id: 'test-id',
-          model: `${TEST_MODEL}:online`,
-          created: Date.now(),
-          object: 'chat.completion',
-          choices: [
-            {
-              index: 0,
-              message: { content: 'Research findings.', role: 'assistant' },
-              finish_reason: 'stop',
-            },
-          ],
-          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
-        });
-
-      const client = createOpenRouterClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        researchId: 'research-123',
-        pricing: createTestPricing(),
-        logger: mockLogger,
-      });
-
-      await client.research('Test prompt');
-
-      expect(vi.mocked(createAuditContext).mock.calls[0]?.[0]).toEqual(
-        expect.objectContaining({
-          provider: LlmProviders.OpenRouter,
-          model: TEST_MODEL,
-          method: 'research',
-          prompt: 'Test prompt',
-          userId: 'test-user',
-          researchId: 'research-123',
-        })
-      );
-    });
-
-    it('excludes researchId from audit context when undefined', async () => {
-      nock(API_BASE_URL)
-        .post('/chat/completions')
-        .reply(200, {
-          id: 'test-id',
-          model: `${TEST_MODEL}:online`,
-          created: Date.now(),
-          object: 'chat.completion',
-          choices: [
-            {
-              index: 0,
-              message: { content: 'Research findings.', role: 'assistant' },
-              finish_reason: 'stop',
-            },
-          ],
-          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
-        });
-
-      const client = createOpenRouterClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        pricing: createTestPricing(),
-        logger: mockLogger,
-      });
-
-      await client.research('Test prompt');
-
-      const auditArgs = vi.mocked(createAuditContext).mock.calls[0]?.[0] as unknown as Record<
-        string,
-        unknown
-      >;
-      expect(auditArgs).not.toHaveProperty('researchId');
-      expect(auditArgs?.['userId']).toBe('test-user');
-    });
-
     it('sends request with :online suffix for research', async () => {
       let capturedBody: Record<string, unknown> | undefined;
 
@@ -156,6 +74,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       await client.research('Test prompt');
@@ -193,6 +112,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       await client.research('Test prompt');
@@ -225,6 +145,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Tell me about AI');
@@ -260,6 +181,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Test prompt');
@@ -299,6 +221,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Test prompt');
@@ -335,6 +258,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Test prompt');
@@ -370,6 +294,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       await client.research('Test prompt');
@@ -394,6 +319,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Test prompt');
@@ -413,6 +339,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Test prompt');
@@ -432,6 +359,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Test prompt');
@@ -451,6 +379,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       await client.research('Test prompt');
@@ -472,6 +401,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Test prompt');
@@ -491,6 +421,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Test prompt');
@@ -532,6 +463,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       await client.generate('Write something');
@@ -564,6 +496,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.generate('Write something');
@@ -605,6 +538,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       await client.generate('Write something');
@@ -626,6 +560,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.generate('Write something');
@@ -645,6 +580,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.generate('Write something');
@@ -664,6 +600,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.generate('Write something');
@@ -683,6 +620,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.generate('Write something');
@@ -702,6 +640,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.generate('Write something');
@@ -721,6 +660,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.generate('Write something');
@@ -755,6 +695,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.generate('Write something');
@@ -794,6 +735,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       await client.generate('Return JSON', { responseFormat: { type: 'json_object' } });
@@ -830,6 +772,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       await client.generate('Write something');
@@ -855,6 +798,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.generate('Write something');
@@ -919,6 +863,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.validateKey('test-key');
@@ -939,6 +884,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.validateKey('bad-key');
@@ -958,6 +904,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.validateKey('test-key');
@@ -977,6 +924,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.validateKey('test-key');
@@ -996,6 +944,7 @@ describe('createOpenRouterClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.validateKey('test-key');

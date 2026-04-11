@@ -5,6 +5,7 @@
 
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
 import type { ModelPricing } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
   buildInferResearchContextPrompt,
   buildInferSynthesisContextPrompt,
@@ -75,6 +76,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     userId: string,
     pricing: ModelPricing,
     logger: Logger,
+    usageSink: UsageSink,
     researchId?: string
   ) {
     this.client = createGeminiClient({
@@ -84,6 +86,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       ...(researchId !== undefined && { researchId }),
       pricing,
       logger,
+      usageSink,
     });
     this.logger = logger;
   }
@@ -136,7 +139,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       };
     }
 
-    const { usage } = result.value;
+    const { usage } = result.value; // @allow-result-access -- result.ok narrowed at line 99 earlier in function
     return {
       ok: true,
       value: {
@@ -197,7 +200,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       };
     }
 
-    const { usage } = result.value;
+    const { usage } = result.value; // @allow-result-access -- result.ok narrowed at line 160 earlier in function
     return {
       ok: true,
       value: {

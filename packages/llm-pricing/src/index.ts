@@ -4,7 +4,6 @@ export {
   isUsageLoggingEnabled,
   UsageLogger,
   createUsageLogger,
-  FirestoreUsageSink,
   StructuredLogUsageSink,
   NoopUsageSink,
   type UsageLogParams,
@@ -12,8 +11,6 @@ export {
   type UsageSink,
 } from './usageLogger.js';
 
-// eslint-disable-next-line @typescript-eslint/no-deprecated
-export { logUsage } from './usageLogger.js';
 export {
   fetchAllPricing,
   createPricingContext,
@@ -27,6 +24,9 @@ export {
   TEST_IMAGE_PRICING,
   FakePricingContext,
   createFakePricingContext,
+  FakeUsageSink,
+  createFakeUsageSink,
+  type FakeUsageSinkRecord,
 } from './testFixtures.js';
 export { HttpWebhookUsageSink, type HttpWebhookUsageSinkConfig } from './httpWebhookUsageSink.js';
 export {

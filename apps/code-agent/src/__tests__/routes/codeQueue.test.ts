@@ -106,12 +106,6 @@ describe('GET /code/queue', () => {
       logger,
     });
 
-    const rateLimitService = {
-      async checkLimits(): Promise<ReturnType<typeof ok>> { return ok(undefined); },
-      async recordTaskStart(): Promise<void> { return; },
-      async recordTaskComplete(): Promise<void> { return; },
-    };
-
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -123,7 +117,6 @@ describe('GET /code/queue', () => {
       logLineRepo,
       actionsAgentClient,
       linearAgentClient,
-      rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),

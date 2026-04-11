@@ -5,7 +5,11 @@
 
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
-import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
+import {
+  fetchAllPricing,
+  createPricingContext,
+  HttpInternalAuthUsageSink,
+} from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
 import { FirestoreEmbeddingRepository } from './infra/firestore/embeddingRepository.js';
@@ -120,6 +124,22 @@ export async function initializeServices(): Promise<void> {
   // Create OpenAI instance for embeddings
   const openai = new OpenAI({ apiKey: openaiApiKey });
 
+  const guestUsageSink = new HttpInternalAuthUsageSink({
+    usageServiceUrl: llmUsageServiceUrl,
+    internalAuthToken,
+    service: 'chat-agent',
+    component: 'guest-chat',
+    logger,
+  });
+
+  const userServiceUsageSink = new HttpInternalAuthUsageSink({
+    usageServiceUrl: llmUsageServiceUrl,
+    internalAuthToken,
+    service: 'chat-agent',
+    component: 'user-service-client',
+    logger,
+  });
+
   // Create guest LLM client with platform-owned Gemini API key
   const guestLlmClient = createLlmClient({
     apiKey: guestGeminiApiKey,
@@ -127,6 +147,7 @@ export async function initializeServices(): Promise<void> {
     userId: 'guest',
     pricing: pricingContext.getPricing(LlmModels.Gemini25Flash),
     logger,
+    usageSink: guestUsageSink,
   });
 
   container = {
@@ -141,6 +162,7 @@ export async function initializeServices(): Promise<void> {
       internalAuthToken,
       pricingContext,
       logger,
+      usageSink: userServiceUsageSink,
       platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
     }),
     logger,

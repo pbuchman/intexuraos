@@ -113,8 +113,6 @@ describe('pricingClient', () => {
     updatedAt: '2026-01-05T12:00:00Z',
   };
 
-  // ZAI removed - no mockZaiPricing
-
   const mockOpenrouterPricing: ProviderPricing = {
     provider: LlmProviders.OpenRouter,
     models: {},
