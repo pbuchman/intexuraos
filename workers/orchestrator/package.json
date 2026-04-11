@@ -21,7 +21,6 @@
     "@google-cloud/firestore": "^7.10.0",
     "@google/genai": "^1.0.0",
     "@intexuraos/common-core": "workspace:*",
-    "@intexuraos/llm-audit": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",

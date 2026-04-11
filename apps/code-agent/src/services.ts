@@ -12,6 +12,7 @@ import { TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
 import { createLlmClient, createToolCallingClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { EmbeddingClient } from '@intexuraos/infra-gpt';
 import OpenAI from 'openai';
 import type { CreateEmbeddingResponse } from 'openai/resources';
@@ -422,6 +423,15 @@ export function initServices(config: ServiceConfig): void {
     // The original dispatched all edited bot comments without payload inspection.
   ]);
 
+  const buildUsageSink = (component: string): HttpInternalAuthUsageSink =>
+    new HttpInternalAuthUsageSink({
+      usageServiceUrl: config.llmUsageServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+      service: 'code-agent',
+      component,
+      logger,
+    });
+
   const toolCallingClient = config.geminiAppApiKey !== ''
     ? createToolCallingClient({
         apiKey: config.geminiAppApiKey,
@@ -429,6 +439,7 @@ export function initServices(config: ServiceConfig): void {
         userId: 'system:github-agent',
         pricing: GEMINI_TOOL_CALLING_PRICING,
         logger,
+        usageSink: buildUsageSink('github-agent'),
       })
     : undefined;
   const executionMemoryOpenAI = config.openaiAppApiKey !== ''
@@ -441,6 +452,7 @@ export function initServices(config: ServiceConfig): void {
         userId: EXECUTION_MEMORY_USER_ID,
         pricing: GEMINI_TOOL_CALLING_PRICING,
         logger,
+        usageSink: buildUsageSink('execution-memory-query'),
       })
     : undefined;
   const executionMemoryDistillerClient = config.geminiAppApiKey !== ''
@@ -450,6 +462,7 @@ export function initServices(config: ServiceConfig): void {
         userId: EXECUTION_MEMORY_USER_ID,
         pricing: GEMINI_TOOL_CALLING_PRICING,
         logger,
+        usageSink: buildUsageSink('execution-memory-distiller'),
       })
     : undefined;
   const executionMemoryEvaluatorClient = config.geminiAppApiKey !== ''
@@ -459,6 +472,7 @@ export function initServices(config: ServiceConfig): void {
         userId: EXECUTION_MEMORY_USER_ID,
         pricing: GEMINI_TOOL_CALLING_PRICING,
         logger,
+        usageSink: buildUsageSink('execution-memory-evaluator'),
       })
     : undefined;
   const executionMemoryEmbeddingClient = executionMemoryOpenAI !== undefined

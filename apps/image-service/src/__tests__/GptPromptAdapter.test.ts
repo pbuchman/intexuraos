@@ -4,13 +4,6 @@ import type { ModelPricing } from '@intexuraos/llm-contract';
 import { GptPromptAdapter, mapError } from '../infra/llm/GptPromptAdapter.js';
 import type { Logger } from '@intexuraos/common-core';
 
-vi.mock('@intexuraos/llm-audit', (): object => ({
-  createAuditContext: (): object => ({
-    success: vi.fn().mockResolvedValue(undefined),
-    error: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-
 vi.mock('@intexuraos/llm-pricing', (): object => ({
   logUsage: vi.fn().mockResolvedValue(undefined),
   createUsageLogger: vi.fn().mockReturnValue({

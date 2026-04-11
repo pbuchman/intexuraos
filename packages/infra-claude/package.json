@@ -16,7 +16,6 @@
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/llm-prompts": "workspace:*",
-    "@intexuraos/llm-audit": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
     "@anthropic-ai/sdk": "^0.52.0"

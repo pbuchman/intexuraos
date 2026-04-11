@@ -4,7 +4,6 @@ export {
   isUsageLoggingEnabled,
   UsageLogger,
   createUsageLogger,
-  FirestoreUsageSink,
   StructuredLogUsageSink,
   NoopUsageSink,
   type UsageLogParams,

@@ -18,13 +18,6 @@ vi.mock('@google/genai', () => {
   return { GoogleGenAI: MockGoogleGenAI };
 });
 
-vi.mock('@intexuraos/llm-audit', () => ({
-  createAuditContext: vi.fn().mockReturnValue({
-    success: vi.fn().mockResolvedValue(undefined),
-    error: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-
 const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@intexuraos/llm-pricing', () => ({
@@ -35,7 +28,6 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 }));
 
 const { createGeminiClient } = await import('../client.js');
-const { createAuditContext } = await import('@intexuraos/llm-audit');
 const { createUsageLogger } = await import('@intexuraos/llm-pricing');
 
 const TEST_MODEL = LlmModels.Gemini25Flash;
@@ -57,13 +49,12 @@ describe('createGeminiClient', () => {
     vi.clearAllMocks();
   });
 
-  it('passes audit and usage sinks to shared infra clients', async () => {
+  it('passes usage sink to createUsageLogger', async () => {
     mockGenerateContent.mockResolvedValue({
       text: 'ok',
       usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
       candidates: [{}],
     });
-    const auditSink = { save: vi.fn().mockResolvedValue({ ok: true, value: undefined }) };
     const usageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
     const client = createGeminiClient({
@@ -72,7 +63,6 @@ describe('createGeminiClient', () => {
       userId: 'test-user',
       pricing: createTestPricing(),
       logger: mockLogger,
-      auditSink,
       usageSink,
     });
 
@@ -84,65 +74,9 @@ describe('createGeminiClient', () => {
         sink: usageSink,
       })
     );
-    expect(createAuditContext).toHaveBeenCalledWith(expect.any(Object), { sink: auditSink });
   });
 
   describe('research', () => {
-    it('includes userId and researchId in audit context', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: 'Research findings about AI.',
-        usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50 },
-        candidates: [{ groundingMetadata: {} }],
-      });
-
-      const client = createGeminiClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        researchId: 'research-123',
-        pricing: createTestPricing(),
-        logger: mockLogger,
-      });
-
-      await client.research('Tell me about AI');
-
-      expect(vi.mocked(createAuditContext).mock.calls[0]?.[0]).toEqual(
-        expect.objectContaining({
-          provider: LlmProviders.Google,
-          model: TEST_MODEL,
-          method: 'research',
-          prompt: 'Tell me about AI',
-          userId: 'test-user',
-          researchId: 'research-123',
-        })
-      );
-    });
-
-    it('excludes researchId from audit context when undefined', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: 'Research findings about AI.',
-        usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50 },
-        candidates: [{ groundingMetadata: {} }],
-      });
-
-      const client = createGeminiClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        pricing: createTestPricing(),
-        logger: mockLogger,
-      });
-
-      await client.research('Tell me about AI');
-
-      const auditArgs = vi.mocked(createAuditContext).mock.calls[0]?.[0] as unknown as Record<
-        string,
-        unknown
-      >;
-      expect(auditArgs).not.toHaveProperty('researchId');
-      expect(auditArgs?.['userId']).toBe('test-user');
-    });
-
     it('returns research result with content and usage from pricing', async () => {
       mockGenerateContent.mockResolvedValue({
         text: 'Research findings about AI.',

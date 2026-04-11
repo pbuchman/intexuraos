@@ -5,7 +5,6 @@ import { LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-con
 import { HttpWebhookUsageSink } from '@intexuraos/llm-pricing';
 import { z } from 'zod';
 import { stripDockerHeaders } from './log-formatter.js';
-import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 import type { ExecutionMemoryPromptContext } from '../types/execution-memory.js';
 
 const verifierTaskIdStorage = new AsyncLocalStorage<string>();
@@ -813,20 +812,12 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       throw new Error('INTEXURAOS_GEMINI_APP_API_KEY is required');
     }
 
-    if (config.auditLogPath === '') {
-      throw new Error('Completion verifier auditLogPath is required');
-    }
-
     return createLlmClient({
       apiKey: config.geminiApiKey,
       model: config.model,
       userId: 'orchestrator-completion-verifier',
       pricing,
       logger: this.logger,
-      auditSink: new OrchestratorFileAuditSink({
-        logger: this.logger,
-        auditLogPath: config.auditLogPath,
-      }),
       usageSink: new HttpWebhookUsageSink({
         webhookUrl: config.usageWebhookUrl,
         webhookSecret: config.orchestratorSecret,

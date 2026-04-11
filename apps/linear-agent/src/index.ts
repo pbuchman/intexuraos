@@ -57,6 +57,7 @@ async function main(): Promise<void> {
     codeAgentUrl,
     internalAuthToken,
     pricingContext,
+    llmUsageServiceUrl: usageServiceUrl,
   });
 
   const app = await buildServer();
