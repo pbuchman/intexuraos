@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 import { InputValidationAdapter } from '../../../infra/llm/InputValidationAdapter.js';
 
 const mockLogger: Logger = {
@@ -29,7 +30,8 @@ describe('InputValidationAdapter', () => {
       LlmModels.Gemini25Flash,
       'user-123',
       { inputPricePerMillion: 0.1, outputPricePerMillion: 0.2 },
-      mockLogger
+      mockLogger,
+      new FakeUsageSink()
     );
 
   describe('validateInput', () => {
@@ -201,7 +203,8 @@ describe('InputValidationAdapter', () => {
         LlmModels.Gemini25Flash,
         'user-123',
         { inputPricePerMillion: 0.1, outputPricePerMillion: 0.2 },
-        mockLogger as unknown as import('@intexuraos/common-core').Logger
+        mockLogger as unknown as import('@intexuraos/common-core').Logger,
+        new FakeUsageSink()
       );
       await adapter.validateInput('Test prompt');
 

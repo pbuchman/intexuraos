@@ -16,7 +16,6 @@
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/llm-prompts": "workspace:*",
-    "@intexuraos/llm-audit": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
     "@google/genai": "^1.0.0"

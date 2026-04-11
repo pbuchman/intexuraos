@@ -5,7 +5,6 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
-import type { AuditSink } from '@intexuraos/llm-audit';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 
 export type {
@@ -56,8 +55,6 @@ export interface GeminiConfig {
   imagePricing?: import('@intexuraos/llm-contract').ModelPricing;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
-  /** Optional audit sink override (defaults to Firestore audit sink) */
-  auditSink?: AuditSink;
-  /** Optional usage sink override (defaults to Firestore usage sink) */
-  usageSink?: UsageSink;
+  /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
+  usageSink: UsageSink;
 }

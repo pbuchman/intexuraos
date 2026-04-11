@@ -126,17 +126,6 @@ describe('Worker Settings Routes', () => {
       }),
       actionsAgentClient,
       linearAgentClient,
-      rateLimitService: {
-        async checkLimits() {
-          return ok(undefined);
-        },
-        async recordTaskStart() {
-          return;
-        },
-        async recordTaskComplete() {
-          return;
-        },
-      },
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({

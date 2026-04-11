@@ -6,6 +6,7 @@
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
 import type { Logger, Result } from '@intexuraos/common-core';
 import type { ModelPricing } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
   buildResearchPrompt,
   buildSynthesisPrompt,
@@ -35,6 +36,7 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     userId: string,
     pricing: ModelPricing,
     logger: Logger,
+    usageSink: UsageSink,
     researchId?: string
   ) {
     this.client = createGeminiClient({
@@ -44,6 +46,7 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
       ...(researchId !== undefined && { researchId }),
       pricing,
       logger,
+      usageSink,
     });
     this.model = model;
     this.logger = logger;

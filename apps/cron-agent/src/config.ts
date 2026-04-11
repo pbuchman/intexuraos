@@ -17,6 +17,7 @@ export interface CronAgentConfig {
   environment: string;
   allowedServices: ServiceDefinition[];
   geminiApiKey: string;
+  llmUsageServiceUrl: string;
 }
 
 const INTERNAL_API_SERVICE_CATALOG = [
@@ -198,5 +199,6 @@ export function loadConfig(): CronAgentConfig {
     environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
     allowedServices,
     geminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'] ?? '',
+    llmUsageServiceUrl: process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '',
   };
 }

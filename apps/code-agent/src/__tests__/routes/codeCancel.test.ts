@@ -33,7 +33,6 @@ import type { LogChunkRepository } from '../../domain/repositories/logChunkRepos
 import type { LogLineRepository } from '../../domain/repositories/logLineRepository.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
-import type { RateLimitService } from '../../domain/services/rateLimitService.js';
 import { ok } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
@@ -125,18 +124,6 @@ describe('POST /code/cancel', () => {
     cancelOnWorkerSpy = vi.spyOn(taskDispatcher, 'cancelOnWorker') as ReturnType<typeof vi.fn>;
     cancelOnWorkerSpy.mockResolvedValue(undefined);
 
-    const rateLimitService: RateLimitService = {
-      async checkLimits() {
-        return ok(undefined);
-      },
-      async recordTaskStart() {
-        return;
-      },
-      async recordTaskComplete() {
-        return;
-      },
-    };
-
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -147,7 +134,6 @@ describe('POST /code/cancel', () => {
       logLineRepo,
       actionsAgentClient,
       linearAgentClient,
-      rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
@@ -214,7 +200,6 @@ describe('POST /code/cancel', () => {
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;
-      rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
@@ -714,91 +699,5 @@ describe('POST /code/cancel', () => {
       }
     });
 
-    it('calls recordTaskComplete when task is cancelled successfully', async () => {
-      // Create a running task
-      const createResult = await codeTaskRepo.create({
-        userId: 'test-user-id',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'default',
-        workerType: 'auto',
-        workerLocation: 'home-mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_123',
-      });
-
-      expect(createResult.ok).toBe(true);
-      if (!createResult.ok) throw new Error('Failed to create task');
-      const taskId = createResult.value.id;
-
-      await codeTaskRepo.update(taskId, { status: 'running' });
-
-      const { getServices } = await import('../../services.js');
-      const services = getServices();
-      const recordCompleteSpy = vi.spyOn(services.rateLimitService, 'recordTaskComplete');
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/cancel',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {
-          taskId,
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(recordCompleteSpy).toHaveBeenCalledWith('test-user-id');
-    });
-
-    it('continues cancellation even when recordTaskComplete fails', async () => {
-      const createResult = await codeTaskRepo.create({
-        userId: 'test-user-id',
-        prompt: 'Fix the bug',
-        sanitizedPrompt: 'Fix the bug',
-        systemPromptHash: 'default',
-        workerType: 'auto',
-        workerLocation: 'home-mac',
-        repository: 'pbuchman/intexuraos',
-        baseBranch: 'development',
-        traceId: 'trace_123',
-      });
-
-      expect(createResult.ok).toBe(true);
-      if (!createResult.ok) throw new Error('Failed to create task');
-      const taskId = createResult.value.id;
-
-      await codeTaskRepo.update(taskId, { status: 'running' });
-
-      const { getServices } = await import('../../services.js');
-      const services = getServices();
-      vi.spyOn(services.rateLimitService, 'recordTaskComplete').mockRejectedValueOnce(
-        new Error('Rate limit service unavailable')
-      );
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/cancel',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {
-          taskId,
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
-      expect(body.data.status).toBe('cancelled');
-
-      const getResult = await codeTaskRepo.findById(taskId);
-      expect(getResult.ok).toBe(true);
-      if (getResult.ok) {
-        expect(getResult.value.status).toBe('cancelled');
-      }
-    });
   });
 });

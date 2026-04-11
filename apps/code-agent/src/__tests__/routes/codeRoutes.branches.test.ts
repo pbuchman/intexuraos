@@ -66,7 +66,6 @@ import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { TaskDispatcherService, DispatchResult, DispatchError } from '../../domain/services/taskDispatcher.js';
-import type { RateLimitService } from '../../domain/services/rateLimitService.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
@@ -170,18 +169,6 @@ describe('codeRoutes branch coverage', () => {
       logger,
     });
 
-    const rateLimitService: RateLimitService = {
-      async checkLimits() {
-        return ok(undefined);
-      },
-      async recordTaskStart() {
-        return;
-      },
-      async recordTaskComplete() {
-        return;
-      },
-    };
-
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -208,7 +195,6 @@ describe('codeRoutes branch coverage', () => {
       logLineRepo,
       actionsAgentClient,
       linearAgentClient,
-      rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
@@ -813,52 +799,6 @@ describe('codeRoutes branch coverage', () => {
       expect(response.statusCode).toBe(200);
     });
 
-    it('records task completion for terminal status', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      const created = await repo.create({
-        userId: 'test-user-id',
-        prompt: 'Terminal status test',
-        sanitizedPrompt: 'terminal status test',
-        systemPromptHash: 'abc123',
-        workerType: 'opus',
-        workerLocation: 'vm',
-        repository: 'test/repo',
-        baseBranch: 'main',
-        traceId: 'trace-terminal-123',
-      });
-      expect(created.ok).toBe(true);
-      if (!created.ok) return;
-
-      await repo.update(created.value.id, { status: 'running' });
-
-      const recordTaskComplete = vi.fn().mockResolvedValue(undefined);
-      setServices({
-        ...getServices(),
-        rateLimitService: {
-          checkLimits: vi.fn().mockResolvedValue(ok(undefined)),
-          recordTaskStart: vi.fn(),
-          recordTaskComplete,
-        },
-      } as never);
-
-      const response = await server.inject({
-        method: 'PATCH',
-        url: `/internal/code-tasks/${created.value.id}`,
-        headers: { 'x-internal-auth': 'test-internal-token' },
-        payload: {
-          status: 'implemented',
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      // The call is fire-and-forget, so we wait briefly
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(recordTaskComplete).toHaveBeenCalled();
-    });
   });
 
   // ============================================================

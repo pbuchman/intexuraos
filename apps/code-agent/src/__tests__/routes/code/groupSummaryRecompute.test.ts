@@ -34,7 +34,6 @@ import { createWorkerSettingsRepository } from '../../../infra/firestore/workerS
 import { createFirestoreTurnMetricsRepository } from '../../../infra/repositories/firestoreTurnMetricsRepository.js';
 import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
 import type { TaskDispatcherService, DispatchResult } from '../../../domain/services/taskDispatcher.js';
-import type { RateLimitService } from '../../../domain/services/rateLimitService.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { createFakeTaskGroupSummaryRepository } from '../../fakes/fakeTaskGroupSummaryRepository.js';
 import { Timestamp } from '@google-cloud/firestore';
@@ -138,12 +137,6 @@ describe('POST /internal/code/group-summary/recompute', () => {
       logger,
     });
 
-    const rateLimitService: RateLimitService = {
-      async checkLimits() { return ok(undefined); },
-      async recordTaskStart() { return; },
-      async recordTaskComplete() { return; },
-    };
-
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -163,7 +156,6 @@ describe('POST /internal/code/group-summary/recompute', () => {
       logLineRepo,
       actionsAgentClient,
       linearAgentClient,
-      rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),

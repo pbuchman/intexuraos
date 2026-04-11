@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { ModelPricing, ToolCallingClient } from '@intexuraos/llm-contract';
-import type { AuditSink } from '@intexuraos/llm-audit';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
 
@@ -28,13 +27,6 @@ vi.mock('@google/genai', () => {
   return { GoogleGenAI: MockGoogleGenAI, FunctionCallingConfigMode };
 });
 
-vi.mock('@intexuraos/llm-audit', () => ({
-  createAuditContext: vi.fn().mockReturnValue({
-    success: vi.fn().mockResolvedValue(undefined),
-    error: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-
 const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@intexuraos/llm-pricing', () => ({
@@ -44,7 +36,6 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 }));
 
 const { createUsageLogger } = await import('@intexuraos/llm-pricing');
-const { createAuditContext } = await import('@intexuraos/llm-audit');
 const { createGeminiToolCallingClient, TOOL_CALLING_PRICING } =
   await import('../toolCallingClient.js');
 
@@ -56,6 +47,8 @@ const TEST_PRICING: ModelPricing = {
   groundingCostPerRequest: 0,
 };
 
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
+
 function createClient(): ToolCallingClient {
   return createGeminiToolCallingClient({
     apiKey: 'test-key',
@@ -63,6 +56,7 @@ function createClient(): ToolCallingClient {
     userId: 'test-user',
     pricing: TEST_PRICING,
     logger: mockLogger,
+    usageSink: mockUsageSink,
   });
 }
 
@@ -538,6 +532,7 @@ describe('createGeminiToolCallingClient', () => {
       userId: 'test-user',
       pricing,
       logger: mockLogger,
+      usageSink: mockUsageSink,
     });
 
     const result = await client.run({
@@ -585,32 +580,6 @@ describe('createGeminiToolCallingClient', () => {
     });
 
     expect(createUsageLogger).toHaveBeenCalledWith(expect.objectContaining({ sink: fakeSink }));
-  });
-
-  it('passes auditSink to createAuditContext when provided', async () => {
-    const fakeAuditSink: AuditSink = {
-      save: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
-    };
-    mockGenerateContent.mockResolvedValueOnce(textResponse('ok'));
-
-    const client = createGeminiToolCallingClient({
-      apiKey: 'test-key',
-      model: TEST_MODEL,
-      userId: 'test-user',
-      pricing: TEST_PRICING,
-      logger: mockLogger,
-      auditSink: fakeAuditSink,
-    });
-    await client.run({
-      systemPrompt: 'Test',
-      messages: [{ role: 'user', content: 'test' }],
-      tools: [],
-    });
-
-    expect(createAuditContext).toHaveBeenCalledWith(
-      expect.objectContaining({ provider: LlmProviders.Google, model: TEST_MODEL }),
-      expect.objectContaining({ sink: fakeAuditSink })
-    );
   });
 
   it('maps assistant role to model in contents', async () => {

@@ -489,6 +489,9 @@ importers:
       '@intexuraos/llm-factory':
         specifier: workspace:*
         version: link:../../packages/llm-factory
+      '@intexuraos/llm-pricing':
+        specifier: workspace:*
+        version: link:../../packages/llm-pricing
       '@intexuraos/llm-prompts':
         specifier: workspace:*
         version: link:../../packages/llm-prompts
@@ -768,6 +771,9 @@ importers:
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
+      '@intexuraos/llm-pricing':
+        specifier: workspace:*
+        version: link:../../packages/llm-pricing
       '@intexuraos/llm-prompts':
         specifier: workspace:*
         version: link:../../packages/llm-prompts
@@ -835,9 +841,6 @@ importers:
       '@intexuraos/internal-clients':
         specifier: workspace:*
         version: link:../../packages/internal-clients
-      '@intexuraos/llm-audit':
-        specifier: workspace:*
-        version: link:../../packages/llm-audit
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -1720,9 +1723,6 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
-      '@intexuraos/llm-audit':
-        specifier: workspace:*
-        version: link:../llm-audit
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
@@ -1750,9 +1750,6 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
-      '@intexuraos/llm-audit':
-        specifier: workspace:*
-        version: link:../llm-audit
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
@@ -1768,9 +1765,6 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
-      '@intexuraos/llm-audit':
-        specifier: workspace:*
-        version: link:../llm-audit
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
@@ -1798,9 +1792,6 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
-      '@intexuraos/llm-audit':
-        specifier: workspace:*
-        version: link:../llm-audit
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
@@ -1872,9 +1863,6 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
-      '@intexuraos/llm-audit':
-        specifier: workspace:*
-        version: link:../llm-audit
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
@@ -1950,18 +1938,6 @@ importers:
         specifier: ^4.0.16
         version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
-  packages/llm-audit:
-    dependencies:
-      '@intexuraos/common-core':
-        specifier: workspace:*
-        version: link:../common-core
-      '@intexuraos/infra-firestore':
-        specifier: workspace:*
-        version: link:../infra-firestore
-      '@intexuraos/llm-contract':
-        specifier: workspace:*
-        version: link:../llm-contract
-
   packages/llm-contract:
     dependencies:
       '@intexuraos/common-core':
@@ -1976,9 +1952,6 @@ importers:
       '@intexuraos/infra-gemini':
         specifier: workspace:*
         version: link:../infra-gemini
-      '@intexuraos/llm-audit':
-        specifier: workspace:*
-        version: link:../llm-audit
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
@@ -2086,9 +2059,6 @@ importers:
       '@intexuraos/infra-openrouter':
         specifier: workspace:*
         version: link:../../packages/infra-openrouter
-      '@intexuraos/llm-audit':
-        specifier: workspace:*
-        version: link:../../packages/llm-audit
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract

@@ -60,8 +60,8 @@ export interface OpenRouterConfig {
   timeoutMs?: number;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
-  /** Optional usage sink override. Defaults to FirestoreUsageSink. */
-  usageSink?: UsageSink;
+  /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
+  usageSink: UsageSink;
 }
 
 /**

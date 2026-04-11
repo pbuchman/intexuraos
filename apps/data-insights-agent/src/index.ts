@@ -1,7 +1,11 @@
 import { initSentry, createAppLogger } from '@intexuraos/infra-sentry';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { validateRequiredEnv } from '@intexuraos/http-server';
-import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
+import {
+  fetchAllPricing,
+  createPricingContext,
+  HttpInternalAuthUsageSink,
+} from '@intexuraos/llm-pricing';
 import { LlmModels, type LLMModel } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
@@ -64,6 +68,13 @@ async function main(): Promise<void> {
     internalAuthToken: config.internalAuthToken,
     pricingContext,
     logger,
+    usageSink: new HttpInternalAuthUsageSink({
+      usageServiceUrl: config.llmUsageServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+      service: 'data-insights-agent',
+      component: 'user-service-client',
+      logger,
+    }),
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 

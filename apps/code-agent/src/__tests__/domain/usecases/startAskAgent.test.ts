@@ -9,7 +9,6 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import type { Firestore } from '@google-cloud/firestore';
 import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
-import type { RateLimitService } from '../../../domain/services/rateLimitService.js';
 import type { WorkerSettingsRepository } from '../../../domain/ports/workerSettingsRepository.js';
 import type { TaskEnqueueService } from '../../../domain/services/taskEnqueueService.js';
 import { createWorkerSettingsRepository } from '../../../infra/firestore/workerSettingsRepository.js';
@@ -26,7 +25,6 @@ describe('startAskAgent', () => {
   let logger: Logger;
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
   let codeTaskRepo: CodeTaskRepository;
-  let rateLimitService: RateLimitService;
   let workerSettingsRepo: WorkerSettingsRepository;
   let taskEnqueueService: TaskEnqueueService;
 
@@ -39,12 +37,6 @@ describe('startAskAgent', () => {
       firestore: fakeFirestore as unknown as Firestore,
       logger,
     });
-
-    rateLimitService = {
-      checkLimits: vi.fn().mockResolvedValue(ok(undefined)),
-      recordTaskStart: vi.fn().mockResolvedValue(undefined),
-      recordTaskComplete: vi.fn().mockResolvedValue(undefined),
-    };
 
     workerSettingsRepo = createWorkerSettingsRepository({
       firestore: fakeFirestore as unknown as Firestore,
@@ -72,7 +64,7 @@ describe('startAskAgent', () => {
 
   it('submits task successfully on happy path', async () => {
     const result = await startAskAgent(
-      { logger, codeTaskRepo, rateLimitService, workerSettingsRepo, taskEnqueueService },
+      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService },
       { userId: 'test-user-id', prompt: 'What is the architecture of this codebase?' },
     );
 
@@ -88,45 +80,12 @@ describe('startAskAgent', () => {
         userId: 'test-user-id',
       }),
     );
-
-    // Verify rate limit start was recorded
-    expect(rateLimitService.recordTaskStart).toHaveBeenCalledWith('test-user-id');
-  });
-
-  it('returns rate_limited when rate limit is exceeded', async () => {
-    vi.mocked(rateLimitService.checkLimits).mockResolvedValueOnce(
-      err({ code: 'concurrent_limit', message: 'Maximum 2 concurrent tasks allowed' }),
-    );
-
-    const result = await startAskAgent(
-      { logger, codeTaskRepo, rateLimitService, workerSettingsRepo, taskEnqueueService },
-      { userId: 'test-user-id', prompt: 'Ask something' },
-    );
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.code).toBe('rate_limited');
-  });
-
-  it('returns service_unavailable when rate limit service is down', async () => {
-    vi.mocked(rateLimitService.checkLimits).mockResolvedValueOnce(
-      err({ code: 'service_unavailable', message: 'Unable to verify rate limits' }),
-    );
-
-    const result = await startAskAgent(
-      { logger, codeTaskRepo, rateLimitService, workerSettingsRepo, taskEnqueueService },
-      { userId: 'test-user-id', prompt: 'Ask something' },
-    );
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.code).toBe('service_unavailable');
   });
 
   it('returns worker_not_configured when no workers are set up', async () => {
     // Use a user with no workers
     const result = await startAskAgent(
-      { logger, codeTaskRepo, rateLimitService, workerSettingsRepo, taskEnqueueService },
+      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService },
       { userId: 'user-with-no-workers', prompt: 'Ask something' },
     );
 
@@ -141,7 +100,7 @@ describe('startAskAgent', () => {
     );
 
     const result = await startAskAgent(
-      { logger, codeTaskRepo, rateLimitService, workerSettingsRepo, taskEnqueueService },
+      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService },
       { userId: 'test-user-id', prompt: 'Ask something' },
     );
 
@@ -153,13 +112,13 @@ describe('startAskAgent', () => {
   it('returns duplicate_prompt when similar prompt was recently submitted', async () => {
     // Submit first task
     await startAskAgent(
-      { logger, codeTaskRepo, rateLimitService, workerSettingsRepo, taskEnqueueService },
+      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService },
       { userId: 'test-user-id', prompt: 'Exact same prompt' },
     );
 
     // Submit second task with same prompt
     const result = await startAskAgent(
-      { logger, codeTaskRepo, rateLimitService, workerSettingsRepo, taskEnqueueService },
+      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService },
       { userId: 'test-user-id', prompt: 'Exact same prompt' },
     );
 
@@ -174,7 +133,7 @@ describe('startAskAgent', () => {
     );
 
     const result = await startAskAgent(
-      { logger, codeTaskRepo, rateLimitService, workerSettingsRepo, taskEnqueueService },
+      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService },
       { userId: 'test-user-id', prompt: 'Ask something new' },
     );
 
@@ -191,7 +150,7 @@ describe('startAskAgent', () => {
     };
 
     const result = await startAskAgent(
-      { logger, codeTaskRepo, rateLimitService, workerSettingsRepo: failingWorkerSettingsRepo, taskEnqueueService },
+      { logger, codeTaskRepo, workerSettingsRepo: failingWorkerSettingsRepo, taskEnqueueService },
       { userId: 'test-user-id', prompt: 'Ask something else' },
     );
 

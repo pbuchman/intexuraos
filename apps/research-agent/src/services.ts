@@ -23,6 +23,7 @@ import {
   type ResearchEventPublisher,
 } from './infra/pubsub/index.js';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
+import { HttpInternalAuthUsageSink, type UsageSink } from '@intexuraos/llm-pricing';
 import { createImageServiceClient, type ImageServiceClient } from './infra/image/index.js';
 import { createNotionServiceClient, type NotionServiceClient } from './infra/notion/index.js';
 import { exportResearchToNotion } from './infra/notion/notionResearchExporter.js';
@@ -97,7 +98,7 @@ export interface ServiceContainer {
     userId: string,
     pricing: ModelPricing,
     logger: Logger,
-    researchId: string | undefined
+    researchId: string | undefined // @allow-undefined-type -- positional arg preserved for call-site compat
   ) => LlmResearchProvider;
   createSynthesizer: (
     model: ResearchModel,
@@ -105,7 +106,7 @@ export interface ServiceContainer {
     userId: string,
     pricing: ModelPricing,
     logger: Logger,
-    researchId: string | undefined
+    researchId: string | undefined // @allow-undefined-type -- positional arg preserved for call-site compat
   ) => LlmSynthesisProvider;
   createTitleGenerator: (
     model: FastModel,
@@ -113,7 +114,7 @@ export interface ServiceContainer {
     userId: string,
     pricing: ModelPricing,
     logger: Logger,
-    researchId: string | undefined
+    researchId: string | undefined // @allow-undefined-type -- positional arg preserved for call-site compat
   ) => TitleGenerator;
   createContextInferrer: (
     model: FastModel,
@@ -121,7 +122,7 @@ export interface ServiceContainer {
     userId: string,
     pricing: ModelPricing,
     logger: Logger,
-    researchId: string | undefined
+    researchId: string | undefined // @allow-undefined-type -- positional arg preserved for call-site compat
   ) => ContextInferenceProvider;
   createInputValidator: (
     model: FastModel,
@@ -219,11 +220,24 @@ function createShareStorageAndConfig(): {
 export function initializeServices(pricingContext: IPricingContext): void {
   const researchRepo = new FirestoreResearchRepository();
 
+  const llmUsageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '';
+  const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
+  const sinkLogger = createAppLogger({ name: 'research-agent-usage-sink' });
+  const buildUsageSink = (component: string): UsageSink =>
+    new HttpInternalAuthUsageSink({
+      usageServiceUrl: llmUsageServiceUrl,
+      internalAuthToken,
+      service: 'research-agent',
+      component,
+      logger: sinkLogger,
+    });
+
   const userServiceClient = createUserServiceClient({
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8081',
-    internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
+    internalAuthToken,
     pricingContext,
     logger: createAppLogger({ name: 'user-service-client' }),
+    usageSink: buildUsageSink('user-service-client'),
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
@@ -276,11 +290,89 @@ export function initializeServices(pricingContext: IPricingContext): void {
     shareStorage,
     shareConfig,
     webAppUrl: process.env['INTEXURAOS_WEB_APP_URL'] ?? '',
-    createResearchProvider,
-    createSynthesizer,
-    createTitleGenerator,
-    createContextInferrer,
-    createInputValidator,
+    createResearchProvider: (
+      model: ResearchModel,
+      apiKey: string,
+      userId: string,
+      pricing: ModelPricing,
+      logger: Logger,
+      researchId: string | undefined // @allow-undefined-type -- positional arg matches container type
+    ): LlmResearchProvider =>
+      createResearchProvider(
+        model,
+        apiKey,
+        userId,
+        pricing,
+        logger,
+        buildUsageSink(`research:${model}`),
+        researchId
+      ),
+    createSynthesizer: (
+      model: ResearchModel,
+      apiKey: string,
+      userId: string,
+      pricing: ModelPricing,
+      logger: Logger,
+      researchId: string | undefined // @allow-undefined-type -- positional arg matches container type
+    ): LlmSynthesisProvider =>
+      createSynthesizer(
+        model,
+        apiKey,
+        userId,
+        pricing,
+        logger,
+        buildUsageSink(`synthesis:${model}`),
+        researchId
+      ),
+    createTitleGenerator: (
+      model: FastModel,
+      apiKey: string,
+      userId: string,
+      pricing: ModelPricing,
+      logger: Logger,
+      researchId: string | undefined // @allow-undefined-type -- positional arg matches container type
+    ): TitleGenerator =>
+      createTitleGenerator(
+        model,
+        apiKey,
+        userId,
+        pricing,
+        logger,
+        buildUsageSink('title-generator'),
+        researchId
+      ),
+    createContextInferrer: (
+      model: FastModel,
+      apiKey: string,
+      userId: string,
+      pricing: ModelPricing,
+      logger: Logger,
+      researchId: string | undefined // @allow-undefined-type -- positional arg matches container type
+    ): ContextInferenceProvider =>
+      createContextInferrer(
+        model,
+        apiKey,
+        userId,
+        pricing,
+        logger,
+        buildUsageSink('context-inferrer'),
+        researchId
+      ),
+    createInputValidator: (
+      model: FastModel,
+      apiKey: string,
+      userId: string,
+      pricing: ModelPricing,
+      logger: Logger
+    ): InputValidationProvider =>
+      createInputValidator(
+        model,
+        apiKey,
+        userId,
+        pricing,
+        logger,
+        buildUsageSink('input-validator')
+      ),
     notionExporter: exportResearchToNotion,
   };
 }

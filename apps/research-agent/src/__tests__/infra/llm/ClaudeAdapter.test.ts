@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockResearch = vi.fn();
 
@@ -32,10 +33,19 @@ const mockLogger: Logger = {
 
 describe('ClaudeAdapter', () => {
   let adapter: InstanceType<typeof ClaudeAdapter>;
+  let fakeUsageSink: FakeUsageSink;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new ClaudeAdapter('test-key', LlmModels.ClaudeOpus45, 'test-user-id', testPricing, mockLogger);
+    fakeUsageSink = new FakeUsageSink();
+    adapter = new ClaudeAdapter(
+      'test-key',
+      LlmModels.ClaudeOpus45,
+      'test-user-id',
+      testPricing,
+      mockLogger,
+      fakeUsageSink
+    );
   });
 
   describe('constructor', () => {
@@ -47,6 +57,7 @@ describe('ClaudeAdapter', () => {
         'test-user-id',
         testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -57,6 +68,7 @@ describe('ClaudeAdapter', () => {
         researchId: 'research-123',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: fakeUsageSink,
       });
     });
   });
