@@ -28,7 +28,6 @@ export { NotesListPage } from './NotesListPage.js';
 export { ShareHistoryPage } from './ShareHistoryPage.js';
 export { ShareTargetPage } from './ShareTargetPage.js';
 export { TodosListPage } from './TodosListPage.js';
-export { LlmCostsPage } from './LlmCostsPage.js';
 export { LlmUsagePage } from './LlmUsagePage.js';
 export { LlmUsageViewPage } from './LlmUsageViewPage.js';
 export { LlmUsagePricingPage } from './LlmUsagePricingPage.js';
