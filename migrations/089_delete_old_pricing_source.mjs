@@ -12,7 +12,7 @@
  */
 
 export const metadata = {
-  id: '087',
+  id: '089',
   name: 'deprecate_old_pricing_source',
   description: 'Mark settings/llm_pricing/providers/* as deprecated (data preserved for rollback)',
   createdAt: '2026-04-10',

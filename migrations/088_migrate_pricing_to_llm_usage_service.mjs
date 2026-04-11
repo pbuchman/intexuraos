@@ -1,5 +1,5 @@
 /**
- * Migration 086: Copy LLM pricing from app-settings-service to llm-usage-service.
+ * Migration 088: Copy LLM pricing from app-settings-service to llm-usage-service.
  *
  * Source: settings/llm_pricing/providers/{provider}     (owner: app-settings-service)
  * Target: llm_pricing/{provider}                         (owner: llm-usage-service)
@@ -11,7 +11,7 @@
  */
 
 export const metadata = {
-  id: '086',
+  id: '088',
   name: 'migrate_pricing_to_llm_usage_service',
   description: 'Copy LLM pricing into the new llm_pricing collection owned by llm-usage-service',
   createdAt: '2026-04-10',

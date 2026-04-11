@@ -16,7 +16,7 @@
  */
 
 export const metadata = {
-  id: '088',
+  id: '090',
   name: 'backfill_openrouter_pricing',
   description:
     'Write llm_pricing/openrouter with useProviderCost marker if missing after migration 086',
