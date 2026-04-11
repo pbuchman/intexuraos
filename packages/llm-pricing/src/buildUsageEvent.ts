@@ -1,5 +1,3 @@
-// IMPORTANT: Must remain `import type` — @intexuraos/internal-clients is a devDependency (type-checking only).
-import type { UsageEventInput } from '@intexuraos/internal-clients';
 import type { UsageLogParams } from './usageLogger.js';
 
 /**
@@ -14,7 +12,18 @@ export interface CorrelationOverrides {
 }
 
 /**
- * Shared helper that maps UsageLogParams to a UsageEventInput payload.
+ * Structural payload produced by buildUsageEvent — intentionally opaque
+ * (`Record<string, unknown>`) to break the circular type reference with
+ * @intexuraos/internal-clients' UsageEventInput. Sinks only JSON.stringify
+ * the result, so no field-level access is needed at this layer; shape is
+ * validated by the receiving service's Zod schema.
+ *
+ * @internal
+ */
+export type UsageEventPayload = Record<string, unknown>;
+
+/**
+ * Shared helper that maps UsageLogParams to a usage event payload.
  * Used by both HttpWebhookUsageSink and HttpInternalAuthUsageSink to avoid duplication.
  *
  * @internal
@@ -23,7 +32,7 @@ export function buildUsageEvent(
   params: UsageLogParams,
   source: { service: string; component: string },
   correlationOverrides?: CorrelationOverrides
-): UsageEventInput {
+): UsageEventPayload {
   const environment: 'dev' | 'prod' = process.env['NODE_ENV'] === 'production' ? 'prod' : 'dev';
 
   return {
