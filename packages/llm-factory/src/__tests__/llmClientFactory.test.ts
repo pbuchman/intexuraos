@@ -147,8 +147,8 @@ describe('llmClientFactory', () => {
       expect(isSupportedProvider(LlmProviders.Google)).toBe(true);
     });
 
-    it('returns false for Zai provider (no longer supported)', () => {
-      expect(isSupportedProvider('zai')).toBe(false);
+    it('returns false for an unknown provider', () => {
+      expect(isSupportedProvider('unknown-provider')).toBe(false);
     });
 
     it('returns false for Anthropic provider', () => {
