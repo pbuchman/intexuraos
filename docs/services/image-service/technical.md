@@ -283,7 +283,7 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth               |
 | `INTEXURAOS_IMAGE_BUCKET`             | Yes      | GCS bucket name for image storage             |
 | `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`    | Yes      | Public base URL for GCS objects               |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | App settings service URL (pricing data)       |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | LLM usage service URL (pricing data)          |
 | `INTEXURAOS_SENTRY_DSN`               | No       | Sentry error tracking DSN                     |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key for user fallback     |
 | `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint for OpenTelemetry tracing |

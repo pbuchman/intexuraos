@@ -16,7 +16,6 @@ import {
   type HealthCheck,
 } from '@intexuraos/http-server';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
-import { internalRoutes } from './routes/internalRoutes.js';
 import { publicRoutes } from './routes/publicRoutes.js';
 
 const SERVICE_NAME = 'app-settings-service';
@@ -91,35 +90,6 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
               durationMs: { type: 'number' },
               downstreamStatus: { type: 'integer' },
               downstreamRequestId: { type: 'string' },
-            },
-          },
-          ModelPricing: {
-            type: 'object',
-            required: ['inputPricePerMillion', 'outputPricePerMillion'],
-            properties: {
-              inputPricePerMillion: { type: 'number' },
-              outputPricePerMillion: { type: 'number' },
-              cacheReadMultiplier: { type: 'number' },
-              cacheWriteMultiplier: { type: 'number' },
-              webSearchCostPerCall: { type: 'number' },
-              groundingCostPerRequest: { type: 'number' },
-              imagePricing: {
-                type: 'object',
-                additionalProperties: { type: 'number' },
-              },
-              useProviderCost: { type: 'boolean' },
-            },
-          },
-          ProviderPricing: {
-            type: 'object',
-            required: ['provider', 'models', 'updatedAt'],
-            properties: {
-              provider: { type: 'string' },
-              models: {
-                type: 'object',
-                additionalProperties: { $ref: '#/components/schemas/ModelPricing' },
-              },
-              updatedAt: { type: 'string' },
             },
           },
           MonthlyCost: {
@@ -232,39 +202,6 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   // Register service-specific schemas for Fastify serialization
   app.addSchema({
-    $id: 'ModelPricing',
-    type: 'object',
-    required: ['inputPricePerMillion', 'outputPricePerMillion'],
-    properties: {
-      inputPricePerMillion: { type: 'number' },
-      outputPricePerMillion: { type: 'number' },
-      cacheReadMultiplier: { type: 'number' },
-      cacheWriteMultiplier: { type: 'number' },
-      webSearchCostPerCall: { type: 'number' },
-      groundingCostPerRequest: { type: 'number' },
-      imagePricing: {
-        type: 'object',
-        additionalProperties: { type: 'number' },
-      },
-      useProviderCost: { type: 'boolean' },
-    },
-  });
-
-  app.addSchema({
-    $id: 'ProviderPricing',
-    type: 'object',
-    required: ['provider', 'models', 'updatedAt'],
-    properties: {
-      provider: { type: 'string' },
-      models: {
-        type: 'object',
-        additionalProperties: { $ref: 'ModelPricing#' },
-      },
-      updatedAt: { type: 'string' },
-    },
-  });
-
-  app.addSchema({
     $id: 'MonthlyCost',
     type: 'object',
     required: ['month', 'costUsd', 'calls', 'inputTokens', 'outputTokens', 'percentage'],
@@ -336,7 +273,6 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   // Register routes
   await app.register(publicRoutes);
-  await app.register(internalRoutes, { prefix: '/internal' });
 
   // OpenAPI spec endpoint
   app.get(

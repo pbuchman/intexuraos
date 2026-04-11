@@ -10,7 +10,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_ACTIONS_AGENT_URL',
-  'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
+  'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_PUBSUB_ACTIONS_QUEUE',
 ];
@@ -29,7 +29,7 @@ async function main(): Promise<void> {
   await initServices({
     userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] as string,
     actionsAgentUrl: process.env['INTEXURAOS_ACTIONS_AGENT_URL'] as string,
-    appSettingsServiceUrl: process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] as string,
+    llmUsageServiceUrl: process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] as string,
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] as string,
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] as string,
   });

@@ -4,6 +4,7 @@ import { buildServer } from '../../server.js';
 import { setServices, resetServices, type ServiceContainer } from '../../services.js';
 import { FakeUsageEventRepository } from '../fakeUsageEventRepository.js';
 import { FakeUsageAggregateRepository } from '../fakeUsageAggregateRepository.js';
+import { FakePricingRepository } from '../fakePricingRepository.js';
 import { createTestEventInput } from '../helpers.js';
 
 describe('internalUsageRoutes', () => {
@@ -24,6 +25,7 @@ describe('internalUsageRoutes', () => {
     setServices({
       usageEventRepository: eventRepo,
       usageAggregateRepository: aggregateRepo,
+      pricingRepository: new FakePricingRepository(),
       orchestratorSecret: 'test-secret',
     } satisfies ServiceContainer);
   });

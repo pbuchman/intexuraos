@@ -18,7 +18,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_WEB_APP_URL',
-  'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
+  'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'INTEXURAOS_NOTION_SERVICE_URL',
   'INTEXURAOS_IMAGE_PUBLIC_BASE_URL',
   'INTEXURAOS_IMAGE_SERVICE_URL',
@@ -61,11 +61,11 @@ const REQUIRED_MODELS: LLMModel[] = [
 ];
 
 async function loadPricing(): Promise<IPricingContext> {
-  const appSettingsUrl = process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] ?? '';
+  const usageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '';
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
 
-  process.stdout.write(`Fetching pricing from ${appSettingsUrl}\n`);
-  const pricingResult = await fetchAllPricing(appSettingsUrl, internalAuthToken);
+  process.stdout.write(`Fetching pricing from ${usageServiceUrl}\n`);
+  const pricingResult = await fetchAllPricing(usageServiceUrl, internalAuthToken);
   if (!pricingResult.ok) {
     throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
   }
@@ -76,7 +76,7 @@ async function loadPricing(): Promise<IPricingContext> {
 }
 
 async function main(): Promise<void> {
-  // Load pricing from app-settings-service
+  // Load pricing from llm-usage-service
   const pricingContext = await loadPricing();
 
   // Initialize dependency injection container

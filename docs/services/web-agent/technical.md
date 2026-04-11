@@ -322,7 +322,7 @@ Fetches and parses OpenGraph metadata via direct HTTP with browser-like headers.
 | `INTEXURAOS_CLOUDFLARE_ACCOUNT_ID`    | Cloudflare account ID                         | Yes      |
 | `INTEXURAOS_CLOUDFLARE_API_TOKEN`     | Cloudflare API token (Browser Rendering Edit) | Yes      |
 | `INTEXURAOS_USER_SERVICE_URL`         | User service base URL                         | Yes      |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Pricing lookup                                | Yes      |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Pricing lookup                                | Yes      |
 | `INTEXURAOS_SENTRY_DSN`               | Error tracking                                | Yes      |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini 2.5 Flash fallback            | Optional |
 | `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | Dash0 OpenTelemetry endpoint                  | Optional |

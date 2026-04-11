@@ -26,7 +26,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL',
-  'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
+  'INTEXURAOS_LLM_USAGE_SERVICE_URL',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
@@ -47,10 +47,10 @@ async function main(): Promise<void> {
 
   const logger = createAppLogger({ name: 'data-insights-agent' });
 
-  // Fetch pricing from app-settings-service
-  process.stdout.write(`Fetching pricing from ${config.appSettingsServiceUrl}\n`);
+  // Fetch pricing from llm-usage-service
+  process.stdout.write(`Fetching pricing from ${config.llmUsageServiceUrl}\n`);
   const pricingResult = await fetchAllPricing(
-    config.appSettingsServiceUrl,
+    config.llmUsageServiceUrl,
     config.internalAuthToken
   );
   if (!pricingResult.ok) {
