@@ -62,14 +62,6 @@
       "owner": "research-agent",
       "description": "LLM research queries, responses, and synthesized results"
     },
-    "llm_api_logs": {
-      "owner": "research-agent",
-      "description": "LLM API call audit logs with token usage and cost tracking"
-    },
-    "llm_usage_stats": {
-      "owner": "llm-pricing",
-      "description": "Aggregated LLM usage statistics by provider, model, and call type"
-    },
     "commands": {
       "owner": "commands-agent",
       "description": "Incoming commands from various sources (WhatsApp, etc.) with classification metadata"
