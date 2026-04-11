@@ -6,6 +6,7 @@
 import { type ClaudeClient, createClaudeClient } from '@intexuraos/infra-claude';
 import type { Logger, Result } from '@intexuraos/common-core';
 import type { ModelPricing } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import { buildResearchPrompt, type ResearchContext } from '@intexuraos/llm-prompts';
 import type {
   LlmError,
@@ -24,6 +25,7 @@ export class ClaudeAdapter implements LlmResearchProvider {
     userId: string,
     pricing: ModelPricing,
     logger: Logger,
+    usageSink: UsageSink,
     researchId?: string
   ) {
     this.client = createClaudeClient({
@@ -33,6 +35,7 @@ export class ClaudeAdapter implements LlmResearchProvider {
       ...(researchId !== undefined && { researchId }),
       pricing,
       logger,
+      usageSink,
     });
     this.model = model;
     this.logger = logger;

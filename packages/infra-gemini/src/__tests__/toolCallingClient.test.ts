@@ -47,6 +47,8 @@ const TEST_PRICING: ModelPricing = {
   groundingCostPerRequest: 0,
 };
 
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
+
 function createClient(): ToolCallingClient {
   return createGeminiToolCallingClient({
     apiKey: 'test-key',
@@ -54,6 +56,7 @@ function createClient(): ToolCallingClient {
     userId: 'test-user',
     pricing: TEST_PRICING,
     logger: mockLogger,
+    usageSink: mockUsageSink,
   });
 }
 
@@ -529,6 +532,7 @@ describe('createGeminiToolCallingClient', () => {
       userId: 'test-user',
       pricing,
       logger: mockLogger,
+      usageSink: mockUsageSink,
     });
 
     const result = await client.run({

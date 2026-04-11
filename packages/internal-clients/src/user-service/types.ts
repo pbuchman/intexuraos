@@ -1,5 +1,5 @@
 import type { Logger, Result } from '@intexuraos/common-core';
-import type { IPricingContext } from '@intexuraos/llm-pricing';
+import type { IPricingContext, UsageSink } from '@intexuraos/llm-pricing';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { LlmProvider } from '@intexuraos/llm-contract';
 
@@ -11,6 +11,13 @@ export interface UserServiceConfig {
   internalAuthToken: string;
   pricingContext: IPricingContext;
   logger: Logger;
+  /**
+   * Usage sink used when materializing per-user LLM clients via
+   * {@link UserServiceClient.getLlmClient}. Required — production apps
+   * should pass an HttpInternalAuthUsageSink tagged with their own
+   * `service` / `component`. Tests may pass a FakeUsageSink.
+   */
+  usageSink: UsageSink;
   platformGeminiApiKey?: string | undefined;
 }
 

@@ -63,6 +63,6 @@ export interface GptConfig {
   imagePricing?: import('@intexuraos/llm-contract').ModelPricing;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
-  /** Optional usage sink override. Defaults to NoopUsageSink. */
-  usageSink?: UsageSink;
+  /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
+  usageSink: UsageSink;
 }

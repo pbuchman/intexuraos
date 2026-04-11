@@ -5,6 +5,7 @@
 import { LlmModels } from '@intexuraos/llm-contract';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok, type Logger } from '@intexuraos/common-core';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 import { LlmValidatorImpl, type ValidationPricing } from '../../infra/llm/LlmValidatorImpl.js';
 
 const mockLogger: Logger = {
@@ -53,12 +54,14 @@ const testPricing: ValidationPricing = {
 
 describe('LlmValidatorImpl', () => {
   let validator: LlmValidatorImpl;
+  let fakeUsageSink: FakeUsageSink;
   const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
   const testUserId = 'test-user-123';
 
   beforeEach(() => {
     vi.clearAllMocks();
-    validator = new LlmValidatorImpl(testPricing, mockLogger);
+    fakeUsageSink = new FakeUsageSink();
+    validator = new LlmValidatorImpl(testPricing, mockLogger, fakeUsageSink);
   });
 
   describe('validateKey', () => {
@@ -78,6 +81,7 @@ describe('LlmValidatorImpl', () => {
           userId: testUserId,
           pricing: testPricing.google,
           logger: mockLogger,
+          usageSink: fakeUsageSink,
         });
         expect(mockClient.generate).toHaveBeenCalled();
       });
@@ -131,6 +135,7 @@ describe('LlmValidatorImpl', () => {
           userId: testUserId,
           pricing: testPricing.openai,
           logger: mockLogger,
+          usageSink: fakeUsageSink,
         });
       });
 
@@ -181,6 +186,7 @@ describe('LlmValidatorImpl', () => {
           userId: testUserId,
           pricing: testPricing.anthropic,
           logger: mockLogger,
+          usageSink: fakeUsageSink,
         });
       });
 
@@ -233,6 +239,7 @@ describe('LlmValidatorImpl', () => {
           userId: testUserId,
           pricing: testPricing.perplexity,
           logger: mockLogger,
+          usageSink: fakeUsageSink,
         });
       });
 
@@ -283,6 +290,7 @@ describe('LlmValidatorImpl', () => {
           userId: testUserId,
           pricing: testPricing.openrouter,
           logger: mockLogger,
+          usageSink: fakeUsageSink,
         });
         expect(mockClient.validateKey).toHaveBeenCalledWith('or-test-key');
       });

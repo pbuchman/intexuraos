@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModelPricing, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -8,6 +9,8 @@ const mockLogger: Logger = {
   warn: vi.fn(),
   debug: vi.fn(),
 };
+
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
 const mockGenerateContent = vi.fn();
 
@@ -91,6 +94,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Tell me about AI');
 
@@ -129,6 +133,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -161,6 +166,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -184,6 +190,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -209,6 +216,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -232,6 +240,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.research('Test prompt');
 
@@ -255,6 +264,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -273,6 +283,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -291,6 +302,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -309,6 +321,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.research('Test prompt');
 
@@ -338,6 +351,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Tell me about AI');
 
@@ -369,6 +383,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Write something');
 
@@ -397,6 +412,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.generate('Write something');
 
@@ -420,6 +436,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Write something');
 
@@ -438,6 +455,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Write something');
 
@@ -464,6 +482,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Write something');
 
@@ -496,6 +515,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Write something');
 
@@ -520,6 +540,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Write something');
 
@@ -552,6 +573,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -585,6 +607,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat', { size: '1536x1024' });
@@ -620,6 +643,7 @@ describe('createGeminiClient', () => {
         pricing,
         imagePricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -647,6 +671,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -676,6 +701,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       await client.generateImage('A cat');
@@ -697,6 +723,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -718,6 +745,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -736,6 +764,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -754,6 +783,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -772,6 +802,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -790,6 +821,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -808,6 +840,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Test');
 
@@ -826,6 +859,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Test');
 
@@ -844,6 +878,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Test');
 
@@ -862,6 +897,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Test');
 
@@ -880,6 +916,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -899,6 +936,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -918,6 +956,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -937,6 +976,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -956,6 +996,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -974,6 +1015,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Test');
 
@@ -992,6 +1034,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -1016,6 +1059,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Query');
 
@@ -1051,6 +1095,7 @@ describe('createGeminiClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Query');
 

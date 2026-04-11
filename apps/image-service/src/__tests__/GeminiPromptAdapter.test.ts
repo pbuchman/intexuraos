@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import nock from 'nock';
 import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import { GeminiPromptAdapter } from '../infra/llm/GeminiPromptAdapter.js';
 import type { Logger } from '@intexuraos/common-core';
 
@@ -22,6 +23,8 @@ const mockLogger: Logger = {
   warn: vi.fn(),
   debug: vi.fn(),
 };
+
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
 describe('GeminiPromptAdapter', () => {
   beforeAll(() => {
@@ -72,6 +75,7 @@ describe('GeminiPromptAdapter', () => {
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Machine learning article');
 
@@ -100,6 +104,7 @@ describe('GeminiPromptAdapter', () => {
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -119,6 +124,7 @@ describe('GeminiPromptAdapter', () => {
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -138,6 +144,7 @@ describe('GeminiPromptAdapter', () => {
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -155,6 +162,7 @@ describe('GeminiPromptAdapter', () => {
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -172,6 +180,7 @@ describe('GeminiPromptAdapter', () => {
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -206,6 +215,7 @@ describe('GeminiPromptAdapter', () => {
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Test');
 

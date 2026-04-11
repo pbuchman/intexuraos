@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import nock from 'nock';
 import type { ModelPricing } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import { GptPromptAdapter, mapError } from '../infra/llm/GptPromptAdapter.js';
 import type { Logger } from '@intexuraos/common-core';
 
@@ -22,6 +23,8 @@ const mockLogger: Logger = {
   warn: vi.fn(),
   debug: vi.fn(),
 };
+
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
 describe('GptPromptAdapter', () => {
   beforeAll(() => {
@@ -72,6 +75,7 @@ describe('GptPromptAdapter', () => {
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('AI technology article');
 
@@ -100,6 +104,7 @@ describe('GptPromptAdapter', () => {
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -125,6 +130,7 @@ describe('GptPromptAdapter', () => {
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -151,6 +157,7 @@ describe('GptPromptAdapter', () => {
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -168,6 +175,7 @@ describe('GptPromptAdapter', () => {
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -193,6 +201,7 @@ describe('GptPromptAdapter', () => {
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -212,6 +221,7 @@ describe('GptPromptAdapter', () => {
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -246,6 +256,7 @@ describe('GptPromptAdapter', () => {
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Test');
 

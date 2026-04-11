@@ -54,6 +54,7 @@ async function main(): Promise<void> {
     cloudflareApiToken: process.env['INTEXURAOS_CLOUDFLARE_API_TOKEN'] ?? '',
     userServiceUrl: USER_SERVICE_URL,
     internalAuthToken: INTERNAL_AUTH_TOKEN,
+    llmUsageServiceUrl: LLM_USAGE_SERVICE_URL,
     pricingContext,
   });
 

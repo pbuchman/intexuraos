@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 import {
   UsageLogger,
   createUsageLogger,
-  logUsage,
   isUsageLoggingEnabled,
   NoopUsageSink,
   StructuredLogUsageSink,
@@ -102,14 +101,11 @@ describe('usageLogger', () => {
 
   describe('UsageLogger class', () => {
     describe('constructor', () => {
-      it('stores the provided logger', () => {
-        const usageLogger = new UsageLogger({ logger: fakeLogger });
+      it('stores the provided logger and sink', () => {
+        const sink = new NoopUsageSink();
+        const usageLogger = new UsageLogger({ logger: fakeLogger, sink });
         expect(usageLogger.logger).toBe(fakeLogger);
-      });
-
-      it('defaults to NoopUsageSink when no sink is provided', () => {
-        const usageLogger = new UsageLogger({ logger: fakeLogger });
-        expect(usageLogger.sink).toBeInstanceOf(NoopUsageSink);
+        expect(usageLogger.sink).toBe(sink);
       });
 
       it('uses the provided sink when given', () => {
@@ -220,27 +216,18 @@ describe('usageLogger', () => {
   });
 
   describe('createUsageLogger factory', () => {
-    it('creates UsageLogger with provided logger', () => {
-      const usageLogger = createUsageLogger({ logger: fakeLogger });
+    it('creates UsageLogger with provided logger and sink', () => {
+      const sink = new NoopUsageSink();
+      const usageLogger = createUsageLogger({ logger: fakeLogger, sink });
       expect(usageLogger).toBeInstanceOf(UsageLogger);
       expect(usageLogger.logger).toBe(fakeLogger);
+      expect(usageLogger.sink).toBe(sink);
     });
 
     it('passes through a custom sink', () => {
       const customSink = { log: vi.fn().mockResolvedValue(undefined) };
       const usageLogger = createUsageLogger({ logger: fakeLogger, sink: customSink });
       expect(usageLogger.sink).toBe(customSink);
-    });
-  });
-
-  describe('logUsage (legacy)', () => {
-    it('resolves without throwing (uses NoopUsageSink under the hood)', async () => {
-      await expect(logUsage(baseParams)).resolves.toBeUndefined();
-    });
-
-    it('respects the INTEXURAOS_LOG_LLM_USAGE env var', async () => {
-      process.env['INTEXURAOS_LOG_LLM_USAGE'] = 'false';
-      await expect(logUsage(baseParams)).resolves.toBeUndefined();
     });
   });
 });

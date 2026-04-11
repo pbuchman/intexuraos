@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockResearch = vi.fn();
 const mockGenerate = vi.fn();
@@ -36,16 +37,33 @@ const mockLogger: Logger = {
 
 describe('GeminiAdapter', () => {
   let adapter: InstanceType<typeof GeminiAdapter>;
+  let fakeUsageSink: FakeUsageSink;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GeminiAdapter('test-key', LlmModels.Gemini25Pro, 'test-user-id', testPricing, mockLogger);
+    fakeUsageSink = new FakeUsageSink();
+    adapter = new GeminiAdapter(
+      'test-key',
+      LlmModels.Gemini25Pro,
+      'test-user-id',
+      testPricing,
+      mockLogger,
+      fakeUsageSink
+    );
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateGeminiClient.mockClear();
-      new GeminiAdapter('test-key', LlmModels.Gemini25Pro, 'test-user-id', testPricing, mockLogger, 'research-123');
+      new GeminiAdapter(
+        'test-key',
+        LlmModels.Gemini25Pro,
+        'test-user-id',
+        testPricing,
+        mockLogger,
+        fakeUsageSink,
+        'research-123'
+      );
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
@@ -54,6 +72,7 @@ describe('GeminiAdapter', () => {
         researchId: 'research-123',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: fakeUsageSink,
       });
     });
 
@@ -63,7 +82,8 @@ describe('GeminiAdapter', () => {
         LlmModels.Gemini25Pro,
         'test-user-id',
         testPricing,
-        mockLogger
+        mockLogger,
+        fakeUsageSink
       );
       expect(testAdapter).toBeDefined();
     });
@@ -199,7 +219,8 @@ describe('GeminiAdapter', () => {
         LlmModels.Gemini25Pro,
         'test-user-id',
         testPricing,
-        mockLogger
+        mockLogger,
+        fakeUsageSink
       );
 
       mockGenerate.mockResolvedValue({

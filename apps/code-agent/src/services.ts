@@ -352,10 +352,20 @@ export function initServices(config: ServiceConfig): void {
         logger: createAppLogger({ name: 'whatsapp-publisher' }),
       });
 
+  const buildUsageSink = (component: string): HttpInternalAuthUsageSink =>
+    new HttpInternalAuthUsageSink({
+      usageServiceUrl: config.llmUsageServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+      service: 'code-agent',
+      component,
+      logger,
+    });
+
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
     logger,
+    usageSink: buildUsageSink('user-service-client'),
     pricingContext: {
       getPricing() { throw new Error('code-agent does not use LLM pricing'); },
       hasPricing() { return false; },
@@ -422,15 +432,6 @@ export function initServices(config: ServiceConfig): void {
     // new "meaningful changes" filtering not present in the original code.
     // The original dispatched all edited bot comments without payload inspection.
   ]);
-
-  const buildUsageSink = (component: string): HttpInternalAuthUsageSink =>
-    new HttpInternalAuthUsageSink({
-      usageServiceUrl: config.llmUsageServiceUrl,
-      internalAuthToken: config.internalAuthToken,
-      service: 'code-agent',
-      component,
-      logger,
-    });
 
   const toolCallingClient = config.geminiAppApiKey !== ''
     ? createToolCallingClient({

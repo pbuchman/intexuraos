@@ -205,6 +205,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
               userId,
               pricing: fallbackPricing,
               logger: config.logger,
+              usageSink: config.usageSink,
             });
 
             logger.info(
@@ -232,6 +233,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           userId,
           pricing,
           logger: config.logger,
+          usageSink: config.usageSink,
         };
 
         const client: LlmGenerateClient = createLlmClient(clientConfig);

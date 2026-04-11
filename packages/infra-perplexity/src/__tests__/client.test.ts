@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 import { type ModelPricing, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -9,6 +10,8 @@ const mockLogger: Logger = {
   warn: vi.fn(),
   debug: vi.fn(),
 };
+
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
 const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
 
@@ -110,6 +113,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Tell me about AI');
 
@@ -151,6 +155,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Tell me about AI');
 
@@ -180,6 +185,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -210,6 +216,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -238,6 +245,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -266,6 +274,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.research('Test prompt');
 
@@ -289,6 +298,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -307,6 +317,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -325,6 +336,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -343,6 +355,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.research('Test prompt');
 
@@ -363,6 +376,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -391,6 +405,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -417,6 +432,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Write something');
 
@@ -453,6 +469,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Write something');
 
@@ -476,6 +493,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.generate('Write something');
 
@@ -501,6 +519,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Write something');
 
@@ -524,6 +543,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Write something');
 
@@ -542,6 +562,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Write something');
 
@@ -560,6 +581,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Write something');
 
@@ -591,6 +613,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -621,6 +644,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -650,6 +674,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -677,6 +702,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Test prompt');
 
@@ -710,6 +736,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -743,6 +770,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -758,6 +786,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -778,6 +807,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Test prompt');
 
@@ -798,6 +828,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -816,6 +847,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -848,6 +880,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.research('Test prompt');
 
@@ -872,6 +905,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.generate('Test prompt');
 
@@ -889,6 +923,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -910,6 +945,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Test prompt');
 
@@ -932,6 +968,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
         timeoutMs: 1000, // 1 second timeout
       });
       const result = await client.research('Test prompt');
@@ -961,6 +998,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
         // timeoutMs not specified, should use DEFAULT_TIMEOUT_MS
       });
       const result = await client.research('Test prompt');
@@ -987,6 +1025,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
         timeoutMs: 100,
       });
 
@@ -1009,6 +1048,7 @@ describe('createPerplexityClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
         timeoutMs: 50, // Shorter than delay
       });
       const result = await client.research('Test prompt');

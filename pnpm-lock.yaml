@@ -771,6 +771,9 @@ importers:
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
+      '@intexuraos/llm-pricing':
+        specifier: workspace:*
+        version: link:../../packages/llm-pricing
       '@intexuraos/llm-prompts':
         specifier: workspace:*
         version: link:../../packages/llm-prompts

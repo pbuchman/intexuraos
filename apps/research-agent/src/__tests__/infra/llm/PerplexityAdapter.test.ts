@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockResearch = vi.fn();
 
@@ -29,10 +30,19 @@ const mockLogger: Logger = {
 
 describe('PerplexityAdapter', () => {
   let adapter: InstanceType<typeof PerplexityAdapter>;
+  let fakeUsageSink: FakeUsageSink;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new PerplexityAdapter('test-key', LlmModels.SonarPro, 'test-user-id', testPricing, mockLogger);
+    fakeUsageSink = new FakeUsageSink();
+    adapter = new PerplexityAdapter(
+      'test-key',
+      LlmModels.SonarPro,
+      'test-user-id',
+      testPricing,
+      mockLogger,
+      fakeUsageSink
+    );
   });
 
   describe('constructor', () => {
@@ -44,6 +54,7 @@ describe('PerplexityAdapter', () => {
         'test-user-id',
         testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -54,6 +65,7 @@ describe('PerplexityAdapter', () => {
         researchId: 'research-123',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: fakeUsageSink,
       });
     });
   });

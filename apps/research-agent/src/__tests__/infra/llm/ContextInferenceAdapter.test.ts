@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
 import type { ResearchContext, SynthesisContext } from '@intexuraos/llm-prompts';
 import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockGenerate = vi.fn();
 
@@ -87,16 +88,19 @@ function createMockLogger(): Logger & {
 describe('ContextInferenceAdapter', () => {
   let adapter: InstanceType<typeof ContextInferenceAdapter>;
   let mockLogger: ReturnType<typeof createMockLogger>;
+  let fakeUsageSink: FakeUsageSink;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockLogger = createMockLogger();
+    fakeUsageSink = new FakeUsageSink();
     adapter = new ContextInferenceAdapter(
       'test-key',
       LlmModels.Gemini20Flash,
       'test-user',
       testPricing,
-      mockLogger
+      mockLogger,
+      fakeUsageSink
     );
   });
 
@@ -110,6 +114,7 @@ describe('ContextInferenceAdapter', () => {
         'test-user',
         testPricing,
         testLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -120,6 +125,7 @@ describe('ContextInferenceAdapter', () => {
         researchId: 'research-123',
         pricing: testPricing,
         logger: testLogger,
+        usageSink: fakeUsageSink,
       });
     });
   });

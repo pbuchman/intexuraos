@@ -3,6 +3,7 @@ import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
 import { LlmModels } from '@intexuraos/llm-contract';
 import type { ModelPricing } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import type { ImageGenerationModel } from '../../domain/index.js';
 import type {
   GeneratedImageData,
@@ -20,6 +21,7 @@ export interface GoogleImageGeneratorConfig {
   pricing: ModelPricing;
   imagePricing: ModelPricing;
   logger: Logger;
+  usageSink: UsageSink;
   generateId?: () => string;
 }
 
@@ -31,6 +33,7 @@ export class GoogleImageGenerator implements ImageGenerator {
   private readonly pricing: ModelPricing;
   private readonly imagePricing: ModelPricing;
   private readonly logger: Logger;
+  private readonly usageSink: UsageSink;
   private readonly generateId: () => string;
 
   constructor(config: GoogleImageGeneratorConfig) {
@@ -41,6 +44,7 @@ export class GoogleImageGenerator implements ImageGenerator {
     this.pricing = config.pricing;
     this.imagePricing = config.imagePricing;
     this.logger = config.logger;
+    this.usageSink = config.usageSink;
     this.generateId = config.generateId ?? ((): string => randomUUID());
   }
 
@@ -57,6 +61,7 @@ export class GoogleImageGenerator implements ImageGenerator {
       pricing: this.pricing,
       imagePricing: this.imagePricing,
       logger: this.logger,
+      usageSink: this.usageSink,
     });
 
     if (client.generateImage === undefined) {

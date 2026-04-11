@@ -45,20 +45,20 @@ describe('config', () => {
       expect(config.gcpProjectId).toBe('my-gcp-project');
     });
 
-    it('returns empty string for internalAuthKey when not set', () => {
+    it('returns empty string for internalAuthToken when not set', () => {
       delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
 
       const config = loadConfig();
 
-      expect(config.internalAuthKey).toBe('');
+      expect(config.internalAuthToken).toBe('');
     });
 
-    it('uses internalAuthKey from environment variable', () => {
+    it('uses internalAuthToken from environment variable', () => {
       process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'secret-key-123';
 
       const config = loadConfig();
 
-      expect(config.internalAuthKey).toBe('secret-key-123');
+      expect(config.internalAuthToken).toBe('secret-key-123');
     });
 
     it('returns empty string for geminiApiKey when not set', () => {
@@ -117,8 +117,9 @@ describe('config', () => {
       expect(config).toEqual({
         port: 3000,
         gcpProjectId: 'prod-project',
-        internalAuthKey: 'prod-secret',
+        internalAuthToken: 'prod-secret',
         geminiApiKey: 'gemini-prod-key',
+        llmUsageServiceUrl: '',
         auth: {
           jwksUrl: 'https://auth.example.com/jwks',
           issuer: 'https://auth.example.com/',

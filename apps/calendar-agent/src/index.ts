@@ -53,6 +53,7 @@ async function main(): Promise<void> {
   initServices({
     userServiceUrl,
     internalAuthToken,
+    llmUsageServiceUrl: usageServiceUrl,
     pricingContext,
   });
 

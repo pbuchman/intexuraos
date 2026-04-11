@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { createAppLogger } from '@intexuraos/infra-sentry';
-import type { IPricingContext } from '@intexuraos/llm-pricing';
+import {
+  HttpInternalAuthUsageSink,
+  type IPricingContext,
+  type UsageSink,
+} from '@intexuraos/llm-pricing';
 import { LlmModels, LlmProviders, type Google, type OpenAI } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import type { ImageGenerationModel, PromptGenerator, ImageGenerator } from './domain/index.js';
@@ -17,11 +21,24 @@ export function initializeServices(pricingContext: IPricingContext): void {
   const publicBaseUrl = process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'];
   const storage = createGcsImageStorage(bucketName, publicBaseUrl);
 
+  const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
+  const llmUsageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '';
+  const sinkLogger = createAppLogger({ name: 'image-service-usage-sink' });
+  const buildUsageSink = (component: string): UsageSink =>
+    new HttpInternalAuthUsageSink({
+      usageServiceUrl: llmUsageServiceUrl,
+      internalAuthToken,
+      service: 'image-service',
+      component,
+      logger: sinkLogger,
+    });
+
   const userServiceClient = createUserServiceClient({
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8110',
-    internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
+    internalAuthToken,
     pricingContext,
     logger: createAppLogger({ name: 'user-service-client' }),
+    usageSink: buildUsageSink('user-service-client'),
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
@@ -45,9 +62,21 @@ export function initializeServices(pricingContext: IPricingContext): void {
       logger: Logger
     ): PromptGenerator => {
       if (provider === LlmProviders.Google) {
-        return createGeminiPromptAdapter({ apiKey, userId, pricing: geminiPricing, logger });
+        return createGeminiPromptAdapter({
+          apiKey,
+          userId,
+          pricing: geminiPricing,
+          logger,
+          usageSink: buildUsageSink('gemini-prompt-adapter'),
+        });
       }
-      return createGptPromptAdapter({ apiKey, userId, pricing: gptPricing, logger });
+      return createGptPromptAdapter({
+        apiKey,
+        userId,
+        pricing: gptPricing,
+        logger,
+        usageSink: buildUsageSink('gpt-prompt-adapter'),
+      });
     },
     createImageGenerator: (
       model: ImageGenerationModel,
@@ -65,6 +94,7 @@ export function initializeServices(pricingContext: IPricingContext): void {
           pricing: gptPricing,
           imagePricing: openaiImagePricing,
           logger,
+          usageSink: buildUsageSink('openai-image-generator'),
         });
       }
       return createGoogleImageGenerator({
@@ -75,6 +105,7 @@ export function initializeServices(pricingContext: IPricingContext): void {
         pricing: geminiPricing,
         imagePricing: googleImagePricing,
         logger,
+        usageSink: buildUsageSink('google-image-generator'),
       });
     },
     generateId: (): string => randomUUID(),
