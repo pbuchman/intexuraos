@@ -178,6 +178,7 @@ describe('pricingClient', () => {
         expect(result.error.code).toBe('API_ERROR');
         expect(result.error.message).toContain('HTTP 500');
         expect(result.error.message).toContain('Internal Server Error');
+        expect(result.error.statusCode).toBe(500);
       }
     });
 
@@ -196,6 +197,7 @@ describe('pricingClient', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
         expect(result.error.message).toBe('HTTP 404');
+        expect(result.error.statusCode).toBe(404);
       }
     });
 
@@ -211,6 +213,7 @@ describe('pricingClient', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
         expect(result.error.message).toBe('Response success is false');
+        expect(result.error.statusCode).toBeUndefined();
       }
     });
 
@@ -239,6 +242,7 @@ describe('pricingClient', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
         expect(result.error.message).toBe('HTTP 503');
+        expect(result.error.statusCode).toBe(503);
       }
     });
   });
@@ -638,8 +642,8 @@ describe('pricingClient', () => {
       expect(fetch).toHaveBeenCalledTimes(1);
     });
 
-    it('does NOT retry on VALIDATION_ERROR (non-transient)', async () => {
-      // Simulate success:false response which produces VALIDATION-like error
+    it('does NOT retry on API_ERROR with no HTTP status code (non-transient)', async () => {
+      // success:false produces API_ERROR without statusCode — not transient
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
         json: async () => ({ success: false }),
@@ -655,8 +659,9 @@ describe('pricingClient', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
         expect(result.error.message).toBe('Response success is false');
+        expect(result.error.statusCode).toBeUndefined();
       }
-      // API_ERROR with non-HTTP-status message is not transient — no retry
+      // API_ERROR without statusCode is not transient — no retry
       expect(fetch).toHaveBeenCalledTimes(1);
     });
 
