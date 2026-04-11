@@ -171,6 +171,133 @@ export async function fetchAllPricing(
 }
 
 /**
+ * Configuration for retry behavior in {@link fetchAllPricingWithRetry}.
+ */
+export interface PricingRetryOptions {
+  /** Maximum number of retry attempts (default: 5) */
+  maxRetries?: number | undefined;
+  /** Initial delay in milliseconds before first retry (default: 1000) */
+  initialDelayMs?: number | undefined;
+  /** Maximum delay in milliseconds between retries (default: 15000) */
+  maxDelayMs?: number | undefined;
+  /** Optional logger for retry progress (default: process.stderr.write) */
+  log?: ((message: string) => void) | undefined;
+  /** Delay function for testability (default: setTimeout-based) */
+  delayFn?: ((ms: number) => Promise<void>) | undefined;
+}
+
+const DEFAULT_MAX_RETRIES = 5;
+const DEFAULT_INITIAL_DELAY_MS = 1000;
+const DEFAULT_MAX_DELAY_MS = 15000;
+
+/**
+ * Whether a pricing client error is transient and worth retrying.
+ *
+ * Retries on:
+ * - NETWORK_ERROR: connection refused, DNS failure, timeout
+ * - API_ERROR with HTTP 404, 5xx: service not yet deployed or temporarily down
+ *
+ * Does NOT retry:
+ * - API_ERROR with HTTP 401/403: auth misconfiguration won't self-heal
+ * - VALIDATION_ERROR: response format issues won't self-heal
+ */
+function isTransientError(error: PricingClientError): boolean {
+  // Network errors (connection refused, DNS failure, timeout) are always transient
+  if (error.code === 'NETWORK_ERROR') return true;
+
+  // API_ERROR — check if the HTTP status is transient
+  // fetchAllPricing formats these as "HTTP <status>: ..."
+  const statusMatch = /^HTTP (\d+)/.exec(error.message);
+  if (statusMatch === null) return false;
+
+  const status = Number(statusMatch[1]);
+  // 404 = route not deployed yet; 5xx = server error
+  return status === 404 || status >= 500;
+}
+
+/**
+ * Default delay using setTimeout.
+ */
+function defaultDelay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/**
+ * Fetch all LLM pricing with exponential backoff retries.
+ *
+ * @remarks
+ * Wraps {@link fetchAllPricing} with retry logic to handle transient failures
+ * during deployment (e.g., llm-usage-service not yet ready). Uses exponential
+ * backoff: 1s → 2s → 4s → 8s → 15s (capped). Total max wait ≈ 30s with
+ * default settings.
+ *
+ * Only retries on transient errors (network failures, HTTP 404/5xx).
+ * Non-transient errors (401, 403, validation) fail immediately.
+ *
+ * @param baseUrl - Base URL of llm-usage-service
+ * @param authToken - Internal auth token for `X-Internal-Auth` header
+ * @param options - Optional retry configuration
+ * @returns Result with all provider pricing or error after exhausting retries
+ *
+ * @example
+ * ```ts
+ * // At service startup — resilient to deployment ordering
+ * const result = await fetchAllPricingWithRetry(
+ *   process.env.INTEXURAOS_LLM_USAGE_SERVICE_URL,
+ *   process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN
+ * );
+ *
+ * if (!result.ok) {
+ *   throw new Error(`Failed to fetch pricing: ${result.error.message}`);
+ * }
+ * ```
+ */
+export async function fetchAllPricingWithRetry(
+  baseUrl: string,
+  authToken: string,
+  options?: PricingRetryOptions
+): Promise<Result<AllPricingResponse, PricingClientError>> {
+  const maxRetries = options?.maxRetries ?? DEFAULT_MAX_RETRIES;
+  const initialDelayMs = options?.initialDelayMs ?? DEFAULT_INITIAL_DELAY_MS;
+  const maxDelayMs = options?.maxDelayMs ?? DEFAULT_MAX_DELAY_MS;
+  const log =
+    options?.log ??
+    ((msg: string): void => {
+      process.stderr.write(msg);
+    });
+  const delayFn = options?.delayFn ?? defaultDelay;
+
+  let lastResult: Result<AllPricingResponse, PricingClientError> | undefined;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const result = await fetchAllPricing(baseUrl, authToken);
+
+    if (result.ok) return result;
+
+    lastResult = result;
+
+    // Non-transient errors fail immediately
+    if (!isTransientError(result.error)) return result;
+
+    // Last attempt — don't delay, just return the error
+    if (attempt === maxRetries) break;
+
+    const delayMs = Math.min(initialDelayMs * Math.pow(2, attempt), maxDelayMs);
+    log(
+      `Pricing fetch failed (attempt ${String(attempt + 1)}/${String(maxRetries + 1)}): ${result.error.message}. ` +
+        `Retrying in ${String(delayMs)}ms...\n`
+    );
+    await delayFn(delayMs);
+  }
+
+  // lastResult is always defined here because maxRetries >= 0, so the loop
+  // runs at least once and sets lastResult before breaking.
+  return lastResult as Result<AllPricingResponse, PricingClientError>;
+}
+
+/**
  * Interface for pricing context.
  *
  * @remarks

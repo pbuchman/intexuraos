@@ -6,7 +6,7 @@
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import {
-  fetchAllPricing,
+  fetchAllPricingWithRetry,
   createPricingContext,
   HttpInternalAuthUsageSink,
 } from '@intexuraos/llm-pricing';
@@ -110,7 +110,7 @@ export async function initializeServices(): Promise<void> {
   });
 
   // Fetch pricing data from llm-usage-service
-  const pricingResult = await fetchAllPricing(llmUsageServiceUrl, internalAuthToken);
+  const pricingResult = await fetchAllPricingWithRetry(llmUsageServiceUrl, internalAuthToken);
 
   if (!pricingResult.ok) {
     throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
