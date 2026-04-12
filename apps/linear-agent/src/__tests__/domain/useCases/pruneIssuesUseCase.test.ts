@@ -273,4 +273,51 @@ describe('pruneIssues', () => {
 
     expect(result.ok).toBe(true);
   });
+
+  it('skips pruning when prune candidates are already pending review', async () => {
+    const issues = Array.from({ length: 210 }, (_, i) =>
+      createTestIssue({ id: `id-${String(i)}`, identifier: `INT-${String(i)}` })
+    );
+    (deps.issueRepo.listByUserId as ReturnType<typeof vi.fn>).mockResolvedValue(ok(issues));
+
+    // Seed existing candidates — simulates a previous run that hasn't been reviewed yet
+    (deps.pruneCandidateRepo.listAll as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok([
+        {
+          id: 'existing-1',
+          identifier: 'INT-999',
+          title: 'Old candidate',
+          score: 80,
+          reason: 'Cancelled',
+          category: 'cancelled' as const,
+          classifiedAt: '2026-04-01T00:00:00.000Z',
+        },
+      ])
+    );
+
+    const result = await pruneIssues(deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.skipped).toBe(true);
+    expect(result.value.skipReason).toContain('pending review');
+    expect(result.value.stored).toBe(0);
+    expect(result.value.storedCandidates).toEqual([]);
+    expect(deps.classifier.classifyCandidates).not.toHaveBeenCalled();
+    expect(deps.pruneCandidateRepo.clearAll).not.toHaveBeenCalled();
+    expect(deps.pruneCandidateRepo.storeAll).not.toHaveBeenCalled();
+  });
+
+  it('returns error when checking pending candidates fails', async () => {
+    (deps.pruneCandidateRepo.listAll as ReturnType<typeof vi.fn>).mockResolvedValue(
+      err({ code: 'INTERNAL_ERROR', message: 'Firestore read failed' })
+    );
+
+    const result = await pruneIssues(deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INTERNAL_ERROR');
+    expect(result.error.message).toContain('Firestore read failed');
+  });
 });
