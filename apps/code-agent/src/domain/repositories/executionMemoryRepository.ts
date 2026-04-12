@@ -88,4 +88,5 @@ export interface ExecutionMemoryRepository {
     id: string,
     input: UpdateExecutionMemoryInput
   ): Promise<Result<ExecutionMemory, ExecutionMemoryRepositoryError>>;
+  listStaleUnused(cutoffDate: Date): Promise<Result<ExecutionMemory[], ExecutionMemoryRepositoryError>>;
 }

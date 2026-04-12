@@ -706,6 +706,43 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       };
     }
 
+    // Enforce non-empty memory fields when memories were injected for any agent type.
+    // The Zod schemas for non-execution agents use .optional().default(''), so Gemini can
+    // return empty strings without triggering a schema error. This post-parse check ensures
+    // that agents which received injected memories must report their memory_ids_used or
+    // memory_ids_rejected fields (at least one must be non-empty).
+    const hasInjectedMemories =
+      input.executionMemoryContext !== undefined &&
+      input.executionMemoryContext.matchedMemories.length > 0;
+
+    if (hasInjectedMemories && input.agentType !== 'execution') {
+      const parsed = parseResult.data as Record<string, unknown>;
+      /* v8 ignore start -- schema: Zod .optional().default('') guarantees value is always a string after parse @preserve */
+      const usedVal =
+        typeof parsed['memory_ids_used'] === 'string' ? parsed['memory_ids_used'] : '';
+      const rejectedVal =
+        typeof parsed['memory_ids_rejected'] === 'string' ? parsed['memory_ids_rejected'] : '';
+      /* v8 ignore stop @preserve */
+      if (usedVal.trim() === '' && rejectedVal.trim() === '') {
+        const emptyMemoryFields = ['memory_ids_used', 'memory_ids_rejected'];
+        this.logger.warn(
+          {
+            taskId: input.taskId,
+            attempt: input.attempt,
+            model: this.model,
+            emptyMemoryFields,
+          },
+          'Memory fields are empty despite memories being injected'
+        );
+        return {
+          passed: false,
+          missingFields: emptyMemoryFields,
+          verifierFailure: false,
+          trace: { transcript, prompt, response: generated.value.content },
+        };
+      }
+    }
+
     const agentData = toAgentData(input.agentType, parseResult.data);
     const memoryValidationFailures =
       input.executionMemoryContext !== undefined

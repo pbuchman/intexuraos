@@ -278,6 +278,7 @@ async function handleNewTaskRetry(
       embeddingClient: deps.executionMemory?.embeddingClient,
       executionMemoryRepo: deps.executionMemory?.executionMemoryRepo,
       executionMemoryApplicationRepo: deps.executionMemory?.executionMemoryApplicationRepo,
+      agentType,
     });
 
     if (taskExecutionMemoryContext?.status === 'error') {
