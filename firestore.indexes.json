@@ -1670,20 +1670,6 @@
           "order": "DESCENDING"
         }
       ]
-    },
-    {
-      "collectionGroup": "llm_usage_events",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "occurredAt",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
     }
   ],
   "fieldOverrides": [
