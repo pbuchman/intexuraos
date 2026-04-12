@@ -4,7 +4,6 @@ export {
   isUsageLoggingEnabled,
   UsageLogger,
   createUsageLogger,
-  StructuredLogUsageSink,
   NoopUsageSink,
   type UsageLogParams,
   type CallType,
