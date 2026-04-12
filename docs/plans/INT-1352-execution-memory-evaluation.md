@@ -7,9 +7,74 @@
 
 ---
 
+## Data Collection Methodology
+
+The following queries and filters were used to derive the statistics in this report. These can be re-run for future baseline comparisons.
+
+### Firestore Queries
+
+**50 most recent code tasks:**
+```
+collection: code_tasks
+orderBy: createdAt DESC
+limit: 50
+```
+
+**Active memory corpus:**
+```
+collection: execution_memories
+where: status == "active"
+```
+
+**Memory application history:**
+```
+collection: execution_memory_applications
+```
+Aggregated by `memoryId` to compute `applicationCount`, `positiveCount`, and `negativeCount` per memory.
+
+**Worker self-report check:**
+```
+collection: code_tasks
+where: status == "completed"
+select: result.execution_memory_ids_used
+```
+Verified all 40 completed tasks have `execution_memory_ids_used: ""`.
+
+### GCP Cloud Run Logs
+
+**Retrieval and injection logs:**
+```
+gcloud logging read 'resource.type="cloud_run_revision"
+  AND resource.labels.service_name="intexuraos-code-agent"
+  AND jsonPayload.message=~"(execution memory|rerank|injection)"
+  AND timestamp>="2026-04-10T00:00:00Z"' \
+  --project=intexuraos-dev-pbuchman --limit=500 --format=json
+```
+
+**Evaluator hallucination logs:**
+```
+gcloud logging read 'resource.type="cloud_run_revision"
+  AND resource.labels.service_name="intexuraos-code-agent"
+  AND jsonPayload.message=~"Evaluator returned outcome for unknown memory ID"
+  AND timestamp>="2026-04-10T00:00:00Z"' \
+  --project=intexuraos-dev-pbuchman --limit=100 --format=json
+```
+
+**Post-run error logs (Gemini outage):**
+```
+gcloud logging read 'resource.type="cloud_run_revision"
+  AND resource.labels.service_name="intexuraos-code-agent"
+  AND jsonPayload.message=~"(Service Unavailable|500 Server Error)"
+  AND timestamp>="2026-04-11T07:00:00Z"
+  AND timestamp<="2026-04-11T12:00:00Z"' \
+  --project=intexuraos-dev-pbuchman --limit=100 --format=json
+```
+
+---
+
 ## Executive Summary
 
-Execution memory retrieval is **operational and broadly active** across all eligible agent types. Of 50 tasks analyzed, 48 (96%) had retrieval attempted, and 32 (64%) received at least one injected memory. However, the investigation uncovered **three critical systemic issues** that severely undermine the feedback loop and memory quality evolution:
+Execution memory retrieval is **operational and broadly active** across all eligible agent types. Of 50 tasks analyzed, 48 (96%) had retrieval attempted, and 31 (62%) received at least one injected memory. However, the investigation uncovered **three critical systemic issues** that severely undermine the feedback loop and memory quality evolution:
 
 1. **Workers never report memory usage** - 0 of 40 completed tasks reported which memories they used (all `execution_memory_ids_used` fields are empty strings)
 2. **All per-memory evaluation outcomes are `unknown`** - The evaluator cannot determine positive/negative impact because it has no worker self-report to cross-reference
@@ -25,7 +90,7 @@ The net effect: the system generates and injects memories but **cannot learn whi
 | ------------------------------------- | ---------- | ----------------------------------- |
 | Tasks analyzed                        | 50         | Apr 10-12, 2026                     |
 | Retrieval attempted                   | 48 (96%)   | 2 tasks ineligible (`ask_agent`)    |
-| Memories injected (>= 1)              | 32 (64%)   | Passed 0.50 rerank threshold        |
+| Memories injected (>= 1)              | 31 (62%)   | Passed 0.50 rerank threshold        |
 | No match (candidates below threshold) | 16 (32%)   | Had 20 candidates, none qualified   |
 | Avg top candidate rerank score        | 0.539      | Range: 0.427 - 0.682                |
 | Tasks with 3 memories injected        | 16 (32%)   | Maximum allowed                     |
@@ -64,7 +129,7 @@ The net effect: the system generates and injects memories but **cannot learn whi
 
 ## Detailed Task Evidence Table
 
-The following table shows every task where execution memory found at least one candidate to inject (32 tasks). Columns:
+The following table shows every task where execution memory found at least one candidate to inject (31 tasks). Columns:
 - **Task** - Task ID (truncated) and Linear issue
 - **Agent** - Agent type (P=planning, E=execution, R=review, M=remediation, PR=pull_request)
 - **Inj** - Number of memories injected (passed >= 0.50 threshold)
@@ -106,7 +171,6 @@ The following table shows every task where execution memory found at least one c
 | 29  | `task_6a4..963` | INT-750  | M       | 2     | 0.511       | Handle `git push` failures when local branch name doesn't match remote PR branch | **error**  | empty `""`      |
 | 30  | `task_ef1..e6`  | INT-750  | M       | 3     | 0.587       | Auto-merge Planning PRs on Review Pass                                           | missing    | N/A             |
 | 31  | `task_bef..be1` | INT-1340 | R       | 1     | 0.509       | Route orchestrator usage via code-agent webhook gateway                          | completed  | empty `""`      |
-| 32  | `task_e20..bac` | N/A      | R       | 1     | 0.562       | Standardize Nitpick Nuker comment processing and reaction handling               | completed  | empty `""`      |
 
 ---
 
@@ -160,6 +224,16 @@ The actual worker agents (Claude Code) appear to **not be reporting memory usage
 ### Finding 3: Evaluator Reports Unknown Memory IDs
 
 **Evidence:** 9 log entries of `"Evaluator returned outcome for unknown memory ID, skipping"` across 8 distinct tasks. The memory IDs in these logs appear to be truncated or corrupted versions of valid IDs.
+
+**Affected Tasks:**
+- `task_7e15a3ba` (INT-1342, review) - 1 hallucinated ID
+- `task_2ee2aa96` (INT-1343, review) - 2 hallucinated IDs
+- `task_67aab694` (INT-1343, review) - 1 hallucinated ID
+- `task_c15e6681` (N/A, review) - 1 hallucinated ID
+- `task_e20d1bac` (N/A, review) - 1 hallucinated ID
+- `task_997a34ff` (INT-1347, review) - 1 hallucinated ID
+- `task_4ba430f9` (INT-1348, remediation) - 1 hallucinated ID
+- `task_55e40404` (INT-1348, review) - 1 hallucinated ID
 
 Example from logs:
 - Expected: `mem_d2999121-0694-413d-adb0-35e45223c8d6`
