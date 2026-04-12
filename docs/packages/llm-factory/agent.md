@@ -30,8 +30,7 @@ interface LlmClientConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
-  auditSink?: AuditSink;   // Override Firestore audit sink (optional)
-  usageSink?: UsageSink;   // Override Firestore usage sink (optional)
+  usageSink?: UsageSink;   // Override default usage sink (optional)
 }
 
 interface LlmGenerateClient {
