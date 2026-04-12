@@ -126,17 +126,7 @@ Checks `INTEXURAOS_LOG_LLM_USAGE`. Defaults to `true`.
 
 ### Firestore Structure
 
-```
-llm_usage_stats/{model}/
-  by_call_type/{callType}/
-    by_period/
-      total/              (all-time aggregate)
-        by_user/{userId}
-      YYYY-MM/            (monthly aggregate)
-        by_user/{userId}
-      YYYY-MM-DD/         (daily aggregate)
-        by_user/{userId}
-```
+Usage statistics collection has been removed as part of INT-1342 (llm-audit and user_usage cleanup).
 
 Each period document accumulates `totalCalls`, `successfulCalls`, `failedCalls`, `inputTokens`, `outputTokens`, `totalTokens`, `costUsd` via Firestore `FieldValue.increment`.
 

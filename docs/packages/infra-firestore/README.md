@@ -101,7 +101,7 @@ This is the most widely used infrastructure package. Consumed by virtually every
 
 **Apps:** `actions-agent`, `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `code-agent`, `commands-agent`, `data-insights-agent`, `image-service`, `linear-agent`, `mobile-notifications-service`, `notes-agent`, `notion-service`, `research-agent`, `todos-agent`, `user-service`, `whatsapp-service`
 
-**Packages:** `http-server`, `llm-audit`, `llm-pricing`
+**Packages:** `http-server`, `llm-pricing`
 
 ## Recent Changes
 

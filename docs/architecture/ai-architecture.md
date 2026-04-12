@@ -432,13 +432,7 @@ const result = await client.generate({
 
 ### Usage Tracking
 
-All LLM calls are tracked through the `llm-audit` package:
-
-- Token usage (input/output)
-- Cost calculation
-- Model selection
-- Response latency
-- Error rates
+LLM usage (token counts, cost) is tracked through the `llm-pricing` package which writes to Firestore.
 
 Published to Pub/Sub for aggregation in `app-settings-service`.
 
@@ -641,7 +635,6 @@ const validationResult = await llmValidator.validateKey({
 | `@intexuraos/llm-pricing`      | Cost calculation                     |
 | `@intexuraos/llm-prompts`      | Prompt builders, schemas, parsers    |
 | `@intexuraos/llm-utils`        | Redaction and parse error utilities  |
-| `@intexuraos/llm-audit`        | Usage tracking                       |
 | `@intexuraos/infra-gemini`     | Google AI adapter                    |
 | `@intexuraos/infra-gpt`        | OpenAI adapter                       |
 | `@intexuraos/infra-claude`     | Anthropic adapter                    |
