@@ -1354,6 +1354,16 @@ describe('GitHubDispatchService', () => {
       expect(isStaleTaskError({ success: false, dispatched: false, errorCode: 'task_not_found', error: 'Task X not found' })).toBe(true);
     });
 
+    it('treats session_expired as stale task error', () => {
+      const result: WebhookDispatchResult = {
+        success: false,
+        dispatched: false,
+        error: 'Session has expired — the worker container was cleaned up.',
+        errorCode: 'session_expired',
+      };
+      expect(isStaleTaskError(result)).toBe(true);
+    });
+
     it('should return true for task_not_found regardless of message content', () => {
       expect(isStaleTaskError({ success: false, dispatched: false, errorCode: 'task_not_found', error: 'anything' })).toBe(true);
     });
