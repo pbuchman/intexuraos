@@ -4,12 +4,12 @@
 
 ## Identity
 
-| Attribute | Value                                                              |
-| --------- | ------------------------------------------------------------------ |
-| Package   | `@intexuraos/llm-pricing`                                          |
-| Role      | Pricing lookup and usage tracking for LLM operations               |
-| Goal      | Provide O(1) cost lookup at runtime; aggregate usage to Firestore  |
-| Firestore | `llm_usage_stats` (owner: this package via `FirestoreUsageSink`)   |
+| Attribute | Value                                                                                |
+| --------- | ------------------------------------------------------------------------------------ |
+| Package   | `@intexuraos/llm-pricing`                                                            |
+| Role      | Pricing lookup and usage tracking for LLM operations                                 |
+| Goal      | Provide O(1) cost lookup at runtime; aggregate usage to Firestore                    |
+| Firestore | None (usage events forwarded via `HttpInternalAuthUsageSink` to `llm-usage-service`) |
 
 ## Exports
 
@@ -24,14 +24,14 @@
 
 ### Classes
 
-| Export                   | Purpose                                                  |
-| ------------------------ | -------------------------------------------------------- |
-| `PricingContext`         | O(1) pricing lookups via internal Map                    |
-| `UsageLogger`            | Logs usage to Firestore with structured logging          |
-| `FirestoreUsageSink`     | Default sink — writes to `llm_usage_stats`               |
-| `StructuredLogUsageSink` | Sink that emits to a Pino logger                         |
-| `NoopUsageSink`          | Sink that discards all events (tests only)               |
-| `FakePricingContext`     | Test double implementing `IPricingContext`               |
+| Export                      | Purpose                                                  |
+| --------------------------- | -------------------------------------------------------- |
+| `PricingContext`            | O(1) pricing lookups via internal Map                    |
+| `UsageLogger`               | Logs usage to Firestore with structured logging          |
+| `HttpInternalAuthUsageSink` | Default sink — forwards to `llm-usage-service` via HTTP  |
+| `HttpWebhookUsageSink`      | HMAC-signed sink for orchestrator → code-agent webhook   |
+| `NoopUsageSink`             | Sink that discards all events (tests only)               |
+| `FakePricingContext`        | Test double implementing `IPricingContext`               |
 
 ### Key Types
 
@@ -115,7 +115,7 @@ const pricingContext = createFakePricingContext();
 **Do NOT:**
 - Call `getPricing()` with a model not in the pricing response (throws)
 - Use `logUsage()` standalone function in new code — it is deprecated; use `UsageLogger.log()` instead
-- Use `FirestoreUsageSink` in tests — use `NoopUsageSink` instead
+- Use HTTP sinks in tests — use `NoopUsageSink` or `FakeUsageSink` instead
 
 **Requires:**
 - `fetchAllPricing` must succeed before `createPricingContext` can be called
