@@ -79,6 +79,7 @@ vi.mock('@/hooks/index.js', async () => {
   return {
     ...(actual as object),
     useWorkersStatus: () => mockUseWorkersStatus(),
+    usePruneCandidateStatus: () => ({ pendingCount: 0, loading: false, error: null }),
   } as Record<string, unknown>;
 });
 
@@ -95,6 +96,7 @@ vi.mock('lucide-react', async () => {
     RefreshCw: (): React.JSX.Element => <div data-testid="refresh-icon" />,
     RotateCcw: (): React.JSX.Element => <div data-testid="rotate-ccw-icon" />,
     Server: (): React.JSX.Element => <div data-testid="server-icon" />,
+    Trash2: (): React.JSX.Element => <div data-testid="trash2-icon" />,
   };
 });
 
