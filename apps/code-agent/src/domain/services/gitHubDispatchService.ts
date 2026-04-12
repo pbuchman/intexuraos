@@ -155,6 +155,20 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
           return await handleNewTask(deps, event, logger, workerDirective);
         }
 
+        // Guard: PR is closed or merged — existing task context is stale
+        if (event.state === 'closed' || event.mergedAt !== null) {
+          logger.info(
+            {
+              staleTaskId: task.id,
+              prNumber: event.pullRequestNumber,
+              prState: event.state,
+              merged: event.mergedAt !== null,
+            },
+            'PR is closed/merged — skipping existing task, creating new task'
+          );
+          return await handleNewTask(deps, event, logger, workerDirective);
+        }
+
         const existingResult = await handleExistingTask(deps, event, task, logger);
 
         // If the existing task is stale (worker says "not found"), fall back to creating a new task
@@ -415,8 +429,9 @@ ${input.checkName}
 
 /**
  * Detect when a dispatch failure indicates the task is stale and no longer reachable.
- * Two scenarios: (1) task_not_found — task was found by PR lookup but deleted before
- * message send (Firestore-level race), (2) worker_error with "Task not found" — task
+ * Three scenarios: (1) task_not_found — task was found by PR lookup but deleted before
+ * message send (Firestore-level race), (2) session_expired — the orchestrator detected
+ * the worker container was cleaned up, (3) worker_error with "Task not found" — task
  * completed/crashed and was cleaned up on the worker but Firestore still has a record.
  *
  * Checks the structured error code first (preferred), then falls back to message
@@ -424,6 +439,7 @@ ${input.checkName}
  */
 export function isStaleTaskError(result: WebhookDispatchResult): boolean {
   if (result.errorCode === 'task_not_found') return true;
+  if (result.errorCode === 'session_expired') return true;
   if (result.errorCode === 'worker_error' && result.error !== undefined) {
     return result.error.includes('Task not found') || result.error.includes('HTTP 404');
   }
