@@ -106,11 +106,11 @@ type CallType =
 
 #### Usage Sinks
 
-| Sink                     | Destination                   | Use Case                            |
-| ------------------------ | ----------------------------- | ----------------------------------- |
-| `FirestoreUsageSink`     | Firestore `llm_usage_stats`   | Default for all production services |
-| `StructuredLogUsageSink` | Pino logger (structured JSON) | Services without Firestore access   |
-| `NoopUsageSink`          | /dev/null                     | Tests, disabled logging             |
+| Sink                          | Destination                           | Use Case                                       |
+| ----------------------------- | ------------------------------------- | ---------------------------------------------- |
+| `HttpInternalAuthUsageSink`   | `llm-usage-service` via HTTP          | Default for all in-cluster production services |
+| `HttpWebhookUsageSink`        | `code-agent` webhook (HMAC-signed)    | Orchestrator → code-agent → llm-usage-service  |
+| `NoopUsageSink`               | /dev/null                             | Tests, disabled logging                        |
 
 All sinks implement `UsageSink`:
 
