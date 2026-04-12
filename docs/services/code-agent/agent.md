@@ -19,7 +19,6 @@ deploy: cloud-run
 collections:
   - code_tasks (subcollections: logs, log_lines, log_entries, turn_metrics)
   - user_spend
-  - user_usage
   - code_worker_settings
   - github-pr-events
   - github-pr-summaries

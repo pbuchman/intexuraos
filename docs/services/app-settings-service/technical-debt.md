@@ -9,11 +9,11 @@
 
 | Category    | Count | Severity |
 | ----------- | ----- | -------- |
-| Code Smells | 3     | Low-Med  |
+| Code Smells | 2     | Low-Med  |
 | Test Gaps   | 0     | —        |
 | Type Issues | 0     | —        |
 | TODOs       | 0     | —        |
-| **Total**   | **3** | —        |
+| **Total**   | **2** | —        |
 
 ---
 
@@ -43,30 +43,13 @@
 
 ### Low Priority
 
-| File                                         | Issue                                       | Impact                                                          |
-| -------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------- |
-| `infra/firestore/index.ts:23`                | Hardcoded Firestore collection path         | Cannot override for multi-tenant or staging without code change |
-| `infra/firestore/usageStatsRepository.ts:67` | Hardcoded collection group name (`by_user`) | Same as above                                                   |
+| File                          | Issue                               | Impact                                                          |
+| ----------------------------- | ----------------------------------- | --------------------------------------------------------------- |
+| `infra/firestore/index.ts:23` | Hardcoded Firestore collection path | Cannot override for multi-tenant or staging without code change |
 
-**Details:** Collection paths are hardcoded strings (`'settings/llm_pricing/providers'` and `'by_user'` collection group with implied root `llm_usage_stats`).
+**Details:** Collection path is a hardcoded string (`'settings/llm_pricing/providers'`).
 
-**Resolution path:** Add optional env vars `INTEXURAOS_PRICING_COLLECTION` and `INTEXURAOS_USAGE_STATS_COLLECTION` with hardcoded values as defaults.
-
----
-
-| File                                         | Issue                                                  | Impact                                                              |
-| -------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------- |
-| `infra/firestore/usageStatsRepository.ts:67` | Collection group query fetches all history client-side | Firestore reads scale with total user history, not requested window |
-
-**Details:** `getUserCosts()` queries `collectionGroup('by_user').where('userId', '==', userId)` without a date filter at the Firestore query level. The `days` cutoff is applied client-side after fetching all documents:
-
-```typescript
-if (period < cutoffDate) continue; // client-side filter
-```
-
-A user with 2 years of history pays full Firestore read cost even for a `?days=7` query.
-
-**Resolution path:** Add a `createdAt` timestamp field to usage docs, then push the date filter into the Firestore query: `.where('createdAt', '>=', cutoffTimestamp)`. Requires a migration to backfill `createdAt` on existing docs.
+**Resolution path:** Add optional env var `INTEXURAOS_PRICING_COLLECTION` with the hardcoded value as default.
 
 ---
 

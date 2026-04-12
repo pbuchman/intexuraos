@@ -48,7 +48,7 @@
 | `infra-sentry`                 | Yes                | Active        |
 | `infra-whatsapp`               | Yes                | Active        |
 | `internal-clients`             | Yes                | Active        |
-| `llm-audit`                    | Yes                | Active        |
+| `llm-audit`                    | **No**             | **DELETED**   |
 | `llm-contract`                 | Yes                | Active        |
 | `llm-factory`                  | Yes                | Active        |
 | `llm-pricing`                  | Yes                | Active        |
@@ -61,30 +61,30 @@
 
 All `@intexuraos/*` direct dependencies as read from each package's `package.json`. Changes from v2 are marked.
 
-| Package            | Depends On (@intexuraos/\*)                                               | Changed from v2?         |
-| ------------------ | ------------------------------------------------------------------------- | ------------------------ |
-| `common-core`      | _(none — leaf)_                                                           | No                       |
-| `common-http`      | `common-core`, `llm-utils`                                                | No                       |
-| `http-contracts`   | _(none — leaf)_                                                           | No                       |
-| `http-server`      | `common-core`, `common-http`, `infra-firestore`                           | No                       |
-| `infra-claude`     | `common-core`, `llm-prompts`, `llm-audit`, `llm-contract`, `llm-pricing`  | No                       |
-| `infra-firestore`  | `common-core`                                                             | No                       |
-| `infra-gemini`     | `common-core`, `llm-prompts`, `llm-audit`, `llm-contract`, `llm-pricing`  | No                       |
-| `infra-glm`        | **DELETED** — no `package.json`                                           | **Yes (deleted)**        |
-| `infra-gpt`        | `common-core`, `llm-prompts`, `llm-audit`, `llm-contract`, `llm-pricing`  | No                       |
-| `infra-notion`     | `common-core`                                                             | No                       |
-| `infra-otel`       | _(none — standalone OTel wrapper, no @intexuraos/\* deps)_                | No                       |
-| `infra-perplexity` | `common-core`, `llm-prompts`, `llm-audit`, `llm-contract`, `llm-pricing`  | No                       |
-| `infra-pubsub`     | `common-core`                                                             | No                       |
-| `infra-sentry`     | `common-core`                                                             | No                       |
-| `infra-whatsapp`   | `common-core`                                                             | No                       |
-| `internal-clients` | `common-core`, `llm-contract`, `llm-factory`, `llm-pricing`               | No                       |
-| `llm-audit`        | `common-core`, `infra-firestore`, `llm-contract`                          | No                       |
-| `llm-contract`     | `common-core`                                                             | No                       |
-| `llm-factory`      | `common-core`, `llm-audit`, `infra-gemini`, `llm-contract`, `llm-pricing` | **Yes** (no `infra-glm`) |
-| `llm-pricing`      | `common-core`, `infra-firestore`, `llm-contract`                          | No                       |
-| `llm-prompts`      | `common-core`, `llm-contract`, `llm-utils`                                | No                       |
-| `llm-utils`        | `common-core`                                                             | No                       |
+| Package            | Depends On (@intexuraos/\*)                                               | Changed from v2?                         |
+| ------------------ | ------------------------------------------------------------------------- | ---------------------------------------- |
+| `common-core`      | _(none — leaf)_                                                           | No                                       |
+| `common-http`      | `common-core`, `llm-utils`                                                | No                                       |
+| `http-contracts`   | _(none — leaf)_                                                           | No                                       |
+| `http-server`      | `common-core`, `common-http`, `infra-firestore`                           | No                                       |
+| `infra-claude`     | `common-core`, `llm-prompts`, `llm-contract`, `llm-pricing`               | **Yes** (no `llm-audit`)                 |
+| `infra-firestore`  | `common-core`                                                             | No                                       |
+| `infra-gemini`     | `common-core`, `llm-prompts`, `llm-contract`, `llm-pricing`               | **Yes** (no `llm-audit`)                 |
+| `infra-glm`        | **DELETED** — no `package.json`                                           | **Yes (deleted)**                        |
+| `infra-gpt`        | `common-core`, `llm-prompts`, `llm-contract`, `llm-pricing`               | **Yes** (no `llm-audit`)                 |
+| `infra-notion`     | `common-core`                                                             | No                                       |
+| `infra-otel`       | _(none — standalone OTel wrapper, no @intexuraos/\* deps)_                | No                                       |
+| `infra-perplexity` | `common-core`, `llm-prompts`, `llm-contract`, `llm-pricing`               | **Yes** (no `llm-audit`)                 |
+| `infra-pubsub`     | `common-core`                                                             | No                                       |
+| `infra-sentry`     | `common-core`                                                             | No                                       |
+| `infra-whatsapp`   | `common-core`                                                             | No                                       |
+| `internal-clients` | `common-core`, `llm-contract`, `llm-factory`, `llm-pricing`               | No                                       |
+| `llm-audit`        | **DELETED** — removed in INT-1342                                         | **Yes (deleted)**                        |
+| `llm-contract`     | `common-core`                                                             | No                                       |
+| `llm-factory`      | `common-core`, `infra-gemini`, `llm-contract`, `llm-pricing`              | **Yes** (no `llm-audit`, no `infra-glm`) |
+| `llm-pricing`      | `common-core`, `infra-firestore`, `llm-contract`                          | No                                       |
+| `llm-prompts`      | `common-core`, `llm-contract`, `llm-utils`                                | No                                       |
+| `llm-utils`        | `common-core`                                                             | No                                       |
 
 ---
 
@@ -92,8 +92,7 @@ All `@intexuraos/*` direct dependencies as read from each package's `package.jso
 
 Full transitive trace of all dependency chains (based on actual `package.json` data):
 
-- `llm-factory` → `infra-gemini` → `llm-audit`, `llm-pricing`, `llm-prompts` → (leaf deps only) PASS
-- `llm-factory` → `llm-audit` → `infra-firestore` → `common-core` PASS
+- `llm-factory` → `infra-gemini` → `llm-pricing`, `llm-prompts` → (leaf deps only) PASS
 - `llm-factory` → `llm-pricing` → `infra-firestore` → `common-core` PASS
 - `internal-clients` → `llm-factory` → (no back-edge to `internal-clients`) PASS
 - `common-http` → `llm-utils` → `common-core` PASS
@@ -103,7 +102,7 @@ Full transitive trace of all dependency chains (based on actual `package.json` d
 **Result: No circular dependencies found.**
 
 Notable transitive chains:
-- `llm-factory` transitively depends on `infra-firestore` (via `llm-audit` and `llm-pricing`) even though it doesn't list it directly.
+- `llm-factory` transitively depends on `infra-firestore` (via `llm-pricing`) even though it doesn't list it directly.
 - Any app using `http-server` transitively pulls in `infra-firestore` and `llm-utils`.
 - `common-http` → `llm-utils` means any consumer of `common-http` transitively pulls in `llm-utils`.
 
@@ -160,7 +159,7 @@ Checked all 10 active `infra-*` packages. Each wraps exactly one external SDK wi
 | `infra-sentry`     | `@sentry/node`, `pino-opentelemetry-transport` | `common-core`                 | PASS             |
 | `infra-whatsapp`   | _(HTTP-based, no third-party SDK)_             | `common-core`                 | PASS             |
 
-Note: The four LLM adapter packages (`infra-claude`, `infra-gemini`, `infra-gpt`, `infra-perplexity`) also depend on `llm-prompts`, `llm-audit`, `llm-contract`, and `llm-pricing`. These are LLM-layer support packages, not domain logic, so the wrapper contract is satisfied.
+Note: The four LLM adapter packages (`infra-claude`, `infra-gemini`, `infra-gpt`, `infra-perplexity`) also depend on `llm-prompts`, `llm-contract`, and `llm-pricing`. These are LLM-layer support packages, not domain logic, so the wrapper contract is satisfied. (`llm-audit` was removed in INT-1342.)
 
 ---
 
@@ -180,7 +179,7 @@ Note: The four LLM adapter packages (`infra-claude`, `infra-gemini`, `infra-gpt`
 **Impact:**
 - `docs/architecture/package-contracts.md` still lists `@intexuraos/infra-glm` in the Package Catalog table.
 - The package count claim ("22 packages") is wrong — there are 21 active packages.
-- The v2 validation report's dependency matrix lists `infra-glm` as having deps and as being a consumer of `llm-audit`, `llm-pricing`, etc.
+- The v2 validation report's dependency matrix lists `infra-glm` as having deps and as being a consumer of `llm-pricing`, etc.
 - The ghost directory may cause confusion during `pnpm install` or workspace commands.
 
 **Fix:**
@@ -229,7 +228,7 @@ This has been present since at least v2 (the v2 matrix correctly listed it), yet
 The v2 dependency matrix stated:
 > `llm-factory` | `common-core`, `llm-audit`, `infra-gemini`, `infra-glm`, `llm-contract`, `llm-pricing`
 
-**Evidence:** `packages/llm-factory/package.json` (both current HEAD and the v3.2.0 commit `93aeac4a3`) does not list `infra-glm`. `llm-factory` never depended on `infra-glm` — the v2 report contained a factual error.
+**Evidence:** `packages/llm-factory/package.json` (both current HEAD and the v3.2.0 commit `93aeac4a3`) does not list `infra-glm`. `llm-factory` never depended on `infra-glm` — the v2 report contained a factual error. Note: `llm-audit` was also removed from `llm-factory` in INT-1342.
 
 **Fix:** This is corrected in the v3 matrix above. No action needed beyond noting the correction.
 

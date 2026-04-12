@@ -279,7 +279,7 @@ Cross-checking:
 
 ### Gap 1: No Validator Checked LLM Cost Tracking End-to-End
 
-The AI models report notes that `gpt-4.1` and `text-embedding-3-small` are not in the central pricing contract (`llm-contract`). The firestore report notes `llm_usage_stats` is owned by `llm-pricing` (a package). No validator checked whether the services using out-of-contract models (`image-service`, `chat-agent`) have cost tracking wired up. If these models are used without going through `llm-pricing`, usage costs may be untracked.
+The AI models report notes that `gpt-4.1` and `text-embedding-3-small` are not in the central pricing contract (`llm-contract`). No validator checked whether the services using out-of-contract models (`image-service`, `chat-agent`) have cost tracking wired up through `llm-pricing`. If these models are used without going through `llm-pricing`, usage costs may be untracked. Note: `llm_usage_stats` and `llm-audit` were removed as part of INT-1342.
 
 ### Gap 2: No Validator Checked Scheduler Job → Endpoint Alignment
 
@@ -291,7 +291,7 @@ The pub/sub report thoroughly documents DLQ configuration (all 14 module-managed
 
 ### Gap 4: Firestore Security — No Validator for Cross-Service Access Patterns at Runtime
 
-The firestore report confirms no static cross-service Firestore access. But no validator checked whether the llm-audit package (which writes to `llm_api_logs`) is properly initialized only within services that use it, or whether all services that depend on `llm-audit` (via their infra-\* dependencies) could inadvertently write logs to collections they shouldn't own.
+The firestore report confirms no static cross-service Firestore access. No validator checked whether services writing to shared collections (e.g., via `llm-pricing`) do so only within their declared scope. Note: `llm-audit` and `llm_api_logs` were removed as part of INT-1342.
 
 ### Gap 5: No Validator for OpenAPI Specification Accuracy
 

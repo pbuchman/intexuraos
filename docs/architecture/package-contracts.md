@@ -69,7 +69,6 @@ The monorepo contains 22 packages:
 
 | Package                    | Purpose                                             |
 | -------------------------- | --------------------------------------------------- |
-| `@intexuraos/llm-audit`    | LLM API call audit logging to Firestore             |
 | `@intexuraos/llm-contract` | Shared LLM type contracts (models, messages)        |
 | `@intexuraos/llm-factory`  | LLM client factory (selects provider by model ID)   |
 | `@intexuraos/llm-pricing`  | LLM token pricing lookup and cost calculation       |

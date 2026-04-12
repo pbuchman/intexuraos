@@ -100,7 +100,6 @@ if (!result.ok) {
 - `@intexuraos/common-core` -- Result types, getErrorMessage, Logger
 - `@intexuraos/llm-contract` -- LLMClient, NormalizedUsage, TokenUsage, ModelPricing, LlmModels
 - `@intexuraos/llm-prompts` -- buildResearchPrompt
-- `@intexuraos/llm-audit` -- createAuditContext
 - `@intexuraos/llm-pricing` -- createUsageLogger
 
 ## Constants
