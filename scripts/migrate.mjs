@@ -61,8 +61,11 @@ function aggregateIndexes(migrations) {
     for (const index of migration.indexes ?? []) {
       // Skip single-field indexes - Firestore creates them automatically
       // UNLESS the index has a vectorConfig field (Firestore does NOT auto-create vector indexes)
+      // __name__ is always implicitly appended by Firestore, so an index like
+      // [occurredAt ASC, __name__ ASC] is effectively single-field and must be skipped.
       const hasVectorField = index.fields?.some((f) => f.vectorConfig != null) === true;
-      if ((index.fields?.length ?? 0) < 2 && !hasVectorField) {
+      const realFields = index.fields?.filter((f) => f.fieldPath !== '__name__') ?? [];
+      if (realFields.length < 2 && !hasVectorField) {
         continue;
       }
       const normalized = normalizeVectorFields(index);
