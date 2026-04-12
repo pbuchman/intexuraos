@@ -45,7 +45,6 @@ const defaultConfig = {
     inputPricePerMillion: 3.0,
     outputPricePerMillion: 15.0,
   },
-  auditLogPath: '/tmp/compliance-validator-audit.test.log',
   codeAgentUrl: 'http://localhost:8128',
   usageWebhookUrl: 'http://localhost:8128/internal/webhooks/usage-events',
   orchestratorSecret: 'test-secret',

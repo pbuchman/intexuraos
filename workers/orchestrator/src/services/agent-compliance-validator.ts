@@ -259,7 +259,6 @@ export interface AgentComplianceValidatorConfig {
   openRouterApiKey: string;
   model: string;
   pricing: ModelPricing;
-  auditLogPath: string;
   codeAgentUrl: string;
   usageWebhookUrl: string;
   orchestratorSecret: string;

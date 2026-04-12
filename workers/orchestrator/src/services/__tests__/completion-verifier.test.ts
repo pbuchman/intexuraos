@@ -44,7 +44,6 @@ const logger: Logger = {
 const defaultConfig = {
   model: LlmModels.Gemini25Flash,
   geminiApiKey: 'gemini-key',
-  auditLogPath: '/tmp/orchestrator-llm-audit.test.log',
   codeAgentUrl: 'http://localhost:8128',
   usageWebhookUrl: 'http://localhost:8128/internal/webhooks/usage-events',
   orchestratorSecret: 'test-secret',
@@ -55,7 +54,6 @@ function createVerifier(
   overrides: Partial<{
     model: string;
     geminiApiKey: string;
-    auditLogPath: string;
     codeAgentUrl: string;
     usageWebhookUrl: string;
     orchestratorSecret: string;
