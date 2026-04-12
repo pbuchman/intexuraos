@@ -21,6 +21,49 @@ describe('aggregateIndexes', () => {
     expect(result.indexes).toHaveLength(0);
   });
 
+  it('skips indexes where __name__ is the only companion field (effectively single-field)', () => {
+    const migrations = [
+      {
+        indexes: [
+          {
+            collectionGroup: 'llm_usage_events',
+            queryScope: 'COLLECTION',
+            fields: [
+              { fieldPath: 'occurredAt', order: 'ASCENDING' },
+              { fieldPath: '__name__', order: 'ASCENDING' },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const result = aggregateIndexes(migrations);
+
+    expect(result.indexes).toHaveLength(0);
+  });
+
+  it('keeps composite indexes that include __name__ alongside 2+ real fields', () => {
+    const migrations = [
+      {
+        indexes: [
+          {
+            collectionGroup: 'events',
+            queryScope: 'COLLECTION',
+            fields: [
+              { fieldPath: 'status', order: 'ASCENDING' },
+              { fieldPath: 'occurredAt', order: 'DESCENDING' },
+              { fieldPath: '__name__', order: 'DESCENDING' },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const result = aggregateIndexes(migrations);
+
+    expect(result.indexes).toHaveLength(1);
+  });
+
   it('preserves single-field vector indexes (Firestore does NOT auto-create these)', () => {
     const migrations = [
       {
