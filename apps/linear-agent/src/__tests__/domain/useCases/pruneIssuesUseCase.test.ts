@@ -275,11 +275,6 @@ describe('pruneIssues', () => {
   });
 
   it('skips pruning when prune candidates are already pending review', async () => {
-    const issues = Array.from({ length: 210 }, (_, i) =>
-      createTestIssue({ id: `id-${String(i)}`, identifier: `INT-${String(i)}` })
-    );
-    (deps.issueRepo.listByUserId as ReturnType<typeof vi.fn>).mockResolvedValue(ok(issues));
-
     // Seed existing candidates — simulates a previous run that hasn't been reviewed yet
     (deps.pruneCandidateRepo.listAll as ReturnType<typeof vi.fn>).mockResolvedValue(
       ok([
