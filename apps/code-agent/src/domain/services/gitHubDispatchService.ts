@@ -155,6 +155,20 @@ export function createWebhookDispatchService(deps: WebhookDispatchServiceDeps): 
           return await handleNewTask(deps, event, logger, workerDirective);
         }
 
+        // Guard: PR is closed or merged — existing task context is stale
+        if (event.state === 'closed' || event.mergedAt !== null) {
+          logger.info(
+            {
+              staleTaskId: task.id,
+              prNumber: event.pullRequestNumber,
+              prState: event.state,
+              merged: event.mergedAt !== null,
+            },
+            'PR is closed/merged — skipping existing task, creating new task'
+          );
+          return await handleNewTask(deps, event, logger, workerDirective);
+        }
+
         const existingResult = await handleExistingTask(deps, event, task, logger);
 
         // If the existing task is stale (worker says "not found"), fall back to creating a new task
