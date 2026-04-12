@@ -98,6 +98,8 @@ You must account for EVERY memory listed above. Skipping even one will cause ver
 
 **D. Mandatory reporting block (strengthened)**
 
+> **Note:** This also corrects a naming mismatch — the current prompt uses `execution_memory_ids_*` prefix but the completion verifier schema expects `memory_ids_*`. The new prompt uses the schema's canonical names.
+
 Replace current reporting section with:
 
 ```
@@ -422,7 +424,7 @@ export async function sweepErroredApplications(
 
 **B. Add a new route or scheduler entry** to call `sweepErroredApplications()` periodically (once per hour or via Cloud Scheduler).
 
-**File:** `apps/code-agent/src/routes/internal/execution-memory-routes.ts` (or new file)
+**File:** `apps/code-agent/src/routes/internalRoutes.ts`
 
 Add endpoint:
 ```
@@ -434,6 +436,8 @@ POST /internal/execution-memory/sweep-errored
 **File:** `terraform/environments/dev/main.tf`
 
 Add a Cloud Scheduler job that hits the sweep endpoint every 6 hours.
+
+**Deployment ordering:** Deploy the code change first (so the `/internal/execution-memory/sweep-errored` endpoint exists), then apply Terraform to activate the Cloud Scheduler job. Do not apply Terraform before the code deploy — the Scheduler firing before the endpoint is live will receive 404s and trigger unnecessary retry behavior.
 
 ### Test Changes
 
@@ -588,19 +592,19 @@ Step 7 (corpus pruning) ───────────→ Deploy after Step 6
 
 ## Files Changed Summary
 
-| File                                                                                  | Steps   | Nature                                              |
-| ------------------------------------------------------------------------------------- | ------- | --------------------------------------------------- |
-| `workers/orchestrator/src/services/system-prompt.ts`                                  | 1       | Rewrite `buildExecutionMemorySection()`             |
-| `workers/orchestrator/src/services/completion-verifier.ts`                            | 2       | Make memory fields required; add conditional schema |
-| `workers/orchestrator/src/services/task-dispatcher.ts`                                | 3       | Enhance `buildMissingFieldsPrompt()`                |
-| `apps/code-agent/src/domain/usecases/processExecutionMemoryBacklog.ts`                | 4, 5, 7 | Indexed evaluator; sweep function; prune function   |
-| `apps/code-agent/src/domain/usecases/prepareExecutionMemoryContext.ts`                | 6       | Agent-type-specific threshold                       |
-| `apps/code-agent/src/routes/internal/execution-memory-routes.ts`                      | 5, 7    | New sweep + prune endpoints                         |
-| `terraform/environments/dev/main.tf`                                                  | 5, 7    | Cloud Scheduler jobs                                |
-| `workers/orchestrator/src/services/__tests__/completion-verifier.test.ts`             | 2       | Schema enforcement tests                            |
-| `workers/orchestrator/src/services/__tests__/task-dispatcher.test.ts`                 | 3       | Resume prompt tests                                 |
-| `apps/code-agent/src/domain/usecases/__tests__/processExecutionMemoryBacklog.test.ts` | 4, 5, 7 | Evaluator + sweep + prune tests                     |
-| `apps/code-agent/src/domain/usecases/__tests__/prepareExecutionMemoryContext.test.ts` | 6       | Threshold tests                                     |
+| File                                                                                  | Steps   | Nature                                                                                                                                          |
+| ------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workers/orchestrator/src/services/system-prompt.ts`                                  | 1       | Rewrite `buildExecutionMemorySection()`                                                                                                         |
+| `workers/orchestrator/src/services/completion-verifier.ts`                            | 2       | Make memory fields required; add conditional schema                                                                                             |
+| `workers/orchestrator/src/services/task-dispatcher.ts`                                | 3       | Enhance `buildMissingFieldsPrompt()`                                                                                                            |
+| `apps/code-agent/src/domain/usecases/processExecutionMemoryBacklog.ts`                | 4, 5, 7 | Indexed evaluator; sweep function; prune function                                                                                               |
+| `apps/code-agent/src/domain/usecases/prepareExecutionMemoryContext.ts`                | 6       | Agent-type-specific threshold                                                                                                                   |
+| `apps/code-agent/src/routes/internalRoutes.ts`                                        | 5, 7    | New sweep + prune endpoints (add to existing file)                                                                                              |
+| `terraform/environments/dev/main.tf`                                                  | 5, 7    | Cloud Scheduler jobs                                                                                                                            |
+| `workers/orchestrator/src/services/__tests__/completion-verifier.test.ts`             | 2       | Schema enforcement tests (existing file)                                                                                                        |
+| `workers/orchestrator/src/services/__tests__/task-dispatcher.test.ts`                 | 3       | Resume prompt tests (**create new** — follow `completion-verifier.test.ts` pattern for Vitest setup, imports, and DI scaffolding)               |
+| `apps/code-agent/src/domain/usecases/__tests__/processExecutionMemoryBacklog.test.ts` | 4, 5, 7 | Evaluator + sweep + prune tests (**create new** — follow `getLinearIssueContext.test.ts` pattern for Vitest setup, imports, and DI scaffolding) |
+| `apps/code-agent/src/domain/usecases/__tests__/prepareExecutionMemoryContext.test.ts` | 6       | Threshold tests (**create new** — follow `getLinearIssueContext.test.ts` pattern for Vitest setup, imports, and DI scaffolding)                 |
 
 ---
 
