@@ -23,14 +23,16 @@ The existing `GET /linear/prune-candidates` already returns `{ candidates: Store
 
 ## File Structure
 
-| Action   | File                                                                         | Responsibility                                          |
-| -------- | ---------------------------------------------------------------------------- | ------------------------------------------------------- |
-| Modify   | `apps/linear-agent/src/domain/useCases/pruneIssuesUseCase.ts`                | Add early-exit when candidates already exist            |
-| Modify   | `apps/linear-agent/src/__tests__/domain/useCases/pruneIssuesUseCase.test.ts` | Test the new skip-when-pending guard                    |
-| Modify   | `apps/linear-agent/src/__tests__/routes/pruneIssuesRoute.test.ts`            | Integration test for the route-level skip behavior      |
-| Create   | `apps/web/src/hooks/usePruneCandidateStatus.ts`                              | Hook that fetches candidate count on mount + interval   |
-| Modify   | `apps/web/src/hooks/index.ts`                                                | Re-export the new hook                                  |
-| Modify   | `apps/web/src/components/Header.tsx`                                         | Render "Linear Cleanup" indicator below workers section |
+| Action   | File                                                                         | Responsibility                                                          |
+| -------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Modify   | `apps/linear-agent/src/domain/useCases/pruneIssuesUseCase.ts`                | Add early-exit when candidates already exist                            |
+| Modify   | `apps/linear-agent/src/__tests__/domain/useCases/pruneIssuesUseCase.test.ts` | Test the new skip-when-pending guard                                    |
+| Modify   | `apps/linear-agent/src/__tests__/routes/pruneIssuesRoute.test.ts`            | Integration test for the route-level skip behavior                      |
+| Create   | `apps/web/src/hooks/usePruneCandidateStatus.ts`                              | Hook that fetches candidate count on mount + interval                   |
+| Create   | `apps/web/src/hooks/__tests__/usePruneCandidateStatus.test.ts`               | Test hook polling, loading state, error state, and cleanup              |
+| Modify   | `apps/web/src/hooks/index.ts`                                                | Re-export the new hook                                                  |
+| Modify   | `apps/web/src/components/Header.tsx`                                         | Render "Linear Cleanup" indicator below workers section                 |
+| Modify   | `apps/web/src/components/__tests__/Header.test.tsx`                          | Mock new hook and add Trash2 to lucide-react mock                       |
 
 ---
 
@@ -109,7 +111,9 @@ Expected: 2 new tests FAIL (the skip-when-pending test fails because the guard d
 
 - [ ] **Step 4: Implement the pending-candidates guard in pruneIssuesUseCase.ts**
 
-In `apps/linear-agent/src/domain/useCases/pruneIssuesUseCase.ts`, add the guard **after** the `No connected users` early-return and **before** the issue aggregation loop. Insert right after the `userIds.length === 0` block (after line 57):
+In `apps/linear-agent/src/domain/useCases/pruneIssuesUseCase.ts`, add the guard **after** the `No connected users` early-return and **before** the issue aggregation loop. Insert right after the `userIds.length === 0` block (after line 57).
+
+> **Note:** Placing the guard before the activation threshold check means every hourly run with connected users calls `pruneCandidateRepo.listAll()` even when the issue count is below threshold. This is an acceptable tradeoff — the single Firestore read is cheap, and placing the guard early ensures candidates are never overwritten regardless of threshold logic changes:
 
 ```typescript
   // Guard: skip if previous candidates are still pending user review
@@ -323,6 +327,121 @@ pending count for the header status dot."
 
 ---
 
+### Task 3.5: Frontend — Test usePruneCandidateStatus hook
+
+**Files:**
+- Create: `apps/web/src/hooks/__tests__/usePruneCandidateStatus.test.ts`
+
+Per CLAUDE.md: _"Web app exception: coverage not enforced, tests optional for UI, **required for `utils/`, `services/`, `hooks/`**."_ This hook follows the same `vi.hoisted` + `vi.mock` pattern as `useFailedLinearIssues.test.ts`.
+
+- [ ] **Step 1: Write tests for the hook**
+
+Create `apps/web/src/hooks/__tests__/usePruneCandidateStatus.test.ts` following the existing pattern from `apps/web/src/hooks/__tests__/useFailedLinearIssues.test.ts`:
+
+```typescript
+import { renderHook, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+const mockGetAccessToken = vi.hoisted(() => vi.fn().mockResolvedValue('test-token'));
+const mockIsAuthenticated = vi.hoisted(() => ({ value: true }));
+const mockListPruneCandidates = vi.hoisted(() => vi.fn().mockResolvedValue([]));
+
+vi.mock('@/context', () => ({
+  useAuth: () => ({
+    getAccessToken: mockGetAccessToken(),
+    isAuthenticated: mockIsAuthenticated.value,
+  }),
+}));
+
+vi.mock('@/services/linearApi', () => ({
+  listPruneCandidates: mockListPruneCandidates(),
+}));
+
+import { usePruneCandidateStatus } from '../usePruneCandidateStatus.js';
+
+describe('usePruneCandidateStatus', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mockIsAuthenticated.value = true;
+    mockListPruneCandidates().mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('fetches candidates on mount and sets pendingCount', async () => {
+    mockListPruneCandidates().mockResolvedValue([
+      { id: '1', identifier: 'INT-1', title: 'Test', score: 80, reason: 'Cancelled', category: 'cancelled', classifiedAt: '2026-01-01' },
+    ]);
+
+    const { result } = renderHook(() => usePruneCandidateStatus());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.pendingCount).toBe(1);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('sets error when fetch fails', async () => {
+    mockListPruneCandidates().mockRejectedValue(new Error('Network error'));
+
+    const { result } = renderHook(() => usePruneCandidateStatus());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.error).toBeTruthy();
+  });
+
+  it('sets loading false when not authenticated', async () => {
+    mockIsAuthenticated.value = false;
+
+    const { result } = renderHook(() => usePruneCandidateStatus());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.pendingCount).toBe(0);
+  });
+
+  it('cleans up interval on unmount', async () => {
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval');
+
+    const { unmount } = renderHook(() => usePruneCandidateStatus());
+
+    unmount();
+
+    expect(clearIntervalSpy).toHaveBeenCalled();
+  });
+});
+```
+
+- [ ] **Step 2: Run tests to verify they pass**
+
+```bash
+cd /repo && pnpm vitest run apps/web/src/hooks/__tests__/usePruneCandidateStatus.test.ts
+```
+
+Expected: ALL tests PASS.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add apps/web/src/hooks/__tests__/usePruneCandidateStatus.test.ts
+git commit -m "test(web): add tests for usePruneCandidateStatus hook
+
+Covers mount fetch, success/error paths, unauthenticated state, and
+cleanup on unmount. Required per CLAUDE.md hooks coverage rule."
+```
+
+---
+
 ### Task 4: Frontend — Add Linear Cleanup indicator to Header
 
 **Files:**
@@ -401,24 +520,46 @@ Inside the dropdown menu (the `{isMenuOpen ? (` block), insert a "Linear Cleanup
 )}
 ```
 
-- [ ] **Step 4: Verify build passes**
+- [ ] **Step 4: Update Header.test.tsx for new hook mock**
+
+In `apps/web/src/components/__tests__/Header.test.tsx`, update the `@/hooks/index.js` mock (lines 77–83) to include `usePruneCandidateStatus`:
+
+```typescript
+vi.mock('@/hooks/index.js', async () => {
+  const actual = await vi.importActual('@/hooks/index.js');
+  return {
+    ...(actual as object),
+    useWorkersStatus: () => mockUseWorkersStatus(),
+    usePruneCandidateStatus: () => ({ pendingCount: 0, loading: false, error: null }),
+  } as Record<string, unknown>;
+});
+```
+
+Also add `Trash2` to the lucide-react mock block (lines 94–98 in `Header.test.tsx`):
+
+```typescript
+Trash2: (): React.JSX.Element => <div data-testid="trash2-icon" />,
+```
+
+- [ ] **Step 5: Verify build and tests pass**
 
 ```bash
 cd /repo && pnpm build
+cd /repo && pnpm vitest run apps/web/src/components/__tests__/Header.test.tsx
 ```
 
-Expected: Build succeeds with no type errors.
+Expected: Build succeeds and all Header tests pass.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add apps/web/src/components/Header.tsx
+git add apps/web/src/components/Header.tsx apps/web/src/components/__tests__/Header.test.tsx
 git commit -m "feat(web): add Linear Cleanup status indicator to header
 
 Shows a Trash2 icon with a red dot when prune candidates are pending
 review, green when none exist. Visible on desktop next to workers,
 and in the mobile dropdown menu below workers. Links to the prune
-candidates page."
+candidates page. Updates Header.test.tsx with new hook mock."
 ```
 
 ---
