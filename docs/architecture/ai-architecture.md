@@ -432,9 +432,7 @@ const result = await client.generate({
 
 ### Usage Tracking
 
-LLM usage (token counts, cost) is tracked through the `llm-pricing` package which writes to Firestore.
-
-Published to Pub/Sub for aggregation in `app-settings-service`.
+LLM usage (token counts, cost) is tracked through the `llm-pricing` package which forwards events to `llm-usage-service` via HTTP (`HttpInternalAuthUsageSink` / `HttpWebhookUsageSink`).
 
 ---
 
