@@ -7,7 +7,6 @@ import {
   createUsageLogger,
   isUsageLoggingEnabled,
   NoopUsageSink,
-  StructuredLogUsageSink,
 } from '../usageLogger.js';
 
 /**
@@ -182,36 +181,6 @@ describe('usageLogger', () => {
     it('discards all usage events', async () => {
       const sink = new NoopUsageSink();
       await expect(sink.log()).resolves.toBeUndefined();
-    });
-  });
-
-  describe('StructuredLogUsageSink', () => {
-    it('emits usage payload to logger', async () => {
-      const sink = new StructuredLogUsageSink({ logger: fakeLogger });
-      await sink.log(baseParams);
-
-      expect(fakeLogger.info).toHaveBeenCalledWith(
-        expect.objectContaining({
-          usage: expect.objectContaining({
-            userId: 'user-123',
-            model: LlmModels.Gemini25Flash,
-            costUsd: 0.001,
-          }),
-        }),
-        'LLM usage sink log'
-      );
-    });
-
-    it('includes errorMessage when present', async () => {
-      const sink = new StructuredLogUsageSink({ logger: fakeLogger });
-      await sink.log({ ...baseParams, success: false, errorMessage: 'rate limited' });
-
-      expect(fakeLogger.info).toHaveBeenCalledWith(
-        expect.objectContaining({
-          usage: expect.objectContaining({ success: false, errorMessage: 'rate limited' }),
-        }),
-        'LLM usage sink log'
-      );
     });
   });
 
