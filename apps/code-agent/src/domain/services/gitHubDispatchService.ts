@@ -438,6 +438,7 @@ ${input.checkName}
  */
 export function isStaleTaskError(result: WebhookDispatchResult): boolean {
   if (result.errorCode === 'task_not_found') return true;
+  if (result.errorCode === 'session_expired') return true;
   if (result.errorCode === 'worker_error' && result.error !== undefined) {
     return result.error.includes('Task not found') || result.error.includes('HTTP 404');
   }
