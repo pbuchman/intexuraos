@@ -143,6 +143,7 @@ describe('POST /internal/linear/prune-issues', () => {
     expect(body.success).toBe(true);
     expect(body.data.skipped).toBe(true);
     expect(body.data.skipReason).toContain('pending review');
+    expect(services.issuePruningClassifier.classifyCandidates).not.toHaveBeenCalled();
   });
 
   it('returns 500 when pruneIssues fails', async () => {

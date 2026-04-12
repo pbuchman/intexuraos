@@ -81,6 +81,7 @@ describe('usePruneCandidateStatus', () => {
     });
 
     expect(result.current.pendingCount).toBe(0);
+    expect(mockListPruneCandidates).not.toHaveBeenCalled();
   });
 
   it('cleans up interval on unmount', () => {
@@ -90,6 +91,21 @@ describe('usePruneCandidateStatus', () => {
 
     unmount();
 
-    expect(clearIntervalSpy).toHaveBeenCalled();
+    expect(clearIntervalSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-fetches candidates after poll interval', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockListPruneCandidates.mockResolvedValue([]);
+    const { result } = renderHook(() => usePruneCandidateStatus());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    mockListPruneCandidates.mockResolvedValue([
+      { id: '1', identifier: 'INT-1', title: 'T', score: 80, reason: 'R', category: 'cancelled', classifiedAt: '' },
+    ]);
+
+    await vi.advanceTimersByTimeAsync(120_000);
+    await waitFor(() => expect(result.current.pendingCount).toBe(1));
+    vi.useRealTimers();
   });
 });
