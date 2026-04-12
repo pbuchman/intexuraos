@@ -38,31 +38,28 @@
 | 26  | `linear_issue_comments`          | linear-agent                 | `apps/linear-agent/src/infra/firestore/`         | OK     |
 | 27  | `linear_issues`                  | linear-agent                 | `apps/linear-agent/src/infra/firestore/`         | OK     |
 | 28  | `linear_processed_actions`       | linear-agent                 | `apps/linear-agent/src/infra/firestore/`         | OK     |
-| 29  | `llm_api_logs`                   | research-agent               | `packages/llm-audit/src/`                        | NOTE   |
-| 30  | `llm_usage_stats`                | llm-pricing                  | `packages/llm-pricing/src/`                      | NOTE   |
-| 31  | `mobile_notification_signatures` | mobile-notifications-service | `apps/mobile-notifications-service/src/infra/`   | OK     |
-| 32  | `mobile_notifications`           | mobile-notifications-service | `apps/mobile-notifications-service/src/infra/`   | OK     |
-| 33  | `mobile_notifications_filters`   | mobile-notifications-service | `apps/mobile-notifications-service/src/infra/`   | OK     |
-| 34  | `notes`                          | notes-agent                  | `apps/notes-agent/src/infra/firestore/`          | OK     |
-| 35  | `notion_connections`             | notion-service               | `apps/notion-service/src/infra/firestore/`       | OK     |
-| 36  | `oauth_connections`              | user-service                 | `apps/user-service/src/infra/firestore/`         | OK     |
-| 37  | `pr_automation_comments`         | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
-| 38  | `pr_task_locks`                  | code-agent                   | `apps/code-agent/src/domain/utils/prTaskLock.ts` | NOTE   |
-| 39  | `research_export_settings`       | research-agent               | `apps/research-agent/src/infra/firestore/`       | OK     |
-| 40  | `researches`                     | research-agent               | `apps/research-agent/src/infra/research/`        | OK     |
-| 41  | `settings`                       | app-settings-service         | `apps/app-settings-service/src/infra/firestore/` | OK     |
-| 42  | `todos`                          | todos-agent                  | `apps/todos-agent/src/infra/firestore/`          | OK     |
-| 43  | `user_settings`                  | user-service                 | `apps/user-service/src/infra/firestore/`         | OK     |
-| 44  | `user_spend`                     | code-agent                   | No repository found                              | WARN   |
-| 45  | `user_usage`                     | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
-| 46  | `visualizations`                 | data-insights-agent          | `apps/data-insights-agent/src/infra/firestore/`  | OK     |
-| 47  | `whatsapp_messages`              | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
-| 48  | `whatsapp_outbound_messages`     | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
-| 49  | `whatsapp_phone_verifications`   | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
-| 50  | `whatsapp_user_mappings`         | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
-| 51  | `whatsapp_webhook_events`        | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
+| 29  | `mobile_notification_signatures` | mobile-notifications-service | `apps/mobile-notifications-service/src/infra/`   | OK     |
+| 30  | `mobile_notifications`           | mobile-notifications-service | `apps/mobile-notifications-service/src/infra/`   | OK     |
+| 31  | `mobile_notifications_filters`   | mobile-notifications-service | `apps/mobile-notifications-service/src/infra/`   | OK     |
+| 32  | `notes`                          | notes-agent                  | `apps/notes-agent/src/infra/firestore/`          | OK     |
+| 33  | `notion_connections`             | notion-service               | `apps/notion-service/src/infra/firestore/`       | OK     |
+| 34  | `oauth_connections`              | user-service                 | `apps/user-service/src/infra/firestore/`         | OK     |
+| 35  | `pr_automation_comments`         | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
+| 36  | `pr_task_locks`                  | code-agent                   | `apps/code-agent/src/domain/utils/prTaskLock.ts` | NOTE   |
+| 37  | `research_export_settings`       | research-agent               | `apps/research-agent/src/infra/firestore/`       | OK     |
+| 38  | `researches`                     | research-agent               | `apps/research-agent/src/infra/research/`        | OK     |
+| 39  | `settings`                       | app-settings-service         | `apps/app-settings-service/src/infra/firestore/` | OK     |
+| 40  | `todos`                          | todos-agent                  | `apps/todos-agent/src/infra/firestore/`          | OK     |
+| 41  | `user_settings`                  | user-service                 | `apps/user-service/src/infra/firestore/`         | OK     |
+| 42  | `user_spend`                     | code-agent                   | No repository found                              | WARN   |
+| 43  | `visualizations`                 | data-insights-agent          | `apps/data-insights-agent/src/infra/firestore/`  | OK     |
+| 44  | `whatsapp_messages`              | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
+| 45  | `whatsapp_outbound_messages`     | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
+| 46  | `whatsapp_phone_verifications`   | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
+| 47  | `whatsapp_user_mappings`         | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
+| 48  | `whatsapp_webhook_events`        | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
 
-**Total: 51 collections** (46 in registry + `_migrations` system entry = 47 registry entries; 4 have notes, 1 has a warning).
+**Total: 48 collections** (43 in registry + `_migrations` system entry = 44 registry entries; 2 have notes, 1 has a warning).
 
 ---
 
@@ -98,8 +95,6 @@ Each collection in `firestore-collections.json` has exactly one owner. No two se
 
 All production Firestore collection access is within the owning service's `src/infra/` directory. Cross-service data access follows the HTTP pattern (`/internal/{service}/{resource}` with `X-Internal-Auth`).
 
-The one apparent exception is `app-settings-service` reading `llm_usage_stats` via `collectionGroup('by_user')` — this is addressed in section 7.
-
 ---
 
 ## 5. Collections in Registry But Not Found in Production Code
@@ -116,7 +111,7 @@ The one apparent exception is `app-settings-service` reading `llm_usage_stats` v
 | `apps/code-agent/src/infra/`                     | No repository file (`*spend*` files: none found)                          |
 | `apps/code-agent/src/`                           | No use cases reference `UserSpend` or `user_spend` collection name        |
 
-**Interpretation:** The repository was never implemented. The `user_usage` collection (fully implemented at `apps/code-agent/src/infra/firestore/userUsageFirestoreRepository.ts`) supersedes it for rate-limiting purposes. `user_spend` is a deprecated design artifact — the domain model exists with a design reference note ("Lines 2616-2671") but no actual data is being written to this collection.
+**Interpretation:** The repository was never implemented. `user_spend` is a deprecated design artifact — the domain model exists with a design reference note ("Lines 2616-2671") but no actual data is being written to this collection.
 
 **Status: OPEN — unchanged from previous report.**
 
@@ -148,37 +143,7 @@ The registry defines `code_tasks.subcollections` as `["logs", "log_lines", "turn
 
 ---
 
-## 7. Architectural Notes (Package-Owned Collections)
-
-Two registry entries assign ownership to packages rather than apps. This is architecturally coherent but deviates from the registry schema constraint that "Owner must match an existing service directory: `apps/<owner>/`".
-
-### 7a. `llm_api_logs` — Owned by `research-agent`, written by `packages/llm-audit`
-
-**Registry owner:** `research-agent`
-
-**Actual writer:** `packages/llm-audit/src/sink.ts` (`FirestoreAuditSink` class, `COLLECTION_NAME = 'llm_api_logs'`).
-
-**Services using `llm-audit`:** `packages/llm-factory`, `packages/infra-perplexity`, `packages/infra-gemini`, `packages/infra-claude`, `packages/infra-gpt`, `workers/orchestrator`, `apps/image-service` — meaning any service using these packages may write to `llm_api_logs`, not just `research-agent`.
-
-**Issue:** The registry attributes ownership to `research-agent`, but `llm_api_logs` is written by a shared infrastructure package used across many services. The `research-agent` attribution is a legacy simplification.
-
-**Severity:** LOW (no runtime violation; data integrity is maintained)
-
-### 7b. `llm_usage_stats` — Owned by `llm-pricing` (a package, not an app)
-
-**Registry owner:** `llm-pricing`
-
-**Writer:** `packages/llm-pricing/src/usageLogger.ts` (`COLLECTION_NAME = 'llm_usage_stats'`). Used by 12 apps (all that depend on `@intexuraos/llm-pricing`).
-
-**Reader:** `apps/app-settings-service/src/infra/firestore/usageStatsRepository.ts` — reads via `db.collectionGroup('by_user')`. This is a direct Firestore read from a collection not owned by `app-settings-service` per the registry.
-
-**Assessment:** The `app-settings-service` cross-collection-group read is the only case in the codebase where a service reads a collection it doesn't own via direct Firestore access (rather than HTTP). It is read-only and uses a collection group query, not direct document writes. This is an intentional architectural trade-off documented in the previous report.
-
-**Severity:** LOW (intentional, read-only, well-documented)
-
----
-
-## 8. `pr_task_locks` — Non-Standard Access Pattern
+## 7. `pr_task_locks` — Non-Standard Access Pattern
 
 **Registry:** `pr_task_locks` (owner: `code-agent`)
 
@@ -192,7 +157,7 @@ Two registry entries assign ownership to packages rather than apps. This is arch
 
 ---
 
-## 9. Legacy Migration Collection Names
+## 8. Legacy Migration Collection Names
 
 Migrations reference several collection names not in the current registry. These are expected for historical migrations operating on data that predates or was renamed before the current registry:
 
@@ -207,7 +172,7 @@ No action needed. Migrations are immutable by policy and these names reflect the
 
 ---
 
-## 10. Summary of Findings
+## 9. Summary of Findings
 
 ### Passing
 
@@ -225,11 +190,9 @@ No action needed. Migrations are immutable by policy and these names reflect the
 
 ### Architectural Notes (No Action Required)
 
-| #   | Issue                                                                                                      | Severity |
-| --- | ---------------------------------------------------------------------------------------------------------- | -------- |
-| 7a  | `llm_api_logs` registry owner (`research-agent`) does not match actual writer (`packages/llm-audit`)       | LOW      |
-| 7b  | `llm_usage_stats` owner is `llm-pricing` (a package, not an app); `app-settings-service` reads it directly | LOW      |
-| 8   | `pr_task_locks` accessed from domain layer, outside `src/infra/firestore/` — validation script blind spot  | LOW      |
+| #   | Issue                                                                                                     | Severity |
+| --- | --------------------------------------------------------------------------------------------------------- | -------- |
+| 7   | `pr_task_locks` accessed from domain layer, outside `src/infra/firestore/` — validation script blind spot | LOW      |
 
 ### Previously Reported Items (Resolved)
 
