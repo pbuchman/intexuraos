@@ -2,7 +2,7 @@
 
 > **Time:** 15-20 minutes
 > **Prerequisites:** Auth0 access token, IntexuraOS project access
-> **You will learn:** How to fetch LLM pricing, query usage costs, and calculate estimated costs before making LLM calls
+> **You will learn:** How to fetch LLM pricing and calculate estimated costs before making LLM calls
 
 ---
 
@@ -11,7 +11,6 @@
 A working integration that:
 
 - Fetches current LLM pricing for all 4 providers
-- Queries your personal usage costs with time-range filtering
 - Calculates estimated costs before making an LLM call
 
 ---
@@ -111,92 +110,11 @@ Returns the same pricing structure as the public endpoint.
 
 ---
 
-## Part 3: Query Usage Costs (5 minutes)
-
-### Step 3.1: Default 90-Day View
-
-```bash
-curl -s http://localhost:8122/settings/usage-costs \
-  -H "Authorization: Bearer YOUR_TOKEN" | jq .
-```
-
-**Expected response:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "totalCostUsd": 12.45,
-    "totalCalls": 234,
-    "totalInputTokens": 1450000,
-    "totalOutputTokens": 320000,
-    "monthlyBreakdown": [
-      {
-        "month": "2026-04",
-        "costUsd": 5.20,
-        "calls": 60,
-        "inputTokens": 620000,
-        "outputTokens": 140000,
-        "percentage": 42
-      },
-      {
-        "month": "2026-03",
-        "costUsd": 4.25,
-        "calls": 84,
-        "inputTokens": 500000,
-        "outputTokens": 100000,
-        "percentage": 34
-      }
-    ],
-    "byModel": [
-      { "model": "gemini-2.5-flash", "costUsd": 8.10, "calls": 95, "percentage": 65 }
-    ],
-    "byCallType": [
-      { "callType": "research", "costUsd": 10.20, "calls": 110, "percentage": 82 }
-    ]
-  }
-}
-```
-
-### Step 3.2: Custom Time Range
-
-Fetch only the last 30 days:
-
-```bash
-curl -s "http://localhost:8122/settings/usage-costs?days=30" \
-  -H "Authorization: Bearer YOUR_TOKEN" | jq .
-```
-
-### Step 3.3: Handle Validation Errors
-
-Try an invalid range:
-
-```bash
-curl -s "http://localhost:8122/settings/usage-costs?days=500" \
-  -H "Authorization: Bearer YOUR_TOKEN" | jq .
-```
-
-**Expected response:**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INVALID_REQUEST",
-    "message": "days must be between 1 and 365"
-  }
-}
-```
-
-**Checkpoint:** You should see your personal usage data (or empty arrays if you have not made any LLM calls).
-
----
-
-## Part 4: Calculate Estimated Cost (5 minutes)
+## Part 3: Calculate Estimated Cost (5 minutes)
 
 Use the pricing data to estimate costs before making LLM calls.
 
-### Step 4.1: Fetch Pricing and Extract Model Data
+### Step 3.1: Fetch Pricing and Extract Model Data
 
 ```typescript
 const response = await fetch('http://localhost:8122/settings/pricing', {
@@ -207,7 +125,7 @@ const { data: pricing } = await response.json();
 const geminiFlash = pricing.google.models['gemini-2.5-flash'];
 ```
 
-### Step 4.2: Calculate Token Cost
+### Step 3.2: Calculate Token Cost
 
 ```typescript
 function estimateCost(
@@ -226,7 +144,7 @@ const cost = estimateCost(geminiFlash, 5000, 2000);
 // $0.000375 + $0.0006 = $0.000975
 ```
 
-### Step 4.3: Account for Optional Costs
+### Step 3.3: Account for Optional Costs
 
 Some models have additional costs beyond tokens:
 
@@ -275,9 +193,7 @@ All endpoints return a standardized response contract:
 | Problem                | Cause                            | Solution                                           |
 | ---------------------- | -------------------------------- | -------------------------------------------------- |
 | 401 UNAUTHORIZED       | Missing or invalid token         | Check Bearer token or X-Internal-Auth header       |
-| 400 INVALID_REQUEST    | Non-numeric or out-of-range days | Pass an integer string between 1 and 365           |
 | 500 INTERNAL_ERROR     | Missing pricing data             | Contact admin — Firestore pricing needs migration  |
-| Empty usage data       | No LLM calls made yet            | Make some research queries first                   |
 | Service not starting   | Missing model pricing            | Run Firestore pricing migration                    |
 
 ---
@@ -297,8 +213,7 @@ Now that you understand the basics:
 Test your understanding:
 
 1. **Easy:** Fetch pricing and find which model has the lowest input cost per million tokens
-2. **Medium:** Query usage costs for 7 days vs 365 days and compare the monthly breakdown
-3. **Hard:** Write a function that takes a model name and token counts, fetches pricing from the API, and returns the estimated cost in USD including optional grounding fees
+2. **Hard:** Write a function that takes a model name and token counts, fetches pricing from the API, and returns the estimated cost in USD including optional grounding fees
 
 <details>
 <summary>Solutions</summary>
@@ -321,16 +236,7 @@ for (const [, provider] of Object.entries(pricing)) {
 console.log(`Cheapest: ${cheapest.model} at $${cheapest.cost}/M tokens`);
 ```
 
-### Exercise 2: Time Range Comparison
-
-```bash
-# 7 days
-curl -s "/settings/usage-costs?days=7" -H "Authorization: Bearer $TOKEN" | jq '.data.monthlyBreakdown'
-# 365 days
-curl -s "/settings/usage-costs?days=365" -H "Authorization: Bearer $TOKEN" | jq '.data.monthlyBreakdown | length'
-```
-
-### Exercise 3: Cost Estimator Function
+### Exercise 2: Cost Estimator Function
 
 ```typescript
 async function estimateLLMCost(
