@@ -116,6 +116,35 @@ describe('POST /internal/linear/prune-issues', () => {
     expect(response.statusCode).toBe(200);
   });
 
+  it('returns 200 with skipped stats when candidates are pending review', async () => {
+    // Seed existing candidates via the pruneCandidateRepository
+    services.pruneCandidateRepository.listAll = vi.fn().mockResolvedValue(
+      ok([
+        {
+          id: 'existing-1',
+          identifier: 'INT-999',
+          title: 'Old candidate',
+          score: 80,
+          reason: 'Cancelled',
+          category: 'cancelled',
+          classifiedAt: '2026-04-01T00:00:00.000Z',
+        },
+      ])
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/linear/prune-issues',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+    expect(body.data.skipped).toBe(true);
+    expect(body.data.skipReason).toContain('pending review');
+  });
+
   it('returns 500 when pruneIssues fails', async () => {
     // Need to seed enough issues to trigger pruning (above 200 threshold)
     const issues = Array.from({ length: 210 }, (_, i) => ({
