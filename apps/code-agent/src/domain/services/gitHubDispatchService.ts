@@ -429,8 +429,9 @@ ${input.checkName}
 
 /**
  * Detect when a dispatch failure indicates the task is stale and no longer reachable.
- * Two scenarios: (1) task_not_found — task was found by PR lookup but deleted before
- * message send (Firestore-level race), (2) worker_error with "Task not found" — task
+ * Three scenarios: (1) task_not_found — task was found by PR lookup but deleted before
+ * message send (Firestore-level race), (2) session_expired — the orchestrator detected
+ * the worker container was cleaned up, (3) worker_error with "Task not found" — task
  * completed/crashed and was cleaned up on the worker but Firestore still has a record.
  *
  * Checks the structured error code first (preferred), then falls back to message
