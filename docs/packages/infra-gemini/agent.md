@@ -54,8 +54,7 @@ interface GeminiConfig {
   pricing: ModelPricing;
   imagePricing?: ModelPricing; // separate pricing for generateImage
   logger: Logger;
-  auditSink?: AuditSink;  // defaults to Firestore audit sink
-  usageSink?: UsageSink;  // defaults to Firestore usage sink
+  usageSink: UsageSink;        // HTTP usage sink (HttpInternalAuthUsageSink or HttpWebhookUsageSink)
 }
 
 interface ToolCallingClientConfig {
@@ -64,8 +63,7 @@ interface ToolCallingClientConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
-  auditSink?: AuditSink;
-  usageSink?: UsageSink;
+  usageSink: UsageSink;    // HTTP usage sink (HttpInternalAuthUsageSink or HttpWebhookUsageSink)
 }
 
 // GeminiError = LLMError from @intexuraos/llm-contract
@@ -92,6 +90,7 @@ const client = createGeminiClient({
     groundingCostPerRequest: 0.002,
   },
   logger,
+  usageSink,
 });
 
 const result = await client.research('query');
@@ -123,6 +122,7 @@ const toolClient = createGeminiToolCallingClient({
   userId,
   pricing: TOOL_CALLING_PRICING['gemini-2.5-flash'],
   logger,
+  usageSink,
 });
 
 const result = await toolClient.run({
@@ -161,8 +161,7 @@ if (!result.ok) {
 | `@intexuraos/common-core`  | Result types, getErrorMessage, Logger                                                         |
 | `@intexuraos/llm-contract` | LLMClient, ToolCallingClient, NormalizedUsage, TokenUsage, ModelPricing, LlmModels, ImageSize |
 | `@intexuraos/llm-prompts`  | buildResearchPrompt                                                                           |
-| `@intexuraos/llm-audit`    | createAuditContext, AuditSink                                                                 |
-| `@intexuraos/llm-pricing`  | createUsageLogger, UsageSink                                                                  |
+| `@intexuraos/llm-pricing`  | createUsageLogger                                                                             |
 
 ## Constants
 

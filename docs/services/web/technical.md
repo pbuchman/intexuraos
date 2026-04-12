@@ -220,7 +220,6 @@ apps/web/src/
 | `/settings/code`                        | WorkerSettingsPage                | Yes                             | Code worker configuration            |
 | `/settings/api-keys`                    | ApiKeysSettingsPage               | Yes                             | LLM API key management               |
 | `/settings/llm-pricing`                 | LlmPricingPage                    | Yes                             | LLM pricing configuration            |
-| `/settings/usage-costs`                 | LlmCostsPage                      | Yes                             | LLM usage cost tracking              |
 | `/settings/share-history`               | ShareHistoryPage                  | Yes                             | PWA share history                    |
 | `/share-target`                         | ShareTargetPage                   | Yes                             | PWA share target handler             |
 

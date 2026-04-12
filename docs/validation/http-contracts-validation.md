@@ -268,7 +268,6 @@ All routes verified against `apps/*/src/routes/`. Auth: `Bearer` = Auth0 JWT, `I
 | Method | Path                    | Auth     | Route File        | Status |
 | ------ | ----------------------- | -------- | ----------------- | ------ |
 | GET    | `/settings/pricing`     | None     | publicRoutes.ts   | OK     |
-| GET    | `/settings/usage-costs` | Bearer   | publicRoutes.ts   | OK     |
 | GET    | `/settings/pricing`     | Internal | internalRoutes.ts | OK     |
 
 ### bookmarks-agent

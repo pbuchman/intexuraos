@@ -107,7 +107,6 @@ if (!result.ok) {
 | `@intexuraos/common-core`  | Result types, getErrorMessage, Logger                |
 | `@intexuraos/llm-contract` | LLMClient, NormalizedUsage, TokenUsage, ModelPricing |
 | `@intexuraos/llm-prompts`  | buildResearchPrompt                                  |
-| `@intexuraos/llm-audit`    | createAuditContext                                   |
 | `@intexuraos/llm-pricing`  | createUsageLogger                                    |
 
 ## Constants
@@ -122,7 +121,6 @@ if (!result.ok) {
 **Do NOT:**
 
 - Call `generateImage` — not implemented (method does not exist on this client)
-- Inject custom `auditSink` or `usageSink` — not supported (uses Firestore defaults)
 - Expect `reasoning_tokens` in usage — Claude does not expose reasoning tokens
 
 **Requires:**

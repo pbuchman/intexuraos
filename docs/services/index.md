@@ -313,7 +313,6 @@ Shared libraries used across apps and workers.
 | [llm-factory](../packages/llm-factory/README.md)   | Unified factory for creating provider-specific LLM clients |
 | [llm-prompts](../packages/llm-prompts/README.md)   | Centralized prompt templates and Zod response schemas      |
 | [llm-pricing](../packages/llm-pricing/README.md)   | Runtime pricing lookups, usage logging to Firestore        |
-| [llm-audit](../packages/llm-audit/README.md)       | LLM request/response audit trail in Firestore              |
 | [llm-utils](../packages/llm-utils/README.md)       | Token redaction, LLM parse error handling, Zod formatting  |
 
 ### Service Clients

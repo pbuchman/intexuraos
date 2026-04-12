@@ -307,7 +307,6 @@ sequenceDiagram
 | ---------------------------- | ---------------------------------------------------- |
 | `researches`                 | LLM research queries, responses, synthesized results |
 | `research_export_settings`   | Notion target page configuration per user            |
-| `llm_api_logs`               | LLM API call audit logs with token usage and cost    |
 
 ## Configuration
 

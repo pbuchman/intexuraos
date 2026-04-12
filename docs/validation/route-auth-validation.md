@@ -62,7 +62,6 @@
 | Method | Path                  | Auth Type                | Status                                                          |
 | ------ | --------------------- | ------------------------ | --------------------------------------------------------------- |
 | GET    | /settings/pricing     | `requireAuth()`          | OK                                                              |
-| GET    | /settings/usage-costs | `requireAuth()`          | OK                                                              |
 | GET    | /settings/pricing     | `validateInternalAuth()` | OK (MEDIUM: path not `/internal/` prefixed — see discrepancies) |
 
 ### bookmarks-agent

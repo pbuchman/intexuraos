@@ -492,7 +492,6 @@ async function bootstrap(): Promise<void> {
   };
 
   const logFilePath = join(logsDir, 'orchestrator.log');
-  const llmAuditLogPath = join(logsDir, 'llm-audit.log');
   const logLevel = process.env['LOG_LEVEL'] ?? 'info';
 
   // Create logger — pretty stdout + JSON file for debugging
@@ -729,7 +728,6 @@ async function bootstrap(): Promise<void> {
   const completionVerifier = new OrchestratorCompletionVerifier(logger, {
     model: LlmModels.Gemini25Flash,
     geminiApiKey: geminiVerifierKey,
-    auditLogPath: llmAuditLogPath,
     codeAgentUrl: config.codeAgentUrl,
     usageWebhookUrl,
     orchestratorSecret: config.orchestratorSecret,
@@ -784,7 +782,6 @@ async function bootstrap(): Promise<void> {
             inputPricePerMillion: 1.0,
             outputPricePerMillion: 3.0,
           },
-          auditLogPath: llmAuditLogPath,
           codeAgentUrl: config.codeAgentUrl,
           usageWebhookUrl,
           orchestratorSecret: config.orchestratorSecret,

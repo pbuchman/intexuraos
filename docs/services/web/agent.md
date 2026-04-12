@@ -314,7 +314,6 @@ type CodeTaskWorkerType =
 | API Keys             | user-service                 | `/#/settings/api-keys`        |
 | Workers              | code-agent                   | `/#/settings/code`            |
 | LLM Pricing          | app-settings-service         | `/#/settings/llm-pricing`     |
-| Usage Costs          | app-settings-service         | `/#/settings/usage-costs`     |
 | Share History        | local (SyncQueueContext)     | `/#/settings/share-history`   |
 
 ### Persistent User Preferences
@@ -535,6 +534,5 @@ None. The web app is a consumer only — it does not publish Pub/Sub events.
 | `/#/settings/code`                        | Yes  | Worker configuration                |
 | `/#/settings/api-keys`                    | Yes  | API key management                  |
 | `/#/settings/llm-pricing`                 | Yes  | LLM pricing                         |
-| `/#/settings/usage-costs`                 | Yes  | Usage cost tracking                 |
 | `/#/settings/share-history`               | Yes  | Share history                       |
 | `/#/share-target`                         | Yes  | PWA share handler                   |

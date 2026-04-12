@@ -70,38 +70,6 @@ export interface UsageSink {
 }
 
 /**
- * Sink that emits usage payloads to structured logs.
- */
-export class StructuredLogUsageSink implements UsageSink {
-  readonly logger: Logger;
-
-  constructor(deps: { logger: Logger }) {
-    this.logger = deps.logger;
-  }
-
-  log(params: UsageLogParams): Promise<void> {
-    this.logger.info(
-      {
-        usage: {
-          userId: params.userId,
-          provider: params.provider,
-          model: params.model,
-          callType: params.callType,
-          inputTokens: params.usage.inputTokens,
-          outputTokens: params.usage.outputTokens,
-          totalTokens: params.usage.totalTokens,
-          costUsd: params.usage.costUsd,
-          success: params.success,
-          ...(params.errorMessage !== undefined && { errorMessage: params.errorMessage }),
-        },
-      },
-      'LLM usage sink log'
-    );
-    return Promise.resolve();
-  }
-}
-
-/**
  * Sink that discards all usage events.
  *
  * Deliberate opt-out for CLI tools, scripts, and other contexts that genuinely

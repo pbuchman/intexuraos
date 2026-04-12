@@ -128,7 +128,6 @@ All methods return `Result<T, PerplexityError>`. Error mapping:
 
 ## Cross-Cutting Concerns
 
-- **Audit trail:** Every request creates an `AuditContext` via `@intexuraos/llm-audit`
 - **Usage logging:** Automatic fire-and-forget logging via `@intexuraos/llm-pricing` `UsageLogger`
 - **Prompt building:** Research prompts built via `@intexuraos/llm-prompts` `buildResearchPrompt()`
 - **Max tokens:** Hardcoded to 8192

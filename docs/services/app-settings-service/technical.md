@@ -2,7 +2,7 @@
 
 ## Overview
 
-App-settings-service provides centralized LLM pricing configuration and user-specific usage cost analytics. It runs on Cloud Run (port 8122 locally) and depends on Firestore for pricing data (`settings/llm_pricing/providers`) and usage statistics (`llm_usage_stats` collection group). The service validates pricing completeness at startup and serves both internal (service-to-service) and public (authenticated user) endpoints.
+App-settings-service provides centralized LLM pricing configuration. It runs on Cloud Run (port 8122 locally) and depends on Firestore for pricing data (`settings/llm_pricing/providers`). Usage cost analytics have been migrated to `llm-usage-service`. The service validates pricing completeness at startup and serves both internal (service-to-service) and public (authenticated user) endpoints.
 
 ## Architecture
 
@@ -17,28 +17,24 @@ graph TB
         PublicAPI[Public Routes<br/>Bearer Auth]
         InternalAPI[Internal Routes<br/>X-Internal-Auth]
         PricingRepo[FirestorePricingRepository]
-        UsageRepo[FirestoreUsageStatsRepository]
     end
 
     subgraph "Firestore"
         PricingColl[(settings/llm_pricing/<br/>providers/&lbrace;provider&rbrace;)]
-        UsageColl[(llm_usage_stats/<br/>collection group: by_user)]
     end
 
     WebApp --> PublicAPI
     Services --> InternalAPI
     PublicAPI --> PricingRepo
-    PublicAPI --> UsageRepo
     InternalAPI --> PricingRepo
     PricingRepo --> PricingColl
-    UsageRepo --> UsageColl
 
     classDef service fill:#e1f5ff
     classDef storage fill:#fff4e6
     classDef external fill:#f0f0f0
 
-    class PublicAPI,InternalAPI,PricingRepo,UsageRepo service
-    class PricingColl,UsageColl storage
+    class PublicAPI,InternalAPI,PricingRepo service
+    class PricingColl storage
     class WebApp,Services external
 ```
 
@@ -65,12 +61,6 @@ sequenceDiagram
     Firestore-->>Service: Provider pricing docs
     Service-->>-Client: { google, openai, anthropic, perplexity }
 
-    Note over Client,Service: Runtime: Usage Costs
-    Client->>+Service: GET /settings/usage-costs?days=30
-    Service->>Firestore: Collection group query: by_user WHERE userId
-    Firestore-->>Service: All user usage docs
-    Service->>Service: Filter by date, aggregate by month/model/callType
-    Service-->>-Client: AggregatedCosts
 ```
 
 ## Recent Changes
@@ -94,7 +84,6 @@ sequenceDiagram
 | Method | Path                    | Purpose                                   | Auth         |
 | ------ | ----------------------- | ----------------------------------------- | ------------ |
 | GET    | `/settings/pricing`     | Get LLM pricing for all 4 providers       | Bearer token |
-| GET    | `/settings/usage-costs` | Get authenticated user's aggregated costs | Bearer token |
 
 ### Internal Endpoints
 
@@ -226,7 +215,6 @@ type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
 > **Note:** Firestore collection paths are hardcoded in the repository implementations:
 >
 > - Pricing: `settings/llm_pricing/providers/{provider}`
-> - Usage stats: collection group `by_user` within `llm_usage_stats/{model}/by_call_type/{callType}/by_period/{YYYY-MM-DD}/by_user/{userId}`
 
 ## Dependencies
 
@@ -235,7 +223,6 @@ type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
 | Component                                      | Purpose                                           |
 | ---------------------------------------------- | ------------------------------------------------- |
 | Firestore (`settings/llm_pricing/providers`)   | Provider pricing config (document per provider)   |
-| Firestore (`llm_usage_stats` collection group) | User usage statistics (written by other services) |
 
 ### Internal Services
 
@@ -288,17 +275,15 @@ apps/app-settings-service/src/
     index.ts                 # Port interfaces: PricingRepository, UsageStatsRepository, all types
   infra/firestore/
     index.ts                 # FirestorePricingRepository (reads settings/llm_pricing/providers)
-    usageStatsRepository.ts  # FirestoreUsageStatsRepository (collection group query, aggregation)
   routes/
-    publicRoutes.ts          # GET /settings/pricing, GET /settings/usage-costs (Bearer auth)
+    publicRoutes.ts          # GET /settings/pricing (Bearer auth)
     internalRoutes.ts        # GET /internal/settings/pricing (Internal auth)
   __tests__/
     routes/
-      publicRoutes.test.ts   # Tests covering auth, pricing, usage-costs
+      publicRoutes.test.ts   # Tests covering auth, pricing
       internalRoutes.test.ts # Tests covering auth, pricing
     infra/
       FirestorePricingRepository.test.ts  # Tests for pricing repository
-      usageStatsRepository.test.ts        # Tests covering aggregation, filtering, sorting
   services.ts                # DI container (getServices, setServices, resetServices)
   server.ts                  # Fastify server setup, OpenAPI schemas, health check
   index.ts                   # Entry point: startup validation, env check, server start

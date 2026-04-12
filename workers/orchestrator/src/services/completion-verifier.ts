@@ -122,7 +122,6 @@ export interface CompletionVerifier {
 export interface CompletionVerifierConfig {
   model: string;
   geminiApiKey: string;
-  auditLogPath: string;
   codeAgentUrl: string;
   usageWebhookUrl: string;
   orchestratorSecret: string;
