@@ -116,7 +116,6 @@ if (!result.ok) {
 | `@intexuraos/common-core`  | Result types, getErrorMessage, Logger                                      |
 | `@intexuraos/llm-contract` | LLMClient, NormalizedUsage, TokenUsage, ModelPricing, LlmModels, ImageSize |
 | `@intexuraos/llm-prompts`  | buildResearchPrompt                                                        |
-| `@intexuraos/llm-audit`    | createAuditContext                                                         |
 | `@intexuraos/llm-pricing`  | createUsageLogger                                                          |
 
 ## Constants
@@ -131,7 +130,6 @@ if (!result.ok) {
 
 **Do NOT:**
 
-- Inject custom `auditSink` or `usageSink` — not supported (uses Firestore defaults)
 - Rely on `generateImage` having a timeout on URL fetches — there is none; can hang if OpenAI CDN is unresponsive
 
 **Requires:**

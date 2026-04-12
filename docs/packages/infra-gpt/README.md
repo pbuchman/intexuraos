@@ -117,11 +117,9 @@ All methods return `Result<T, GptError>`. Error mapping:
 - **Image generation** uses `client.images.generate` with `gpt-image-1` model. Supports both `b64_json` (primary) and URL (fallback) response formats — URL responses are fetched via `fetch()` with no timeout.
 - **Reasoning tokens:** Extracted from `output_tokens_details.reasoning_tokens` for o-series models. Included in `NormalizedUsage.reasoningTokens` when present.
 - **Dual usage shapes:** The Responses API and Chat Completions API return different usage structures (`ResponseUsage` vs `CompletionUsage`). `extractUsageDetails` handles both shapes.
-- **Audit sink:** This client does not accept injectable `auditSink`/`usageSink` — it uses the default Firestore sinks.
 
 ## Cross-Cutting Concerns
 
-- **Audit trail:** Every request creates an `AuditContext` via `@intexuraos/llm-audit`
 - **Usage logging:** Automatic fire-and-forget logging via `@intexuraos/llm-pricing` `UsageLogger`
 - **Prompt building:** Research prompts built via `@intexuraos/llm-prompts` `buildResearchPrompt()`
 
@@ -141,7 +139,6 @@ All methods return `Result<T, GptError>`. Error mapping:
 | `@intexuraos/common-core`  | `Result` types, `getErrorMessage`, `Logger`                              |
 | `@intexuraos/llm-contract` | `LLMClient`, `NormalizedUsage`, `ModelPricing`, `LlmModels`, `ImageSize` |
 | `@intexuraos/llm-prompts`  | `buildResearchPrompt`                                                    |
-| `@intexuraos/llm-audit`    | `createAuditContext`                                                     |
 | `@intexuraos/llm-pricing`  | `createUsageLogger`                                                      |
 
 ## Recent Changes

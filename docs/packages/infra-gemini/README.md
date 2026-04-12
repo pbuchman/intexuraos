@@ -131,8 +131,6 @@ interface GeminiConfig {
   pricing: ModelPricing;    // Cost configuration for text operations
   imagePricing?: ModelPricing; // Separate pricing for image generation
   logger: Logger;           // Pino logger for structured logging
-  auditSink?: AuditSink;    // Optional audit sink override (defaults to Firestore)
-  usageSink?: UsageSink;    // Optional usage sink override (defaults to Firestore)
 }
 ```
 
@@ -145,8 +143,6 @@ interface ToolCallingClientConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
-  auditSink?: AuditSink;
-  usageSink?: UsageSink;
 }
 ```
 
@@ -189,11 +185,9 @@ All methods return `Result<T, GeminiError>`. Error mapping:
 - **Tool calling — first-iteration forcing:** Uses `FunctionCallingConfigMode.ANY` on the first iteration to guarantee a tool call when tools are provided. Switches to `AUTO` for subsequent iterations.
 - **Tool calling — hallucinated tool names:** If Gemini calls a tool name not in the tool map, the fake error response is sent back for self-correction rather than returning an error.
 - **Tool calling — repair callback:** `onExhausted` allows injecting a correction message when `maxIterations` is reached, giving the model additional repair iterations.
-- **Injectable sinks:** `GeminiConfig` and `ToolCallingClientConfig` both support `auditSink` and `usageSink` overrides for testing without Firestore.
 
 ## Cross-Cutting Concerns
 
-- **Audit trail:** Every request creates an `AuditContext` via `@intexuraos/llm-audit`
 - **Usage logging:** Automatic fire-and-forget logging via `@intexuraos/llm-pricing` `UsageLogger`
 - **Prompt building:** Research prompts built via `@intexuraos/llm-prompts` `buildResearchPrompt()`
 
@@ -218,8 +212,7 @@ All methods return `Result<T, GeminiError>`. Error mapping:
 | `@intexuraos/common-core`  | `Result` types, `getErrorMessage`, `Logger`                                                   |
 | `@intexuraos/llm-contract` | `LLMClient`, `ToolCallingClient`, `NormalizedUsage`, `ModelPricing`, `LlmModels`, `ImageSize` |
 | `@intexuraos/llm-prompts`  | `buildResearchPrompt`                                                                         |
-| `@intexuraos/llm-audit`    | `createAuditContext`, `AuditSink`                                                             |
-| `@intexuraos/llm-pricing`  | `createUsageLogger`, `UsageSink`                                                              |
+| `@intexuraos/llm-pricing`  | `createUsageLogger`                                                                           |
 
 ## Recent Changes
 
