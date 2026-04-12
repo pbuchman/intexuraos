@@ -1081,6 +1081,24 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
     },
 
+    listErroredExecutionMemoryPostRun: async (): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('executionMemoryPostRun.status', '==', 'error')
+          .limit(50)
+          .get();
+        return ok(snapshot.docs.map((doc) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        ));
+      } catch (error) {
+        logger.error({ error }, 'Failed to list errored execution memory post-run tasks');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
     findByPR: async (
       repository: string,
       prNumber: number

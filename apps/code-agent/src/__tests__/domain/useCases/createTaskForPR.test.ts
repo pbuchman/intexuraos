@@ -110,6 +110,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async listPendingExecutionMemoryPostRun(): ReturnType<CodeTaskRepository['listPendingExecutionMemoryPostRun']> {
       return ok([]);
     },
+    async listErroredExecutionMemoryPostRun(): ReturnType<CodeTaskRepository['listErroredExecutionMemoryPostRun']> {
+      return ok([]);
+    },
     async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
       return ok(0);
     },
