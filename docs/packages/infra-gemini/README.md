@@ -27,6 +27,7 @@ const client = createGeminiClient({
     groundingCostPerRequest: 0.002,
   },
   logger: pinoLogger,
+  usageSink,
 });
 ```
 
@@ -51,6 +52,7 @@ const toolClient = createGeminiToolCallingClient({
   userId: 'user-123',
   pricing: TOOL_CALLING_PRICING['gemini-2.5-flash'],
   logger,
+  usageSink,
 });
 
 const result = await toolClient.run({
@@ -131,6 +133,7 @@ interface GeminiConfig {
   pricing: ModelPricing;    // Cost configuration for text operations
   imagePricing?: ModelPricing; // Separate pricing for image generation
   logger: Logger;           // Pino logger for structured logging
+  usageSink: UsageSink;     // HTTP usage sink (HttpInternalAuthUsageSink or HttpWebhookUsageSink)
 }
 ```
 
@@ -143,6 +146,7 @@ interface ToolCallingClientConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
+  usageSink: UsageSink;     // HTTP usage sink (HttpInternalAuthUsageSink or HttpWebhookUsageSink)
 }
 ```
 

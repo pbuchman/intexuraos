@@ -54,6 +54,7 @@ interface GeminiConfig {
   pricing: ModelPricing;
   imagePricing?: ModelPricing; // separate pricing for generateImage
   logger: Logger;
+  usageSink: UsageSink;        // HTTP usage sink (HttpInternalAuthUsageSink or HttpWebhookUsageSink)
 }
 
 interface ToolCallingClientConfig {
@@ -62,6 +63,7 @@ interface ToolCallingClientConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
+  usageSink: UsageSink;    // HTTP usage sink (HttpInternalAuthUsageSink or HttpWebhookUsageSink)
 }
 
 // GeminiError = LLMError from @intexuraos/llm-contract
@@ -88,6 +90,7 @@ const client = createGeminiClient({
     groundingCostPerRequest: 0.002,
   },
   logger,
+  usageSink,
 });
 
 const result = await client.research('query');
@@ -119,6 +122,7 @@ const toolClient = createGeminiToolCallingClient({
   userId,
   pricing: TOOL_CALLING_PRICING['gemini-2.5-flash'],
   logger,
+  usageSink,
 });
 
 const result = await toolClient.run({
