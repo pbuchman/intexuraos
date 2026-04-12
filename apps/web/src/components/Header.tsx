@@ -76,7 +76,7 @@ export function Header(): React.JSX.Element {
   const { pendingCount, isSyncing, isOnline, authFailed } = useSyncQueue();
   const { isInstalled } = usePWA();
   const { status: workersStatus, refreshStatus: refreshWorkersStatus, refreshing: isWorkersRefreshing } = useWorkersStatus();
-  const { pendingCount: prunePendingCount, loading: pruneLoading } = usePruneCandidateStatus();
+  const { pendingCount: prunePendingCount, loading: pruneLoading, error: pruneError } = usePruneCandidateStatus();
   const { resolvedTheme, toggleTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isWorkersOpen, setIsWorkersOpen] = useState(false);
@@ -271,7 +271,7 @@ export function Header(): React.JSX.Element {
         )}
 
         {/* Linear Cleanup Status - desktop only */}
-        {isAuthenticated && !isInstalled && !pruneLoading && (
+        {isAuthenticated && !isInstalled && !pruneLoading && pruneError === null && (
           <Link
             to="/linear/prune-candidates"
             className="relative hidden items-center gap-1 rounded-lg p-2 text-sm transition-colors hover:bg-slate-100 md:flex dark:hover:bg-slate-700"
@@ -450,7 +450,7 @@ export function Header(): React.JSX.Element {
               )}
 
               {/* Linear Cleanup status menu item — shown in PWA mode or on mobile */}
-              {isAuthenticated && !pruneLoading && (
+              {isAuthenticated && !pruneLoading && pruneError === null && (
                 <div className={isInstalled ? '' : 'md:hidden'}>
                   <Link
                     to="/linear/prune-candidates"
