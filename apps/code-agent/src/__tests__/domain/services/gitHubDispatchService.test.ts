@@ -396,6 +396,24 @@ describe('GitHubDispatchService', () => {
       expect(mockedSendTaskMessage).toHaveBeenCalled();
       expect(mockedCreateTaskForPR).not.toHaveBeenCalled();
     });
+
+    it('should route to existing task when event state is null', async () => {
+      const existingTask = { id: 'task-123', userId: 'user-456', linearIssueId: 'INT-100' };
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(existingTask as never));
+      mockedSendTaskMessage.mockResolvedValue(ok({ action: 'queued' }));
+
+      const nullStateEvent: GitHubPREvent = { ...mockEvent, state: null, mergedAt: null };
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch({ event: nullStateEvent, decision: mockDecision, logger: mockLogger });
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'task-123',
+      });
+      expect(mockedSendTaskMessage).toHaveBeenCalled();
+      expect(mockedCreateTaskForPR).not.toHaveBeenCalled();
+    });
   });
 
   describe('dispatch — new task path', () => {
