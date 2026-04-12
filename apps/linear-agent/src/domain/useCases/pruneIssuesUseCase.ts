@@ -56,6 +56,28 @@ export async function pruneIssues(
     });
   }
 
+  // Guard: skip if previous candidates are still pending user review
+  const pendingResult = await pruneCandidateRepo.listAll();
+  if (!pendingResult.ok) {
+    return pendingResult;
+  }
+
+  if (pendingResult.value.length > 0) {
+    logger.info(
+      { pendingCount: pendingResult.value.length },
+      'Prune candidates already pending review, skipping new classification'
+    );
+    return ok({
+      skipped: true,
+      skipReason: `${String(pendingResult.value.length)} candidates pending review`,
+      totalActive: 0,
+      stored: 0,
+      remaining: 0,
+      storedCandidates: [],
+      durationMs: Date.now() - startTime,
+    });
+  }
+
   const allIssuesMap = new Map<string, { issue: SyncedLinearIssue; userIds: string[] }>();
 
   const issueResults = await Promise.all(
