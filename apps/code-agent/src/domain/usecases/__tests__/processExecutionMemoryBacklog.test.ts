@@ -425,7 +425,12 @@ describe('sweepErroredApplications', () => {
     }
 
     expect(updateFn).toHaveBeenCalledWith('task_old_error', expect.objectContaining({
-      executionMemoryPostRun: expect.objectContaining({ status: 'pending', attempts: 2 }),
+      executionMemoryPostRun: expect.objectContaining({
+        status: 'pending',
+        attempts: 2,
+        lastAttemptAt: oldTimestamp,
+        generatedMemoryIds: [],
+      }),
     }));
   });
 
