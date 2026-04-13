@@ -381,6 +381,7 @@ export function createGitHubPRHttpClient(
           user?: { login?: string };
           base?: { ref?: string };
           head?: { ref?: string; sha?: string };
+          created_at?: string;
         };
 
         if (typeof data.number !== 'number') {
@@ -409,6 +410,9 @@ export function createGitHubPRHttpClient(
         const headShaResult = ensureString(data.head?.sha, 'head.sha');
         if (!headShaResult.ok) return headShaResult;
 
+        const createdAtResult = ensureString(data.created_at, 'created_at');
+        if (!createdAtResult.ok) return createdAtResult;
+
         return ok({
           number: data.number,
           title: titleResult.value,
@@ -420,6 +424,7 @@ export function createGitHubPRHttpClient(
           mergeable: data.mergeable ?? null,
           mergeableState: data.mergeable_state ?? null,
           headSha: headShaResult.value,
+          createdAt: createdAtResult.value,
         });
       } catch (error) {
         return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });

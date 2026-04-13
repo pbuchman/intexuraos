@@ -73,6 +73,7 @@ function createFakeGitHubPRClient(): GitHubPRClient {
       mergeable: true,
       mergeableState: 'clean',
       headSha: 'sha123',
+      createdAt: '2026-01-01T00:00:00Z',
     })),
     getIssueComment: vi.fn().mockResolvedValue(ok({ body: '' })),
     updateIssueComment: vi.fn().mockResolvedValue(ok({ commentId: 1 })),

@@ -227,6 +227,7 @@ function createMockGitHubPRClient(): GitHubPRClient {
         mergeable: true,
         mergeableState: 'clean',
         headSha: 'sha123',
+        createdAt: '2026-01-01T00:00:00Z',
       });
     },
     async getIssueComment(): ReturnType<GitHubPRClient['getIssueComment']> {
