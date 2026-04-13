@@ -13,10 +13,10 @@ export type StoredResearchModel = string;
 const MODEL_TO_PROVIDER = {
   [LlmModels.Gemini25Pro]: LlmProviders.Google,
   [LlmModels.Gemini25Flash]: LlmProviders.Google,
-  [LlmModels.ClaudeOpus45]: LlmProviders.Anthropic,
-  [LlmModels.ClaudeSonnet45]: LlmProviders.Anthropic,
+  [LlmModels.ClaudeOpus46]: LlmProviders.Anthropic,
+  [LlmModels.ClaudeSonnet46]: LlmProviders.Anthropic,
   [LlmModels.O4MiniDeepResearch]: LlmProviders.OpenAI,
-  [LlmModels.GPT52]: LlmProviders.OpenAI,
+  [LlmModels.GPT54]: LlmProviders.OpenAI,
   [LlmModels.Sonar]: LlmProviders.Perplexity,
   [LlmModels.SonarPro]: LlmProviders.Perplexity,
   [LlmModels.SonarDeepResearch]: LlmProviders.Perplexity,

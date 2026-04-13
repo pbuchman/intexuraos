@@ -959,12 +959,12 @@ describe('FirestoreResearchRepository', () => {
         userId: 'user-1',
         title: 'Test Research',
         prompt: 'Test',
-        selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus45],
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus46],
         synthesisModel: LlmModels.Gemini25Pro,
         status: 'pending',
         llmResults: [
           { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
-          { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeOpus45, status: 'pending' },
+          { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeOpus46, status: 'pending' },
         ],
         startedAt: '2024-01-01T00:00:00Z',
       };
@@ -988,7 +988,7 @@ describe('FirestoreResearchRepository', () => {
             status: 'completed',
             result: 'Result content',
           },
-          { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeOpus45, status: 'pending' },
+          { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeOpus46, status: 'pending' },
         ],
       });
     });

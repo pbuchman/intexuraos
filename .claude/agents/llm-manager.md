@@ -137,7 +137,7 @@ cat migrations/012_new-pricing-structure.mjs
 | Provider | Model            | Field  | Database | Official | Status  |
 | -------- | ---------------- | ------ | -------- | -------- | ------- |
 | google   | gemini-2.5-flash | input  | $0.30    | $0.25    | CHANGED |
-| openai   | gpt-5.2          | output | $14.00   | $14.00   | OK      |
+| openai   | gpt-5.4          | output | $14.00   | $14.00   | OK      |
 | ...      | ...              | ...    | ...      | ...      | ...     |
 ```
 
@@ -365,12 +365,12 @@ pnpm run migrate:status  # Should show new migration as pending
 
 ## Quick Reference: Current Models (15 total)
 
-| Provider   | Models                                                                          | Usage                               |
-| ---------- | ------------------------------------------------------------------------------- | ----------------------------------- |
-| Google     | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-2.5-flash-image      | Research, synthesis, titles, images |
-| OpenAI     | o4-mini-deep-research, gpt-5.2, gpt-4o-mini, gpt-image-1                        | Research, images                    |
-| Anthropic  | claude-opus-4-5-20251101, claude-sonnet-4-5-20250929, claude-3-5-haiku-20241022 | Research                            |
-| Perplexity | sonar, sonar-pro, sonar-deep-research                                           | Research                            |
-| Zai        | glm-4.7                                                                         | Research, validation                |
+| Provider   | Models                                                                     | Usage                               |
+| ---------- | -------------------------------------------------------------------------- | ----------------------------------- |
+| Google     | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-2.5-flash-image | Research, synthesis, titles, images |
+| OpenAI     | o4-mini-deep-research, gpt-5.4, gpt-4o-mini, gpt-image-1                   | Research, images                    |
+| Anthropic  | claude-opus-4-6, claude-sonnet-4-6, claude-3-5-haiku-20241022              | Research                            |
+| Perplexity | sonar, sonar-pro, sonar-deep-research                                      | Research                            |
+| Zai        | glm-4.7                                                                    | Research, validation                |
 
 This registry should match exactly what's in `packages/llm-contract/src/supportedModels.ts`.

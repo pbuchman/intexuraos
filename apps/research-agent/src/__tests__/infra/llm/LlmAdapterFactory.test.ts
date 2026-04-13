@@ -164,7 +164,7 @@ describe('LlmAdapterFactory', () => {
 
     it('creates ClaudeAdapter for claude model', () => {
       const provider = createResearchProvider(
-        LlmModels.ClaudeOpus45,
+        LlmModels.ClaudeOpus46,
         'anthropic-key',
         'test-user-id',
         testPricing,
@@ -174,7 +174,7 @@ describe('LlmAdapterFactory', () => {
       );
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('anthropic-key');
-      expect((provider as unknown as { model: string }).model).toBe(LlmModels.ClaudeOpus45);
+      expect((provider as unknown as { model: string }).model).toBe(LlmModels.ClaudeOpus46);
       expect((provider as unknown as { researchId?: string }).researchId).toBe('research-123');
     });
 
@@ -247,7 +247,7 @@ describe('LlmAdapterFactory', () => {
     it('throws error for claude model (synthesis not supported)', () => {
       expect(() =>
         createSynthesizer(
-          LlmModels.ClaudeOpus45,
+          LlmModels.ClaudeOpus46,
           'anthropic-key',
           'test-user-id',
           testPricing,

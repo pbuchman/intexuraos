@@ -167,8 +167,8 @@ interface ModelPricing {
 | Provider   | Models (14 total)                                                               |
 | ---------- | ------------------------------------------------------------------------------- |
 | Google     | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-2.5-flash-image      |
-| OpenAI     | gpt-5.2, gpt-4o-mini, o4-mini-deep-research, gpt-image-1                        |
-| Anthropic  | claude-opus-4-5-20251101, claude-sonnet-4-5-20250929, claude-3-5-haiku-20241022 |
+| OpenAI     | gpt-5.4, gpt-4o-mini, o4-mini-deep-research, gpt-image-1                        |
+| Anthropic  | claude-opus-4-6, claude-sonnet-4-6, claude-3-5-haiku-20241022                   |
 | Perplexity | sonar, sonar-pro, sonar-deep-research                                           |
 
 ---

@@ -29,16 +29,16 @@ describe('Research factory functions', () => {
         id: 'test-id',
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.Gemini25Flash, LlmModels.ClaudeSonnet45],
-        synthesisModel: LlmModels.ClaudeSonnet45,
+        selectedModels: [LlmModels.Gemini25Flash, LlmModels.ClaudeSonnet46],
+        synthesisModel: LlmModels.ClaudeSonnet46,
       });
 
       expect(research.id).toBe('test-id');
       expect(research.userId).toBe('user-123');
       expect(research.prompt).toBe('Test prompt');
       expect(research.status).toBe('pending');
-      expect(research.selectedModels).toEqual([LlmModels.Gemini25Flash, LlmModels.ClaudeSonnet45]);
-      expect(research.synthesisModel).toBe(LlmModels.ClaudeSonnet45);
+      expect(research.selectedModels).toEqual([LlmModels.Gemini25Flash, LlmModels.ClaudeSonnet46]);
+      expect(research.synthesisModel).toBe(LlmModels.ClaudeSonnet46);
       expect(research.llmResults).toHaveLength(2);
     });
 
@@ -184,7 +184,7 @@ describe('Research factory functions', () => {
         id: 'enhanced-id',
         userId: 'user-123',
         sourceResearch,
-        additionalModels: [LlmModels.ClaudeSonnet45],
+        additionalModels: [LlmModels.ClaudeSonnet46],
       });
 
       expect(enhanced.favourite).toBe(false);
@@ -195,7 +195,7 @@ describe('Research factory functions', () => {
         id: 'enhanced-id',
         userId: 'user-123',
         sourceResearch,
-        additionalModels: [LlmModels.ClaudeSonnet45],
+        additionalModels: [LlmModels.ClaudeSonnet46],
       });
 
       expect(enhanced.sourceResearchId).toBe('source-id');
@@ -214,7 +214,7 @@ describe('Research factory functions', () => {
         id: 'enhanced-id',
         userId: 'user-123',
         sourceResearch: sourceWithUserInfo,
-        additionalModels: [LlmModels.ClaudeSonnet45],
+        additionalModels: [LlmModels.ClaudeSonnet46],
       });
 
       expect(enhanced.userName).toBe('Original Creator');
@@ -226,7 +226,7 @@ describe('Research factory functions', () => {
         id: 'enhanced-id',
         userId: 'user-123',
         sourceResearch,
-        additionalModels: [LlmModels.ClaudeSonnet45],
+        additionalModels: [LlmModels.ClaudeSonnet46],
       });
 
       expect(enhanced.userName).toBeUndefined();

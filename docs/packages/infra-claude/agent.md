@@ -57,7 +57,7 @@ import { createClaudeClient } from '@intexuraos/infra-claude';
 
 const client = createClaudeClient({
   apiKey: env.INTEXURAOS_ANTHROPIC_API_KEY,
-  model: 'claude-sonnet-4-5',
+  model: 'claude-sonnet-4-6',
   userId,
   pricing: {
     inputPricePerMillion: 3.0,
