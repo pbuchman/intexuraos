@@ -261,7 +261,11 @@ export const DEFAULT_OPENROUTER_MODELS: readonly DefaultOpenRouterModel[] = [
   { id: 'google/gemma-4-31b-it:free', name: 'Gemma 4 31B IT', provider: 'Google' },
   { id: 'minimax/minimax-m2.7', name: 'MiniMax M2.7', provider: 'MiniMax' },
   { id: 'qwen/qwen3.6-plus', name: 'Qwen 3.6 Plus', provider: 'Qwen' },
-  { id: 'nvidia/nemotron-3-super-120b-a12b:free', name: 'Nemotron 3 Super 120B', provider: 'NVIDIA' },
+  {
+    id: 'nvidia/nemotron-3-super-120b-a12b:free',
+    name: 'Nemotron 3 Super 120B',
+    provider: 'NVIDIA',
+  },
 ] as const;
 
 const DEFAULT_OPENROUTER_MODEL_IDS: ReadonlySet<string> = new Set(
@@ -285,9 +289,7 @@ export function isDefaultEligibleModel(model: string): model is DefaultEligibleM
 
 export const DEFAULT_MODEL_DISPLAY_NAMES: Record<string, string> = {
   ...FAST_MODEL_DISPLAY_NAMES,
-  ...Object.fromEntries(
-    DEFAULT_OPENROUTER_MODELS.map((m) => [`or:${m.id}`, m.name])
-  ),
+  ...Object.fromEntries(DEFAULT_OPENROUTER_MODELS.map((m) => [`or:${m.id}`, m.name])),
 };
 
 /**
