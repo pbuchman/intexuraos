@@ -563,7 +563,9 @@ export function LlmUsagePage(): React.JSX.Element {
     enabled: isRawMode && !isCustomIncomplete,
   });
 
-  // Auto-apply openrouter filter when grouping by openrouter model
+  // Auto-apply openrouter filter when grouping by openrouter model.
+  // Intentionally only used by the aggregate query below — the raw events hook
+  // is disabled when groupBy !== 'none', so it never needs effectiveFilters.
   const effectiveFilters = useMemo(() => {
     if (groupBy === 'openrouter-model') {
       return { ...filters, providers: ['openrouter'] };
