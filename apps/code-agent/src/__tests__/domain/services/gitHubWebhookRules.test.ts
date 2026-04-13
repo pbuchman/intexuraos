@@ -32,6 +32,7 @@ describe('GitHubWebhookRules', () => {
     title: 'Test PR',
     body: 'Test description',
     state: 'open',
+    isDraft: null,
     baseBranch: null,
     mergedAt: null,
     createdAt: new Date('2026-03-03T10:00:00Z'),

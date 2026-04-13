@@ -122,6 +122,7 @@ export function parsePullRequestEvent(
   const prBody = pr['body'] ?? null;
   const prState = pr['state'] ?? null;
   const prMergedAt = pr['merged_at'];
+  const prDraft = pr['draft'];
 
   const baseBranch = extractBaseBranch(pr);
 
@@ -156,6 +157,7 @@ export function parsePullRequestEvent(
     title: typeof prTitle === 'string' ? prTitle : null,
     body: typeof prBody === 'string' ? prBody : null,
     state: typeof prState === 'string' ? prState : null,
+    isDraft: typeof prDraft === 'boolean' ? prDraft : null,
     baseBranch,
     mergedAt:
       prMergedAt && typeof prMergedAt === 'string'
@@ -260,6 +262,7 @@ export function parsePullRequestReviewEvent(
 
   const prState = pr['state'] ?? null;
   const prMergedAt = pr['merged_at'];
+  const prDraft = pr['draft'];
 
   const baseBranch = extractBaseBranch(pr);
 
@@ -294,6 +297,7 @@ export function parsePullRequestReviewEvent(
     title: typeof prTitle === 'string' ? prTitle : null,
     body: typeof prBody === 'string' ? prBody : null,
     state: typeof prState === 'string' ? prState : null,
+    isDraft: typeof prDraft === 'boolean' ? prDraft : null,
     baseBranch,
     mergedAt:
       prMergedAt && typeof prMergedAt === 'string'
@@ -349,6 +353,7 @@ export function parsePullRequestReviewCommentEvent(
   const prTitle = pr['title'] ?? null;
   const prState = pr['state'] ?? null;
   const prMergedAt = pr['merged_at'];
+  const prDraft = pr['draft'];
 
   const baseBranch = extractBaseBranch(pr);
 
@@ -390,6 +395,7 @@ export function parsePullRequestReviewCommentEvent(
     title: typeof prTitle === 'string' ? prTitle : null,
     body: typeof commentBody === 'string' ? commentBody : null,
     state: typeof prState === 'string' ? prState : null,
+    isDraft: typeof prDraft === 'boolean' ? prDraft : null,
     baseBranch,
     mergedAt:
       prMergedAt && typeof prMergedAt === 'string'
@@ -454,6 +460,7 @@ export function parseIssueCommentEvent(
   const prId = issueObj['id'];
   const prTitle = issueObj['title'] ?? null;
   const prState = issueObj['state'] ?? null;
+  const prDraft = issueObj['draft'];
 
   if (typeof prNumber !== 'number' || typeof prId !== 'number') {
     return err({ code: 'INVALID_PAYLOAD', message: 'Invalid issue data' });
@@ -488,6 +495,7 @@ export function parseIssueCommentEvent(
     title: typeof prTitle === 'string' ? prTitle : null,
     body: typeof commentBody === 'string' ? commentBody : null,
     state: typeof prState === 'string' ? prState : null,
+    isDraft: typeof prDraft === 'boolean' ? prDraft : null,
     baseBranch: null,
     mergedAt: null,
     createdAt: createdAt instanceof Date ? createdAt : new Date(String(createdAt)),
@@ -548,6 +556,7 @@ export function parsePushEvent(
     title: `Push to ${typeof ref === 'string' ? ref.replace('refs/heads/', '') : 'unknown'}`,
     body: null,
     state: null,
+    isDraft: null,
     baseBranch: null,
     mergedAt: null,
     createdAt: createdAt instanceof Date ? createdAt : new Date(String(createdAt)),
@@ -673,6 +682,7 @@ export function parseCheckSuiteEvent(
     title,
     body: typeof prBody === 'string' ? prBody : null,
     state: typeof prState === 'string' ? prState : null,
+    isDraft: null,
     // NOTE: For check_suite events, baseBranch stores headBranch (the source/head branch of the PR).
     // This is the opposite semantic of other event types where baseBranch = target/merge-into branch.
     // CIFailureRule.evaluate() reads event.baseBranch expecting the source branch.
