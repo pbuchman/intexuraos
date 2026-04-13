@@ -74,6 +74,26 @@ export async function updateDefaultModel(
 }
 
 /**
+ * Update the user's LLM preferences (default model and optional fallback model).
+ */
+export async function updateLlmPreferences(
+  accessToken: string,
+  userId: string,
+  defaultModel: string,
+  fallbackModel?: string | null
+): Promise<{ defaultModel: string; fallbackModel: string | null }> {
+  return await apiRequest<{ defaultModel: string; fallbackModel: string | null }>(
+    config.authServiceUrl,
+    `/users/${userId}/settings`,
+    accessToken,
+    {
+      method: 'PATCH',
+      body: { defaultModel, ...(fallbackModel !== undefined ? { fallbackModel } : {}) },
+    }
+  );
+}
+
+/**
  * Test an LLM API key with a sample prompt.
  */
 export async function testLlmKey(

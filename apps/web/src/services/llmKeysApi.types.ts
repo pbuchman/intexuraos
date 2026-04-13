@@ -19,6 +19,7 @@ export interface LlmTestResult {
  */
 export interface LlmKeysResponse {
   defaultModel: string | null;
+  fallbackModel: string | null;
   google: string | null;
   openai: string | null;
   anthropic: string | null;
