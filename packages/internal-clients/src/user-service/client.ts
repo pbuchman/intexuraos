@@ -229,6 +229,16 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           });
         }
 
+        // Helper: resolve pricing for a model (static or OpenRouter)
+        function resolvePricing(model: string): { inputPricePerMillion: number; outputPricePerMillion: number; useProviderCost?: boolean } {
+          if (isOpenRouterModel(model)) {
+            const rawId = getOpenRouterRawId(model);
+            /* v8 ignore next -- upstream: getDefaultAllowlistPricing always resolves for curated default models @preserve */
+            return getDefaultAllowlistPricing(rawId) ?? { inputPricePerMillion: 0, outputPricePerMillion: 0, useProviderCost: true };
+          }
+          return config.pricingContext.getPricing(model as LLMModel);
+        }
+
         // Helper: build a client for a given model using the fetched API keys
         function buildClientForModel(
           model: string,
@@ -239,34 +249,18 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           const modelApiKey = apiKeys[modelKeyField];
           if (modelApiKey === null || modelApiKey === undefined) return null;
 
-          let modelPricing;
-          if (isOpenRouterModel(model)) {
-            const rawId = getOpenRouterRawId(model);
-            const allowlistPricing = getDefaultAllowlistPricing(rawId);
-            modelPricing = allowlistPricing ?? { inputPricePerMillion: 0, outputPricePerMillion: 0 };
-          } else {
-            modelPricing = config.pricingContext.getPricing(model as LLMModel);
-          }
-
           return createLlmClient({
             apiKey: modelApiKey,
             model: model as LLMModel,
             userId,
-            pricing: modelPricing,
+            pricing: resolvePricing(model),
             logger: config.logger,
             usageSink: config.usageSink,
           });
         }
 
         // Step 4: Get pricing for the model
-        let pricing;
-        if (isOpenRouterModel(defaultModel)) {
-          const rawId = getOpenRouterRawId(defaultModel);
-          const allowlistPricing = getDefaultAllowlistPricing(rawId);
-          pricing = allowlistPricing ?? { inputPricePerMillion: 0, outputPricePerMillion: 0 };
-        } else {
-          pricing = config.pricingContext.getPricing(defaultModel as LLMModel);
-        }
+        const pricing = resolvePricing(defaultModel);
 
         // Step 5: Create and return the LLM client
         const clientConfig: LlmClientConfig = {
@@ -309,7 +303,14 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
                 return primaryResult;
               }
 
-              return await fallbackClient.generate(prompt);
+              const fallbackResult = await fallbackClient.generate(prompt);
+              if (fallbackResult.ok) {
+                logger.info(
+                  { userId, primaryModel: defaultModel, fallbackModel: fallbackModelRaw },
+                  'Fallback model succeeded after primary failure',
+                );
+              }
+              return fallbackResult;
             },
           };
           return ok(wrappedClient);
