@@ -71,13 +71,6 @@ const INTERNAL_API_SERVICE_CATALOG = [
     allowedOperations: ['createAction'] as readonly string[],
   },
   {
-    key: 'data-insights-agent',
-    name: 'Data Insights Agent',
-    baseUrlEnvVar: 'INTEXURAOS_DATA_INSIGHTS_AGENT_URL',
-    openApiUrlEnvVar: 'INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL',
-    allowedOperations: ['computeVisualization'] as readonly string[],
-  },
-  {
     key: 'image-service',
     name: 'Image Service',
     baseUrlEnvVar: 'INTEXURAOS_IMAGE_SERVICE_URL',

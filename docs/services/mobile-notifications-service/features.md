@@ -44,7 +44,7 @@ Name and save filter combinations you use often — "Banking Alerts" for your fi
 
 Notification data is not locked inside this service. The platform's analysis tools query your notifications directly via an internal endpoint, turning your alert stream into a data source for trend detection and visualization.
 
-**Example:** The data-insights agent asks for all notifications from `com.whatsapp` and `com.telegram` for a user. The service returns the filtered list, and the agent uses it to generate a daily communication summary.
+**Example:** An AI agent queries all notifications from `com.whatsapp` and `com.telegram` for a user. The service returns the filtered list, which can be used to generate a daily communication summary.
 
 ## Key Benefits
 

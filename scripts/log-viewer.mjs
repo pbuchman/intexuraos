@@ -55,8 +55,6 @@ const NAME_MAP = {
   'linear-a': 'linear',
   'linear-': 'linear',
   'linear-agent': 'linear',
-  'data-ins': 'insights',
-  'data-insights-agent': 'insights',
   'web-agen': 'web-agent',
   'web-agent': 'web-agent',
   'image-se': 'image',

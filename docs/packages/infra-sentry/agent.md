@@ -139,9 +139,9 @@ authorization, x-internal-auth, cookie, x-api-key, apikey
 ```
 actions-agent, api-docs-hub, app-settings-service, bookmarks-agent,
 calendar-agent, chat-agent, code-agent, commands-agent,
-data-insights-agent, image-service, linear-agent,
-mobile-notifications-service, notes-agent, notion-service,
-research-agent, todos-agent, user-service, web-agent, whatsapp-service
+image-service, linear-agent, mobile-notifications-service,
+notes-agent, notion-service, research-agent, todos-agent,
+user-service, web-agent, whatsapp-service
 ```
 
 ---

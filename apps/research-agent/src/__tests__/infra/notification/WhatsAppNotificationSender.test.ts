@@ -170,13 +170,13 @@ describe('WhatsAppNotificationSender', () => {
       await sender.sendLlmFailure(
         'user-123',
         'research-456',
-        LlmModels.ClaudeOpus45,
+        LlmModels.ClaudeOpus46,
         'Key invalid'
       );
 
       expect(mockPublishSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: expect.stringContaining(LlmModels.ClaudeOpus45),
+          message: expect.stringContaining(LlmModels.ClaudeOpus46),
         })
       );
     });

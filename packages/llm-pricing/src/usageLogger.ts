@@ -33,10 +33,6 @@ export type CallType =
   | 'generate'
   /** Image generation operations */
   | 'image_generation'
-  /** Visualization chart data analysis */
-  | 'visualization_insights'
-  /** Vega-Lite chart generation */
-  | 'visualization_vegalite'
   /** Tool calling / function calling agent loops */
   | 'tool_calling';
 

@@ -22,6 +22,7 @@ import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
 import { isMemoryEligibleAgent } from '../domain/utils/memoryEligibility.js';
 import { mergePlanPr } from '../domain/utils/mergePlanPr.js';
 import { fetchGitHubToken } from '../domain/utils/gitHubTokenResolver.js';
+import { validatePrUrl } from '../domain/utils/validatePrUrl.js';
 
 /**
  * Best-effort: record a task_failed automation log event for PR-linked tasks.
@@ -580,7 +581,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const enforceExecutionOutcome = async (
         executionResult: NonNullable<typeof result>
-      ): Promise<{ ok: true } | { ok: false; message: string; code: string }> => {
+      ): Promise<{ ok: true; prUrlValidationFailed?: boolean; prUrlValidationErrors?: string[] } | { ok: false; message: string; code: string }> => {
         if (task.linearIssueId === undefined) {
           return {
             ok: false,
@@ -713,6 +714,40 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           };
         }
 
+        // PR URL validation (INT-1361): verify PR exists, title matches, and recency
+        let prUrlValidationFailed: boolean | undefined; // @allow-undefined-type -- local variable, not interface property
+        let prUrlValidationErrors: string[] | undefined; // @allow-undefined-type -- local variable, not interface property
+        const prNumberFromUrl = /\/pull\/(\d+)/.exec(executionResult.prUrl);
+        /* v8 ignore start -- ts-type: prUrl always returns a match for /pull/N after enforcement check at line 658; parseOwnerRepo cannot return null for valid task.repository @preserve */
+        if (prNumberFromUrl?.[1] !== undefined) {
+          const parsedOwnerRepo = parseOwnerRepo(task.repository);
+          if (parsedOwnerRepo !== null) {
+          /* v8 ignore stop @preserve */
+            const token = await fetchGitHubToken(userServiceClient, task.userId, logger);
+            if (token !== null) {
+              const validationResult = await validatePrUrl({
+                prUrl: executionResult.prUrl,
+                prNumber: Number(prNumberFromUrl[1]),
+                linearIssueId: task.linearIssueId,
+                /* v8 ignore start -- ts-type: conditional spread for optional Timestamp field @preserve */
+                ...(task.dispatchedAt !== undefined && { dispatchedAt: task.dispatchedAt.toDate() }),
+                /* v8 ignore stop @preserve */
+                token,
+                owner: parsedOwnerRepo.owner,
+                repo: parsedOwnerRepo.repo,
+                gitHubPRClient,
+                logger,
+              });
+              if (validationResult.failed) {
+                prUrlValidationFailed = true;
+                prUrlValidationErrors = validationResult.errors;
+              }
+            } else {
+              logger.warn({ taskId, userId: task.userId }, 'PR URL validation skipped: no GitHub token available');
+            }
+          }
+        }
+
         const commentResult = await linearAgentClient.addComment({
           userId: task.userId,
           issueId: routedIssueValidation.value.id,
@@ -754,7 +789,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           };
         }
 
-        return { ok: true };
+        return {
+          ok: true,
+          ...(prUrlValidationFailed === true && { prUrlValidationFailed }),
+          ...(prUrlValidationErrors !== undefined && { prUrlValidationErrors }),
+        };
       };
 
       const enforcePullRequestOutcome = async (
@@ -901,6 +940,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       };
 
       // Step 3: Update task based on status
+      // PR URL validation fields (INT-1361) — hoisted so they survive across agent-type blocks
+      let executionPrUrlValidationFailed: boolean | undefined; // @allow-undefined-type -- hoisted mutable variable
+      let executionPrUrlValidationErrors: string[] | undefined; // @allow-undefined-type -- hoisted mutable variable
+
       if (status === 'completed') {
         // Trace which agent type is being handled for debugging
         request.log.info({ taskId, agentType: task.agentType }, 'Processing completed task');
@@ -972,6 +1015,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             return await reply.send({ received: true });
           }
 
+          // Capture PR URL validation fields for the shared task update (INT-1361)
+          executionPrUrlValidationFailed = executionEnforcement.prUrlValidationFailed;
+          executionPrUrlValidationErrors = executionEnforcement.prUrlValidationErrors;
         }
 
         if (task.agentType === 'pull_request') {
@@ -1264,6 +1310,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           ...(executionMemoryPostRun !== undefined && { executionMemoryPostRun }),
           ...(remediationRequiresReReview !== undefined && {
               requiresReReview: remediationRequiresReReview,
+            }),
+          ...(executionPrUrlValidationFailed === true && executionPrUrlValidationErrors !== undefined && {
+              prUrlValidationFailed: true,
+              prUrlValidationErrors: executionPrUrlValidationErrors,
             }),
           callbackReceived: true,
         });

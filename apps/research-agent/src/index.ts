@@ -49,10 +49,10 @@ const REQUIRED_MODELS: LLMModel[] = [
   // Research models
   LlmModels.Gemini25Pro,
   LlmModels.Gemini25Flash,
-  LlmModels.ClaudeOpus45,
-  LlmModels.ClaudeSonnet45,
+  LlmModels.ClaudeOpus46,
+  LlmModels.ClaudeSonnet46,
   LlmModels.O4MiniDeepResearch,
-  LlmModels.GPT52,
+  LlmModels.GPT54,
   LlmModels.Sonar,
   LlmModels.SonarPro,
   LlmModels.SonarDeepResearch,

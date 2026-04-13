@@ -13,7 +13,6 @@ This document describes the Cloud Run service configuration and operations.
 | Research Agent               | `intexuraos-research-agent`               | 8116       | `/health`       |
 | Commands Agent               | `intexuraos-commands-agent`               | 8117       | `/health`       |
 | Actions Agent                | `intexuraos-actions-agent`                | 8118       | `/health`       |
-| Data Insights Agent          | `intexuraos-data-insights-agent`          | 8119       | `/health`       |
 | Image Service                | `intexuraos-image-service`                | 8120       | `/health`       |
 | Notes Agent                  | `intexuraos-notes-agent`                  | 8121       | `/health`       |
 | App Settings Service         | `intexuraos-app-settings-service`         | 8122       | `/health`       |
@@ -106,7 +105,6 @@ SERVICES=(
   intexuraos-research-agent
   intexuraos-commands-agent
   intexuraos-actions-agent
-  intexuraos-data-insights-agent
   intexuraos-image-service
   intexuraos-notes-agent
   intexuraos-app-settings-service

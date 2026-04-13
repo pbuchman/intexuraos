@@ -140,8 +140,7 @@ All endpoints require `X-Internal-Auth` header.
 
 ```
 actions-agent, calendar-agent, chat-agent, code-agent, commands-agent,
-data-insights-agent, image-service, linear-agent, research-agent,
-todos-agent, web-agent
+image-service, linear-agent, research-agent, todos-agent, web-agent
 ```
 
 ---

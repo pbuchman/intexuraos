@@ -4556,7 +4556,7 @@ describe('TaskDispatcher', () => {
       const initJson = JSON.stringify({
         type: 'system',
         subtype: 'init',
-        model: 'claude-sonnet-4-5-20250929',
+        model: 'claude-sonnet-4-6',
         tools: ['Task', 'Bash', 'Glob'],
         mcp_servers: [
           { name: 'linear', status: 'connected' },
@@ -4571,7 +4571,7 @@ describe('TaskDispatcher', () => {
       onLog(initJson + '\n');
 
       const formatted = findFormattedChunk('[claude] Session init');
-      expect(formatted).toContain('model=claude-sonnet-4-5-20250929');
+      expect(formatted).toContain('model=claude-sonnet-4-6');
       expect(formatted).toContain('tools=3');
       expect(formatted).toContain('mcp=[linear:ok, sentry:fail]');
       expect(formatted).toContain('mode=bypassPermissions');
@@ -4583,7 +4583,7 @@ describe('TaskDispatcher', () => {
       const initJson = JSON.stringify({
         type: 'system',
         subtype: 'init',
-        model: 'claude-sonnet-4-5-20250929',
+        model: 'claude-sonnet-4-6',
         tools: [],
         permissionMode: 'plan',
         version: '2.0.0',

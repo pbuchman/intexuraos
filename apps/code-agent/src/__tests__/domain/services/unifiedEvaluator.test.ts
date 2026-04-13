@@ -42,6 +42,7 @@ function createFakeEvent(overrides: Partial<GitHubPREvent> = {}): GitHubPREvent 
     title: 'feat: new feature',
     body: 'Can you fix the lint?',
     state: 'open',
+    isDraft: null,
     baseBranch: null,
     mergedAt: null,
     createdAt: new Date(),

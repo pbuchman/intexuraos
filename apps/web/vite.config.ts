@@ -83,7 +83,6 @@ export default defineConfig(({ mode }) => {
     '/api/research': { target: 'http://localhost:8116', rewrite: (p: string) => p.replace(/^\/api\/research/, '') },
     '/api/commands': { target: 'http://localhost:8117', rewrite: (p: string) => p.replace(/^\/api\/commands/, '') },
     '/api/actions': { target: 'http://localhost:8118', rewrite: (p: string) => p.replace(/^\/api\/actions/, '') },
-    '/api/data-insights': { target: 'http://localhost:8119', rewrite: (p: string) => p.replace(/^\/api\/data-insights/, '') },
     '/api/images': { target: 'http://localhost:8120', rewrite: (p: string) => p.replace(/^\/api\/images/, '') },
     '/api/notes': { target: 'http://localhost:8121', rewrite: (p: string) => p.replace(/^\/api\/notes/, '') },
     '/api/settings': { target: 'http://localhost:8122', rewrite: (p: string) => p.replace(/^\/api\/settings/, '') },

@@ -230,11 +230,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         }
 
         // Helper: resolve pricing for a model (static or OpenRouter)
-        function resolvePricing(model: string): {
-          inputPricePerMillion: number;
-          outputPricePerMillion: number;
-          useProviderCost?: boolean;
-        } {
+        function resolvePricing(model: string): { inputPricePerMillion: number; outputPricePerMillion: number; useProviderCost?: boolean } {
           if (isOpenRouterModel(model)) {
             const rawId = getOpenRouterRawId(model);
             const allowlistPricing = getDefaultAllowlistPricing(rawId);
@@ -249,7 +245,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         // Helper: build a client for a given model using the fetched API keys
         function buildClientForModel(
           model: string,
-          apiKeys: Record<string, string | null | undefined>
+          apiKeys: Record<string, string | null | undefined>,
         ): LlmGenerateClient | null {
           const modelProvider = getProviderForModel(model);
           const modelKeyField = providerToKeyField(modelProvider);
@@ -298,14 +294,14 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
                   fallbackModel: fallbackModelRaw,
                   error: primaryResult.error,
                 },
-                'Primary model failed, attempting fallback'
+                'Primary model failed, attempting fallback',
               );
 
               const fallbackClient = buildClientForModel(fallbackModelRaw, keysBody.data);
               if (fallbackClient === null) {
                 logger.warn(
                   { userId, fallbackModel: fallbackModelRaw },
-                  'No API key for fallback model'
+                  'No API key for fallback model',
                 );
                 return primaryResult;
               }
@@ -314,7 +310,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
               if (fallbackResult.ok) {
                 logger.info(
                   { userId, primaryModel: defaultModel, fallbackModel: fallbackModelRaw },
-                  'Fallback model succeeded after primary failure'
+                  'Fallback model succeeded after primary failure',
                 );
               }
               return fallbackResult;
