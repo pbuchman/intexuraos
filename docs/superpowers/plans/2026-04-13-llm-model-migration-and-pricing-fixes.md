@@ -558,10 +558,10 @@ to:
 
 In `apps/research-agent/src/domain/research/usecases/extractModelPreferences.ts:44,45,47,59,60,62`, replace every occurrence of `LlmModels.ClaudeOpus45` → `LlmModels.ClaudeOpus46`, `LlmModels.ClaudeSonnet45` → `LlmModels.ClaudeSonnet46`, `LlmModels.GPT52` → `LlmModels.GPT54`.
 
-- [ ] **Step 3: Run research-agent tests**
+- [ ] **Step 3: Run research-agent verification**
 
 ```bash
-pnpm --filter @intexuraos/research-agent test
+pnpm run verify:workspace:tracked -- research-agent
 ```
 
 Expected: many tests fail because test files still reference the old IDs. That's Task 5. For now we only need the production code to compile:
@@ -615,10 +615,10 @@ find apps/research-agent/src/__tests__ -name "*.ts" -exec sed -i.bak \
 find apps/research-agent/src/__tests__ -name "*.bak" -delete
 ```
 
-- [ ] **Step 2: Run research-agent tests**
+- [ ] **Step 2: Run research-agent verification**
 
 ```bash
-pnpm --filter @intexuraos/research-agent test
+pnpm run verify:workspace:tracked -- research-agent
 ```
 
 Expected: all tests pass.
@@ -642,11 +642,10 @@ In `apps/actions-agent/src/services.ts:193-194`, change `LlmModels.ClaudeSonnet4
 - [ ] **Step 2: Run actions-agent tests and build**
 
 ```bash
-pnpm --filter @intexuraos/actions-agent test
-pnpm --filter @intexuraos/actions-agent run build
+pnpm run verify:workspace:tracked -- actions-agent
 ```
 
-Expected: both green.
+Expected: green.
 
 - [ ] **Step 3: Commit**
 
@@ -719,7 +718,7 @@ Change `'claude-opus-4-5-20251101'` → `'claude-opus-4-6'`, `'claude-sonnet-4-5
 - [ ] **Step 3: Run package tests**
 
 ```bash
-pnpm --filter @intexuraos/llm-prompts test
+pnpm run verify:workspace:tracked -- llm-prompts
 ```
 
 Expected: green. If a snapshot test fails, verify the new snapshot is correct (new model IDs are present) and update with `-u`.
@@ -795,15 +794,15 @@ For each hit, replace `0.03` with `0.01`. Expected locations: `apps/llm-usage-se
 
 ```bash
 pnpm run verify:workspace:tracked -- llm-pricing
-pnpm --filter @intexuraos/llm-prompts test
+pnpm run verify:workspace:tracked -- llm-prompts
 pnpm --filter @intexuraos/internal-clients test
-pnpm --filter @intexuraos/llm-usage-service test
+pnpm run verify:workspace:tracked -- llm-usage-service
 pnpm run verify:workspace:tracked -- llm-factory
 pnpm run verify:workspace:tracked -- llm-contract
 pnpm --filter @intexuraos/orchestrator test
 ```
 
-Expected: all green. Note: `llm-pricing`, `llm-factory`, and `llm-contract` have no per-package `test` script; use the root-level `verify:workspace:tracked` command instead.
+Expected: all green. Note: `llm-pricing`, `llm-prompts`, `llm-factory`, `llm-contract`, and `llm-usage-service` have no per-package `test` script; use the root-level `verify:workspace:tracked` command instead.
 
 - [ ] **Step 4: Commit**
 
