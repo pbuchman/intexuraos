@@ -119,6 +119,19 @@ describe('llmClientFactory', () => {
       ).toThrow('Unsupported LLM model');
     });
 
+    it('throws for valid non-Google model passed to createLlmClient', () => {
+      expect(() =>
+        createLlmClient({
+          apiKey: 'test-key',
+          model: LlmModels.ClaudeHaiku35,
+          userId: 'user-123',
+          pricing: createTestPricing(),
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        })
+      ).toThrow('Unsupported LLM provider: anthropic');
+    });
+
     it('creates OpenRouter client for or: prefixed models', () => {
       const client = createLlmClient({
         apiKey: 'test-key',

@@ -804,6 +804,38 @@ describe('LLM Keys Routes', () => {
       expect(stored?.llmPreferences?.fallbackModel).toBeUndefined();
     });
 
+    it('still returns 200 when cascade fallback clear fails', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-cascade-fallback-fail';
+      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      const orKey = 'sk-or-1234567890abcdef1234';
+      const orFallback = 'or:google/gemma-4-31b-it:free';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          openrouter: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(orKey).toString('base64') },
+        },
+        llmPreferences: { defaultModel: LlmModels.Gemini25Flash, fallbackModel: orFallback },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      // Make updateLlmPreferences fail to test the error handling in cascade
+      fakeSettingsRepo.setFailNextUpdateLlmPreferences(true);
+
+      app = await buildServer();
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      // Key deletion still succeeds; cascade failure is logged but doesn't affect response
+      expect(response.statusCode).toBe(200);
+    });
+
     it('preserves default model when deleting a different provider key', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-cascade-preserve';
       const googleKey = 'AIzaSyB1234567890abcdefghij';
@@ -838,6 +870,44 @@ describe('LLM Keys Routes', () => {
       // Verify llmPreferences was NOT cleared (different provider)
       const stored = fakeSettingsRepo.getStoredSettings(userId);
       expect(stored?.llmPreferences?.defaultModel).toBe(LlmModels.GPT4oMini);
+    });
+
+    it('preserves fallbackModel when deleting a provider key unrelated to fallback', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-cascade-keep-fallback';
+      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      const openaiKey = 'sk-proj1234567890abcdefgh';
+      const orKey = 'sk-or-1234567890abcdef1234';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
+          openrouter: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(orKey).toString('base64') },
+        },
+        llmPreferences: {
+          defaultModel: LlmModels.Gemini25Flash,
+          fallbackModel: 'or:google/gemma-4-31b-it:free',
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+      const token = await createToken({ sub: userId });
+
+      // Delete openai key — neither default (google) nor fallback (openrouter) belong to openai
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Both default and fallback should be preserved
+      const stored = fakeSettingsRepo.getStoredSettings(userId);
+      expect(stored?.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
+      expect(stored?.llmPreferences?.fallbackModel).toBe('or:google/gemma-4-31b-it:free');
     });
 
     it('still returns 200 when cascade getSettings fails after deletion', { timeout: 20000 }, async () => {
