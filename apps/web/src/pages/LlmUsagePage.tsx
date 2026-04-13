@@ -229,27 +229,35 @@ function TimeRangePicker({ timeRange, onChange }: TimeRangePickerProps): React.J
 interface ProviderFiltersProps {
   activeProviders: string[];
   onToggle: (provider: string) => void;
+  locked: boolean;
 }
 
-function ProviderFilters({ activeProviders, onToggle }: ProviderFiltersProps): React.JSX.Element {
+function ProviderFilters({ activeProviders, onToggle, locked }: ProviderFiltersProps): React.JSX.Element {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
       <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Provider:</span>
-      {PROVIDERS.map((provider) => {
-        const isActive = activeProviders.includes(provider);
-        return (
-          <button
-            key={provider}
-            onClick={(): void => { onToggle(provider); }}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-              isActive ? (PROVIDER_ACTIVE_CLASSES[provider] ?? INACTIVE_SEGMENT_CLASS) : INACTIVE_SEGMENT_CLASS
-            }`}
-          >
-            <span className={`inline-block h-2 w-2 rounded-full ${PROVIDER_DOT_CLASSES[provider] ?? 'bg-slate-400'}`} />
-            {provider}
-          </button>
-        );
-      })}
+      {locked ? (
+        <span className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700 dark:border-rose-400 dark:bg-rose-900/30 dark:text-rose-400">
+          <span className="inline-block h-2 w-2 rounded-full bg-rose-500" />
+          openrouter (locked by group-by)
+        </span>
+      ) : (
+        PROVIDERS.map((provider) => {
+          const isActive = activeProviders.includes(provider);
+          return (
+            <button
+              key={provider}
+              onClick={(): void => { onToggle(provider); }}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                isActive ? (PROVIDER_ACTIVE_CLASSES[provider] ?? INACTIVE_SEGMENT_CLASS) : INACTIVE_SEGMENT_CLASS
+              }`}
+            >
+              <span className={`inline-block h-2 w-2 rounded-full ${PROVIDER_DOT_CLASSES[provider] ?? 'bg-slate-400'}`} />
+              {provider}
+            </button>
+          );
+        })
+      )}
     </div>
   );
 }
@@ -580,7 +588,7 @@ export function LlmUsagePage(): React.JSX.Element {
     <Layout>
       <PageHeader displayedCount={displayedCount} totalMatched={totalMatched} loading={isLoading} />
       <TimeRangePicker timeRange={timeRange} onChange={handleTimeRangeChange} />
-      <ProviderFilters activeProviders={activeProviders} onToggle={handleToggleProvider} />
+      <ProviderFilters activeProviders={activeProviders} onToggle={handleToggleProvider} locked={groupBy === 'openrouter-model'} />
       <GroupBySelector groupBy={groupBy} onChange={handleGroupByChange} />
       {isRawMode ? (
         <>
