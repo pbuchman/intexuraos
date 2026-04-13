@@ -205,8 +205,58 @@ describe('getLlmClient fallback behavior', () => {
     expect(fallbackGenerate).toHaveBeenCalledTimes(1);
   });
 
+  it('skips fallback wrapping when fallback model is not default-eligible', async () => {
+    // An OpenRouter model NOT in the curated allowlist fails isDefaultEligibleModel
+    const UNLISTED_OR_MODEL = 'or:some/unlisted-model';
+
+    nock('http://localhost:3000')
+      .get('/internal/users/user123/settings')
+      .matchHeader('X-Internal-Auth', 'test-token')
+      .reply(200, {
+        success: true,
+        data: {
+          llmPreferences: {
+            defaultModel: PRIMARY_MODEL,
+            fallbackModel: UNLISTED_OR_MODEL,
+          },
+        },
+      });
+
+    nock('http://localhost:3000')
+      .get('/internal/users/user123/llm-keys')
+      .matchHeader('X-Internal-Auth', 'test-token')
+      .reply(200, {
+        success: true,
+        data: {
+          google: 'google-key',
+          openrouter: 'openrouter-key',
+        },
+      });
+
+    const primaryGenerate = vi.fn().mockResolvedValue(makeErrorResult());
+    const primaryClient: LlmGenerateClient = { generate: primaryGenerate };
+
+    mockCreateLlmClient.mockReturnValue(primaryClient);
+
+    const serviceClient = createUserServiceClient(config);
+    const result = await serviceClient.getLlmClient('user123');
+
+    if (!result.ok) expect.fail('Expected ok result');
+
+    // Unlisted model fails isDefaultEligibleModel → no wrapping → primary error returned directly
+    const generateResult = await result.value.generate('test prompt');
+
+    expect(generateResult.ok).toBe(false);
+    if (!generateResult.ok) {
+      expect(generateResult.error.code).toBe('PROVIDER_ERROR');
+    }
+    // Only primary client created; no fallback attempted
+    expect(mockCreateLlmClient).toHaveBeenCalledTimes(1);
+  });
+
   it('returns primary error when fallback model has no API key', async () => {
     // User has google key but the fallback is an anthropic model — no anthropic key
+    // ClaudeHaiku35 is a FastModel → passes isDefaultEligibleModel
     const ANTHROPIC_FALLBACK = LlmModels.ClaudeHaiku35;
 
     nock('http://localhost:3000')
@@ -235,8 +285,7 @@ describe('getLlmClient fallback behavior', () => {
 
     const primaryGenerate = vi.fn().mockResolvedValue(makeErrorResult());
     const primaryClient: LlmGenerateClient = { generate: primaryGenerate };
-    // createLlmClient only called once (primary); fallback has no key so buildClientForModel returns null
-    mockCreateLlmClient.mockReturnValue(primaryClient);
+    mockCreateLlmClient.mockReturnValueOnce(primaryClient);
 
     const serviceClient = createUserServiceClient(config);
     const result = await serviceClient.getLlmClient('user123');
@@ -249,9 +298,8 @@ describe('getLlmClient fallback behavior', () => {
     if (!generateResult.ok) {
       expect(generateResult.error.code).toBe('PROVIDER_ERROR');
     }
-    // Fallback was attempted (buildClientForModel) but returned null — only primary generate called
+    // Primary generate called once, then fallback attempted but no key → primary error returned
     expect(primaryGenerate).toHaveBeenCalledTimes(1);
-    // createLlmClient only called once since no key for fallback
     expect(mockCreateLlmClient).toHaveBeenCalledTimes(1);
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'user123', fallbackModel: ANTHROPIC_FALLBACK }),
