@@ -48,7 +48,7 @@ describe('aggregateKeyUtils', () => {
       expect(parts[2]).toBe(sha256Truncated('user_abc'));
       expect(parts[3]).toBe('orchestrator');
       expect(parts[4]).toBe('research');
-      expect(parts[5]).toBe('web');
+      expect(parts[5]).toBe(sha256Truncated('web'));
       expect(parts[6]).toBe('dev');
       expect(parts[7]).toBe(LlmProviders.Anthropic);
       expect(parts[8]).toBe(sha256Truncated('claude-sonnet-4-20250514'));
@@ -62,6 +62,32 @@ describe('aggregateKeyUtils', () => {
       });
       const id = computeAggregateId(event);
       expect(id).toContain('__false');
+    });
+
+    describe('source.client slash safety', () => {
+      it('produces an id with no "/" even when source.client contains slashes', () => {
+        const event = createTestEvent({
+          source: { service: 'orchestrator', component: 'compliance', client: 'xiaomi/mimo-v2-pro', environment: 'dev' },
+        });
+        expect(computeAggregateId(event)).not.toMatch(/\//);
+      });
+
+      it('is deterministic for the same input', () => {
+        const event = createTestEvent({
+          source: { service: 'orchestrator', component: 'compliance', client: 'xiaomi/mimo-v2-pro', environment: 'dev' },
+        });
+        expect(computeAggregateId(event)).toBe(computeAggregateId(event));
+      });
+
+      it('differs when source.client differs (hash distinguishes clients)', () => {
+        const a = computeAggregateId(createTestEvent({
+          source: { service: 'orchestrator', component: 'compliance', client: 'client-a', environment: 'dev' },
+        }));
+        const b = computeAggregateId(createTestEvent({
+          source: { service: 'orchestrator', component: 'compliance', client: 'client-b', environment: 'dev' },
+        }));
+        expect(a).not.toBe(b);
+      });
     });
   });
 });
