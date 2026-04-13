@@ -247,14 +247,14 @@ export function PruneCandidateRow({
           {candidate.reason}
         </div>
 
-        {/* Delete button */}
+        {/* Dismiss button (client-side only — no per-item delete API) */}
         <div className="flex justify-center">
           <button
-            onClick={(): void => { setShowDeleteConfirm(true); }}
-            className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 dark:hover:text-red-400"
-            aria-label={`Delete ${candidate.identifier}`}
+            onClick={(): void => { setShowDismissConfirm(true); }}
+            className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+            aria-label={`Dismiss ${candidate.identifier} from view`}
           >
-            <Trash2 className="h-4 w-4" />
+            <X className="h-4 w-4" />
           </button>
         </div>
       </div>
