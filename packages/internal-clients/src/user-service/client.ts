@@ -233,8 +233,11 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         function resolvePricing(model: string): { inputPricePerMillion: number; outputPricePerMillion: number; useProviderCost?: boolean } {
           if (isOpenRouterModel(model)) {
             const rawId = getOpenRouterRawId(model);
-            /* v8 ignore next -- upstream: getDefaultAllowlistPricing always resolves for curated default models @preserve */
-            return getDefaultAllowlistPricing(rawId) ?? { inputPricePerMillion: 0, outputPricePerMillion: 0, useProviderCost: true };
+            const allowlistPricing = getDefaultAllowlistPricing(rawId);
+            if (allowlistPricing !== undefined) return allowlistPricing;
+            /* v8 ignore start -- upstream: isDefaultEligibleModel always rejects models not in curated allowlist; unreachable after validation @preserve */
+            return { inputPricePerMillion: 0, outputPricePerMillion: 0, useProviderCost: true };
+            /* v8 ignore stop @preserve */
           }
           return config.pricingContext.getPricing(model as LLMModel);
         }
