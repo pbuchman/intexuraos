@@ -19,7 +19,7 @@ import { createClaudeClient } from '@intexuraos/infra-claude';
 
 const client = createClaudeClient({
   apiKey: process.env.ANTHROPIC_API_KEY,
-  model: 'claude-sonnet-4-5',
+  model: 'claude-sonnet-4-6',
   userId: 'user-123',
   pricing: {
     inputPricePerMillion: 3.0,
@@ -63,7 +63,7 @@ Converts raw Anthropic usage data into the standardized `NormalizedUsage` format
 ```ts
 interface ClaudeConfig {
   apiKey: string;   // Anthropic API key
-  model: string;    // e.g., 'claude-sonnet-4-5', 'claude-haiku-3-5'
+  model: string;    // e.g., 'claude-sonnet-4-6', 'claude-haiku-3-5'
   userId: string;   // User ID for usage tracking
   pricing: ModelPricing; // Cost configuration per million tokens
   logger: Logger;   // Pino logger for structured logging

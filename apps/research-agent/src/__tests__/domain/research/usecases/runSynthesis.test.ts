@@ -1301,7 +1301,7 @@ describe('runSynthesis', () => {
     it('prefers OpenAI for image generation when synthesis model is OpenAI-based', async () => {
       // Covers getAvailableProviderPipelines: preferOpenAi=true → OpenAI pipeline first
       const research = createTestResearch({
-        synthesisModel: LlmModels.GPT52, // GPT model (starts with 'gpt-')
+        synthesisModel: LlmModels.GPT54, // GPT model (starts with 'gpt-')
       });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
@@ -1344,7 +1344,7 @@ describe('runSynthesis', () => {
     it('falls back to Google for image generation when synthesis model is OpenAI-based but no OpenAI key', async () => {
       // Covers getAvailableProviderPipelines: preferOpenAi=true but only Google key → Google pipeline
       const research = createTestResearch({
-        synthesisModel: LlmModels.GPT52, // GPT model (starts with 'gpt-')
+        synthesisModel: LlmModels.GPT54, // GPT model (starts with 'gpt-')
       });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
@@ -1418,7 +1418,7 @@ describe('runSynthesis', () => {
           },
           {
             provider: LlmProviders.Anthropic,
-            model: LlmModels.ClaudeOpus45,
+            model: LlmModels.ClaudeOpus46,
             status: 'pending', // Should be excluded from cost
           },
         ],
@@ -1458,7 +1458,7 @@ describe('runSynthesis', () => {
           },
           {
             provider: LlmProviders.Anthropic,
-            model: LlmModels.ClaudeOpus45,
+            model: LlmModels.ClaudeOpus46,
             status: 'failed',
             error: 'Failed',
             // Failed calls don't have costs - costUsd omitted
@@ -1516,7 +1516,7 @@ describe('runSynthesis', () => {
           // New LLM for enhancement (should be included in llmTotals)
           {
             provider: LlmProviders.Anthropic,
-            model: LlmModels.ClaudeOpus45,
+            model: LlmModels.ClaudeOpus46,
             status: 'completed',
             result: 'New Result',
             inputTokens: 500,
@@ -1623,7 +1623,7 @@ describe('runSynthesis', () => {
           },
           {
             provider: LlmProviders.Anthropic,
-            model: LlmModels.ClaudeOpus45,
+            model: LlmModels.ClaudeOpus46,
             status: 'pending', // New LLM not yet completed
           },
         ],
@@ -1674,7 +1674,7 @@ describe('runSynthesis', () => {
           },
           {
             provider: LlmProviders.Anthropic,
-            model: LlmModels.ClaudeOpus45,
+            model: LlmModels.ClaudeOpus46,
             status: 'completed',
             result: 'New Result',
             costUsd: 0.04,
@@ -1958,7 +1958,7 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
     });
 
     it('prefers OpenAI pipeline when synthesis model is gpt-based', async () => {
-      const research = createTestResearch({ synthesisModel: LlmModels.GPT52 });
+      const research = createTestResearch({ synthesisModel: LlmModels.GPT54 });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
       const fakeImageClient = createFakeImageServiceClient();
@@ -1985,7 +1985,7 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
     });
 
     it('falls back to Google when OpenAI preferred but only Google key available', async () => {
-      const research = createTestResearch({ synthesisModel: LlmModels.GPT52 });
+      const research = createTestResearch({ synthesisModel: LlmModels.GPT54 });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
       const fakeImageClient = createFakeImageServiceClient();
@@ -2011,7 +2011,7 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
     });
 
     it('uses only OpenAI pipeline when gpt-based model and only OpenAI key available', async () => {
-      const research = createTestResearch({ synthesisModel: LlmModels.GPT52 });
+      const research = createTestResearch({ synthesisModel: LlmModels.GPT54 });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
       const fakeImageClient = createFakeImageServiceClient();

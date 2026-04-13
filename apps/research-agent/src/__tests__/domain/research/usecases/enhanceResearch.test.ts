@@ -103,7 +103,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'nonexistent',
       userId: 'user-1',
-      additionalModels: [LlmModels.ClaudeOpus45],
+      additionalModels: [LlmModels.ClaudeOpus46],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -122,7 +122,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'research-1',
       userId: 'user-1',
-      additionalModels: [LlmModels.ClaudeOpus45],
+      additionalModels: [LlmModels.ClaudeOpus46],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -140,7 +140,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalModels: [LlmModels.ClaudeOpus45],
+      additionalModels: [LlmModels.ClaudeOpus46],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -158,7 +158,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalModels: [LlmModels.ClaudeOpus45],
+      additionalModels: [LlmModels.ClaudeOpus46],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -195,7 +195,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalModels: [LlmModels.ClaudeOpus45],
+      additionalModels: [LlmModels.ClaudeOpus46],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -204,7 +204,7 @@ describe('enhanceResearch', () => {
     if (result.ok) {
       expect(result.value.id).toBe('generated-id');
       expect(result.value.sourceResearchId).toBe('source-research-id');
-      expect(result.value.selectedModels).toContain(LlmModels.ClaudeOpus45);
+      expect(result.value.selectedModels).toContain(LlmModels.ClaudeOpus46);
       expect(result.value.llmResults).toHaveLength(3);
     }
     expect(deps.mockRepo.save).toHaveBeenCalledOnce();
@@ -218,14 +218,14 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      synthesisModel: LlmModels.ClaudeOpus45,
+      synthesisModel: LlmModels.ClaudeOpus46,
     };
 
     const result = await enhanceResearch(params, deps);
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.synthesisModel).toBe(LlmModels.ClaudeOpus45);
+      expect(result.value.synthesisModel).toBe(LlmModels.ClaudeOpus46);
     }
   });
 
@@ -278,7 +278,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalModels: [LlmModels.ClaudeOpus45],
+      additionalModels: [LlmModels.ClaudeOpus46],
     };
 
     const result = await enhanceResearch(params, deps);
@@ -297,7 +297,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      additionalModels: [LlmModels.ClaudeOpus45],
+      additionalModels: [LlmModels.ClaudeOpus46],
       synthesisModel: LlmModels.Gemini25Flash,
     };
 
@@ -309,7 +309,7 @@ describe('enhanceResearch', () => {
         llmResults: expect.arrayContaining([
           expect.objectContaining({
             provider: LlmProviders.Anthropic,
-            model: LlmModels.ClaudeOpus45,
+            model: LlmModels.ClaudeOpus46,
           }),
         ]),
       })
@@ -345,7 +345,7 @@ describe('enhanceResearch', () => {
     const params: EnhanceResearchInput = {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
-      synthesisModel: LlmModels.ClaudeOpus45,
+      synthesisModel: LlmModels.ClaudeOpus46,
     };
 
     const result = await enhanceResearch(params, deps);

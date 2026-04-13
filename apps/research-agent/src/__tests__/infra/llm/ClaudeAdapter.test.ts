@@ -40,7 +40,7 @@ describe('ClaudeAdapter', () => {
     fakeUsageSink = new FakeUsageSink();
     adapter = new ClaudeAdapter(
       'test-key',
-      LlmModels.ClaudeOpus45,
+      LlmModels.ClaudeOpus46,
       'test-user-id',
       testPricing,
       mockLogger,
@@ -53,7 +53,7 @@ describe('ClaudeAdapter', () => {
       mockCreateClaudeClient.mockClear();
       new ClaudeAdapter(
         'test-key',
-        LlmModels.ClaudeOpus45,
+        LlmModels.ClaudeOpus46,
         'test-user-id',
         testPricing,
         mockLogger,
@@ -63,7 +63,7 @@ describe('ClaudeAdapter', () => {
 
       expect(mockCreateClaudeClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        model: LlmModels.ClaudeOpus45,
+        model: LlmModels.ClaudeOpus46,
         userId: 'test-user-id',
         researchId: 'research-123',
         pricing: testPricing,

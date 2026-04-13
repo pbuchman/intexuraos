@@ -36,10 +36,11 @@ export const TEST_OPENAI_PRICING: Record<string, ModelPricing> = {
     cacheReadMultiplier: 0.25,
     webSearchCostPerCall: 0.01,
   },
-  'gpt-5.2': {
-    inputPricePerMillion: 1.75,
-    outputPricePerMillion: 14.0,
+  'gpt-5.4': {
+    inputPricePerMillion: 2.5,
+    outputPricePerMillion: 15.0,
     cacheReadMultiplier: 0.1,
+    webSearchCostPerCall: 0.01,
   },
   'gpt-4o-mini': {
     inputPricePerMillion: 0.15,
@@ -54,19 +55,19 @@ export const TEST_OPENAI_PRICING: Record<string, ModelPricing> = {
 };
 
 export const TEST_ANTHROPIC_PRICING: Record<string, ModelPricing> = {
-  'claude-opus-4-5-20251101': {
+  'claude-opus-4-6': {
     inputPricePerMillion: 5.0,
     outputPricePerMillion: 25.0,
     cacheReadMultiplier: 0.1,
     cacheWriteMultiplier: 1.25,
-    webSearchCostPerCall: 0.03,
+    webSearchCostPerCall: 0.01,
   },
-  'claude-sonnet-4-5-20250929': {
+  'claude-sonnet-4-6': {
     inputPricePerMillion: 3.0,
     outputPricePerMillion: 15.0,
     cacheReadMultiplier: 0.1,
     cacheWriteMultiplier: 1.25,
-    webSearchCostPerCall: 0.03,
+    webSearchCostPerCall: 0.01,
   },
   'claude-3-5-haiku-20241022': {
     inputPricePerMillion: 0.8,
