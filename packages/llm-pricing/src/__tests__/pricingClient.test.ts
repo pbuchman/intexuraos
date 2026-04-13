@@ -51,6 +51,12 @@ describe('pricingClient', () => {
         outputPricePerMillion: 14.0,
         cacheReadMultiplier: 0.1,
       },
+      [LlmModels.GPT54]: {
+        inputPricePerMillion: 2.5,
+        outputPricePerMillion: 15.0,
+        cacheReadMultiplier: 0.1,
+        webSearchCostPerCall: 0.01,
+      },
       [LlmModels.GPT4oMini]: {
         inputPricePerMillion: 0.15,
         outputPricePerMillion: 0.6,
@@ -75,12 +81,26 @@ describe('pricingClient', () => {
         cacheWriteMultiplier: 1.25,
         webSearchCostPerCall: 0.03,
       },
+      [LlmModels.ClaudeOpus46]: {
+        inputPricePerMillion: 5.0,
+        outputPricePerMillion: 25.0,
+        cacheReadMultiplier: 0.1,
+        cacheWriteMultiplier: 1.25,
+        webSearchCostPerCall: 0.01,
+      },
       [LlmModels.ClaudeSonnet45]: {
         inputPricePerMillion: 3.0,
         outputPricePerMillion: 15.0,
         cacheReadMultiplier: 0.1,
         cacheWriteMultiplier: 1.25,
         webSearchCostPerCall: 0.03,
+      },
+      [LlmModels.ClaudeSonnet46]: {
+        inputPricePerMillion: 3.0,
+        outputPricePerMillion: 15.0,
+        cacheReadMultiplier: 0.1,
+        cacheWriteMultiplier: 1.25,
+        webSearchCostPerCall: 0.01,
       },
       [LlmModels.ClaudeHaiku35]: {
         inputPricePerMillion: 0.8,
@@ -297,7 +317,7 @@ describe('pricingClient', () => {
       const context = new PricingContext(completeAllPricing);
 
       const models = context.getModelsWithPricing();
-      expect(models).toHaveLength(14);
+      expect(models).toHaveLength(17);
       expect(models).toContain(LlmModels.Gemini25Pro);
       expect(models).toContain(LlmModels.GPT52);
     });

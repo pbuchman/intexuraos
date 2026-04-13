@@ -76,7 +76,7 @@ describe('getProviderForModel', () => {
 describe('supportedModels', () => {
   describe('ALL_LLM_MODELS', () => {
     it('contains all 14 expected models', () => {
-      expect(ALL_LLM_MODELS).toHaveLength(14);
+      expect(ALL_LLM_MODELS).toHaveLength(17);
     });
 
     it('contains all Google models', () => {
@@ -262,6 +262,32 @@ describe('supportedModels', () => {
       const openRouterModel = createOpenRouterModelId('anthropic/claude-sonnet-4.6');
       const researchModel: ResearchModel = openRouterModel;
       expect(researchModel).toBe('or:anthropic/claude-sonnet-4.6');
+    });
+  });
+
+  describe('new model identifiers (2026-04 migration)', () => {
+    it('exposes GPT54 with id "gpt-5.4"', () => {
+      expect(LlmModels.GPT54).toBe('gpt-5.4');
+    });
+
+    it('exposes ClaudeSonnet46 with id "claude-sonnet-4-6"', () => {
+      expect(LlmModels.ClaudeSonnet46).toBe('claude-sonnet-4-6');
+    });
+
+    it('exposes ClaudeOpus46 with id "claude-opus-4-6"', () => {
+      expect(LlmModels.ClaudeOpus46).toBe('claude-opus-4-6');
+    });
+
+    it('includes the three new models in ALL_LLM_MODELS', () => {
+      expect(ALL_LLM_MODELS).toContain(LlmModels.GPT54);
+      expect(ALL_LLM_MODELS).toContain(LlmModels.ClaudeSonnet46);
+      expect(ALL_LLM_MODELS).toContain(LlmModels.ClaudeOpus46);
+    });
+
+    it('maps each new model to the correct provider', () => {
+      expect(MODEL_PROVIDER_MAP[LlmModels.GPT54]).toBe(LlmProviders.OpenAI);
+      expect(MODEL_PROVIDER_MAP[LlmModels.ClaudeSonnet46]).toBe(LlmProviders.Anthropic);
+      expect(MODEL_PROVIDER_MAP[LlmModels.ClaudeOpus46]).toBe(LlmProviders.Anthropic);
     });
   });
 });
