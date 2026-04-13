@@ -11,7 +11,7 @@ vi.mock('@intexuraos/infra-firestore', () => ({
   getFirestore: vi.fn(),
 }));
 
-import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
+import { createFirestoreGitHubPREventsRepository, readIsDraft } from '../../../infra/firestore/gitHubPREventsRepository.js';
 import { getFirestore } from '@intexuraos/infra-firestore';
 
 const mockGetFirestore = vi.mocked(getFirestore);
@@ -1503,5 +1503,28 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         expect(result.value[0]?.deliveryId).toBeNull();
       }
     });
+  });
+});
+
+describe('readIsDraft', () => {
+  it('should return true when isDraft is true', () => {
+    expect(readIsDraft({ isDraft: true })).toBe(true);
+  });
+
+  it('should return false when isDraft is false', () => {
+    expect(readIsDraft({ isDraft: false })).toBe(false);
+  });
+
+  it('should return null when isDraft is undefined (old document)', () => {
+    expect(readIsDraft({})).toBeNull();
+  });
+
+  it('should return null when isDraft is null', () => {
+    expect(readIsDraft({ isDraft: null })).toBeNull();
+  });
+
+  it('should return null when isDraft is a non-boolean value', () => {
+    expect(readIsDraft({ isDraft: 'yes' })).toBeNull();
+    expect(readIsDraft({ isDraft: 1 })).toBeNull();
   });
 });
