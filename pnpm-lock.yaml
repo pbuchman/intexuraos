@@ -1919,6 +1919,9 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
+      '@intexuraos/infra-openrouter':
+        specifier: workspace:*
+        version: link:../infra-openrouter
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
