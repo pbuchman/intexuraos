@@ -70,9 +70,12 @@ This lowers execution risk, but it raises cleanup risk: the implementation must 
 - Modify: `packages/llm-pricing/src/usageLogger.ts`
 - Modify: `packages/internal-clients/src/usage-service/types.ts`
 - Modify: `apps/llm-usage-service/src/domain/models/usageEvent.ts`
+- Modify: `apps/code-agent/src/routes/internalUsageWebhookRoute.ts`
 - Modify: `packages/llm-prompts/src/generation/titlePrompt.ts`
 - Modify: `firestore-collections.json`
 - Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/modules/iam/main.tf`
+- Modify: `terraform/modules/iam/outputs.tf`
 - Modify: `terraform/modules/cloud-build/main.tf`
 - Modify: `ecosystem.config.cjs`
 - Modify: `cloudbuild/cloudbuild.yaml`
@@ -89,7 +92,13 @@ This lowers execution risk, but it raises cleanup risk: the implementation must 
 - Modify: `apps/web/src/components/Sidebar.tsx`
 - Delete: `apps/web/src/components/DataInsightsTabs.tsx`
 - Modify: `apps/web/src/components/index.ts`
-- Delete: Data Insights pages, hooks, and services under `apps/web/src/pages/`, `apps/web/src/hooks/`, `apps/web/src/services/`
+- Delete: Data Insights pages under `apps/web/src/pages/`
+- Delete: `apps/web/src/hooks/useDataSources.ts`
+- Delete: `apps/web/src/hooks/useCompositeFeeds.ts`
+- Delete: `apps/web/src/hooks/useChartDefinition.ts`
+- Delete: `apps/web/src/hooks/useChartPreview.ts`
+- Delete: `apps/web/src/services/dataSourceApi.ts`
+- Delete: Data Insights services under `apps/web/src/services/`
 - Modify: `apps/web/src/pages/index.ts`
 - Modify: `apps/web/src/hooks/index.ts`
 - Modify: `apps/web/src/types/index.ts`
@@ -116,6 +125,7 @@ This lowers execution risk, but it raises cleanup risk: the implementation must 
 - `GET /data-sources/:id`
 - `PUT /data-sources/:id`
 - `DELETE /data-sources/:id`
+- `POST /data-sources/generate-title`
 - `POST /composite-feeds`
 - `GET /composite-feeds`
 - `GET /composite-feeds/:id`
@@ -188,10 +198,15 @@ This lowers execution risk, but it raises cleanup risk: the implementation must 
 - Delete: `apps/web/src/hooks/useDataInsights.ts`
 - Delete: `apps/web/src/hooks/useCreateVisualization.ts`
 - Delete: `apps/web/src/hooks/useVisualizations.ts`
+- Delete: `apps/web/src/hooks/useDataSources.ts`
+- Delete: `apps/web/src/hooks/useCompositeFeeds.ts`
+- Delete: `apps/web/src/hooks/useChartDefinition.ts`
+- Delete: `apps/web/src/hooks/useChartPreview.ts`
 - Modify: `apps/web/src/hooks/index.ts`
 - Delete: `apps/web/src/services/compositeFeedApi.ts`
 - Delete: `apps/web/src/services/dataInsightsApi.ts`
 - Delete: `apps/web/src/services/visualizationsApi.ts`
+- Delete: `apps/web/src/services/dataSourceApi.ts`
 - Modify: `apps/web/src/types/index.ts`
 - Test: web tests covering routing, hooks, services, and sidebar behavior
 
@@ -217,8 +232,10 @@ This lowers execution risk, but it raises cleanup risk: the implementation must 
 - Modify: `apps/llm-usage-service/src/domain/models/usageEvent.ts`
 - Modify: `packages/internal-clients/src/usage-service/types.ts`
 - Modify: `packages/llm-pricing/src/usageLogger.ts`
+- Modify: `apps/code-agent/src/routes/internalUsageWebhookRoute.ts`
 - Modify: any related tests in those workspaces
 
+- [ ] Remove `visualization_insights` and `visualization_vegalite` operation names from `apps/code-agent/src/routes/internalUsageWebhookRoute.ts`, which still enumerates them in its route schema.
 - [ ] Remove `data-insights-agent` from service catalogs and OpenAPI source catalogs so internal tooling no longer advertises it.
 - [ ] Remove `INTEXURAOS_DATA_INSIGHTS_AGENT_URL` and `INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL` expectations from shared configuration code.
 - [ ] Decide whether `visualization_insights` and `visualization_vegalite` should be deleted or migrated to a generic surviving concept. Current evidence suggests they were introduced specifically for Data Insights and should be removed from usage-event models and logger types.
@@ -237,6 +254,8 @@ This lowers execution risk, but it raises cleanup risk: the implementation must 
 
 **Files:**
 - Modify: `terraform/environments/dev/main.tf`
+- Modify: `terraform/modules/iam/main.tf`
+- Modify: `terraform/modules/iam/outputs.tf`
 - Modify: `terraform/modules/cloud-build/main.tf`
 - Modify: `ecosystem.config.cjs`
 - Modify: `cloudbuild/cloudbuild.yaml`
