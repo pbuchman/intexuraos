@@ -196,6 +196,8 @@ export interface CodeTask {
   prBranch?: string;           // Branch name (queryable, redundant with result.branch)
   prMergedAt?: Timestamp;      // When the PR was merged (set by handlePrClose webhook, INT-1174)
   prClosedAt?: Timestamp;      // When PR was closed without merge (set by handlePrClose webhook, INT-1316)
+  prUrlValidationFailed?: boolean;    // True if PR URL validation found issues (INT-1361)
+  prUrlValidationErrors?: string[];   // Validation error details (INT-1361)
 
   // Resume/Follow-up tracking (for PR comment auto-response - INT-465)
   parentTaskId?: string;       // If this task is a follow-up to another
