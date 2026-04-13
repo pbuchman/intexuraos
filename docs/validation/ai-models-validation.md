@@ -17,11 +17,11 @@ Models defined in `packages/llm-contract/src/supportedModels.ts` — the single 
 | 3   | `gemini-2.0-flash`           | Gemini20Flash      | Google     | Validation, Fast                       |
 | 4   | `gemini-2.5-flash-image`     | Gemini25FlashImage | Google     | Image                                  |
 | 5   | `o4-mini-deep-research`      | O4MiniDeepResearch | OpenAI     | Research                               |
-| 6   | `gpt-5.4`                    | GPT52              | OpenAI     | Research, Generic                      |
+| 6   | `gpt-5.4`                    | GPT54              | OpenAI     | Research, Generic                      |
 | 7   | `gpt-4o-mini`                | GPT4oMini          | OpenAI     | Validation, Fast                       |
 | 8   | `gpt-image-1`                | GPTImage1          | OpenAI     | Image                                  |
-| 9   | `claude-opus-4-6`   | ClaudeOpus45       | Anthropic  | Research                               |
-| 10  | `claude-sonnet-4-6` | ClaudeSonnet45     | Anthropic  | Research                               |
+| 9   | `claude-opus-4-6`            | ClaudeOpus46       | Anthropic  | Research                               |
+| 10  | `claude-sonnet-4-6`          | ClaudeSonnet46     | Anthropic  | Research                               |
 | 11  | `claude-3-5-haiku-20241022`  | ClaudeHaiku35      | Anthropic  | Validation, Fast                       |
 | 12  | `sonar`                      | Sonar              | Perplexity | Research, Validation                   |
 | 13  | `sonar-pro`                  | SonarPro           | Perplexity | Research                               |
