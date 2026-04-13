@@ -1,6 +1,5 @@
 /**
  * Title generation prompt for creating concise titles from content.
- * Consolidates title generation used across research-agent and data-insights.
  */
 
 import type { PromptBuilder, PromptDeps } from '../types.js';
