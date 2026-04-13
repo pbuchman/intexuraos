@@ -10317,6 +10317,60 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     expect(g.value.prUrlValidationErrors).toBeUndefined();
   });
 
+  it('skips PR URL validation when GitHub token is unavailable (INT-1361)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't-prval-5', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValue(ok({ id: 'uuid', identifier: 'INT-123', title: 'T', url: 'u', labels: [], childCount: 0, parentId: null }));
+    vi.mocked(lac.addComment).mockReset();
+    vi.mocked(lac.addComment).mockResolvedValue(ok({ commentId: 'c1' }));
+    vi.mocked(lac.updateIssueState).mockReset();
+    vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
+    vi.mocked(lac.updateIssueMetadata).mockReset();
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok({ droppedLabels: [] }));
+
+    // Install GitHub client but make token unavailable
+    const gitHubPRClient = {
+      postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 42 })),
+      updatePRTitle: vi.fn().mockResolvedValue(ok(undefined)),
+      getPullRequestFiles: vi.fn().mockResolvedValue(ok([])),
+      getPullRequestCommits: vi.fn().mockResolvedValue(ok([])),
+      getPullRequestBaseBranch: vi.fn().mockResolvedValue(ok('development')),
+      getPullRequestStatus: vi.fn().mockResolvedValue(ok({ state: 'open', mergedAt: null, headRef: 'task_existing_pr_branch' })),
+      listOpenPullRequestsByBaseBranch: vi.fn().mockResolvedValue(ok([])),
+      getPullRequestDetails: vi.fn().mockResolvedValue(ok(null)),
+      mergePullRequest: vi.fn().mockResolvedValue(ok({ sha: 'abc123', merged: true })),
+      getCombinedCheckStatus: vi.fn().mockResolvedValue(ok({ state: 'success' })),
+      listAllOpenPullRequests: vi.fn().mockResolvedValue(ok([])),
+    } as unknown as GitHubPRClient;
+    const userServiceClient = {
+      ...mockUserServiceClient,
+      getOAuthToken: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND' as const, message: 'No token' })),
+    } as UserServiceClient;
+
+    setServices({ ...getServices(), gitHubPRClient, userServiceClient });
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/901', execution_outcome_label: 'implemented' as const, execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.status).toBe('implemented');
+    expect(g.value.prUrlValidationFailed).toBeUndefined();
+    expect(g.value.prUrlValidationErrors).toBeUndefined();
+    // Verify getPullRequestDetails was never called (validation was skipped)
+    expect(gitHubPRClient.getPullRequestDetails).not.toHaveBeenCalled();
+  });
+
   it('fails pull_request enforcement when linearIssueId is undefined', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
