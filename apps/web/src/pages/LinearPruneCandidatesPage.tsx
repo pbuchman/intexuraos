@@ -73,11 +73,10 @@ function sortCandidates(
 
 interface PageHeaderProps {
   totalCount: number;
-  filteredCount: number;
   categoryCounts: Record<PruneCategory, number>;
 }
 
-function PageHeader({ totalCount, filteredCount, categoryCounts }: PageHeaderProps): React.JSX.Element {
+function PageHeader({ totalCount, categoryCounts }: PageHeaderProps): React.JSX.Element {
   const parts: string[] = [`${String(totalCount)} candidate${totalCount !== 1 ? 's' : ''}`];
   const topCategory = ALL_CATEGORIES
     .map((c) => ({ category: c, count: categoryCounts[c] }))
@@ -325,7 +324,6 @@ export function LinearPruneCandidatesPage(): React.JSX.Element {
     <Layout>
       <PageHeader
         totalCount={allCandidates.length}
-        filteredCount={filteredCandidates.length}
         categoryCounts={categoryCounts}
       />
 
