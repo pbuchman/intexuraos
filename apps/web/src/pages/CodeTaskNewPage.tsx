@@ -107,18 +107,18 @@ export function CodeTaskNewPage(): React.JSX.Element {
   // Worker section states
   const hasNoWorkers = workersStatus !== null && allWorkers.length === 0;
 
-  // Sync default prompt and task mode when linearMode changes (only if user hasn't manually edited)
+  // Sync defaults when linearMode changes (only if user hasn't manually edited)
   useEffect(() => {
     if (linearMode === 'link') {
       setTaskMode('execution');
+      if (!promptManuallyEdited.current) {
+        setPrompt(EXECUTION_DEFAULT_PROMPT);
+      }
     } else {
       setTaskMode('planning');
-    }
-    if (promptManuallyEdited.current) return;
-    if (linearMode === 'link') {
-      setPrompt(EXECUTION_DEFAULT_PROMPT);
-    } else {
-      setPrompt('');
+      if (!promptManuallyEdited.current) {
+        setPrompt('');
+      }
     }
   }, [linearMode]);
 
