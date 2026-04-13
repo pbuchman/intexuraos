@@ -305,7 +305,7 @@ export async function fetchAllPricingWithRetry(
  * Implemented by {@link PricingContext}.
  */
 export interface IPricingContext {
-  /** Get pricing for a model, throws if not found */
+  /** Get pricing for a model; returns zero pricing for unknown models with a warn for ops audit */
   getPricing(model: LLMModel): ModelPricing;
   /** Check if pricing exists for a model */
   hasPricing(model: LLMModel): boolean;
@@ -369,12 +369,20 @@ export class PricingContext implements IPricingContext {
 
   /**
    * Get pricing for a model.
-   * @throws Error if model pricing not found
+   *
+   * Returns zero pricing for unknown models so producers can still emit a
+   * usage event with cost=$0 instead of crashing. Use validateModels() at
+   * startup if you need fail-fast for known-static dependencies.
    */
   getPricing(model: LLMModel): ModelPricing {
     const pricing = this.pricing.get(model);
     if (pricing === undefined) {
-      throw new Error(`Pricing not found for model: ${model}`);
+      // Audit trail: ops needs to know which models leak through unpriced.
+      // console.warn (no Logger dep in PricingContext) — Cloud Logging picks it up as severity=WARNING.
+      console.warn(
+        `[llm-pricing] No pricing for model ${String(model)} — falling back to $0; emit-don't-skip policy`,
+      );
+      return { inputPricePerMillion: 0, outputPricePerMillion: 0 };
     }
     return pricing;
   }
