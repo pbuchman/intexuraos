@@ -33,6 +33,8 @@ const VITEST_PATTERNS = [
   /^@@PHASE_TIMING@@/,
   /^\(node:\d+\) \[DEP\d+\] DeprecationWarning:/,
   /^\(Use `node --trace-deprecation \.\.\.` to show where the warning was created\)$/,
+  /^\d+:\d+:\d+\s*(AM|PM)\s*\[vite\]/,
+  /^\s*Plugin: vite:/,
 ];
 
 function isVitestLine(line) {
