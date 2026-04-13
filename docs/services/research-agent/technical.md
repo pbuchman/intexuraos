@@ -337,8 +337,8 @@ Research Agent loads pricing at startup for all models it uses. Models are split
 
 **Research models** (dispatched per user selection):
 - `Gemini25Pro`, `Gemini25Flash`
-- `ClaudeOpus45`, `ClaudeSonnet45`
-- `O4MiniDeepResearch`, `GPT52`
+- `ClaudeOpus46`, `ClaudeSonnet46`
+- `O4MiniDeepResearch`, `GPT54`
 - `Sonar`, `SonarPro`, `SonarDeepResearch`
 
 **OpenRouter models** (14 curated models via allowlist):
