@@ -83,17 +83,17 @@ steps:
         npm install -g pnpm@10
         pnpm install --frozen-lockfile
 
-  # Build claude-worker Docker image (no deploy, runs in parallel with pnpm-install)
+  # Build code-worker Docker image (no deploy, runs in parallel with pnpm-install)
   - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-claude-worker'
+    id: 'build-push-code-worker'
     waitFor: ['-'] # Start immediately, no dependencies
     timeout: 900s
     entrypoint: 'bash'
     args:
       [
         'cloudbuild/scripts/build-push-monitored.sh',
-        'claude-worker',
-        'workers/claude-worker/Dockerfile',
+        'code-worker',
+        'workers/code-worker/Dockerfile',
       ]
     env:
       - 'DOCKER_BUILDKIT=1'
