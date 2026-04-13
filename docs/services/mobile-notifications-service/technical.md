@@ -26,14 +26,9 @@ graph TB
         Firestore[(Firestore)]
     end
 
-    subgraph "Consumers"
-        DataInsights[data-insights-agent]
-    end
-
     Mobile --> Tasker
     Tasker -->|POST + Signature| Webhook
     WebApp -->|Bearer JWT| Public
-    DataInsights -->|X-Internal-Auth| Internal
     Webhook --> Domain
     Public --> Domain
     Internal --> Domain
@@ -120,7 +115,7 @@ v8 ignore blocks in `firestoreNotificationRepository.ts` and `firestoreSignature
 
 | Method | Path                                   | Purpose                                   | Auth           |
 | ------ | -------------------------------------- | ----------------------------------------- | -------------- |
-| POST   | `/internal/mobile-notifications/query` | Query notifications (data-insights-agent) | Internal token |
+| POST   | `/internal/mobile-notifications/query` | Query notifications (internal consumers)  | Internal token |
 
 ### Webhook
 

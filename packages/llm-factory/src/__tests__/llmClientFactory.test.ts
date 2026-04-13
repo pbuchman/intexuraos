@@ -181,7 +181,7 @@ describe('llmClientFactory', () => {
         createToolCallingClient({
           apiKey: 'test-key',
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          model: LlmModels.ClaudeOpus45 as any,
+          model: LlmModels.ClaudeOpus46 as any,
           userId: 'test-user',
           pricing: createTestPricing(),
           logger: mockLogger,

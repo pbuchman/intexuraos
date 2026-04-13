@@ -328,7 +328,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     type: 'object',
                     properties: {
                       defaultModel: { type: 'string' },
-                      fallbackModel: { type: 'string', nullable: true },
+                      fallbackModel: { type: 'string' },
                     },
                   },
                   transcriptionPreferences: {

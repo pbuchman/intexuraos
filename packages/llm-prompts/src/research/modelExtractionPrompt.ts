@@ -219,10 +219,10 @@ export function parseModelExtractionResponseWithLogging(
 export const MODEL_KEYWORDS: Record<ResearchModel, string[]> = {
   [LlmModels.Gemini25Pro]: ['gemini pro', 'gemini-pro', 'pro'],
   [LlmModels.Gemini25Flash]: ['gemini flash', 'gemini-flash', 'gemini', 'google'],
-  [LlmModels.ClaudeOpus45]: ['claude opus', 'opus'],
-  [LlmModels.ClaudeSonnet45]: ['claude sonnet', 'sonnet', 'claude', 'anthropic'],
+  [LlmModels.ClaudeOpus46]: ['claude opus', 'opus'],
+  [LlmModels.ClaudeSonnet46]: ['claude sonnet', 'sonnet', 'claude', 'anthropic'],
   [LlmModels.O4MiniDeepResearch]: ['o4', 'o4-mini', 'deep research'],
-  [LlmModels.GPT52]: ['gpt', 'gpt-5', 'openai', 'chatgpt'],
+  [LlmModels.GPT54]: ['gpt', 'gpt-5', 'openai', 'chatgpt'],
   [LlmModels.Sonar]: ['sonar basic'],
   [LlmModels.SonarPro]: ['sonar', 'sonar pro', 'pplx', 'perplexity'],
   [LlmModels.SonarDeepResearch]: ['sonar deep', 'perplexity deep', 'deep sonar'],
@@ -234,15 +234,15 @@ export const MODEL_KEYWORDS: Record<ResearchModel, string[]> = {
  */
 export const PROVIDER_DEFAULT_MODELS: Record<string, ResearchModel> = {
   google: LlmModels.Gemini25Pro,
-  anthropic: LlmModels.ClaudeSonnet45,
-  openai: LlmModels.GPT52,
+  anthropic: LlmModels.ClaudeSonnet46,
+  openai: LlmModels.GPT54,
   perplexity: LlmModels.SonarPro,
 };
 
 /**
  * Models that support synthesis.
  */
-export const SYNTHESIS_MODELS: ResearchModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT52];
+export const SYNTHESIS_MODELS: ResearchModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT54];
 
 /**
  * Default synthesis model when not specified or invalid.

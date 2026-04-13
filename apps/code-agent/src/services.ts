@@ -59,7 +59,7 @@ import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
 import type { UserServiceClient, UsageServiceClient } from '@intexuraos/internal-clients';
 import { createUserServiceClient, createUsageServiceClient } from '@intexuraos/internal-clients';
 import { createGitHubUsernameResolver } from './infra/services/gitHubUsernameResolverImpl.js';
-import { CodeWorkerOutputRule, ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, CIFailureRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
+import { CodeWorkerOutputRule, DraftPRRule, ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, CIFailureRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
 import { createWebhookDispatchService, type WebhookDispatchService, type CIFailureDispatchService } from './domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
 import { ALLOWED_BOTS, CODE_WORKER_BOTS } from './routes/webhooks/github.js';
@@ -420,6 +420,9 @@ export function initServices(config: ServiceConfig): void {
     // both intexuraos/* and */intexuraos patterns. Adding it here would be
     // redundant and risks scope mismatch (see PR #997 review).
     new CodeWorkerOutputRule(CODE_WORKER_BOTS),
+    // DraftPRRule must come before CIFailureRule and ActionableEventRule
+    // to block ALL code-tasks on draft PRs before any dispatch/triage cost.
+    new DraftPRRule(),
     // CIFailureRule must come BEFORE ActionableEventRule to catch check_suite
     // events before ActionableEventRule short-circuits with "skip" (check_suite
     // is not in ActionableEventRule's list of known event types).

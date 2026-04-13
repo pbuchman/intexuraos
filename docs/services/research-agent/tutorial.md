@@ -46,7 +46,7 @@ curl -s -X POST "$BASE_URL/research" \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "What are the main tradeoffs between PostgreSQL and MongoDB for a SaaS product?",
-    "selectedModels": ["gemini-2.5-pro", "claude-sonnet-4-5"],
+    "selectedModels": ["gemini-2.5-pro", "claude-sonnet-4-6"],
     "synthesisModel": "gemini-2.5-pro"
   }' | jq .
 ```
@@ -61,11 +61,11 @@ curl -s -X POST "$BASE_URL/research" \
     "status": "pending",
     "title": "",
     "prompt": "What are the main tradeoffs...",
-    "selectedModels": ["gemini-2.5-pro", "claude-sonnet-4-5"],
+    "selectedModels": ["gemini-2.5-pro", "claude-sonnet-4-6"],
     "synthesisModel": "gemini-2.5-pro",
     "llmResults": [
       { "model": "gemini-2.5-pro", "status": "pending" },
-      { "model": "claude-sonnet-4-5", "status": "pending" }
+      { "model": "claude-sonnet-4-6", "status": "pending" }
     ],
     "startedAt": "2026-03-15T10:00:00.000Z"
   }
@@ -158,7 +158,7 @@ curl -s "$BASE_URL/research/$RESEARCH_ID" \
 {
   "status": "awaiting_confirmation",
   "partialFailure": {
-    "failedModels": ["claude-sonnet-4-5"],
+    "failedModels": ["claude-sonnet-4-6"],
     "detectedAt": "2026-03-15T10:05:00.000Z",
     "retryCount": 0
   }

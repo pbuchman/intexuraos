@@ -35,7 +35,6 @@ All Cloud Run services use the shared `cloud-run-service` module. Default values
 | research-agent               | `research_agent`               | `apps/research-agent`               | 0   | 1   | 512Mi  | 1   | **900s** | PARTIAL (note 2) | OK            |
 | commands-agent               | `commands_agent`               | `apps/commands-agent`               | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
 | actions-agent                | `actions_agent`                | `apps/actions-agent`                | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
-| data-insights-agent          | `data_insights_agent`          | `apps/data-insights-agent`          | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
 | image-service                | `image_service`                | `apps/image-service`                | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
 | notes-agent                  | `notes_agent`                  | `apps/notes-agent`                  | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
 | todos-agent                  | `todos_agent`                  | `apps/todos-agent`                  | 0   | 1   | 512Mi  | 1   | 300s     | OK               | OK            |
@@ -218,7 +217,6 @@ env_vars = merge(local.common_service_env_vars, {
 | ------------------------------------- | -------------- | ------------------------------------------------ |
 | intexuraos-retry-pending-commands-dev | `*/5 * * * *`  | commands-agent `/internal/retry-pending`         |
 | intexuraos-retry-pending-actions-dev  | `*/5 * * * *`  | actions-agent `/internal/actions/retry-pending`  |
-| intexuraos-refresh-snapshots-dev      | `*/15 * * * *` | data-insights-agent via Pub/Sub snapshot-refresh |
 | intexuraos-linear-sync-hourly-dev     | `0 * * * *`    | linear-agent `/internal/linear/sync-all`         |
 | intexuraos-vm-start-dev               | `0 7 * * 1-5`  | function_vm_start (Europe/Warsaw)                |
 | intexuraos-vm-stop-dev                | `0 23 * * *`   | function_vm_stop (Europe/Warsaw)                 |
@@ -244,7 +242,6 @@ env_vars = merge(local.common_service_env_vars, {
 | intexuraos-bookmark-summarize-dev       | bookmarks-agent                                            | bookmarks-agent      |
 | intexuraos-todos-processing-dev         | todos-agent                                                | todos-agent          |
 | intexuraos-calendar-preview-dev         | actions-agent                                              | calendar-agent       |
-| snapshot-refresh-dev                    | cloud-scheduler                                            | data-insights-agent  |
 | intexuraos-log-cleanup-dev              | cloud-scheduler                                            | function_log_cleanup |
 
 ---

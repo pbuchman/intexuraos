@@ -63,6 +63,7 @@ export interface GitHubPREvent {
   title: string | null;
   body: string | null;
   state: string | null;
+  isDraft: boolean | null;
   baseBranch: string | null;
   mergedAt: Date | null;
   createdAt: Date;
@@ -90,6 +91,7 @@ export interface CreateGitHubPREventInput {
   title: string | null;
   body: string | null;
   state: string | null;
+  isDraft: boolean | null;
   baseBranch: string | null;
   mergedAt: Date | null;
   createdAt: Date;

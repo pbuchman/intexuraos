@@ -282,7 +282,7 @@ describe('createUsageServiceClient', () => {
       [LlmProviders.Anthropic]: {
         provider: LlmProviders.Anthropic,
         models: {
-          [LlmModels.ClaudeSonnet45]: {
+          [LlmModels.ClaudeSonnet46]: {
             inputPricePerMillion: 3,
             outputPricePerMillion: 15,
           },

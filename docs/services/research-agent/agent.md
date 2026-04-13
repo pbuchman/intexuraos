@@ -57,7 +57,7 @@ interface SubmitResearchOutput {
 // Request
 {
   "prompt": "Compare PostgreSQL vs MongoDB for a SaaS product",
-  "selectedModels": ["gemini-2.5-pro", "claude-sonnet-4-5", "or:x-ai/grok-4.20-beta"],
+  "selectedModels": ["gemini-2.5-pro", "claude-sonnet-4-6", "or:x-ai/grok-4.20-beta"],
   "synthesisModel": "gemini-2.5-pro"
 }
 
@@ -68,10 +68,10 @@ interface SubmitResearchOutput {
     "id": "res_abc123",
     "status": "pending",
     "title": "",
-    "selectedModels": ["gemini-2.5-pro", "claude-sonnet-4-5", "or:x-ai/grok-4.20-beta"],
+    "selectedModels": ["gemini-2.5-pro", "claude-sonnet-4-6", "or:x-ai/grok-4.20-beta"],
     "llmResults": [
       { "model": "gemini-2.5-pro", "status": "pending" },
-      { "model": "claude-sonnet-4-5", "status": "pending" },
+      { "model": "claude-sonnet-4-6", "status": "pending" },
       { "model": "or:x-ai/grok-4.20-beta", "status": "pending" }
     ],
     "startedAt": "2026-03-15T10:00:00.000Z"

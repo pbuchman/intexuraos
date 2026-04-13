@@ -20,7 +20,6 @@ describe('loadConfig', () => {
     delete process.env['INTEXURAOS_RESEARCH_AGENT_URL'];
     delete process.env['INTEXURAOS_COMMANDS_AGENT_URL'];
     delete process.env['INTEXURAOS_ACTIONS_AGENT_URL'];
-    delete process.env['INTEXURAOS_DATA_INSIGHTS_AGENT_URL'];
     delete process.env['INTEXURAOS_IMAGE_SERVICE_URL'];
     delete process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'];
     delete process.env['INTEXURAOS_NOTES_AGENT_URL'];
@@ -159,7 +158,6 @@ describe('loadConfig', () => {
     process.env['INTEXURAOS_RESEARCH_AGENT_URL'] = 'https://research-agent.example.com';
     process.env['INTEXURAOS_COMMANDS_AGENT_URL'] = 'https://commands-agent.example.com';
     process.env['INTEXURAOS_ACTIONS_AGENT_URL'] = 'https://actions-agent.example.com';
-    process.env['INTEXURAOS_DATA_INSIGHTS_AGENT_URL'] = 'https://data-insights-agent.example.com';
     process.env['INTEXURAOS_IMAGE_SERVICE_URL'] = 'https://image-service.example.com';
     process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] = 'https://app-settings-service.example.com';
     process.env['INTEXURAOS_NOTES_AGENT_URL'] = 'https://notes-agent.example.com';

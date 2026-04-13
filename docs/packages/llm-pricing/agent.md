@@ -37,8 +37,7 @@
 
 ```typescript
 type CallType =
-  | 'research' | 'generate' | 'image_generation'
-  | 'visualization_insights' | 'visualization_vegalite' | 'tool_calling';
+  | 'research' | 'generate' | 'image_generation' | 'tool_calling';
 
 interface UsageLogParams {
   userId: string;

@@ -87,6 +87,33 @@ export class CodeWorkerOutputRule implements WebhookRule {
   }
 }
 
+/**
+ * Rule that skips ALL events for pull requests in draft state.
+ *
+ * Draft PRs should receive no automated code-tasks: no reviews,
+ * no remediations, no CI fixes, no merge conflict fixes.
+ * When isDraft is null (event type doesn't carry draft info), fails open.
+ */
+export class DraftPRRule implements WebhookRule {
+  evaluate(event: GitHubPREvent): RuleOutcome {
+    if (event.isDraft === true) {
+      return {
+        action: 'skip',
+        reason: 'DRAFT_PR',
+        context: { pullRequestNumber: event.pullRequestNumber },
+      };
+    }
+
+    if (event.isDraft === false) {
+      return { action: 'dispatch', reason: 'NOT_DRAFT_PR' };
+    }
+
+    // isDraft is null — event type doesn't include draft status (e.g., issue_comment).
+    // Fail open: allow the event through.
+    return { action: 'dispatch', reason: 'DRAFT_STATUS_UNKNOWN' };
+  }
+}
+
 export class ActionableEventRule implements WebhookRule {
   constructor(private readonly allowedBots: Set<string>) {}
 
@@ -110,6 +137,10 @@ export class ActionableEventRule implements WebhookRule {
         reason: 'EVENT_NOT_ACTIONABLE',
         context: { eventType: event.eventType, action: event.action },
       };
+    }
+    // pull_request ready_for_review → needs_triage (triggers review on draft→ready transition)
+    if (event.eventType === 'pull_request' && event.action === 'ready_for_review') {
+      return { action: 'needs_triage', reason: 'PR_READY_FOR_REVIEW' };
     }
     // pull_request opened/synchronize → needs_triage
     if (event.eventType === 'pull_request' && (event.action === 'opened' || event.action === 'synchronize')) {

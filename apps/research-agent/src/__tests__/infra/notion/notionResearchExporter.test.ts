@@ -57,8 +57,8 @@ describe('exportResearchToNotion', () => {
       userId: 'user-123',
       title: 'Test Research',
       prompt: 'Test prompt',
-      selectedModels: [LlmModels.GPT52],
-      synthesisModel: LlmModels.GPT52,
+      selectedModels: [LlmModels.GPT54],
+      synthesisModel: LlmModels.GPT54,
       status: 'completed',
       llmResults: [],
       startedAt: '2024-01-01T00:00:00Z',
@@ -137,7 +137,7 @@ describe('exportResearchToNotion', () => {
         llmResults: [
           {
             provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT52,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'GPT result here.',
             sources: ['https://example.com/1'],
@@ -146,7 +146,7 @@ describe('exportResearchToNotion', () => {
           },
           {
             provider: LlmProviders.Anthropic,
-            model: LlmModels.ClaudeOpus45,
+            model: LlmModels.ClaudeOpus46,
             status: 'completed',
             result: 'Claude result here.',
             startedAt: '2024-01-01T00:00:00Z',
@@ -154,7 +154,7 @@ describe('exportResearchToNotion', () => {
           },
           {
             provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT52,
+            model: LlmModels.GPT54,
             status: 'failed',
             error: 'API error',
             startedAt: '2024-01-01T00:00:00Z',
@@ -167,8 +167,8 @@ describe('exportResearchToNotion', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.llmReportPages).toHaveLength(2);
-        expect(result.value.llmReportPages[0]?.model).toBe(LlmModels.GPT52);
-        expect(result.value.llmReportPages[1]?.model).toBe(LlmModels.ClaudeOpus45);
+        expect(result.value.llmReportPages[0]?.model).toBe(LlmModels.GPT54);
+        expect(result.value.llmReportPages[1]?.model).toBe(LlmModels.ClaudeOpus46);
       }
 
       // Main page + 2 LLM report pages created
@@ -194,7 +194,7 @@ describe('exportResearchToNotion', () => {
         llmResults: [
           {
             provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT52,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Result content.',
             sources: ['https://example.com/1', 'https://example.com/2'],
@@ -338,7 +338,7 @@ Attribution: Primary=S1; Secondary=; Constraints=; UNK=false
         llmResults: [
           {
             provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT52,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: llmResultWithAttribution,
             startedAt: '2024-01-01T00:00:00Z',
@@ -446,7 +446,7 @@ Attribution: Primary=S1; Secondary=; Constraints=; UNK=false
         llmResults: [
           {
             provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT52,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: resultWithDetails,
             startedAt: '2024-01-01T00:00:00Z',
@@ -489,8 +489,8 @@ Attribution: Primary=S1; Secondary=; Constraints=; UNK=false
         userId: 'user-123',
         title: 'Test Research',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.GPT52],
-        synthesisModel: LlmModels.GPT52,
+        selectedModels: [LlmModels.GPT54],
+        synthesisModel: LlmModels.GPT54,
         status: 'completed',
         llmResults: [],
         startedAt: '2024-01-01T00:00:00Z',
@@ -970,7 +970,7 @@ Attribution: Primary=S1; Secondary=; Constraints=; UNK=false
         llmResults: [
           {
             provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT52,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: llmParagraphs,
             startedAt: '2024-01-01T00:00:00Z',
@@ -1016,7 +1016,7 @@ Attribution: Primary=S1; Secondary=; Constraints=; UNK=false
         llmResults: [
           {
             provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT52,
+            model: LlmModels.GPT54,
             status: 'failed',
             error: 'Failed',
             startedAt: '2024-01-01T00:00:00Z',
@@ -1047,9 +1047,9 @@ Attribution: Primary=S1; Secondary=; Constraints=; UNK=false
         } as never);
 
       // Omit 'result' property from LlmResult
-      const llmResultWithoutResult: Omit<{ provider: typeof LlmProviders.OpenAI; model: typeof LlmModels.GPT52; status: 'completed'; result: string; startedAt: string; completedAt: string }, 'result'> = {
+      const llmResultWithoutResult: Omit<{ provider: typeof LlmProviders.OpenAI; model: typeof LlmModels.GPT54; status: 'completed'; result: string; startedAt: string; completedAt: string }, 'result'> = {
         provider: LlmProviders.OpenAI,
-        model: LlmModels.GPT52,
+        model: LlmModels.GPT54,
         status: 'completed',
         startedAt: '2024-01-01T00:00:00Z',
         completedAt: '2024-01-01T00:05:00Z',

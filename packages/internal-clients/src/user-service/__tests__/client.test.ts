@@ -517,10 +517,10 @@ describe('createUserServiceClient', () => {
       }
     });
 
-    it('rejects GPT52 model as invalid since it is not a default-eligible model', async () => {
+    it('rejects GPT54 model as invalid since it is not a default-eligible model', async () => {
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.GPT52,
+          defaultModel: LlmModels.GPT54,
         },
       };
 
@@ -532,12 +532,12 @@ describe('createUserServiceClient', () => {
       const client = createUserServiceClient(config);
       const result = await client.getLlmClient('user123');
 
-      // GPT52 is not a default-eligible model (only fast models and default OpenRouter models are)
+      // GPT54 is not a default-eligible model (only fast models and default OpenRouter models are)
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_MODEL');
-        expect(result.error.message).toContain(LlmModels.GPT52);
+        expect(result.error.message).toContain(LlmModels.GPT54);
         expect(mockLogger.warn).toHaveBeenCalledWith(
-          { userId: 'user123', invalidModel: LlmModels.GPT52 },
+          { userId: 'user123', invalidModel: LlmModels.GPT54 },
           'User has invalid model preference'
         );
       } else {
@@ -545,10 +545,10 @@ describe('createUserServiceClient', () => {
       }
     });
 
-    it('rejects ClaudeSonnet45 model as invalid since it is not a default-eligible model', async () => {
+    it('rejects ClaudeSonnet46 model as invalid since it is not a default-eligible model', async () => {
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.ClaudeSonnet45,
+          defaultModel: LlmModels.ClaudeSonnet46,
         },
       };
 
@@ -560,12 +560,12 @@ describe('createUserServiceClient', () => {
       const client = createUserServiceClient(config);
       const result = await client.getLlmClient('user123');
 
-      // ClaudeSonnet45 is not a default-eligible model (only fast models and default OpenRouter models are)
+      // ClaudeSonnet46 is not a default-eligible model (only fast models and default OpenRouter models are)
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_MODEL');
-        expect(result.error.message).toContain(LlmModels.ClaudeSonnet45);
+        expect(result.error.message).toContain(LlmModels.ClaudeSonnet46);
         expect(mockLogger.warn).toHaveBeenCalledWith(
-          { userId: 'user123', invalidModel: LlmModels.ClaudeSonnet45 },
+          { userId: 'user123', invalidModel: LlmModels.ClaudeSonnet46 },
           'User has invalid model preference'
         );
       } else {

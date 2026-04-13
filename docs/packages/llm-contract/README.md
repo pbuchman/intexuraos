@@ -26,12 +26,12 @@ type LLMModel =
   | 'gemini-2.5-flash-image'
   // OpenAI (4)
   | 'o4-mini-deep-research'
-  | 'gpt-5.2'
+  | 'gpt-5.4'
   | 'gpt-4o-mini'
   | 'gpt-image-1'
   // Anthropic (3)
-  | 'claude-opus-4-5-20251101'
-  | 'claude-sonnet-4-5-20250929'
+  | 'claude-opus-4-6'
+  | 'claude-sonnet-4-6'
   | 'claude-3-5-haiku-20241022'
   // Perplexity (3)
   | 'sonar'
@@ -46,10 +46,10 @@ type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
 | Type               | Purpose                            | Models                                                                                                                                                                          |
 | ------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ImageModel`       | Image generation                   | `gpt-image-1`, `gemini-2.5-flash-image`                                                                                                                                         |
-| `ResearchModel`    | Web search enhanced generation     | `gemini-2.5-pro`, `gemini-2.5-flash`, `claude-opus-4-5-20251101`, `claude-sonnet-4-5-20250929`, `o4-mini-deep-research`, `gpt-5.2`, `sonar`, `sonar-pro`, `sonar-deep-research` |
+| `ResearchModel`    | Web search enhanced generation     | `gemini-2.5-pro`, `gemini-2.5-flash`, `claude-opus-4-6`, `claude-sonnet-4-6`, `o4-mini-deep-research`, `gpt-5.4`, `sonar`, `sonar-pro`, `sonar-deep-research`                   |
 | `ValidationModel`  | API key validation (cheap, fast)   | `claude-3-5-haiku-20241022`, `gemini-2.0-flash`, `gpt-4o-mini`, `sonar`                                                                                                         |
 | `FastModel`        | Quick tasks (classification, etc.) | `gemini-2.5-flash`, `gemini-2.0-flash`, `claude-3-5-haiku-20241022`, `gpt-4o-mini`                                                                                              |
-| `GenericModel`     | General-purpose                    | `gemini-2.5-pro`, `gpt-5.2`                                                                                                                                                     |
+| `GenericModel`     | General-purpose                    | `gemini-2.5-pro`, `gpt-5.4`                                                                                                                                                     |
 | `ToolCallingModel` | Agent tool-calling loops           | `gemini-2.5-flash`                                                                                                                                                              |
 
 ### Constants
@@ -68,11 +68,11 @@ const LlmModels = {
   Gemini20Flash: 'gemini-2.0-flash',
   Gemini25FlashImage: 'gemini-2.5-flash-image',
   O4MiniDeepResearch: 'o4-mini-deep-research',
-  GPT52: 'gpt-5.2',
+  GPT54: 'gpt-5.4',
   GPT4oMini: 'gpt-4o-mini',
   GPTImage1: 'gpt-image-1',
-  ClaudeOpus45: 'claude-opus-4-5-20251101',
-  ClaudeSonnet45: 'claude-sonnet-4-5-20250929',
+  ClaudeOpus46: 'claude-opus-4-6',
+  ClaudeSonnet46: 'claude-sonnet-4-6',
   ClaudeHaiku35: 'claude-3-5-haiku-20241022',
   Sonar: 'sonar',
   SonarPro: 'sonar-pro',
@@ -229,7 +229,7 @@ type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
 
 **Packages (8):** `llm-factory`, `llm-pricing`, `llm-prompts`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-perplexity`, `internal-clients`
 
-**Apps (14):** `actions-agent`, `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `commands-agent`, `data-insights-agent`, `image-service`, `linear-agent`, `research-agent`, `todos-agent`, `user-service`, `web`, `web-agent`
+**Apps (13):** `actions-agent`, `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `commands-agent`, `image-service`, `linear-agent`, `research-agent`, `todos-agent`, `user-service`, `web`, `web-agent`
 
 **Workers (1):** `orchestrator`
 

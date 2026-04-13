@@ -35,7 +35,6 @@ const mockImportMetaEnv = {
   INTEXURAOS_RESEARCH_AGENT_URL: 'http://localhost:8116',
   INTEXURAOS_COMMANDS_AGENT_URL: 'http://localhost:8117',
   INTEXURAOS_ACTIONS_AGENT_URL: 'http://localhost:8118',
-  INTEXURAOS_DATA_INSIGHTS_AGENT_URL: 'http://localhost:8119',
   INTEXURAOS_NOTES_AGENT_URL: 'http://localhost:8121',
   INTEXURAOS_TODOS_AGENT_URL: 'http://localhost:8123',
   INTEXURAOS_BOOKMARKS_AGENT_URL: 'http://localhost:8124',

@@ -529,6 +529,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (input.requiresReReview !== undefined) {
           updateData['requiresReReview'] = input.requiresReReview;
         }
+        if (input.prUrlValidationFailed !== undefined) {
+          updateData['prUrlValidationFailed'] = input.prUrlValidationFailed;
+        }
+        if (input.prUrlValidationErrors !== undefined) {
+          updateData['prUrlValidationErrors'] = input.prUrlValidationErrors;
+        }
 
         if (options?.transaction !== undefined) {
           options.transaction.update(docRef, updateData);

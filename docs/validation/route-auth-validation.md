@@ -133,12 +133,6 @@
 | POST   | /internal/retry-pending       | OIDC Bearer or `validateInternalAuth()` | OK     |
 | GET    | /internal/commands/:commandId | `validateInternalAuth()`                | OK     |
 
-### data-insights-agent
-
-| Method | Path                             | Auth Type                | Status |
-| ------ | -------------------------------- | ------------------------ | ------ |
-| POST   | /internal/visualizations/compute | `validateInternalAuth()` | OK     |
-
 ### image-service
 
 | Method | Path                              | Auth Type                | Status |

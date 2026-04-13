@@ -47,7 +47,7 @@ const context = createPricingContext(allPricing);
 // Validate only models this service uses
 const context = createPricingContext(allPricing, [
   'gemini-2.5-flash',
-  'claude-sonnet-4-5-20250929',
+  'claude-sonnet-4-6',
 ]);
 ```
 
@@ -79,7 +79,7 @@ const usageLogger = createUsageLogger({ logger });
 await usageLogger.log({
   userId: 'user-123',
   provider: 'anthropic',
-  model: 'claude-sonnet-4-5-20250929',
+  model: 'claude-sonnet-4-6',
   callType: 'research',
   usage: {
     inputTokens: 1000,
@@ -99,8 +99,6 @@ type CallType =
   | 'research'              // Web search enhanced generation
   | 'generate'             // Simple text generation
   | 'image_generation'     // Image creation
-  | 'visualization_insights' // Chart data analysis
-  | 'visualization_vegalite' // Vega-Lite chart generation
   | 'tool_calling';         // Function calling agent loops
 ```
 

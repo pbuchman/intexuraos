@@ -37,8 +37,6 @@ export interface UsageEvent {
       | 'generate'
       | 'image_generation'
       | 'tool_calling'
-      | 'visualization_insights'
-      | 'visualization_vegalite'
       | 'other';
     success: boolean;
     durationMs: number;

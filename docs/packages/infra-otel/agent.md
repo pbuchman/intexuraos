@@ -140,9 +140,9 @@ All 19 apps consume this via side-effect (`ecosystem.config.cjs`):
 ```
 actions-agent, api-docs-hub, app-settings-service, bookmarks-agent,
 calendar-agent, chat-agent, code-agent, commands-agent,
-data-insights-agent, image-service, linear-agent,
-mobile-notifications-service, notes-agent, notion-service,
-research-agent, todos-agent, user-service, web-agent, whatsapp-service
+image-service, linear-agent, mobile-notifications-service,
+notes-agent, notion-service, research-agent, todos-agent,
+user-service, web-agent, whatsapp-service
 ```
 
 `@intexuraos/infra-sentry` also depends on this package directly (library use).

@@ -84,7 +84,6 @@ const prompt = titlePrompt.build(
 | ---------------- | --------------- | ------------------------------------------- |
 | `titlePrompt`    | `PromptBuilder` | Generate concise titles from content        |
 | `labelPrompt`    | `PromptBuilder` | Generate classification labels from content |
-| `feedNamePrompt` | `PromptBuilder` | Generate feed names from metadata           |
 
 ### Classification (`src/classification/`)
 
@@ -134,18 +133,6 @@ Research context types: `ResearchContext` with `domain`, `mode`, `language`, `sa
 | `thumbnailPrompt`         | `PromptBuilder` | Generate image generation prompt for thumbnails |
 | `generateThumbnailPrompt` | function        | Build thumbnail prompt from content metadata    |
 
-### Data Insights (`src/dataInsights/`)
-
-| Export                     | Type            | Purpose                                        |
-| -------------------------- | --------------- | ---------------------------------------------- |
-| `dataAnalysisPrompt`       | `PromptBuilder` | Analyze data for key insights (max 5)          |
-| `chartDefinitionPrompt`    | `PromptBuilder` | Generate Vega-Lite chart configuration         |
-| `dataTransformPrompt`      | `PromptBuilder` | Transform raw data for visualization           |
-| `buildInsightRepairPrompt` | function        | Repair malformed insight response              |
-| `parseInsightResponse`     | function        | Parse and validate LLM insight output          |
-| `parseChartDefinition`     | function        | Parse and validate Vega-Lite output            |
-| `parseTransformedData`     | function        | Parse and validate data transform output       |
-
 ### Approvals (`src/approvals/`)
 
 | Export                  | Type            | Purpose                                        |
@@ -189,7 +176,7 @@ This pattern is consistently applied across all domains.
 
 ## Used By
 
-**Apps (13):** `actions-agent`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `commands-agent`, `data-insights-agent`, `image-service`, `linear-agent`, `research-agent`, `todos-agent`, `web-agent`, `code-agent`, `user-service`
+**Apps (12):** `actions-agent`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `commands-agent`, `image-service`, `linear-agent`, `research-agent`, `todos-agent`, `web-agent`, `code-agent`, `user-service`
 
 **Workers (1):** `orchestrator`
 
@@ -206,7 +193,7 @@ This pattern is consistently applied across all domains.
 
 | Directory             | Contents                                                     |
 | --------------------- | ------------------------------------------------------------ |
-| `src/generation/`     | `titlePrompt`, `labelPrompt`, `feedNamePrompt`               |
+| `src/generation/`     | `titlePrompt`, `labelPrompt`                                 |
 | `src/classification/` | `commandClassifierPrompt`, `intelligentPromptBuilder`        |
 | `src/research/`       | Research, synthesis, model extraction, repair prompts        |
 | `src/synthesis/`      | Multi-source synthesis context and repair                    |
