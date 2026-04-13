@@ -7,16 +7,20 @@ import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import {
   getProviderForModel,
-  isValidModel,
+  isDefaultEligibleModel,
+  isOpenRouterModel,
+  getOpenRouterRawId,
   LlmModels,
   LlmProviders,
   type LlmProvider,
+  type LLMModel,
 } from '@intexuraos/llm-contract';
 import {
   createLlmClient,
   type LlmClientConfig,
   type LlmGenerateClient,
 } from '@intexuraos/llm-factory';
+import { getDefaultAllowlistPricing } from '@intexuraos/infra-openrouter';
 
 import type {
   UserServiceConfig,
@@ -145,15 +149,17 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           data: {
             llmPreferences?: {
               defaultModel: string;
+              fallbackModel?: string;
             };
           };
         };
 
         // Step 2: Determine model (use user's preference or default)
         const rawModel = settingsBody.data.llmPreferences?.defaultModel ?? LlmModels.Gemini25Flash;
+        const fallbackModelRaw = settingsBody.data.llmPreferences?.fallbackModel;
 
-        // Validate that the model is supported
-        if (!isValidModel(rawModel)) {
+        // Validate that the model is supported (including OpenRouter models)
+        if (!isDefaultEligibleModel(rawModel)) {
           logger.warn({ userId, invalidModel: rawModel }, 'User has invalid model preference');
           return err({
             code: 'INVALID_MODEL',
@@ -223,13 +229,49 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           });
         }
 
+        // Helper: build a client for a given model using the fetched API keys
+        function buildClientForModel(
+          model: string,
+          apiKeys: Record<string, string | null | undefined>,
+        ): LlmGenerateClient | null {
+          const modelProvider = getProviderForModel(model);
+          const modelKeyField = providerToKeyField(modelProvider);
+          const modelApiKey = apiKeys[modelKeyField];
+          if (modelApiKey === null || modelApiKey === undefined) return null;
+
+          let modelPricing;
+          if (isOpenRouterModel(model)) {
+            const rawId = getOpenRouterRawId(model);
+            const allowlistPricing = getDefaultAllowlistPricing(rawId);
+            modelPricing = allowlistPricing ?? { inputPricePerMillion: 0, outputPricePerMillion: 0 };
+          } else {
+            modelPricing = config.pricingContext.getPricing(model as LLMModel);
+          }
+
+          return createLlmClient({
+            apiKey: modelApiKey,
+            model: model as LLMModel,
+            userId,
+            pricing: modelPricing,
+            logger: config.logger,
+            usageSink: config.usageSink,
+          });
+        }
+
         // Step 4: Get pricing for the model
-        const pricing = config.pricingContext.getPricing(defaultModel);
+        let pricing;
+        if (isOpenRouterModel(defaultModel)) {
+          const rawId = getOpenRouterRawId(defaultModel);
+          const allowlistPricing = getDefaultAllowlistPricing(rawId);
+          pricing = allowlistPricing ?? { inputPricePerMillion: 0, outputPricePerMillion: 0 };
+        } else {
+          pricing = config.pricingContext.getPricing(defaultModel as LLMModel);
+        }
 
         // Step 5: Create and return the LLM client
         const clientConfig: LlmClientConfig = {
           apiKey,
-          model: defaultModel,
+          model: defaultModel as LLMModel,
           userId,
           pricing,
           logger: config.logger,
@@ -239,6 +281,39 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         const client: LlmGenerateClient = createLlmClient(clientConfig);
 
         logger.info({ userId, model: defaultModel, provider }, 'LLM client created successfully');
+
+        // Step 6: Wrap with fallback retry if fallback model is configured
+        if (fallbackModelRaw !== undefined && isDefaultEligibleModel(fallbackModelRaw)) {
+          const primaryClient = client;
+          const wrappedClient: LlmGenerateClient = {
+            async generate(prompt: string) {
+              const primaryResult = await primaryClient.generate(prompt);
+              if (primaryResult.ok) return primaryResult;
+
+              logger.warn(
+                {
+                  userId,
+                  primaryModel: defaultModel,
+                  fallbackModel: fallbackModelRaw,
+                  error: primaryResult.error,
+                },
+                'Primary model failed, attempting fallback',
+              );
+
+              const fallbackClient = buildClientForModel(fallbackModelRaw, keysBody.data);
+              if (fallbackClient === null) {
+                logger.warn(
+                  { userId, fallbackModel: fallbackModelRaw },
+                  'No API key for fallback model',
+                );
+                return primaryResult;
+              }
+
+              return await fallbackClient.generate(prompt);
+            },
+          };
+          return ok(wrappedClient);
+        }
 
         return ok(client);
       } catch (error) {
