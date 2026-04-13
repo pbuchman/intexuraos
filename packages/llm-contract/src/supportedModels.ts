@@ -268,6 +268,14 @@ const DEFAULT_OPENROUTER_MODEL_IDS: ReadonlySet<string> = new Set(
   DEFAULT_OPENROUTER_MODELS.map((m) => `or:${m.id}`)
 );
 
+/**
+ * A model that can be selected as the user's default LLM model.
+ * Includes all FastModel values plus curated OpenRouter models (with 'or:' prefix).
+ *
+ * Note: The type includes all OpenRouterModelId values for type ergonomics,
+ * but runtime validation via `isDefaultEligibleModel()` only accepts the
+ * 4 curated models in `DEFAULT_OPENROUTER_MODELS`. Always validate at runtime.
+ */
 export type DefaultEligibleModel = FastModel | OpenRouterModelId;
 
 export function isDefaultEligibleModel(model: string): model is DefaultEligibleModel {

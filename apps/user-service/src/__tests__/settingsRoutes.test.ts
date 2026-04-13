@@ -594,6 +594,38 @@ describe('Settings Routes', () => {
       expect(body.error.message).toContain('not-a-real-model');
     });
 
+    it('rejects fallbackModel same as defaultModel', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-same-fallback';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmApiKeys: {
+          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from('test-key').toString('base64') },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { defaultModel: LlmModels.Gemini25Flash, fallbackModel: LlmModels.Gemini25Flash },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('different from the default model');
+    });
+
     it('rejects fallbackModel when no API key for its provider', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-fallback-no-key';
       const orFallback = 'or:google/gemma-4-31b-it:free';
