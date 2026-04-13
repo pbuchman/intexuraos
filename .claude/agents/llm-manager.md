@@ -365,12 +365,12 @@ pnpm run migrate:status  # Should show new migration as pending
 
 ## Quick Reference: Current Models (15 total)
 
-| Provider   | Models                                                                          | Usage                               |
-| ---------- | ------------------------------------------------------------------------------- | ----------------------------------- |
-| Google     | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-2.5-flash-image      | Research, synthesis, titles, images |
-| OpenAI     | o4-mini-deep-research, gpt-5.4, gpt-4o-mini, gpt-image-1                        | Research, images                    |
-| Anthropic  | claude-opus-4-6, claude-sonnet-4-6, claude-3-5-haiku-20241022 | Research                            |
-| Perplexity | sonar, sonar-pro, sonar-deep-research                                           | Research                            |
-| Zai        | glm-4.7                                                                         | Research, validation                |
+| Provider   | Models                                                                     | Usage                               |
+| ---------- | -------------------------------------------------------------------------- | ----------------------------------- |
+| Google     | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-2.5-flash-image | Research, synthesis, titles, images |
+| OpenAI     | o4-mini-deep-research, gpt-5.4, gpt-4o-mini, gpt-image-1                   | Research, images                    |
+| Anthropic  | claude-opus-4-6, claude-sonnet-4-6, claude-3-5-haiku-20241022              | Research                            |
+| Perplexity | sonar, sonar-pro, sonar-deep-research                                      | Research                            |
+| Zai        | glm-4.7                                                                    | Research, validation                |
 
 This registry should match exactly what's in `packages/llm-contract/src/supportedModels.ts`.
