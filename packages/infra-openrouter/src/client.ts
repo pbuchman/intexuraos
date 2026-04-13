@@ -126,6 +126,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     timeoutMs = DEFAULT_TIMEOUT_MS,
     logger,
     usageSink,
+    ownerType,
   } = config;
 
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
@@ -146,6 +147,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       success,
       ...(errorMessage !== undefined && { errorMessage }),
       ...(providerReportedUsd !== undefined && providerReportedUsd !== null && { providerReportedUsd }),
+      ...(ownerType !== undefined && { ownerType }),
     });
   }
 

@@ -195,6 +195,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
     timeoutMs = DEFAULT_TIMEOUT_MS,
     logger,
     usageSink,
+    ownerType,
   } = config;
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
@@ -212,6 +213,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
+      ...(ownerType !== undefined && { ownerType }),
     });
   }
 
