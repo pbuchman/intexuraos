@@ -30,7 +30,7 @@ describe('OpenRouter model helpers', () => {
     expect(isOpenRouterModel('gemini-2.5-pro')).toBe(false);
     expect(isOpenRouterModel('')).toBe(false);
     expect(isOpenRouterModel('sonar')).toBe(false);
-    expect(isOpenRouterModel('claude-opus-4-5-20251101')).toBe(false);
+    expect(isOpenRouterModel('claude-opus-4-6')).toBe(false);
   });
 
   it('createOpenRouterModelId adds or: prefix', () => {
@@ -67,8 +67,8 @@ describe('getProviderForModel', () => {
 
   it('returns correct provider for static models (unchanged)', () => {
     expect(getProviderForModel(LlmModels.Gemini25Pro)).toBe('google');
-    expect(getProviderForModel(LlmModels.GPT52)).toBe('openai');
-    expect(getProviderForModel(LlmModels.ClaudeOpus45)).toBe('anthropic');
+    expect(getProviderForModel(LlmModels.GPT54)).toBe('openai');
+    expect(getProviderForModel(LlmModels.ClaudeOpus46)).toBe('anthropic');
     expect(getProviderForModel(LlmModels.Sonar)).toBe('perplexity');
   });
 });
@@ -88,14 +88,14 @@ describe('supportedModels', () => {
 
     it('contains all OpenAI models', () => {
       expect(ALL_LLM_MODELS).toContain('o4-mini-deep-research');
-      expect(ALL_LLM_MODELS).toContain('gpt-5.2');
+      expect(ALL_LLM_MODELS).toContain('gpt-5.4');
       expect(ALL_LLM_MODELS).toContain('gpt-4o-mini');
       expect(ALL_LLM_MODELS).toContain('gpt-image-1');
     });
 
     it('contains all Anthropic models', () => {
-      expect(ALL_LLM_MODELS).toContain('claude-opus-4-5-20251101');
-      expect(ALL_LLM_MODELS).toContain('claude-sonnet-4-5-20250929');
+      expect(ALL_LLM_MODELS).toContain('claude-opus-4-6');
+      expect(ALL_LLM_MODELS).toContain('claude-sonnet-4-6');
       expect(ALL_LLM_MODELS).toContain('claude-3-5-haiku-20241022');
     });
 
@@ -124,14 +124,14 @@ describe('supportedModels', () => {
 
     it('maps OpenAI models correctly', () => {
       expect(MODEL_PROVIDER_MAP['o4-mini-deep-research']).toBe('openai');
-      expect(MODEL_PROVIDER_MAP['gpt-5.2']).toBe('openai');
+      expect(MODEL_PROVIDER_MAP['gpt-5.4']).toBe('openai');
       expect(MODEL_PROVIDER_MAP['gpt-4o-mini']).toBe('openai');
       expect(MODEL_PROVIDER_MAP['gpt-image-1']).toBe('openai');
     });
 
     it('maps Anthropic models correctly', () => {
-      expect(MODEL_PROVIDER_MAP['claude-opus-4-5-20251101']).toBe('anthropic');
-      expect(MODEL_PROVIDER_MAP['claude-sonnet-4-5-20250929']).toBe('anthropic');
+      expect(MODEL_PROVIDER_MAP['claude-opus-4-6']).toBe('anthropic');
+      expect(MODEL_PROVIDER_MAP['claude-sonnet-4-6']).toBe('anthropic');
       expect(MODEL_PROVIDER_MAP['claude-3-5-haiku-20241022']).toBe('anthropic');
     });
 
@@ -146,8 +146,8 @@ describe('supportedModels', () => {
     it('contains all models', () => {
       expect(LlmModels.Gemini25Pro).toBe('gemini-2.5-pro');
       expect(LlmModels.Gemini25Flash).toBe('gemini-2.5-flash');
-      expect(LlmModels.GPT52).toBe('gpt-5.2');
-      expect(LlmModels.ClaudeOpus45).toBe('claude-opus-4-5-20251101');
+      expect(LlmModels.GPT54).toBe('gpt-5.4');
+      expect(LlmModels.ClaudeOpus46).toBe('claude-opus-4-6');
       expect(LlmModels.SonarPro).toBe('sonar-pro');
     });
   });
@@ -155,7 +155,7 @@ describe('supportedModels', () => {
   describe('isValidModel', () => {
     it('returns true for valid models', () => {
       expect(isValidModel('gemini-2.5-pro')).toBe(true);
-      expect(isValidModel('claude-opus-4-5-20251101')).toBe(true);
+      expect(isValidModel('claude-opus-4-6')).toBe(true);
       expect(isValidModel('o4-mini-deep-research')).toBe(true);
       expect(isValidModel('sonar-pro')).toBe(true);
       expect(isValidModel('gpt-image-1')).toBe(true);
@@ -212,8 +212,8 @@ describe('supportedModels', () => {
 
     it('returns false for non-fast models (including GLM-4.7-flash)', () => {
       expect(isFastModel('gemini-2.5-pro')).toBe(false);
-      expect(isFastModel('gpt-5.2')).toBe(false);
-      expect(isFastModel('claude-opus-4-5-20251101')).toBe(false);
+      expect(isFastModel('gpt-5.4')).toBe(false);
+      expect(isFastModel('claude-opus-4-6')).toBe(false);
       expect(isFastModel('sonar')).toBe(false);
       expect(isFastModel('glm-4.7-flash')).toBe(false);
       expect(isFastModel('invalid-model')).toBe(false);

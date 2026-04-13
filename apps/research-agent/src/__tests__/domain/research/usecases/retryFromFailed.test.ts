@@ -278,7 +278,7 @@ describe('retryFromFailed', () => {
         selectedModels: [
           LlmModels.Gemini25Pro,
           LlmModels.O4MiniDeepResearch,
-          LlmModels.ClaudeOpus45,
+          LlmModels.ClaudeOpus46,
         ],
         llmResults: [
           {
@@ -295,7 +295,7 @@ describe('retryFromFailed', () => {
           },
           {
             provider: LlmProviders.Anthropic,
-            model: LlmModels.ClaudeOpus45,
+            model: LlmModels.ClaudeOpus46,
             status: 'failed',
             error: 'Error 2',
           },
@@ -308,7 +308,7 @@ describe('retryFromFailed', () => {
       expect(result).toEqual({
         ok: true,
         action: 'retried_llms',
-        retriedModels: [LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus45],
+        retriedModels: [LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus46],
       });
       expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledTimes(2);
       expect(deps.mockRepo.updateLlmResult).toHaveBeenCalledTimes(2);

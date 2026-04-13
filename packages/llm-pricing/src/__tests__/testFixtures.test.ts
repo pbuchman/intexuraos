@@ -55,13 +55,13 @@ describe('testFixtures', () => {
       const context = new FakePricingContext();
 
       expect(context.hasPricing(LlmModels.Gemini25Pro)).toBe(true);
-      expect(context.hasPricing(LlmModels.GPT52)).toBe(true);
+      expect(context.hasPricing(LlmModels.GPT54)).toBe(true);
     });
 
     it('validateModels does not throw', () => {
       const context = new FakePricingContext();
 
-      expect(() => context.validateModels([LlmModels.Gemini25Pro, LlmModels.GPT52])).not.toThrow();
+      expect(() => context.validateModels([LlmModels.Gemini25Pro, LlmModels.GPT54])).not.toThrow();
     });
 
     it('validateAllModels does not throw', () => {
@@ -77,7 +77,7 @@ describe('testFixtures', () => {
       expect(models).toHaveLength(17);
       expect(models).toContain(LlmModels.Gemini25Pro);
       expect(models).toContain(LlmModels.GPTImage1);
-      expect(models).toContain(LlmModels.ClaudeOpus45);
+      expect(models).toContain(LlmModels.ClaudeOpus46);
       expect(models).toContain(LlmModels.SonarPro);
     });
 
@@ -121,7 +121,7 @@ describe('testFixtures', () => {
       };
       const context = createFakePricingContext(customPricing);
 
-      expect(context.getPricing(LlmModels.GPT52).inputPricePerMillion).toBe(3.0);
+      expect(context.getPricing(LlmModels.GPT54).inputPricePerMillion).toBe(3.0);
     });
 
     it('creates context with custom image pricing', () => {
