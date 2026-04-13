@@ -33,7 +33,7 @@ const BAD_EXAMPLES = `BAD EXAMPLES (DO NOT DO THIS):
 export const titlePrompt: PromptBuilder<TitlePromptInput, TitlePromptDeps> = {
   name: 'title-generation',
   description: 'Generates concise titles from content or research prompts',
-  version: '2.0.0',
+  version: '2.0.1',
 
   build(input: TitlePromptInput, deps?: TitlePromptDeps): string {
     const contentPreviewLimit = deps?.contentPreviewLimit ?? 5000;

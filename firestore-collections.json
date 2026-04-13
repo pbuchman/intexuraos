@@ -78,18 +78,6 @@
       "owner": "actions-agent",
       "description": "Tracks outgoing approval request WhatsApp messages for reply matching"
     },
-    "custom_data_sources": {
-      "owner": "data-insights-agent",
-      "description": "User-created custom data sources for analysis"
-    },
-    "composite_feeds": {
-      "owner": "data-insights-agent",
-      "description": "User-created composite feeds aggregating data sources and notifications"
-    },
-    "composite_feed_snapshots": {
-      "owner": "data-insights-agent",
-      "description": "Pre-computed snapshots of composite feed data for fast LLM retrieval"
-    },
     "generated_images": {
       "owner": "image-service",
       "description": "Generated thumbnail images and their metadata"
@@ -109,10 +97,6 @@
     "bookmarks": {
       "owner": "bookmarks-agent",
       "description": "User-scoped bookmarks with OG metadata, AI summaries, and tags"
-    },
-    "visualizations": {
-      "owner": "data-insights-agent",
-      "description": "LLM-generated data visualizations with insights and Vega-Lite specs"
     },
     "calendar_failed_events": {
       "owner": "calendar-agent",
