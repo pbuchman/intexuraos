@@ -1059,4 +1059,26 @@ describe('createPerplexityClient', () => {
       }
     });
   });
+
+  it('passes ownerType to usage logger when provided', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { content: 'ok' } }],
+        usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
+      });
+
+    const client = createPerplexityClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      pricing: createTestPricing({ useProviderCost: false }),
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+      ownerType: 'user',
+    });
+    await client.generate('hello');
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'user' }));
+  });
 });
