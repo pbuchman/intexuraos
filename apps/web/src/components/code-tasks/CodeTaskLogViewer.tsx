@@ -26,6 +26,7 @@ interface ToolBlock {
   headerIdx: number;
   bodyStart: number;
   bodyEnd: number;
+  groupTag?: string;
 }
 
 const TAG_STYLES: Record<string, TagStyle> = {
@@ -149,20 +150,35 @@ export function CodeTaskLogViewer({
       current = null;
     };
 
+    let currentGroupTag: string | null = null;
+
     for (let index = 0; index < logs.length; index++) {
       const line = logs[index];
       if (line === undefined) continue;
       const tag = extractTag(line.text);
 
-      if (tag === 'tool' || tag === 'cmd' || tag === 'orchestrator' || tag === 'entrypoint') {
+      if (tag === 'orchestrator' || tag === 'entrypoint') {
+        if (currentGroupTag === tag && current !== null) {
+          // Same consecutive tag — extend group body
+          current.bodyEnd = index + 1;
+        } else {
+          // New group or different tag
+          finalizeBlock(index);
+          current = { headerIdx: index, bodyStart: index + 1, bodyEnd: index + 1, groupTag: tag };
+          currentGroupTag = tag;
+        }
+      } else if (tag === 'tool' || tag === 'cmd') {
         finalizeBlock(index);
         current = { headerIdx: index, bodyStart: index + 1, bodyEnd: index + 1 };
+        currentGroupTag = null;
       } else if (tag !== null) {
         finalizeBlock(index);
+        currentGroupTag = null;
       } else if (current !== null && isBodyLine(line.text)) {
         current.bodyEnd = index + 1;
       } else {
         finalizeBlock(index);
+        currentGroupTag = null;
       }
     }
     if (current !== null && current.bodyEnd > current.bodyStart) {
