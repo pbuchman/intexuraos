@@ -358,6 +358,26 @@ describe('FirestoreUsageEventRepository', () => {
       }
     });
 
+    it('applies provider filter with oldest-first sort to Firestore', async () => {
+      mockQuery = createMockQuery([], 0);
+      mockCollection.mockImplementation(() => ({ doc: mockDoc, where: mockQuery.where }));
+
+      await repo.list({
+        timeRange: { from: '2026-04-01T00:00:00Z', to: '2026-04-30T23:59:59Z' },
+        filters: {
+          providers: ['openai', 'anthropic'],
+        },
+        sortBy: { field: 'occurredAt', direction: 'asc' },
+        limit: 10,
+      });
+
+      expect(mockQuery.where).toHaveBeenCalledWith('occurredAt', '>=', '2026-04-01T00:00:00Z');
+      expect(mockQuery.where).toHaveBeenCalledWith('occurredAt', '<=', '2026-04-30T23:59:59Z');
+      expect(mockQuery.where).toHaveBeenCalledWith('request.provider', 'in', ['openai', 'anthropic']);
+      expect(mockQuery.orderBy).toHaveBeenCalledWith('occurredAt', 'asc');
+      expect(mockQuery.orderBy).toHaveBeenCalledWith('__name__', 'asc');
+    });
+
     it('returns empty events when no docs match', async () => {
       mockQuery = createMockQuery([], 0);
       mockCollection.mockImplementation(() => ({ doc: mockDoc, where: mockQuery.where }));
