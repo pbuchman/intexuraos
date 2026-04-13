@@ -68,7 +68,7 @@ describe('submitResearch', () => {
       {
         userId: 'user-123',
         prompt: 'Test research prompt',
-        selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus45],
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus46],
         synthesisModel: LlmModels.Gemini25Pro,
       },
       {
@@ -84,7 +84,7 @@ describe('submitResearch', () => {
       expect(result.value.userId).toBe('user-123');
       expect(result.value.prompt).toBe('Test research prompt');
       expect(result.value.status).toBe('pending');
-      expect(result.value.selectedModels).toEqual([LlmModels.Gemini25Pro, LlmModels.ClaudeOpus45]);
+      expect(result.value.selectedModels).toEqual([LlmModels.Gemini25Pro, LlmModels.ClaudeOpus46]);
       expect(result.value.llmResults).toHaveLength(2);
     }
   });
@@ -97,7 +97,7 @@ describe('submitResearch', () => {
         selectedModels: [
           LlmModels.Gemini25Pro,
           LlmModels.O4MiniDeepResearch,
-          LlmModels.ClaudeOpus45,
+          LlmModels.ClaudeOpus46,
         ],
         synthesisModel: LlmModels.Gemini25Pro,
       },
@@ -168,7 +168,7 @@ describe('submitResearch', () => {
       {
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.ClaudeOpus45],
+        selectedModels: [LlmModels.ClaudeOpus46],
         synthesisModel: LlmModels.Gemini25Pro,
       },
       {
@@ -180,7 +180,7 @@ describe('submitResearch', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.llmResults[0]?.model).toBe(LlmModels.ClaudeOpus45);
+      expect(result.value.llmResults[0]?.model).toBe(LlmModels.ClaudeOpus46);
     }
   });
 });
@@ -338,12 +338,12 @@ describe('validateSelectedModels', () => {
 
     // Pass a model that is NOT in availableModels
     const result = validateSelectedModels(
-      [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus45],
+      [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus46],
       availableModels
     );
 
     expect(result).toEqual([LlmModels.Gemini25Pro]);
-    expect(result).not.toContain(LlmModels.ClaudeOpus45);
+    expect(result).not.toContain(LlmModels.ClaudeOpus46);
   });
 
   it('keeps only one model per provider', () => {
@@ -386,7 +386,7 @@ describe('validateSynthesisModel', () => {
       },
     ];
 
-    const result = validateSynthesisModel(LlmModels.GPT52, availableModels);
+    const result = validateSynthesisModel(LlmModels.GPT54, availableModels);
 
     expect(result).toBeUndefined();
   });
@@ -416,15 +416,15 @@ describe('validateSynthesisModel', () => {
   it('returns undefined for model that does not support synthesis', () => {
     const availableModels: AvailableModelInfo[] = [
       {
-        id: LlmModels.ClaudeOpus45,
+        id: LlmModels.ClaudeOpus46,
         provider: LlmProviders.Anthropic,
-        displayName: 'Claude Opus 4.5',
+        displayName: 'Claude Opus 4.6',
         keywords: ['claude'],
         isProviderDefault: true,
       },
     ];
 
-    const result = validateSynthesisModel(LlmModels.ClaudeOpus45, availableModels);
+    const result = validateSynthesisModel(LlmModels.ClaudeOpus46, availableModels);
 
     expect(result).toBeUndefined();
   });

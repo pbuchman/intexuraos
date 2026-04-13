@@ -190,8 +190,8 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   const pricingContext = createPricingContext(pricingResult.value, [
     LlmModels.Gemini25Flash,
     LlmModels.Gemini25Pro,
-    LlmModels.ClaudeSonnet45,
-    LlmModels.GPT52,
+    LlmModels.ClaudeSonnet46,
+    LlmModels.GPT54,
     LlmModels.SonarPro,
   ]);
 

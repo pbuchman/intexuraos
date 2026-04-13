@@ -84,7 +84,7 @@ describe('createSynthesisProviders', () => {
     };
 
     const result = createSynthesisProviders(
-      LlmModels.ClaudeSonnet45,
+      LlmModels.ClaudeSonnet46,
       apiKeys,
       'user-123',
       undefined,
@@ -103,7 +103,7 @@ describe('createSynthesisProviders', () => {
 
     expect(() =>
       createSynthesisProviders(
-        LlmModels.ClaudeSonnet45,
+        LlmModels.ClaudeSonnet46,
         apiKeys,
         'user-123',
         undefined,
@@ -120,7 +120,7 @@ describe('createSynthesisProviders', () => {
 
     expect(() =>
       createSynthesisProviders(
-        LlmModels.ClaudeSonnet45,
+        LlmModels.ClaudeSonnet46,
         apiKeys,
         'user-123',
         undefined,
@@ -137,7 +137,7 @@ describe('createSynthesisProviders', () => {
     };
 
     const result = createSynthesisProviders(
-      LlmModels.ClaudeSonnet45,
+      LlmModels.ClaudeSonnet46,
       apiKeys,
       'user-123',
       undefined,

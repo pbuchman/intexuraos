@@ -90,8 +90,8 @@ describe('extractModelPreferences', () => {
 
     it('extracts selected models from valid JSON response', async () => {
       const response = JSON.stringify({
-        selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeSonnet45],
-        synthesisModel: LlmModels.GPT52,
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeSonnet46],
+        synthesisModel: LlmModels.GPT54,
       });
 
       const deps: ExtractModelPreferencesDeps = {
@@ -103,8 +103,8 @@ describe('extractModelPreferences', () => {
       const result = await extractModelPreferences('research AI using gemini and claude, synthesize with gpt', deps);
 
       expect(result.selectedModels).toContain(LlmModels.Gemini25Pro);
-      expect(result.selectedModels).toContain(LlmModels.ClaudeSonnet45);
-      expect(result.synthesisModel).toBe(LlmModels.GPT52);
+      expect(result.selectedModels).toContain(LlmModels.ClaudeSonnet46);
+      expect(result.synthesisModel).toBe(LlmModels.GPT54);
     });
 
     it('returns empty models when LLM call fails', async () => {
@@ -179,7 +179,7 @@ describe('extractModelPreferences', () => {
       };
 
       const response = JSON.stringify({
-        selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeSonnet45],
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeSonnet46],
         synthesisModel: null,
       });
 
@@ -192,7 +192,7 @@ describe('extractModelPreferences', () => {
       const result = await extractModelPreferences('use gemini and claude', deps);
 
       expect(result.selectedModels).toContain(LlmModels.Gemini25Pro);
-      expect(result.selectedModels).not.toContain(LlmModels.ClaudeSonnet45);
+      expect(result.selectedModels).not.toContain(LlmModels.ClaudeSonnet46);
     });
 
     it('returns undefined synthesis model when null in response', async () => {
@@ -215,8 +215,8 @@ describe('extractModelPreferences', () => {
     it('returns undefined synthesis model when model does not support synthesis', async () => {
       // Claude does not support synthesis
       const response = JSON.stringify({
-        selectedModels: [LlmModels.ClaudeSonnet45],
-        synthesisModel: LlmModels.ClaudeSonnet45,
+        selectedModels: [LlmModels.ClaudeSonnet46],
+        synthesisModel: LlmModels.ClaudeSonnet46,
       });
 
       const deps: ExtractModelPreferencesDeps = {
@@ -238,7 +238,7 @@ describe('extractModelPreferences', () => {
 
       const response = JSON.stringify({
         selectedModels: [LlmModels.Gemini25Pro],
-        synthesisModel: LlmModels.GPT52,
+        synthesisModel: LlmModels.GPT54,
       });
 
       const deps: ExtractModelPreferencesDeps = {
@@ -318,7 +318,7 @@ describe('extractModelPreferences', () => {
     it('uses openai key for GPT models', async () => {
       const keys: ApiKeyStore = { openai: 'openai-key' };
       const response = JSON.stringify({
-        selectedModels: [LlmModels.GPT52],
+        selectedModels: [LlmModels.GPT54],
         synthesisModel: null,
       });
 
@@ -330,13 +330,13 @@ describe('extractModelPreferences', () => {
 
       const result = await extractModelPreferences('use gpt', deps);
 
-      expect(result.selectedModels).toContain(LlmModels.GPT52);
+      expect(result.selectedModels).toContain(LlmModels.GPT54);
     });
 
     it('uses anthropic key for Claude models', async () => {
       const keys: ApiKeyStore = { anthropic: 'anthropic-key' };
       const response = JSON.stringify({
-        selectedModels: [LlmModels.ClaudeSonnet45],
+        selectedModels: [LlmModels.ClaudeSonnet46],
         synthesisModel: null,
       });
 
@@ -348,7 +348,7 @@ describe('extractModelPreferences', () => {
 
       const result = await extractModelPreferences('use claude', deps);
 
-      expect(result.selectedModels).toContain(LlmModels.ClaudeSonnet45);
+      expect(result.selectedModels).toContain(LlmModels.ClaudeSonnet46);
     });
 
     it('uses perplexity key for Sonar models', async () => {
@@ -478,7 +478,7 @@ describe('extractModelPreferences', () => {
   describe('getModelDisplayName', () => {
     it('returns static display name for known models', () => {
       expect(getModelDisplayName(LlmModels.Gemini25Pro)).toBe('Gemini 2.5 Pro');
-      expect(getModelDisplayName(LlmModels.ClaudeSonnet45)).toBe('Claude Sonnet 4.5');
+      expect(getModelDisplayName(LlmModels.ClaudeSonnet46)).toBe('Claude Sonnet 4.6');
     });
 
     it('generates display name from OpenRouter model ID', () => {

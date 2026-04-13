@@ -42,9 +42,9 @@ type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity';
 
 // All 14 supported models
 type LLMModel = 'gemini-2.5-pro' | 'gemini-2.5-flash' | 'gemini-2.0-flash'
-  | 'gemini-2.5-flash-image' | 'o4-mini-deep-research' | 'gpt-5.2'
-  | 'gpt-4o-mini' | 'gpt-image-1' | 'claude-opus-4-5-20251101'
-  | 'claude-sonnet-4-5-20250929' | 'claude-3-5-haiku-20241022'
+  | 'gemini-2.5-flash-image' | 'o4-mini-deep-research' | 'gpt-5.4'
+  | 'gpt-4o-mini' | 'gpt-image-1' | 'claude-opus-4-6'
+  | 'claude-sonnet-4-6' | 'claude-3-5-haiku-20241022'
   | 'sonar' | 'sonar-pro' | 'sonar-deep-research';
 
 // Narrowed subsets

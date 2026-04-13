@@ -46,10 +46,11 @@ describe('pricingClient', () => {
         cacheReadMultiplier: 0.25,
         webSearchCostPerCall: 0.01,
       },
-      [LlmModels.GPT52]: {
-        inputPricePerMillion: 1.75,
-        outputPricePerMillion: 14.0,
+      [LlmModels.GPT54]: {
+        inputPricePerMillion: 2.5,
+        outputPricePerMillion: 15.0,
         cacheReadMultiplier: 0.1,
+        webSearchCostPerCall: 0.01,
       },
       [LlmModels.GPT4oMini]: {
         inputPricePerMillion: 0.15,
@@ -68,19 +69,19 @@ describe('pricingClient', () => {
   const mockAnthropicPricing: ProviderPricing = {
     provider: LlmProviders.Anthropic,
     models: {
-      [LlmModels.ClaudeOpus45]: {
+      [LlmModels.ClaudeOpus46]: {
         inputPricePerMillion: 5.0,
         outputPricePerMillion: 25.0,
         cacheReadMultiplier: 0.1,
         cacheWriteMultiplier: 1.25,
-        webSearchCostPerCall: 0.03,
+        webSearchCostPerCall: 0.01,
       },
-      [LlmModels.ClaudeSonnet45]: {
+      [LlmModels.ClaudeSonnet46]: {
         inputPricePerMillion: 3.0,
         outputPricePerMillion: 15.0,
         cacheReadMultiplier: 0.1,
         cacheWriteMultiplier: 1.25,
-        webSearchCostPerCall: 0.03,
+        webSearchCostPerCall: 0.01,
       },
       [LlmModels.ClaudeHaiku35]: {
         inputPricePerMillion: 0.8,
@@ -252,8 +253,8 @@ describe('pricingClient', () => {
       const context = new PricingContext(completeAllPricing);
 
       expect(context.hasPricing(LlmModels.Gemini25Pro)).toBe(true);
-      expect(context.hasPricing(LlmModels.GPT52)).toBe(true);
-      expect(context.hasPricing(LlmModels.ClaudeOpus45)).toBe(true);
+      expect(context.hasPricing(LlmModels.GPT54)).toBe(true);
+      expect(context.hasPricing(LlmModels.ClaudeOpus46)).toBe(true);
       expect(context.hasPricing(LlmModels.SonarPro)).toBe(true);
     });
 
@@ -275,7 +276,7 @@ describe('pricingClient', () => {
     it('validates that specified models have pricing', () => {
       const context = new PricingContext(completeAllPricing);
 
-      expect(() => context.validateModels([LlmModels.Gemini25Pro, LlmModels.GPT52])).not.toThrow();
+      expect(() => context.validateModels([LlmModels.Gemini25Pro, LlmModels.GPT54])).not.toThrow();
     });
 
     it('throws when validating models with missing pricing', () => {
@@ -288,8 +289,8 @@ describe('pricingClient', () => {
       };
       const context = new PricingContext(incompletePricing);
 
-      expect(() => context.validateModels([LlmModels.Gemini25Pro, LlmModels.GPT52])).toThrow(
-        'Missing pricing for models: gpt-5.2'
+      expect(() => context.validateModels([LlmModels.Gemini25Pro, LlmModels.GPT54])).toThrow(
+        'Missing pricing for models: gpt-5.4'
       );
     });
 
@@ -299,7 +300,7 @@ describe('pricingClient', () => {
       const models = context.getModelsWithPricing();
       expect(models).toHaveLength(14);
       expect(models).toContain(LlmModels.Gemini25Pro);
-      expect(models).toContain(LlmModels.GPT52);
+      expect(models).toContain(LlmModels.GPT54);
     });
 
     it('ignores invalid model keys in pricing data', () => {

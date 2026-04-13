@@ -183,8 +183,8 @@ All provider packages implement the same interface but wrap different APIs.
 | Package                        | Provider   | Models                  |
 | ------------------------------ | ---------- | ----------------------- |
 | `@intexuraos/infra-gemini`     | Google AI  | Gemini 2.5 Flash, Pro   |
-| `@intexuraos/infra-gpt`        | OpenAI     | GPT-5.2, O4 Mini        |
-| `@intexuraos/infra-claude`     | Anthropic  | Claude Opus 4.5, Sonnet |
+| `@intexuraos/infra-gpt`        | OpenAI     | GPT-5.4, O4 Mini        |
+| `@intexuraos/infra-claude`     | Anthropic  | Claude Opus 4.6, Sonnet |
 | `@intexuraos/infra-perplexity` | Perplexity | Sonar, Sonar Pro        |
 
 ---
