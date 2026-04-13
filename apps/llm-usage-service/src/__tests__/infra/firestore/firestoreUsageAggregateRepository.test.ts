@@ -115,6 +115,22 @@ describe('FirestoreUsageAggregateRepository', () => {
     });
   });
 
+  describe('incrementAggregate — does not throw on bad doc-id', () => {
+    it('returns err Result instead of throwing when Firestore rejects the doc id', async () => {
+      mockDoc.mockImplementationOnce(() => {
+        throw new Error('Value for argument "documentPath" must point to a document');
+      });
+
+      const repo = new FirestoreUsageAggregateRepository();
+      const result = await repo.incrementAggregate(createTestEvent());
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toMatch(/documentPath/);
+      }
+    });
+  });
+
   describe('queryAggregates', () => {
     it('returns aggregates from Firestore query', async () => {
       const docData = {
