@@ -92,6 +92,9 @@ This lowers execution risk, but it raises cleanup risk: the implementation must 
 - Modify: `apps/web/src/components/Sidebar.tsx`
 - Delete: `apps/web/src/components/DataInsightsTabs.tsx`
 - Modify: `apps/web/src/components/index.ts`
+- Modify: `apps/web/src/pages/HomePage.tsx`
+- Modify: `apps/web/src/components/home/HeroShowcase.tsx`
+- Modify: `apps/web/src/components/__tests__/Chat/Chat.test.tsx`
 - Delete: Data Insights pages under `apps/web/src/pages/`
 - Delete: `apps/web/src/hooks/useDataSources.ts`
 - Delete: `apps/web/src/hooks/useCompositeFeeds.ts`
@@ -188,6 +191,9 @@ This lowers execution risk, but it raises cleanup risk: the implementation must 
 - Modify: `apps/web/src/components/Sidebar.tsx`
 - Delete: `apps/web/src/components/DataInsightsTabs.tsx`
 - Modify: `apps/web/src/components/index.ts`
+- Modify: `apps/web/src/pages/HomePage.tsx` (remove Data Insights card/copy)
+- Modify: `apps/web/src/components/home/HeroShowcase.tsx` (remove Data Insights showcase item)
+- Modify: `apps/web/src/components/__tests__/Chat/Chat.test.tsx` (remove `INTEXURAOS_DATA_INSIGHTS_AGENT_URL` from test env seed)
 - Delete: `apps/web/src/pages/DataInsightsPage.tsx`
 - Delete: `apps/web/src/pages/CompositeFeedsListPage.tsx`
 - Delete: `apps/web/src/pages/CompositeFeedFormPage.tsx`
@@ -215,6 +221,10 @@ This lowers execution risk, but it raises cleanup risk: the implementation must 
 - [ ] Delete `DataInsightsTabs.tsx` and clean up its export from `apps/web/src/components/index.ts`.
 - [ ] Delete all Data Insights pages, hooks, and service clients.
 - [ ] Delete or narrow all web types that model `CustomDataSource`, `CompositeFeed`, `DataInsight`, and `Visualization` if they are no longer used anywhere else.
+- [ ] Remove Data Insights references outside the dedicated feature slice:
+  - `apps/web/src/pages/HomePage.tsx`: remove Data Insights card and any copy/descriptions referencing the feature.
+  - `apps/web/src/components/home/HeroShowcase.tsx`: remove the Data Insights showcase/sidebar item.
+  - `apps/web/src/components/__tests__/Chat/Chat.test.tsx`: remove `INTEXURAOS_DATA_INSIGHTS_AGENT_URL` from the test environment seed.
 - [ ] Remove or rewrite tests that import deleted pages/hooks/services so the web workspace compiles cleanly.
 - [ ] Verify the web workspace with:
   `pnpm run verify:workspace:tracked -- web`
