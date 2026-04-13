@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import nock from 'nock';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { createFakePricingContext, createFakeUsageSink } from '@intexuraos/llm-pricing';
+import type { LlmClientConfig } from '@intexuraos/llm-factory';
 import type { LlmGenerateClient, GenerateResult } from '@intexuraos/llm-factory';
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
@@ -301,5 +302,103 @@ describe('getLlmClient fallback behavior', () => {
       expect.objectContaining({ userId: 'user123', fallbackModel: ANTHROPIC_FALLBACK }),
       'No API key for fallback model'
     );
+  });
+});
+
+describe('getLlmClient ownerType tagging', () => {
+  beforeEach(() => {
+    nock.cleanAll();
+    vi.clearAllMocks();
+  });
+
+  it('passes ownerType: "user" to createLlmClient for the main client (call site 3)', async () => {
+    // Normal path: user has a key for their default model
+    setupNocks(PRIMARY_MODEL);
+
+    const fakeClient: LlmGenerateClient = {
+      generate: vi.fn().mockResolvedValue(makeSuccessResult('ok')),
+    };
+    mockCreateLlmClient.mockReturnValue(fakeClient);
+
+    const serviceClient = createUserServiceClient(config);
+    const result = await serviceClient.getLlmClient('user123');
+
+    if (!result.ok) expect.fail(`Expected ok, got ${JSON.stringify(result.error)}`);
+
+    // One createLlmClient call for the main client
+    expect(mockCreateLlmClient).toHaveBeenCalledTimes(1);
+    const capturedConfig = mockCreateLlmClient.mock.calls[0]?.[0] as LlmClientConfig;
+    expect(capturedConfig).toMatchObject({ ownerType: 'user' });
+  });
+
+  it('passes ownerType: "user" to createLlmClient for the buildClientForModel helper (call site 2)', async () => {
+    // Fallback retry path: primary fails, buildClientForModel creates fallback client
+    setupNocks(PRIMARY_MODEL, FALLBACK_MODEL);
+
+    const primaryGenerate = vi.fn().mockResolvedValue(makeErrorResult());
+    const primaryClient: LlmGenerateClient = { generate: primaryGenerate };
+
+    const fallbackGenerate = vi.fn().mockResolvedValue(makeSuccessResult('fallback ok'));
+    const fallbackClient: LlmGenerateClient = { generate: fallbackGenerate };
+
+    mockCreateLlmClient.mockReturnValueOnce(primaryClient).mockReturnValueOnce(fallbackClient);
+
+    const serviceClient = createUserServiceClient(config);
+    const result = await serviceClient.getLlmClient('user123');
+
+    if (!result.ok) expect.fail(`Expected ok, got ${JSON.stringify(result.error)}`);
+
+    // Trigger fallback so buildClientForModel is invoked
+    await result.value.generate('test prompt');
+
+    // Two calls: primary (call site 3) and fallback (call site 2 inside buildClientForModel)
+    expect(mockCreateLlmClient).toHaveBeenCalledTimes(2);
+    const primaryConfig = mockCreateLlmClient.mock.calls[0]?.[0] as LlmClientConfig;
+    const fallbackConfig = mockCreateLlmClient.mock.calls[1]?.[0] as LlmClientConfig;
+    expect(primaryConfig).toMatchObject({ ownerType: 'user' });
+    expect(fallbackConfig).toMatchObject({ ownerType: 'user' });
+  });
+
+  it('passes ownerType: "user" to createLlmClient for the platform Gemini fallback (call site 1)', async () => {
+    // Platform Gemini path: user has no key for their preferred model
+    // and the service has a platform Gemini key configured
+    const configWithPlatformKey = {
+      ...config,
+      platformGeminiApiKey: 'platform-gemini-key',
+    };
+
+    // User wants ClaudeHaiku35 but has no anthropic key
+    nock('http://localhost:3000')
+      .get('/internal/users/user123/settings')
+      .matchHeader('X-Internal-Auth', 'test-token')
+      .reply(200, {
+        success: true,
+        data: {
+          llmPreferences: { defaultModel: LlmModels.ClaudeHaiku35 },
+        },
+      });
+
+    nock('http://localhost:3000')
+      .get('/internal/users/user123/llm-keys')
+      .matchHeader('X-Internal-Auth', 'test-token')
+      .reply(200, {
+        success: true,
+        data: { openai: 'openai-key' }, // no anthropic key
+      });
+
+    const fakeClient: LlmGenerateClient = {
+      generate: vi.fn().mockResolvedValue(makeSuccessResult('gemini ok')),
+    };
+    mockCreateLlmClient.mockReturnValue(fakeClient);
+
+    const serviceClient = createUserServiceClient(configWithPlatformKey);
+    const result = await serviceClient.getLlmClient('user123');
+
+    if (!result.ok) expect.fail(`Expected ok, got ${JSON.stringify(result.error)}`);
+
+    // Platform Gemini fallback: one call via call site 1
+    expect(mockCreateLlmClient).toHaveBeenCalledTimes(1);
+    const capturedConfig = mockCreateLlmClient.mock.calls[0]?.[0] as LlmClientConfig;
+    expect(capturedConfig).toMatchObject({ ownerType: 'user' });
   });
 });
