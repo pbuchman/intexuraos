@@ -286,8 +286,8 @@ Findings:
 ### titlePrompt v2.0.0
 
 File: `packages/llm-prompts/src/generation/titlePrompt.ts`
-Parser: None strict; downstream trimming in `apps/data-insights-agent/src/infra/gemini/titleGenerationService.ts` and research adapters
-Consumer(s): `apps/data-insights-agent/src/infra/gemini/titleGenerationService.ts`, `apps/research-agent/src/infra/llm/GeminiAdapter.ts`, `apps/research-agent/src/infra/llm/GptAdapter.ts`, `apps/research-agent/src/infra/llm/GlmAdapter.ts`
+Parser: None strict; downstream trimming in research adapters
+Consumer(s): `apps/research-agent/src/infra/llm/GeminiAdapter.ts`, `apps/research-agent/src/infra/llm/GptAdapter.ts`, `apps/research-agent/src/infra/llm/GlmAdapter.ts`
 
 | Dimension                   | Score      | Evidence                                                                       |
 | --------------------------- | ---------: | ------------------------------------------------------------------------------ |
@@ -322,28 +322,6 @@ Consumer(s): `apps/research-agent/src/infra/llm/GeminiAdapter.ts`
 | D7. Version Accuracy        | 9/10       | Minor bump present with content updates.                      |
 | D8. Repair Effectiveness    | N/A        | Not a repair prompt.                                          |
 | **Average**                 | **8.6/10** |                                                               |
-
-Findings:
-
-- None.
-
-### feedNamePrompt v1.2.0
-
-File: `packages/llm-prompts/src/generation/feedNamePrompt.ts`
-Parser: None strict; downstream trims and truncates
-Consumer(s): `apps/data-insights-agent/src/infra/gemini/feedNameGenerationService.ts`
-
-| Dimension                   | Score      | Evidence                                                                                        |
-| --------------------------- | ---------: | ----------------------------------------------------------------------------------------------- |
-| D1. Parser Alignment        | 7/10       | No parser; service accepts free text and slices max length (`feedNameGenerationService.ts:61`). |
-| D2. Injection Safety        | 10/10      | Guard before injected feed metadata (`feedNamePrompt.ts:50-54`).                                |
-| D3. Internal Contradictions | 8/10       | Constraints and examples are consistent.                                                        |
-| D4. Example Quality         | 8/10       | Includes good and bad examples (`feedNamePrompt.ts:44-48`).                                     |
-| D5. Section Ordering        | 9/10       | Rules precede inputs.                                                                           |
-| D6. Downstream Context      | 8/10       | Dashboard display context stated (`feedNamePrompt.ts:34`).                                      |
-| D7. Version Accuracy        | 9/10       | Version bumped with content updates (`1.1.0 -> 1.2.0`).                                         |
-| D8. Repair Effectiveness    | N/A        | Not a repair prompt.                                                                            |
-| **Average**                 | **8.4/10** |                                                                                                 |
 
 Findings:
 
@@ -503,95 +481,6 @@ Findings:
 
 - [F-004] [High] No injection guard in a prompt that influences action execution intent.
 
-### dataAnalysisPrompt v1.2.0
-
-File: `packages/llm-prompts/src/dataInsights/dataAnalysisPrompt.ts`
-Parser: `packages/llm-prompts/src/dataInsights/parseInsightResponse.ts`
-Consumer(s): `apps/data-insights-agent/src/infra/gemini/dataAnalysisService.ts`
-
-| Dimension                   | Score      | Evidence                                                                                                                                                                                                |
-| --------------------------- | ---------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D1. Parser Alignment        | 6/10       | Prompt has conflicting field spec: `INSIGHT_2 ... Trackable=<chart ID from table>` (`dataAnalysisPrompt.ts:64`) while parser expects `Trackable=...` as metric text (`parseInsightResponse.ts:96-101`). |
-| D2. Injection Safety        | 10/10      | Guard is correctly placed before snapshot data (`dataAnalysisPrompt.ts:54-55`).                                                                                                                         |
-| D3. Internal Contradictions | 6/10       | `INSIGHT_1` and `INSIGHT_2` define different `Trackable` meaning (`dataAnalysisPrompt.ts:63-64`).                                                                                                       |
-| D4. Example Quality         | 7/10       | Only one worked example for a complex line format (`dataAnalysisPrompt.ts:70-72`).                                                                                                                      |
-| D5. Section Ordering        | 9/10       | Clear instruction -> schema -> data -> output format order.                                                                                                                                             |
-| D6. Downstream Context      | 10/10      | Explicitly names step 1 of 3 and step-2 dependency (`dataAnalysisPrompt.ts:47-49`).                                                                                                                     |
-| D7. Version Accuracy        | 9/10       | PromptBuilder version bumped with recent changes (`1.1.0 -> 1.2.0`).                                                                                                                                    |
-| D8. Repair Effectiveness    | N/A        | Not a repair prompt.                                                                                                                                                                                    |
-| **Average**                 | **8.1/10** |                                                                                                                                                                                                         |
-
-Findings:
-
-- [F-009] [Medium] Internal line-format contradiction for `Trackable` field.
-- [F-010] [Medium] Prompt allows dynamic chart IDs (`<chart ID from table>`) while parser hardcodes `C1..C6` (`parseInsightResponse.ts:5`, `115-118`).
-
-### chartDefinitionPrompt v1.1.0
-
-File: `packages/llm-prompts/src/dataInsights/chartDefinitionPrompt.ts`
-Parser: `packages/llm-prompts/src/dataInsights/parseChartDefinition.ts`, `packages/llm-prompts/src/dataInsights/contextSchemas.ts`
-Consumer(s): `apps/data-insights-agent/src/infra/gemini/chartDefinitionService.ts`
-
-| Dimension                   | Score      | Evidence                                                                                                          |
-| --------------------------- | ---------: | ----------------------------------------------------------------------------------------------------------------- |
-| D1. Parser Alignment        | 8/10       | Marker format and JSON block align (`chartDefinitionPrompt.ts:56-77` vs `parseChartDefinition.ts:28-41`).         |
-| D2. Injection Safety        | 7/10       | Snapshot data is guarded (`chartDefinitionPrompt.ts:40-42`), but insight fields are injected unguarded (`45-48`). |
-| D3. Internal Contradictions | 8/10       | Rules are coherent with parser constraints (`no data property` aligns with schema refine).                        |
-| D4. Example Quality         | 7/10       | Uses skeleton template, but lacks full realistic end-to-end example.                                              |
-| D5. Section Ordering        | 9/10       | Strong pipeline-aware ordering.                                                                                   |
-| D6. Downstream Context      | 10/10      | Explicitly names step 2 and step-3 LLM consumer (`chartDefinitionPrompt.ts:34-36`).                               |
-| D7. Version Accuracy        | 9/10       | Version bumped (`1.0.1 -> 1.1.0`) with content edits.                                                             |
-| D8. Repair Effectiveness    | N/A        | Not a repair prompt.                                                                                              |
-| **Average**                 | **8.3/10** |                                                                                                                   |
-
-Findings:
-
-- [F-008] [Medium] Untrusted insight text from prior LLM output is injected without guard.
-
-### dataTransformPrompt v1.1.0
-
-File: `packages/llm-prompts/src/dataInsights/dataTransformPrompt.ts`
-Parser: `packages/llm-prompts/src/dataInsights/parseTransformedData.ts`, `packages/llm-prompts/src/dataInsights/contextSchemas.ts`
-Consumer(s): `apps/data-insights-agent/src/infra/gemini/dataTransformService.ts`
-
-| Dimension                   | Score      | Evidence                                                                                                                                   |
-| --------------------------- | ---------: | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| D1. Parser Alignment        | 2/10       | Prompt explicitly allows empty output (`dataTransformPrompt.ts:74`), parser forbids it via `.min(1)` (`contextSchemas.ts:53-55`).          |
-| D2. Injection Safety        | 6/10       | Snapshot data is guarded (`dataTransformPrompt.ts:38-39`), but `transformInstructions` from another LLM are injected without guard (`49`). |
-| D3. Internal Contradictions | 7/10       | Prompt is internally coherent; mismatch is with parser contract.                                                                           |
-| D4. Example Quality         | 7/10       | Has output scaffold but no realistic transformed-data example with edge conditions.                                                        |
-| D5. Section Ordering        | 8/10       | Strong step framing and output markers.                                                                                                    |
-| D6. Downstream Context      | 8/10       | Explicit step 3 pipeline context (`dataTransformPrompt.ts:31-33`).                                                                         |
-| D7. Version Accuracy        | 9/10       | Version bumped with prompt changes (`1.0.1 -> 1.1.0`).                                                                                     |
-| D8. Repair Effectiveness    | N/A        | Not a repair prompt.                                                                                                                       |
-| **Average**                 | **6.7/10** |                                                                                                                                            |
-
-Findings:
-
-- [F-001] [Critical] Empty-array fallback in prompt is incompatible with parser minimum length requirement.
-
-### buildInsightRepairPrompt v1.1.0
-
-File: `packages/llm-prompts/src/dataInsights/buildInsightRepairPrompt.ts`
-Parser: `packages/llm-prompts/src/dataInsights/parseInsightResponse.ts`
-Consumer(s): `apps/data-insights-agent/src/infra/gemini/dataAnalysisService.ts`
-
-| Dimension                   | Score      | Evidence                                                                                                                          |
-| --------------------------- | ---------: | --------------------------------------------------------------------------------------------------------------------------------- |
-| D1. Parser Alignment        | 8/10       | Repair line format mirrors parser expectations (`buildInsightRepairPrompt.ts:36-43`, `parseInsightResponse.ts:36-42`, `109-118`). |
-| D2. Injection Safety        | 2/10       | `originalPrompt` and `invalidResponse` are unguarded triple-quote injections (`buildInsightRepairPrompt.ts:21-32`).               |
-| D3. Internal Contradictions | 8/10       | Sentence cap guidance is explicit and reconciled with parser tolerance (`38-39`).                                                 |
-| D4. Example Quality         | 8/10       | Includes valid and invalid examples (`44-53`).                                                                                    |
-| D5. Section Ordering        | 8/10       | Error context precedes strict requirements.                                                                                       |
-| D6. Downstream Context      | 8/10       | States single repair attempt and `NO_INSIGHTS` fallback (`19`).                                                                   |
-| D7. Version Accuracy        | 8/10       | Has version comment and recent update (`buildInsightRepairPrompt.ts:12`).                                                         |
-| D8. Repair Effectiveness    | 8/10       | Strong final-attempt framing and explicit fallback path.                                                                          |
-| **Average**                 | **7.2/10** |                                                                                                                                   |
-
-Findings:
-
-- [F-006] [High] Missing literal-content guards at both untrusted interpolation points.
-
 ### itemExtractionPrompt v1.2.0
 
 File: `packages/llm-prompts/src/todos/itemExtractionPrompt.ts`
@@ -618,9 +507,6 @@ Section C: Parser Mismatch Registry
 
 | ID    | Prompt                       | Prompt Says                                                                           | Parser Expects                                                  | Parser File:Line                                                   | Severity                                              |
 | ----- | ---------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------- |  |
-| M-001 | dataTransformPrompt          | `If the transformation produces zero matching rows, return: DATA_START\n[]\nDATA_END` | Non-empty array only (`.min(1)`)                                | `packages/llm-prompts/src/dataInsights/contextSchemas.ts:53`       | Critical                                              |
-| M-002 | dataAnalysisPrompt           | `INSIGHT_2: ... Trackable=<chart ID from table>`                                      | `Trackable=(.+)` metric text parsed; no chart-id semantics      | `packages/llm-prompts/src/dataInsights/parseInsightResponse.ts:96` | Medium                                                |
-| M-003 | dataAnalysisPrompt           | `ChartType=<chart ID from table>`                                                     | Hardcoded enum `C1..C6`                                         | `packages/llm-prompts/src/dataInsights/parseInsightResponse.ts:5`  | Medium                                                |
 | M-004 | thumbnailPrompt              | Output requires `parameters.aspectRatio/textOnImage/logosTrademarks`                  | Parser ignores response values and hardcodes constants          | `packages/llm-prompts/src/image/generateThumbnailPrompt.ts:119`    | Medium                                                |
 | M-005 | itemExtractionPrompt         | `"dueDate": "<ISO-8601-date>"                                                         | null`                                                           | `dueDate: z.string().nullable()` (no ISO validation)               | `packages/llm-prompts/src/todos/contextSchemas.ts:14` | Low |
 | M-006 | linearActionExtractionPrompt | `Create a clear, concise title (max 100 characters)`                                  | `title: z.string()` (no max)                                    | `packages/llm-prompts/src/linear/contextSchemas.ts:17`             | Low                                                   |

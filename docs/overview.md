@@ -66,8 +66,6 @@ You review a draft before anything runs — the refined prompt, selected models,
 
 **[Your Dashboard](services/web/features.md)** is the observation deck. Code tasks stream their output in real time — color-coded lines showing every file read, every test run, every tool invocation — with a redesigned issue-centric grouped task view that surfaces design documents, worker model selection, and task lifecycle at a glance. All PR automation actions are visible in a unified log. Action items, approval gates, and research reviews surface in a single inbox. Your Linear board, calendar, todos, notes, bookmarks, and notification history are each one tap away. The floating chat assistant is available on every page.
 
-**[Data Insights Agent](services/data-insights-agent/features.md)** turns scattered data into visualizations. Upload spreadsheet exports, data files, or plain text, or combine them with filtered mobile notifications into a single view. The AI discovers patterns and recommends chart types — line, bar, scatter, area, pie, or heatmap — each with a trackable metric. Preview before you save. Refresh when you want the latest view. No formulas, no spreadsheet gymnastics.
-
 **[App Settings Service](services/app-settings-service/features.md)** shows you what every AI interaction costs. Current pricing for all four providers, broken down by model. Your personal usage split by month, model, and call type — with dollar costs displayed so you know exactly where your AI spend goes. The service verifies that every registered model has pricing data before it starts, so the numbers are never stale or incomplete.
 
 ### Connect Your Tools and Data

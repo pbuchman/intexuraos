@@ -145,10 +145,6 @@ function isValidExtractionResponse(value: unknown): value is ExtractionResponse 
 | Service             | File                        | Guard/Parser Function    |
 | ------------------- | --------------------------- | ------------------------ |
 | research-agent      | `InputValidationAdapter.ts` | `isInputQualityResult()` |
-| data-insights-agent | `parseInsightResponse.ts`   | `parseInsightResponse()` |
-
-**Note:** The `parseInsightResponse()` function uses custom text-based parsing (not JSON), so manual validation is appropriate.
-
 ---
 
 ## Approach 3: No Validation

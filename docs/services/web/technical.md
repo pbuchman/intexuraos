@@ -24,7 +24,6 @@ graph TB
         BKMK[bookmarks-agent]
         CAL[calendar-agent]
         LIN[linear-agent]
-        DATA[data-insights-agent]
         NOTIF[mobile-notifications]
         SETTINGS[app-settings-service]
         NOTION[notion-service]
@@ -202,14 +201,6 @@ apps/web/src/
 | `/notes`                                | WhatsAppNotesPage                 | Yes                             | WhatsApp notes                       |
 | `/calendar`                             | CalendarPage                      | Yes                             | Calendar events                      |
 | `/linear`                               | LinearIssuesPage                  | Yes                             | Linear issues dashboard              |
-| `/data-insights`                        | CompositeFeedsListPage            | Yes                             | Data insights feeds                  |
-| `/data-insights/new`                    | CompositeFeedFormPage             | Yes                             | Create composite feed                |
-| `/data-insights/visualizations`         | VisualizationsListPage            | Yes                             | Saved visualizations                 |
-| `/data-insights/:feedId/visualizations` | DataInsightsPage                  | Yes                             | Saved visualizations for a feed      |
-| `/data-insights/:id`                    | CompositeFeedFormPage             | Yes                             | Edit composite feed                  |
-| `/data-insights/static-sources`         | DataSourcesListPage               | Yes                             | Static data sources                  |
-| `/data-insights/static-sources/new`     | DataSourceFormPage                | Yes                             | Create data source                   |
-| `/data-insights/static-sources/:id`     | DataSourceFormPage                | Yes                             | Edit data source                     |
 | `/notifications`                        | MobileNotificationsListPage       | Yes                             | Push notifications history           |
 | `/settings/whatsapp`                    | WhatsAppConnectionPage            | Yes                             | WhatsApp connection                  |
 | `/settings/mobile`                      | MobileNotificationsConnectionPage | Yes                             | Mobile notification settings         |
@@ -381,7 +372,6 @@ Environment variables (prefixed `INTEXURAOS_`, read via `import.meta.env`):
 | `INTEXURAOS_RESEARCH_AGENT_URL`               | research-agent endpoint               | Yes      |
 | `INTEXURAOS_COMMANDS_AGENT_URL`               | commands-agent endpoint               | Yes      |
 | `INTEXURAOS_ACTIONS_AGENT_URL`                | actions-agent endpoint                | Yes      |
-| `INTEXURAOS_DATA_INSIGHTS_AGENT_URL`          | data-insights-agent endpoint          | Yes      |
 | `INTEXURAOS_NOTES_AGENT_URL`                  | notes-agent endpoint                  | Yes      |
 | `INTEXURAOS_TODOS_AGENT_URL`                  | todos-agent endpoint                  | Yes      |
 | `INTEXURAOS_BOOKMARKS_AGENT_URL`              | bookmarks-agent endpoint              | Yes      |
