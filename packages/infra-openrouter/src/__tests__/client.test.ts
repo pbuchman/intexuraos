@@ -811,6 +811,111 @@ describe('createOpenRouterClient', () => {
     });
   });
 
+  describe('OpenRouter usage.cost passthrough', () => {
+    it('uses usage.cost from API response and forwards it to the sink as providerReportedUsd', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Generated text.', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150, cost: 0.0042 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing({ useProviderCost: true }),
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generate('hello');
+      expect(result.ok).toBe(true);
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({ providerReportedUsd: 0.0042 }),
+      );
+    });
+
+    it('omits providerReportedUsd when usage.cost absent and falls back to token-based costUsd', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Generated text.', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 }, // NO cost field
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing({ inputPricePerMillion: 1, outputPricePerMillion: 2 }),
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await client.generate('hello');
+
+      const callArg = mockUsageLoggerLog.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(callArg['providerReportedUsd']).toBeUndefined();
+      expect((callArg['usage'] as { costUsd: number }).costUsd).toBeGreaterThan(0); // token-fallback still produces non-zero cost
+    });
+
+    it('forwards providerReportedUsd on the research callType too', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: `${TEST_MODEL}:online`,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Research findings.', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150, cost: 0.011 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing({ useProviderCost: true }),
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await client.research('hello');
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({ callType: 'research', providerReportedUsd: 0.011 }),
+      );
+    });
+  });
+
   describe('usageSink', () => {
     it('passes custom usageSink to createUsageLogger', async () => {
       const { createUsageLogger } = await import('@intexuraos/llm-pricing');
