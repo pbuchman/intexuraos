@@ -145,4 +145,34 @@ describe('createOpenRouterGenerateClient', () => {
       expect(result.error.code).toBe('OVERLOADED');
     }
   });
+
+  describe('ownerType propagation', () => {
+    it('forwards ownerType to createOpenRouterClient when set to user', async () => {
+      const { createOpenRouterClient } = await import('@intexuraos/infra-openrouter');
+      mockOrGenerate.mockResolvedValue(
+        ok({ content: '', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 } })
+      );
+
+      createOpenRouterGenerateClient({ ...baseConfig, ownerType: 'user' });
+
+      expect(createOpenRouterClient).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerType: 'user' })
+      );
+    });
+
+    it('omits ownerType from createOpenRouterClient call when not configured', async () => {
+      const { createOpenRouterClient } = await import('@intexuraos/infra-openrouter');
+      mockOrGenerate.mockResolvedValue(
+        ok({ content: '', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 } })
+      );
+
+      createOpenRouterGenerateClient(baseConfig);
+
+      const callArg = vi.mocked(createOpenRouterClient).mock.calls[0]?.[0] as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(callArg?.['ownerType']).toBeUndefined();
+    });
+  });
 });

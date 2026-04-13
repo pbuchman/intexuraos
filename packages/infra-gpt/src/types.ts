@@ -7,6 +7,8 @@
 import type { Logger } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 
+import type { OwnerType } from '@intexuraos/llm-contract';
+
 export type {
   LLMError as GptError,
   ResearchResult,
@@ -65,4 +67,6 @@ export interface GptConfig {
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
   usageSink: UsageSink;
+  /** Owner scope of the call. When omitted, the usage sink defaults to 'system'. */
+  ownerType?: OwnerType;
 }

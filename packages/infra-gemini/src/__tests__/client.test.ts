@@ -1105,4 +1105,24 @@ describe('createGeminiClient', () => {
       }
     });
   });
+
+  it('passes ownerType to usage logger when provided', async () => {
+    mockGenerateContent.mockResolvedValue({
+      text: 'ok',
+      usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 5 },
+    });
+
+    const client = createGeminiClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      pricing: createTestPricing(),
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+      ownerType: 'user',
+    });
+    await client.generate('hello');
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'user' }));
+  });
 });

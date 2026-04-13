@@ -16,6 +16,7 @@ export function createOpenRouterGenerateClient(config: LlmClientConfig): LlmGene
     pricing: config.pricing,
     logger: config.logger,
     usageSink: config.usageSink,
+    ...(config.ownerType !== undefined && { ownerType: config.ownerType }),
   });
 
   return {

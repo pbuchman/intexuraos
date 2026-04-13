@@ -35,15 +35,23 @@ export function buildUsageEvent(
 ): UsageEventPayload {
   const environment: 'dev' | 'prod' = process.env['NODE_ENV'] === 'production' ? 'prod' : 'dev';
 
+  const ownerType = params.ownerType ?? 'system';
+  const clientName = params.clientName ?? source.component;
+  const providerReportedUsd = params.providerReportedUsd ?? null;
+  const useProviderCost = providerReportedUsd !== null;
+  // Schema requires billedUsd >= 0; clamp defensively so a misbehaving provider can't 400 the receiver.
+  const billedUsd = useProviderCost ? Math.max(0, providerReportedUsd) : params.usage.costUsd;
+  const pricingSource = useProviderCost ? 'provider_reported' : 'calculated';
+
   return {
     schemaVersion: 1,
     eventId: crypto.randomUUID(),
     occurredAt: new Date().toISOString(),
-    owner: { type: 'system', id: params.userId },
+    owner: { type: ownerType, id: params.userId },
     source: {
       service: source.service,
       component: source.component,
-      client: params.model,
+      client: clientName,
       environment,
     },
     request: {
@@ -67,10 +75,10 @@ export function buildUsageEvent(
       imageCount: 0,
     },
     cost: {
-      billedUsd: params.usage.costUsd,
-      providerReportedUsd: null,
+      billedUsd,
+      providerReportedUsd,
       calculatedUsd: params.usage.costUsd,
-      pricingSource: 'calculated',
+      pricingSource,
     },
     correlation: {
       requestId: correlationOverrides?.requestId ?? null,

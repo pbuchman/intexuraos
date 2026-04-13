@@ -10,6 +10,14 @@ import type { Result } from '@intexuraos/common-core';
 import type { LLMModel } from './supportedModels.js';
 
 /**
+ * Owner scope for emitted LLM usage events.
+ *
+ * - `'user'`: the call was made on behalf of a real user (their dashboard should show it).
+ * - `'system'`: the call was an internal/system action (e.g. orchestrator validators, execution-memory).
+ */
+export type OwnerType = 'user' | 'system';
+
+/**
  * Base configuration for LLM clients.
  *
  * Extended by provider-specific configs (e.g., {@link ClaudeConfig}, {@link GptConfig})

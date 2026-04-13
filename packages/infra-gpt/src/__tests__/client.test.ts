@@ -877,4 +877,24 @@ describe('createGptClient', () => {
       }
     });
   });
+
+  it('passes ownerType to usage logger when provided', async () => {
+    mockChatCompletionsCreate.mockResolvedValue({
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 5, completion_tokens: 5 },
+    });
+
+    const client = createGptClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      pricing: createTestPricing(),
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+      ownerType: 'user',
+    });
+    await client.generate('hello');
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'user' }));
+  });
 });

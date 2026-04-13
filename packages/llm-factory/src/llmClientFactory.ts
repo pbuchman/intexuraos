@@ -43,6 +43,7 @@ import {
   type LLMModel,
   type ModelPricing,
   type ToolCallingClient,
+  type OwnerType,
 } from '@intexuraos/llm-contract';
 import { createOpenRouterGenerateClient } from './openRouterGenerateClient.js';
 import type { Logger, Result } from '@intexuraos/common-core';
@@ -63,6 +64,12 @@ export interface LlmClientConfig {
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
   usageSink: UsageSink;
+  /**
+   * Owner scope of the call.
+   * When omitted, downstream defaults to 'system' to preserve legacy behavior.
+   * Pass 'user' for calls initiated directly by a human (e.g. chat, code tasks).
+   */
+  ownerType?: OwnerType;
 }
 
 /**

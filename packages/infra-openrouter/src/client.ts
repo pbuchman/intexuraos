@@ -126,6 +126,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     timeoutMs = DEFAULT_TIMEOUT_MS,
     logger,
     usageSink,
+    ownerType,
   } = config;
 
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
@@ -134,7 +135,8 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
-    errorMessage?: string
+    errorMessage?: string,
+    providerReportedUsd?: number | null
   ): void {
     void usageLogger.log({
       userId,
@@ -144,22 +146,32 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
+      ...(providerReportedUsd !== undefined &&
+        providerReportedUsd !== null && { providerReportedUsd }),
+      ...(ownerType !== undefined && { ownerType }),
     });
   }
 
-  function extractUsage(usage: OpenRouterUsage | undefined): NormalizedUsage {
+  function extractUsage(usage?: OpenRouterUsage): {
+    normalized: NormalizedUsage;
+    providerReportedUsd: number | null;
+  } {
     /* v8 ignore start -- upstream: cannot verify usage is present in all API responses @preserve */
     if (usage === undefined) {
-      return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 };
+      return {
+        normalized: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
+        providerReportedUsd: null,
+      };
     }
     /* v8 ignore stop @preserve */
-    // OpenRouter doesn't provide per-request cost in the response like Perplexity does
-    return normalizeUsage(
+    const providerReportedUsd = typeof usage.cost === 'number' ? usage.cost : null;
+    const normalized = normalizeUsage(
       usage.prompt_tokens,
       usage.completion_tokens,
-      undefined, // No provider cost in response
+      providerReportedUsd ?? undefined,
       pricing
     );
+    return { normalized, providerReportedUsd };
   }
 
   return {
@@ -215,7 +227,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
 
         const data = (await response.json()) as OpenRouterResponse;
         const content = data.choices[0]?.message.content ?? '';
-        const usage = extractUsage(data.usage);
+        const { normalized, providerReportedUsd } = extractUsage(data.usage);
 
         // Extract sources from annotations (OpenRouter returns web search citations as annotations)
         const sources: string[] = [];
@@ -237,9 +249,9 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           }
         }
 
-        trackUsage('research', usage, true);
+        trackUsage('research', normalized, true, undefined, providerReportedUsd);
 
-        return ok({ content, sources, usage });
+        return ok({ content, sources, usage: normalized });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
         const emptyUsage: NormalizedUsage = {
@@ -313,11 +325,11 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           /* v8 ignore stop @preserve */
         }
         const content = firstChoice.message.content;
-        const usage = extractUsage(data.usage);
+        const { normalized, providerReportedUsd } = extractUsage(data.usage);
 
-        trackUsage('generate', usage, true);
+        trackUsage('generate', normalized, true, undefined, providerReportedUsd);
 
-        return ok({ content, usage });
+        return ok({ content, usage: normalized });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
         const emptyUsage: NormalizedUsage = {
