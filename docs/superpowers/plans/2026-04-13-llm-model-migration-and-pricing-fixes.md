@@ -53,6 +53,7 @@ When Task 12's PR is drafted, include the URL and the three verified values abov
 
 **Files modified (production code):**
 - `packages/llm-contract/src/supportedModels.ts` — add new branded types, const entries, union members, runtime array entries, provider-map entries; remove the old ones at the end.
+- `packages/llm-contract/src/index.ts` — barrel re-exports `GPT52`, `ClaudeOpus45`, `ClaudeSonnet45`; must be updated to export `GPT54`, `ClaudeOpus46`, `ClaudeSonnet46` (Task 1 add, Task 12 remove old) or the barrel breaks when the old symbols are removed from `supportedModels.ts`.
 - `packages/llm-contract/src/__tests__/fixtures/pricing.ts` — replace `gpt-5.2` / `claude-sonnet-4-5-20250929` / `claude-opus-4-5-20251101` rows with the new IDs and prices (mirror migration 093 exactly — the file comment already claims it does).
 - `packages/llm-pricing/src/testFixtures.ts` — **shipped source** (NOT under `__tests__/`); re-exported from the package index for downstream test harnesses. Lines 73, 76, 77 reference old enum IDs and must be updated in Task 12 Step 6, or `pnpm run ci:tracked` fails to compile `llm-pricing`.
 - `apps/research-agent/src/index.ts` — `REQUIRED_MODELS` list.
@@ -182,10 +183,10 @@ describe('new model identifiers (2026-04 migration)', () => {
 - [ ] **Step 2: Run the test and confirm it fails**
 
 ```bash
-pnpm --filter @intexuraos/llm-contract test -- --run supportedModels
+pnpm run verify:workspace:tracked -- llm-contract
 ```
 
-Expected output: 5 failing tests with `TypeError: Cannot read property 'GPT54' of undefined` (or similar — TS compile error counts as a fail).
+Expected output: 5 failing tests with `TypeError: Cannot read property 'GPT54' of undefined` (or similar — TS compile error counts as a fail). Note: `@intexuraos/llm-contract` has no per-package `test` script; tests are run via the root-level workspace verify command.
 
 - [ ] **Step 3: Add the three new branded types**
 
@@ -266,18 +267,18 @@ In the `MODEL_PROVIDER_MAP` record (lines 216-235), add these lines alongside th
 - [ ] **Step 9: Run the test and confirm it passes**
 
 ```bash
-pnpm --filter @intexuraos/llm-contract test -- --run supportedModels
+pnpm run verify:workspace:tracked -- llm-contract
 ```
 
-Expected: all 5 new tests pass. No existing tests regress.
+Expected: all 5 new tests pass. No existing tests regress. Note: `@intexuraos/llm-contract` has no per-package `test` script; tests are run via the root-level workspace verify command.
 
 - [ ] **Step 10: Verify the package typechecks**
 
 ```bash
-pnpm --filter @intexuraos/llm-contract run build
+pnpm --filter @intexuraos/llm-contract run typecheck
 ```
 
-Expected: clean build. If you see "not assignable to Record<LLMModel, ...>", you forgot an entry in `MODEL_PROVIDER_MAP` — the whole point of that Record type is to force exhaustiveness.
+Expected: clean typecheck. If you see "not assignable to Record<LLMModel, ...>", you forgot an entry in `MODEL_PROVIDER_MAP` — the whole point of that Record type is to force exhaustiveness. Note: `@intexuraos/llm-contract` has no `build` script; use `typecheck` instead.
 
 - [ ] **Step 11: Commit**
 
@@ -323,10 +324,10 @@ it('fixture includes pricing for claude-sonnet-4-6', () => {
 - [ ] **Step 2: Run the test and confirm it fails**
 
 ```bash
-pnpm --filter @intexuraos/llm-pricing test -- --run testFixtures
+pnpm run verify:workspace:tracked -- llm-pricing
 ```
 
-Expected: 3 failures, all `expect(undefined).toBeDefined()` or similar.
+Expected: 3 failures, all `expect(undefined).toBeDefined()` or similar. Note: `@intexuraos/llm-pricing` has no per-package `test` script; tests are run via the root-level workspace verify command.
 
 - [ ] **Step 3: Add new-model entries to the test fixture**
 
@@ -370,7 +371,7 @@ Note: the two old Anthropic entries keep `webSearchCostPerCall: 0.03` for now. W
 - [ ] **Step 4: Run the test and confirm it passes**
 
 ```bash
-pnpm --filter @intexuraos/llm-pricing test -- --run testFixtures
+pnpm run verify:workspace:tracked -- llm-pricing
 ```
 
 Expected: 3 new tests pass.
@@ -793,16 +794,16 @@ For each hit, replace `0.03` with `0.01`. Expected locations: `apps/llm-usage-se
 - [ ] **Step 3: Run affected package tests**
 
 ```bash
-pnpm --filter @intexuraos/llm-pricing test
+pnpm run verify:workspace:tracked -- llm-pricing
 pnpm --filter @intexuraos/llm-prompts test
 pnpm --filter @intexuraos/internal-clients test
 pnpm --filter @intexuraos/llm-usage-service test
-pnpm --filter @intexuraos/llm-factory test
-pnpm --filter @intexuraos/llm-contract test
+pnpm run verify:workspace:tracked -- llm-factory
+pnpm run verify:workspace:tracked -- llm-contract
 pnpm --filter @intexuraos/orchestrator test
 ```
 
-Expected: all green.
+Expected: all green. Note: `llm-pricing`, `llm-factory`, and `llm-contract` have no per-package `test` script; use the root-level `verify:workspace:tracked` command instead.
 
 - [ ] **Step 4: Commit**
 
