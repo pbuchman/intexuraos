@@ -37,7 +37,7 @@
 | Backend schema | `apps/code-agent/src/routes/codeRoutes.ts`                       | Add `taskMode` to `/code/submit` body schema          |
 | Backend logic  | `apps/code-agent/src/routes/codeRoutes.ts`                       | Use explicit `taskMode` to set `agentType`            |
 | Tests          | `apps/web/src/__tests__/CodeTaskNewPage.test.tsx`                | Test mode selector behavior and defaults              |
-| Tests          | `apps/code-agent/src/routes/__tests__/codeRoutes.submit.test.ts` | Test `taskMode` parameter handling                    |
+| Tests          | `apps/code-agent/src/__tests__/routes/codeSubmit.test.ts`        | Test `taskMode` parameter handling                    |
 
 ### Endpoint Changes
 
@@ -436,7 +436,7 @@ git commit -m "feat(web): show task mode in confirmation modal"
 
 - [ ] **Step 1: Write the failing test — taskMode=execution sets agentType to execution**
 
-In the submit code task test file (find it via `ls apps/code-agent/src/routes/__tests__/codeRoutes.submit*` — the file that tests the `/code/submit` endpoint):
+In the submit code task test file (`apps/code-agent/src/__tests__/routes/codeSubmit.test.ts`):
 
 ```typescript
 it('uses explicit taskMode=execution to set agentType', async () => {
@@ -568,7 +568,7 @@ Expected: All PASS
 - [ ] **Step 8: Commit**
 
 ```bash
-git add apps/code-agent/src/routes/codeRoutes.ts apps/code-agent/src/routes/__tests__/codeRoutes.submit*
+git add apps/code-agent/src/routes/codeRoutes.ts apps/code-agent/src/__tests__/routes/codeSubmit.test.ts
 git commit -m "feat(code-agent): accept explicit taskMode in /code/submit endpoint"
 ```
 
