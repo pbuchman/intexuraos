@@ -28,6 +28,7 @@ function createEvent(overrides: Partial<GitHubPREvent> = {}): GitHubPREvent {
     title: 'Test PR',
     body: '@claude review this',
     state: 'open',
+    isDraft: null,
     baseBranch: null,
     mergedAt: null,
     createdAt: new Date('2026-03-26T12:00:00.000Z'),
