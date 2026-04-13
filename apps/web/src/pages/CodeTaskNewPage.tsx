@@ -483,6 +483,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
         isOpen={showConfirmModal}
         taskTitle={getTaskTitle()}
         workerType={workerType}
+        taskMode={taskMode}
         onConfirm={handleConfirmSubmit}
         onCancel={handleCancelModal}
       />
