@@ -331,6 +331,49 @@ describe('github-event-parser', () => {
         expect(result.value.prAuthorLogin).toBeNull(); // @allow-result-access -- narrowed by result.ok
       }
     });
+
+    it('should extract isDraft as true when draft is true', () => {
+      const payload = {
+        ...validPRPayload,
+        pull_request: {
+          ...validPRPayload.pull_request,
+          draft: true,
+        },
+      };
+
+      const result = parsePullRequestEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.isDraft).toBe(true); // @allow-result-access -- narrowed by result.ok
+      }
+    });
+
+    it('should extract isDraft as false when draft is false', () => {
+      const payload = {
+        ...validPRPayload,
+        pull_request: {
+          ...validPRPayload.pull_request,
+          draft: false,
+        },
+      };
+
+      const result = parsePullRequestEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.isDraft).toBe(false); // @allow-result-access -- narrowed by result.ok
+      }
+    });
+
+    it('should extract isDraft as null when draft field is missing', () => {
+      const result = parsePullRequestEvent(validPRPayload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.isDraft).toBeNull(); // @allow-result-access -- narrowed by result.ok
+      }
+    });
   });
 
   describe('parsePullRequestReviewEvent', () => {
@@ -527,6 +570,32 @@ describe('github-event-parser', () => {
         expect(result.value.mergedAt?.toISOString()).toBe('2024-01-15T12:00:00.000Z'); // @allow-result-access -- narrowed by result.ok
       }
     });
+
+    it('should extract isDraft from pull_request.draft', () => {
+      const payload = {
+        ...validReviewPayload,
+        pull_request: {
+          ...validReviewPayload.pull_request,
+          draft: true,
+        },
+      };
+
+      const result = parsePullRequestReviewEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.isDraft).toBe(true); // @allow-result-access -- narrowed by result.ok
+      }
+    });
+
+    it('should extract isDraft as null when draft is missing from review payload', () => {
+      const result = parsePullRequestReviewEvent(validReviewPayload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.isDraft).toBeNull(); // @allow-result-access -- narrowed by result.ok
+      }
+    });
   });
 
   describe('parsePushEvent', () => {
@@ -605,6 +674,15 @@ describe('github-event-parser', () => {
         const now = new Date();
         const diff = Math.abs(now.getTime() - result.value.createdAt.getTime()); // @allow-result-access -- narrowed by result.ok && result.value !== null
         expect(diff).toBeLessThan(1000);
+      }
+    });
+
+    it('should always set isDraft to null for push events', () => {
+      const result = parsePushEvent(validPushPayload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.isDraft).toBeNull(); // @allow-result-access -- push events have no draft info
       }
     });
   });
@@ -920,6 +998,32 @@ describe('github-event-parser', () => {
       if (result.ok) {
         expect(result.value.githubEventId).toBeGreaterThanOrEqual(beforeTime);
         expect(result.value.githubEventId).toBeLessThanOrEqual(afterTime);
+      }
+    });
+
+    it('should extract isDraft from pull_request.draft in review comment payload', () => {
+      const payload = {
+        ...validCommentPayload,
+        pull_request: {
+          ...validCommentPayload.pull_request,
+          draft: false,
+        },
+      };
+
+      const result = parsePullRequestReviewCommentEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.isDraft).toBe(false); // @allow-result-access -- narrowed by result.ok
+      }
+    });
+
+    it('should extract isDraft as null when draft is missing from review comment payload', () => {
+      const result = parsePullRequestReviewCommentEvent(validCommentPayload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.isDraft).toBeNull(); // @allow-result-access -- narrowed by result.ok
       }
     });
   });
@@ -1274,6 +1378,32 @@ describe('github-event-parser', () => {
       if (result.ok && result.value !== null) {
         expect(result.value.githubEventId).toBeGreaterThanOrEqual(beforeTime);
         expect(result.value.githubEventId).toBeLessThanOrEqual(afterTime);
+      }
+    });
+
+    it('should extract isDraft from issue.draft when present', () => {
+      const payload = {
+        ...validIssueCommentPayload,
+        issue: {
+          ...validIssueCommentPayload.issue,
+          draft: true,
+        },
+      };
+
+      const result = parseIssueCommentEvent(payload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.isDraft).toBe(true); // @allow-result-access -- narrowed by result.ok
+      }
+    });
+
+    it('should extract isDraft as null when draft is missing from issue_comment payload', () => {
+      const result = parseIssueCommentEvent(validIssueCommentPayload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.isDraft).toBeNull(); // @allow-result-access -- narrowed by result.ok
       }
     });
   });
@@ -2501,6 +2631,18 @@ describe('github-event-parser', () => {
         if (result.value !== null) {
           // checkSuiteId should be 0 when not a valid number
           expect(result.value.payload).toHaveProperty('checkSuiteId');
+        }
+      }
+    });
+
+    it('should always set isDraft to null for check_suite events', () => {
+      const result = parseCheckSuiteEvent(validCheckSuiteFailurePayload);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).not.toBeNull();
+        if (result.value !== null) {
+          expect(result.value.isDraft).toBeNull(); // @allow-result-access -- check_suite events have no draft info
         }
       }
     });

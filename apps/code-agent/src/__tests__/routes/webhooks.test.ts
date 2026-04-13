@@ -4558,6 +4558,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         title: null,
         body,
         state: 'open',
+        isDraft: null,
         baseBranch: 'development',
         mergedAt: null,
         createdAt: new Date('2026-03-27T00:00:00Z'),
