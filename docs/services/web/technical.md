@@ -150,7 +150,6 @@ apps/web/src/
 │   ├── ResearchAgentPage.tsx  # Research query form
 │   ├── CalendarPage.tsx       # Calendar events list
 │   ├── LinearIssuesPage.tsx   # 3-column board with sub-issues and assignees
-│   ├── VisualizationsListPage.tsx # Saved data visualizations
 │   └── ...
 ├── services/           # API client functions
 │   ├── apiClient.ts       # Base API request handler

@@ -115,7 +115,7 @@ const cost = calculateCost({
 
 | Domain           | Prompts                                                                                     | Purpose                    |
 | ---------------- | ------------------------------------------------------------------------------------------- | -------------------------- |
-| `generation`     | `titlePrompt`, `labelPrompt`, `feedNamePrompt`                                              | Generate text from content |
+| `generation`     | `titlePrompt`, `labelPrompt`                                                                | Generate text from content |
 | `classification` | `commandClassifierPrompt`, `calendarActionExtractionPrompt`, `linearActionExtractionPrompt` | Classify and extract       |
 | `validation`     | `inputQualityPrompt`, `inputImprovementPrompt`                                              | Validate input quality     |
 | `research`       | `buildResearchPrompt`, `buildInferResearchContextPrompt`                                    | Research operations        |
