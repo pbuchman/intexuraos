@@ -17,11 +17,11 @@ Models defined in `packages/llm-contract/src/supportedModels.ts` — the single 
 | 3   | `gemini-2.0-flash`           | Gemini20Flash      | Google     | Validation, Fast                       |
 | 4   | `gemini-2.5-flash-image`     | Gemini25FlashImage | Google     | Image                                  |
 | 5   | `o4-mini-deep-research`      | O4MiniDeepResearch | OpenAI     | Research                               |
-| 6   | `gpt-5.2`                    | GPT52              | OpenAI     | Research, Generic                      |
+| 6   | `gpt-5.4`                    | GPT52              | OpenAI     | Research, Generic                      |
 | 7   | `gpt-4o-mini`                | GPT4oMini          | OpenAI     | Validation, Fast                       |
 | 8   | `gpt-image-1`                | GPTImage1          | OpenAI     | Image                                  |
-| 9   | `claude-opus-4-5-20251101`   | ClaudeOpus45       | Anthropic  | Research                               |
-| 10  | `claude-sonnet-4-5-20250929` | ClaudeSonnet45     | Anthropic  | Research                               |
+| 9   | `claude-opus-4-6`   | ClaudeOpus45       | Anthropic  | Research                               |
+| 10  | `claude-sonnet-4-6` | ClaudeSonnet45     | Anthropic  | Research                               |
 | 11  | `claude-3-5-haiku-20241022`  | ClaudeHaiku35      | Anthropic  | Validation, Fast                       |
 | 12  | `sonar`                      | Sonar              | Perplexity | Research, Validation                   |
 | 13  | `sonar-pro`                  | SonarPro           | Perplexity | Research                               |
@@ -72,8 +72,8 @@ There is no `infra-glm` package with implemented source code in the repository. 
 `REQUIRED_MODELS` at startup (lines 48–61):
 
 ```
-gemini-2.5-pro, gemini-2.5-flash, claude-opus-4-5-20251101,
-claude-sonnet-4-5-20250929, o4-mini-deep-research, gpt-5.2,
+gemini-2.5-pro, gemini-2.5-flash, claude-opus-4-6,
+claude-sonnet-4-6, o4-mini-deep-research, gpt-5.4,
 sonar, sonar-pro, sonar-deep-research, gemini-2.0-flash
 ```
 
@@ -110,7 +110,7 @@ The architecture doc is at version **2.0.0, dated 2026-01-24**. The codebase has
 
 **ai-architecture.md section header (line 96):** "Research Models (11)"
 **Table rows:** 10 rows (including the phantom GLM-5).
-**Code (ResearchModel type):** 9 models — `gemini-2.5-pro`, `gemini-2.5-flash`, `claude-opus-4-5-20251101`, `claude-sonnet-4-5-20250929`, `o4-mini-deep-research`, `gpt-5.2`, `sonar`, `sonar-pro`, `sonar-deep-research`.
+**Code (ResearchModel type):** 9 models — `gemini-2.5-pro`, `gemini-2.5-flash`, `claude-opus-4-6`, `claude-sonnet-4-6`, `o4-mini-deep-research`, `gpt-5.4`, `sonar`, `sonar-pro`, `sonar-deep-research`.
 
 - Header says 11 but table has 10 rows — internal inconsistency.
 - Code has 9 research models, not 10 or 11.
@@ -132,7 +132,7 @@ Claude Haiku 3.5 and GPT-4o Mini are missing from the Fast Models section of the
 ```typescript
 const client = createLlmClient({
   provider: 'anthropic',
-  model: 'claude-opus-4-5-20251101',
+  model: 'claude-opus-4-6',
   apiKey: userApiKey,
 });
 ```
