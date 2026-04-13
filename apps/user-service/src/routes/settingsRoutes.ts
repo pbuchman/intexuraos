@@ -245,7 +245,9 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', settingsResult.error.message);
       }
 
-      const hasKey = settingsResult.value?.llmApiKeys?.[provider] !== undefined;
+      const settings = settingsResult.value;
+      const llmApiKeys = settings?.llmApiKeys;
+      const hasKey = llmApiKeys?.[provider] !== undefined;
       if (!hasKey) {
         return await reply.fail(
           'INVALID_REQUEST',
@@ -258,8 +260,11 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (!isDefaultEligibleModel(body.fallbackModel)) {
           return await reply.fail('INVALID_REQUEST', `Invalid fallback model: ${body.fallbackModel}. Must be a supported model.`);
         }
+        if (body.fallbackModel === body.defaultModel) {
+          return await reply.fail('INVALID_REQUEST', 'Fallback model must be different from the default model.');
+        }
         const fallbackProvider = getProviderForModel(body.fallbackModel);
-        const hasFallbackKey = settingsResult.value.llmApiKeys?.[fallbackProvider] !== undefined;
+        const hasFallbackKey = llmApiKeys[fallbackProvider] !== undefined;
         if (!hasFallbackKey) {
           return await reply.fail(
             'INVALID_REQUEST',
