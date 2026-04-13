@@ -7,7 +7,6 @@ import {
   ChevronDown,
   ChevronUp,
   Code2,
-  Database,
   ExternalLink,
   RadioTower,
   Inbox,
@@ -187,7 +186,6 @@ export function HeroShowcase(): React.JSX.Element {
             <div className="h-1" />
             <SbItem icon={Sparkles} label="Research Studio" chevron="down" />
             <div className="h-1" />
-            <SbItem icon={Database} label="Data Insights" chevron="down" />
             <SbItem icon={LayoutList} label="Linear Issues" />
             <SbItem icon={Calendar} label="Calendar" />
             <SbItem icon={Bookmark} label="Bookmarks" />

@@ -227,7 +227,6 @@ Legacy function that always returns `undefined`. Use `createSentryStream` instea
 | chat-agent                   | `initSentry` + `createAppLogger` + error handler |
 | code-agent                   | `initSentry` + `createAppLogger` + error handler |
 | commands-agent               | `initSentry` + `createAppLogger` + error handler |
-| data-insights-agent          | `initSentry` + `createAppLogger` + error handler |
 | image-service                | `initSentry` + `createAppLogger` + error handler |
 | linear-agent                 | `initSentry` + `createAppLogger` + error handler |
 | mobile-notifications-service | `initSentry` + `createAppLogger` + error handler |

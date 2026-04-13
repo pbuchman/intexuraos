@@ -439,4 +439,4 @@ Now that you understand the basics:
 
 1. Configure Tasker or Automate on your Android device to forward notifications to the webhook endpoint
 2. Read the [Technical Reference](technical.md) for full API details and domain model documentation
-3. Explore the internal query endpoint for building data aggregation pipelines with the data-insights-agent
+3. Explore the internal query endpoint for building data aggregation pipelines

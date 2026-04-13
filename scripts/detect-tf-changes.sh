@@ -37,7 +37,7 @@ GLOBAL_MODULES=(
 declare -A MODULE_TO_SERVICES
 
 # pubsub-push is used by many services (all topic instances)
-MODULE_TO_SERVICES[pubsub-push]="whatsapp-service commands-agent actions-agent research-agent bookmarks-agent todos-agent data-insights-agent"
+MODULE_TO_SERVICES[pubsub-push]="whatsapp-service commands-agent actions-agent research-agent bookmarks-agent todos-agent"
 
 # Bucket modules
 MODULE_TO_SERVICES[whatsapp-media-bucket]="whatsapp-service"

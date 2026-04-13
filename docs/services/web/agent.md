@@ -287,18 +287,6 @@ type CodeTaskWorkerType =
 - Command creation flow: chat can suggest actions that create commands via commands-agent
 - Session and panel size persistence in localStorage
 
-### Manage Saved Visualizations
-
-**Endpoint:** `GET /visualizations` from data-insights-agent
-
-**When to use:** When user browses or creates saved Vega/Vega-Lite charts
-
-**Features:**
-
-- Global list at `/#/data-insights/visualizations`
-- Per-feed list at `/#/data-insights/:feedId/visualizations`
-- Create, view, and persist chart definitions
-
 ### Manage Integration Settings
 
 **Integrations covered:**
@@ -468,7 +456,6 @@ None. The web app is a consumer only — it does not publish Pub/Sub events.
 | bookmarks-agent              | Bookmark management                 | Cannot manage bookmarks                   |
 | calendar-agent               | Calendar integration                | Cannot view or manage events              |
 | linear-agent                 | Linear integration + webhooks       | Cannot view or manage issues              |
-| data-insights-agent          | Data visualization + visualizations | Cannot view data insights or saved charts |
 | code-agent                   | Code tasks, workers, PR events      | Cannot manage code tasks or workers       |
 | chat-agent                   | AI chat assistant                   | Cannot use Intex Chat                     |
 | whatsapp-service             | WhatsApp connection + verification  | Cannot connect WhatsApp                   |
@@ -517,13 +504,6 @@ None. The web app is a consumer only — it does not publish Pub/Sub events.
 | `/#/notes`                                | Yes  | WhatsApp notes                      |
 | `/#/calendar`                             | Yes  | Calendar events                     |
 | `/#/linear`                               | Yes  | Linear issues                       |
-| `/#/data-insights`                        | Yes  | Data insights feeds                 |
-| `/#/data-insights/visualizations`         | Yes  | Saved visualizations (global)       |
-| `/#/data-insights/:feedId/visualizations` | Yes  | Saved visualizations (per feed)     |
-| `/#/data-insights/:id`                    | Yes  | Feed data/charts                    |
-| `/#/data-insights/static-sources`         | Yes  | Static data sources                 |
-| `/#/data-insights/static-sources/new`     | Yes  | Create static source                |
-| `/#/data-insights/static-sources/:id`     | Yes  | Edit static source                  |
 | `/#/notifications`                        | Yes  | Push notification history           |
 | `/#/settings/whatsapp`                    | Yes  | WhatsApp connection                 |
 | `/#/settings/mobile`                      | Yes  | Mobile notifications                |

@@ -99,8 +99,6 @@ type CallType =
   | 'research'              // Web search enhanced generation
   | 'generate'             // Simple text generation
   | 'image_generation'     // Image creation
-  | 'visualization_insights' // Chart data analysis
-  | 'visualization_vegalite' // Vega-Lite chart generation
   | 'tool_calling';         // Function calling agent loops
 ```
 

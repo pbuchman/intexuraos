@@ -37,7 +37,6 @@ vi.mock('../../config', () => {
     ResearchAgentUrl: 'http://localhost:8116',
     commandsAgentServiceUrl: 'http://localhost:8117',
     actionsAgentUrl: 'http://localhost:8118',
-    dataInsightsAgentUrl: 'http://localhost:8119',
     notesAgentUrl: 'http://localhost:8121',
     todosAgentUrl: 'http://localhost:8123',
     bookmarksAgentUrl: 'http://localhost:8124',
