@@ -14,3 +14,4 @@ export {
   type LLMError,
   isSupportedProvider,
 } from './llmClientFactory.js';
+export { createOpenRouterGenerateClient } from './openRouterGenerateClient.js';

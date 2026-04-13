@@ -16,6 +16,7 @@
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/infra-gemini": "workspace:*",
+    "@intexuraos/infra-openrouter": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*"
   }
