@@ -38,6 +38,17 @@ function readDeliveryId(data: Record<string, unknown>): string | null {
   return typeof raw === 'string' ? raw : null;
 }
 
+/**
+ * Read isDraft from Firestore document data with backwards-compatible null default.
+ * Old documents missing the field return null (fail-open for DraftPRRule).
+ */
+export function readIsDraft(data: Record<string, unknown>): boolean | null {
+  const raw = data['isDraft'];
+  if (raw === true) return true;
+  if (raw === false) return false;
+  return null;
+}
+
 const COLLECTION_NAME = 'github-pr-events';
 
 export function createFirestoreGitHubPREventsRepository(deps: {
@@ -166,7 +177,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
             deliveryId: readDeliveryId(data as Record<string, unknown>),
             prAuthorLogin: ((data as Record<string, unknown>)['prAuthorLogin'] as string | undefined) ?? null,
             baseBranch: data.baseBranch ?? null,
-            isDraft: (data as Record<string, unknown>)['isDraft'] === true ? true : (data as Record<string, unknown>)['isDraft'] === false ? false : null,
+            isDraft: readIsDraft(data as Record<string, unknown>),
             createdAt: toDate(data.createdAt),
             processedAt: toDate(data.processedAt),
             mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
@@ -211,7 +222,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
             deliveryId: readDeliveryId(data as Record<string, unknown>),
             prAuthorLogin: ((data as Record<string, unknown>)['prAuthorLogin'] as string | undefined) ?? null,
             baseBranch: data.baseBranch ?? null,
-            isDraft: (data as Record<string, unknown>)['isDraft'] === true ? true : (data as Record<string, unknown>)['isDraft'] === false ? false : null,
+            isDraft: readIsDraft(data as Record<string, unknown>),
             createdAt: toDate(data.createdAt),
             processedAt: toDate(data.processedAt),
             mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
@@ -266,7 +277,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
               deliveryId: readDeliveryId(data as Record<string, unknown>),
               prAuthorLogin: ((data as Record<string, unknown>)['prAuthorLogin'] as string | undefined) ?? null,
             baseBranch: data.baseBranch ?? null,
-            isDraft: (data as Record<string, unknown>)['isDraft'] === true ? true : (data as Record<string, unknown>)['isDraft'] === false ? false : null,
+            isDraft: readIsDraft(data as Record<string, unknown>),
               createdAt: toDate(data.createdAt),
               processedAt: toDate(data.processedAt),
               mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
@@ -306,7 +317,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
             deliveryId: readDeliveryId(data as Record<string, unknown>),
             prAuthorLogin: ((data as Record<string, unknown>)['prAuthorLogin'] as string | undefined) ?? null,
             baseBranch: data.baseBranch ?? null,
-            isDraft: (data as Record<string, unknown>)['isDraft'] === true ? true : (data as Record<string, unknown>)['isDraft'] === false ? false : null,
+            isDraft: readIsDraft(data as Record<string, unknown>),
             createdAt: toDate(data.createdAt),
             processedAt: toDate(data.processedAt),
             mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
