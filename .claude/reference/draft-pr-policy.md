@@ -25,6 +25,7 @@ For event types where GitHub doesn't include draft status (e.g., `issue_comment`
 ## Usage for Long-Lived PRs
 
 To prevent automated interference on a long-lived PR (e.g., Hetzner migration):
+
 1. Convert the PR to draft via GitHub UI
 2. Work on the branch freely — no automated tasks will fire
 3. When ready for review, mark the PR as ready — review will trigger automatically

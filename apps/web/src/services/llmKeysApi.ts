@@ -55,20 +55,21 @@ export async function deleteLlmKey(
 }
 
 /**
- * Update the user's default LLM model.
+ * Update the user's LLM preferences (default model and optional fallback model).
  */
-export async function updateDefaultModel(
+export async function updateLlmPreferences(
   accessToken: string,
   userId: string,
-  defaultModel: string
-): Promise<{ defaultModel: string }> {
-  return await apiRequest<{ defaultModel: string }>(
+  defaultModel: string,
+  fallbackModel?: string | null
+): Promise<{ defaultModel: string; fallbackModel: string | null }> {
+  return await apiRequest<{ defaultModel: string; fallbackModel: string | null }>(
     config.authServiceUrl,
     `/users/${userId}/settings`,
     accessToken,
     {
       method: 'PATCH',
-      body: { defaultModel },
+      body: { defaultModel, ...(fallbackModel !== undefined ? { fallbackModel } : {}) },
     }
   );
 }

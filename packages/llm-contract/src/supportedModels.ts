@@ -244,6 +244,54 @@ export const FAST_MODEL_DISPLAY_NAMES: Record<FastModel, string> = {
   [LlmModels.GPT4oMini]: 'GPT-4o Mini',
 };
 
+// =============================================================================
+// Default-Eligible Models (for user's default model preference)
+// =============================================================================
+
+export interface DefaultOpenRouterModel {
+  /** Raw OpenRouter model ID (without 'or:' prefix) */
+  id: string;
+  /** Human-readable display name */
+  name: string;
+  /** Provider name for UI grouping */
+  provider: string;
+}
+
+export const DEFAULT_OPENROUTER_MODELS: readonly DefaultOpenRouterModel[] = [
+  { id: 'google/gemma-4-31b-it:free', name: 'Gemma 4 31B IT', provider: 'Google' },
+  { id: 'minimax/minimax-m2.7', name: 'MiniMax M2.7', provider: 'MiniMax' },
+  { id: 'qwen/qwen3.6-plus', name: 'Qwen 3.6 Plus', provider: 'Qwen' },
+  {
+    id: 'nvidia/nemotron-3-super-120b-a12b:free',
+    name: 'Nemotron 3 Super 120B',
+    provider: 'NVIDIA',
+  },
+] as const;
+
+const DEFAULT_OPENROUTER_MODEL_IDS: ReadonlySet<string> = new Set(
+  DEFAULT_OPENROUTER_MODELS.map((m) => `or:${m.id}`)
+);
+
+/**
+ * A model that can be selected as the user's default LLM model.
+ * Includes all FastModel values plus curated OpenRouter models (with 'or:' prefix).
+ *
+ * Note: The type includes all OpenRouterModelId values for type ergonomics,
+ * but runtime validation via `isDefaultEligibleModel()` only accepts the
+ * 4 curated models in `DEFAULT_OPENROUTER_MODELS`. Always validate at runtime.
+ */
+export type DefaultEligibleModel = FastModel | OpenRouterModelId;
+
+export function isDefaultEligibleModel(model: string): model is DefaultEligibleModel {
+  if (isFastModel(model)) return true;
+  return DEFAULT_OPENROUTER_MODEL_IDS.has(model);
+}
+
+export const DEFAULT_MODEL_DISPLAY_NAMES: Record<string, string> = {
+  ...FAST_MODEL_DISPLAY_NAMES,
+  ...Object.fromEntries(DEFAULT_OPENROUTER_MODELS.map((m) => [`or:${m.id}`, m.name])),
+};
+
 /**
  * Get provider for a model.
  */
