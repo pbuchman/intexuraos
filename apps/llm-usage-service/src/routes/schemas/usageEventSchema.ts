@@ -78,8 +78,6 @@ export const usageEventInputSchema = {
             'generate',
             'image_generation',
             'tool_calling',
-            'visualization_insights',
-            'visualization_vegalite',
             'other',
           ],
         },
