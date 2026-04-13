@@ -27,11 +27,10 @@ All service URLs follow the pattern `INTEXURAOS_<SERVICE>_URL`.
 | user-service                 | `INTEXURAOS_USER_SERVICE_URL` (:8110)                 | `INTEXURAOS_USER_SERVICE_URL`                 | `createUserServiceClient` uses `config.baseUrl`   | OK          |
 | notion-service               | `INTEXURAOS_NOTION_SERVICE_URL` (:8112)               | `INTEXURAOS_NOTION_SERVICE_URL`               | Direct fetch in research-agent                    | OK          |
 | whatsapp-service             | `INTEXURAOS_WHATSAPP_SERVICE_URL` (:8113)             | `INTEXURAOS_WHATSAPP_SERVICE_URL`             | Direct fetch in code-agent                        | OK          |
-| mobile-notifications-service | `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` (:8114) | `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | Direct fetch in data-insights-agent               | OK          |
+| mobile-notifications-service | `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` (:8114) | `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | Direct fetch in internal consumers                | OK          |
 | research-agent               | `INTEXURAOS_RESEARCH_AGENT_URL` (:8116)               | `INTEXURAOS_RESEARCH_AGENT_URL`               | Direct fetch in actions-agent                     | OK          |
 | commands-agent               | `INTEXURAOS_COMMANDS_AGENT_URL` (:8117)               | `INTEXURAOS_COMMANDS_AGENT_URL`               | Direct fetch in commands-agent/web                | OK          |
 | actions-agent                | `INTEXURAOS_ACTIONS_AGENT_URL` (:8118)                | `INTEXURAOS_ACTIONS_AGENT_URL`                | Direct fetch in code-agent, commands-agent        | OK          |
-| data-insights-agent          | `INTEXURAOS_DATA_INSIGHTS_AGENT_URL` (:8119)          | `INTEXURAOS_DATA_INSIGHTS_AGENT_URL`          | Direct fetch in web                               | OK          |
 | image-service                | `INTEXURAOS_IMAGE_SERVICE_URL` (:8120)                | `INTEXURAOS_IMAGE_SERVICE_URL`                | Direct fetch in research-agent                    | OK          |
 | notes-agent                  | `INTEXURAOS_NOTES_AGENT_URL` (:8121)                  | `INTEXURAOS_NOTES_AGENT_URL`                  | Direct fetch in actions-agent                     | OK          |
 | app-settings-service         | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` (:8122)         | `INTEXURAOS_APP_SETTINGS_SERVICE_URL`         | Direct fetch in multiple services                 | OK          |

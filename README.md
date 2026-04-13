@@ -203,7 +203,6 @@ graph TD
         LIN3[Linear Agent]
         BOOK[Bookmarks Agent]
         NOTE[Notes Agent]
-        DATA[Data Insights Agent]
         IMG[Image Service]
         WEBAG[Web Agent]
         CHAT[Chat Agent]
@@ -217,7 +216,7 @@ graph TD
     WA3 & WEB3 --> CMD3 --> ACT
     WEB3 --> CHAT
     GH --> CODE3
-    ACT --> RES & CODE3 & TODO & CAL & LIN3 & BOOK & NOTE & DATA
+    ACT --> RES & CODE3 & TODO & CAL & LIN3 & BOOK & NOTE
     CODE3 --> ORCH3 --> CW3
 ```
 
@@ -441,7 +440,6 @@ Full setup: **[Development Setup Guide](docs/setup/05-local-dev-with-gcp-deps.md
 | **[notes-agent](docs/services/notes-agent/features.md)**                                   | Tag-based notes from dashboard or voice commands                                |
 | **[bookmarks-agent](docs/services/bookmarks-agent/features.md)**                           | Link saving with AI-generated summary and metadata extraction                   |
 | **[linear-agent](docs/services/linear-agent/features.md)**                                 | Voice-to-issue with AI-generated titles and urgency mapping                     |
-| **[data-insights-agent](docs/services/data-insights-agent/features.md)**                   | AI-powered data visualization from uploads and notification streams             |
 | **[mobile-notifications-service](docs/services/mobile-notifications-service/features.md)** | Android notification capture with filtering and pattern discovery               |
 | **[user-service](docs/services/user-service/features.md)**                                 | Encrypted API key vault, multi-method auth, provider key validation             |
 | **[app-settings-service](docs/services/app-settings-service/features.md)**                 | AI cost tracking per provider, model, and call type                             |

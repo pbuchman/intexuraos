@@ -15,7 +15,6 @@ graph TB
         CA[calendar-agent]
         TA[todos-agent]
         LA[linear-agent]
-        DIA[data-insights-agent]
     end
 
     subgraph "Prompt Layer"
@@ -43,7 +42,6 @@ graph TB
     CA --> LP
     TA --> LP
     LA --> LP
-    DIA --> LP
 
     LP --> LC
     LU --> LC

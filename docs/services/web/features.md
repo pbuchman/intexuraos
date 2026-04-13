@@ -58,7 +58,7 @@ The Linear integration presents your issues in grouped columns — Planning, In 
 
 ### Review Research and Visualize Data
 
-Research tasks return structured reports with sources, summaries, and findings. The web app shows them in a list view, and you can drill into any report to read the full analysis. Data insights sit alongside — combined views that pull together information from multiple sources into a single feed, saved visualizations you have configured, and static data sources you have uploaded for reference.
+Research tasks return structured reports with sources, summaries, and findings. The web app shows them in a list view, and you can drill into any report to read the full analysis.
 
 **Example:** You asked the system to research pricing models for a competitor. The report comes back with four sources, a summary table, and a recommendation section. You read it, decide you want deeper analysis on one point, and send a follow-up research request. The new report lands in the same list, and you compare the two side by side.
 
