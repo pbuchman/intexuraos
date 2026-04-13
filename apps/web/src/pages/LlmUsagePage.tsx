@@ -12,10 +12,11 @@ import { resolveTimeRange, type TimeRangeState, type TimeRangePreset } from '@/u
 import { loadFromStorage, saveToStorage } from '@/utils/llmUsageStorage';
 import { formatRelative, formatDateTime } from '@/utils/dateFormat';
 import type { UsageEvent, UsageEventFilters, UsageEventSortField, UsageQueryRow, AggregateMetrics } from '@/types/llmUsage';
+import { resolveOpenRouterModelName } from '@/utils/openRouterModelNames';
 
 // --- Types ---
 
-type GroupByMode = 'none' | 'day' | 'component' | 'service' | 'model';
+type GroupByMode = 'none' | 'day' | 'component' | 'service' | 'model' | 'openrouter-model';
 
 interface SortState {
   field: UsageEventSortField;
@@ -51,6 +52,7 @@ const GROUP_BY_MAP: Record<GroupByMode, string[]> = {
   component: ['source.component'],
   service: ['source.service'],
   model: ['request.model'],
+  'openrouter-model': ['request.provider', 'request.model'],
 };
 
 const GROUP_BY_OPTIONS: { key: GroupByMode; label: string }[] = [
@@ -59,6 +61,7 @@ const GROUP_BY_OPTIONS: { key: GroupByMode; label: string }[] = [
   { key: 'component', label: 'Component' },
   { key: 'service', label: 'Service' },
   { key: 'model', label: 'Model' },
+  { key: 'openrouter-model', label: 'OpenRouter Model' },
 ];
 
 // "Most expensive" / "Most tokens" sorts are intentionally omitted:
@@ -113,7 +116,7 @@ function isSortState(v: unknown): v is SortState {
 }
 
 function isGroupByMode(v: unknown): v is GroupByMode {
-  return typeof v === 'string' && ['none', 'day', 'component', 'service', 'model'].includes(v);
+  return typeof v === 'string' && ['none', 'day', 'component', 'service', 'model', 'openrouter-model'].includes(v);
 }
 
 // --- Defaults ---
@@ -226,27 +229,35 @@ function TimeRangePicker({ timeRange, onChange }: TimeRangePickerProps): React.J
 interface ProviderFiltersProps {
   activeProviders: string[];
   onToggle: (provider: string) => void;
+  locked: boolean;
 }
 
-function ProviderFilters({ activeProviders, onToggle }: ProviderFiltersProps): React.JSX.Element {
+function ProviderFilters({ activeProviders, onToggle, locked }: ProviderFiltersProps): React.JSX.Element {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
       <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Provider:</span>
-      {PROVIDERS.map((provider) => {
-        const isActive = activeProviders.includes(provider);
-        return (
-          <button
-            key={provider}
-            onClick={(): void => { onToggle(provider); }}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-              isActive ? (PROVIDER_ACTIVE_CLASSES[provider] ?? INACTIVE_SEGMENT_CLASS) : INACTIVE_SEGMENT_CLASS
-            }`}
-          >
-            <span className={`inline-block h-2 w-2 rounded-full ${PROVIDER_DOT_CLASSES[provider] ?? 'bg-slate-400'}`} />
-            {provider}
-          </button>
-        );
-      })}
+      {locked ? (
+        <span className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700 dark:border-rose-400 dark:bg-rose-900/30 dark:text-rose-400">
+          <span className="inline-block h-2 w-2 rounded-full bg-rose-500" />
+          openrouter (locked by group-by)
+        </span>
+      ) : (
+        PROVIDERS.map((provider) => {
+          const isActive = activeProviders.includes(provider);
+          return (
+            <button
+              key={provider}
+              onClick={(): void => { onToggle(provider); }}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                isActive ? (PROVIDER_ACTIVE_CLASSES[provider] ?? INACTIVE_SEGMENT_CLASS) : INACTIVE_SEGMENT_CLASS
+              }`}
+            >
+              <span className={`inline-block h-2 w-2 rounded-full ${PROVIDER_DOT_CLASSES[provider] ?? 'bg-slate-400'}`} />
+              {provider}
+            </button>
+          );
+        })
+      )}
     </div>
   );
 }
@@ -407,6 +418,11 @@ interface AggregateTableProps {
 }
 
 function getGroupLabel(row: UsageQueryRow, groupBy: GroupByMode): string {
+  if (groupBy === 'openrouter-model') {
+    const modelId = row.group['request.model'];
+    if (typeof modelId === 'string') return resolveOpenRouterModelName(modelId);
+    return 'Unknown';
+  }
   const key = GROUP_BY_MAP[groupBy][0];
   if (key === undefined) return 'Unknown';
   const value = row.group[key];
@@ -447,7 +463,9 @@ function AggregateTable({ rows, totals, groupBy, loading, error }: AggregateTabl
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-200 dark:border-slate-700">
-            <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400 capitalize">{groupBy}</th>
+            <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">
+              {GROUP_BY_OPTIONS.find((o) => o.key === groupBy)?.label ?? groupBy}
+            </th>
             <th className="py-2 pr-4 text-right font-medium text-slate-500 dark:text-slate-400">Calls</th>
             <th className="py-2 pr-4 text-right font-medium text-slate-500 dark:text-slate-400">Cost</th>
             <th className="py-2 text-right font-medium text-slate-500 dark:text-slate-400">Tokens</th>
@@ -545,11 +563,21 @@ export function LlmUsagePage(): React.JSX.Element {
     enabled: isRawMode && !isCustomIncomplete,
   });
 
+  // Auto-apply openrouter filter when grouping by openrouter model.
+  // Intentionally only used by the aggregate query below — the raw events hook
+  // is disabled when groupBy !== 'none', so it never needs effectiveFilters.
+  const effectiveFilters = useMemo(() => {
+    if (groupBy === 'openrouter-model') {
+      return { ...filters, providers: ['openrouter'] };
+    }
+    return filters;
+  }, [groupBy, filters]);
+
   // Aggregate query hook (active when groupBy !== 'none')
   const queryGroupBy = GROUP_BY_MAP[groupBy];
   const queryResult = useLlmUsageQuery({
     timeRange: resolvedTimeRange,
-    filters,
+    filters: effectiveFilters,
     groupBy: queryGroupBy,
     enabled: !isRawMode && !isCustomIncomplete,
   });
@@ -562,7 +590,7 @@ export function LlmUsagePage(): React.JSX.Element {
     <Layout>
       <PageHeader displayedCount={displayedCount} totalMatched={totalMatched} loading={isLoading} />
       <TimeRangePicker timeRange={timeRange} onChange={handleTimeRangeChange} />
-      <ProviderFilters activeProviders={activeProviders} onToggle={handleToggleProvider} />
+      <ProviderFilters activeProviders={activeProviders} onToggle={handleToggleProvider} locked={groupBy === 'openrouter-model'} />
       <GroupBySelector groupBy={groupBy} onChange={handleGroupByChange} />
       {isRawMode ? (
         <>
