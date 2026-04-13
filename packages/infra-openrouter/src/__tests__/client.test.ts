@@ -843,7 +843,7 @@ describe('createOpenRouterClient', () => {
       expect(result.ok).toBe(true);
 
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
-        expect.objectContaining({ providerReportedUsd: 0.0042 }),
+        expect.objectContaining({ providerReportedUsd: 0.0042 })
       );
     });
 
@@ -911,7 +911,7 @@ describe('createOpenRouterClient', () => {
       await client.research('hello');
 
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
-        expect.objectContaining({ callType: 'research', providerReportedUsd: 0.011 }),
+        expect.objectContaining({ callType: 'research', providerReportedUsd: 0.011 })
       );
     });
   });
@@ -1059,5 +1059,37 @@ describe('createOpenRouterClient', () => {
         expect(result.error.code).toBe('API_ERROR');
       }
     });
+  });
+
+  it('passes ownerType to usage logger when provided', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        id: 'test-id',
+        model: TEST_MODEL,
+        created: Date.now(),
+        object: 'chat.completion',
+        choices: [
+          {
+            index: 0,
+            message: { content: 'ok', role: 'assistant' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
+      });
+
+    const client = createOpenRouterClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      pricing: createTestPricing(),
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+      ownerType: 'user',
+    });
+    await client.generate('hello');
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'user' }));
   });
 });
