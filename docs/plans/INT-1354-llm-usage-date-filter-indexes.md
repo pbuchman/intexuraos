@@ -96,13 +96,6 @@ Run: `pnpm vitest run migrations/__tests__/093-llm-usage-events-filtered-asc-ind
 
 Expected: FAIL with module-not-found for `../093_llm-usage-events-filtered-asc-indexes.mjs`.
 
-- [ ] **Step 5: Commit the test scaffolding**
-
-```bash
-git add apps/llm-usage-service/src/__tests__/infra/firestore/firestoreUsageEventRepository.test.ts migrations/__tests__/093-llm-usage-events-filtered-asc-indexes.test.ts
-git commit -m "test: lock llm usage filtered asc index contract"
-```
-
 ### Task 2: Add The Immutable Firestore Migration
 
 **Files:**
@@ -196,7 +189,7 @@ Expected: a `llm_usage_events` block appears with `request.provider`, `occurredA
 - [ ] **Step 5: Commit the migration and regenerated artifact**
 
 ```bash
-git add migrations/093_llm-usage-events-filtered-asc-indexes.mjs migrations/__tests__/093-llm-usage-events-filtered-asc-indexes.test.ts firestore.indexes.json
+git add apps/llm-usage-service/src/__tests__/infra/firestore/firestoreUsageEventRepository.test.ts migrations/093_llm-usage-events-filtered-asc-indexes.mjs migrations/__tests__/093-llm-usage-events-filtered-asc-indexes.test.ts firestore.indexes.json
 git commit -m "feat: add llm usage filtered asc firestore index"
 ```
 
