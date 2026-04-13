@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ExternalLink, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import type { PruneCandidateResponse } from '@/services/linearApi';
-import { CATEGORY_CONFIG, scoreColor } from './shared.js';
+import { CATEGORY_CONFIG, scoreColor } from './shared';
 
 interface PruneCandidateRowProps {
   candidate: PruneCandidateResponse;
