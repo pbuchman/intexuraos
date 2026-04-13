@@ -199,4 +199,38 @@ describe('usageLogger', () => {
       expect(usageLogger.sink).toBe(customSink);
     });
   });
+
+  describe('UsageLogger.log forwarding new optional fields', () => {
+    it('forwards ownerType, clientName, providerReportedUsd to the sink when provided', async () => {
+      const fakeSink = { log: vi.fn().mockResolvedValue(undefined) };
+      const logger = createUsageLogger({ logger: fakeLogger, sink: fakeSink });
+
+      await logger.log({
+        ...baseParams,
+        ownerType: 'user',
+        clientName: 'linear-agent-title-gen',
+        providerReportedUsd: 0.0042,
+      });
+
+      expect(fakeSink.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerType: 'user',
+          clientName: 'linear-agent-title-gen',
+          providerReportedUsd: 0.0042,
+        }),
+      );
+    });
+
+    it('omits new optional fields from the sink call when not provided', async () => {
+      const fakeSink = { log: vi.fn().mockResolvedValue(undefined) };
+      const logger = createUsageLogger({ logger: fakeLogger, sink: fakeSink });
+
+      await logger.log(baseParams);
+
+      const callArg = fakeSink.log.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(callArg['ownerType']).toBeUndefined();
+      expect(callArg['clientName']).toBeUndefined();
+      expect(callArg['providerReportedUsd']).toBeUndefined();
+    });
+  });
 });
