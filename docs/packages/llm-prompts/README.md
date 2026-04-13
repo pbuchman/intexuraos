@@ -84,7 +84,6 @@ const prompt = titlePrompt.build(
 | ---------------- | --------------- | ------------------------------------------- |
 | `titlePrompt`    | `PromptBuilder` | Generate concise titles from content        |
 | `labelPrompt`    | `PromptBuilder` | Generate classification labels from content |
-| `feedNamePrompt` | `PromptBuilder` | Generate feed names from metadata           |
 
 ### Classification (`src/classification/`)
 
@@ -194,7 +193,7 @@ This pattern is consistently applied across all domains.
 
 | Directory             | Contents                                                     |
 | --------------------- | ------------------------------------------------------------ |
-| `src/generation/`     | `titlePrompt`, `labelPrompt`, `feedNamePrompt`               |
+| `src/generation/`     | `titlePrompt`, `labelPrompt`                                 |
 | `src/classification/` | `commandClassifierPrompt`, `intelligentPromptBuilder`        |
 | `src/research/`       | Research, synthesis, model extraction, repair prompts        |
 | `src/synthesis/`      | Multi-source synthesis context and repair                    |
