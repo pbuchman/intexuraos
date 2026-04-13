@@ -1,11 +1,13 @@
 /**
  * Static mapping of OpenRouter model IDs to human-readable names.
  *
- * Mirrors the curated allowlist in packages/infra-openrouter/src/allowlist.ts.
+ * Mirrors the curated allowlist in packages/infra-openrouter/src/allowlist.ts
+ * and the default allowlist in packages/infra-openrouter/src/defaultAllowlist.ts.
  * When a model ID is not found in this mapping, the raw ID is returned as-is.
  */
 
 const OPENROUTER_MODEL_NAMES: Record<string, string> = {
+  // Curated allowlist (allowlist.ts)
   'qwen/qwen3.5-plus-02-15': 'Qwen 3.5 Plus',
   'qwen/qwen3.5-flash-02-23': 'Qwen 3.5 Flash',
   'minimax/minimax-m2.7': 'MiniMax M2.7',
@@ -20,14 +22,21 @@ const OPENROUTER_MODEL_NAMES: Record<string, string> = {
   'openai/gpt-5.4-mini': 'GPT-5.4 Mini',
   'xiaomi/mimo-v2-pro': 'MiMo V2 Pro',
   'z-ai/glm-5-turbo': 'GLM 5 Turbo',
+  // Default allowlist (defaultAllowlist.ts) — minimax/minimax-m2.7 shared above
+  'google/gemma-4-31b-it': 'Gemma 4 31B IT',
+  'qwen/qwen3.6-plus': 'Qwen 3.6 Plus',
+  'nvidia/nemotron-3-super-120b-a12b': 'Nemotron 3 Super 120B',
 };
 
 /**
  * Resolve an OpenRouter model ID to its human-readable name.
- * Strips the `:online` suffix before lookup (OpenRouter appends it for web-search mode).
+ * Strips known suffixes (:online, :free) before lookup — OpenRouter appends
+ * these for web-search mode and free-tier variants respectively.
  * Returns the raw model ID if no friendly name is found.
  */
 export function resolveOpenRouterModelName(modelId: string): string {
-  const baseId = modelId.endsWith(':online') ? modelId.slice(0, -7) : modelId;
+  let baseId = modelId;
+  if (baseId.endsWith(':online')) baseId = baseId.slice(0, -7);
+  else if (baseId.endsWith(':free')) baseId = baseId.slice(0, -5);
   return OPENROUTER_MODEL_NAMES[baseId] ?? modelId;
 }
