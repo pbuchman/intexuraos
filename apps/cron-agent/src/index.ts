@@ -10,11 +10,13 @@ import { FirestoreExecutionRepository } from './infra/firestore-execution-reposi
 import { OpenApiToolRegistry } from './infra/openapi-tool-registry.js';
 import { createGeminiClient, createGeminiToolCallingClient, TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
 import { LlmModels } from '@intexuraos/llm-contract';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 
 const REQUIRED_ENV = [
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_GEMINI_APP_API_KEY',
+  'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'INTEXURAOS_SENTRY_DSN',
   'INTEXURAOS_ENVIRONMENT',
 ];
@@ -55,12 +57,22 @@ async function main(): Promise<void> {
     logger: createAppLogger({ name: 'tool-registry' }),
   });
 
+  const buildUsageSink = (component: string): HttpInternalAuthUsageSink =>
+    new HttpInternalAuthUsageSink({
+      usageServiceUrl: config.llmUsageServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+      service: 'cron-agent',
+      component,
+      logger,
+    });
+
   const toolCallingClient = createGeminiToolCallingClient({
     apiKey: config.geminiApiKey,
     model: LlmModels.Gemini25Flash,
     userId: 'cron-agent-system',
     pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
     logger: createAppLogger({ name: 'tool-calling' }),
+    usageSink: buildUsageSink('tool-calling'),
   });
 
   const geminiClient = createGeminiClient({
@@ -69,6 +81,7 @@ async function main(): Promise<void> {
     userId: 'cron-agent-system',
     pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
     logger: createAppLogger({ name: 'gemini-client' }),
+    usageSink: buildUsageSink('gemini-client'),
   });
 
   initServices({

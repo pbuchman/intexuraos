@@ -104,7 +104,11 @@ import {
   type WhatsAppSendPublisher,
 } from '@intexuraos/infra-pubsub';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
-import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
+import {
+  fetchAllPricingWithRetry,
+  createPricingContext,
+  HttpInternalAuthUsageSink,
+} from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
 
 export interface Services {
@@ -162,7 +166,7 @@ export interface ServiceConfig {
   calendarAgentUrl: string;
   linearAgentUrl: string;
   codeAgentUrl: string;
-  appSettingsServiceUrl: string;
+  llmUsageServiceUrl: string;
   internalAuthToken: string;
   gcpProjectId: string;
   whatsappSendTopic: string;
@@ -172,9 +176,9 @@ export interface ServiceConfig {
 let container: Services | null = null;
 
 export async function initServices(config: ServiceConfig): Promise<void> {
-  // Fetch pricing from app-settings-service
-  const pricingResult = await fetchAllPricing(
-    config.appSettingsServiceUrl,
+  // Fetch pricing from llm-usage-service
+  const pricingResult = await fetchAllPricingWithRetry(
+    config.llmUsageServiceUrl,
     config.internalAuthToken
   );
 
@@ -198,11 +202,19 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   const approvalMessageRepository = createFirestoreApprovalMessageRepository();
   const actionServiceClient = createLocalActionServiceClient(actionRepository);
 
+  const userServiceClientLogger = createAppLogger({ name: 'userServiceClient' });
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
     pricingContext,
-    logger: createAppLogger({ name: 'userServiceClient' }),
+    logger: userServiceClientLogger,
+    usageSink: new HttpInternalAuthUsageSink({
+      usageServiceUrl: config.llmUsageServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+      service: 'actions-agent',
+      component: 'user-service-client',
+      logger: userServiceClientLogger,
+    }),
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 

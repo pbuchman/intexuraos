@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LlmProviders, LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -8,6 +9,8 @@ const mockLogger: Logger = {
   warn: vi.fn(),
   debug: vi.fn(),
 };
+
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
 const mockGeminiGenerate = vi.fn();
 
@@ -43,6 +46,7 @@ describe('llmClientFactory', () => {
         userId: 'user-123',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       expect(client.generate).toBeDefined();
@@ -56,6 +60,7 @@ describe('llmClientFactory', () => {
         userId: 'user-123',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       expect(client.generate).toBeDefined();
@@ -69,6 +74,7 @@ describe('llmClientFactory', () => {
         userId: 'user-123',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       expect(client).toBeInstanceOf(MockGeminiClient);
     });
@@ -82,6 +88,7 @@ describe('llmClientFactory', () => {
           userId: 'user-123',
           pricing: createTestPricing(),
           logger: mockLogger,
+          usageSink: mockUsageSink,
         })
       ).toThrow('Unsupported LLM model');
     });
@@ -97,6 +104,7 @@ describe('llmClientFactory', () => {
           userId: 'user-123',
           pricing: createTestPricing(),
           logger: mockLogger,
+          usageSink: mockUsageSink,
         })
       ).toThrow('Unsupported LLM model');
     });
@@ -110,6 +118,7 @@ describe('llmClientFactory', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       expect(client.run).toBeDefined();
@@ -124,6 +133,7 @@ describe('llmClientFactory', () => {
           userId: 'test-user',
           pricing: createTestPricing(),
           logger: mockLogger,
+          usageSink: mockUsageSink,
         })
       ).toThrow('Unsupported LLM model');
     });
@@ -137,6 +147,7 @@ describe('llmClientFactory', () => {
           userId: 'test-user',
           pricing: createTestPricing(),
           logger: mockLogger,
+          usageSink: mockUsageSink,
         })
       ).toThrow('Tool calling not supported for provider: anthropic');
     });
@@ -147,8 +158,8 @@ describe('llmClientFactory', () => {
       expect(isSupportedProvider(LlmProviders.Google)).toBe(true);
     });
 
-    it('returns false for Zai provider (no longer supported)', () => {
-      expect(isSupportedProvider('zai')).toBe(false);
+    it('returns false for an unknown provider', () => {
+      expect(isSupportedProvider('unknown-provider')).toBe(false);
     });
 
     it('returns false for Anthropic provider', () => {

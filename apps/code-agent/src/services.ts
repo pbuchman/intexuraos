@@ -12,6 +12,7 @@ import { TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
 import { createLlmClient, createToolCallingClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { EmbeddingClient } from '@intexuraos/infra-gpt';
 import OpenAI from 'openai';
 import type { CreateEmbeddingResponse } from 'openai/resources';
@@ -21,7 +22,6 @@ import type { LogLineRepository } from './domain/repositories/logLineRepository.
 import type { TaskDispatcherService } from './domain/services/taskDispatcher.js';
 import type { WhatsAppNotifier } from './domain/services/whatsappNotifier.js';
 import type { ActionsAgentClient } from './infra/clients/actionsAgentClient.js';
-import type { RateLimitService } from './domain/services/rateLimitService.js';
 import type { WorkerSettingsRepository } from './domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from './domain/ports/workerHealthProbe.js';
 import type { UserLookupService } from './domain/ports/userLookupService.js';
@@ -31,8 +31,6 @@ import { createFirestoreLogLineRepository } from './infra/repositories/firestore
 import { createTaskDispatcherService } from './infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from './infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from './infra/clients/actionsAgentClient.js';
-import { createUserUsageFirestoreRepository } from './infra/firestore/userUsageFirestoreRepository.js';
-import { createRateLimitService } from './domain/services/rateLimitService.js';
 import { createLinearAgentHttpClient } from './infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService, type LinearIssueService } from './domain/services/linearIssueService.js';
 import type { LinearAgentClient, IssueContext, LinearAgentError } from './domain/ports/linearAgentClient.js';
@@ -58,8 +56,8 @@ import type { GitHubPRSummaryRepository } from './domain/repositories/gitHubPRSu
 import { createFirestoreGitHubPRSummariesRepository } from './infra/firestore/gitHubPRSummariesRepository.js';
 import type { GitHubPRClient } from './domain/ports/gitHubPRClient.js';
 import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
-import type { UserServiceClient } from '@intexuraos/internal-clients';
-import { createUserServiceClient } from '@intexuraos/internal-clients';
+import type { UserServiceClient, UsageServiceClient } from '@intexuraos/internal-clients';
+import { createUserServiceClient, createUsageServiceClient } from '@intexuraos/internal-clients';
 import { createGitHubUsernameResolver } from './infra/services/gitHubUsernameResolverImpl.js';
 import { CodeWorkerOutputRule, ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, CIFailureRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
 import { createWebhookDispatchService, type WebhookDispatchService, type CIFailureDispatchService } from './domain/services/gitHubDispatchService.js';
@@ -110,7 +108,6 @@ export interface ServiceContainer {
   whatsappNotifier: WhatsAppNotifier;
   actionsAgentClient: ActionsAgentClient;
   linearAgentClient: LinearAgentClient;
-  rateLimitService: RateLimitService;
   linearIssueService: LinearIssueService;
   statusMirrorService: StatusMirrorService;
   processHeartbeat: ProcessHeartbeatUseCase;
@@ -147,6 +144,7 @@ export interface ServiceContainer {
   executionMemoryDistillerClient?: LlmGenerateClient;
   executionMemoryEvaluatorClient?: LlmGenerateClient;
   executionMemoryEmbeddingClient?: EmbeddingClient;
+  usageServiceClient?: UsageServiceClient;
   // Optional so existing setServices() call sites in tests don't need updating
   groupSummaryRepo?: TaskGroupSummaryRepository;
   createRemediationTaskFn?: (logger: Logger, request: CreateRemediationTaskRequest) => Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
@@ -168,6 +166,7 @@ export interface ServiceConfig {
   // GitHub Agent (INT-743)
   geminiAppApiKey: string;
   openaiAppApiKey: string;
+  llmUsageServiceUrl: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -353,10 +352,20 @@ export function initServices(config: ServiceConfig): void {
         logger: createAppLogger({ name: 'whatsapp-publisher' }),
       });
 
+  const buildUsageSink = (component: string): HttpInternalAuthUsageSink =>
+    new HttpInternalAuthUsageSink({
+      usageServiceUrl: config.llmUsageServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+      service: 'code-agent',
+      component,
+      logger,
+    });
+
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
     logger,
+    usageSink: buildUsageSink('user-service-client'),
     pricingContext: {
       getPricing() { throw new Error('code-agent does not use LLM pricing'); },
       hasPricing() { return false; },
@@ -365,6 +374,14 @@ export function initServices(config: ServiceConfig): void {
       getModelsWithPricing() { return []; },
     },
   });
+
+  const usageServiceClient = config.llmUsageServiceUrl !== ''
+    ? createUsageServiceClient({
+        baseUrl: config.llmUsageServiceUrl,
+        internalAuthToken: config.internalAuthToken,
+        logger,
+      })
+    : undefined;
 
   const rawCodeTaskRepo = createFirestoreCodeTaskRepository({ firestore, logger });
   const groupSummaryRepo = createTaskGroupSummaryFirestoreRepository({ firestore, logger });
@@ -423,6 +440,7 @@ export function initServices(config: ServiceConfig): void {
         userId: 'system:github-agent',
         pricing: GEMINI_TOOL_CALLING_PRICING,
         logger,
+        usageSink: buildUsageSink('github-agent'),
       })
     : undefined;
   const executionMemoryOpenAI = config.openaiAppApiKey !== ''
@@ -435,6 +453,7 @@ export function initServices(config: ServiceConfig): void {
         userId: EXECUTION_MEMORY_USER_ID,
         pricing: GEMINI_TOOL_CALLING_PRICING,
         logger,
+        usageSink: buildUsageSink('execution-memory-query'),
       })
     : undefined;
   const executionMemoryDistillerClient = config.geminiAppApiKey !== ''
@@ -444,6 +463,7 @@ export function initServices(config: ServiceConfig): void {
         userId: EXECUTION_MEMORY_USER_ID,
         pricing: GEMINI_TOOL_CALLING_PRICING,
         logger,
+        usageSink: buildUsageSink('execution-memory-distiller'),
       })
     : undefined;
   const executionMemoryEvaluatorClient = config.geminiAppApiKey !== ''
@@ -453,6 +473,7 @@ export function initServices(config: ServiceConfig): void {
         userId: EXECUTION_MEMORY_USER_ID,
         pricing: GEMINI_TOOL_CALLING_PRICING,
         logger,
+        usageSink: buildUsageSink('execution-memory-evaluator'),
       })
     : undefined;
   const executionMemoryEmbeddingClient = executionMemoryOpenAI !== undefined
@@ -585,10 +606,6 @@ export function initServices(config: ServiceConfig): void {
     actionsAgentClient,
     linearAgentClient,
     statusMirrorService,
-    rateLimitService: createRateLimitService({
-      userUsageRepository: createUserUsageFirestoreRepository(firestore, logger),
-      logger,
-    }),
     linearIssueService,
     processHeartbeat: createProcessHeartbeatUseCase({
       codeTaskRepository: codeTaskRepo,
@@ -637,6 +654,7 @@ export function initServices(config: ServiceConfig): void {
     ...(executionMemoryDistillerClient !== undefined && { executionMemoryDistillerClient }),
     ...(executionMemoryEvaluatorClient !== undefined && { executionMemoryEvaluatorClient }),
     ...(executionMemoryEmbeddingClient !== undefined && { executionMemoryEmbeddingClient }),
+    ...(usageServiceClient !== undefined && { usageServiceClient }),
     groupSummaryRepo,
     createRemediationTaskFn: (taskLogger: Logger, request: CreateRemediationTaskRequest): Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>> => createRemediationTask(
       {

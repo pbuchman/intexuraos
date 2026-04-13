@@ -342,6 +342,78 @@ describe('GitHubDispatchService', () => {
       });
       expect(mockedCreateTaskForPR).not.toHaveBeenCalled();
     });
+
+    it('should create new task when PR is merged and existing task found', async () => {
+      const existingTask = { id: 'task-123', userId: 'user-456' };
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(existingTask as never));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'new-task-merged' }));
+
+      const mergedEvent: GitHubPREvent = { ...mockEvent, state: 'closed', mergedAt: new Date('2026-03-03T12:00:00Z') };
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch({ event: mergedEvent, decision: mockDecision, logger: mockLogger });
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'new-task-merged',
+      });
+      expect(mockedCreateTaskForPR).toHaveBeenCalled();
+      expect(mockedSendTaskMessage).not.toHaveBeenCalled();
+    });
+
+    it('should create new task when PR is closed (not merged) and existing task found', async () => {
+      const existingTask = { id: 'task-123', userId: 'user-456' };
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(existingTask as never));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'new-task-closed' }));
+
+      const closedEvent: GitHubPREvent = { ...mockEvent, state: 'closed', mergedAt: null };
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch({ event: closedEvent, decision: mockDecision, logger: mockLogger });
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'new-task-closed',
+      });
+      expect(mockedCreateTaskForPR).toHaveBeenCalled();
+      expect(mockedSendTaskMessage).not.toHaveBeenCalled();
+    });
+
+    it('should still route to existing task when PR is open', async () => {
+      const existingTask = { id: 'task-123', userId: 'user-456', linearIssueId: 'INT-100' };
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(existingTask as never));
+      mockedSendTaskMessage.mockResolvedValue(ok({ action: 'queued' }));
+
+      const openEvent: GitHubPREvent = { ...mockEvent, state: 'open', mergedAt: null };
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch({ event: openEvent, decision: mockDecision, logger: mockLogger });
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'task-123',
+      });
+      expect(mockedSendTaskMessage).toHaveBeenCalled();
+      expect(mockedCreateTaskForPR).not.toHaveBeenCalled();
+    });
+
+    it('should route to existing task when event state is null', async () => {
+      const existingTask = { id: 'task-123', userId: 'user-456', linearIssueId: 'INT-100' };
+      vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(existingTask as never));
+      mockedSendTaskMessage.mockResolvedValue(ok({ action: 'queued' }));
+
+      const nullStateEvent: GitHubPREvent = { ...mockEvent, state: null, mergedAt: null };
+      const service = createWebhookDispatchService(deps);
+      const result = await service.dispatch({ event: nullStateEvent, decision: mockDecision, logger: mockLogger });
+
+      expect(result).toEqual<WebhookDispatchResult>({
+        success: true,
+        dispatched: true,
+        taskId: 'task-123',
+      });
+      expect(mockedSendTaskMessage).toHaveBeenCalled();
+      expect(mockedCreateTaskForPR).not.toHaveBeenCalled();
+    });
   });
 
   describe('dispatch — new task path', () => {
@@ -1298,6 +1370,16 @@ describe('GitHubDispatchService', () => {
   describe('isStaleTaskError', () => {
     it('should return true for task_not_found error code', () => {
       expect(isStaleTaskError({ success: false, dispatched: false, errorCode: 'task_not_found', error: 'Task X not found' })).toBe(true);
+    });
+
+    it('treats session_expired as stale task error', () => {
+      const result: WebhookDispatchResult = {
+        success: false,
+        dispatched: false,
+        error: 'Session has expired — the worker container was cleaned up.',
+        errorCode: 'session_expired',
+      };
+      expect(isStaleTaskError(result)).toBe(true);
     });
 
     it('should return true for task_not_found regardless of message content', () => {

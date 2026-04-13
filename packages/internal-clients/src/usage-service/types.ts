@@ -163,10 +163,62 @@ export interface UsageQueryResponse {
   totals: AggregateMetrics;
 }
 
+/** Stored event with server-populated fields (receivedAt, ingress) */
+export interface StoredUsageEvent extends UsageEventInput {
+  receivedAt: string;
+  ingress: 'internal' | 'orchestrator_webhook';
+}
+
+export interface UsageListEventsRequest {
+  timeRange: { from: string; to: string };
+  filters?: UsageQueryFilters;
+  sortBy?: { field: string; direction: 'asc' | 'desc' };
+  limit?: number;
+  cursor?: string;
+}
+
+export interface UsageListEventsResponse {
+  events: StoredUsageEvent[];
+  nextCursor?: string;
+  totalMatched: number;
+}
+
+export interface UsageGetEventResponse {
+  event: StoredUsageEvent;
+}
+
 export interface UsageServiceError {
   code: 'NETWORK_ERROR' | 'API_ERROR' | 'VALIDATION_ERROR';
   message: string;
 }
+
+/**
+ * Pricing data for a single LLM provider.
+ * Mirrors the ProviderPricing shape from @intexuraos/llm-contract.
+ */
+export interface PricingProviderEntry {
+  provider: string;
+  models: Record<string, PricingModelEntry>;
+  updatedAt: string;
+  useProviderCost?: boolean;
+  costSource?: string;
+}
+
+export interface PricingModelEntry {
+  inputPricePerMillion: number;
+  outputPricePerMillion: number;
+  cacheReadMultiplier?: number;
+  cacheWriteMultiplier?: number;
+  webSearchCostPerCall?: number;
+  groundingCostPerRequest?: number;
+  imagePricing?: Record<string, number>;
+  useProviderCost?: boolean;
+}
+
+/**
+ * Response shape for fetchPricing() — keyed by provider name.
+ */
+export type PricingResponse = Record<string, PricingProviderEntry>;
 
 export interface UsageServiceClient {
   ingestEvents(
@@ -178,4 +230,16 @@ export interface UsageServiceClient {
     request: UsageQueryRequest,
     options?: { traceId?: string }
   ): Promise<Result<UsageQueryResponse, UsageServiceError>>;
+
+  fetchPricing(options?: { traceId?: string }): Promise<Result<PricingResponse, UsageServiceError>>;
+
+  listUsageEvents(
+    request: UsageListEventsRequest,
+    options?: { traceId?: string }
+  ): Promise<Result<UsageListEventsResponse, UsageServiceError>>;
+
+  getUsageEvent(
+    eventId: string,
+    options?: { traceId?: string }
+  ): Promise<Result<UsageGetEventResponse, UsageServiceError>>;
 }

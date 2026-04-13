@@ -1,11 +1,14 @@
 import type { UsageEventRepository } from './domain/repositories/usageEventRepository.js';
 import type { UsageAggregateRepository } from './domain/repositories/usageAggregateRepository.js';
+import type { PricingRepository } from './domain/repositories/pricingRepository.js';
 import { FirestoreUsageEventRepository } from './infra/firestore/firestoreUsageEventRepository.js';
 import { FirestoreUsageAggregateRepository } from './infra/firestore/firestoreUsageAggregateRepository.js';
+import { FirestorePricingRepository } from './infra/firestore/firestorePricingRepository.js';
 
 export interface ServiceContainer {
   usageEventRepository: UsageEventRepository;
   usageAggregateRepository: UsageAggregateRepository;
+  pricingRepository: PricingRepository;
   orchestratorSecret: string;
 }
 
@@ -27,6 +30,7 @@ export function initializeServices(): void {
   container = {
     usageEventRepository: new FirestoreUsageEventRepository(),
     usageAggregateRepository: new FirestoreUsageAggregateRepository(),
+    pricingRepository: new FirestorePricingRepository(),
     orchestratorSecret,
   };
 }

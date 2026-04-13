@@ -1,7 +1,11 @@
 import { initSentry, createAppLogger } from '@intexuraos/infra-sentry';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { validateRequiredEnv } from '@intexuraos/http-server';
-import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
+import {
+  fetchAllPricingWithRetry,
+  createPricingContext,
+  HttpInternalAuthUsageSink,
+} from '@intexuraos/llm-pricing';
 import { LlmModels, type LLMModel } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
@@ -26,7 +30,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL',
-  'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
+  'INTEXURAOS_LLM_USAGE_SERVICE_URL',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
@@ -47,10 +51,10 @@ async function main(): Promise<void> {
 
   const logger = createAppLogger({ name: 'data-insights-agent' });
 
-  // Fetch pricing from app-settings-service
-  process.stdout.write(`Fetching pricing from ${config.appSettingsServiceUrl}\n`);
-  const pricingResult = await fetchAllPricing(
-    config.appSettingsServiceUrl,
+  // Fetch pricing from llm-usage-service
+  process.stdout.write(`Fetching pricing from ${config.llmUsageServiceUrl}\n`);
+  const pricingResult = await fetchAllPricingWithRetry(
+    config.llmUsageServiceUrl,
     config.internalAuthToken
   );
   if (!pricingResult.ok) {
@@ -64,6 +68,13 @@ async function main(): Promise<void> {
     internalAuthToken: config.internalAuthToken,
     pricingContext,
     logger,
+    usageSink: new HttpInternalAuthUsageSink({
+      usageServiceUrl: config.llmUsageServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+      service: 'data-insights-agent',
+      component: 'user-service-client',
+      logger,
+    }),
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 

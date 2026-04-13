@@ -1,10 +1,11 @@
 /**
  * Test fixtures for pricing.
- * Provides mock pricing and PricingContext for tests.
+ * Provides mock pricing, PricingContext, and UsageSink for tests.
  */
 
 import { LlmModels, type ModelPricing, type LLMModel } from '@intexuraos/llm-contract';
 import type { IPricingContext } from './pricingClient.js';
+import type { UsageLogParams, UsageSink } from './usageLogger.js';
 
 /**
  * Default test pricing for all models.
@@ -90,4 +91,44 @@ export function createFakePricingContext(
   imagePricing: ModelPricing = TEST_IMAGE_PRICING
 ): FakePricingContext {
   return new FakePricingContext(pricing, imagePricing);
+}
+
+/**
+ * Snapshot of a usage event captured by {@link FakeUsageSink}.
+ */
+export type FakeUsageSinkRecord = UsageLogParams;
+
+/**
+ * In-memory UsageSink for tests. Captures every log call in a mutable array
+ * so tests can assert usage tracking behavior without real HTTP traffic.
+ *
+ * @example
+ * ```ts
+ * const sink = new FakeUsageSink();
+ * const client = createGeminiClient({ ..., usageSink: sink });
+ * await client.generate('hello');
+ * expect(sink.records).toHaveLength(1);
+ * expect(sink.records[0].callType).toBe('generate');
+ * ```
+ */
+export class FakeUsageSink implements UsageSink {
+  readonly records: FakeUsageSinkRecord[] = [];
+
+  log(params: UsageLogParams): Promise<void> {
+    this.records.push(params);
+    return Promise.resolve();
+  }
+
+  /** Clear captured records between test cases. */
+  clear(): void {
+    this.records.length = 0;
+  }
+}
+
+/**
+ * Create a {@link FakeUsageSink} instance. Convenience helper for tests that
+ * prefer a factory function over `new`.
+ */
+export function createFakeUsageSink(): FakeUsageSink {
+  return new FakeUsageSink();
 }

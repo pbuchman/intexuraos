@@ -182,6 +182,7 @@ export interface AppConfig {
   cronAgentUrl: string;
   hellscriptAgentUrl: string;
   appSettingsServiceUrl: string;
+  llmUsageServiceUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
   firebaseAuthDomain: string;
@@ -743,14 +744,20 @@ export interface ProviderPricing {
 }
 
 /**
- * All providers pricing response
+ * All providers pricing response.
+ *
+ * Matches the shape returned by `llm-usage-service`'s `GET /llm-usage/pricing`
+ * (5 providers: google, openai, anthropic, perplexity, openrouter). The 4
+ * calculated-cost providers are required; openrouter is included by the
+ * backend but its cost comes from the provider's own API response, so the
+ * pricing UI only renders the 4 calculated-cost cards.
  */
 export interface AllProvidersPricing {
   google: ProviderPricing;
   openai: ProviderPricing;
   anthropic: ProviderPricing;
   perplexity: ProviderPricing;
-  zai: ProviderPricing;
+  openrouter?: ProviderPricing;
 }
 
 /**
@@ -841,51 +848,6 @@ export interface GitHubConnectionStatus {
   scopes?: string[];
   createdAt?: string;
   updatedAt?: string;
-}
-
-/**
- * Monthly cost breakdown for LLM usage
- */
-export interface MonthlyCost {
-  month: string;
-  costUsd: number;
-  calls: number;
-  inputTokens: number;
-  outputTokens: number;
-  percentage: number;
-}
-
-/**
- * Cost breakdown by LLM model
- */
-export interface ModelCost {
-  model: string;
-  costUsd: number;
-  calls: number;
-  percentage: number;
-}
-
-/**
- * Cost breakdown by call type
- */
-export interface CallTypeCost {
-  callType: string;
-  costUsd: number;
-  calls: number;
-  percentage: number;
-}
-
-/**
- * Aggregated LLM usage costs for a user
- */
-export interface AggregatedCosts {
-  totalCostUsd: number;
-  totalCalls: number;
-  totalInputTokens: number;
-  totalOutputTokens: number;
-  monthlyBreakdown: MonthlyCost[];
-  byModel: ModelCost[];
-  byCallType: CallTypeCost[];
 }
 
 /**
@@ -1518,6 +1480,20 @@ export type {
   WritingSample,
 } from './hellscript.js';
 export { WRITING_CATEGORIES } from './hellscript.js';
+
+// LLM Usage types
+export type {
+  UsageEvent,
+  UsageEventSortField,
+  UsageEventFilters,
+  ListLlmUsageEventsRequest,
+  ListLlmUsageEventsResponse,
+  GetUsageEventResponse,
+  AggregateMetrics,
+  UsageQueryRow,
+  LlmUsageQueryRequest,
+  LlmUsageQueryResponse,
+} from './llmUsage.js';
 
 // Cron Agent types
 export type {

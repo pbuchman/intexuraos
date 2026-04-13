@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModelPricing } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const TEST_MODEL = 'or:deepseek/deepseek-v3-0324';
 const EXPECTED_RAW_MODEL = 'deepseek/deepseek-v3-0324';
@@ -38,15 +39,18 @@ const mockLogger: Logger = {
 
 describe('OpenRouterAdapter', () => {
   let adapter: InstanceType<typeof OpenRouterAdapter>;
+  let fakeUsageSink: FakeUsageSink;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    fakeUsageSink = new FakeUsageSink();
     adapter = new OpenRouterAdapter(
       'test-key',
       TEST_MODEL,
       'test-user-id',
       testPricing,
-      mockLogger
+      mockLogger,
+      fakeUsageSink
     );
   });
 
@@ -58,7 +62,8 @@ describe('OpenRouterAdapter', () => {
         TEST_MODEL,
         'test-user-id',
         testPricing,
-        mockLogger
+        mockLogger,
+        fakeUsageSink
       );
 
       expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
@@ -67,6 +72,7 @@ describe('OpenRouterAdapter', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: fakeUsageSink,
       });
     });
 
@@ -78,6 +84,7 @@ describe('OpenRouterAdapter', () => {
         'test-user-id',
         testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -88,6 +95,7 @@ describe('OpenRouterAdapter', () => {
         researchId: 'research-123',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: fakeUsageSink,
       });
     });
 
@@ -99,7 +107,8 @@ describe('OpenRouterAdapter', () => {
         nonOpenRouterModel,
         'test-user-id',
         testPricing,
-        mockLogger
+        mockLogger,
+        fakeUsageSink
       );
 
       expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
@@ -108,6 +117,7 @@ describe('OpenRouterAdapter', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: fakeUsageSink,
       });
     });
   });
@@ -416,7 +426,8 @@ describe('OpenRouterAdapter', () => {
         TEST_MODEL,
         'test-user-id',
         testPricing,
-        mockLoggerLocal
+        mockLoggerLocal,
+        fakeUsageSink
       );
 
       mockGenerate.mockResolvedValue({

@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
 import { LlmModels } from '@intexuraos/llm-contract';
+import type { ExecutionMemoryPromptContext } from '../../types/execution-memory.js';
 
 const { createLlmClientMock } = vi.hoisted(() => ({
   createLlmClientMock: vi.fn(),
@@ -44,11 +45,21 @@ const logger: Logger = {
 const defaultConfig = {
   model: LlmModels.Gemini25Flash,
   geminiApiKey: 'gemini-key',
-  auditLogPath: '/tmp/orchestrator-llm-audit.test.log',
+  codeAgentUrl: 'http://localhost:8128',
+  usageWebhookUrl: 'http://localhost:8128/internal/webhooks/usage-events',
+  orchestratorSecret: 'test-secret',
+  internalAuthToken: 'test-token',
 } as const;
 
 function createVerifier(
-  overrides: Partial<{ model: string; geminiApiKey: string; auditLogPath: string }> = {}
+  overrides: Partial<{
+    model: string;
+    geminiApiKey: string;
+    codeAgentUrl: string;
+    usageWebhookUrl: string;
+    orchestratorSecret: string;
+    internalAuthToken: string;
+  }> = {}
 ): InstanceType<typeof OrchestratorCompletionVerifier> {
   return new OrchestratorCompletionVerifier(logger, { ...defaultConfig, ...overrides });
 }
@@ -778,12 +789,6 @@ describe('OrchestratorCompletionVerifier', () => {
         'INTEXURAOS_GEMINI_APP_API_KEY is required'
       );
     });
-
-    it('throws when auditLogPath is empty', () => {
-      expect(() => createVerifier({ auditLogPath: '' })).toThrow(
-        'Completion verifier auditLogPath is required'
-      );
-    });
   });
 
   describe('describe', () => {
@@ -794,6 +799,92 @@ describe('OrchestratorCompletionVerifier', () => {
         provider: 'gemini',
         model: LlmModels.Gemini25Flash,
       });
+    });
+  });
+
+  describe('correlation.taskId wiring via AsyncLocalStorage', () => {
+    it('getCorrelationTaskId returns null outside of verify/extractResumeSummary context', () => {
+      createVerifier();
+
+      const clientConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(clientConfig).toBeDefined();
+      const sink = clientConfig['usageSink'] as Record<string, unknown>;
+      expect(sink).toBeDefined();
+
+      const sinkConfig = (sink as { config: { getCorrelationTaskId?: () => string | null } })[
+        'config'
+      ];
+      const getTaskId = sinkConfig?.getCorrelationTaskId;
+      expect(getTaskId).toBeDefined();
+
+      // Outside any verify/extractResumeSummary context, taskId should be null
+      expect(getTaskId?.()).toBeNull();
+    });
+
+    it('getCorrelationTaskId returns the correct taskId during verify()', async () => {
+      let capturedTaskId: string | null | undefined;
+      generateMock.mockImplementationOnce(() => {
+        // Capture taskId during generate() — this is when the usage sink would call getCorrelationTaskId
+        const clientConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
+        const sink = clientConfig['usageSink'] as Record<string, unknown>;
+        const sinkConfig = (sink as { config: { getCorrelationTaskId?: () => string | null } })[
+          'config'
+        ];
+        capturedTaskId = sinkConfig?.getCorrelationTaskId?.();
+        return Promise.resolve({
+          ok: true as const,
+          value: {
+            content: JSON.stringify({
+              outcome: 'planned',
+              superpowers_writing_plans: 'used',
+              linear_url: 'https://linear.app/pbuchman/issue/INT-100',
+              is_complex: '0',
+              has_plan_doc: '0',
+              subtask_urls: '',
+              pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
+              summary: 'The agent planned successfully.',
+              unclear_clarification: '',
+            }),
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+          },
+        });
+      });
+      const verifier = createVerifier();
+
+      await verifier.verify({
+        taskId: 'task-correlation-test',
+        attempt: 1,
+        maxAttempts: 1,
+        agentType: 'planning',
+        rawLogs: 'test logs',
+      });
+
+      // The callback should have returned the correct taskId during generate()
+      expect(capturedTaskId).toBe('task-correlation-test');
+    });
+
+    it('getCorrelationTaskId returns the correct taskId during extractResumeSummary()', async () => {
+      let capturedTaskId: string | null | undefined;
+      generateMock.mockImplementationOnce(() => {
+        const clientConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
+        const sink = clientConfig['usageSink'] as Record<string, unknown>;
+        const sinkConfig = (sink as { config: { getCorrelationTaskId?: () => string | null } })[
+          'config'
+        ];
+        capturedTaskId = sinkConfig?.getCorrelationTaskId?.();
+        return Promise.resolve({
+          ok: true as const,
+          value: {
+            content: JSON.stringify({ summary: 'Resume summary text.' }),
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+          },
+        });
+      });
+      const verifier = createVerifier();
+
+      await verifier.extractResumeSummary('task-resume-test', 'some logs');
+
+      expect(capturedTaskId).toBe('task-resume-test');
     });
   });
 
@@ -1323,6 +1414,329 @@ describe('OrchestratorCompletionVerifier', () => {
         prompt: expect.any(String),
         response: validRemediationResponse,
       });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // verify — memory field enforcement for non-execution agents
+  // ---------------------------------------------------------------------------
+
+  describe('verify — memory field enforcement for non-execution agents', () => {
+    const makeMemoryContext = (memoryIds: string[]): ExecutionMemoryPromptContext => ({
+      applicationId: 'app-123',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'Test query',
+      matchedMemories: memoryIds.map((memoryId) => ({
+        memoryId,
+        title: `Memory ${memoryId}`,
+        memoryType: 'pitfall_pattern' as const,
+        score: 0.9,
+        appliesWhen: 'When working on feature',
+        action: 'Follow the pattern',
+        avoid: 'Do not skip',
+        verification: 'Check after done',
+      })),
+    });
+
+    it('fails planning agent when memories were injected but memory_ids_used and memory_ids_rejected are both empty', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'planned',
+            superpowers_writing_plans: 'used',
+            linear_url: 'https://linear.app/pbuchman/issue/INT-100',
+            is_complex: '0',
+            has_plan_doc: '0',
+            subtask_urls: '',
+            pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
+            memory_ids_used: '',
+            memory_ids_rejected: '',
+            memory_usage_summary: '',
+            summary: 'Planned.',
+            unclear_clarification: '',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-planning-memory-empty',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'planning',
+        rawLogs: '[claude] Planning completed',
+        executionMemoryContext: makeMemoryContext(['mem_142']),
+      });
+      expect(result.passed).toBe(false);
+      expect(result.verifierFailure).toBe(false);
+      expect(result.missingFields).toEqual(['memory_ids_used', 'memory_ids_rejected']);
+    });
+
+    it('passes planning agent when only memory_ids_used is populated (rejected empty is acceptable)', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'planned',
+            superpowers_writing_plans: 'used',
+            linear_url: 'https://linear.app/pbuchman/issue/INT-100',
+            is_complex: '0',
+            has_plan_doc: '0',
+            subtask_urls: '',
+            pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
+            memory_ids_used: 'mem_142',
+            memory_ids_rejected: '',
+            memory_usage_summary: 'Used memory to improve the plan.',
+            summary: 'Planned.',
+            unclear_clarification: '',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      // Note: validateMemoryReporting will still run and may fail for unaccounted IDs etc.,
+      // but the post-parse empty-field check won't trigger since memory_ids_used is non-empty.
+      // For this test we inject mem_142 and report mem_142 as used — should pass all validation.
+      const result = await verifier.verify({
+        taskId: 'task-planning-memory-used',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'planning',
+        rawLogs:
+          '[claude] 📋 **Execution Memories Received:**\n[claude] - [mem_142] Memory for planning\n',
+        executionMemoryContext: makeMemoryContext(['mem_142']),
+      });
+      expect(result.passed).toBe(true);
+    });
+
+    it('passes planning agent when only memory_ids_rejected is populated (used empty is acceptable)', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'planned',
+            superpowers_writing_plans: 'used',
+            linear_url: 'https://linear.app/pbuchman/issue/INT-100',
+            is_complex: '0',
+            has_plan_doc: '0',
+            subtask_urls: '',
+            pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
+            memory_ids_used: '',
+            memory_ids_rejected: 'mem_142',
+            memory_usage_summary: 'Rejected the memory as not applicable.',
+            summary: 'Planned.',
+            unclear_clarification: '',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-planning-memory-rejected',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'planning',
+        rawLogs:
+          '[claude] 📋 **Execution Memories Received:**\n[claude] - [mem_142] Memory for planning\n',
+        executionMemoryContext: makeMemoryContext(['mem_142']),
+      });
+      expect(result.passed).toBe(true);
+    });
+
+    it('fails pull_request agent when memories were injected but both memory fields are empty', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            gh_pr_url: 'https://github.com/org/repo/pull/42',
+            comments_replied: 'yes',
+            tracking_comment_id: '12345678',
+            memory_ids_used: '',
+            memory_ids_rejected: '',
+            memory_usage_summary: '',
+            summary: 'Replied to PR comments.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-pr-memory-empty',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'pull_request',
+        rawLogs: '[claude] PR work done',
+        executionMemoryContext: makeMemoryContext(['mem_200']),
+      });
+      expect(result.passed).toBe(false);
+      expect(result.verifierFailure).toBe(false);
+      expect(result.missingFields).toEqual(['memory_ids_used', 'memory_ids_rejected']);
+    });
+
+    it('fails review agent when memories were injected but both memory fields are empty', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            gh_pr_url: 'https://github.com/org/repo/pull/42',
+            review_id: '123',
+            review_comments_posted: '2',
+            review_types: 'code_quality',
+            memory_ids_used: '',
+            memory_ids_rejected: '',
+            memory_usage_summary: '',
+            summary: 'Reviewed the PR.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-review-memory-empty',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'review',
+        rawLogs: '[claude] Review done',
+        executionMemoryContext: makeMemoryContext(['mem_300']),
+      });
+      expect(result.passed).toBe(false);
+      expect(result.verifierFailure).toBe(false);
+      expect(result.missingFields).toEqual(['memory_ids_used', 'memory_ids_rejected']);
+    });
+
+    it('fails remediation agent when memories were injected but both memory fields are empty', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'implemented',
+            gh_pr_url: 'https://github.com/org/repo/pull/77',
+            memory_ids_used: '',
+            memory_ids_rejected: '',
+            memory_usage_summary: '',
+            requires_re_review: '0',
+            summary: 'Remediated the review findings.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-remediation-memory-empty',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'remediation',
+        rawLogs: '[claude] Remediation done',
+        executionMemoryContext: makeMemoryContext(['mem_400']),
+      });
+      expect(result.passed).toBe(false);
+      expect(result.verifierFailure).toBe(false);
+      expect(result.missingFields).toEqual(['memory_ids_used', 'memory_ids_rejected']);
+    });
+
+    it('skips memory field enforcement for non-execution agents when no memories were injected', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            gh_pr_url: 'https://github.com/org/repo/pull/42',
+            review_id: '123',
+            review_comments_posted: '2',
+            review_types: 'code_quality',
+            memory_ids_used: '',
+            memory_ids_rejected: '',
+            memory_usage_summary: '',
+            summary: 'Reviewed the PR.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-review-no-memories',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'review',
+        rawLogs: '[claude] Review done',
+        executionMemoryContext: {
+          applicationId: 'app-123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Test query',
+          matchedMemories: [],
+        },
+      });
+      expect(result.passed).toBe(true);
+    });
+
+    it('skips memory field enforcement for non-execution agents when executionMemoryContext is absent', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            gh_pr_url: 'https://github.com/org/repo/pull/42',
+            review_id: '123',
+            review_comments_posted: '2',
+            review_types: 'code_quality',
+            memory_ids_used: '',
+            memory_ids_rejected: '',
+            memory_usage_summary: '',
+            summary: 'Reviewed the PR.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-review-no-context',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'review',
+        rawLogs: '[claude] Review done',
+      });
+      expect(result.passed).toBe(true);
+    });
+
+    it('does not apply non-execution memory field enforcement to execution agent (execution uses validateMemoryReporting directly)', async () => {
+      // The execution agent uses EXECUTION_SCHEMA which requires memory fields as z.string() (not optional),
+      // so Zod will already fail if they are missing. This test confirms the post-parse check does not
+      // double-run for execution agents (it only runs for non-execution agents).
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/org/repo/pull/901',
+            memory_ids_used: '',
+            memory_ids_rejected: '',
+            memory_usage_summary: '',
+            summary: 'Implemented the feature.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-execution-no-context',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'execution',
+        rawLogs: '[claude] Execution done',
+        executionMemoryContext: makeMemoryContext(['mem_500']),
+      });
+      // Fails via validateMemoryReporting (memory_acknowledgment, memory_ids_unaccounted, memory_usage_summary),
+      // NOT via the new post-parse check (which is skipped for execution agents)
+      expect(result.passed).toBe(false);
+      expect(result.missingFields).not.toEqual(['memory_ids_used', 'memory_ids_rejected']);
+      expect(result.missingFields).toEqual(
+        expect.arrayContaining([
+          'memory_acknowledgment',
+          'memory_ids_unaccounted',
+          'memory_usage_summary',
+        ])
+      );
     });
   });
 

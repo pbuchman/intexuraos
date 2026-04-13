@@ -4,7 +4,12 @@
  */
 import { LlmModels } from '@intexuraos/llm-contract';
 import { createEncryptor, type Encryptor } from './infra/encryption.js';
-import type { PricingContext } from '@intexuraos/llm-pricing';
+import {
+  HttpInternalAuthUsageSink,
+  NoopUsageSink,
+  type PricingContext,
+  type UsageSink,
+} from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { Auth0Client, AuthTokenRepository } from './domain/identity/index.js';
@@ -121,7 +126,19 @@ export function initializeServices(pricingContext?: PricingContext, logger: Logg
         outputPricePerMillion: 0.26,
       },
     };
-    llmValidator = new LlmValidatorImpl(validationPricing, logger);
+    const llmUsageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '';
+    const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
+    const validatorUsageSink: UsageSink =
+      llmUsageServiceUrl !== '' && internalAuthToken !== ''
+        ? new HttpInternalAuthUsageSink({
+            usageServiceUrl: llmUsageServiceUrl,
+            internalAuthToken,
+            service: 'user-service',
+            component: 'llm-validator',
+            logger,
+          })
+        : new NoopUsageSink();
+    llmValidator = new LlmValidatorImpl(validationPricing, logger, validatorUsageSink);
   }
 
   container = {

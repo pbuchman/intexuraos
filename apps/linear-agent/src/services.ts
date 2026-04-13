@@ -25,7 +25,7 @@ import { createLinearCommentRepository } from './infra/firestore/linearCommentRe
 import { createIssuePruningClassifier } from './infra/llm/issuePruningClassifier.js';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { createCodeAgentHttpClient } from './infra/http/codeAgentHttpClient.js';
-import type { IPricingContext } from '@intexuraos/llm-pricing';
+import { type IPricingContext, HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { createGeminiClient, TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
 import { LlmModels } from '@intexuraos/llm-contract';
@@ -53,16 +53,27 @@ export interface ServiceConfig {
   codeAgentUrl: string;
   internalAuthToken: string;
   pricingContext: IPricingContext;
+  llmUsageServiceUrl: string;
 }
 
 let container: ServiceContainer | null = null;
 
 export function initServices(config: ServiceConfig): void {
+  const buildUsageSink = (component: string): HttpInternalAuthUsageSink =>
+    new HttpInternalAuthUsageSink({
+      usageServiceUrl: config.llmUsageServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+      service: 'linear-agent',
+      component,
+      logger,
+    });
+
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
     pricingContext: config.pricingContext,
     logger: logger,
+    usageSink: buildUsageSink('user-service-client'),
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
@@ -82,6 +93,7 @@ export function initServices(config: ServiceConfig): void {
         userId: 'system:pruning',
         pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
         logger,
+        usageSink: buildUsageSink('issue-pruning'),
       })
     : null;
 

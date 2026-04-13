@@ -1,5 +1,9 @@
 import { createAppLogger } from '@intexuraos/infra-sentry';
-import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
+import {
+  fetchAllPricingWithRetry,
+  createPricingContext,
+  HttpInternalAuthUsageSink,
+} from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
 import type { CommandRepository } from './domain/ports/commandRepository.js';
 import type { ClassifierFactory } from './domain/ports/classifier.js';
@@ -46,7 +50,7 @@ export interface Services {
 export interface ServiceConfig {
   userServiceUrl: string;
   actionsAgentUrl: string;
-  appSettingsServiceUrl: string;
+  llmUsageServiceUrl: string;
   internalAuthToken: string;
   gcpProjectId: string;
 }
@@ -63,9 +67,9 @@ const CLASSIFIER_MODELS = [
 export async function initServices(config: ServiceConfig): Promise<void> {
   const logger = createAppLogger({ name: 'commands-agent' });
 
-  // Fetch pricing data from app-settings-service
-  const pricingResult = await fetchAllPricing(
-    config.appSettingsServiceUrl,
+  // Fetch pricing data from llm-usage-service
+  const pricingResult = await fetchAllPricingWithRetry(
+    config.llmUsageServiceUrl,
     config.internalAuthToken
   );
 
@@ -83,11 +87,19 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   });
   const classifierFactory: ClassifierFactory = (client, classifierLogger) =>
     createGeminiClassifier(client, classifierLogger);
+  const userServiceClientLogger = createAppLogger({ name: 'userServiceClient' });
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
     pricingContext,
-    logger: createAppLogger({ name: 'userServiceClient' }),
+    logger: userServiceClientLogger,
+    usageSink: new HttpInternalAuthUsageSink({
+      usageServiceUrl: config.llmUsageServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+      service: 'commands-agent',
+      component: 'user-service-client',
+      logger: userServiceClientLogger,
+    }),
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
   const eventPublisher = createActionEventPublisher({

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModelPricing, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -9,13 +10,15 @@ const mockLogger: Logger = {
   debug: vi.fn(),
 };
 
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
+
 const mockResponsesCreate = vi.fn();
 const mockChatCompletionsCreate = vi.fn();
 const mockImagesGenerate = vi.fn();
 
 class MockAPIError extends Error {
   status: number;
-  code: string | undefined;
+  code: string | undefined; // @allow-undefined-type -- property on mock class, cannot use ?: here
   constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
@@ -34,13 +37,6 @@ vi.mock('openai', () => {
   return { default: MockOpenAI };
 });
 
-vi.mock('@intexuraos/llm-audit', () => ({
-  createAuditContext: vi.fn().mockReturnValue({
-    success: vi.fn().mockResolvedValue(undefined),
-    error: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-
 const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@intexuraos/llm-pricing', () => ({
@@ -51,7 +47,6 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 }));
 
 const { createGptClient } = await import('../client.js');
-const { createAuditContext } = await import('@intexuraos/llm-audit');
 
 const TEST_MODEL = 'gpt-4o';
 
@@ -74,61 +69,6 @@ describe('createGptClient', () => {
   });
 
   describe('research', () => {
-    it('includes userId and researchId in audit context', async () => {
-      mockResponsesCreate.mockResolvedValue({
-        output_text: 'Research findings about AI.',
-        output: [],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      });
-
-      const client = createGptClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        researchId: 'research-123',
-        pricing: createTestPricing(),
-        logger: mockLogger,
-      });
-
-      await client.research('Tell me about AI');
-
-      expect(vi.mocked(createAuditContext).mock.calls[0]?.[0]).toEqual(
-        expect.objectContaining({
-          provider: LlmProviders.OpenAI,
-          model: TEST_MODEL,
-          method: 'research',
-          prompt: 'Tell me about AI',
-          userId: 'test-user',
-          researchId: 'research-123',
-        })
-      );
-    });
-
-    it('excludes researchId from audit context when undefined', async () => {
-      mockResponsesCreate.mockResolvedValue({
-        output_text: 'Research findings about AI.',
-        output: [],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      });
-
-      const client = createGptClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        pricing: createTestPricing(),
-        logger: mockLogger,
-      });
-
-      await client.research('Tell me about AI');
-
-      const auditArgs = vi.mocked(createAuditContext).mock.calls[0]?.[0] as unknown as Record<
-        string,
-        unknown
-      >;
-      expect(auditArgs).not.toHaveProperty('researchId');
-      expect(auditArgs?.['userId']).toBe('test-user');
-    });
-
     it('returns research result with content and usage from pricing', async () => {
       mockResponsesCreate.mockResolvedValue({
         output_text: 'Research findings about AI.',
@@ -143,6 +83,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Tell me about AI');
 
@@ -177,6 +118,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -205,6 +147,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -228,6 +171,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -257,6 +201,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -282,6 +227,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.research('Test prompt');
 
@@ -305,6 +251,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -323,6 +270,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -343,6 +291,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -361,6 +310,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.research('Test prompt');
 
@@ -387,6 +337,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Write something');
 
@@ -415,6 +366,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.generate('Write something');
 
@@ -438,6 +390,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Write something');
 
@@ -456,6 +409,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Write something');
 
@@ -482,6 +436,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -509,6 +464,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat', { size: '1536x1024' });
@@ -538,6 +494,7 @@ describe('createGptClient', () => {
         pricing,
         imagePricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -559,6 +516,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -582,6 +540,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       await client.generateImage('A cat');
@@ -611,6 +570,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -633,6 +593,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -657,6 +618,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Test');
 
@@ -684,6 +646,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -710,6 +673,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -739,6 +703,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -766,6 +731,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -792,6 +758,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -812,6 +779,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -831,6 +799,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.generate('Test prompt');
 
@@ -850,6 +819,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -872,6 +842,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -894,6 +865,7 @@ describe('createGptClient', () => {
         userId: 'test-user',
         pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');

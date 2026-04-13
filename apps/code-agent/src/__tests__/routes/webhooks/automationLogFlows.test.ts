@@ -212,7 +212,6 @@ describe('Automation log integration flows', () => {
       whatsappNotifier: {} as never,
       actionsAgentClient: {} as never,
       linearAgentClient: {} as never,
-      rateLimitService: {} as never,
       linearIssueService: {} as never,
       statusMirrorService: {} as never,
       processHeartbeat: {} as never,

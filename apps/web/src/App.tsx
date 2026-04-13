@@ -44,12 +44,13 @@ import {
   GoogleCalendarConnectionPage,
   HomePage,
   InboxPage,
-  LlmCostsPage,
+  LlmUsagePage,
+  LlmUsagePricingPage,
+  LlmUsageViewPage,
   LinearConnectionPage,
   LinearIssuesPage,
   LinearPruneCandidatesPage,
   ResearchAgentPage,
-  LlmPricingPage,
   LoginPage,
   MobileNotificationsConnectionPage,
   MobileNotificationsListPage,
@@ -151,6 +152,11 @@ function CodeTaskViewRedirect(): React.JSX.Element {
   return <Navigate to={`/code-tasks/${id ?? ''}`} replace />;
 }
 
+function LlmUsageViewPageKeyed(): React.JSX.Element {
+  const { eventId } = useParams<{ eventId: string }>();
+  return <LlmUsageViewPage key={eventId} />;
+}
+
 function AppRoutes(): React.JSX.Element {
   return (
     <Routes>
@@ -217,22 +223,6 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <ApiKeysSettingsPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings/llm-pricing"
-        element={
-          <ProtectedRoute>
-            <LlmPricingPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings/usage-costs"
-        element={
-          <ProtectedRoute>
-            <LlmCostsPage />
           </ProtectedRoute>
         }
       />
@@ -355,6 +345,31 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <MergeQueuePage />
+          </ProtectedRoute>
+        }
+      />
+      {/* LLM Usage routes */}
+      <Route
+        path="/llm-usage"
+        element={
+          <ProtectedRoute>
+            <LlmUsagePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/llm-usage/pricing"
+        element={
+          <ProtectedRoute>
+            <LlmUsagePricingPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/llm-usage/:eventId"
+        element={
+          <ProtectedRoute>
+            <LlmUsageViewPageKeyed />
           </ProtectedRoute>
         }
       />

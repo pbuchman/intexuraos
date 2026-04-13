@@ -37,7 +37,6 @@ graph TB
     subgraph "Foundation Layer"
         LC[llm-contract]
         LPR[llm-pricing]
-        LA2[llm-audit]
     end
 
     RA --> LP
@@ -105,15 +104,6 @@ const cost = calculateCost({
   pricing: { inputPricePerMillion: 0.075, outputPricePerMillion: 0.3 },
 });
 ```
-
-#### `@intexuraos/llm-audit`
-
-**Purpose:** Usage tracking and audit logging via Pub/Sub.
-
-| Export              | Description                     |
-| ------------------- | ------------------------------- |
-| `LlmAuditPublisher` | Pub/Sub publisher for LLM calls |
-| `LlmCallEvent`      | Event schema type               |
 
 ---
 

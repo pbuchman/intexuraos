@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
-import { LlmProviders } from '@intexuraos/llm-contract';
 import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../../server.js';
 import { setServices, resetServices, type ServiceContainer } from '../../services.js';
 import { FakeUsageEventRepository } from '../fakeUsageEventRepository.js';
 import { FakeUsageAggregateRepository } from '../fakeUsageAggregateRepository.js';
+import { FakePricingRepository } from '../fakePricingRepository.js';
 import { createTestEventInput } from '../helpers.js';
 
 describe('internalUsageRoutes', () => {
@@ -25,6 +25,7 @@ describe('internalUsageRoutes', () => {
     setServices({
       usageEventRepository: eventRepo,
       usageAggregateRepository: aggregateRepo,
+      pricingRepository: new FakePricingRepository(),
       orchestratorSecret: 'test-secret',
     } satisfies ServiceContainer);
   });
@@ -185,78 +186,4 @@ describe('internalUsageRoutes', () => {
     });
   });
 
-  describe('POST /internal/usage/query', () => {
-    it('returns 200 with query result', async () => {
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/usage/query',
-        headers: { 'x-internal-auth': AUTH_TOKEN },
-        payload: {
-          timeRange: {
-            from: '2026-04-10T00:00:00Z',
-            to: '2026-04-10T23:59:59Z',
-          },
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { rows: unknown[]; totals: { calls: number } } };
-      expect(body.success).toBe(true);
-      expect(body.data.rows).toEqual([]);
-    });
-
-    it('returns 401 for missing auth token', async () => {
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/usage/query',
-        payload: {
-          timeRange: {
-            from: '2026-04-10T00:00:00Z',
-            to: '2026-04-10T23:59:59Z',
-          },
-        },
-      });
-
-      expect(response.statusCode).toBe(401);
-    });
-
-    it('returns 200 with query result including optional fields', async () => {
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/usage/query',
-        headers: { 'x-internal-auth': AUTH_TOKEN },
-        payload: {
-          timeRange: {
-            from: '2026-04-10T00:00:00Z',
-            to: '2026-04-10T23:59:59Z',
-          },
-          filters: { providers: [LlmProviders.Anthropic] },
-          groupBy: ['request.provider'],
-          sortBy: { field: 'calls', direction: 'desc' },
-          limit: 10,
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { rows: unknown[] } };
-      expect(body.success).toBe(true);
-    });
-
-    it('returns 400 for invalid groupBy field', async () => {
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/usage/query',
-        headers: { 'x-internal-auth': AUTH_TOKEN },
-        payload: {
-          timeRange: {
-            from: '2026-04-10T00:00:00Z',
-            to: '2026-04-10T23:59:59Z',
-          },
-          groupBy: ['invalid_field'],
-        },
-      });
-
-      expect(response.statusCode).toBe(400);
-    });
-  });
 });

@@ -10,6 +10,7 @@
 import { createOpenRouterClient, type OpenRouterClient } from '@intexuraos/infra-openrouter';
 import type { Logger, Result } from '@intexuraos/common-core';
 import { type ModelPricing, isOpenRouterModel, getOpenRouterRawId } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import { buildResearchPrompt, buildSynthesisPrompt, titlePrompt, type ResearchContext, type SynthesisContext } from '@intexuraos/llm-prompts';
 import type {
   LlmError,
@@ -31,6 +32,7 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
     userId: string,
     pricing: ModelPricing,
     logger: Logger,
+    usageSink: UsageSink,
     researchId?: string
   ) {
     // Strip 'or:' prefix before passing to OpenRouter API client
@@ -42,6 +44,7 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
       ...(researchId !== undefined && { researchId }),
       pricing,
       logger,
+      usageSink,
     });
     this.model = model;
     this.logger = logger;

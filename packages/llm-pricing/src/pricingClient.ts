@@ -3,20 +3,20 @@
  *
  * @packageDocumentation
  *
- * Fetches LLM pricing from app-settings-service at startup and provides
+ * Fetches LLM pricing from llm-usage-service at startup and provides
  * runtime pricing lookups via {@link PricingContext}.
  *
  * @remarks
- * Pricing data is fetched from `/internal/settings/pricing` endpoint
+ * Pricing data is fetched from `/internal/pricing` endpoint
  * and cached in a `PricingContext` for efficient runtime access.
  *
  * @example
  * ```ts
  * import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
  *
- * // Fetch pricing from app-settings-service
+ * // Fetch pricing from llm-usage-service
  * const result = await fetchAllPricing(
- *   'http://app-settings-service/internal',
+ *   'http://llm-usage-service/internal',
  *   'internal-auth-token'
  * );
  *
@@ -38,7 +38,7 @@ import {
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 
 /**
- * Response from the app-settings-service pricing endpoint.
+ * Response from the llm-usage-service pricing endpoint.
  *
  * @remarks
  * Contains pricing data for all LLM providers. Each provider's pricing
@@ -71,6 +71,8 @@ export interface AllPricingResponse {
   anthropic: ProviderPricing;
   /** Perplexity pricing */
   perplexity: ProviderPricing;
+  /** OpenRouter pricing */
+  openrouter: ProviderPricing;
 }
 
 /**
@@ -95,23 +97,25 @@ export interface PricingClientError {
   code: 'NETWORK_ERROR' | 'API_ERROR' | 'VALIDATION_ERROR';
   /** Human-readable error message */
   message: string;
+  /** HTTP status code (set for API_ERROR from HTTP responses) */
+  statusCode?: number | undefined;
 }
 
 /**
- * Fetch all LLM pricing from app-settings-service.
+ * Fetch all LLM pricing from llm-usage-service.
  *
  * @remarks
- * Calls `/internal/settings/pricing` with `X-Internal-Auth` header.
+ * Calls `/internal/pricing` with `X-Internal-Auth` header.
  * Returns a {@link Result} type - use pattern matching to handle errors.
  *
- * @param baseUrl - Base URL of app-settings-service (e.g., `'http://app-settings-service/internal'`)
+ * @param baseUrl - Base URL of llm-usage-service (e.g., `'http://llm-usage-service'`)
  * @param authToken - Internal auth token for `X-Internal-Auth` header
  * @returns Result with all provider pricing or error
  *
  * @example
  * ```ts
  * const result = await fetchAllPricing(
- *   'http://app-settings-service/internal',
+ *   'http://llm-usage-service',
  *   process.env.INTERNAL_AUTH_TOKEN
  * );
  *
@@ -126,7 +130,7 @@ export async function fetchAllPricing(
   baseUrl: string,
   authToken: string
 ): Promise<Result<AllPricingResponse, PricingClientError>> {
-  const url = `${baseUrl}/internal/settings/pricing`;
+  const url = `${baseUrl}/internal/pricing`;
 
   try {
     const response = await fetch(url, {
@@ -147,6 +151,7 @@ export async function fetchAllPricing(
       return err({
         code: 'API_ERROR',
         message: `HTTP ${String(response.status)}${errorDetails}`,
+        statusCode: response.status,
       });
     }
 
@@ -166,6 +171,130 @@ export async function fetchAllPricing(
       message: getErrorMessage(error),
     });
   }
+}
+
+/**
+ * Configuration for retry behavior in {@link fetchAllPricingWithRetry}.
+ */
+export interface PricingRetryOptions {
+  /** Maximum number of retry attempts (default: 5) */
+  maxRetries?: number | undefined;
+  /** Initial delay in milliseconds before first retry (default: 1000) */
+  initialDelayMs?: number | undefined;
+  /** Maximum delay in milliseconds between retries (default: 15000) */
+  maxDelayMs?: number | undefined;
+  /** Optional logger for retry progress (default: process.stderr.write) */
+  log?: ((message: string) => void) | undefined;
+  /** Delay function for testability (default: setTimeout-based) */
+  delayFn?: ((ms: number) => Promise<void>) | undefined;
+}
+
+const DEFAULT_MAX_RETRIES = 5;
+const DEFAULT_INITIAL_DELAY_MS = 1000;
+const DEFAULT_MAX_DELAY_MS = 15000;
+
+/**
+ * Whether a pricing client error is transient and worth retrying.
+ *
+ * Retries on:
+ * - NETWORK_ERROR: connection refused, DNS failure, timeout
+ * - API_ERROR with HTTP 404, 5xx: service not yet deployed or temporarily down
+ *
+ * Does NOT retry:
+ * - API_ERROR with HTTP 401/403: auth misconfiguration won't self-heal
+ * - VALIDATION_ERROR: response format issues won't self-heal
+ */
+function isTransientError(error: PricingClientError): boolean {
+  // Network errors (connection refused, DNS failure, timeout) are always transient
+  if (error.code === 'NETWORK_ERROR') return true;
+
+  // API_ERROR — check if the HTTP status is transient
+  if (error.statusCode === undefined) return false;
+
+  // 404 = route not deployed yet; 5xx = server error
+  return error.statusCode === 404 || error.statusCode >= 500;
+}
+
+/**
+ * Default delay using setTimeout.
+ */
+function defaultDelay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/**
+ * Fetch all LLM pricing with exponential backoff retries.
+ *
+ * @remarks
+ * Wraps {@link fetchAllPricing} with retry logic to handle transient failures
+ * during deployment (e.g., llm-usage-service not yet ready). Uses exponential
+ * backoff: 1s → 2s → 4s → 8s → 15s (capped). Total max wait ≈ 30s with
+ * default settings.
+ *
+ * Only retries on transient errors (network failures, HTTP 404/5xx).
+ * Non-transient errors (401, 403, validation) fail immediately.
+ *
+ * @param baseUrl - Base URL of llm-usage-service
+ * @param authToken - Internal auth token for `X-Internal-Auth` header
+ * @param options - Optional retry configuration
+ * @returns Result with all provider pricing or error after exhausting retries
+ *
+ * @example
+ * ```ts
+ * // At service startup — resilient to deployment ordering
+ * const result = await fetchAllPricingWithRetry(
+ *   process.env.INTEXURAOS_LLM_USAGE_SERVICE_URL,
+ *   process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN
+ * );
+ *
+ * if (!result.ok) {
+ *   throw new Error(`Failed to fetch pricing: ${result.error.message}`);
+ * }
+ * ```
+ */
+export async function fetchAllPricingWithRetry(
+  baseUrl: string,
+  authToken: string,
+  options?: PricingRetryOptions
+): Promise<Result<AllPricingResponse, PricingClientError>> {
+  const maxRetries = options?.maxRetries ?? DEFAULT_MAX_RETRIES;
+  const initialDelayMs = options?.initialDelayMs ?? DEFAULT_INITIAL_DELAY_MS;
+  const maxDelayMs = options?.maxDelayMs ?? DEFAULT_MAX_DELAY_MS;
+  const log =
+    options?.log ??
+    ((msg: string): void => {
+      process.stderr.write(msg);
+    });
+  const delayFn = options?.delayFn ?? defaultDelay;
+
+  let lastResult: Result<AllPricingResponse, PricingClientError> | undefined;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const result = await fetchAllPricing(baseUrl, authToken);
+
+    if (result.ok) return result;
+
+    lastResult = result;
+
+    // Non-transient errors fail immediately
+    if (!isTransientError(result.error)) return result;
+
+    // Last attempt — don't delay, just return the error
+    if (attempt === maxRetries) break;
+
+    const delayMs = Math.min(initialDelayMs * Math.pow(2, attempt), maxDelayMs);
+    log(
+      `Pricing fetch failed (attempt ${String(attempt + 1)}/${String(maxRetries + 1)}): ${result.error.message}. ` +
+        `Retrying in ${String(delayMs)}ms...\n`
+    );
+    await delayFn(delayMs);
+  }
+
+  // lastResult is always defined here because maxRetries >= 0, so the loop
+  // runs at least once and sets lastResult before breaking.
+  return lastResult as Result<AllPricingResponse, PricingClientError>;
 }
 
 /**
@@ -192,7 +321,7 @@ export interface IPricingContext {
  * Runtime pricing lookup context.
  *
  * @remarks
- * Created at application startup with fetched pricing from app-settings-service.
+ * Created at application startup with fetched pricing from llm-usage-service.
  * Caches all pricing in a Map for O(1) lookups during LLM operations.
  *
  * @example
@@ -227,6 +356,7 @@ export class PricingContext implements IPricingContext {
       LlmProviders.OpenAI,
       LlmProviders.Anthropic,
       LlmProviders.Perplexity,
+      LlmProviders.OpenRouter,
     ] as const) {
       const providerPricing = allPricing[provider];
       for (const [model, pricing] of Object.entries(providerPricing.models)) {
@@ -269,7 +399,7 @@ export class PricingContext implements IPricingContext {
 
   /**
    * Validate that ALL LLM models have pricing defined.
-   * Used by app-settings-service at startup.
+   * Used by llm-usage-service at startup.
    * @throws Error listing missing models
    */
   validateAllModels(): void {
@@ -298,7 +428,7 @@ function isValidLLMModel(model: string): model is LLMModel {
  * Validates that all required models have pricing defined before returning.
  * Throws an error listing missing models if validation fails.
  *
- * @param allPricing - Pricing response from app-settings-service
+ * @param allPricing - Pricing response from llm-usage-service
  * @param requiredModels - Models that must have pricing (default: all models)
  * @returns Validated pricing context
  * @throws Error if any required model is missing pricing
@@ -307,7 +437,7 @@ function isValidLLMModel(model: string): model is LLMModel {
  * ```ts
  * import { createPricingContext } from '@intexuraos/llm-pricing';
  *
- * // Validate all models have pricing (for app-settings-service)
+ * // Validate all models have pricing (for llm-usage-service)
  * const context = createPricingContext(allPricing);
  *
  * // Validate only specific models (for client services)

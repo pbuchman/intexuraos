@@ -73,9 +73,8 @@ vi.mock('@/components/code-tasks/LogStream.js', () => ({
   LogStream: (): React.JSX.Element => <div>Log stream</div>,
 }));
 
-vi.mock('@/components/code-tasks/TaskActions.js', () => ({
-  TaskActions: (): React.JSX.Element => <div>actions</div>,
-}));
+// TaskActions is NOT mocked — these tests assert on the real GitHub link
+// rendered by TaskActions via the `linkButtons` block when `prUrl` is set.
 
 function createTask(overrides?: Partial<CodeTask>): CodeTask {
   return {

@@ -359,7 +359,7 @@ None — user-service does not publish or subscribe to Pub/Sub events.
 | `INTEXURAOS_TOKEN_ENCRYPTION_KEY`       | Yes      | Key for encrypting stored Auth0 tokens                    |
 | `INTEXURAOS_ENCRYPTION_KEY`             | Yes      | AES-256 key for API key encryption (64 hex chars)         |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes      | Shared secret for internal endpoints                      |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`   | Yes      | URL of app-settings-service (fetches LLM pricing)         |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`      | Yes      | URL of llm-usage-service (fetches LLM pricing)            |
 | `INTEXURAOS_WEB_APP_URL`                | Yes      | Web app URL for OAuth redirects                           |
 | `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`     | Yes      | Google OAuth client ID                                    |
 | `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET` | Yes      | Google OAuth client secret                                |

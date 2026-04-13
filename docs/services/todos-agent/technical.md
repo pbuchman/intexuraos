@@ -265,7 +265,7 @@ When a new item is added to a completed todo, the status reverts to `in_progress
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Internal service auth key              | Yes      |
 | `INTEXURAOS_TODOS_PROCESSING_TOPIC`   | Pub/Sub topic for processing           | Yes      |
 | `INTEXURAOS_USER_SERVICE_URL`         | User-service base URL                  | Yes      |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | App-settings base URL (LLM pricing)    | Yes      |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | LLM usage service base URL (pricing)   | Yes      |
 | `INTEXURAOS_SENTRY_DSN`               | Sentry error tracking                  | No       |
 | `INTEXURAOS_ENVIRONMENT`              | Environment name                       | No       |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini API key (LLM fallback) | No       |

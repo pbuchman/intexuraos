@@ -62,14 +62,6 @@
       "owner": "research-agent",
       "description": "LLM research queries, responses, and synthesized results"
     },
-    "llm_api_logs": {
-      "owner": "research-agent",
-      "description": "LLM API call audit logs with token usage and cost tracking"
-    },
-    "llm_usage_stats": {
-      "owner": "llm-pricing",
-      "description": "Aggregated LLM usage statistics by provider, model, and call type"
-    },
     "commands": {
       "owner": "commands-agent",
       "description": "Incoming commands from various sources (WhatsApp, etc.) with classification metadata"
@@ -108,7 +100,7 @@
     },
     "settings": {
       "owner": "app-settings-service",
-      "description": "Application settings including LLM pricing per provider"
+      "description": "Application settings (usage statistics)"
     },
     "todos": {
       "owner": "todos-agent",
@@ -166,10 +158,6 @@
     "user_spend": {
       "owner": "code-agent",
       "description": "User cost tracking for rate limiting"
-    },
-    "user_usage": {
-      "owner": "code-agent",
-      "description": "User rate limiting and cost tracking for code tasks (concurrent tasks, hourly limits, daily/monthly cost caps)"
     },
     "code_worker_settings": {
       "owner": "code-agent",
@@ -256,6 +244,10 @@
     "llm_usage_daily_aggregates": {
       "owner": "llm-usage-service",
       "description": "Daily aggregated LLM usage metrics by owner, service, provider, model, and operation"
+    },
+    "llm_pricing": {
+      "owner": "llm-usage-service",
+      "description": "LLM pricing per provider (one doc per provider, keyed by provider ID)"
     }
   }
 }

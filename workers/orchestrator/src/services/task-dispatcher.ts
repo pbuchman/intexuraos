@@ -56,6 +56,58 @@ export function hasFatalExitCodeField(missingFields: string[]): string | undefin
   return missingFields.find((f) => f.startsWith(FATAL_EXIT_CODE_PREFIX));
 }
 
+const MEMORY_FIELDS = [
+  'memory_acknowledgment',
+  'memory_ids_used_invalid',
+  'memory_ids_rejected_invalid',
+  'memory_ids_overlap',
+  'memory_ids_unaccounted',
+  'memory_usage_summary',
+  'memory_ids_used',
+  'memory_ids_rejected',
+];
+
+export function buildMissingFieldsPrompt(
+  agentType: CompletionAgentType,
+  missingFields: string[],
+  rawLogs: string
+): string {
+  const transcript = getLast50Lines(rawLogs);
+  const hasMemoryFailures = missingFields.some((field) => MEMORY_FIELDS.includes(field));
+
+  const memoryGuidance = hasMemoryFailures
+    ? [
+        '',
+        'EXECUTION MEMORY REPORTING FAILURE:',
+        'You were injected with execution memories but did not properly report their usage.',
+        'You MUST include in your final output:',
+        '1. memory_ids_used: comma-separated IDs of memories you applied',
+        '2. memory_ids_rejected: comma-separated IDs of memories you found irrelevant',
+        '3. memory_usage_summary: one sentence about how memories influenced your work',
+        'Every injected memory must appear in either used or rejected. No ID may be missing.',
+        'If you did not use any memory, put all IDs in memory_ids_rejected.',
+      ]
+    : [];
+
+  return [
+    '[AUTO-CONTINUE ATTEMPT]',
+    'Your last response was missing required fields for the completion verifier.',
+    '',
+    `Missing fields: ${missingFields.join(', ')}`,
+    ...memoryGuidance,
+    '',
+    'Please ensure your final message includes all required information.',
+    `Agent type: ${agentType}`,
+    '',
+    'Last 50 lines of transcript for reference:',
+    transcript,
+    '',
+    'Constraints:',
+    '- Do not restart from scratch.',
+    '- Continue from current repository/worktree state.',
+  ].join('\n');
+}
+
 const TASK_TIMEOUT_WARNING_MS = 175 * 60 * 1000; // 2h 55m
 const TASK_TIMEOUT_KILL_MS = 180 * 60 * 1000; // 3h
 const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
@@ -1614,23 +1666,7 @@ export class TaskDispatcher {
     missingFields: string[],
     rawLogs: string
   ): string {
-    const transcript = getLast50Lines(rawLogs);
-    return [
-      '[AUTO-CONTINUE ATTEMPT]',
-      'Your last response was missing required fields for the completion verifier.',
-      '',
-      `Missing fields: ${missingFields.join(', ')}`,
-      '',
-      'Please ensure your final message includes all required information.',
-      `Agent type: ${agentType}`,
-      '',
-      'Last 50 lines of transcript for reference:',
-      transcript,
-      '',
-      'Constraints:',
-      '- Do not restart from scratch.',
-      '- Continue from current repository/worktree state.',
-    ].join('\n');
+    return buildMissingFieldsPrompt(agentType, missingFields, rawLogs);
   }
 
   private buildResultFromVerification(

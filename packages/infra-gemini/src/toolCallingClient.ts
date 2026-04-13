@@ -23,8 +23,6 @@ import type {
   ToolCallingModel,
 } from '@intexuraos/llm-contract';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
-import type { AuditSink } from '@intexuraos/llm-audit';
-import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import { createUsageLogger, type UsageSink } from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
 import { normalizeUsage } from './costCalculator.js';
@@ -54,8 +52,8 @@ export interface ToolCallingClientConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
-  auditSink?: AuditSink;
-  usageSink?: UsageSink;
+  /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
+  usageSink: UsageSink;
 }
 
 /**
@@ -63,12 +61,9 @@ export interface ToolCallingClientConfig {
  */
 export function createGeminiToolCallingClient(config: ToolCallingClientConfig): ToolCallingClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const { model, userId, pricing, logger, auditSink, usageSink } = config;
+  const { model, userId, pricing, logger, usageSink } = config;
 
-  const usageLogger = createUsageLogger({
-    logger,
-    ...(usageSink !== undefined && { sink: usageSink }),
-  });
+  const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
   function trackUsage(usage: NormalizedUsage, success: boolean, errorMessage?: string): void {
     void usageLogger.log({
@@ -92,18 +87,6 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
         onExhausted,
         repairIterations,
       } = params;
-
-      const auditContext: AuditContext = createAuditContext(
-        {
-          provider: LlmProviders.Google,
-          model,
-          method: 'toolCalling',
-          prompt: systemPrompt,
-          startedAt: new Date(),
-          userId,
-        },
-        auditSink !== undefined ? { sink: auditSink } : undefined
-      );
 
       // Build function declarations (strip `run` callbacks — only schema goes to Gemini)
       const functionDeclarations: FunctionDeclaration[] = tools.map((t) => ({
@@ -270,7 +253,6 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
 
             if (finalText === '') {
               // Empty response
-              await auditContext.error({ error: 'Empty response from model' });
               trackUsage(aggregatedUsage, false, 'Empty response from model');
               return err({
                 code: 'API_ERROR',
@@ -295,11 +277,6 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
               'Tool calling: completed'
             );
 
-            await auditContext.success({
-              response: finalText,
-              inputTokens: aggregatedUsage.inputTokens,
-              outputTokens: aggregatedUsage.outputTokens,
-            });
             trackUsage(aggregatedUsage, true);
 
             return ok({
@@ -332,11 +309,6 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
         const lastText = lastTextPart?.text ?? '';
 
         if (lastText !== '') {
-          await auditContext.success({
-            response: lastText,
-            inputTokens: aggregatedUsage.inputTokens,
-            outputTokens: aggregatedUsage.outputTokens,
-          });
           trackUsage(aggregatedUsage, true);
 
           return ok({
@@ -347,9 +319,6 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
           });
         }
 
-        await auditContext.error({
-          error: 'Tool calling loop exceeded maxIterations',
-        });
         trackUsage(aggregatedUsage, false, 'Tool calling loop exceeded maxIterations');
         return err({
           code: 'API_ERROR',
@@ -357,7 +326,6 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
         });
       } catch (error: unknown) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         trackUsage(aggregatedUsage, false, errorMsg);
         return err(mapGeminiError(error));
       }

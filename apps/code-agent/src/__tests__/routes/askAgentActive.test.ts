@@ -34,7 +34,6 @@ import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepos
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
-import type { RateLimitService } from '../../domain/services/rateLimitService.js';
 import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
 import { ok } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
@@ -62,7 +61,6 @@ describe('GET /code/ask-agent/active', () => {
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
   let taskEnqueueService: TaskEnqueueService;
-  let rateLimitService: RateLimitService;
 
   beforeEach(async () => {
     // Set jwtVerify to resolve by default (simulating valid token)
@@ -118,12 +116,6 @@ describe('GET /code/ask-agent/active', () => {
       logger,
     });
 
-    rateLimitService = {
-      checkLimits: vi.fn().mockResolvedValue(ok(undefined)),
-      recordTaskStart: vi.fn().mockResolvedValue(undefined),
-      recordTaskComplete: vi.fn().mockResolvedValue(undefined),
-    };
-
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -145,7 +137,6 @@ describe('GET /code/ask-agent/active', () => {
       logLineRepo,
       actionsAgentClient,
       linearAgentClient,
-      rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
@@ -212,7 +203,6 @@ describe('GET /code/ask-agent/active', () => {
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;
-      rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;

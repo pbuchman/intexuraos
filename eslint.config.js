@@ -64,7 +64,6 @@ export default tseslint.config(
         { type: 'infra-gemini', pattern: ['packages/infra-gemini/src/**'], mode: 'folder' },
         { type: 'infra-claude', pattern: ['packages/infra-claude/src/**'], mode: 'folder' },
         { type: 'infra-gpt', pattern: ['packages/infra-gpt/src/**'], mode: 'folder' },
-        { type: 'llm-audit', pattern: ['packages/llm-audit/src/**'], mode: 'folder' },
         { type: 'llm-contract', pattern: ['packages/llm-contract/src/**'], mode: 'folder' },
         { type: 'llm-pricing', pattern: ['packages/llm-pricing/src/**'], mode: 'folder' },
         { type: 'http-server', pattern: ['packages/http-server/src/**'], mode: 'folder' },
@@ -99,25 +98,20 @@ export default tseslint.config(
             { from: 'llm-contract', allow: ['llm-contract', 'common-core'] },
             // llm-pricing can import from llm-contract (no common-core needed)
             { from: 'llm-pricing', allow: ['llm-pricing', 'llm-contract'] },
-            // infra-gemini can import from common-core, llm-audit, llm-contract, and llm-pricing
+            // infra-gemini can import from common-core, llm-contract, and llm-pricing
             {
               from: 'infra-gemini',
-              allow: ['infra-gemini', 'common-core', 'llm-audit', 'llm-contract', 'llm-pricing'],
+              allow: ['infra-gemini', 'common-core', 'llm-contract', 'llm-pricing'],
             },
-            // infra-claude can import from common-core, llm-audit, llm-contract, and llm-pricing
+            // infra-claude can import from common-core, llm-contract, and llm-pricing
             {
               from: 'infra-claude',
-              allow: ['infra-claude', 'common-core', 'llm-audit', 'llm-contract', 'llm-pricing'],
+              allow: ['infra-claude', 'common-core', 'llm-contract', 'llm-pricing'],
             },
-            // infra-gpt can import from common-core, llm-audit, llm-contract, and llm-pricing
+            // infra-gpt can import from common-core, llm-contract, and llm-pricing
             {
               from: 'infra-gpt',
-              allow: ['infra-gpt', 'common-core', 'llm-audit', 'llm-contract', 'llm-pricing'],
-            },
-            // llm-audit can import from common-core and infra-firestore
-            {
-              from: 'llm-audit',
-              allow: ['llm-audit', 'common-core', 'infra-firestore'],
+              allow: ['infra-gpt', 'common-core', 'llm-contract', 'llm-pricing'],
             },
             // http-server can import from decomposed packages
             {
@@ -143,7 +137,6 @@ export default tseslint.config(
                 'infra-gemini',
                 'infra-claude',
                 'infra-gpt',
-                'llm-audit',
                 'llm-contract',
                 'llm-pricing',
                 'http-contracts',

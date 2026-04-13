@@ -36,9 +36,7 @@
  * ```
  */
 
-import { randomUUID } from 'node:crypto';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import {
   LlmProviders,
   type LLMClient,
@@ -100,27 +98,6 @@ async function fetchWithTimeout(
   }
 }
 
-function createRequestContext(
-  method: string,
-  model: string,
-  prompt: string,
-  userId: string,
-  researchId?: string
-): { requestId: string; startTime: Date; auditContext: AuditContext } {
-  const requestId = randomUUID();
-  const startTime = new Date();
-  const auditContext = createAuditContext({
-    provider: LlmProviders.OpenRouter,
-    model,
-    method,
-    prompt,
-    startedAt: startTime,
-    userId,
-    ...(researchId !== undefined && { researchId }),
-  });
-  return { requestId, startTime, auditContext };
-}
-
 class OpenRouterApiError extends Error {
   constructor(
     public readonly status: number,
@@ -145,17 +122,13 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     apiKey,
     model,
     userId,
-    researchId,
     pricing,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     logger,
     usageSink,
   } = config;
 
-  const usageLogger = createUsageLogger({
-    logger,
-    ...(usageSink !== undefined && { sink: usageSink }),
-  });
+  const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
   function trackUsage(
     callType: CallType,
@@ -191,8 +164,6 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, OpenRouterError>> {
-      const { auditContext } = createRequestContext('research', model, prompt, userId, researchId);
-
       try {
         // Build the model ID - research uses :online suffix for web search
         const searchModel = model.endsWith(':online') ? model : `${model}:online`;
@@ -232,7 +203,6 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           const errorText = await response.text();
           const apiError = new OpenRouterApiError(response.status, errorText);
           const errorMsg = getErrorMessage(apiError);
-          await auditContext.error({ error: errorMsg });
           const emptyUsage: NormalizedUsage = {
             inputTokens: 0,
             outputTokens: 0,
@@ -267,18 +237,11 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           }
         }
 
-        await auditContext.success({
-          response: content,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          providerCost: usage.costUsd,
-        });
         trackUsage('research', usage, true);
 
         return ok({ content, sources, usage });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
@@ -294,8 +257,6 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       prompt: string,
       options?: GenerateOptions
     ): Promise<Result<GenerateResult, OpenRouterError>> {
-      const { auditContext } = createRequestContext('generate', model, prompt, userId, researchId);
-
       try {
         const requestBody = {
           model, // No :online suffix for synthesis
@@ -330,7 +291,6 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           const errorText = await response.text();
           const apiError = new OpenRouterApiError(response.status, errorText);
           const errorMsg = getErrorMessage(apiError);
-          await auditContext.error({ error: errorMsg });
           const emptyUsage: NormalizedUsage = {
             inputTokens: 0,
             outputTokens: 0,
@@ -355,18 +315,11 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         const content = firstChoice.message.content;
         const usage = extractUsage(data.usage);
 
-        await auditContext.success({
-          response: content,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          providerCost: usage.costUsd,
-        });
         trackUsage('generate', usage, true);
 
         return ok({ content, usage });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,

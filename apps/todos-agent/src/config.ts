@@ -8,7 +8,7 @@ export interface Config {
   };
   internalAuthKey: string;
   userServiceUrl: string;
-  appSettingsServiceUrl: string;
+  llmUsageServiceUrl: string;
 }
 
 export function loadConfig(): Config {
@@ -22,6 +22,6 @@ export function loadConfig(): Config {
     },
     internalAuthKey: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
     userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8110',
-    appSettingsServiceUrl: process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] ?? 'http://localhost:8113',
+    llmUsageServiceUrl: process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? 'http://localhost:8113',
   };
 }

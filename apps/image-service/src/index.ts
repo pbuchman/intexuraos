@@ -1,7 +1,7 @@
 import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
-import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
+import { fetchAllPricingWithRetry, createPricingContext } from '@intexuraos/llm-pricing';
 import type { ImageModel, FastModel, ValidationModel } from '@intexuraos/llm-contract';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
@@ -16,7 +16,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_IMAGE_BUCKET',
   'INTEXURAOS_IMAGE_PUBLIC_BASE_URL',
-  'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
+  'INTEXURAOS_LLM_USAGE_SERVICE_URL',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
@@ -41,11 +41,11 @@ const REQUIRED_MODELS: (ImageModel | FastModel | ValidationModel)[] = [
 ];
 
 async function main(): Promise<void> {
-  const appSettingsUrl = process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] ?? '';
+  const usageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '';
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
 
-  process.stdout.write(`Fetching pricing from ${appSettingsUrl}\n`);
-  const pricingResult = await fetchAllPricing(appSettingsUrl, internalAuthToken);
+  process.stdout.write(`Fetching pricing from ${usageServiceUrl}\n`);
+  const pricingResult = await fetchAllPricingWithRetry(usageServiceUrl, internalAuthToken);
   if (!pricingResult.ok) {
     throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
   }

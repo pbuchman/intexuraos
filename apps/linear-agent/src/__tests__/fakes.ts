@@ -870,7 +870,7 @@ export class FakeUserServiceClient implements UserServiceClient {
   private shouldFail = false;
   private failError: UserServiceError = { code: 'API_ERROR', message: 'User service error' };
 
-  async getApiKeys(_userId: string): Promise<Result<{ google?: string; openai?: string; anthropic?: string; perplexity?: string; zai?: string }, UserServiceError>> {
+  async getApiKeys(_userId: string): Promise<Result<{ google?: string; openai?: string; anthropic?: string; perplexity?: string }, UserServiceError>> {
     if (this.shouldFail) return err(this.failError);
     return ok({ google: 'fake-google-key', openai: 'fake-openai-key' });
   }

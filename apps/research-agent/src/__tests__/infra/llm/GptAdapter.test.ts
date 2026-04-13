@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockResearch = vi.fn();
 const mockGenerate = vi.fn();
@@ -34,10 +35,19 @@ const mockLogger: Logger = {
 
 describe('GptAdapter', () => {
   let adapter: InstanceType<typeof GptAdapter>;
+  let fakeUsageSink: FakeUsageSink;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GptAdapter('test-key', LlmModels.O4MiniDeepResearch, 'test-user-id', testPricing, mockLogger);
+    fakeUsageSink = new FakeUsageSink();
+    adapter = new GptAdapter(
+      'test-key',
+      LlmModels.O4MiniDeepResearch,
+      'test-user-id',
+      testPricing,
+      mockLogger,
+      fakeUsageSink
+    );
   });
 
   describe('constructor', () => {
@@ -49,6 +59,7 @@ describe('GptAdapter', () => {
         'test-user-id',
         testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -59,6 +70,7 @@ describe('GptAdapter', () => {
         researchId: 'research-123',
         pricing: testPricing,
         logger: mockLogger,
+        usageSink: fakeUsageSink,
       });
     });
   });
@@ -199,7 +211,8 @@ describe('GptAdapter', () => {
         LlmModels.O4MiniDeepResearch,
         'test-user-id',
         testPricing,
-        mockLogger
+        mockLogger,
+        fakeUsageSink
       );
 
       mockGenerate.mockResolvedValue({

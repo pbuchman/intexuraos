@@ -441,6 +441,7 @@ async function bootstrap(): Promise<void> {
   const codeAgentUrl = getRequiredEnv('INTEXURAOS_CODE_AGENT_URL');
   const internalAuthToken = getRequiredEnv('INTEXURAOS_INTERNAL_AUTH_TOKEN');
   const orchestratorSecret = getRequiredEnv('INTEXURAOS_ORCHESTRATOR_SECRET');
+  const usageWebhookUrl = getRequiredEnv('INTEXURAOS_USAGE_WEBHOOK_URL');
   const githubAppId = getRequiredEnv('INTEXURAOS_GITHUB_APP_ID');
   const githubInstallationId = getRequiredEnv('INTEXURAOS_GITHUB_INSTALLATION_ID');
   const projectId = getRequiredEnv('INTEXURAOS_PROJECT_ID');
@@ -491,7 +492,6 @@ async function bootstrap(): Promise<void> {
   };
 
   const logFilePath = join(logsDir, 'orchestrator.log');
-  const llmAuditLogPath = join(logsDir, 'llm-audit.log');
   const logLevel = process.env['LOG_LEVEL'] ?? 'info';
 
   // Create logger — pretty stdout + JSON file for debugging
@@ -728,7 +728,10 @@ async function bootstrap(): Promise<void> {
   const completionVerifier = new OrchestratorCompletionVerifier(logger, {
     model: LlmModels.Gemini25Flash,
     geminiApiKey: geminiVerifierKey,
-    auditLogPath: llmAuditLogPath,
+    codeAgentUrl: config.codeAgentUrl,
+    usageWebhookUrl,
+    orchestratorSecret: config.orchestratorSecret,
+    internalAuthToken: config.internalAuthToken,
   });
 
   const completionControl: CompletionControlConfig = {
@@ -779,7 +782,10 @@ async function bootstrap(): Promise<void> {
             inputPricePerMillion: 1.0,
             outputPricePerMillion: 3.0,
           },
-          auditLogPath: llmAuditLogPath,
+          codeAgentUrl: config.codeAgentUrl,
+          usageWebhookUrl,
+          orchestratorSecret: config.orchestratorSecret,
+          internalAuthToken: config.internalAuthToken,
         })
       : undefined;
 

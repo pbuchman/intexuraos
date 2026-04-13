@@ -220,7 +220,6 @@ apps/web/src/
 | `/settings/code`                        | WorkerSettingsPage                | Yes                             | Code worker configuration            |
 | `/settings/api-keys`                    | ApiKeysSettingsPage               | Yes                             | LLM API key management               |
 | `/settings/llm-pricing`                 | LlmPricingPage                    | Yes                             | LLM pricing configuration            |
-| `/settings/usage-costs`                 | LlmCostsPage                      | Yes                             | LLM usage cost tracking              |
 | `/settings/share-history`               | ShareHistoryPage                  | Yes                             | PWA share history                    |
 | `/share-target`                         | ShareTargetPage                   | Yes                             | PWA share target handler             |
 
@@ -390,7 +389,7 @@ Environment variables (prefixed `INTEXURAOS_`, read via `import.meta.env`):
 | `INTEXURAOS_LINEAR_AGENT_URL`                 | linear-agent endpoint                 | Yes      |
 | `INTEXURAOS_CODE_AGENT_URL`                   | code-agent endpoint                   | Yes      |
 | `INTEXURAOS_CHAT_AGENT_URL`                   | chat-agent endpoint                   | Yes      |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`         | app-settings-service endpoint         | Yes      |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`            | llm-usage-service endpoint            | Yes      |
 | `INTEXURAOS_FIREBASE_PROJECT_ID`              | Firebase project ID                   | Yes      |
 | `INTEXURAOS_FIREBASE_API_KEY`                 | Firebase API key                      | Yes      |
 | `INTEXURAOS_FIREBASE_AUTH_DOMAIN`             | Firebase auth domain                  | Yes      |

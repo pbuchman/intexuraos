@@ -7,6 +7,7 @@ export interface Config {
   gcpProjectId: string;
   userServiceUrl: string;
   internalAuthToken: string;
+  llmUsageServiceUrl: string;
 }
 
 export function loadConfig(): Config {
@@ -14,11 +15,13 @@ export function loadConfig(): Config {
   const gcpProjectId = process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '';
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'] ?? '';
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
+  const llmUsageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '';
 
   return {
     port,
     gcpProjectId,
     userServiceUrl,
     internalAuthToken,
+    llmUsageServiceUrl,
   };
 }

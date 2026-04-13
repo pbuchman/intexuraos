@@ -380,7 +380,6 @@ Changes since v3.4.0, sourced from release context and git history:
 | `code_tasks/{id}/log_entries`   | code-agent | Log entry subcollection                                   |
 | `code_tasks/{id}/turn_metrics`  | code-agent | Per-turn resource metrics                                 |
 | `user_spend`                    | code-agent | Per-user cost tracking                                    |
-| `user_usage`                    | code-agent | Per-user rate limit tracking                              |
 | `code_worker_settings`          | code-agent | Per-user worker configurations (encrypted secrets)        |
 | `github-pr-events`              | code-agent | GitHub webhook event history                              |
 | `github-pr-summaries`           | code-agent | PR list view cache (30-day window)                        |

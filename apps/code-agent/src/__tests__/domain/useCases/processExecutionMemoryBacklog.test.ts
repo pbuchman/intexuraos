@@ -313,7 +313,7 @@ describe('processExecutionMemoryBacklog', () => {
         summary: 'The previous verification memory directly helped the fix.',
         perMemory: [
           {
-            memoryId: 'mem-existing',
+            memoryIndex: 1,
             outcome: 'positive',
             reason: 'The route coverage lesson was applied.',
             confidence: 0.84,
@@ -738,7 +738,7 @@ describe('processExecutionMemoryBacklog', () => {
         summary: 'negative summary',
         perMemory: [
           {
-            memoryId: 'mem-existing',
+            memoryIndex: 1,
             outcome: 'negative',
             reason: 'The prior guidance did not apply.',
             confidence: 0.8,
@@ -801,7 +801,7 @@ describe('processExecutionMemoryBacklog', () => {
         summary: 'negative summary',
         perMemory: [
           {
-            memoryId: 'mem-existing',
+            memoryIndex: 1,
             outcome: 'negative',
             reason: 'The prior guidance did not apply.',
             confidence: 0.8,
@@ -837,7 +837,7 @@ describe('processExecutionMemoryBacklog', () => {
     expect(executionMemoryRepo.update.mock.calls.length).toBe(updateCallsBefore);
   });
 
-  it('skips evaluator outcomes for unknown memory IDs with a warning', async () => {
+  it('skips evaluator outcomes for unknown memory indices with a warning', async () => {
     executionMemoryApplicationRepo.findById.mockResolvedValueOnce(ok(createApplicationRecord()));
     executionMemoryApplicationRepo.update.mockResolvedValueOnce(ok(createApplicationRecord()));
     evaluatorClient.generate.mockResolvedValueOnce(ok({
@@ -845,13 +845,13 @@ describe('processExecutionMemoryBacklog', () => {
         summary: 'hallucinated evaluation',
         perMemory: [
           {
-            memoryId: 'hallucinated-id',
+            memoryIndex: 99,
             outcome: 'positive',
             reason: 'Seems good.',
             confidence: 0.9,
           },
           {
-            memoryId: 'mem-existing',
+            memoryIndex: 1,
             outcome: 'neutral',
             reason: 'Applied but no clear impact.',
             confidence: 0.7,
@@ -879,8 +879,8 @@ describe('processExecutionMemoryBacklog', () => {
     );
     expect(summary).toBe('hallucinated evaluation');
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ memoryId: 'hallucinated-id' }),
-      'Evaluator returned outcome for unknown memory ID, skipping'
+      expect.objectContaining({ memoryIndex: 'unknown-index-99' }),
+      'Evaluator returned outcome for unknown memory index, skipping'
     );
     expect(executionMemoryRepo.findById).toHaveBeenCalledTimes(1);
     expect(executionMemoryRepo.findById).toHaveBeenCalledWith('mem-existing');
@@ -2494,7 +2494,7 @@ describe('processExecutionMemoryBacklog', () => {
       const validResponse = JSON.stringify({
         summary: 'Memory was applied successfully.',
         perMemory: [
-          { memoryId: 'mem-existing', outcome: 'positive', reason: 'Guided the approach.', confidence: 0.9 },
+          { memoryIndex: 1, outcome: 'positive', reason: 'Guided the approach.', confidence: 0.9 },
         ],
       });
 
@@ -2603,7 +2603,7 @@ describe('processExecutionMemoryBacklog', () => {
       evaluatorClient.generate.mockResolvedValueOnce(ok({
         content: JSON.stringify({
           summary: 'Test summary.',
-          perMemory: [{ memoryId: 'mem-existing', outcome: 'positive', reason: 'Applied.', confidence: 0.9 }],
+          perMemory: [{ memoryIndex: 1, outcome: 'positive', reason: 'Applied.', confidence: 0.9 }],
         }),
       }));
       executionMemoryApplicationRepo.update.mockResolvedValue(ok(createApplicationRecord()));

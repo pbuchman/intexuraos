@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { TEST_PRICING } from '@intexuraos/llm-pricing';
+import { TEST_PRICING, FakeUsageSink } from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
 import { LlmModels, type ResearchModel } from '@intexuraos/llm-contract';
 
@@ -14,6 +14,7 @@ const mockLogger: Logger = {
   warn: vi.fn(),
   debug: vi.fn(),
 };
+const fakeUsageSink = new FakeUsageSink();
 
 vi.mock('../../../infra/llm/GeminiAdapter.js', () => ({
   GeminiAdapter: class MockGeminiAdapter {
@@ -28,6 +29,7 @@ vi.mock('../../../infra/llm/GeminiAdapter.js', () => ({
       userId: string,
       _pricing: unknown,
       _logger: Logger,
+      _usageSink: unknown,
       researchId?: string
     ) {
       this.apiKey = apiKey;
@@ -52,6 +54,7 @@ vi.mock('../../../infra/llm/ClaudeAdapter.js', () => ({
       userId: string,
       _pricing: unknown,
       _logger: Logger,
+      _usageSink: unknown,
       researchId?: string
     ) {
       this.apiKey = apiKey;
@@ -76,6 +79,7 @@ vi.mock('../../../infra/llm/GptAdapter.js', () => ({
       userId: string,
       _pricing: unknown,
       _logger: Logger,
+      _usageSink: unknown,
       researchId?: string
     ) {
       this.apiKey = apiKey;
@@ -100,6 +104,7 @@ vi.mock('../../../infra/llm/PerplexityAdapter.js', () => ({
       userId: string,
       _pricing: unknown,
       _logger: Logger,
+      _usageSink: unknown,
       researchId?: string
     ) {
       this.apiKey = apiKey;
@@ -124,6 +129,7 @@ vi.mock('../../../infra/llm/OpenRouterAdapter.js', () => ({
       userId: string,
       _pricing: unknown,
       _logger: Logger,
+      _usageSink: unknown,
       researchId?: string
     ) {
       this.apiKey = apiKey;
@@ -147,6 +153,7 @@ describe('LlmAdapterFactory', () => {
         'test-user-id',
         testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -162,6 +169,7 @@ describe('LlmAdapterFactory', () => {
         'test-user-id',
         testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -177,6 +185,7 @@ describe('LlmAdapterFactory', () => {
         'test-user-id',
         testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -192,6 +201,7 @@ describe('LlmAdapterFactory', () => {
         'test-user-id',
         testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -208,6 +218,7 @@ describe('LlmAdapterFactory', () => {
         'test-user-id',
         testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -225,6 +236,7 @@ describe('LlmAdapterFactory', () => {
         'test-user-id',
         testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -240,6 +252,7 @@ describe('LlmAdapterFactory', () => {
           'test-user-id',
           testPricing,
           mockLogger,
+          fakeUsageSink,
           'research-123'
         )
       ).toThrow('Anthropic does not support synthesis');
@@ -252,6 +265,7 @@ describe('LlmAdapterFactory', () => {
         'test-user-id',
         testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -269,6 +283,7 @@ describe('LlmAdapterFactory', () => {
           'test-user-id',
           testPricing,
           mockLogger,
+          fakeUsageSink,
           'research-123'
         )
       ).toThrow('Perplexity does not support synthesis');
@@ -282,6 +297,7 @@ describe('LlmAdapterFactory', () => {
         'test-user-id',
         testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -298,6 +314,7 @@ describe('LlmAdapterFactory', () => {
         'test-user-id',
         testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 

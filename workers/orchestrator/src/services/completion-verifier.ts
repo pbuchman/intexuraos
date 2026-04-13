@@ -1,11 +1,13 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
 import { LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
-import { StructuredLogUsageSink } from '@intexuraos/llm-pricing';
+import { HttpWebhookUsageSink } from '@intexuraos/llm-pricing';
 import { z } from 'zod';
 import { stripDockerHeaders } from './log-formatter.js';
-import { OrchestratorFileAuditSink } from './orchestrator-audit-sink.js';
 import type { ExecutionMemoryPromptContext } from '../types/execution-memory.js';
+
+const verifierTaskIdStorage = new AsyncLocalStorage<string>();
 
 export type CompletionAgentType =
   | 'planning'
@@ -120,7 +122,10 @@ export interface CompletionVerifier {
 export interface CompletionVerifierConfig {
   model: string;
   geminiApiKey: string;
-  auditLogPath: string;
+  codeAgentUrl: string;
+  usageWebhookUrl: string;
+  orchestratorSecret: string;
+  internalAuthToken: string;
 }
 
 export const PLANNING_SCHEMA = z
@@ -580,6 +585,10 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
   }
 
   async verify(input: CompletionVerifierInput): Promise<CompletionVerifierVerdict> {
+    return await verifierTaskIdStorage.run(input.taskId, () => this.doVerify(input));
+  }
+
+  private async doVerify(input: CompletionVerifierInput): Promise<CompletionVerifierVerdict> {
     const transcript = getLast50Lines(input.rawLogs);
 
     const fatalExitCode = detectFatalExitCode(input.rawLogs);
@@ -697,6 +706,43 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       };
     }
 
+    // Enforce non-empty memory fields when memories were injected for any agent type.
+    // The Zod schemas for non-execution agents use .optional().default(''), so Gemini can
+    // return empty strings without triggering a schema error. This post-parse check ensures
+    // that agents which received injected memories must report their memory_ids_used or
+    // memory_ids_rejected fields (at least one must be non-empty).
+    const hasInjectedMemories =
+      input.executionMemoryContext !== undefined &&
+      input.executionMemoryContext.matchedMemories.length > 0;
+
+    if (hasInjectedMemories && input.agentType !== 'execution') {
+      const parsed = parseResult.data as Record<string, unknown>;
+      /* v8 ignore start -- schema: Zod .optional().default('') guarantees value is always a string after parse @preserve */
+      const usedVal =
+        typeof parsed['memory_ids_used'] === 'string' ? parsed['memory_ids_used'] : '';
+      const rejectedVal =
+        typeof parsed['memory_ids_rejected'] === 'string' ? parsed['memory_ids_rejected'] : '';
+      /* v8 ignore stop @preserve */
+      if (usedVal.trim() === '' && rejectedVal.trim() === '') {
+        const emptyMemoryFields = ['memory_ids_used', 'memory_ids_rejected'];
+        this.logger.warn(
+          {
+            taskId: input.taskId,
+            attempt: input.attempt,
+            model: this.model,
+            emptyMemoryFields,
+          },
+          'Memory fields are empty despite memories being injected'
+        );
+        return {
+          passed: false,
+          missingFields: emptyMemoryFields,
+          verifierFailure: false,
+          trace: { transcript, prompt, response: generated.value.content },
+        };
+      }
+    }
+
     const agentData = toAgentData(input.agentType, parseResult.data);
     const memoryValidationFailures =
       input.executionMemoryContext !== undefined
@@ -740,6 +786,15 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
   }
 
   async extractResumeSummary(taskId: string, rawLogs: string): Promise<string | undefined> {
+    return await verifierTaskIdStorage.run(taskId, () =>
+      this.doExtractResumeSummary(taskId, rawLogs)
+    );
+  }
+
+  private async doExtractResumeSummary(
+    taskId: string,
+    rawLogs: string
+  ): Promise<string | undefined> {
     const transcript = getLast20Lines(rawLogs);
     const prompt = buildResumeSummaryPrompt(transcript);
 
@@ -793,21 +848,21 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       throw new Error('INTEXURAOS_GEMINI_APP_API_KEY is required');
     }
 
-    if (config.auditLogPath === '') {
-      throw new Error('Completion verifier auditLogPath is required');
-    }
-
     return createLlmClient({
       apiKey: config.geminiApiKey,
       model: config.model,
       userId: 'orchestrator-completion-verifier',
       pricing,
       logger: this.logger,
-      auditSink: new OrchestratorFileAuditSink({
+      usageSink: new HttpWebhookUsageSink({
+        webhookUrl: config.usageWebhookUrl,
+        webhookSecret: config.orchestratorSecret,
+        internalAuthToken: config.internalAuthToken,
+        service: 'orchestrator',
+        component: 'completion-verifier',
         logger: this.logger,
-        auditLogPath: config.auditLogPath,
+        getCorrelationTaskId: (): string | null => verifierTaskIdStorage.getStore() ?? null,
       }),
-      usageSink: new StructuredLogUsageSink({ logger: this.logger }),
     });
   }
 }
