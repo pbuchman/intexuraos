@@ -12,11 +12,11 @@
 
 ## File Structure
 
-| File                                                             | Action   | Responsibility                                                                       |
-| ---------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------ |
-| `apps/web/src/pages/LinearPruneCandidatesPage.tsx`               | Modify   | Main page: header, filters, sort, list container, batch actions, modals              |
-| `apps/web/src/components/prune-candidates/PruneCandidateRow.tsx` | Create   | Individual row component with grid layout, selection checkbox, inline delete confirm |
-| `apps/web/src/components/prune-candidates/shared.ts`             | Create   | Category config (styles, labels, dot colors), sort options, filter storage keys      |
+| File                                                             | Action   | Responsibility                                                                        |
+| ---------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------- |
+| `apps/web/src/pages/LinearPruneCandidatesPage.tsx`               | Modify   | Main page: header, filters, sort, list container, batch actions, modals               |
+| `apps/web/src/components/prune-candidates/PruneCandidateRow.tsx` | Create   | Individual row component with grid layout, selection checkbox, inline dismiss confirm |
+| `apps/web/src/components/prune-candidates/shared.ts`             | Create   | Category config (styles, labels, dot colors), sort options, filter storage keys       |
 
 ---
 
@@ -157,13 +157,13 @@ git commit -m "feat(web): add prune-candidates shared config module"
 **Files:**
 - Create: `apps/web/src/components/prune-candidates/PruneCandidateRow.tsx`
 
-This component mirrors the `IssueGroupRow` pattern: responsive grid on desktop, stacked on mobile, selection checkbox on the left, inline delete confirmation overlay with backdrop-blur.
+This component mirrors the `IssueGroupRow` pattern: responsive grid on desktop, stacked on mobile, selection checkbox on the left, inline dismiss confirmation overlay with backdrop-blur. Note: the per-row action is a client-side dismissal (remove from view), not a backend delete — there is no per-item delete API. Actual deletion uses the bulk "Delete All" action.
 
 - [ ] **Step 1: Create the row component**
 
 ```tsx
 import { useState } from 'react';
-import { ExternalLink, Trash2 } from 'lucide-react';
+import { ExternalLink, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import type { PruneCandidateResponse } from '@/services/linearApi';
 import { CATEGORY_CONFIG, scoreColor } from './shared';
@@ -172,18 +172,16 @@ interface PruneCandidateRowProps {
   candidate: PruneCandidateResponse;
   isSelected: boolean;
   onToggleSelection: (id: string) => void;
-  onDelete: (id: string) => void;
-  isDeleting: boolean;
+  onDismiss: (id: string) => void;
 }
 
 export function PruneCandidateRow({
   candidate,
   isSelected,
   onToggleSelection,
-  onDelete,
-  isDeleting,
+  onDismiss,
 }: PruneCandidateRowProps): React.JSX.Element {
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDismissConfirm, setShowDismissConfirm] = useState(false);
   const cfg = CATEGORY_CONFIG[candidate.category];
 
   return (
@@ -309,37 +307,38 @@ export function PruneCandidateRow({
             </p>
           </div>
           <button
-            onClick={(): void => { setShowDeleteConfirm(true); }}
-            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 dark:hover:text-red-400"
-            aria-label={`Delete ${candidate.identifier}`}
+            onClick={(): void => { setShowDismissConfirm(true); }}
+            className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+            aria-label={`Dismiss ${candidate.identifier} from view`}
           >
-            <Trash2 className="h-4 w-4" />
+            <X className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      {/* Inline delete confirmation overlay (IssueGroupRow pattern) */}
-      {showDeleteConfirm ? (
+      {/* Inline dismiss confirmation overlay (IssueGroupRow pattern) */}
+      {/* Note: This is a client-side dismissal only — there is no per-item delete API.
+          The candidate is removed from the current view. Actual deletion happens
+          via the bulk "Delete All" action which calls the real backend API. */}
+      {showDismissConfirm ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/80 backdrop-blur-sm dark:bg-slate-900/80">
           <div className="flex items-center gap-3 rounded-lg bg-white px-4 py-3 shadow-lg dark:bg-slate-800">
             <p className="text-sm text-slate-700 dark:text-slate-300">
-              Delete {candidate.identifier}?
+              Remove {candidate.identifier} from view?
             </p>
             <Button
               variant="secondary"
               size="sm"
-              onClick={(): void => { setShowDeleteConfirm(false); }}
+              onClick={(): void => { setShowDismissConfirm(false); }}
             >
               Cancel
             </Button>
             <Button
-              variant="danger"
+              variant="secondary"
               size="sm"
-              isLoading={isDeleting}
-              loadingText="Deleting..."
-              onClick={(): void => { onDelete(candidate.id); }}
+              onClick={(): void => { onDismiss(candidate.id); }}
             >
-              Delete
+              Dismiss
             </Button>
           </div>
         </div>
@@ -353,7 +352,7 @@ export function PruneCandidateRow({
 
 ```bash
 git add apps/web/src/components/prune-candidates/PruneCandidateRow.tsx
-git commit -m "feat(web): add PruneCandidateRow with grid layout and inline confirm"
+git commit -m "feat(web): add PruneCandidateRow with grid layout and inline dismiss"
 ```
 
 ---
@@ -574,7 +573,7 @@ export function LinearPruneCandidatesPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Note: no per-item deletingId state needed — dismiss is synchronous local removal
   const [deleteResult, setDeleteResult] = useState<{ deleted: number; failed: number } | null>(null);
 
   // Filter and sort state
@@ -696,15 +695,16 @@ export function LinearPruneCandidatesPage(): React.JSX.Element {
     }
   };
 
-  // Note: single-item delete is not currently supported by the backend API.
-  // The onDelete callback on PruneCandidateRow is wired to remove from local state
-  // as a client-side optimistic removal. The item will be truly deleted on the
-  // next "Delete All" operation. This is a UX affordance, not a backend call.
-  const handleDeleteSingle = useCallback((id: string): void => {
-    setDeletingId(id);
-    // Optimistic removal from local state
+  // Per-row dismiss: removes the candidate from the current view only.
+  // There is no per-item delete API — actual deletion uses the bulk "Delete All"
+  // action via deletePruneCandidates(). This is a client-side UX affordance.
+  const handleDismiss = useCallback((id: string): void => {
     setAllCandidates((prev) => prev.filter((c) => c.id !== id));
-    setDeletingId(null);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   }, []);
 
   return (
@@ -752,8 +752,15 @@ export function LinearPruneCandidatesPage(): React.JSX.Element {
       ) : null}
 
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+        <div className="py-12">
+          <div className="mx-auto max-w-md">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+              <div className="h-full w-1/3 animate-progress-slide rounded-full bg-blue-500" />
+            </div>
+            <p className="mt-3 text-center text-sm text-slate-500 dark:text-slate-400">
+              Loading prune candidates…
+            </p>
+          </div>
         </div>
       ) : allCandidates.length === 0 && deleteResult === null ? (
         /* Empty state */
@@ -842,8 +849,7 @@ export function LinearPruneCandidatesPage(): React.JSX.Element {
                   candidate={candidate}
                   isSelected={selectedIds.has(candidate.id)}
                   onToggleSelection={handleToggleSelection}
-                  onDelete={handleDeleteSingle}
-                  isDeleting={deletingId === candidate.id}
+                  onDismiss={handleDismiss}
                 />
               ))}
             </div>
