@@ -42,6 +42,7 @@ const TAG_STYLES: Record<string, TagStyle> = {
   init:         { text: 'text-cyan-600 dark:text-cyan-300' },
   system:       { text: 'text-slate-500 dark:text-slate-500' },
   orchestrator: { text: 'text-slate-500 dark:text-slate-500' },
+  entrypoint:   { text: 'text-slate-500 dark:text-slate-500' },
   cmd:          { text: 'text-amber-700 dark:text-yellow-300' },
   msg:          { text: 'text-blue-700 dark:text-blue-300' },
   codex:        { text: 'text-cyan-600 dark:text-cyan-300' },
@@ -153,7 +154,7 @@ export function CodeTaskLogViewer({
       if (line === undefined) continue;
       const tag = extractTag(line.text);
 
-      if (tag === 'tool' || tag === 'cmd') {
+      if (tag === 'tool' || tag === 'cmd' || tag === 'orchestrator' || tag === 'entrypoint') {
         finalizeBlock(index);
         current = { headerIdx: index, bodyStart: index + 1, bodyEnd: index + 1 };
       } else if (tag !== null) {
