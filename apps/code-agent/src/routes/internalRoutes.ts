@@ -3,7 +3,11 @@ import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-htt
 import { getServices } from '../services.js';
 import { authenticateInternalScheduler } from './helpers/internalAuth.js';
 import { getLinearIssueContext } from '../domain/usecases/getLinearIssueContext.js';
-import { processExecutionMemoryBacklog } from '../domain/usecases/processExecutionMemoryBacklog.js';
+import {
+  processExecutionMemoryBacklog,
+  sweepErroredApplications,
+  pruneStaleMemories,
+} from '../domain/usecases/processExecutionMemoryBacklog.js';
 import { loadConfig } from '../config.js';
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -321,6 +325,214 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         /* v8 ignore stop @preserve */
         limit: request.body?.limit ?? 10,
       });
+
+      if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok(result.value);
+    }
+  );
+
+  // POST /internal/execution-memory/sweep-errored - sweep permanently errored post-run tasks (INT-1352)
+  fastify.post(
+    '/internal/execution-memory/sweep-errored',
+    {
+      schema: {
+        operationId: 'sweepErroredExecutionMemory',
+        summary: 'Sweep permanently errored execution memory post-run tasks and requeue for retry',
+        description:
+          'Called by Cloud Scheduler every 6 hours. Finds tasks stuck in error state for 24+ hours and requeues them.',
+        tags: ['internal'],
+        response: {
+          200: {
+            description: 'Sweep completed',
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  requeued: { type: 'number' },
+                  skipped: { type: 'number' },
+                },
+                required: ['requeued', 'skipped'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/execution-memory/sweep-errored',
+      });
+
+      const authResult = authenticateInternalScheduler(request);
+      if (!authResult.authenticated) {
+        request.log.warn('Internal auth failed for execution-memory sweep-errored');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      if (!loadConfig().executionMemoryEnabled) {
+        return await reply.ok({ requeued: 0, skipped: 0 });
+      }
+
+      const services = getServices();
+      const result = await sweepErroredApplications({
+        logger: services.logger,
+        codeTaskRepo: services.codeTaskRepo,
+      });
+
+      if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok(result.value);
+    }
+  );
+
+  // POST /internal/execution-memory/prune-stale - archive aged zero-application memories (INT-1352)
+  fastify.post<{ Body: { maxAgeDays?: number; dryRun?: boolean } | null }>(
+    '/internal/execution-memory/prune-stale',
+    {
+      schema: {
+        operationId: 'pruneStaleExecutionMemories',
+        summary: 'Archive aged zero-application execution memories to reduce corpus noise',
+        description:
+          'Called by Cloud Scheduler weekly. Archives memories with zero applications older than the configured age threshold.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          nullable: true,
+          additionalProperties: false,
+          properties: {
+            maxAgeDays: { type: 'number', minimum: 1 },
+            dryRun: { type: 'boolean' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Prune completed',
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  archived: { type: 'number' },
+                  skipped: { type: 'number' },
+                },
+                required: ['archived', 'skipped'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/execution-memory/prune-stale',
+      });
+
+      const authResult = authenticateInternalScheduler(request);
+      if (!authResult.authenticated) {
+        request.log.warn('Internal auth failed for execution-memory prune-stale');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      if (!loadConfig().executionMemoryEnabled) {
+        return await reply.ok({ archived: 0, skipped: 0 });
+      }
+
+      const services = getServices();
+      const executionMemoryRepo = services.executionMemoryRepo;
+      if (executionMemoryRepo === undefined) {
+        return await reply.ok({ archived: 0, skipped: 0 });
+      }
+
+      const maxAgeDays = request.body?.maxAgeDays;
+      const dryRun = request.body?.dryRun;
+      const result = await pruneStaleMemories(
+        {
+          logger: services.logger,
+          executionMemoryRepo,
+        },
+        {
+          ...(maxAgeDays !== undefined && { maxAgeDays }),
+          ...(dryRun !== undefined && { dryRun }),
+        },
+      );
 
       if (!result.ok) {
         return await reply.fail('INTERNAL_ERROR', result.error.message);

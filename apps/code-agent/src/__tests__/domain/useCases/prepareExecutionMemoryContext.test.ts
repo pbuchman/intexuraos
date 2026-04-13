@@ -863,4 +863,171 @@ describe('prepareExecutionMemoryContext', () => {
       expect(prepareExecutionMemoryContextTestables.parseJsonObject(raw)).toEqual({ key: 'value' });
     });
   });
+
+  describe('getMinRerankScore', () => {
+    it('returns 0.55 threshold for review agent type', () => {
+      expect(prepareExecutionMemoryContextTestables.getMinRerankScore('review')).toBe(0.55);
+    });
+
+    it('returns 0.50 threshold for execution agent type', () => {
+      expect(prepareExecutionMemoryContextTestables.getMinRerankScore('execution')).toBe(0.50);
+    });
+
+    it('returns 0.50 threshold when no agentType is provided (empty string)', () => {
+      expect(prepareExecutionMemoryContextTestables.getMinRerankScore('')).toBe(0.50);
+    });
+
+    it('returns 0.50 threshold for unknown agent types', () => {
+      expect(prepareExecutionMemoryContextTestables.getMinRerankScore('planning')).toBe(0.50);
+    });
+  });
+
+  describe('agent-type-specific rerank threshold filtering', () => {
+    it('review agent rejects a candidate at 0.52 that would pass for execution agent', async () => {
+      queryClient.generate.mockResolvedValue(ok({
+        content: JSON.stringify({
+          semanticQuery: 'route logging verification',
+          components: ['route', 'logging'],
+          riskFlags: [],
+          verificationGoals: [],
+          summary: 'Route logging verification',
+        }),
+        usage: { model: LlmModels.Gemini25Flash },
+      }));
+
+      embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
+
+      // Craft a candidate whose rerankScore lands at ~0.52
+      // rerankScore = 0.55*vectorScore + 0.25*componentOverlap + 0.20*effectiveness
+      // With vectorScore=0.7, componentHints=[], applicationCount=1, positiveCount=0:
+      // effectiveness = (0+1)/(1+2) = 0.333
+      // componentOverlap = 0 (no hints matching)
+      // score = 0.55*0.7 + 0.25*0 + 0.20*0.333 = 0.385 + 0 + 0.0667 = 0.4517 — too low
+      // Need higher: vectorScore=0.85, componentHints=['route','logging'] (2/2 overlap), applicationCount=0, positiveCount=0
+      // effectiveness = 1/2 = 0.5
+      // componentOverlap = 2/2 = 1.0
+      // score = 0.55*0.85 + 0.25*1.0 + 0.20*0.5 = 0.4675 + 0.25 + 0.1 = 0.8175 — too high
+      // Target ~0.52: vectorScore=0.70, componentHints=[], applicationCount=0, positiveCount=0
+      // effectiveness = 1/2 = 0.5
+      // componentOverlap = 0
+      // score = 0.55*0.70 + 0 + 0.20*0.5 = 0.385 + 0.1 = 0.485 — still below 0.50
+      // vectorScore=0.80, componentHints=[], applicationCount=0, positiveCount=0
+      // score = 0.55*0.80 + 0 + 0.20*0.5 = 0.44 + 0.1 = 0.54 — above 0.50 but below 0.55
+      executionMemoryRepo.findNearest.mockResolvedValue(ok([
+        createMatch('mem-mid', {
+          vectorScore: 0.80,
+          componentHints: [],
+          applicationCount: 0,
+          positiveCount: 0,
+        }),
+      ]));
+      executionMemoryApplicationRepo.create.mockResolvedValue(ok({ id: 'app-review' }));
+
+      // Review agent: score 0.54 should be BELOW 0.55 threshold → no_match
+      const reviewResult = await prepareExecutionMemoryContext({
+        task: createTask({ agentType: 'review' }),
+        logger,
+        linearAgentClient: linearAgentClient as never,
+        queryClient: queryClient as never,
+        embeddingClient: embeddingClient as never,
+        executionMemoryRepo: executionMemoryRepo as never,
+        executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+        agentType: 'review',
+      });
+
+      expect(reviewResult?.status).toBe('none');
+      expect(reviewResult?.topCandidates?.[0]).toMatchObject({
+        memoryId: 'mem-mid',
+        passedThreshold: false,
+      });
+    });
+
+    it('execution agent accepts a candidate at ~0.54 that review agent would reject', async () => {
+      queryClient.generate.mockResolvedValue(ok({
+        content: JSON.stringify({
+          semanticQuery: 'route logging verification',
+          components: ['route', 'logging'],
+          riskFlags: [],
+          verificationGoals: [],
+          summary: 'Route logging verification',
+        }),
+        usage: { model: LlmModels.Gemini25Flash },
+      }));
+
+      embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
+
+      // Same candidate as above: vectorScore=0.80, no hints, applicationCount=0, positiveCount=0
+      // rerankScore = 0.55*0.80 + 0 + 0.20*0.5 = 0.44 + 0.1 = 0.54 → above 0.50
+      executionMemoryRepo.findNearest.mockResolvedValue(ok([
+        createMatch('mem-mid', {
+          vectorScore: 0.80,
+          componentHints: [],
+          applicationCount: 0,
+          positiveCount: 0,
+        }),
+      ]));
+      executionMemoryApplicationRepo.create.mockResolvedValue(ok({ id: 'app-execution' }));
+
+      // Execution agent: score 0.54 should be ABOVE 0.50 threshold → matched
+      const executionResult = await prepareExecutionMemoryContext({
+        task: createTask({ agentType: 'execution' }),
+        logger,
+        linearAgentClient: linearAgentClient as never,
+        queryClient: queryClient as never,
+        embeddingClient: embeddingClient as never,
+        executionMemoryRepo: executionMemoryRepo as never,
+        executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+        agentType: 'execution',
+      });
+
+      expect(executionResult?.status).toBe('matched');
+      expect(executionResult?.topCandidates?.[0]).toMatchObject({
+        memoryId: 'mem-mid',
+        passedThreshold: true,
+      });
+    });
+
+    it('default (no agentType) uses 0.50 threshold and accepts a candidate at ~0.54', async () => {
+      queryClient.generate.mockResolvedValue(ok({
+        content: JSON.stringify({
+          semanticQuery: 'route logging verification',
+          components: ['route', 'logging'],
+          riskFlags: [],
+          verificationGoals: [],
+          summary: 'Route logging verification',
+        }),
+        usage: { model: LlmModels.Gemini25Flash },
+      }));
+
+      embeddingClient.embed.mockResolvedValue(ok([0.1, 0.2, 0.3]));
+
+      // Same candidate: rerankScore ~0.54 → above 0.50 base threshold
+      executionMemoryRepo.findNearest.mockResolvedValue(ok([
+        createMatch('mem-mid', {
+          vectorScore: 0.80,
+          componentHints: [],
+          applicationCount: 0,
+          positiveCount: 0,
+        }),
+      ]));
+      executionMemoryApplicationRepo.create.mockResolvedValue(ok({ id: 'app-default' }));
+
+      // No agentType passed → defaults to base threshold 0.50
+      const defaultResult = await prepareExecutionMemoryContext({
+        task: createTask(),
+        logger,
+        linearAgentClient: linearAgentClient as never,
+        queryClient: queryClient as never,
+        embeddingClient: embeddingClient as never,
+        executionMemoryRepo: executionMemoryRepo as never,
+        executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+      });
+
+      expect(defaultResult?.status).toBe('matched');
+      expect(defaultResult?.topCandidates?.[0]).toMatchObject({
+        memoryId: 'mem-mid',
+        passedThreshold: true,
+      });
+    });
+  });
 });

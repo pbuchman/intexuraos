@@ -16,10 +16,15 @@ const MAX_DESCRIPTION_LENGTH = 2500;
 const MAX_COMMENT_LENGTH = 800;
 const MAX_TOTAL_CONTEXT_LENGTH = 5000;
 const MAX_MATCHES = 3;
-const MIN_RERANK_SCORE = 0.50;
+const BASE_RERANK_THRESHOLD = 0.50;
+const REVIEW_RERANK_THRESHOLD = 0.55;
 const TOP_LOG_CANDIDATES = 3;
 const CANDIDATE_LIMIT = 20;
 const TOP_CANDIDATES_LIMIT = 5;
+
+function getMinRerankScore(agentType: string): number {
+  return agentType === 'review' ? REVIEW_RERANK_THRESHOLD : BASE_RERANK_THRESHOLD;
+}
 
 const QueryNormalizationSchema = z.object({
   semanticQuery: z.string().min(1),
@@ -52,6 +57,7 @@ export interface PrepareExecutionMemoryContextParams extends PrepareExecutionMem
   task: Pick<CodeTask, 'id' | 'prompt' | 'sanitizedPrompt' | 'repository' | 'linearIssueId'>;
   logger: Logger;
   linearAgentClient: Pick<LinearAgentClient, 'getIssueContext'>;
+  agentType?: string | undefined;
 }
 
 export async function prepareExecutionMemoryContext(
@@ -169,10 +175,11 @@ export async function prepareExecutionMemoryContext(
     };
   }
 
+  const minScore = getMinRerankScore(params.agentType ?? '');
   const reranked = rerankMemories(nearestResult.value, normalization);
   const totalSearchResults = reranked.length;
   const matchedMemories = reranked
-    .filter((candidate) => candidate.rerankScore >= MIN_RERANK_SCORE)
+    .filter((candidate) => candidate.rerankScore >= minScore)
     .slice(0, MAX_MATCHES);
 
   const topCandidates: ExecutionMemoryApplicationCandidate[] = reranked.slice(0, TOP_CANDIDATES_LIMIT).map((candidate) => ({
@@ -183,7 +190,7 @@ export async function prepareExecutionMemoryContext(
     rerankScore: roundScore(candidate.rerankScore),
     componentOverlap: roundScore(candidate.componentOverlap),
     effectiveness: roundScore(candidate.effectiveness),
-    passedThreshold: candidate.rerankScore >= MIN_RERANK_SCORE,
+    passedThreshold: candidate.rerankScore >= minScore,
   }));
 
   // Observability: log top candidates with score breakdowns
@@ -194,7 +201,7 @@ export async function prepareExecutionMemoryContext(
       taskId: task.id,
       candidateCount: reranked.length,
       matchedCount: matchedMemories.length,
-      minRerankScore: MIN_RERANK_SCORE,
+      minRerankScore: minScore,
       topCandidates: topLogCandidates,
     },
     'Execution memory reranking complete'
@@ -514,4 +521,5 @@ export const __testables = {
   parseJsonObject,
   truncate,
   overlapRatio,
+  getMinRerankScore,
 };
