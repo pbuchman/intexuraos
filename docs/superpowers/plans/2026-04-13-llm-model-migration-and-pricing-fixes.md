@@ -61,8 +61,8 @@ When Task 12's PR is drafted, include the URL and the three verified values abov
 - `apps/web/src/pages/ResearchAgentPage.tsx:36` — `SYNTHESIS_CAPABLE_MODELS`.
 - `apps/web/src/components/research/EnhanceModal.tsx:19`.
 - `apps/web/src/components/ModelSelector.tsx:35,36,43`.
-- `apps/web/src/services/researchAgentApi.types.ts:16,17`.
-- `packages/llm-prompts/src/research/modelExtractionPrompt.ts:222,223,237` — string literals inside the prompt (these are user-facing model names; the prompt tells the model which IDs to emit).
+- `apps/web/src/services/researchAgentApi.types.ts:16,17,19`.
+- `packages/llm-prompts/src/research/modelExtractionPrompt.ts:222,223,225,237,238,245` — string literals inside the prompt (these are user-facing model names; the prompt tells the model which IDs to emit) and OpenAI-specific wiring in `MODEL_KEYWORDS`, `PROVIDER_DEFAULT_MODELS`, and `SYNTHESIS_MODELS`.
 
 **Files modified (tests):**
 - `packages/llm-contract/src/__tests__/supportedModels.test.ts` — 15+ assertion updates.
@@ -602,6 +602,14 @@ find apps/research-agent/src/__tests__ -name "*.ts" -exec sed -i.bak \
   -e "s/'claude-opus-4-5-20251101'/'claude-opus-4-6'/g" \
   {} +
 
+# Handle short-form strings (no date suffix) used in display/assertion contexts:
+find apps/research-agent/src/__tests__ -name "*.ts" -exec sed -i.bak \
+  -e "s/'claude-opus-4-5'/'claude-opus-4-6'/g" \
+  -e "s/'claude-sonnet-4-5'/'claude-sonnet-4-6'/g" \
+  -e "s/Claude Sonnet 4\.5/Claude Sonnet 4.6/g" \
+  -e "s/Claude Opus 4\.5/Claude Opus 4.6/g" \
+  {} +
+
 # Remove sed backup files
 find apps/research-agent/src/__tests__ -name "*.bak" -delete
 ```
@@ -672,7 +680,7 @@ const SYNTHESIS_CAPABLE_MODELS: LLMModel[] = [LlmModels.Gemini25Pro, LlmModels.G
 { value: LlmModels.GPT54, label: 'GPT-5.4' },
 ```
 
-`researchAgentApi.types.ts:16,17`: swap `'claude-opus-4-5-20251101'` → `'claude-opus-4-6'`, `'claude-sonnet-4-5-20250929'` → `'claude-sonnet-4-6'`.
+`researchAgentApi.types.ts:16,17,19`: swap `'claude-opus-4-5-20251101'` → `'claude-opus-4-6'`, `'claude-sonnet-4-5-20250929'` → `'claude-sonnet-4-6'`, and swap the `LlmModels.GPT52` → `LlmModels.GPT54` provider-map entry at line 19 so `getProviderForModel(LlmModels.GPT54)` resolves to `openai`.
 
 - [ ] **Step 2: Run web tests and build**
 
@@ -683,13 +691,9 @@ pnpm --filter @intexuraos/web run build
 
 Expected: both green. The web app has no coverage requirement (per CLAUDE.md) but typecheck must pass.
 
-- [ ] **Step 3: Start the dev server and smoke-test the model selector**
+- [ ] **Step 3 (optional): Smoke-test the model selector on the dev environment**
 
-```bash
-pnpm --filter @intexuraos/web run dev
-```
-
-Open `http://localhost:5173` (or whatever port PM2 reports), go to the Research Agent page, open the model dropdown, confirm you see "Claude Opus 4.6", "Claude Sonnet 4.6", "GPT-5.4". Pick each and confirm the page doesn't throw in the browser console.
+After deploying to the dev environment (`dev.intexuraos.cloud` via PM2), navigate to the Research Agent page, open the model dropdown, and confirm you see "Claude Opus 4.6", "Claude Sonnet 4.6", "GPT-5.4". Pick each and confirm the page doesn't throw in the browser console. This step is a manual verification on the dev environment, not a CI gate.
 
 - [ ] **Step 4: Commit**
 
@@ -701,7 +705,7 @@ git commit -m "refactor(web): migrate model selectors to 4.6 and gpt-5.4"
 ### Task 8: Migrate prompt text in llm-prompts
 
 **Files:**
-- Modify: `packages/llm-prompts/src/research/modelExtractionPrompt.ts:222,223,237`
+- Modify: `packages/llm-prompts/src/research/modelExtractionPrompt.ts:222,223,225,237,238,245`
 
 - [ ] **Step 1: Read the surrounding context**
 
@@ -709,7 +713,7 @@ These lines are inside a prompt string sent to an LLM. The prompt tells the mode
 
 - [ ] **Step 2: Replace string occurrences**
 
-Change `'claude-opus-4-5-20251101'` → `'claude-opus-4-6'`, `'claude-sonnet-4-5-20250929'` → `'claude-sonnet-4-6'`, any human-readable labels (`"Claude Opus 4.5"` → `"Claude Opus 4.6"`).
+Change `'claude-opus-4-5-20251101'` → `'claude-opus-4-6'`, `'claude-sonnet-4-5-20250929'` → `'claude-sonnet-4-6'`, any human-readable labels (`"Claude Opus 4.5"` → `"Claude Opus 4.6"`). Also update the OpenAI-specific `GPT52` wiring: `MODEL_KEYWORDS` (line 225), `PROVIDER_DEFAULT_MODELS` (line 238), and `SYNTHESIS_MODELS` (line 245) — swap `gpt-5.2` → `gpt-5.4` and `GPT52` → `GPT54` references.
 
 - [ ] **Step 3: Run package tests**
 
@@ -906,7 +910,8 @@ With every call site migrated and all tests green, we can now delete the old ide
 grep -rn "LlmModels.GPT52\|LlmModels.ClaudeSonnet45\|LlmModels.ClaudeOpus45\|'gpt-5\.2'\|'claude-sonnet-4-5-20250929'\|'claude-opus-4-5-20251101'" \
   --include="*.ts" --include="*.tsx" --include="*.md" \
   --exclude-dir=node_modules --exclude-dir=dist \
-  --exclude-dir="docs/plans" --exclude-dir="docs/superpowers/plans"
+  --exclude-dir="docs/plans" --exclude-dir="docs/superpowers/plans" \
+  --exclude-dir="docs/validation"
 ```
 
 Expected output: zero hits. If any hits come back outside the historical-plan exclusions, address them before proceeding. Pay special attention to `packages/llm-pricing/src/testFixtures.ts` — Phase 3 did not touch it; Step 6 below handles it.
