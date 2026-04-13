@@ -191,6 +191,61 @@ describe('llmClientFactory', () => {
     });
   });
 
+  describe('LlmClientConfig.ownerType propagation', () => {
+    it('forwards ownerType to createOpenRouterGenerateClient when passed', async () => {
+      const { createOpenRouterGenerateClient } = await import('../openRouterGenerateClient.js');
+
+      createLlmClient({
+        apiKey: 'test-key',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        model: 'or:google/gemma-4-31b-it:free' as any,
+        userId: 'user-123',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+        ownerType: 'user',
+      });
+
+      expect(vi.mocked(createOpenRouterGenerateClient)).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerType: 'user' })
+      );
+    });
+
+    it('forwards ownerType to createGeminiClient when passed', async () => {
+      const { createGeminiClient } = await import('@intexuraos/infra-gemini');
+
+      createLlmClient({
+        apiKey: 'test-key',
+        model: LlmModels.Gemini25Flash,
+        userId: 'user-123',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+        ownerType: 'user',
+      });
+
+      expect(vi.mocked(createGeminiClient)).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerType: 'user' })
+      );
+    });
+
+    it('omits ownerType from config when not provided', async () => {
+      const { createGeminiClient } = await import('@intexuraos/infra-gemini');
+
+      createLlmClient({
+        apiKey: 'test-key',
+        model: LlmModels.Gemini25Flash,
+        userId: 'user-123',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const callArg = vi.mocked(createGeminiClient).mock.calls[0]?.[0] as unknown as Record<string, unknown>;
+      expect(callArg?.['ownerType']).toBeUndefined();
+    });
+  });
+
   describe('isSupportedProvider', () => {
     it('returns true for Google provider', () => {
       expect(isSupportedProvider(LlmProviders.Google)).toBe(true);

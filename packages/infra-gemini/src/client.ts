@@ -56,7 +56,7 @@ const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
 
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const { model, userId, pricing, imagePricing, logger, usageSink } = config;
+  const { model, userId, pricing, imagePricing, logger, usageSink, ownerType } = config;
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
   function trackUsage(
@@ -73,6 +73,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
+      ...(ownerType !== undefined && { ownerType }),
     });
   }
 

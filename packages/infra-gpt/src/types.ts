@@ -65,4 +65,6 @@ export interface GptConfig {
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
   usageSink: UsageSink;
+  /** Owner scope of the call. When omitted, the usage sink defaults to 'system'. */
+  ownerType?: 'user' | 'system';
 }
