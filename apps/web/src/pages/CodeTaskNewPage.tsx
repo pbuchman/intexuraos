@@ -1,13 +1,13 @@
 import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core/code-task-worker-types';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, Play, Link2, Sparkles, Pencil } from 'lucide-react';
+import { AlertCircle, Play, Link2, Sparkles, Pencil, ClipboardList, Rocket } from 'lucide-react';
 import MDEditor from '@uiw/react-md-editor';
 import rehypeSanitize from 'rehype-sanitize';
 import { Button, Card, Layout, ConfirmSubmitModal, TaskConflictModal, TaskErrorModal, LinearIssueSelectorModal } from '@/components';
 import type { ConflictReason } from '@/components';
 import { useLinearIssueOptions, useWorkersStatus, findRecentTask } from '@/hooks';
-import type { CodeTaskWorkerType } from '@/types';
+import type { CodeTaskWorkerType, TaskMode, SubmitCodeTaskRequest } from '@/types';
 import type { LinearIssueOption } from '@/hooks/useLinearIssueOptions';
 import { ApiError, parseConflictError } from '@/services/apiClient';
 import { listCodeTasks, submitCodeTask } from '@/services/codeAgentApi';
@@ -32,6 +32,23 @@ const LINEAR_MODES: { id: LinearMode; name: string; description: string; icon: R
   { id: 'link', name: 'Link Existing', description: 'Link to an existing Linear issue', icon: <Link2 className="h-4 w-4" /> },
 ];
 
+type TaskModeOption = { id: TaskMode; name: string; description: string; icon: React.ReactNode };
+
+const TASK_MODES: TaskModeOption[] = [
+  {
+    id: 'planning',
+    name: 'Planning',
+    description: 'Analyze, design, and create a plan — no code is written',
+    icon: <ClipboardList className="h-4 w-4" />,
+  },
+  {
+    id: 'execution',
+    name: 'Execution',
+    description: 'Implement code changes, run CI, and create a PR',
+    icon: <Rocket className="h-4 w-4" />,
+  },
+];
+
 /** Delay after which loading text changes to reassure users */
 const LONG_SUBMIT_DELAY_MS = 10000;
 
@@ -43,6 +60,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
   const [prompt, setPrompt] = useState('');
   const [workerType, setWorkerType] = useState<CodeTaskWorkerType>('auto');
   const [linearMode, setLinearMode] = useState<LinearMode>('create');
+  const [taskMode, setTaskMode] = useState<TaskMode>('planning');
   const [selectedIssue, setSelectedIssue] = useState<LinearIssueOption | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [loadingText, setLoadingText] = useState('Submitting...');
@@ -89,8 +107,13 @@ export function CodeTaskNewPage(): React.JSX.Element {
   // Worker section states
   const hasNoWorkers = workersStatus !== null && allWorkers.length === 0;
 
-  // Sync default prompt when linearMode changes (only if user hasn't manually edited)
+  // Sync default prompt and task mode when linearMode changes (only if user hasn't manually edited)
   useEffect(() => {
+    if (linearMode === 'link') {
+      setTaskMode('execution');
+    } else {
+      setTaskMode('planning');
+    }
     if (promptManuallyEdited.current) return;
     if (linearMode === 'link') {
       setPrompt(EXECUTION_DEFAULT_PROMPT);
@@ -132,13 +155,10 @@ export function CodeTaskNewPage(): React.JSX.Element {
     startLongSubmitTimer();
 
     try {
-      const requestData: {
-        prompt: string;
-        workerType?: CodeTaskWorkerType;
-        linearIssueId?: string;
-      } = {
+      const requestData: SubmitCodeTaskRequest = {
         prompt: prompt.trim(),
         workerType,
+        taskMode,
       };
 
       // Only send linearIssueId if linking to existing issue
@@ -298,6 +318,34 @@ export function CodeTaskNewPage(): React.JSX.Element {
             </div>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               {WORKER_TYPES.find((t) => t.id === workerType)?.description}
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2 dark:text-slate-200">Task Mode</label>
+            <div className="flex flex-wrap gap-3">
+              {TASK_MODES.map((mode) => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={(): void => {
+                    setTaskMode(mode.id);
+                  }}
+                  disabled={submitting}
+                  className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors flex items-center gap-2 ${
+                    taskMode === mode.id
+                      ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+                  } disabled:opacity-50`}
+                  title={mode.description}
+                >
+                  {mode.icon}
+                  {mode.name}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {TASK_MODES.find((m) => m.id === taskMode)?.description}
             </p>
           </div>
 

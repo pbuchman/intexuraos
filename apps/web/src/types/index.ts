@@ -1216,6 +1216,8 @@ export interface CodeTask {
   executionMemoryPostRun?: CodeTaskExecutionMemoryPostRun;
 }
 
+export type TaskMode = 'planning' | 'execution';
+
 /**
  * Request to submit a code task
  *
@@ -1227,6 +1229,7 @@ export interface SubmitCodeTaskRequest {
   prompt: string;
   workerType?: CodeTaskWorkerType;
   linearIssueId?: string;
+  taskMode?: TaskMode;
 }
 
 /**

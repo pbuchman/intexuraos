@@ -110,6 +110,8 @@ vi.mock('lucide-react', () => ({
   Link2: (): React.JSX.Element => <span data-testid="icon-link2" />,
   Sparkles: (): React.JSX.Element => <span data-testid="icon-sparkles" />,
   Pencil: (): React.JSX.Element => <span data-testid="icon-pencil" />,
+  ClipboardList: (): React.JSX.Element => <span data-testid="icon-clipboard-list" />,
+  Rocket: (): React.JSX.Element => <span data-testid="icon-rocket" />,
 }));
 
 /** Dummy issue to use when simulating a selection in the modal */
@@ -146,7 +148,7 @@ vi.mock('@/components', () => ({
   Layout: ({ children }: { children: React.ReactNode }): React.JSX.Element => (
     <div data-testid="layout">{children}</div>
   ),
-  ConfirmSubmitModal: (): null => null,
+  ConfirmSubmitModal: (_props: { isOpen: boolean; taskTitle: string; workerType: string; taskMode: string; onConfirm: () => void; onCancel: () => void }): null => null,
   TaskConflictModal: (): null => null,
   TaskErrorModal: (): null => null,
   LinearIssueSelectorModal: ({
