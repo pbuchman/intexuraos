@@ -12,11 +12,16 @@ import {
   isOpenRouterModel,
   createOpenRouterModelId,
   getOpenRouterRawId,
+  DEFAULT_OPENROUTER_MODELS,
+  isDefaultEligibleModel,
+  DEFAULT_MODEL_DISPLAY_NAMES,
   type LLMModel,
   type ResearchModel,
   type ImageModel,
   type ValidationModel,
   type FastModel,
+  type DefaultEligibleModel,
+  type DefaultOpenRouterModel,
 } from '../supportedModels.js';
 
 describe('OpenRouter model helpers', () => {
@@ -262,6 +267,105 @@ describe('supportedModels', () => {
       const openRouterModel = createOpenRouterModelId('anthropic/claude-sonnet-4.6');
       const researchModel: ResearchModel = openRouterModel;
       expect(researchModel).toBe('or:anthropic/claude-sonnet-4.6');
+    });
+  });
+});
+
+describe('DefaultEligibleModel', () => {
+  describe('DEFAULT_OPENROUTER_MODELS', () => {
+    it('contains exactly 4 models', () => {
+      expect(DEFAULT_OPENROUTER_MODELS).toHaveLength(4);
+    });
+
+    it('contains expected model IDs', () => {
+      const ids = DEFAULT_OPENROUTER_MODELS.map((m) => m.id);
+      expect(ids).toContain('google/gemma-4-31b-it:free');
+      expect(ids).toContain('minimax/minimax-m2.7');
+      expect(ids).toContain('qwen/qwen3.6-plus');
+      expect(ids).toContain('nvidia/nemotron-3-super-120b-a12b:free');
+    });
+
+    it('each entry has id, name, and provider fields', () => {
+      for (const model of DEFAULT_OPENROUTER_MODELS) {
+        const m: DefaultOpenRouterModel = model;
+        expect(typeof m.id).toBe('string');
+        expect(typeof m.name).toBe('string');
+        expect(typeof m.provider).toBe('string');
+      }
+    });
+  });
+
+  describe('isDefaultEligibleModel', () => {
+    it('accepts all fast models', () => {
+      expect(isDefaultEligibleModel('gemini-2.5-flash')).toBe(true);
+      expect(isDefaultEligibleModel('gemini-2.0-flash')).toBe(true);
+      expect(isDefaultEligibleModel('claude-3-5-haiku-20241022')).toBe(true);
+      expect(isDefaultEligibleModel('gpt-4o-mini')).toBe(true);
+    });
+
+    it('accepts OpenRouter default models with or: prefix', () => {
+      expect(isDefaultEligibleModel('or:google/gemma-4-31b-it:free')).toBe(true);
+      expect(isDefaultEligibleModel('or:minimax/minimax-m2.7')).toBe(true);
+      expect(isDefaultEligibleModel('or:qwen/qwen3.6-plus')).toBe(true);
+      expect(isDefaultEligibleModel('or:nvidia/nemotron-3-super-120b-a12b:free')).toBe(true);
+    });
+
+    it('rejects unknown models', () => {
+      expect(isDefaultEligibleModel('unknown-model')).toBe(false);
+      expect(isDefaultEligibleModel('')).toBe(false);
+      expect(isDefaultEligibleModel('or:some/unknown-model')).toBe(false);
+    });
+
+    it('rejects non-fast static models', () => {
+      expect(isDefaultEligibleModel('gemini-2.5-pro')).toBe(false);
+      expect(isDefaultEligibleModel('gpt-5.2')).toBe(false);
+      expect(isDefaultEligibleModel('claude-opus-4-5-20251101')).toBe(false);
+      expect(isDefaultEligibleModel('sonar')).toBe(false);
+    });
+
+    it('type guard narrows to DefaultEligibleModel', () => {
+      const model = 'gemini-2.5-flash';
+      if (isDefaultEligibleModel(model)) {
+        const _typed: DefaultEligibleModel = model;
+        expect(_typed).toBe('gemini-2.5-flash');
+      }
+    });
+  });
+
+  describe('DEFAULT_MODEL_DISPLAY_NAMES', () => {
+    it('has entries for all fast models', () => {
+      for (const model of ALL_FAST_MODELS) {
+        expect(DEFAULT_MODEL_DISPLAY_NAMES[model]).toBeDefined();
+        expect(typeof DEFAULT_MODEL_DISPLAY_NAMES[model]).toBe('string');
+      }
+    });
+
+    it('has entries for all default OpenRouter models', () => {
+      for (const m of DEFAULT_OPENROUTER_MODELS) {
+        const key = `or:${m.id}`;
+        expect(DEFAULT_MODEL_DISPLAY_NAMES[key]).toBeDefined();
+        expect(typeof DEFAULT_MODEL_DISPLAY_NAMES[key]).toBe('string');
+      }
+    });
+
+    it('has correct display names for fast models', () => {
+      expect(DEFAULT_MODEL_DISPLAY_NAMES[LlmModels.Gemini25Flash]).toBe('Gemini 2.5 Flash');
+      expect(DEFAULT_MODEL_DISPLAY_NAMES[LlmModels.Gemini20Flash]).toBe('Gemini 2.0 Flash');
+      expect(DEFAULT_MODEL_DISPLAY_NAMES[LlmModels.ClaudeHaiku35]).toBe('Claude 3.5 Haiku');
+      expect(DEFAULT_MODEL_DISPLAY_NAMES[LlmModels.GPT4oMini]).toBe('GPT-4o Mini');
+    });
+
+    it('has correct display names for default OpenRouter models', () => {
+      expect(DEFAULT_MODEL_DISPLAY_NAMES['or:google/gemma-4-31b-it:free']).toBe('Gemma 4 31B IT');
+      expect(DEFAULT_MODEL_DISPLAY_NAMES['or:minimax/minimax-m2.7']).toBe('MiniMax M2.7');
+      expect(DEFAULT_MODEL_DISPLAY_NAMES['or:qwen/qwen3.6-plus']).toBe('Qwen 3.6 Plus');
+      expect(DEFAULT_MODEL_DISPLAY_NAMES['or:nvidia/nemotron-3-super-120b-a12b:free']).toBe(
+        'Nemotron 3 Super 120B'
+      );
+    });
+
+    it('has exactly 8 entries (4 fast + 4 OpenRouter)', () => {
+      expect(Object.keys(DEFAULT_MODEL_DISPLAY_NAMES)).toHaveLength(8);
     });
   });
 });
