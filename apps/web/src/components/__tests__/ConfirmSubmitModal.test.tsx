@@ -38,6 +38,7 @@ describe('ConfirmSubmitModal', () => {
         isOpen
         taskTitle="Implement feature"
         workerType="codex"
+        taskMode="planning"
         onConfirm={vi.fn().mockResolvedValue(undefined)}
         onCancel={vi.fn()}
       />
@@ -54,6 +55,7 @@ describe('ConfirmSubmitModal', () => {
         isOpen
         taskTitle="Implement feature"
         workerType="codex"
+        taskMode="execution"
         onConfirm={onConfirm}
         onCancel={vi.fn()}
       />
