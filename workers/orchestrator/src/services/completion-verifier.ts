@@ -363,7 +363,7 @@ export function buildReviewPrompt(transcript: string): string {
     '- memory_usage_summary: one-sentence summary of how injected memories influenced the review, or empty string if none were injected',
     '- requirements_tracker_updated: "yes" if tracker comment was created/updated, "no" if skipped, empty string if no requirements available',
     '- gh_actions_status: GitHub Actions check result (e.g., "all passed", "2 failed", "pending", "not yet triggered")',
-    '- needs_remediation: "0" if the PR is clean or all findings are informational only, "1" if any finding requires code changes',
+    '- needs_remediation: "0" if the PR is clean or all findings are informational only, "1" if any finding requires code changes. Operational/manual verification steps (deploying migrations, running commands in environments, manual testing in dev/prod) are post-merge activities and do NOT count as code remediation',
     '- summary: concise bullet-point summary (markdown *, max 5-6 points) of the review findings — the LLM agent typically states this clearly as a summary block in its final output',
     '',
     'Example valid response:',
