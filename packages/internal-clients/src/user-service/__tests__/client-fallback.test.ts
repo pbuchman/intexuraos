@@ -125,9 +125,7 @@ describe('getLlmClient fallback behavior', () => {
     const fallbackClient: LlmGenerateClient = { generate: fallbackGenerate };
 
     // First call → primary, second call → fallback
-    mockCreateLlmClient
-      .mockReturnValueOnce(primaryClient)
-      .mockReturnValueOnce(fallbackClient);
+    mockCreateLlmClient.mockReturnValueOnce(primaryClient).mockReturnValueOnce(fallbackClient);
 
     const serviceClient = createUserServiceClient(config);
     const result = await serviceClient.getLlmClient('user123');
@@ -148,7 +146,7 @@ describe('getLlmClient fallback behavior', () => {
         primaryModel: PRIMARY_MODEL,
         fallbackModel: FALLBACK_MODEL,
       }),
-      'Primary model failed, attempting fallback',
+      'Primary model failed, attempting fallback'
     );
   });
 
@@ -186,9 +184,7 @@ describe('getLlmClient fallback behavior', () => {
       .mockResolvedValue(err({ code: 'PROVIDER_ERROR', message: 'fallback also failed' }));
     const fallbackClient: LlmGenerateClient = { generate: fallbackGenerate };
 
-    mockCreateLlmClient
-      .mockReturnValueOnce(primaryClient)
-      .mockReturnValueOnce(fallbackClient);
+    mockCreateLlmClient.mockReturnValueOnce(primaryClient).mockReturnValueOnce(fallbackClient);
 
     const serviceClient = createUserServiceClient(config);
     const result = await serviceClient.getLlmClient('user123');
@@ -303,7 +299,7 @@ describe('getLlmClient fallback behavior', () => {
     expect(mockCreateLlmClient).toHaveBeenCalledTimes(1);
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'user123', fallbackModel: ANTHROPIC_FALLBACK }),
-      'No API key for fallback model',
+      'No API key for fallback model'
     );
   });
 });

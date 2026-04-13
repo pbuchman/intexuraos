@@ -31,9 +31,14 @@ function getApps() {
     const fullPath = join(appsDir, entry);
     // fix for claude-mem bug - creates historical folders
     if (
-      ['client', '*', 'llm-orchestrator', 'data-insights-service', 'commands-router'].includes(
-        entry
-      )
+      [
+        'client',
+        '*',
+        'llm-orchestrator',
+        'data-insights-service',
+        'data-insights-agent',
+        'commands-router',
+      ].includes(entry)
     )
       return false;
     return statSync(fullPath).isDirectory() && !EXEMPT_APPS.includes(entry);

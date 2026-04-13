@@ -87,7 +87,8 @@ describe('createOpenRouterGenerateClient', () => {
 
     createOpenRouterGenerateClient({
       ...baseConfig,
-      model: 'anthropic/claude-sonnet-4.6' as unknown as import('@intexuraos/llm-contract').LLMModel,
+      model:
+        'anthropic/claude-sonnet-4.6' as unknown as import('@intexuraos/llm-contract').LLMModel,
     });
 
     expect(createOpenRouterClient).toHaveBeenCalledWith(

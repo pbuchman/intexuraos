@@ -601,6 +601,42 @@ describe('createUserServiceClient', () => {
       }
     });
 
+    it('creates client for default-eligible OpenRouter model with allowlist pricing', async () => {
+      const openRouterModel = 'or:google/gemma-4-31b-it:free';
+      const mockSettings = {
+        llmPreferences: {
+          defaultModel: openRouterModel,
+        },
+      };
+
+      const mockKeys = {
+        openrouter: 'openrouter-key',
+      };
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: mockSettings });
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: mockKeys });
+
+      const client = createUserServiceClient(config);
+      const result = await client.getLlmClient('user123');
+
+      if (result.ok) {
+        expect(result.value).toBeDefined();
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          { userId: 'user123', model: openRouterModel, provider: LlmProviders.OpenRouter },
+          'LLM client created successfully'
+        );
+      } else {
+        expect.fail('Expected successful result for default-eligible OpenRouter model');
+      }
+    });
+
     it('falls back to platform Gemini25Flash when user has no API key and platformGeminiApiKey is configured', async () => {
       const configWithGeminiKey = {
         ...config,
