@@ -60,8 +60,8 @@ describe('ConfirmSubmitModal', () => {
         taskTitle="Test task"
         workerType="auto"
         taskMode="execution"
-        onConfirm={async (): Promise<void> => {}}
-        onCancel={(): void => {}}
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
       />
     );
     expect(screen.getByText('Execution')).toBeInTheDocument();
@@ -75,8 +75,8 @@ describe('ConfirmSubmitModal', () => {
         taskTitle="Design feature"
         workerType="auto"
         taskMode="planning"
-        onConfirm={async (): Promise<void> => {}}
-        onCancel={(): void => {}}
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
       />
     );
     expect(screen.getByText('Planning')).toBeInTheDocument();
@@ -89,8 +89,8 @@ describe('ConfirmSubmitModal', () => {
         taskTitle="Test task"
         workerType="auto"
         taskMode="execution"
-        onConfirm={async (): Promise<void> => {}}
-        onCancel={(): void => {}}
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
       />
     );
     expect(container.firstChild).toBeNull();

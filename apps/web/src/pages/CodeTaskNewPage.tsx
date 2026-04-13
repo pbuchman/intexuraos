@@ -32,7 +32,7 @@ const LINEAR_MODES: { id: LinearMode; name: string; description: string; icon: R
   { id: 'link', name: 'Link Existing', description: 'Link to an existing Linear issue', icon: <Link2 className="h-4 w-4" /> },
 ];
 
-type TaskModeOption = { id: TaskMode; name: string; description: string; icon: React.ReactNode };
+interface TaskModeOption { id: TaskMode; name: string; description: string; icon: React.ReactNode }
 
 const TASK_MODES: TaskModeOption[] = [
   {
