@@ -310,6 +310,53 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
     expect(screen.getByText('OpenAI Codex runtime for code-task execution with persisted thread resume')).toBeInTheDocument();
   });
 
+  it('renders task mode selector with Planning and Execution options', () => {
+    render(<CodeTaskNewPage />);
+
+    expect(screen.getByRole('button', { name: /planning/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /execution/i })).toBeInTheDocument();
+  });
+
+  it('defaults to Planning mode when linear mode is Create New', () => {
+    render(<CodeTaskNewPage />);
+
+    const planningButton = screen.getByRole('button', { name: /planning/i });
+    const executionButton = screen.getByRole('button', { name: /execution/i });
+
+    expect(planningButton.className).toContain('border-blue-500');
+    expect(executionButton.className).not.toContain('border-blue-500');
+  });
+
+  it('switches to Execution mode when linking an existing issue', () => {
+    render(<CodeTaskNewPage />);
+
+    fireEvent.click(getLinkExistingButton());
+
+    const planningButton = screen.getByRole('button', { name: /planning/i });
+    const executionButton = screen.getByRole('button', { name: /execution/i });
+
+    expect(executionButton.className).toContain('border-blue-500');
+    expect(planningButton.className).not.toContain('border-blue-500');
+  });
+
+  it('allows user to override task mode back to Planning after linking issue', () => {
+    render(<CodeTaskNewPage />);
+
+    // Switch to Link Existing (sets taskMode to execution)
+    fireEvent.click(getLinkExistingButton());
+
+    const planningButton = screen.getByRole('button', { name: /planning/i });
+    const executionButton = screen.getByRole('button', { name: /execution/i });
+
+    expect(executionButton.className).toContain('border-blue-500');
+
+    // Override back to Planning
+    fireEvent.click(planningButton);
+
+    expect(planningButton.className).toContain('border-blue-500');
+    expect(executionButton.className).not.toContain('border-blue-500');
+  });
+
   it('uses worker-neutral copy on the task creation page', () => {
     render(<CodeTaskNewPage />);
 
