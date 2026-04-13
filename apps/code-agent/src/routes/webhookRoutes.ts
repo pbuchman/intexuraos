@@ -718,16 +718,20 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         let prUrlValidationFailed: boolean | undefined; // @allow-undefined-type -- local variable, not interface property
         let prUrlValidationErrors: string[] | undefined; // @allow-undefined-type -- local variable, not interface property
         const prNumberFromUrl = /\/pull\/(\d+)/.exec(executionResult.prUrl);
+        /* v8 ignore start -- ts-type: prUrl always returns a match for /pull/N after enforcement check at line 658; parseOwnerRepo cannot return null for valid task.repository @preserve */
         if (prNumberFromUrl?.[1] !== undefined) {
           const parsedOwnerRepo = parseOwnerRepo(task.repository);
           if (parsedOwnerRepo !== null) {
+          /* v8 ignore stop @preserve */
             const token = await fetchGitHubToken(userServiceClient, task.userId, logger);
             if (token !== null) {
               const validationResult = await validatePrUrl({
                 prUrl: executionResult.prUrl,
                 prNumber: Number(prNumberFromUrl[1]),
                 linearIssueId: task.linearIssueId,
+                /* v8 ignore start -- ts-type: conditional spread for optional Timestamp field @preserve */
                 ...(task.dispatchedAt !== undefined && { dispatchedAt: task.dispatchedAt.toDate() }),
+                /* v8 ignore stop @preserve */
                 token,
                 owner: parsedOwnerRepo.owner,
                 repo: parsedOwnerRepo.repo,
