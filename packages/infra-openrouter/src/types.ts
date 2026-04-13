@@ -101,6 +101,7 @@ export interface OpenRouterUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  cost?: number; // OpenRouter reports USD cost per request (always present per docs, optional for back-compat)
 }
 
 /**
