@@ -12,10 +12,10 @@ export class FirestoreUsageAggregateRepository implements UsageAggregateReposito
   async incrementAggregate(event: UsageEvent): Promise<Result<void, { code: string; message: string }>> {
     const db = getFirestore();
     const aggregateId = computeAggregateId(event);
-    const docRef = db.collection(COLLECTION).doc(aggregateId);
     const now = new Date().toISOString();
 
     try {
+      const docRef = db.collection(COLLECTION).doc(aggregateId);
       const doc = await docRef.get();
 
       const counterFields = {

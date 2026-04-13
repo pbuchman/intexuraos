@@ -10,7 +10,7 @@
  */
 
 import { getErrorMessage } from '@intexuraos/common-core';
-import type { NormalizedUsage } from '@intexuraos/llm-contract';
+import type { NormalizedUsage, OwnerType } from '@intexuraos/llm-contract';
 import type { LlmProvider } from './types.js';
 import type { Logger } from '@intexuraos/common-core';
 
@@ -56,6 +56,12 @@ export interface UsageLogParams {
   errorMessage?: string;
   /** Optional pino logger for structured logging */
   logger?: Logger;
+  /** Owner scope of the call. Defaults to 'system' when omitted to preserve legacy behavior. */
+  ownerType?: OwnerType;
+  /** Label identifying the calling client/transport (e.g. 'openrouter-generate'). Defaults to source.component when omitted. */
+  clientName?: string;
+  /** Cost reported by the provider (e.g. OpenRouter usage.cost). When set, the receiver records pricingSource: 'provider_reported'. */
+  providerReportedUsd?: number | null;
 }
 
 /**

@@ -428,4 +428,24 @@ describe('createClaudeClient', () => {
       }
     });
   });
+
+  it('passes ownerType to usage logger when provided', async () => {
+    mockMessagesCreate.mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    });
+
+    const client = createClaudeClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      pricing: createTestPricing(),
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+      ownerType: 'user',
+    });
+    await client.generate('hello');
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'user' }));
+  });
 });

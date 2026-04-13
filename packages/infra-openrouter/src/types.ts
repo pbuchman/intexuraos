@@ -6,6 +6,7 @@
 
 import type { Logger } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
+import type { OwnerType } from '@intexuraos/llm-contract';
 
 export type {
   LLMError as OpenRouterError,
@@ -62,6 +63,8 @@ export interface OpenRouterConfig {
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
   usageSink: UsageSink;
+  /** Owner scope of the call. When omitted, the usage sink defaults to 'system'. */
+  ownerType?: OwnerType;
 }
 
 /**
@@ -101,6 +104,7 @@ export interface OpenRouterUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  cost?: number; // OpenRouter reports USD cost per request (always present per docs, optional for back-compat)
 }
 
 /**

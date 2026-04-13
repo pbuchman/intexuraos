@@ -18,11 +18,15 @@ export function toDateString(isoTimestamp: string): string {
 /**
  * Compute the aggregate document ID from event dimensions.
  *
- * Format: {date}__{ownerType}__{ownerIdHash}__{service}__{component}__{client}__{environment}__{provider}__{modelHash}__{operation}__{success}
+ * Format: {date}__{ownerType}__{ownerIdHash}__{service}__{component}__{clientHash}__{environment}__{provider}__{modelHash}__{operation}__{success}
+ *
+ * Position 5 is `clientHash` (sha256Truncated of source.client) rather than the raw value so that
+ * any client string containing "/" cannot produce an invalid Firestore document path segment.
  */
 export function computeAggregateId(event: UsageEvent): string {
   const date = toDateString(event.occurredAt);
   const ownerIdHash = sha256Truncated(event.owner.id);
+  const clientHash = sha256Truncated(event.source.client);
   const modelHash = sha256Truncated(event.request.model);
   const success = String(event.request.success);
 
@@ -32,7 +36,7 @@ export function computeAggregateId(event: UsageEvent): string {
     ownerIdHash,
     event.source.service,
     event.source.component,
-    event.source.client,
+    clientHash,
     event.source.environment,
     event.request.provider,
     modelHash,

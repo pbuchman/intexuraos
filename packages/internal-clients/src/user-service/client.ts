@@ -212,6 +212,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
               pricing: fallbackPricing,
               logger: config.logger,
               usageSink: config.usageSink,
+              ownerType: 'user',
             });
 
             logger.info(
@@ -263,6 +264,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
             pricing: resolvePricing(model),
             logger: config.logger,
             usageSink: config.usageSink,
+            ownerType: 'user',
           });
         }
 
@@ -277,6 +279,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           pricing,
           logger: config.logger,
           usageSink: config.usageSink,
+          ownerType: 'user',
         };
 
         const client: LlmGenerateClient = createLlmClient(clientConfig);
