@@ -217,7 +217,7 @@ describe('usageLogger', () => {
           ownerType: 'user',
           clientName: 'linear-agent-title-gen',
           providerReportedUsd: 0.0042,
-        }),
+        })
       );
     });
 

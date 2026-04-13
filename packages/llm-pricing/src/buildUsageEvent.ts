@@ -40,9 +40,7 @@ export function buildUsageEvent(
   const providerReportedUsd = params.providerReportedUsd ?? null;
   const useProviderCost = providerReportedUsd !== null;
   // Schema requires billedUsd >= 0; clamp defensively so a misbehaving provider can't 400 the receiver.
-  const billedUsd = useProviderCost
-    ? Math.max(0, providerReportedUsd)
-    : params.usage.costUsd;
+  const billedUsd = useProviderCost ? Math.max(0, providerReportedUsd) : params.usage.costUsd;
   const pricingSource = useProviderCost ? 'provider_reported' : 'calculated';
 
   return {
