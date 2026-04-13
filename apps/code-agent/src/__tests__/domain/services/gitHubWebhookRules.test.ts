@@ -7,6 +7,7 @@ import {
   SkipPrefixRule,
   BotReviewEditRule,
   CodeWorkerOutputRule,
+  DraftPRRule,
   GitHubWebhookRules,
   CIFailureRule,
 } from '../../../domain/services/gitHubWebhookRules.js';
@@ -158,6 +159,13 @@ describe('GitHubWebhookRules', () => {
         reason: 'EVENT_NOT_ACTIONABLE',
         context: { eventType: 'ping', action: null },
       });
+    });
+
+    it('should return needs_triage for pull_request ready_for_review', () => {
+      const event = { ...mockEvent, eventType: 'pull_request' as const, action: 'ready_for_review' as const };
+      const rule = new ActionableEventRule(allowedBots);
+      const result = rule.evaluate(event);
+      expect(result).toEqual({ action: 'needs_triage', reason: 'PR_READY_FOR_REVIEW' });
     });
   });
 
@@ -1030,6 +1038,66 @@ describe('GitHubWebhookRules', () => {
 
       expect(result.action).toBe('dispatch');
       expect(result.reason).toBe('CHECK_SUITE_TASK_BRANCH');
+    });
+  });
+
+  describe('DraftPRRule', () => {
+    const rule = new DraftPRRule();
+
+    it('should skip when isDraft is true', () => {
+      const event = { ...mockEvent, isDraft: true };
+      const result = rule.evaluate(event);
+      expect(result).toEqual({
+        action: 'skip',
+        reason: 'DRAFT_PR',
+        context: { pullRequestNumber: 123 },
+      });
+    });
+
+    it('should dispatch when isDraft is false', () => {
+      const event = { ...mockEvent, isDraft: false };
+      const result = rule.evaluate(event);
+      expect(result).toEqual({
+        action: 'dispatch',
+        reason: 'NOT_DRAFT_PR',
+      });
+    });
+
+    it('should dispatch when isDraft is null (fail open)', () => {
+      const event = { ...mockEvent, isDraft: null };
+      const result = rule.evaluate(event);
+      expect(result).toEqual({
+        action: 'dispatch',
+        reason: 'DRAFT_STATUS_UNKNOWN',
+      });
+    });
+  });
+
+  describe('Chain integration with DraftPRRule', () => {
+    it('should skip draft PR events before LLM triage', () => {
+      const rules = new GitHubWebhookRules([
+        new CodeWorkerOutputRule(new Set(['bot'])),
+        new DraftPRRule(),
+        new CIFailureRule(),
+        new ActionableEventRule(new Set(['bot'])),
+      ]);
+      const event = { ...mockEvent, isDraft: true, eventType: 'pull_request' as const, action: 'opened' as const };
+      const result = rules.evaluate(event);
+      expect(result.action).toBe('skip');
+      expect(result.reason).toBe('DRAFT_PR');
+    });
+
+    it('should allow non-draft PR events through', () => {
+      const rules = new GitHubWebhookRules([
+        new CodeWorkerOutputRule(new Set(['bot'])),
+        new DraftPRRule(),
+        new CIFailureRule(),
+        new ActionableEventRule(new Set(['bot'])),
+      ]);
+      const event = { ...mockEvent, isDraft: false, eventType: 'pull_request' as const, action: 'opened' as const };
+      const result = rules.evaluate(event);
+      expect(result.action).toBe('needs_triage');
+      expect(result.reason).toBe('TRIAGE_REQUIRED');
     });
   });
 });
