@@ -437,6 +437,89 @@ describe('POST /code/submit', () => {
     });
   });
 
+  describe('taskMode parameter', () => {
+    it('uses explicit taskMode=execution to set agentType', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-200',
+        linearIssueTitle: 'Implement feature task',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+      const createSpy = vi.spyOn(codeTaskRepo, 'create');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Implement feature', taskMode: 'execution' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'execution',
+        })
+      );
+    });
+
+    it('uses explicit taskMode=planning even when issue has code-task label', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-999',
+        linearIssueTitle: 'Plan feature task',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+      const createSpy = vi.spyOn(codeTaskRepo, 'create');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Plan feature', taskMode: 'planning', linearIssueId: 'INT-999' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'planning',
+        })
+      );
+    });
+
+    it('falls back to label-based inference when taskMode is omitted', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-888',
+        linearIssueTitle: 'Do something task',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+      const createSpy = vi.spyOn(codeTaskRepo, 'create');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Do something unique' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentType: 'execution',
+        })
+      );
+    });
+  });
+
   describe('prompt deduplication', () => {
     it('returns 409 for duplicate prompt within 5 minutes', async () => {
       const prompt = 'Fix the login bug';

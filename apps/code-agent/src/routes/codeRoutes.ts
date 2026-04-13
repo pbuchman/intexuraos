@@ -1618,6 +1618,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       prompt: string;
       workerType?: WorkerType;
       linearIssueId?: string;
+      taskMode?: 'planning' | 'execution';
     };
   }>(
     '/code/submit',
@@ -1634,6 +1635,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             prompt: { type: 'string', minLength: 1, maxLength: 100000 },
             workerType: workerTypeSchema,
             linearIssueId: { type: 'string' },
+            taskMode: { type: 'string', enum: ['planning', 'execution'] },
           },
           required: ['prompt'],
         },
@@ -1741,7 +1743,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: WorkerType; workerLocation?: string; linearIssueId?: string } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: WorkerType; workerLocation?: string; linearIssueId?: string; taskMode?: 'planning' | 'execution' } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /code/submit',
         includeParams: true,
@@ -1752,6 +1754,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         prompt: string;
         workerType?: WorkerType;
         linearIssueId?: string;
+        taskMode?: 'planning' | 'execution';
       };
 
       /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
@@ -1806,7 +1809,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         baseBranch: 'development',
         traceId: `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`,
         webhookSecret,
-        agentType: hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'planning',
+        agentType: body.taskMode ?? (hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'planning'),
       };
 
       // Save linearIssueId if available (linking to existing issue)
