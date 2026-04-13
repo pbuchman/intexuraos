@@ -56,12 +56,9 @@ const RESEARCH_MODELS: ResearchModel[] = [
 const MODEL_DISPLAY_NAMES: Record<ResearchModel, string> = {
   [LlmModels.Gemini25Pro]: 'Gemini 2.5 Pro',
   [LlmModels.Gemini25Flash]: 'Gemini 2.5 Flash',
-  [LlmModels.ClaudeOpus45]: 'Claude Opus 4.5',
   [LlmModels.ClaudeOpus46]: 'Claude Opus 4.6',
-  [LlmModels.ClaudeSonnet45]: 'Claude Sonnet 4.5',
   [LlmModels.ClaudeSonnet46]: 'Claude Sonnet 4.6',
   [LlmModels.O4MiniDeepResearch]: 'O4 Mini Deep Research',
-  [LlmModels.GPT52]: 'GPT 5.2',
   [LlmModels.GPT54]: 'GPT 5.4',
   [LlmModels.Sonar]: 'Sonar',
   [LlmModels.SonarPro]: 'Sonar Pro',

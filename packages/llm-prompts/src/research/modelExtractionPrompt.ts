@@ -219,12 +219,9 @@ export function parseModelExtractionResponseWithLogging(
 export const MODEL_KEYWORDS: Record<ResearchModel, string[]> = {
   [LlmModels.Gemini25Pro]: ['gemini pro', 'gemini-pro', 'pro'],
   [LlmModels.Gemini25Flash]: ['gemini flash', 'gemini-flash', 'gemini', 'google'],
-  [LlmModels.ClaudeOpus45]: ['claude opus 4.5'],
   [LlmModels.ClaudeOpus46]: ['claude opus', 'opus'],
-  [LlmModels.ClaudeSonnet45]: ['claude sonnet 4.5'],
   [LlmModels.ClaudeSonnet46]: ['claude sonnet', 'sonnet', 'claude', 'anthropic'],
   [LlmModels.O4MiniDeepResearch]: ['o4', 'o4-mini', 'deep research'],
-  [LlmModels.GPT52]: ['gpt 5.2'],
   [LlmModels.GPT54]: ['gpt', 'gpt-5', 'openai', 'chatgpt'],
   [LlmModels.Sonar]: ['sonar basic'],
   [LlmModels.SonarPro]: ['sonar', 'sonar pro', 'pplx', 'perplexity'],

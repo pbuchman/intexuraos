@@ -2,7 +2,7 @@ import { createHmac } from 'node:crypto';
 import nock from 'nock';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
-import { LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { UsageLogParams } from '../usageLogger.js';
 import { HttpWebhookUsageSink } from '../httpWebhookUsageSink.js';
 import type { HttpWebhookUsageSinkConfig } from '../httpWebhookUsageSink.js';
@@ -85,7 +85,7 @@ function parseBody(raw: string | undefined): CapturedBody {
 const baseParams: UsageLogParams = {
   userId: 'user-123',
   provider: LlmProviders.Anthropic,
-  model: 'claude-sonnet-4-6',
+  model: LlmModels.ClaudeSonnet46,
   callType: 'research',
   usage: {
     inputTokens: 1000,
@@ -150,12 +150,12 @@ describe('HttpWebhookUsageSink', () => {
       expect(event?.source).toEqual({
         service: 'orchestrator',
         component: 'agent-loop',
-        client: 'claude-sonnet-4-6',
+        client: LlmModels.ClaudeSonnet46,
         environment: 'dev',
       });
       expect(event?.request).toEqual({
         provider: LlmProviders.Anthropic,
-        model: 'claude-sonnet-4-6',
+        model: LlmModels.ClaudeSonnet46,
         operation: 'research',
         success: true,
         durationMs: 0,

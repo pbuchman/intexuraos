@@ -76,7 +76,7 @@ describe('getProviderForModel', () => {
 describe('supportedModels', () => {
   describe('ALL_LLM_MODELS', () => {
     it('contains all 14 expected models', () => {
-      expect(ALL_LLM_MODELS).toHaveLength(17);
+      expect(ALL_LLM_MODELS).toHaveLength(14);
     });
 
     it('contains all Google models', () => {

@@ -482,7 +482,7 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain('claude-opus-4-6');
+      expect(body.error.message).toContain(LlmModels.ClaudeOpus46);
     });
 
     it('returns 503 when API key is missing for synthesis model', async () => {
@@ -507,7 +507,7 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain('claude-opus-4-6');
+      expect(body.error.message).toContain(LlmModels.ClaudeOpus46);
     });
 
     it('returns 500 when API key fetch fails', async () => {
@@ -1311,7 +1311,7 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain('claude-opus-4-6');
+      expect(body.error.message).toContain(LlmModels.ClaudeOpus46);
     });
 
     it('returns 503 when API key is missing for synthesis model', async () => {
@@ -1337,7 +1337,7 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain('claude-opus-4-6');
+      expect(body.error.message).toContain(LlmModels.ClaudeOpus46);
     });
 
     it('returns 500 when API key fetch fails', async () => {
@@ -1650,7 +1650,7 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain('claude-opus-4-6');
+      expect(body.error.message).toContain(LlmModels.ClaudeOpus46);
     });
 
     it('returns 503 when API key is missing for synthesis model', async () => {
@@ -1673,7 +1673,7 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain('claude-opus-4-6');
+      expect(body.error.message).toContain(LlmModels.ClaudeOpus46);
     });
 
     it('returns 503 when API key is missing for inherited synthesis model', async () => {
@@ -1698,7 +1698,7 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain('claude-opus-4-6');
+      expect(body.error.message).toContain(LlmModels.ClaudeOpus46);
     });
 
     it('returns 500 when API key fetch fails', async () => {
