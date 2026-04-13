@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { type ProviderPricing, type Gemini25Pro } from '@intexuraos/llm-contract';
+import { type ProviderPricing, type Gemini25Pro, type LLMModel } from '@intexuraos/llm-contract';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import {
   PricingContext,
@@ -265,12 +265,6 @@ describe('pricingClient', () => {
       expect(pricing.inputPricePerMillion).toBe(1.25);
       expect(pricing.outputPricePerMillion).toBe(10.0);
       expect(pricing.groundingCostPerRequest).toBe(0.035);
-    });
-
-    it('throws when getting pricing for unknown model', () => {
-      const context = new PricingContext(completeAllPricing);
-
-      expect(() => context.getPricing('unknown-model' as Gemini25Pro)).toThrow('Pricing not found');
     });
 
     it('validates that specified models have pricing', () => {
@@ -689,6 +683,58 @@ describe('pricingClient', () => {
       expect(result.ok).toBe(true);
       expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('attempt 1/4'));
       stderrSpy.mockRestore();
+    });
+  });
+
+  describe('getPricing no-throw on missing model', () => {
+    it('returns zero pricing instead of throwing when the model is unknown', () => {
+      const ctx = new PricingContext({
+        google: { models: {}, updatedAt: '' },
+        openai: { models: {}, updatedAt: '' },
+        anthropic: { models: {}, updatedAt: '' },
+        perplexity: { models: {}, updatedAt: '' },
+        openrouter: { models: {}, updatedAt: '' },
+      });
+
+      const pricing = ctx.getPricing('or:some/unpriced-model' as LLMModel);
+
+      expect(pricing).toEqual({ inputPricePerMillion: 0, outputPricePerMillion: 0 });
+    });
+
+    it('still returns the real pricing for a known model', () => {
+      const ctx = new PricingContext({
+        google: { models: {}, updatedAt: '' },
+        openai: { models: {}, updatedAt: '' },
+        anthropic: {
+          models: {
+            [LlmModels.ClaudeSonnet46]: { inputPricePerMillion: 3, outputPricePerMillion: 15 },
+          },
+          updatedAt: '',
+        },
+        perplexity: { models: {}, updatedAt: '' },
+        openrouter: { models: {}, updatedAt: '' },
+      });
+
+      expect(ctx.getPricing(LlmModels.ClaudeSonnet46)).toEqual({
+        inputPricePerMillion: 3,
+        outputPricePerMillion: 15,
+      });
+    });
+  });
+
+  describe('validateModels still throws on missing — fail-fast preserved for startup', () => {
+    it('validateModels throws when a required model is missing', () => {
+      const ctx = new PricingContext({
+        google: { models: {}, updatedAt: '' },
+        openai: { models: {}, updatedAt: '' },
+        anthropic: { models: {}, updatedAt: '' },
+        perplexity: { models: {}, updatedAt: '' },
+        openrouter: { models: {}, updatedAt: '' },
+      });
+
+      expect(() => ctx.validateModels([LlmModels.ClaudeSonnet46])).toThrow(
+        /Missing pricing/,
+      );
     });
   });
 });
