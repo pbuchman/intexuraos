@@ -156,7 +156,7 @@ describe('HttpInternalAuthUsageSink', () => {
       expect(event?.source).toEqual({
         service: 'research-agent',
         component: 'llm-client',
-        client: LlmModels.Gemini25Flash,
+        client: 'llm-client',
         environment: 'dev',
       });
       expect(event?.request).toEqual({

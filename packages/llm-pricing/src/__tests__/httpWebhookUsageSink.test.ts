@@ -150,7 +150,7 @@ describe('HttpWebhookUsageSink', () => {
       expect(event?.source).toEqual({
         service: 'orchestrator',
         component: 'agent-loop',
-        client: LlmModels.ClaudeSonnet46,
+        client: 'agent-loop',
         environment: 'dev',
       });
       expect(event?.request).toEqual({
