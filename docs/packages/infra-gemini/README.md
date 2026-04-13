@@ -202,7 +202,6 @@ All methods return `Result<T, GeminiError>`. Error mapping:
 | `research-agent`      | Research and text generation                  |
 | `user-service`        | API key validation and usage                  |
 | `todos-agent`         | Task processing                               |
-| `data-insights-agent` | Data analysis generation                      |
 | `image-service`       | Image generation                              |
 | `commands-agent`      | Command processing                            |
 | `code-agent`          | GitHub Agent tool calling loop                |

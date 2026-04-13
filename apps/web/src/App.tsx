@@ -35,11 +35,6 @@ import {
   HellscriptConversationPage,
   HellscriptStylePage,
   HellscriptSamplesPage,
-  CompositeFeedFormPage,
-  CompositeFeedsListPage,
-  DataInsightsPage,
-  DataSourceFormPage,
-  DataSourcesListPage,
   GitHubConnectionPage,
   GoogleCalendarConnectionPage,
   HomePage,
@@ -62,7 +57,6 @@ import {
   ShareHistoryPage,
   ShareTargetPage,
   TodosListPage,
-  VisualizationsListPage,
   WhatsAppConnectionPage,
   WhatsAppNotesPage,
   WorkerSettingsPage,
@@ -428,71 +422,6 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <ResearchListPage />
-          </ProtectedRoute>
-        }
-      />
-      {/* Data Insights routes */}
-      <Route
-        path="/data-insights"
-        element={
-          <ProtectedRoute>
-            <CompositeFeedsListPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/new"
-        element={
-          <ProtectedRoute>
-            <CompositeFeedFormPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/visualizations"
-        element={
-          <ProtectedRoute>
-            <VisualizationsListPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/:feedId/visualizations"
-        element={
-          <ProtectedRoute>
-            <DataInsightsPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/:id"
-        element={
-          <ProtectedRoute>
-            <CompositeFeedFormPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/static-sources"
-        element={
-          <ProtectedRoute>
-            <DataSourcesListPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/static-sources/new"
-        element={
-          <ProtectedRoute>
-            <DataSourceFormPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/static-sources/:id"
-        element={
-          <ProtectedRoute>
-            <DataSourceFormPage />
           </ProtectedRoute>
         }
       />

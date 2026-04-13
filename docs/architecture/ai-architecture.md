@@ -121,7 +121,7 @@ Optimized for quick, low-cost operations like classification and extraction.
 
 ### Image Models (2)
 
-Text-to-image generation for cover images and visualizations.
+Text-to-image generation for cover images.
 
 | Model                  | Provider | Capabilities                            |
 | ---------------------- | -------- | --------------------------------------- |
@@ -253,7 +253,6 @@ graph TB
         TA[Todos Agent]
         CA[Calendar Agent]
         LA[Linear Agent]
-        DIA[Data Insights Agent]
         IS[Image Service]
     end
 
@@ -283,7 +282,6 @@ graph TB
     AA --> TA
     AA --> CA
     AA --> LA
-    AA --> DIA
     AA --> IS
 
     RA --> CLAUDE
@@ -370,19 +368,6 @@ graph TB
 - Priority (0-4 scale)
 - Functional requirements section
 - Technical details section
-
-### Data Insights Agent
-
-**Purpose**: AI-powered data analysis
-
-**AI Models**: Gemini (multiple services)
-
-**Capabilities**:
-
-- **Title Generation**: Descriptive names for datasets
-- **Data Analysis**: Trend detection, anomaly identification
-- **Chart Definition**: Suggest appropriate visualizations
-- **Data Transform**: Clean and reshape data
 
 ### Image Service
 

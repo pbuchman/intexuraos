@@ -58,7 +58,6 @@ All error codes are defined in `packages/common-core/src/errors.ts` as the `Erro
 | code-agent                   | 98                   | 35                 |
 | research-agent               | 86                   | 37                 |
 | whatsapp-service             | 63                   | 23                 |
-| data-insights-agent          | 60                   | 25                 |
 | user-service                 | 50                   | 22                 |
 | linear-agent                 | 47                   | 29                 |
 | todos-agent                  | 37                   | 17                 |
@@ -137,7 +136,7 @@ This pattern exists in two places in codeRoutes.ts (lines 3570–3581 region), b
 
 ### LOW — `error.message` Passed Directly to `DOWNSTREAM_ERROR` (multiple services)
 
-**Affected services:** calendar-agent, data-insights-agent, linear-agent, whatsapp-service, and others
+**Affected services:** calendar-agent, linear-agent, whatsapp-service, and others
 
 Pattern:
 
@@ -203,7 +202,6 @@ These could potentially expose internal service messages to callers. However, th
 | chat-agent                   | 1        | 4          | 0         | —         | PASS                                               |
 | code-agent                   | 35       | 98         | 7         | 7+4       | PASS (see INVALID_STATUS issue)                    |
 | commands-agent               | 6        | 10         | 0         | —         | PASS                                               |
-| data-insights-agent          | 25       | 60         | 0         | —         | PASS                                               |
 | image-service                | 3        | 11         | 0         | —         | PASS                                               |
 | linear-agent                 | 29       | 47         | 1         | 1         | PASS                                               |
 | mobile-notifications-service | 8        | 11         | 1         | 1         | PASS                                               |

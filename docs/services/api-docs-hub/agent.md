@@ -123,7 +123,6 @@ To programmatically access a service's OpenAPI spec, bypass the hub entirely and
 | Research Agent API               | `INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL`                   |
 | Commands Agent API               | `INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL`                   |
 | Actions Agent API                | `INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL`                    |
-| Data Insights Agent API          | `INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL`              |
 | Image Service API                | `INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL`                    |
 | Notes Agent API                  | `INTEXURAOS_NOTES_AGENT_OPENAPI_URL`                      |
 | Todos Agent API                  | `INTEXURAOS_TODOS_AGENT_OPENAPI_URL`                      |

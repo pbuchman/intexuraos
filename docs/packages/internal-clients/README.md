@@ -200,7 +200,6 @@ interface ServiceClientError {
 | chat-agent          | LLM client creation                   |
 | code-agent          | fetchWithAuth for cross-service calls |
 | commands-agent      | LLM client for command processing     |
-| data-insights-agent | LLM client for data analysis          |
 | image-service       | LLM client for image generation       |
 | linear-agent        | LLM client for issue management       |
 | research-agent      | LLM client for research tasks         |

@@ -13,7 +13,6 @@ process.env.INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL = 'http://localhost:8114
 process.env.INTEXURAOS_RESEARCH_AGENT_URL = 'http://localhost:8116';
 process.env.INTEXURAOS_COMMANDS_AGENT_URL = 'http://localhost:8117';
 process.env.INTEXURAOS_ACTIONS_AGENT_URL = 'http://localhost:8118';
-process.env.INTEXURAOS_DATA_INSIGHTS_AGENT_URL = 'http://localhost:8119';
 process.env.INTEXURAOS_NOTES_AGENT_URL = 'http://localhost:8121';
 process.env.INTEXURAOS_TODOS_AGENT_URL = 'http://localhost:8123';
 process.env.INTEXURAOS_BOOKMARKS_AGENT_URL = 'http://localhost:8124';

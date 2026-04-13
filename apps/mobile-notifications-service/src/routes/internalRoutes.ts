@@ -25,7 +25,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         operationId: 'queryNotificationsInternal',
         summary: 'Query notifications (internal)',
         description:
-          'Internal endpoint for querying notifications. Used by data-insights-agent for composite feeds.',
+          'Internal endpoint for querying notifications. Used by internal consumers for data aggregation.',
         tags: ['internal'],
         body: {
           type: 'object',

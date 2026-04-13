@@ -22,9 +22,6 @@
 | 10  | `code_tasks`                     | code-agent                   | `apps/code-agent/src/infra/repositories/`        | OK     |
 | 11  | `code_worker_settings`           | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
 | 12  | `commands`                       | commands-agent               | `apps/commands-agent/src/infra/firestore/`       | OK     |
-| 13  | `composite_feed_snapshots`       | data-insights-agent          | `apps/data-insights-agent/src/infra/firestore/`  | OK     |
-| 14  | `composite_feeds`                | data-insights-agent          | `apps/data-insights-agent/src/infra/firestore/`  | OK     |
-| 15  | `custom_data_sources`            | data-insights-agent          | `apps/data-insights-agent/src/infra/firestore/`  | OK     |
 | 16  | `dispatch_retries`               | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
 | 17  | `doc_embeddings`                 | chat-agent                   | `apps/chat-agent/src/infra/firestore/`           | OK     |
 | 18  | `event_decisions`                | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
@@ -52,7 +49,6 @@
 | 40  | `todos`                          | todos-agent                  | `apps/todos-agent/src/infra/firestore/`          | OK     |
 | 41  | `user_settings`                  | user-service                 | `apps/user-service/src/infra/firestore/`         | OK     |
 | 42  | `user_spend`                     | code-agent                   | No repository found                              | WARN   |
-| 43  | `visualizations`                 | data-insights-agent          | `apps/data-insights-agent/src/infra/firestore/`  | OK     |
 | 44  | `whatsapp_messages`              | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
 | 45  | `whatsapp_outbound_messages`     | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |
 | 46  | `whatsapp_phone_verifications`   | whatsapp-service             | `apps/whatsapp-service/src/infra/firestore/`     | OK     |

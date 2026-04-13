@@ -210,7 +210,6 @@ The cron-agent maintains an internal catalog of target services with per-service
 | `mobile-notifications-service` | `queryNotificationsInternal`                                                                                                              |
 | `research-agent`               | `createInternalResearchDraft`                                                                                                             |
 | `actions-agent`                | `createAction`                                                                                                                            |
-| `data-insights-agent`          | `computeVisualization`                                                                                                                    |
 | `image-service`                | `generatePromptInternal`, `generateImageInternal`                                                                                         |
 | `notes-agent`                  | `createNoteInternal`                                                                                                                      |
 | `todos-agent`                  | `createTodoInternal`                                                                                                                      |

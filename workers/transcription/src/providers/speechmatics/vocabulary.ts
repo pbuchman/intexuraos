@@ -27,7 +27,6 @@ export const ADDITIONAL_VOCAB = [
   { content: 'actions-agent', sounds_like: ['actions agent'] },
   { content: 'research-agent', sounds_like: ['research agent'] },
   { content: 'commands-agent', sounds_like: ['commands agent'] },
-  { content: 'data-insights-agent', sounds_like: ['data insights agent'] },
   { content: 'bookmarks-agent', sounds_like: ['bookmarks agent'] },
   { content: 'todos-agent', sounds_like: ['to dos agent', 'todos agent'] },
   { content: 'web-agent', sounds_like: ['web agent'] },
