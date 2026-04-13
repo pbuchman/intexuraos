@@ -1,5 +1,5 @@
 /**
- * Migration 093: Migrate model identifiers and fix Anthropic web-search fee
+ * Migration 094: Migrate model identifiers and fix Anthropic web-search fee
  *
  * Model migrations:
  *   - Add:    gpt-5.4              (successor to gpt-5.2)
@@ -23,7 +23,7 @@
  */
 
 export const metadata = {
-  id: '093',
+  id: '094',
   name: 'model-id-migration-and-anthropic-websearch-fix',
   description:
     'Migrate gpt-5.2→gpt-5.4, claude-sonnet-4-5→4-6, claude-opus-4-5→4-6; fix Anthropic web-search fee to $0.01/call; add gpt-5.4 web-search fee',
@@ -41,10 +41,10 @@ export async function up(context) {
   ]);
 
   if (!openaiSnap.exists) {
-    throw new Error('Migration 093: llm_pricing/openai document missing');
+    throw new Error('Migration 094: llm_pricing/openai document missing');
   }
   if (!anthropicSnap.exists) {
-    throw new Error('Migration 093: llm_pricing/anthropic document missing');
+    throw new Error('Migration 094: llm_pricing/anthropic document missing');
   }
 
   const openaiData = openaiSnap.data();
