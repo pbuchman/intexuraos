@@ -85,7 +85,7 @@ function parseBody(raw: string | undefined): CapturedBody {
 const baseParams: UsageLogParams = {
   userId: 'user-123',
   provider: LlmProviders.Anthropic,
-  model: 'claude-sonnet-4-5',
+  model: 'claude-sonnet-4-6',
   callType: 'research',
   usage: {
     inputTokens: 1000,
@@ -150,12 +150,12 @@ describe('HttpWebhookUsageSink', () => {
       expect(event?.source).toEqual({
         service: 'orchestrator',
         component: 'agent-loop',
-        client: 'claude-sonnet-4-5',
+        client: 'claude-sonnet-4-6',
         environment: 'dev',
       });
       expect(event?.request).toEqual({
         provider: LlmProviders.Anthropic,
-        model: 'claude-sonnet-4-5',
+        model: 'claude-sonnet-4-6',
         operation: 'research',
         success: true,
         durationMs: 0,
