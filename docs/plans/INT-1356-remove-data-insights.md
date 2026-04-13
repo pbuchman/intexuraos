@@ -276,12 +276,14 @@ This lowers execution risk, but it raises cleanup risk: the implementation must 
 - Modify: `apps/web/vite.config.ts`
 - Modify: `apps/web/src/config.ts`
 - Modify: `firestore-collections.json`
+- Modify: `firestore.indexes.json`
 
 - [ ] Remove the Cloud Run service definition, related env vars, OpenAPI URL outputs, image references, and IAM bindings for `data-insights-agent` from Terraform.
 - [ ] Remove the service from Cloud Build and GitHub deploy workflow fan-out lists.
 - [ ] Remove the service from `ecosystem.config.cjs` and any dev proxy wiring in `apps/web/vite.config.ts`.
 - [ ] Remove `INTEXURAOS_DATA_INSIGHTS_AGENT_URL` consumption from `apps/web/src/config.ts` and from web build-time injection in `apps/web/cloudbuild.yaml`.
 - [ ] Remove the four Data Insights-owned collections from `firestore-collections.json`.
+- [ ] Remove the 7 composite index definitions for Data Insights collections (`custom_data_sources`, `composite_feeds`, `composite_feed_snapshots`, `visualizations`) from `firestore.indexes.json`. These indexes incur ongoing Firestore write amplification and storage cost for collections that will no longer receive writes.
 - [ ] Decide and document migration handling for existing production/dev Firestore data in:
   `custom_data_sources`, `composite_feeds`, `composite_feed_snapshots`, `visualizations`.
   Because the issue asks for complete module removal rather than data retention, the plan should assume those collections become orphaned unless a follow-up migration/deletion task is scheduled.
@@ -302,14 +304,18 @@ This lowers execution risk, but it raises cleanup risk: the implementation must 
 - Modify: `docs/services/api-docs-hub/*.md`
 - Modify: `docs/services/mobile-notifications-service/*.md`
 - Modify: `docs/setup/04-cloud-run-services.md`
+- Modify: `README.md` (remove architecture diagram node `DATA[Data Insights Agent]` and service table entry)
+- Modify: `.envrc.local.example` (remove `INTEXURAOS_DATA_INSIGHTS_AGENT_URL`)
 - Modify: validation or generated docs if repo checks require synchronization
 
 - [ ] Delete the dedicated Data Insights service docs.
 - [ ] Remove Data Insights from service indexes, architecture diagrams, setup docs, and feature descriptions.
+- [ ] Remove the `DATA[Data Insights Agent]` node from the mermaid architecture diagram in `README.md` and delete the service table entry.
+- [ ] Remove `INTEXURAOS_DATA_INSIGHTS_AGENT_URL=http://localhost:8119` from `.envrc.local.example`.
 - [ ] Update web documentation so sidebar/routes/features no longer mention Data Insights pages or service URLs.
 - [ ] Remove examples in `mobile-notifications-service` docs that present Data Insights as the consumer.
-- [ ] Run a final repository-wide reference scan:
-  `rg -n "data-insights-agent|Data Insights|/data-insights|composite-feeds|visualizations|custom_data_sources|composite_feed_snapshots" apps packages terraform docs ecosystem.config.cjs cloudbuild .github firestore-collections.json --glob '!**/dist/**'`
+- [ ] Run a final repository-wide reference scan (note: scans from repo root `.` with exclusions to ensure root-level files like `README.md`, `.envrc.local.example`, and `firestore.indexes.json` are not missed):
+  `rg -n "data-insights-agent|Data Insights|/data-insights|composite-feeds|visualizations|custom_data_sources|composite_feed_snapshots" apps packages terraform docs ecosystem.config.cjs cloudbuild .github firestore-collections.json firestore.indexes.json README.md .envrc.local.example --glob '!**/dist/**'`
 - [ ] Resolve every remaining hit that is not intentionally historical evidence in an immutable plan or changelog file.
 
 ---
@@ -324,7 +330,7 @@ Run from `/repo` after the implementation branch contains the cleanup:
 4. `pnpm run verify:workspace:tracked -- cron-agent`
 5. `pnpm run verify:workspace:tracked -- llm-usage-service`
 6. `pnpm run ci:tracked`
-7. `rg -n "INTEXURAOS_DATA_INSIGHTS_AGENT|data-insights-agent|/data-insights|composite_feeds|custom_data_sources|composite_feed_snapshots|visualization_insights|visualization_vegalite" apps packages terraform docs ecosystem.config.cjs cloudbuild .github firestore-collections.json --glob '!**/dist/**'`
+7. `rg -n "INTEXURAOS_DATA_INSIGHTS_AGENT|data-insights-agent|/data-insights|composite_feeds|custom_data_sources|composite_feed_snapshots|visualization_insights|visualization_vegalite" apps packages terraform docs ecosystem.config.cjs cloudbuild .github firestore-collections.json firestore.indexes.json README.md .envrc.local.example --glob '!**/dist/**'`
 
 Expected outcome:
 - no build/runtime references to the deleted service remain
@@ -340,7 +346,8 @@ Expected outcome:
   - leave collections in place temporarily and file a follow-up data-deletion task
   - add a one-time deletion/migration script in the same implementation
 - **Usage-event enum removal may touch stored analytics assumptions.** If dashboards or historical queries rely on `visualization_insights` / `visualization_vegalite`, removing those enums may require compatibility handling at read time.
-- **Documentation and generated validation reports may create noisy residual references.** Immutable historical records can stay if repo validation does not require scrubbing them, but active service/setup docs must be updated.
+- **Migration files are IMMUTABLE and excluded from cleanup.** Five migration files (`008`, `019`, `020`, `022`, `047`) create Firestore indexes for Data Insights collections. Per CLAUDE.md, migrations must never be deleted or modified. These will appear as hits in the reference sweep and should be explicitly ignored as intentionally historical artifacts.
+- **Documentation and generated validation reports may create noisy residual references.** Immutable historical records (including migration files) can stay if repo validation does not require scrubbing them, but active service/setup docs must be updated.
 
 ## Recommended Execution Order
 
