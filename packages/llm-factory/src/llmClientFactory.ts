@@ -36,6 +36,7 @@ import {
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
   getProviderForModel,
+  isOpenRouterModel,
   isValidModel,
   LlmProviders,
   type LLMError,
@@ -43,6 +44,7 @@ import {
   type ModelPricing,
   type ToolCallingClient,
 } from '@intexuraos/llm-contract';
+import { createOpenRouterGenerateClient } from './openRouterGenerateClient.js';
 import type { Logger, Result } from '@intexuraos/common-core';
 
 /**
@@ -93,9 +95,9 @@ export interface LlmGenerateClient {
 
 /**
  * Supported providers for the factory.
- * App-side: only Google (Gemini) is supported.
+ * App-side: Google (Gemini) and OpenRouter are supported.
  */
-type SupportedProvider = typeof LlmProviders.Google;
+type SupportedProvider = typeof LlmProviders.Google | typeof LlmProviders.OpenRouter;
 
 /**
  * Maps model to provider and creates the appropriate client.
@@ -116,18 +118,23 @@ type SupportedProvider = typeof LlmProviders.Google;
  * ```
  */
 export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
-  // Validate model is supported
+  const model = config.model as string;
+
+  // OpenRouter models (or: prefix) are routed to the OpenRouter client
+  if (isOpenRouterModel(model)) {
+    return createOpenRouterGenerateClient(config);
+  }
+
+  // Validate model is a known static model
   if (!isValidModel(config.model)) {
-    const model = config.model as string;
     throw new Error(`Unsupported LLM model: ${model}`);
   }
 
-  // Check provider first, before model validation
-  const provider = LlmProviders.Google;
+  // Static models: check provider
   const providerForModel = getProviderForModel(config.model);
-  if (providerForModel !== provider) {
+  if (providerForModel !== LlmProviders.Google) {
     throw new Error(
-      `Unsupported LLM provider: ${providerForModel}. Only ${provider} is supported.`
+      `Unsupported LLM provider: ${providerForModel}. Only ${LlmProviders.Google} is supported.`
     );
   }
 
@@ -138,7 +145,7 @@ export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
  * Type guard to check if a provider is supported by the factory.
  */
 export function isSupportedProvider(provider: string): provider is SupportedProvider {
-  return provider === LlmProviders.Google;
+  return provider === LlmProviders.Google || provider === LlmProviders.OpenRouter;
 }
 
 /**

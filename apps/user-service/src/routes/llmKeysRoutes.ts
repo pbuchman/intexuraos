@@ -42,6 +42,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 type: 'object',
                 properties: {
                   defaultModel: { type: 'string', nullable: true },
+                  fallbackModel: { type: 'string', nullable: true },
                   google: { type: 'string', nullable: true },
                   openai: { type: 'string', nullable: true },
                   anthropic: { type: 'string', nullable: true },
@@ -166,6 +167,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         return await reply.ok({
           defaultModel: settings?.llmPreferences?.defaultModel ?? null,
+          fallbackModel: settings?.llmPreferences?.fallbackModel ?? null,
           google: getMaskedKey(llmApiKeys?.google),
           openai: getMaskedKey(llmApiKeys?.openai),
           anthropic: getMaskedKey(llmApiKeys?.anthropic),
@@ -562,17 +564,38 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', deleteResult.error.message);
       }
 
-      // Cascade: clear defaultModel if it belongs to the deleted provider
+      // Cascade: clear defaultModel/fallbackModel if they belong to the deleted provider
       const settingsResult = await userSettingsRepository.getSettings(params.uid);
       if (settingsResult.ok) {
-        const currentDefault = settingsResult.value?.llmPreferences?.defaultModel;
+        const prefs = settingsResult.value?.llmPreferences;
+        const currentDefault = prefs?.defaultModel;
+        const currentFallback = prefs?.fallbackModel;
+
+        let shouldClearAll = false;
         if (currentDefault !== undefined) {
           const defaultProvider = getProviderForModel(currentDefault);
           if (defaultProvider === params.provider) {
-            const clearResult = await userSettingsRepository.clearLlmPreferences(params.uid);
-            if (!clearResult.ok) {
-              request.log.warn({ userId: params.uid }, 'Failed to cascade-clear LLM preferences after key deletion');
-            }
+            shouldClearAll = true;
+          }
+        }
+
+        let shouldClearFallback = false;
+        if (currentFallback !== undefined) {
+          const fallbackProvider = getProviderForModel(currentFallback);
+          if (fallbackProvider === params.provider) {
+            shouldClearFallback = true;
+          }
+        }
+
+        if (shouldClearAll) {
+          const clearResult = await userSettingsRepository.clearLlmPreferences(params.uid);
+          if (!clearResult.ok) {
+            request.log.warn({ userId: params.uid }, 'Failed to cascade-clear LLM preferences after key deletion');
+          }
+        } else if (shouldClearFallback && currentDefault !== undefined) {
+          const clearResult = await userSettingsRepository.updateLlmPreferences(params.uid, currentDefault, null);
+          if (!clearResult.ok) {
+            request.log.warn({ userId: params.uid }, 'Failed to cascade-clear fallback model after key deletion');
           }
         }
       }

@@ -31,6 +31,9 @@ export {
   getOpenRouterRawId,
   LlmModels,
   LlmProviders,
+  isDefaultEligibleModel,
+  DEFAULT_OPENROUTER_MODELS,
+  DEFAULT_MODEL_DISPLAY_NAMES,
 } from './supportedModels.js';
 
 export type {
@@ -41,6 +44,8 @@ export type {
   ValidationModel,
   FastModel,
   GenericModel,
+  DefaultEligibleModel,
+  DefaultOpenRouterModel,
   // Individual model types
   Gemini25Pro,
   Gemini25Flash,

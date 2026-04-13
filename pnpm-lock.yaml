@@ -1842,6 +1842,9 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
+      '@intexuraos/infra-openrouter':
+        specifier: workspace:*
+        version: link:../infra-openrouter
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
@@ -1876,6 +1879,9 @@ importers:
       '@intexuraos/infra-gemini':
         specifier: workspace:*
         version: link:../infra-gemini
+      '@intexuraos/infra-openrouter':
+        specifier: workspace:*
+        version: link:../infra-openrouter
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract

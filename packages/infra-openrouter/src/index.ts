@@ -16,6 +16,12 @@ export {
   type AllowedOpenRouterModel,
   type CatalogEntry,
 } from './allowlist.js';
+export {
+  DEFAULT_OPENROUTER_ALLOWED_MODELS,
+  isDefaultAllowedModel,
+  getDefaultAllowlistPricing,
+  type DefaultAllowedOpenRouterModel,
+} from './defaultAllowlist.js';
 export { calculateTextCost, normalizeUsage, toModelPricing } from './costCalculator.js';
 export type {
   GenerateOptions,

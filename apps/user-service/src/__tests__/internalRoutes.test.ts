@@ -683,6 +683,40 @@ describe('Internal Routes', () => {
       expect(body.data.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
     });
 
+    it('returns fallbackModel in internal settings when present', async () => {
+      const userId = 'user-with-fallback-model';
+      const orFallback = 'or:google/gemma-4-31b-it:free';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmPreferences: {
+          defaultModel: LlmModels.Gemini25Flash,
+          fallbackModel: orFallback,
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          llmPreferences?: { defaultModel: string; fallbackModel?: string };
+        };
+      };
+      expect(body.data.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
+      expect(body.data.llmPreferences?.fallbackModel).toBe(orFallback);
+    });
+
     it('returns undefined llmPreferences when user has no settings', async () => {
       const userId = 'user-no-settings';
       // Don't set any settings - the repo will return null
