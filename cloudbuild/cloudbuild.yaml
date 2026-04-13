@@ -31,7 +31,6 @@
 # │ BATCH 4 - Agents A                                                      │
 # │   1. commands-agent                                                     │
 # │   2. actions-agent                                                      │
-# │   3. data-insights-agent                                                │
 # ├─────────────────────────────────────────────────────────────────────────┤
 # │ BATCH 5 - Agents B                                                      │
 # │   1. notes-agent                                                        │
@@ -388,27 +387,6 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'COMMIT_SHA=$COMMIT_SHA'
 
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-data-insights-agent'
-    waitFor:
-      [
-        'deploy-app-settings-service',
-        'deploy-mobile-notifications-service',
-        'deploy-research-agent',
-      ]
-    timeout: 900s
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'data-insights-agent',
-        'apps/data-insights-agent/Dockerfile',
-      ]
-    env:
-      - 'DOCKER_BUILDKIT=1'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'COMMIT_SHA=$COMMIT_SHA'
-
   # --- Batch 4 Deploys ---
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-commands-agent'
@@ -432,17 +410,6 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy-data-insights-agent'
-    waitFor: ['build-push-data-insights-agent']
-    entrypoint: 'bash'
-    args: ['-c', 'bash cloudbuild/scripts/deploy-data-insights-agent.sh']
-    env:
-      - 'COMMIT_SHA=$COMMIT_SHA'
-      - 'REGION=${_REGION}'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'ENVIRONMENT=${_ENVIRONMENT}'
-
   # ===========================================================================
   # BATCH 5 - Agents B (3 services)
   # ===========================================================================
@@ -450,7 +417,7 @@ steps:
   # --- Batch 5 Builds (wait for Batch 4 deploys) ---
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-notes-agent'
-    waitFor: ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
+    waitFor: ['deploy-commands-agent', 'deploy-actions-agent']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -462,7 +429,7 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-todos-agent'
-    waitFor: ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
+    waitFor: ['deploy-commands-agent', 'deploy-actions-agent']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -474,7 +441,7 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-bookmarks-agent'
-    waitFor: ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
+    waitFor: ['deploy-commands-agent', 'deploy-actions-agent']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -779,7 +746,6 @@ steps:
           "research-agent:RESEARCH_AGENT"
           "commands-agent:COMMANDS_AGENT"
           "actions-agent:ACTIONS_AGENT"
-          "data-insights-agent:DATA_INSIGHTS_AGENT"
           "notes-agent:NOTES_AGENT"
           "todos-agent:TODOS_AGENT"
           "bookmarks-agent:BOOKMARKS_AGENT"
