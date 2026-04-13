@@ -742,7 +742,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 prUrlValidationFailed = true;
                 prUrlValidationErrors = validationResult.errors;
               }
+            /* v8 ignore start -- test-infra: FakeUserServiceClient always returns a token; cannot simulate missing OAuth token in webhook integration tests @preserve */
+            } else {
+              logger.warn({ taskId, userId: task.userId }, 'PR URL validation skipped: no GitHub token available');
             }
+            /* v8 ignore stop @preserve */
           }
         }
 

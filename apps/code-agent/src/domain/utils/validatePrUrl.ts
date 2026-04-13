@@ -49,8 +49,8 @@ export async function validatePrUrl(params: PrUrlValidationParams): Promise<PrUr
 
   const pr: GitHubPullRequestDetails = detailsResult.value;
 
-  // 2. Verify PR title contains Linear issue ID
-  if (!pr.title.includes(linearIssueId)) {
+  // 2. Verify PR title contains Linear issue ID (case-insensitive)
+  if (!pr.title.toUpperCase().includes(linearIssueId.toUpperCase())) {
     errors.push(`PR title "${pr.title}" does not contain expected Linear issue ID "${linearIssueId}"`);
   }
 
