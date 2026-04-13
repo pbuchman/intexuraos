@@ -119,7 +119,7 @@ The goal of Phase 1 is that after it merges, the codebase compiles with BOTH the
 - [ ] **Step 1: Verify you are on `development` and up to date**
 
 ```bash
-gh repo sync --source pbuchman/intexuraos-1 --branch development 2>/dev/null || git fetch origin development
+gh repo sync --source pbuchman/intexuraos --branch development 2>/dev/null || git fetch origin development
 git checkout development
 git pull --ff-only origin development
 ```
@@ -137,10 +137,10 @@ Expected: `Switched to a new branch 'pbuchman/INT-1355/llm-model-migration-and-p
 - [ ] **Step 3: Confirm the branch tracks nothing yet**
 
 ```bash
-git status -sb
+gh pr status 2>/dev/null || echo "No PR yet — expected for a new branch"
 ```
 
-Expected: `## pbuchman/INT-1355/llm-model-migration-and-pricing-fixes` with no upstream. The first push will use `git push -u origin HEAD`.
+Expected: No open PRs for this branch yet. The first push will use `git push -u origin HEAD`, then `gh pr create`.
 
 ### Task 1: Add new branded types and const entries
 
