@@ -80,6 +80,10 @@ export interface UpdateTaskInput {
   executionMemoryContext?: CodeTask['executionMemoryContext'];
   executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
 
+  // PR URL validation (INT-1361)
+  prUrlValidationFailed?: boolean;
+  prUrlValidationErrors?: string[];
+
   // Remediation task metadata
   requiresReReview?: boolean;
 }

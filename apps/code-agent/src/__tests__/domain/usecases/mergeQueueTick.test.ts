@@ -82,6 +82,7 @@ function makePrDetails(overrides: Partial<GitHubPullRequestDetails> = {}): GitHu
     mergeable: true,
     mergeableState: 'clean',
     headSha: 'sha123',
+    createdAt: '2026-01-01T00:00:00Z',
     ...overrides,
   };
 }

@@ -27,7 +27,7 @@ function createFakeGitHubPRClient(overrides?: Partial<GitHubPRClient>): GitHubPR
     getPullRequestStatus: vi.fn().mockResolvedValue(ok({ state: 'open', mergedAt: null, headRef: 'branch' })),
     postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 100 })),
     listOpenPullRequestsByBaseBranch: vi.fn().mockResolvedValue(ok([])),
-    getPullRequestDetails: vi.fn().mockResolvedValue(ok({ number: 1, title: '', body: null, authorLogin: '', baseBranch: 'main', headBranch: 'branch', mergeable: null, mergeableState: null, headSha: 'sha123' })),
+    getPullRequestDetails: vi.fn().mockResolvedValue(ok({ number: 1, title: '', body: null, authorLogin: '', baseBranch: 'main', headBranch: 'branch', mergeable: null, mergeableState: null, headSha: 'sha123', createdAt: '2026-01-01T00:00:00Z' })),
     getIssueComment: vi.fn().mockResolvedValue(ok({ body: '@ignore\n### IntexuraOS Automation\n\n**12:00** -- existing line' })),
     updateIssueComment: vi.fn().mockResolvedValue(ok({ commentId: 100 })),
     mergePullRequest: vi.fn().mockResolvedValue(ok({ sha: 'abc123', merged: true })),
