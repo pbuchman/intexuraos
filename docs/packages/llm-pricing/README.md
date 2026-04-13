@@ -47,7 +47,7 @@ const context = createPricingContext(allPricing);
 // Validate only models this service uses
 const context = createPricingContext(allPricing, [
   'gemini-2.5-flash',
-  'claude-sonnet-4-5-20250929',
+  'claude-sonnet-4-6',
 ]);
 ```
 
@@ -79,7 +79,7 @@ const usageLogger = createUsageLogger({ logger });
 await usageLogger.log({
   userId: 'user-123',
   provider: 'anthropic',
-  model: 'claude-sonnet-4-5-20250929',
+  model: 'claude-sonnet-4-6',
   callType: 'research',
   usage: {
     inputTokens: 1000,

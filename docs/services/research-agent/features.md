@@ -12,7 +12,7 @@ Research Agent automates that entire workflow: send one prompt, receive one synt
 
 ### Parallel Multi-Model Research
 
-Submit a single research prompt and Research Agent dispatches it simultaneously to every AI model the user has configured -- Gemini 2.5 Pro, Claude Opus 4.5, GPT-5.2, Perplexity Sonar, and others. Each model runs concurrently in its own Cloud Run instance, so a five-model research takes roughly the same wall-clock time as a single call.
+Submit a single research prompt and Research Agent dispatches it simultaneously to every AI model the user has configured -- Gemini 2.5 Pro, Claude Opus 4.6, GPT-5.4, Perplexity Sonar, and others. Each model runs concurrently in its own Cloud Run instance, so a five-model research takes roughly the same wall-clock time as a single call.
 
 **Example:** A user asks "What are the risks of adopting a microservices architecture for a 10-person startup?" All five configured models research the question in parallel. Within minutes, the user has five expert perspectives ready for synthesis.
 
@@ -68,7 +68,7 @@ Before committing to a full research run, users can validate their prompt qualit
 
 A product manager needs competitive intelligence before a board meeting. She submits: "Compare the pricing models and market positioning of Notion, Confluence, and Linear for a 50-person engineering team."
 
-Research Agent infers the domain as business strategy, selects an executive answer style, and builds context-enhanced prompts for each model. Gemini 2.5 Pro, Claude Sonnet 4.5, and Perplexity Sonar Pro each receive the tailored prompt and research the question in parallel. She also adds two OpenRouter models -- Grok 4.20 Beta and Kimi K2.5 -- for broader coverage. Within minutes, all five complete -- but Sonar Pro's response is unusually brief and gets flagged as low quality.
+Research Agent infers the domain as business strategy, selects an executive answer style, and builds context-enhanced prompts for each model. Gemini 2.5 Pro, Claude Sonnet 4.6, and Perplexity Sonar Pro each receive the tailored prompt and research the question in parallel. She also adds two OpenRouter models -- Grok 4.20 Beta and Kimi K2.5 -- for broader coverage. Within minutes, all five complete -- but Sonar Pro's response is unusually brief and gets flagged as low quality.
 
 The synthesis model reads all five reports, deprioritizing the flagged result, and produces a structured document: an executive summary, detailed findings per product, agreements on Notion's document flexibility, and a flagged contradiction between two models' assessments of Confluence pricing. The report is automatically uploaded as a shareable HTML page with a generated cover image.
 

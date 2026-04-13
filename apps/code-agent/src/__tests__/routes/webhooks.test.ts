@@ -35,6 +35,7 @@ import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { Logger } from 'pino';
 import { err, ok } from '@intexuraos/common-core';
+import { LlmModels } from '@intexuraos/llm-contract';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
 import { createFirestoreLogLineRepository } from '../../infra/repositories/firestoreLogLineRepository.js';
@@ -8159,7 +8160,7 @@ describe('POST /internal/logs', () => {
     if (!createResult.ok) throw new Error('Failed to create task');
     const task = createResult.value;
 
-    const jsonContent = JSON.stringify({ type: 'system', subtype: 'init', model: 'claude-opus-4-6' });
+    const jsonContent = JSON.stringify({ type: 'system', subtype: 'init', model: LlmModels.ClaudeOpus46 });
 
     const payload = {
       taskId: task.id,

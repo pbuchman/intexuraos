@@ -33,7 +33,7 @@ import {
 const MAX_INPUT_CONTEXTS = 5;
 const MAX_CONTEXT_LENGTH = 60000;
 
-const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT52];
+const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT54];
 
 export function ResearchAgentPage(): React.JSX.Element {
   const navigate = useNavigate();
@@ -618,7 +618,7 @@ export function ResearchAgentPage(): React.JSX.Element {
     if (canSubmit) return undefined;
     if (prompt.length < 10) return 'Enter a research prompt (at least 10 characters)';
     if (!hasModelOrContext) return 'Select at least one model or provide input context';
-    if (!hasSynthesisModel) return 'Select Gemini Pro or GPT-5.2 for synthesis';
+    if (!hasSynthesisModel) return 'Select Gemini Pro or GPT-5.4 for synthesis';
     return undefined;
   };
 

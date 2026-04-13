@@ -33,7 +33,7 @@ export type Gemini25FlashImage = 'gemini-2.5-flash-image';
 // =============================================================================
 
 export type O4MiniDeepResearch = 'o4-mini-deep-research';
-export type GPT52 = 'gpt-5.2';
+export type GPT54 = 'gpt-5.4';
 export type GPT4oMini = 'gpt-4o-mini';
 export type GPTImage1 = 'gpt-image-1';
 
@@ -41,8 +41,8 @@ export type GPTImage1 = 'gpt-image-1';
 // Individual Model Types - Anthropic
 // =============================================================================
 
-export type ClaudeOpus45 = 'claude-opus-4-5-20251101';
-export type ClaudeSonnet45 = 'claude-sonnet-4-5-20250929';
+export type ClaudeOpus46 = 'claude-opus-4-6';
+export type ClaudeSonnet46 = 'claude-sonnet-4-6';
 export type ClaudeHaiku35 = 'claude-3-5-haiku-20241022';
 
 // =============================================================================
@@ -68,10 +68,10 @@ export type ImageModel = GPTImage1 | Gemini25FlashImage;
 export type ResearchModel =
   | Gemini25Pro
   | Gemini25Flash
-  | ClaudeOpus45
-  | ClaudeSonnet45
+  | ClaudeOpus46
+  | ClaudeSonnet46
   | O4MiniDeepResearch
-  | GPT52
+  | GPT54
   | Sonar
   | SonarPro
   | SonarDeepResearch
@@ -96,7 +96,7 @@ export type FastModel = Gemini25Flash | Gemini20Flash | ClaudeHaiku35 | GPT4oMin
 /**
  * General-purpose models.
  */
-export type GenericModel = Gemini25Pro | GPT52;
+export type GenericModel = Gemini25Pro | GPT54;
 
 /**
  * Union of all LLM model names.
@@ -110,12 +110,12 @@ export type LLMModel =
   | Gemini25FlashImage
   // OpenAI (4 models)
   | O4MiniDeepResearch
-  | GPT52
+  | GPT54
   | GPT4oMini
   | GPTImage1
   // Anthropic (3 models)
-  | ClaudeOpus45
-  | ClaudeSonnet45
+  | ClaudeOpus46
+  | ClaudeSonnet46
   | ClaudeHaiku35
   // Perplexity (3 models)
   | Sonar
@@ -154,12 +154,12 @@ export const LlmModels = {
   Gemini25FlashImage: 'gemini-2.5-flash-image' as Gemini25FlashImage,
   // OpenAI
   O4MiniDeepResearch: 'o4-mini-deep-research' as O4MiniDeepResearch,
-  GPT52: 'gpt-5.2' as GPT52,
+  GPT54: 'gpt-5.4' as GPT54,
   GPT4oMini: 'gpt-4o-mini' as GPT4oMini,
   GPTImage1: 'gpt-image-1' as GPTImage1,
   // Anthropic
-  ClaudeOpus45: 'claude-opus-4-5-20251101' as ClaudeOpus45,
-  ClaudeSonnet45: 'claude-sonnet-4-5-20250929' as ClaudeSonnet45,
+  ClaudeOpus46: 'claude-opus-4-6' as ClaudeOpus46,
+  ClaudeSonnet46: 'claude-sonnet-4-6' as ClaudeSonnet46,
   ClaudeHaiku35: 'claude-3-5-haiku-20241022' as ClaudeHaiku35,
   // Perplexity
   Sonar: 'sonar' as Sonar,
@@ -183,12 +183,12 @@ export const ALL_LLM_MODELS: LLMModel[] = [
   LlmModels.Gemini25FlashImage,
   // OpenAI
   LlmModels.O4MiniDeepResearch,
-  LlmModels.GPT52,
+  LlmModels.GPT54,
   LlmModels.GPT4oMini,
   LlmModels.GPTImage1,
   // Anthropic
-  LlmModels.ClaudeOpus45,
-  LlmModels.ClaudeSonnet45,
+  LlmModels.ClaudeOpus46,
+  LlmModels.ClaudeSonnet46,
   LlmModels.ClaudeHaiku35,
   // Perplexity
   LlmModels.Sonar,
@@ -221,12 +221,12 @@ export const MODEL_PROVIDER_MAP: Record<LLMModel, LlmProvider> = {
   [LlmModels.Gemini25FlashImage]: LlmProviders.Google,
   // OpenAI
   [LlmModels.O4MiniDeepResearch]: LlmProviders.OpenAI,
-  [LlmModels.GPT52]: LlmProviders.OpenAI,
+  [LlmModels.GPT54]: LlmProviders.OpenAI,
   [LlmModels.GPT4oMini]: LlmProviders.OpenAI,
   [LlmModels.GPTImage1]: LlmProviders.OpenAI,
   // Anthropic
-  [LlmModels.ClaudeOpus45]: LlmProviders.Anthropic,
-  [LlmModels.ClaudeSonnet45]: LlmProviders.Anthropic,
+  [LlmModels.ClaudeOpus46]: LlmProviders.Anthropic,
+  [LlmModels.ClaudeSonnet46]: LlmProviders.Anthropic,
   [LlmModels.ClaudeHaiku35]: LlmProviders.Anthropic,
   // Perplexity
   [LlmModels.Sonar]: LlmProviders.Perplexity,

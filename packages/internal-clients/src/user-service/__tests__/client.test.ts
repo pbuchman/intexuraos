@@ -519,7 +519,7 @@ describe('createUserServiceClient', () => {
     it('creates OpenAI client when user has OpenAI model preference', async () => {
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.GPT52,
+          defaultModel: LlmModels.GPT54,
         },
       };
 
@@ -556,7 +556,7 @@ describe('createUserServiceClient', () => {
     it('creates Anthropic client when user has Anthropic model preference', async () => {
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.ClaudeSonnet45,
+          defaultModel: LlmModels.ClaudeSonnet46,
         },
       };
 
@@ -635,7 +635,7 @@ describe('createUserServiceClient', () => {
 
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.ClaudeSonnet45,
+          defaultModel: LlmModels.ClaudeSonnet46,
         },
       };
 
@@ -662,7 +662,7 @@ describe('createUserServiceClient', () => {
           {
             userId: 'user123',
             provider: LlmProviders.Anthropic,
-            requestedModel: LlmModels.ClaudeSonnet45,
+            requestedModel: LlmModels.ClaudeSonnet46,
           },
           'No API key for provider, falling back to platform Gemini25Flash'
         );

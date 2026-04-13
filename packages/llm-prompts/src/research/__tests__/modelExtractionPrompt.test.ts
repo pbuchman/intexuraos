@@ -31,9 +31,9 @@ describe('buildModelExtractionPrompt', () => {
         isProviderDefault: true,
       },
       {
-        id: LlmModels.GPT52,
+        id: LlmModels.GPT54,
         provider: LlmProviders.OpenAI,
-        displayName: 'GPT 5.2',
+        displayName: 'GPT 5.4',
         keywords: ['gpt', 'gpt-5', 'openai', 'chatgpt'],
         isProviderDefault: true,
       },
@@ -57,7 +57,7 @@ describe('buildModelExtractionPrompt', () => {
 
     expect(result).toContain('## Available Models');
     expect(result).toContain(`- ${LlmModels.Gemini25Pro}: Gemini 2.5 Pro (${LlmProviders.Google})`);
-    expect(result).toContain(`- ${LlmModels.GPT52}: GPT 5.2 (${LlmProviders.OpenAI})`);
+    expect(result).toContain(`- ${LlmModels.GPT54}: GPT 5.4 (${LlmProviders.OpenAI})`);
   });
 
   it('includes keywords for each model', () => {
@@ -122,7 +122,7 @@ describe('buildModelExtractionPrompt', () => {
 
     expect(result).toContain('## Provider Defaults');
     expect(result).toContain(`- ${LlmProviders.Google}: ${LlmModels.Gemini25Pro}`);
-    expect(result).toContain(`- ${LlmProviders.OpenAI}: ${LlmModels.GPT52}`);
+    expect(result).toContain(`- ${LlmProviders.OpenAI}: ${LlmModels.GPT54}`);
   });
 
   it('omits providers without defaults from provider defaults section', () => {
@@ -194,22 +194,22 @@ describe('buildModelExtractionPrompt', () => {
 describe('parseModelExtractionResponse', () => {
   const validModels: ResearchModel[] = [
     LlmModels.Gemini25Pro,
-    LlmModels.GPT52,
-    LlmModels.ClaudeSonnet45,
+    LlmModels.GPT54,
+    LlmModels.ClaudeSonnet46,
     LlmModels.SonarPro,
   ];
 
   describe('valid responses', () => {
     it('parses valid JSON with selected models', () => {
       const response = JSON.stringify({
-        selectedModels: [LlmModels.Gemini25Pro, LlmModels.GPT52],
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.GPT54],
         synthesisModel: LlmModels.Gemini25Pro,
       });
 
       const result = parseModelExtractionResponse(response, validModels);
 
       expect(result).not.toBeNull();
-      expect(result?.selectedModels).toEqual([LlmModels.Gemini25Pro, LlmModels.GPT52]);
+      expect(result?.selectedModels).toEqual([LlmModels.Gemini25Pro, LlmModels.GPT54]);
       expect(result?.synthesisModel).toBe(LlmModels.Gemini25Pro);
     });
 
@@ -251,14 +251,14 @@ describe('parseModelExtractionResponse', () => {
     it('extracts JSON with whitespace and newlines', () => {
       const response = `{
         "selectedModels": ["${LlmModels.Gemini25Pro}"],
-        "synthesisModel": "${LlmModels.GPT52}"
+        "synthesisModel": "${LlmModels.GPT54}"
       }`;
 
       const result = parseModelExtractionResponse(response, validModels);
 
       expect(result).not.toBeNull();
       expect(result?.selectedModels).toEqual([LlmModels.Gemini25Pro]);
-      expect(result?.synthesisModel).toBe(LlmModels.GPT52);
+      expect(result?.synthesisModel).toBe(LlmModels.GPT54);
     });
   });
 
@@ -463,10 +463,10 @@ describe('exported constants', () => {
     it('has keywords for all research models', () => {
       expect(MODEL_KEYWORDS[LlmModels.Gemini25Pro]).toBeDefined();
       expect(MODEL_KEYWORDS[LlmModels.Gemini25Flash]).toBeDefined();
-      expect(MODEL_KEYWORDS[LlmModels.ClaudeOpus45]).toBeDefined();
-      expect(MODEL_KEYWORDS[LlmModels.ClaudeSonnet45]).toBeDefined();
+      expect(MODEL_KEYWORDS[LlmModels.ClaudeOpus46]).toBeDefined();
+      expect(MODEL_KEYWORDS[LlmModels.ClaudeSonnet46]).toBeDefined();
       expect(MODEL_KEYWORDS[LlmModels.O4MiniDeepResearch]).toBeDefined();
-      expect(MODEL_KEYWORDS[LlmModels.GPT52]).toBeDefined();
+      expect(MODEL_KEYWORDS[LlmModels.GPT54]).toBeDefined();
       expect(MODEL_KEYWORDS[LlmModels.Sonar]).toBeDefined();
       expect(MODEL_KEYWORDS[LlmModels.SonarPro]).toBeDefined();
       expect(MODEL_KEYWORDS[LlmModels.SonarDeepResearch]).toBeDefined();
@@ -482,20 +482,20 @@ describe('exported constants', () => {
   describe('PROVIDER_DEFAULT_MODELS', () => {
     it('has defaults for all major providers', () => {
       expect(PROVIDER_DEFAULT_MODELS[LlmProviders.Google]).toBe(LlmModels.Gemini25Pro);
-      expect(PROVIDER_DEFAULT_MODELS[LlmProviders.Anthropic]).toBe(LlmModels.ClaudeSonnet45);
-      expect(PROVIDER_DEFAULT_MODELS[LlmProviders.OpenAI]).toBe(LlmModels.GPT52);
+      expect(PROVIDER_DEFAULT_MODELS[LlmProviders.Anthropic]).toBe(LlmModels.ClaudeSonnet46);
+      expect(PROVIDER_DEFAULT_MODELS[LlmProviders.OpenAI]).toBe(LlmModels.GPT54);
       expect(PROVIDER_DEFAULT_MODELS[LlmProviders.Perplexity]).toBe(LlmModels.SonarPro);
     });
   });
 
   describe('SYNTHESIS_MODELS', () => {
-    it('includes Gemini Pro and GPT 5.2', () => {
+    it('includes Gemini Pro and GPT 5.4', () => {
       expect(SYNTHESIS_MODELS).toContain(LlmModels.Gemini25Pro);
-      expect(SYNTHESIS_MODELS).toContain(LlmModels.GPT52);
+      expect(SYNTHESIS_MODELS).toContain(LlmModels.GPT54);
     });
 
     it('does not include non-synthesis models', () => {
-      expect(SYNTHESIS_MODELS).not.toContain(LlmModels.ClaudeSonnet45);
+      expect(SYNTHESIS_MODELS).not.toContain(LlmModels.ClaudeSonnet46);
       expect(SYNTHESIS_MODELS).not.toContain(LlmModels.SonarPro);
     });
   });
@@ -519,7 +519,7 @@ describe('parseModelExtractionResponseWithLogging', () => {
     debug: vi.fn(),
   } as unknown as Logger;
 
-  const validModels: ResearchModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT52];
+  const validModels: ResearchModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT54];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -528,13 +528,13 @@ describe('parseModelExtractionResponseWithLogging', () => {
   it('returns valid response and does not log', () => {
     const response = JSON.stringify({
       selectedModels: [LlmModels.Gemini25Pro],
-      synthesisModel: LlmModels.GPT52,
+      synthesisModel: LlmModels.GPT54,
     });
 
     const result = parseModelExtractionResponseWithLogging(response, validModels, mockLogger);
 
     expect(result.selectedModels).toEqual([LlmModels.Gemini25Pro]);
-    expect(result.synthesisModel).toBe(LlmModels.GPT52);
+    expect(result.synthesisModel).toBe(LlmModels.GPT54);
     expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 

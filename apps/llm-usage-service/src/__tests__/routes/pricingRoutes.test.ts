@@ -61,7 +61,7 @@ const mockGooglePricing: ProviderPricing = {
 const mockOpenaiPricing: ProviderPricing = {
   provider: LlmProviders.OpenAI,
   models: {
-    [LlmModels.GPT52]: {
+    [LlmModels.GPT54]: {
       inputPricePerMillion: 1.75,
       outputPricePerMillion: 14.0,
     },
@@ -72,7 +72,7 @@ const mockOpenaiPricing: ProviderPricing = {
 const mockAnthropicPricing: ProviderPricing = {
   provider: LlmProviders.Anthropic,
   models: {
-    [LlmModels.ClaudeOpus45]: {
+    [LlmModels.ClaudeOpus46]: {
       inputPricePerMillion: 5.0,
       outputPricePerMillion: 25.0,
       cacheReadMultiplier: 0.1,
@@ -180,7 +180,7 @@ describe('pricingRoutes', () => {
       const stored = pricingRepo.byProvider.get(LlmProviders.Anthropic);
       expect(stored).toBeDefined();
       expect(stored?.provider).toBe(LlmProviders.Anthropic);
-      expect(stored?.models[LlmModels.ClaudeOpus45]?.inputPricePerMillion).toBe(5.0);
+      expect(stored?.models[LlmModels.ClaudeOpus46]?.inputPricePerMillion).toBe(5.0);
     });
 
     it('returns 400 for invalid body (missing required fields)', async () => {
