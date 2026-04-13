@@ -136,7 +136,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     usage: NormalizedUsage,
     success: boolean,
     errorMessage?: string,
-    providerReportedUsd?: number | null,
+    providerReportedUsd?: number | null
   ): void {
     void usageLogger.log({
       userId,
@@ -146,7 +146,8 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
-      ...(providerReportedUsd !== undefined && providerReportedUsd !== null && { providerReportedUsd }),
+      ...(providerReportedUsd !== undefined &&
+        providerReportedUsd !== null && { providerReportedUsd }),
       ...(ownerType !== undefined && { ownerType }),
     });
   }
@@ -168,7 +169,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       usage.prompt_tokens,
       usage.completion_tokens,
       providerReportedUsd ?? undefined,
-      pricing,
+      pricing
     );
     return { normalized, providerReportedUsd };
   }

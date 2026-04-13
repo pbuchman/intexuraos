@@ -7,6 +7,8 @@
 import type { Logger } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 
+import type { OwnerType } from '@intexuraos/llm-contract';
+
 export type {
   LLMError as GeminiError,
   ResearchResult,
@@ -58,5 +60,5 @@ export interface GeminiConfig {
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
   usageSink: UsageSink;
   /** Owner scope of the call. When omitted, the usage sink defaults to 'system'. */
-  ownerType?: 'user' | 'system';
+  ownerType?: OwnerType;
 }

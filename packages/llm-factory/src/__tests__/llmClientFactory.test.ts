@@ -241,7 +241,10 @@ describe('llmClientFactory', () => {
         usageSink: mockUsageSink,
       });
 
-      const callArg = vi.mocked(createGeminiClient).mock.calls[0]?.[0] as unknown as Record<string, unknown>;
+      const callArg = vi.mocked(createGeminiClient).mock.calls[0]?.[0] as unknown as Record<
+        string,
+        unknown
+      >;
       expect(callArg?.['ownerType']).toBeUndefined();
     });
   });

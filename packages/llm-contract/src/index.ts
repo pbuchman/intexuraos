@@ -16,6 +16,7 @@ export type {
   LLMErrorCode,
   LLMError,
   LLMClient,
+  OwnerType,
 } from './types.js';
 
 export {

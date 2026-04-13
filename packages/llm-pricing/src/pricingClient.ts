@@ -377,7 +377,6 @@ export class PricingContext implements IPricingContext {
   getPricing(model: LLMModel): ModelPricing {
     const pricing = this.pricing.get(model);
     if (pricing === undefined) {
-      // Audit trail: ops needs to know which models leak through unpriced.
       // process.stderr.write (no Logger dep in PricingContext) — Cloud Logging picks it up as severity=WARNING.
       process.stderr.write(
         `[llm-pricing] No pricing for model ${model} — falling back to $0; emit-don't-skip policy\n`

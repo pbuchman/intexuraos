@@ -862,7 +862,7 @@ describe('createOpenRouterClient', () => {
               finish_reason: 'stop',
             },
           ],
-          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 }, // NO cost field
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
         });
 
       const client = createOpenRouterClient({
