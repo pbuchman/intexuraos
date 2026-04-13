@@ -104,6 +104,12 @@ describe('buildSystemPrompt (review agent)', () => {
     expect(needsRemIdx).toBeGreaterThan(ghActionsIdx);
     expect(summaryIdx).toBeGreaterThan(needsRemIdx);
   });
+
+  it('needs_remediation definition excludes operational/manual verification steps', () => {
+    const prompt = buildSystemPrompt(baseParams);
+    expect(prompt).toContain('post-merge activities');
+    expect(prompt).toContain('do NOT count as code remediation');
+  });
 });
 
 describe('planningPrompt', () => {
@@ -355,8 +361,8 @@ describe('askAgentPrompt', () => {
 });
 
 describe('prompt versions', () => {
-  it('reviewPrompt version is 9.2.0', () => {
-    expect(reviewPrompt.version).toBe('9.2.0');
+  it('reviewPrompt version is 9.2.1', () => {
+    expect(reviewPrompt.version).toBe('9.2.1');
   });
 
   it('pullRequestPrompt version is 4.3.0', () => {

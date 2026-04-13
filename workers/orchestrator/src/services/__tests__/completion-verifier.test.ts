@@ -689,6 +689,12 @@ describe('buildReviewPrompt', () => {
       'LLM agent delivers its summary in one of the last assistant messages'
     );
   });
+
+  it('needs_remediation definition excludes operational/manual verification steps', () => {
+    const prompt = buildReviewPrompt('transcript');
+    expect(prompt).toContain('post-merge activities');
+    expect(prompt).toContain('do NOT count as code remediation');
+  });
 });
 
 // ---------------------------------------------------------------------------
