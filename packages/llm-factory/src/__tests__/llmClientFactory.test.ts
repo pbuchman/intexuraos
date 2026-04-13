@@ -18,9 +18,19 @@ class MockGeminiClient {
   generate = mockGeminiGenerate;
 }
 
+const mockOrGenerate = vi.fn();
+
+class MockOpenRouterGenerateClient {
+  generate = mockOrGenerate;
+}
+
 vi.mock('@intexuraos/infra-gemini', () => ({
   createGeminiClient: vi.fn(() => new MockGeminiClient()),
   createGeminiToolCallingClient: vi.fn(() => ({ run: vi.fn() })),
+}));
+
+vi.mock('../openRouterGenerateClient.js', () => ({
+  createOpenRouterGenerateClient: vi.fn(() => new MockOpenRouterGenerateClient()),
 }));
 
 const { createLlmClient, createToolCallingClient, isSupportedProvider } =
@@ -108,6 +118,21 @@ describe('llmClientFactory', () => {
         })
       ).toThrow('Unsupported LLM model');
     });
+
+    it('creates OpenRouter client for or: prefixed models', () => {
+      const client = createLlmClient({
+        apiKey: 'test-key',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        model: 'or:google/gemma-4-31b-it:free' as any,
+        userId: 'user-123',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      expect(client.generate).toBeDefined();
+      expect(client).toBeInstanceOf(MockOpenRouterGenerateClient);
+    });
   });
 
   describe('createToolCallingClient', () => {
@@ -158,6 +183,10 @@ describe('llmClientFactory', () => {
       expect(isSupportedProvider(LlmProviders.Google)).toBe(true);
     });
 
+    it('returns true for OpenRouter provider', () => {
+      expect(isSupportedProvider(LlmProviders.OpenRouter)).toBe(true);
+    });
+
     it('returns false for an unknown provider', () => {
       expect(isSupportedProvider('unknown-provider')).toBe(false);
     });
@@ -182,8 +211,8 @@ describe('llmClientFactory', () => {
     it('type narrows correctly for supported providers', () => {
       const provider = LlmProviders.Google as string;
       if (isSupportedProvider(provider)) {
-        // TypeScript should know provider is 'google' here
-        expect(provider === LlmProviders.Google).toBe(true);
+        // TypeScript should know provider is 'google' or 'openrouter' here
+        expect(provider === LlmProviders.Google || provider === LlmProviders.OpenRouter).toBe(true);
       }
     });
   });
