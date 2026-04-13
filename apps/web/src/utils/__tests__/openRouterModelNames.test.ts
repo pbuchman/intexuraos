@@ -13,6 +13,15 @@ describe('resolveOpenRouterModelName', () => {
     expect(resolveOpenRouterModelName('some/unknown-model')).toBe('some/unknown-model');
   });
 
+  it('strips :online suffix and resolves friendly name', () => {
+    expect(resolveOpenRouterModelName('anthropic/claude-sonnet-4.6:online')).toBe('Claude Sonnet 4.6');
+    expect(resolveOpenRouterModelName('qwen/qwen3.5-flash-02-23:online')).toBe('Qwen 3.5 Flash');
+  });
+
+  it('returns raw ID for unknown models with :online suffix', () => {
+    expect(resolveOpenRouterModelName('some/unknown-model:online')).toBe('some/unknown-model:online');
+  });
+
   it('handles empty string', () => {
     expect(resolveOpenRouterModelName('')).toBe('');
   });

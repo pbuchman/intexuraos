@@ -24,8 +24,10 @@ const OPENROUTER_MODEL_NAMES: Record<string, string> = {
 
 /**
  * Resolve an OpenRouter model ID to its human-readable name.
+ * Strips the `:online` suffix before lookup (OpenRouter appends it for web-search mode).
  * Returns the raw model ID if no friendly name is found.
  */
 export function resolveOpenRouterModelName(modelId: string): string {
-  return OPENROUTER_MODEL_NAMES[modelId] ?? modelId;
+  const baseId = modelId.endsWith(':online') ? modelId.slice(0, -7) : modelId;
+  return OPENROUTER_MODEL_NAMES[baseId] ?? modelId;
 }
