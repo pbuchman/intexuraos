@@ -2167,6 +2167,82 @@ resource "google_cloud_scheduler_job" "execution_memory_process" {
 }
 
 # -----------------------------------------------------------------------------
+# Cloud Scheduler - Execution Memory Sweep Errored (INT-1352)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_scheduler_job" "execution_memory_sweep_errored" {
+  name        = "intexuraos-execution-memory-sweep-errored-${var.environment}"
+  description = "Sweep permanently errored execution memory post-run tasks and requeue for retry"
+  schedule    = "0 */6 * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/execution-memory/sweep-errored"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - Execution Memory Prune Stale (INT-1352)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_scheduler_job" "execution_memory_prune_stale" {
+  name        = "intexuraos-execution-memory-prune-stale-${var.environment}"
+  description = "Archive aged zero-application execution memories to reduce corpus noise"
+  schedule    = "0 3 * * 0"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/execution-memory/prune-stale"
+
+    body = base64encode("{\"maxAgeDays\":30}")
+
+    headers = {
+      "Content-Type" = "application/json"
+    }
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
+# -----------------------------------------------------------------------------
 # Firebase Authentication (Identity Platform)
 # -----------------------------------------------------------------------------
 

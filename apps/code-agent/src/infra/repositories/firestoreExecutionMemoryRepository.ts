@@ -180,6 +180,22 @@ export class FirestoreExecutionMemoryRepository implements ExecutionMemoryReposi
     }
   }
 
+  async listStaleUnused(cutoffDate: Date): Promise<Result<ExecutionMemory[], ExecutionMemoryRepositoryError>> {
+    try {
+      const snapshot = await this.firestore
+        .collection('execution_memories')
+        .where('status', '==', 'active')
+        .where('applicationCount', '==', 0)
+        .where('createdAt', '<', Timestamp.fromDate(cutoffDate))
+        .limit(100)
+        .get();
+      return ok(snapshot.docs.map((doc) => toExecutionMemory(doc as { id: string; data(): Record<string, unknown> })));
+    } catch (error) {
+      this.logger.error({ error: getErrorMessage(error) }, 'Failed to list stale unused execution memories');
+      return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error) });
+    }
+  }
+
   async update(
     id: string,
     input: UpdateExecutionMemoryInput

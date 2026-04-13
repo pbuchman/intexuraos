@@ -312,6 +312,12 @@ export interface CodeTaskRepository {
   listPendingExecutionMemoryPostRun(limit: number): Promise<Result<CodeTask[], RepositoryError>>;
 
   /**
+   * List tasks with executionMemoryPostRun.status === 'error'.
+   * Used by the sweep job to find tasks stuck in permanent error state.
+   */
+  listErroredExecutionMemoryPostRun(): Promise<Result<CodeTask[], RepositoryError>>;
+
+  /**
    * List all non-archived tasks for a user.
    * Returns all tasks with non-archived statuses, ordered by createdAt desc.
    * Used by the issue-groups endpoint for server-side grouping.
