@@ -222,3 +222,98 @@ describe('CodeTaskLogViewer integration', () => {
     expect(screen.getByRole('link', { name: url })).toBeInTheDocument();
   });
 });
+
+describe('CodeTaskLogViewer orchestrator/entrypoint collapsible groups', () => {
+  it('collapses consecutive orchestrator lines into a single block', () => {
+    const logs: LogLine[] = [
+      makeLog(1, '[orchestrator] Task started: id=task_123'),
+      makeLog(2, '[orchestrator] Worker config: type=opus'),
+      makeLog(3, '[orchestrator] Container config: worktree=/repo'),
+      makeLog(4, '[orchestrator] Creating new container'),
+      makeLog(5, '[orchestrator] Worker attempt completed'),
+    ];
+
+    render(<CodeTaskLogViewer {...makeProps({ logs })} />);
+
+    // Default compactMode=true, 4+ body lines -> collapsed
+    const hiddenLabels = screen.queryAllByText(/\d+ lines hidden/i);
+    expect(hiddenLabels.length).toBeGreaterThan(0);
+  });
+
+  it('collapses consecutive entrypoint lines into a single block', () => {
+    const logs: LogLine[] = [
+      makeLog(1, '[entrypoint] Code worker starting'),
+      makeLog(2, '[entrypoint] Task ID: task_123'),
+      makeLog(3, '[entrypoint] Running as user: claude'),
+      makeLog(4, '[entrypoint] Git repo verified: /repo'),
+      makeLog(5, '[entrypoint] GCP auth successful'),
+    ];
+
+    render(<CodeTaskLogViewer {...makeProps({ logs })} />);
+
+    const hiddenLabels = screen.queryAllByText(/\d+ lines hidden/i);
+    expect(hiddenLabels.length).toBeGreaterThan(0);
+  });
+
+  it('expands a collapsed orchestrator group when the chevron is clicked', async () => {
+    const logs: LogLine[] = [
+      makeLog(1, '[orchestrator] Task started'),
+      makeLog(2, '[orchestrator] Worker config'),
+      makeLog(3, '[orchestrator] Container config'),
+      makeLog(4, '[orchestrator] Creating container'),
+      makeLog(5, '[orchestrator] Attempt completed'),
+    ];
+
+    render(<CodeTaskLogViewer {...makeProps({ logs })} />);
+
+    // Initially collapsed
+    expect(screen.queryAllByText(/\d+ lines hidden/i).length).toBeGreaterThan(0);
+
+    // Expand
+    const expandButton = screen.getByRole('button', { name: /expand tool output/i });
+    await userEvent.click(expandButton);
+
+    // Body lines should now be visible
+    expect(screen.getByText(/Worker config/)).toBeInTheDocument();
+    expect(screen.getByText(/Container config/)).toBeInTheDocument();
+  });
+
+  it('does not group different consecutive tags together', () => {
+    const logs: LogLine[] = [
+      makeLog(1, '[orchestrator] Task started'),
+      makeLog(2, '[orchestrator] Worker config'),
+      makeLog(3, '[orchestrator] Container config'),
+      makeLog(4, '[orchestrator] Creating container'),
+      makeLog(5, '[orchestrator] Attempt started'),
+      makeLog(6, '[entrypoint] Code worker starting'),
+      makeLog(7, '[entrypoint] Task ID: task_123'),
+      makeLog(8, '[entrypoint] Running as user: claude'),
+      makeLog(9, '[entrypoint] Git repo verified'),
+      makeLog(10, '[entrypoint] GCP auth successful'),
+    ];
+
+    render(<CodeTaskLogViewer {...makeProps({ logs })} />);
+
+    // Two separate collapsible groups
+    const hiddenLabels = screen.queryAllByText(/\d+ lines hidden/i);
+    expect(hiddenLabels.length).toBe(2);
+  });
+
+  it('breaks orchestrator group when a different tag appears mid-sequence', () => {
+    const logs: LogLine[] = [
+      makeLog(1, '[orchestrator] Task started'),
+      makeLog(2, '[orchestrator] Worker config'),
+      makeLog(3, '[claude] Hello, I will help'),
+      makeLog(4, '[orchestrator] Attempt completed'),
+      makeLog(5, '[orchestrator] Running verification'),
+    ];
+
+    render(<CodeTaskLogViewer {...makeProps({ logs })} />);
+
+    // First group: 2 orchestrator lines (1 header + 1 body) -> < 4 visual lines -> not collapsible
+    // Second group: 2 orchestrator lines -> also not collapsible
+    // No collapsible blocks expected
+    const hiddenLabels = screen.queryAllByText(/\d+ lines hidden/i);
+    expect(hiddenLabels.length).toBe(0);
+  });
+});
