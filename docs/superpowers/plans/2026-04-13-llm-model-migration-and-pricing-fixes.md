@@ -907,14 +907,16 @@ With every call site migrated and all tests green, we can now delete the old ide
 - [ ] **Step 1: Verify no remaining references**
 
 ```bash
-grep -rn "LlmModels.GPT52\|LlmModels.ClaudeSonnet45\|LlmModels.ClaudeOpus45\|'gpt-5\.2'\|'claude-sonnet-4-5-20250929'\|'claude-opus-4-5-20251101'" \
-  --include="*.ts" --include="*.tsx" --include="*.md" \
-  --exclude-dir=node_modules --exclude-dir=dist \
-  --exclude-dir="docs/plans" --exclude-dir="docs/superpowers/plans" \
-  --exclude-dir="docs/validation"
+# grep --exclude-dir matches basenames, not nested paths.
+# Use find + grep to prune the plan/validation dirs that intentionally
+# contain legacy IDs, then search only source-code directories.
+find apps packages workers migrations \
+  -type f \( -name '*.ts' -o -name '*.tsx' \) \
+  ! -path '*/node_modules/*' ! -path '*/dist/*' \
+  -exec grep -ln "LlmModels.GPT52\|LlmModels.ClaudeSonnet45\|LlmModels.ClaudeOpus45\|'gpt-5\.2'\|'claude-sonnet-4-5-20250929'\|'claude-opus-4-5-20251101'" {} +
 ```
 
-Expected output: zero hits. If any hits come back outside the historical-plan exclusions, address them before proceeding. Pay special attention to `packages/llm-pricing/src/testFixtures.ts` — Phase 3 did not touch it; Step 6 below handles it.
+Expected output: zero hits. The search is scoped to `apps/`, `packages/`, `workers/`, and `migrations/` — the directories that contain executable code. Historical plan docs (`docs/superpowers/plans/`) and validation audit files (`docs/validation/`) are intentionally excluded because they reference legacy IDs for traceability. If any hits come back, address them before proceeding. Pay special attention to `packages/llm-pricing/src/testFixtures.ts` — Phase 3 did not touch it; Step 6 below handles it.
 
 - [ ] **Step 2: Remove type aliases**
 
