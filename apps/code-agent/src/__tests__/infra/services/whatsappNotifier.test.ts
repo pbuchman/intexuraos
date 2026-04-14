@@ -1455,4 +1455,120 @@ describe('WhatsAppNotifier', () => {
       }
     });
   });
+
+  describe('notifyTaskAutoRetried', () => {
+    it('sends message containing Auto-retried, attempt count, and reason', async () => {
+      const task = createMockTask({ id: 'task-123', traceId: 'trace-123' });
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyTaskAutoRetried('user-123', task, {
+        attempt: 2,
+        maxAttempts: 3,
+        reason: 'Worker crashed unexpectedly',
+      });
+
+      expect(result.ok).toBe(true);
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('Auto-retried');
+      expect(callArgs.message).toContain('2/3');
+      expect(callArgs.message).toContain('Worker crashed unexpectedly');
+      expect(callArgs.ctaUrl).toEqual({
+        displayText: 'View Task',
+        url: buildTaskUrl('task-123'),
+      });
+      expect(callArgs.correlationId).toBe('trace-123');
+    });
+
+    it('includes linearIssueId prefix when present', async () => {
+      const task = createMockTask({ linearIssueId: 'INT-999', linearIssueTitle: 'Fix crash' });
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskAutoRetried('user-123', task, {
+        attempt: 1,
+        maxAttempts: 3,
+        reason: 'Timeout',
+      });
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('INT-999 |');
+    });
+
+    it('returns error when publish fails', async () => {
+      const task = createMockTask();
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(
+        err({ code: 'PUBLISH_FAILED', message: 'Queue full' })
+      );
+
+      const result = await notifier.notifyTaskAutoRetried('user-123', task, {
+        attempt: 1,
+        maxAttempts: 3,
+        reason: 'Timeout',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('notification_failed');
+        expect(result.error.message).toBe('Queue full');
+      }
+    });
+  });
+
+  describe('notifyTaskAutoRetryExhausted', () => {
+    it('sends message containing failed after N auto-retries and error message', async () => {
+      const task = createMockTask({ id: 'task-123', traceId: 'trace-123' });
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyTaskAutoRetryExhausted('user-123', task, {
+        attempts: 3,
+        errorMessage: 'Build environment unavailable',
+      });
+
+      expect(result.ok).toBe(true);
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('failed after 3 auto-retries');
+      expect(callArgs.message).toContain('Build environment unavailable');
+      expect(callArgs.ctaUrl).toEqual({
+        displayText: 'View Task',
+        url: buildTaskUrl('task-123'),
+      });
+      expect(callArgs.correlationId).toBe('trace-123');
+    });
+
+    it('includes linearIssueId prefix when present', async () => {
+      const task = createMockTask({ linearIssueId: 'INT-888', linearIssueTitle: 'Deploy fix' });
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskAutoRetryExhausted('user-123', task, {
+        attempts: 3,
+        errorMessage: 'Disk full',
+      });
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('INT-888 |');
+    });
+
+    it('returns error when publish fails', async () => {
+      const task = createMockTask();
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      getPublishSendMessageMock().mockResolvedValueOnce(
+        err({ code: 'PUBLISH_FAILED', message: 'Service unavailable' })
+      );
+
+      const result = await notifier.notifyTaskAutoRetryExhausted('user-123', task, {
+        attempts: 3,
+        errorMessage: 'Worker offline',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('notification_failed');
+        expect(result.error.message).toBe('Service unavailable');
+      }
+    });
+  });
 });

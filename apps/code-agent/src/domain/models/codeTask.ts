@@ -252,4 +252,8 @@ export interface CodeTask {
 
   // Remediation task metadata
   requiresReReview?: boolean;    // Set by remediation tasks before pushing code
+
+  // Auto-retry metadata (INT-1375)
+  failedWorkerLocation?: string;   // Worker location that failed, to exclude on retry dispatch
+  autoRetryAttempt?: number;       // 1-based auto-retry attempt number (max 3)
 }

@@ -457,5 +457,57 @@ A follow-up fix task has been automatically dispatched.`;
 
       return ok(undefined);
     },
+
+    async notifyTaskAutoRetried(
+      userId: string,
+      task: CodeTask,
+      info: { attempt: number; maxAttempts: number; reason: string }
+    ): Promise<Result<void, NotificationError>> {
+      const title = await resolveTaskTitle(linearAgentClient, userId, task);
+      const linearPrefix = task.linearIssueId !== undefined ? `${task.linearIssueId} | ` : '';
+      const message = `⟳ ${linearPrefix}${title}\n\nAuto-retried (${String(info.attempt)}/${String(info.maxAttempts)}): ${info.reason}`;
+
+      const result = await whatsappPublisher.publishSendMessage({
+        userId,
+        message,
+        ctaUrl: { displayText: 'View Task', url: buildTaskUrl(task.id) },
+        correlationId: task.traceId,
+      });
+
+      if (!result.ok) {
+        return err({
+          code: 'notification_failed',
+          message: result.error.message,
+        });
+      }
+
+      return ok(undefined);
+    },
+
+    async notifyTaskAutoRetryExhausted(
+      userId: string,
+      task: CodeTask,
+      info: { attempts: number; errorMessage: string }
+    ): Promise<Result<void, NotificationError>> {
+      const title = await resolveTaskTitle(linearAgentClient, userId, task);
+      const linearPrefix = task.linearIssueId !== undefined ? `${task.linearIssueId} | ` : '';
+      const message = `❌ ${linearPrefix}${title}\n\nTask failed after ${String(info.attempts)} auto-retries: ${info.errorMessage}`;
+
+      const result = await whatsappPublisher.publishSendMessage({
+        userId,
+        message,
+        ctaUrl: { displayText: 'View Task', url: buildTaskUrl(task.id) },
+        correlationId: task.traceId,
+      });
+
+      if (!result.ok) {
+        return err({
+          code: 'notification_failed',
+          message: result.error.message,
+        });
+      }
+
+      return ok(undefined);
+    },
   };
 }
