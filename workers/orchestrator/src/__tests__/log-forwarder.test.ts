@@ -440,25 +440,44 @@ describe('LogForwarder', () => {
   });
 
   describe('size limits', () => {
-    it('should stop uploading after 8MB total', async () => {
+    it('should stop uploading formatted chunks after 8MB total', async () => {
+      vi.useFakeTimers();
+      const warnSpy = mockLogger.warn as ReturnType<typeof vi.fn>;
+      warnSpy.mockClear();
+
       const forwarder = createMockForwarder();
       captureUploadedChunks();
 
-      const logFile = join(logBasePath, 'task-size.log');
-      forwarder.startForwarding('task-size', logFile);
+      // Use appendChunk (Docker mode) for deterministic control
+      forwarder.registerTask('task-size', 'secret');
+      forwarder.appendChunk('task-size', 'init\n');
+      await forwarder.flush('task-size');
 
-      // Write enough data to create multiple chunks (10KB)
-      const largeContent = 'C'.repeat(10 * 1024);
-      writeFileSync(logFile, largeContent, 'utf-8');
+      // Push totalBytes past the 8MB cap so the next non-force flush
+      // exercises the limit guard in flushBuffer.
+      const forwarders = (forwarder as unknown as Record<string, unknown>)['forwarders'] as Map<
+        string,
+        { totalBytes: number; timer: NodeJS.Timeout | null }
+      >;
+      const state = forwarders.get('task-size');
+      if (state !== undefined) {
+        state.totalBytes = 8 * 1024 * 1024 + 1;
+      }
 
-      // Wait for polling to pick up and chunk the content
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // Append more content — a timer-triggered (non-force) flush should drop it
+      forwarder.appendChunk('task-size', 'should-be-dropped\n');
+      await vi.advanceTimersByTimeAsync(3100); // CHUNK_INTERVAL_MS = 3000
 
-      await forwarder.stopForwarding('task-size');
+      // Verify the cap was hit: warn logged and chunk dropped
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-size' }),
+        'Max total log size reached, stopping uploads'
+      );
+      expect(forwarder.getDroppedChunkCount('task-size')).toBeGreaterThan(0);
 
-      // Should have created chunks
-      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-size');
-      expect(taskUploads.length).toBeGreaterThan(0);
+      // Clean up timer
+      if (state?.timer !== null && state?.timer !== undefined) clearInterval(state.timer);
+      vi.useRealTimers();
     });
   });
 
