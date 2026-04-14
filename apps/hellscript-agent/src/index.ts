@@ -64,6 +64,10 @@ async function main(): Promise<void> {
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
+  if (process.env['INTEXURAOS_GEMINI_APP_API_KEY'] === undefined || process.env['INTEXURAOS_GEMINI_APP_API_KEY'].length === 0) {
+    logger.warn('INTEXURAOS_GEMINI_APP_API_KEY is not set — platform Gemini fallback unavailable; users must have their own Gemini API key configured');
+  }
+
   initServices({
     userServiceClient,
     logger,

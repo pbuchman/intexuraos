@@ -266,7 +266,9 @@ export interface AgentComplianceValidatorConfig {
   clients: LlmGenerateClient[];
   /** Display name of the primary model for logging/reports. */
   primaryModelName: string;
-  /** Display names for each client, in the same order as clients. */
+  /** Display names for each client (primary first), in the same order as clients.
+   *  If omitted or shorter than clients, missing entries default to primaryModelName for index 0
+   *  and 'fallback-1', 'fallback-2', etc. for subsequent indices. */
   modelNames?: string[];
   codeAgentUrl: string;
   usageWebhookUrl: string;
@@ -454,7 +456,9 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
     prompt: string,
     taskId: string
   ): Promise<Awaited<ReturnType<LlmGenerateClient['generate']>> & { modelName: string }> {
-    let lastResult: (Awaited<ReturnType<LlmGenerateClient['generate']>> & { modelName: string }) | undefined;
+    let lastResult:
+      | (Awaited<ReturnType<LlmGenerateClient['generate']>> & { modelName: string })
+      | undefined;
     for (const [i, entry] of this.entries.entries()) {
       const result = await entry.client.generate(prompt);
       lastResult = { ...result, modelName: entry.modelName };

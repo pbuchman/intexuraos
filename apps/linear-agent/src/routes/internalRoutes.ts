@@ -702,12 +702,11 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const classifier = services.createClassifier(llmClientResult.value);
-      // Pass the already-fetched userIds into pruneIssues to avoid a second Firestore round-trip.
-      const cachedUserIdsResult = userIdsResult;
 
       const result = await pruneIssues({
+        // Pass the already-fetched userIds via a wrapper to avoid a second Firestore round-trip.
         connectionRepo: {
-          getAllConnectedUserIds: () => Promise.resolve(cachedUserIdsResult),
+          getAllConnectedUserIds: () => Promise.resolve(userIdsResult),
         },
         issueRepo: services.issueRepository,
         pruneCandidateRepo: services.pruneCandidateRepository,
