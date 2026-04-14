@@ -7,6 +7,11 @@ import type { ExecutionMemoryPromptContext } from '../types/execution-memory.js'
 
 const verifierTaskIdStorage = new AsyncLocalStorage<string>();
 
+/** Returns the task ID active in the current verifier async context, or null. */
+export function getVerifierTaskId(): string | null {
+  return verifierTaskIdStorage.getStore() ?? null;
+}
+
 export type CompletionAgentType =
   | 'planning'
   | 'execution'
@@ -596,7 +601,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
           agentType: input.agentType,
           exitCode: fatalExitCode,
         },
-        'Fatal exit code detected — skipping Gemini verification'
+        'Fatal exit code detected — skipping completion verification'
       );
       return {
         passed: false,

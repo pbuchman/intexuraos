@@ -39,9 +39,15 @@ import { WORKER_TYPES } from './services/isolation/types.js';
 import { ensureRepository } from './services/repo-manager.js';
 import type { OrchestratorConfig } from './types/config.js';
 import type { CompletionControlConfig, IsolationConfig } from './services/task-dispatcher.js';
-import { OrchestratorCompletionVerifier } from './services/completion-verifier.js';
+import {
+  OrchestratorCompletionVerifier,
+  getVerifierTaskId,
+} from './services/completion-verifier.js';
 import { TurnMetricsCollector } from './services/turn-metrics-collector.js';
-import { OrchestratorAgentComplianceValidator } from './services/agent-compliance-validator.js';
+import {
+  OrchestratorAgentComplianceValidator,
+  getValidatorTaskId,
+} from './services/agent-compliance-validator.js';
 import {
   parseValidationModels,
   buildValidationClients,
@@ -735,7 +741,7 @@ async function bootstrap(): Promise<void> {
   const geminiApiKey = getRequiredEnv('INTEXURAOS_GEMINI_APP_API_KEY');
   const openRouterApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
 
-  const validationClients = buildValidationClients({
+  const sharedValidationConfig = {
     models: validationModels,
     openRouterApiKey,
     geminiApiKey,
@@ -743,6 +749,16 @@ async function bootstrap(): Promise<void> {
     orchestratorSecret: config.orchestratorSecret,
     internalAuthToken: config.internalAuthToken,
     logger,
+  };
+
+  // Build separate client sets so each usage sink correlates events to the correct task context.
+  const validationClients = buildValidationClients({
+    ...sharedValidationConfig,
+    getCorrelationTaskId: getVerifierTaskId,
+  });
+  const validatorClients = buildValidationClients({
+    ...sharedValidationConfig,
+    getCorrelationTaskId: getValidatorTaskId,
   });
 
   const primaryEntry = validationClients[0];
@@ -797,18 +813,17 @@ async function bootstrap(): Promise<void> {
     'Agent compliance validator configuration'
   );
 
-  const agentComplianceValidator =
-    validationClients.length > 0
-      ? new OrchestratorAgentComplianceValidator(logger, {
-          clients: validationClients.map((e) => e.client),
-          primaryModelName,
-          modelNames: validationClients.map((e) => e.modelName),
-          codeAgentUrl: config.codeAgentUrl,
-          usageWebhookUrl,
-          orchestratorSecret: config.orchestratorSecret,
-          internalAuthToken: config.internalAuthToken,
-        })
-      : undefined;
+  // validatorClients is guaranteed non-empty: process.exit(1) above aborts if validationClients
+  // (built from the same models list) is empty, so we can always create the validator.
+  const agentComplianceValidator = new OrchestratorAgentComplianceValidator(logger, {
+    clients: validatorClients.map((e) => e.client),
+    primaryModelName,
+    modelNames: validatorClients.map((e) => e.modelName),
+    codeAgentUrl: config.codeAgentUrl,
+    usageWebhookUrl,
+    orchestratorSecret: config.orchestratorSecret,
+    internalAuthToken: config.internalAuthToken,
+  });
 
   const dispatcher = new TaskDispatcher(
     config,
