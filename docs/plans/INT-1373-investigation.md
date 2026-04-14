@@ -154,20 +154,43 @@ Three failure modes cause fallback:
 2. **JSON extraction fails** — response isn't parseable JSON
 3. **Zod schema validation fails** — JSON doesn't match expected structured output schema
 
-### Why Gemma Failed This Time
+### Why Gemma Fails: Verified From Firestore
 
-The logs show **no usage entry** for `orchestrator-validation` + `google/gemma-4-31b-it:free`. The OpenRouter client records usage even on failure — but with 0 tokens and $0.00 cost (`client.ts:306-312`). The dashboard likely filters out 0-token entries, or the entry exists but wasn't in the user's view.
+Queried `llm_usage_events` in Firestore for `owner.id == 'orchestrator-validation'` and `request.model == 'google/gemma-4-31b-it:free'`. **Every single entry** has `success: false` with the same error:
 
-The most likely cause: **the free OpenRouter model hit a rate limit (HTTP 429) or was temporarily unavailable**. Free-tier OpenRouter models (`:free` suffix) have aggressive rate limits and availability constraints. The code-agent had _just_ used the same `google/gemma-4-31b-it:free` model moments before (row 1 in the log table), which may have exhausted the rate limit window for the same API key.
+```json
+{
+  "error": {
+    "code": null,
+    "message": "{\"error\":{\"message\":\"No endpoints available matching your guardrail restrictions and data policy. Configure: https://openrouter.ai/settings/privacy\",\"code\":404}}"
+  },
+  "usage": { "inputTokens": 0, "outputTokens": 0, "totalTokens": 0 }
+}
+```
 
-### This Is Working As Designed
+**Verified events (all failures):**
+- `828fe5a2` at `2026-04-14T18:50:55.183Z` — same error
+- `ca219dda` at `2026-04-14T18:47:57.085Z` — same error
+- `1068f295` at `2026-04-14T18:46:54.965Z` — same error
 
-The entire point of the fallback list is to handle exactly this scenario. Gemma (free) is tried first for cost savings. When it fails, Gemini (paid, reliable) provides the safety net. The $0.02 cost for the Gemini fallback is the expected price of reliability.
+**Root cause:** The orchestrator's OpenRouter API key (`INTEXURAOS_OPENROUTER_APP_API_KEY`) has **data privacy guardrail restrictions** configured at https://openrouter.ai/settings/privacy that block the free `google/gemma-4-31b-it:free` model. OpenRouter returns HTTP 404 with "No endpoints available matching your guardrail restrictions and data policy."
+
+This is NOT a transient rate limit — it is a **permanent configuration issue**. Gemma has never succeeded as a validation model. Every validation call follows this path:
+
+1. Try gemma (primary) → HTTP 404 guardrail rejection → 0 tokens
+2. Fall back to gemini-2.5-flash → succeeds → 44.8K tokens, $0.02
+
+The dashboard shows only the gemini entry because gemma's 0-token failed events are either filtered from the view or not shown in the user's time-window summary.
+
+### Implication
+
+The `or:google/gemma-4-31b-it:free` entry in the validation model list is dead weight. It adds latency (one failed HTTP round-trip per validation) for zero cost savings. Two options:
+
+1. **Fix the OpenRouter privacy settings** at https://openrouter.ai/settings/privacy to allow the free model
+2. **Remove gemma from the validation list** by setting `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS=gemini-2.5-flash` (eliminates the wasted round-trip)
 
 ---
 
 ## Recommendation
 
-**No change needed.** The current design is correct. Orchestrator validation is an infrastructure concern that should use a fixed, cheap, reliable model. The user's default model preference correctly applies to `generate()` calls in user-facing services (code-agent, research, etc.) but not to internal verification.
-
-The Gemma→Gemini fallback is working as designed: free model tried first, paid model catches failures. If cost is the concern (the $0.02/task overhead), the existing `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` env var already allows swapping to a cheaper or free model without code changes.
+The architectural decision to use a fixed validation model (not user default) is correct and intentional. However, the primary model (`google/gemma-4-31b-it:free`) is **permanently blocked by OpenRouter privacy guardrails** and adds wasted latency on every validation call. Either fix the OpenRouter privacy settings or remove gemma from the validation model list.
