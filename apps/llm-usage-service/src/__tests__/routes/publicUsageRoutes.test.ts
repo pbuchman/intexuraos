@@ -5,6 +5,7 @@ import { setServices, resetServices, type ServiceContainer } from '../../service
 import { FakeUsageEventRepository } from '../fakeUsageEventRepository.js';
 import { FakeUsageAggregateRepository } from '../fakeUsageAggregateRepository.js';
 import { FakePricingRepository } from '../fakePricingRepository.js';
+import { FakePricingCache } from '../fakePricingCache.js';
 import { createTestEvent } from '../helpers.js';
 import { MAX_LIST_LIMIT, DEFAULT_LIST_LIMIT } from '../../domain/models/usageEvent.js';
 import type { DailyUsageAggregate } from '../../domain/models/dailyAggregate.js';
@@ -77,6 +78,7 @@ describe('publicUsageRoutes', () => {
       usageEventRepository: eventRepo,
       usageAggregateRepository: aggregateRepo,
       pricingRepository: new FakePricingRepository(),
+      pricingCache: new FakePricingCache(),
       orchestratorSecret: 'test-secret',
     } satisfies ServiceContainer);
   });

@@ -7,6 +7,7 @@ import { setServices, resetServices, type ServiceContainer } from '../../service
 import { FakeUsageEventRepository } from '../fakeUsageEventRepository.js';
 import { FakeUsageAggregateRepository } from '../fakeUsageAggregateRepository.js';
 import { FakePricingRepository } from '../fakePricingRepository.js';
+import { FakePricingCache } from '../fakePricingCache.js';
 
 // Mock requireAuth for Auth0 bearer tests — validateInternalAuth is NOT mocked
 // so POST /internal/pricing still validates against env var.
@@ -133,6 +134,7 @@ describe('pricingRoutes', () => {
       usageEventRepository: new FakeUsageEventRepository(),
       usageAggregateRepository: new FakeUsageAggregateRepository(),
       pricingRepository: pricingRepo,
+      pricingCache: new FakePricingCache(),
       orchestratorSecret: 'test-secret',
     } satisfies ServiceContainer);
   });
