@@ -843,10 +843,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     for (const fallbackClient of this.fallbackClients) {
       const fallbackResult = await fallbackClient.generate(prompt);
       if (fallbackResult.ok) {
-        this.logger.info(
-          { taskId },
-          'Fallback validation model succeeded'
-        );
+        this.logger.info({ taskId }, 'Fallback validation model succeeded');
         return fallbackResult;
       }
       this.logger.warn(

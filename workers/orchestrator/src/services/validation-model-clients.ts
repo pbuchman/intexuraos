@@ -43,7 +43,9 @@ export function parseValidationModels(raw: string): ParsedValidationModel[] {
   const models: ParsedValidationModel[] = [];
 
   for (let i = 0; i < entries.length; i++) {
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard; loop bounds guarantee index is valid @preserve */
     const entry = entries[i]?.trim() ?? '';
+    /* v8 ignore stop @preserve */
     if (entry === '') {
       throw new Error(
         `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS contains empty entry at position ${String(i + 1)}`
