@@ -4,7 +4,7 @@
 
 **Goal:** Fix the dispatch pipeline so PR comments on plan PRs create a new `pull_request` task instead of being routed to the completed planning task.
 
-**Architecture:** Three cascading bugs in the code-agent dispatch pipeline allow PR comments to be sent to planning tasks. The fix adds `'planning'` to exclusion filters in the repository query, the `sendTaskMessage` guard, and adds a `planning`-specific check in the dispatch service fallback path.
+**Architecture:** Two bugs in the code-agent dispatch pipeline allow PR comments to be sent to planning tasks. The fix adds `'planning'` to exclusion filters in the repository query and the `sendTaskMessage` guard. Once `findLatestExecutionTaskByPR` excludes planning tasks (returns `null`), the existing `gitHubDispatchService` already falls through to `handleNewTask` and creates a new `pull_request` task — no dispatch-service code change is needed.
 
 **Tech Stack:** TypeScript, Firestore, Fastify (code-agent app)
 
@@ -31,7 +31,7 @@
 | 17:33:17   | PR task lock deleted, post-completion drain finds nothing                                            |
 | —          | **Comment lost.** No pull_request task was ever created.                                             |
 
-### Root Cause: 3 Cascading Bugs
+### Root Cause: 2 Cascading Bugs (+ Contributing Factor)
 
 **Bug 1: `findLatestExecutionTaskByPR` includes planning tasks**
 - **File:** `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts:1215`
@@ -44,12 +44,12 @@
 - Guard blocks `review` and `remediation` but not `planning`
 - Planning tasks should not receive arbitrary PR comment messages
 
-**Bug 3: No fallback after resumed task crashes**
+**Contributing Factor: No fallback after resumed task crashes**
 - **File:** `apps/code-agent/src/domain/services/gitHubDispatchService.ts:171-183`
 - `handleExistingTask` returned `{ success: true }` because the orchestrator accepted the resume
 - The `isStaleTaskError` check only runs when `success === false`
-- When the planning task crashed 30 seconds later via the `/internal/webhooks/task-complete` callback, no fallback mechanism existed to create a replacement `pull_request` task
-- The comment was silently lost
+- When the planning task crashed 30 seconds later, no fallback mechanism existed
+- **No code change needed:** Fixing Bugs 1 and 2 prevents planning tasks from being selected in the first place. Once `findLatestExecutionTaskByPR` excludes planning tasks (returns `null`), the dispatch service already falls through to `handleNewTask` and creates a new `pull_request` task.
 
 ### Why Exit Code 128?
 
@@ -74,8 +74,7 @@ The orchestrator resumed the planning task with `continueSession: true`. This re
 | `apps/code-agent/src/domain/repositories/codeTaskRepository.ts`                        | Modify | Update interface JSDoc to reflect planning exclusion               |
 | `apps/code-agent/src/domain/usecases/sendTaskMessage.ts`                               | Modify | Add `'planning'` to the agentType guard                            |
 | `apps/code-agent/src/__tests__/infra/repositories/firestoreCodeTaskRepository.test.ts` | Modify | Add test for planning task exclusion                               |
-| `apps/code-agent/src/__tests__/domain/services/gitHubDispatchService.test.ts`          | Modify | Add test for planning task fallback to new task                    |
-| `apps/code-agent/src/__tests__/domain/useCases/sendTaskMessage.test.ts`                | Modify | Add test for planning task message rejection                       |
+| `apps/code-agent/src/__tests__/domain/usecases/sendTaskMessage.test.ts`                | Modify | Add test for planning task message rejection                       |
 
 ---
 
@@ -184,7 +183,7 @@ Fixes INT-1372"
 
 **Files:**
 - Modify: `apps/code-agent/src/domain/usecases/sendTaskMessage.ts:72`
-- Test: `apps/code-agent/src/__tests__/domain/useCases/sendTaskMessage.test.ts`
+- Test: `apps/code-agent/src/__tests__/domain/usecases/sendTaskMessage.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -222,7 +221,7 @@ it('should reject messages to planning tasks', async () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd apps/code-agent && npx vitest run src/__tests__/domain/useCases/sendTaskMessage.test.ts -t "should reject messages to planning tasks"`
+Run: `cd apps/code-agent && npx vitest run src/__tests__/domain/usecases/sendTaskMessage.test.ts -t "should reject messages to planning tasks"`
 Expected: FAIL — currently planning tasks are not blocked.
 
 - [ ] **Step 3: Add `'planning'` to the agentType guard**
@@ -241,13 +240,13 @@ if (task.agentType === 'review' || task.agentType === 'remediation' || task.agen
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd apps/code-agent && npx vitest run src/__tests__/domain/useCases/sendTaskMessage.test.ts -t "should reject messages to planning tasks"`
+Run: `cd apps/code-agent && npx vitest run src/__tests__/domain/usecases/sendTaskMessage.test.ts -t "should reject messages to planning tasks"`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/usecases/sendTaskMessage.ts apps/code-agent/src/__tests__/domain/useCases/sendTaskMessage.test.ts
+git add apps/code-agent/src/domain/usecases/sendTaskMessage.ts apps/code-agent/src/__tests__/domain/usecases/sendTaskMessage.test.ts
 git commit -m "fix: block sendTaskMessage to planning tasks
 
 Planning tasks run with a planning system prompt and cannot handle
@@ -259,80 +258,7 @@ Fixes INT-1372"
 
 ---
 
-## Task 3: Add Integration Test for Dispatch Fallback
-
-**Files:**
-- Test: `apps/code-agent/src/__tests__/domain/services/gitHubDispatchService.test.ts`
-
-This task verifies the end-to-end behavior: when the only task for a PR is a planning task, the dispatch service should fall through to `handleNewTask` and create a new `pull_request` task.
-
-- [ ] **Step 1: Write the integration test**
-
-Find the existing test for `'should fall back to new task when existing task is stale'` and add a sibling test:
-
-```typescript
-it('should create new task when only a planning task exists for the PR', async () => {
-  // Create a completed planning task with prNumber
-  await deps.codeTaskRepo.create({
-    id: 'task_planning-existing',
-    userId: 'user-1',
-    prompt: 'Plan the feature',
-    sanitizedPrompt: 'Plan the feature',
-    systemPromptHash: 'planning',
-    workerType: 'opus',
-    workerLocation: 'worker-1',
-    repository: 'pbuchman/intexuraos',
-    baseBranch: 'development',
-    traceId: 'trace-1',
-    agentType: 'planning',
-    prNumber: 1807,
-  });
-
-  const event = buildPREvent({
-    eventType: 'issue_comment',
-    action: 'created',
-    pullRequestNumber: 1807,
-    repository: 'pbuchman/intexuraos',
-    senderLogin: 'pbuchman',
-    body: 'Verify this plan against recent changes',
-  });
-
-  const result = await dispatchService.dispatch({
-    event,
-    decision: { action: 'dispatch' } as any,
-    logger: deps.logger,
-  });
-
-  expect(result.success).toBe(true);
-  expect(result.dispatched).toBe(true);
-  // Should have created a NEW task, not reused the planning one
-  expect(result.taskId).not.toBe('task_planning-existing');
-});
-```
-
-Note: Adapt the test helper (`buildPREvent`) to match the existing test patterns in the file. The exact helper name and shape may differ — read the test file first.
-
-- [ ] **Step 2: Run test to verify it passes**
-
-Run: `cd apps/code-agent && npx vitest run src/__tests__/domain/services/gitHubDispatchService.test.ts -t "should create new task when only a planning task exists"`
-Expected: PASS — Task 1's fix in `findLatestExecutionTaskByPR` already makes this work.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add apps/code-agent/src/__tests__/domain/services/gitHubDispatchService.test.ts
-git commit -m "test: verify PR comment on plan PR creates new pull_request task
-
-Integration test confirming that when only a planning task exists for
-a PR, the dispatch service creates a new pull_request task instead of
-routing the comment to the planning task.
-
-Fixes INT-1372"
-```
-
----
-
-## Task 4: Run Full CI Verification
+## Task 3: Run Full CI Verification
 
 - [ ] **Step 1: Build packages**
 
