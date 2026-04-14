@@ -14,8 +14,7 @@
 export const metadata = {
   id: '092',
   name: 'execution-memories-stale-pruning-index',
-  description:
-    'Composite index for execution_memories stale pruning query (status, applicationCount, createdAt)',
+  description: 'Composite index for execution_memories stale pruning query (status, applicationCount, createdAt)',
   createdAt: '2026-04-12',
 };
 
