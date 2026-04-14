@@ -9,6 +9,11 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 const validatorTaskIdStorage = new AsyncLocalStorage<string>();
+
+/** Returns the task ID active in the current validator async context, or null. */
+export function getValidatorTaskId(): string | null {
+  return validatorTaskIdStorage.getStore() ?? null;
+}
 import type { ExecutionAgentData } from './completion-verifier.js';
 import {
   AgentComplianceReportSchema,
@@ -74,6 +79,9 @@ export type CompliancePromptResult =
   | { ok: true; prompt: string }
   | { ok: false; reason: 'TRANSCRIPT_TOO_LONG' };
 
+// Note: LlmGenerateClient.generate() accepts only a string prompt — no responseFormat option.
+// JSON mode is enforced entirely via prompt instructions ("Return ONLY valid JSON…") and the
+// stripCodeFences + Zod-parse repair loop in OrchestratorAgentComplianceValidator.
 export function buildCompliancePrompt(input: CompliancePromptInput): CompliancePromptResult {
   if (input.formattedTranscript.length > MAX_TRANSCRIPT_TOKENS_CHARS) {
     return { ok: false, reason: 'TRANSCRIPT_TOO_LONG' };

@@ -78,6 +78,8 @@ export interface BuildValidationClientsConfig {
   orchestratorSecret: string;
   internalAuthToken: string;
   logger: Logger;
+  /** Returns the task ID for the currently-active request, for usage correlation. */
+  getCorrelationTaskId: () => string | null;
 }
 
 export interface ValidationClientEntry {
@@ -118,7 +120,7 @@ export function buildValidationClients(
             service: 'orchestrator',
             component: 'validation',
             logger: config.logger,
-            getCorrelationTaskId: () => null,
+            getCorrelationTaskId: config.getCorrelationTaskId,
           }),
         }),
       };
@@ -146,7 +148,7 @@ export function buildValidationClients(
           service: 'orchestrator',
           component: 'validation',
           logger: config.logger,
-          getCorrelationTaskId: () => null,
+          getCorrelationTaskId: config.getCorrelationTaskId,
         }),
       }),
     };

@@ -2011,7 +2011,7 @@ describe('verify — fatal exit code pre-check', () => {
       expect(generateMock).not.toHaveBeenCalled();
       expect(loggerWarn).toHaveBeenCalledWith(
         expect.objectContaining({ taskId, agentType: 'planning', exitCode }),
-        'Fatal exit code detected — skipping Gemini verification'
+        'Fatal exit code detected — skipping completion verification'
       );
     }
   );

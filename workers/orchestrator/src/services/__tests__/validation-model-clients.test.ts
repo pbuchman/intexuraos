@@ -16,6 +16,20 @@ vi.mock('@intexuraos/infra-openrouter', () => ({
   getDefaultAllowlistPricing: getDefaultAllowlistPricingMock,
 }));
 
+const { HttpWebhookUsageSinkMock } = vi.hoisted(() => {
+  const constructorSpy = vi.fn();
+  function HttpWebhookUsageSinkMock(this: Record<string, unknown>, config: unknown): void {
+    constructorSpy(config);
+  }
+  // Expose the spy on the constructor for assertions
+  (HttpWebhookUsageSinkMock as unknown as Record<string, unknown>)['_spy'] = constructorSpy;
+  return { HttpWebhookUsageSinkMock };
+});
+
+vi.mock('@intexuraos/llm-pricing', () => ({
+  HttpWebhookUsageSink: HttpWebhookUsageSinkMock,
+}));
+
 const { parseValidationModels, buildValidationClients, GEMINI_VALIDATION_PRICING } =
   await import('../validation-model-clients.js');
 
@@ -28,6 +42,8 @@ const fakeLogger = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  const spy = (HttpWebhookUsageSinkMock as unknown as Record<string, unknown>)['_spy'] as ReturnType<typeof vi.fn>;
+  spy.mockClear();
 });
 
 describe('parseValidationModels', () => {
@@ -103,6 +119,7 @@ describe('buildValidationClients', () => {
       orchestratorSecret: 'secret',
       internalAuthToken: 'token',
       logger: fakeLogger,
+      getCorrelationTaskId: () => null,
     });
 
     expect(clients).toHaveLength(2);
@@ -137,6 +154,7 @@ describe('buildValidationClients', () => {
       orchestratorSecret: 'secret',
       internalAuthToken: 'token',
       logger: fakeLogger,
+      getCorrelationTaskId: () => null,
     });
 
     expect(getDefaultAllowlistPricingMock).toHaveBeenCalledWith('google/gemma-4-31b-it:free');
@@ -157,6 +175,7 @@ describe('buildValidationClients', () => {
       orchestratorSecret: 'secret',
       internalAuthToken: 'token',
       logger: fakeLogger,
+      getCorrelationTaskId: () => null,
     });
 
     const callConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
@@ -178,6 +197,7 @@ describe('buildValidationClients', () => {
       orchestratorSecret: 'secret',
       internalAuthToken: 'token',
       logger: fakeLogger,
+      getCorrelationTaskId: () => null,
     });
 
     const callConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
@@ -195,6 +215,7 @@ describe('buildValidationClients', () => {
         orchestratorSecret: 'secret',
         internalAuthToken: 'token',
         logger: fakeLogger,
+        getCorrelationTaskId: () => null,
       })
     ).toThrow('INTEXURAOS_OPENROUTER_APP_API_KEY is required for OpenRouter validation model');
   });
@@ -210,7 +231,33 @@ describe('buildValidationClients', () => {
         orchestratorSecret: 'secret',
         internalAuthToken: 'token',
         logger: fakeLogger,
+        getCorrelationTaskId: () => null,
       })
     ).toThrow('INTEXURAOS_GEMINI_APP_API_KEY is required for Gemini validation model');
+  });
+
+  it('threads getCorrelationTaskId into the HttpWebhookUsageSink for each client', () => {
+    createLlmClientMock.mockReturnValue({ generate: vi.fn() });
+    getDefaultAllowlistPricingMock.mockReturnValue({ inputPricePerMillion: 0, outputPricePerMillion: 0 });
+
+    const getCorrelationTaskId = vi.fn().mockReturnValue('task-123');
+    const models = parseValidationModels('or:google/gemma-4-31b-it:free,gemini-2.5-flash');
+    buildValidationClients({
+      models,
+      openRouterApiKey: 'or-key',
+      geminiApiKey: 'gem-key',
+      usageWebhookUrl: 'http://usage',
+      orchestratorSecret: 'secret',
+      internalAuthToken: 'token',
+      logger: fakeLogger,
+      getCorrelationTaskId,
+    });
+
+    const spy = (HttpWebhookUsageSinkMock as unknown as Record<string, unknown>)['_spy'] as ReturnType<typeof vi.fn>;
+    expect(spy).toHaveBeenCalledTimes(2);
+    const sinkConfig0 = spy.mock.calls[0]?.[0] as Record<string, unknown>;
+    const sinkConfig1 = spy.mock.calls[1]?.[0] as Record<string, unknown>;
+    expect(sinkConfig0['getCorrelationTaskId']).toBe(getCorrelationTaskId);
+    expect(sinkConfig1['getCorrelationTaskId']).toBe(getCorrelationTaskId);
   });
 });
