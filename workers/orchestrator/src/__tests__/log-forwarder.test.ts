@@ -440,7 +440,7 @@ describe('LogForwarder', () => {
   });
 
   describe('size limits', () => {
-    it('should stop uploading after 4MB total', async () => {
+    it('should stop uploading after 8MB total', async () => {
       const forwarder = createMockForwarder();
       captureUploadedChunks();
 
