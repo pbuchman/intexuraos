@@ -19,6 +19,7 @@ const {
   getLast50ClaudeLines,
   getLast20Lines,
   detectFatalExitCode,
+  getVerifierTaskId,
 } = await import('../completion-verifier.js');
 
 const loggerInfo = vi.fn();
@@ -2214,5 +2215,11 @@ describe('OrchestratorCompletionVerifier.extractResumeSummary', () => {
     expect(calledPrompt).toContain('line-11');
     expect(calledPrompt).toContain('line-30');
     expect(calledPrompt).not.toContain('line-10');
+  });
+});
+
+describe('getVerifierTaskId', () => {
+  it('returns null when called outside any AsyncLocalStorage context', () => {
+    expect(getVerifierTaskId()).toBeNull();
   });
 });

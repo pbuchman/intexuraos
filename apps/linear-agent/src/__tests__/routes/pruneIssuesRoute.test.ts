@@ -189,6 +189,20 @@ describe('POST /internal/linear/prune-issues', () => {
     expect(services.createClassifier).not.toHaveBeenCalled();
   });
 
+  it('returns 500 when getAllConnectedUserIds fails', async () => {
+    services.connectionRepository.getAllConnectedUserIds = vi.fn().mockResolvedValue(
+      err({ code: 'INTERNAL_ERROR', message: 'Firestore unavailable' })
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/linear/prune-issues',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+  });
+
   it('returns 500 when pruneIssues fails', async () => {
     // Need to seed enough issues to trigger pruning (above 200 threshold)
     const issues = Array.from({ length: 210 }, (_, i) => ({
