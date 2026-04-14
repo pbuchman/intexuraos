@@ -664,11 +664,50 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       request.log.info('internal/pruneIssues: starting issue pruning');
 
+      // Resolve LLM client from the first connected user's account
+      const userIdsResult = await services.connectionRepository.getAllConnectedUserIds();
+      if (!userIdsResult.ok) {
+        return await handleLinearError(userIdsResult.error, reply);
+      }
+
+      if (userIdsResult.value.length === 0) {
+        request.log.info('internal/pruneIssues: no connected users, skipping');
+        return await reply.ok({
+          skipped: true,
+          skipReason: 'No connected users',
+          totalActive: 0,
+          stored: 0,
+          remaining: 0,
+          storedCandidates: [],
+          durationMs: 0,
+        });
+      }
+
+      const firstUserId = userIdsResult.value[0] ?? '';
+      const llmClientResult = await services.userServiceClient.getLlmClient(firstUserId);
+      if (!llmClientResult.ok) {
+        request.log.warn(
+          { userId: firstUserId, error: llmClientResult.error },
+          'internal/pruneIssues: failed to resolve LLM client, skipping'
+        );
+        return await reply.ok({
+          skipped: true,
+          skipReason: 'No user LLM client available',
+          totalActive: 0,
+          stored: 0,
+          remaining: 0,
+          storedCandidates: [],
+          durationMs: 0,
+        });
+      }
+
+      const classifier = services.createClassifier(llmClientResult.value);
+
       const result = await pruneIssues({
         connectionRepo: services.connectionRepository,
         issueRepo: services.issueRepository,
         pruneCandidateRepo: services.pruneCandidateRepository,
-        classifier: services.issuePruningClassifier,
+        classifier,
         logger: request.log as unknown as Logger,
         config: PRUNE_CONFIG,
       });
