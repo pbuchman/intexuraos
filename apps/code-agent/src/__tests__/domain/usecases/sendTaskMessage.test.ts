@@ -197,6 +197,20 @@ describe('sendTaskMessage', () => {
       expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
     });
 
+    it('should return invalid_agent_type for planning tasks', async () => {
+      const planningTask = createMockTask({ agentType: 'planning', status: 'running' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(planningTask));
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_agent_type');
+        expect(result.error.message).toContain('planning');
+      }
+      expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+    });
+
     it('should return task_not_found when task does not exist', async () => {
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(
         err({ code: 'NOT_FOUND', message: 'Task not found' })
