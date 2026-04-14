@@ -1174,7 +1174,7 @@ describe('triageFailedTask', () => {
         workerLocation: 'mac-dev-1',
       });
 
-      const result = await triageFailedTask(deps, { task, completedAt: new Date() });
+      const result = await triageFailedTask(deps, { task, completedAt: new Date(), taskError: task.error! });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -1190,7 +1190,7 @@ describe('triageFailedTask', () => {
         workerLocation: 'mac-dev-1',
       });
 
-      const result = await triageFailedTask(deps, { task, completedAt: new Date() });
+      const result = await triageFailedTask(deps, { task, completedAt: new Date(), taskError: task.error! });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -1207,7 +1207,7 @@ describe('triageFailedTask', () => {
       });
       fakeGeminiClient.setResponse({ shouldRetry: true, reason: 'Transient formatting issue' });
 
-      const result = await triageFailedTask(deps, { task, completedAt: new Date() });
+      const result = await triageFailedTask(deps, { task, completedAt: new Date(), taskError: task.error! });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -1223,7 +1223,7 @@ describe('triageFailedTask', () => {
       });
       fakeGeminiClient.setResponse({ shouldRetry: false, reason: 'Systematic misunderstanding' });
 
-      const result = await triageFailedTask(deps, { task, completedAt: new Date() });
+      const result = await triageFailedTask(deps, { task, completedAt: new Date(), taskError: task.error! });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -1238,7 +1238,7 @@ describe('triageFailedTask', () => {
       });
       fakeGeminiClient.setError('LLM call failed');
 
-      const result = await triageFailedTask(deps, { task, completedAt: new Date() });
+      const result = await triageFailedTask(deps, { task, completedAt: new Date(), taskError: task.error! });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -1254,7 +1254,7 @@ describe('triageFailedTask', () => {
         workerLocation: 'mac-dev-1',
       });
 
-      const result = await triageFailedTask(deps, { task, completedAt: new Date() });
+      const result = await triageFailedTask(deps, { task, completedAt: new Date(), taskError: task.error! });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -1272,7 +1272,7 @@ describe('triageFailedTask', () => {
       // Mock autoRetryTask to return budget_exhausted
       fakeAutoRetry.setError({ code: 'budget_exhausted', message: 'Exhausted after 3 attempts' });
 
-      const result = await triageFailedTask(deps, { task, completedAt: new Date() });
+      const result = await triageFailedTask(deps, { task, completedAt: new Date(), taskError: task.error! });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -1288,7 +1288,7 @@ describe('triageFailedTask', () => {
       });
       fakeAutoRetry.setError({ code: 'budget_exhausted', message: 'Exhausted after 3 attempts' });
 
-      await triageFailedTask(deps, { task, completedAt: new Date() });
+      await triageFailedTask(deps, { task, completedAt: new Date(), taskError: task.error! });
 
       expect(fakeWhatsappNotifier.lastExhausted).toBeDefined();
     });
@@ -1343,11 +1343,10 @@ export interface TriageFailedTaskDeps {
 
 export async function triageFailedTask(
   deps: TriageFailedTaskDeps,
-  request: { task: CodeTask; completedAt: Date }
+  request: { task: CodeTask; completedAt: Date; taskError: TaskError }
 ): Promise<Result<TriageResult, never>> {
   const { logger, codeTaskRepo, taskEnqueueService, whatsappNotifier, logLineRepo, triageClient, orchestratorSecret } = deps;
-  const { task } = request;
-  const taskError: TaskError = task.error ?? { code: 'UNKNOWN_FAILURE', message: 'Task failed without error details' };
+  const { task, taskError } = request;
 
   // Step 1: Classify the failure
   const verdict = classifyFailure(taskError.code, taskError.message);
@@ -1602,7 +1601,7 @@ In `apps/code-agent/src/routes/webhookRoutes.ts`, modify the `status === 'failed
               triageClient: failureTriageClient,
               orchestratorSecret,
             },
-            { task, completedAt }
+            { task, completedAt, taskError }
           );
 
           if (triageResult.ok && triageResult.value.action !== 'permanent_failure') {
