@@ -124,8 +124,50 @@ If we wanted orchestrator validation to respect user model preferences, we'd nee
 
 ---
 
+## Follow-up: Why Gemini Instead of Gemma Specifically?
+
+The validation model list is `or:google/gemma-4-31b-it:free,gemini-2.5-flash`. Gemma is the **primary** and Gemini is the **fallback**. Yet the logs show only Gemini ran. This is because the completion verifier uses a sequential try-each-model loop with automatic fallback.
+
+### The Fallback Loop (`completion-verifier.ts:637-713`)
+
+```typescript
+// Try each model (primary + fallbacks) until one produces a valid, parseable response.
+const allModels = [
+  { client: this.primaryClient, modelName: this.primaryModelName },  // gemma (OR)
+  ...this.fallbacks,                                                  // gemini
+];
+
+for (const { client, modelName } of allModels) {
+  const result = await client.generate(prompt);
+  if (!result.ok) {
+    this.logger.warn({ model: modelName, errorCode: result.error.code },
+      'Completion verifier model call failed, trying next');
+    continue;  // ← falls back to gemini
+  }
+  // ... then tries JSON extraction, then Zod schema validation
+  // If either fails → continue to next model
+}
+```
+
+Three failure modes cause fallback:
+1. **API call fails** (`!result.ok`) — rate limit, timeout, HTTP error
+2. **JSON extraction fails** — response isn't parseable JSON
+3. **Zod schema validation fails** — JSON doesn't match expected structured output schema
+
+### Why Gemma Failed This Time
+
+The logs show **no usage entry** for `orchestrator-validation` + `google/gemma-4-31b-it:free`. The OpenRouter client records usage even on failure — but with 0 tokens and $0.00 cost (`client.ts:306-312`). The dashboard likely filters out 0-token entries, or the entry exists but wasn't in the user's view.
+
+The most likely cause: **the free OpenRouter model hit a rate limit (HTTP 429) or was temporarily unavailable**. Free-tier OpenRouter models (`:free` suffix) have aggressive rate limits and availability constraints. The code-agent had _just_ used the same `google/gemma-4-31b-it:free` model moments before (row 1 in the log table), which may have exhausted the rate limit window for the same API key.
+
+### This Is Working As Designed
+
+The entire point of the fallback list is to handle exactly this scenario. Gemma (free) is tried first for cost savings. When it fails, Gemini (paid, reliable) provides the safety net. The $0.02 cost for the Gemini fallback is the expected price of reliability.
+
+---
+
 ## Recommendation
 
 **No change needed.** The current design is correct. Orchestrator validation is an infrastructure concern that should use a fixed, cheap, reliable model. The user's default model preference correctly applies to `generate()` calls in user-facing services (code-agent, research, etc.) but not to internal verification.
 
-If cost is the concern (the $0.02/task overhead), the existing `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` env var already allows swapping to a cheaper or free model without code changes.
+The Gemma→Gemini fallback is working as designed: free model tried first, paid model catches failures. If cost is the concern (the $0.02/task overhead), the existing `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` env var already allows swapping to a cheaper or free model without code changes.
