@@ -36,7 +36,7 @@ export interface CompletionVerifierTrace {
 }
 
 export interface CompletionVerifierVerdict {
-  /** True when Gemini extraction succeeded and all Zod fields were present — does NOT mean the agent completed its task. */
+  /** True when LLM extraction succeeded and all Zod fields were present — does NOT mean the agent completed its task. */
   passed: boolean;
   missingFields: string[];
   verifierFailure: boolean;
@@ -127,7 +127,8 @@ export interface CompletionVerifierClients {
   fallbackClients: LlmGenerateClient[];
   /** Display name of primary model for logging (e.g. 'or:google/gemma-4-31b-it:free') */
   primaryModelName: string;
-  /** Display names for each fallback client, in the same order as fallbackClients. */
+  /** Display names for each fallback client, in the same order as fallbackClients.
+   *  If omitted or shorter than fallbackClients, missing entries default to 'fallback-1', 'fallback-2', etc. */
   fallbackModelNames?: string[];
 }
 
