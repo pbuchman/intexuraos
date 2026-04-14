@@ -1,15 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
-import { LlmModels } from '@intexuraos/llm-contract';
 import type { ExecutionMemoryPromptContext } from '../../types/execution-memory.js';
-
-const { createLlmClientMock } = vi.hoisted(() => ({
-  createLlmClientMock: vi.fn(),
-}));
-
-vi.mock('@intexuraos/llm-factory', () => ({
-  createLlmClient: createLlmClientMock,
-}));
 
 const {
   OrchestratorCompletionVerifier,
@@ -28,6 +19,7 @@ const {
   getLast50ClaudeLines,
   getLast20Lines,
   detectFatalExitCode,
+  getVerifierTaskId,
 } = await import('../completion-verifier.js');
 
 const loggerInfo = vi.fn();
@@ -42,33 +34,30 @@ const logger: Logger = {
   debug: loggerDebug as Logger['debug'],
 };
 
-const defaultConfig = {
-  model: LlmModels.Gemini25Flash,
-  geminiApiKey: 'gemini-key',
-  codeAgentUrl: 'http://localhost:8128',
-  usageWebhookUrl: 'http://localhost:8128/internal/webhooks/usage-events',
-  orchestratorSecret: 'test-secret',
-  internalAuthToken: 'test-token',
-} as const;
+const generateMock = vi.fn();
 
 function createVerifier(
   overrides: Partial<{
-    model: string;
-    geminiApiKey: string;
-    codeAgentUrl: string;
-    usageWebhookUrl: string;
-    orchestratorSecret: string;
-    internalAuthToken: string;
+    primaryModelName: string;
+    fallbackClients: { generate: typeof generateMock }[];
+    fallbackModelNames: string[];
   }> = {}
 ): InstanceType<typeof OrchestratorCompletionVerifier> {
-  return new OrchestratorCompletionVerifier(logger, { ...defaultConfig, ...overrides });
+  const base = {
+    primaryClient: { generate: generateMock },
+    fallbackClients: overrides.fallbackClients ?? [],
+    primaryModelName: overrides.primaryModelName ?? 'or:google/gemma-4-31b-it:free',
+  };
+  return new OrchestratorCompletionVerifier(
+    logger,
+    overrides.fallbackModelNames !== undefined
+      ? { ...base, fallbackModelNames: overrides.fallbackModelNames }
+      : base
+  );
 }
-
-const generateMock = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
-  createLlmClientMock.mockReturnValue({ generate: generateMock });
 });
 
 // ---------------------------------------------------------------------------
@@ -783,114 +772,186 @@ describe('getLast50ClaudeLines', () => {
 // ---------------------------------------------------------------------------
 
 describe('OrchestratorCompletionVerifier', () => {
-  describe('constructor validation', () => {
-    it('throws when model is not gemini-2.5-flash', () => {
-      expect(() => createVerifier({ model: 'gpt-4' })).toThrow(
-        'Completion verifier must use model gemini-2.5-flash'
-      );
-    });
-
-    it('throws when geminiApiKey is empty', () => {
-      expect(() => createVerifier({ geminiApiKey: '' })).toThrow(
-        'INTEXURAOS_GEMINI_APP_API_KEY is required'
-      );
-    });
-  });
-
   describe('describe', () => {
-    it('returns enabled with gemini provider and model', () => {
-      const verifier = createVerifier();
+    it('returns enabled with primary model name', () => {
+      const verifier = createVerifier({ primaryModelName: 'or:google/gemma-4-31b-it:free' });
       expect(verifier.describe()).toEqual({
         enabled: true,
-        provider: 'gemini',
-        model: LlmModels.Gemini25Flash,
+        model: 'or:google/gemma-4-31b-it:free',
       });
     });
   });
 
-  describe('correlation.taskId wiring via AsyncLocalStorage', () => {
-    it('getCorrelationTaskId returns null outside of verify/extractResumeSummary context', () => {
-      createVerifier();
-
-      const clientConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
-      expect(clientConfig).toBeDefined();
-      const sink = clientConfig['usageSink'] as Record<string, unknown>;
-      expect(sink).toBeDefined();
-
-      const sinkConfig = (sink as { config: { getCorrelationTaskId?: () => string | null } })[
-        'config'
-      ];
-      const getTaskId = sinkConfig?.getCorrelationTaskId;
-      expect(getTaskId).toBeDefined();
-
-      // Outside any verify/extractResumeSummary context, taskId should be null
-      expect(getTaskId?.()).toBeNull();
-    });
-
-    it('getCorrelationTaskId returns the correct taskId during verify()', async () => {
-      let capturedTaskId: string | null | undefined;
-      generateMock.mockImplementationOnce(() => {
-        // Capture taskId during generate() — this is when the usage sink would call getCorrelationTaskId
-        const clientConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
-        const sink = clientConfig['usageSink'] as Record<string, unknown>;
-        const sinkConfig = (sink as { config: { getCorrelationTaskId?: () => string | null } })[
-          'config'
-        ];
-        capturedTaskId = sinkConfig?.getCorrelationTaskId?.();
-        return Promise.resolve({
-          ok: true as const,
-          value: {
-            content: JSON.stringify({
-              outcome: 'planned',
-              superpowers_writing_plans: 'used',
-              linear_url: 'https://linear.app/pbuchman/issue/INT-100',
-              is_complex: '0',
-              has_plan_doc: '0',
-              subtask_urls: '',
-              pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
-              summary: 'The agent planned successfully.',
-              unclear_clarification: '',
-            }),
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
-          },
-        });
+  describe('fallback behavior', () => {
+    it('uses fallback client when primary fails', async () => {
+      const fallbackGenerate = vi.fn();
+      generateMock.mockResolvedValueOnce({
+        ok: false as const,
+        error: { code: 'API_ERROR', message: 'Primary failed' },
       });
-      const verifier = createVerifier();
+      fallbackGenerate.mockResolvedValueOnce({
+        ok: true as const,
+        value: {
+          content: JSON.stringify({
+            outcome: 'planned',
+            superpowers_writing_plans: 'used',
+            linear_url: 'https://linear.app/pbuchman/issue/INT-100',
+            is_complex: '0',
+            has_plan_doc: '0',
+            subtask_urls: '',
+            pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
+            summary: 'The agent planned successfully.',
+            unclear_clarification: '',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier({
+        fallbackClients: [{ generate: fallbackGenerate }],
+        fallbackModelNames: ['or:meta-llama/llama-4-scout:free'],
+      });
 
-      await verifier.verify({
-        taskId: 'task-correlation-test',
+      const result = await verifier.verify({
+        taskId: 'task-fallback-test',
         attempt: 1,
         maxAttempts: 1,
         agentType: 'planning',
         rawLogs: 'test logs',
       });
 
-      // The callback should have returned the correct taskId during generate()
-      expect(capturedTaskId).toBe('task-correlation-test');
+      expect(result.passed).toBe(true);
+      expect(fallbackGenerate).toHaveBeenCalledTimes(1);
+      expect(loggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'or:google/gemma-4-31b-it:free' }),
+        'Completion verifier model call failed, trying next'
+      );
+      // The response log must name the fallback model, not the primary
+      expect(loggerInfo).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'or:meta-llama/llama-4-scout:free' }),
+        'Completion verifier response'
+      );
     });
 
-    it('getCorrelationTaskId returns the correct taskId during extractResumeSummary()', async () => {
-      let capturedTaskId: string | null | undefined;
-      generateMock.mockImplementationOnce(() => {
-        const clientConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
-        const sink = clientConfig['usageSink'] as Record<string, unknown>;
-        const sinkConfig = (sink as { config: { getCorrelationTaskId?: () => string | null } })[
-          'config'
-        ];
-        capturedTaskId = sinkConfig?.getCorrelationTaskId?.();
-        return Promise.resolve({
-          ok: true as const,
-          value: {
-            content: JSON.stringify({ summary: 'Resume summary text.' }),
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
-          },
-        });
+    it('returns verifierFailure when all clients fail', async () => {
+      const fallbackGenerate = vi.fn();
+      generateMock.mockResolvedValueOnce({
+        ok: false as const,
+        error: { code: 'API_ERROR', message: 'Primary failed' },
       });
-      const verifier = createVerifier();
+      fallbackGenerate.mockResolvedValueOnce({
+        ok: false as const,
+        error: { code: 'API_ERROR', message: 'Fallback also failed' },
+      });
+      const verifier = createVerifier({
+        fallbackClients: [{ generate: fallbackGenerate }],
+      });
 
-      await verifier.extractResumeSummary('task-resume-test', 'some logs');
+      const result = await verifier.verify({
+        taskId: 'task-all-fail-test',
+        attempt: 1,
+        maxAttempts: 1,
+        agentType: 'planning',
+        rawLogs: 'test logs',
+      });
 
-      expect(capturedTaskId).toBe('task-resume-test');
+      expect(result.passed).toBe(false);
+      expect(result.verifierFailure).toBe(true);
+    });
+
+    it('uses fallback when primary returns unparseable JSON', async () => {
+      const fallbackGenerate = vi.fn();
+      generateMock.mockResolvedValueOnce({
+        ok: true as const,
+        value: {
+          content: 'not valid json',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      fallbackGenerate.mockResolvedValueOnce({
+        ok: true as const,
+        value: {
+          content: JSON.stringify({
+            outcome: 'planned',
+            superpowers_writing_plans: 'used',
+            linear_url: 'https://linear.app/pbuchman/issue/INT-200',
+            is_complex: '0',
+            has_plan_doc: '0',
+            subtask_urls: '',
+            pr_url: 'https://github.com/pbuchman/intexuraos/pull/200',
+            summary: 'Fallback parsed.',
+            unclear_clarification: '',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier({
+        fallbackClients: [{ generate: fallbackGenerate }],
+        fallbackModelNames: ['or:meta-llama/llama-4-scout:free'],
+      });
+
+      const result = await verifier.verify({
+        taskId: 'task-parse-fallback',
+        attempt: 1,
+        maxAttempts: 1,
+        agentType: 'planning',
+        rawLogs: 'test logs',
+      });
+
+      expect(result.passed).toBe(true);
+      expect(fallbackGenerate).toHaveBeenCalledTimes(1);
+      expect(loggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'or:google/gemma-4-31b-it:free' }),
+        'Completion verifier response parsing failed, trying next model'
+      );
+    });
+
+    it('uses fallback when primary fails schema validation', async () => {
+      const fallbackGenerate = vi.fn();
+      // Primary returns valid JSON but incomplete schema for pull_request agent
+      generateMock.mockResolvedValueOnce({
+        ok: true as const,
+        value: {
+          content: JSON.stringify({ gh_pr_url: 'https://github.com/org/repo/pull/1' }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      // Fallback returns valid complete response for planning agent
+      fallbackGenerate.mockResolvedValueOnce({
+        ok: true as const,
+        value: {
+          content: JSON.stringify({
+            outcome: 'planned',
+            superpowers_writing_plans: 'used',
+            linear_url: 'https://linear.app/pbuchman/issue/INT-300',
+            is_complex: '0',
+            has_plan_doc: '0',
+            subtask_urls: '',
+            pr_url: 'https://github.com/pbuchman/intexuraos/pull/300',
+            summary: 'Fallback validated.',
+            unclear_clarification: '',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier({
+        fallbackClients: [{ generate: fallbackGenerate }],
+        fallbackModelNames: ['or:meta-llama/llama-4-scout:free'],
+      });
+
+      const result = await verifier.verify({
+        taskId: 'task-schema-fallback',
+        attempt: 1,
+        maxAttempts: 1,
+        agentType: 'planning',
+        rawLogs: 'test logs',
+      });
+
+      expect(result.passed).toBe(true);
+      expect(fallbackGenerate).toHaveBeenCalledTimes(1);
+      expect(loggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'or:google/gemma-4-31b-it:free' }),
+        'Completion verifier Zod validation failed, trying next model'
+      );
     });
   });
 
@@ -1868,7 +1929,7 @@ describe('OrchestratorCompletionVerifier', () => {
         rawLogs: 'first line\nsecond line\nthird line\nfourth line\nfifth line',
       });
       const infoCall = loggerInfo.mock.calls.find(
-        (c: unknown[]) => typeof c[1] === 'string' && c[1] === 'Gemini completion verifier request'
+        (c: unknown[]) => typeof c[1] === 'string' && c[1] === 'Completion verifier request'
       ) as [Record<string, unknown>, string] | undefined;
       expect(infoCall).toBeDefined();
       const logged = infoCall?.[0]?.['transcript'] as string;
@@ -1895,7 +1956,7 @@ describe('OrchestratorCompletionVerifier', () => {
         rawLogs: 'only one line',
       });
       const infoCall = loggerInfo.mock.calls.find(
-        (c: unknown[]) => typeof c[1] === 'string' && c[1] === 'Gemini completion verifier request'
+        (c: unknown[]) => typeof c[1] === 'string' && c[1] === 'Completion verifier request'
       ) as [Record<string, unknown>, string] | undefined;
       expect(infoCall).toBeDefined();
       const logged = infoCall?.[0]?.['transcript'] as string;
@@ -1919,7 +1980,7 @@ describe('OrchestratorCompletionVerifier', () => {
         rawLogs: '   \n  \n   ',
       });
       const infoCall = loggerInfo.mock.calls.find(
-        (c: unknown[]) => typeof c[1] === 'string' && c[1] === 'Gemini completion verifier request'
+        (c: unknown[]) => typeof c[1] === 'string' && c[1] === 'Completion verifier request'
       ) as [Record<string, unknown>, string] | undefined;
       expect(infoCall).toBeDefined();
       const logged = infoCall?.[0]?.['transcript'] as string;
@@ -2042,7 +2103,7 @@ describe('verify — fatal exit code pre-check', () => {
       expect(generateMock).not.toHaveBeenCalled();
       expect(loggerWarn).toHaveBeenCalledWith(
         expect.objectContaining({ taskId, agentType: 'planning', exitCode }),
-        'Fatal exit code detected — skipping Gemini verification'
+        'Fatal exit code detected — skipping completion verification'
       );
     }
   );
@@ -2229,6 +2290,46 @@ describe('OrchestratorCompletionVerifier.extractResumeSummary', () => {
     expect(result).toBeUndefined();
   });
 
+  it('falls back to secondary model when primary fails', async () => {
+    const fallbackGenerate = vi.fn();
+    generateMock.mockResolvedValueOnce({
+      ok: false as const,
+      error: { code: 'API_ERROR', message: 'Primary failed' },
+    });
+    fallbackGenerate.mockResolvedValueOnce({
+      ok: true as const,
+      value: {
+        content: JSON.stringify({ summary: 'Fallback summary.' }),
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15, costUsd: 0.0001 },
+      },
+    });
+    const verifier = createVerifier({
+      fallbackClients: [{ generate: fallbackGenerate }],
+      fallbackModelNames: ['or:meta-llama/llama-4-scout:free'],
+    });
+    const result = await verifier.extractResumeSummary('task-fallback', 'some raw logs');
+    expect(result).toBe('Fallback summary.');
+    expect(fallbackGenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns undefined when all models (primary + fallback) fail', async () => {
+    const fallbackGenerate = vi.fn();
+    generateMock.mockResolvedValueOnce({
+      ok: false as const,
+      error: { code: 'API_ERROR', message: 'Primary failed' },
+    });
+    fallbackGenerate.mockResolvedValueOnce({
+      ok: false as const,
+      error: { code: 'API_ERROR', message: 'Fallback also failed' },
+    });
+    const verifier = createVerifier({
+      fallbackClients: [{ generate: fallbackGenerate }],
+    });
+    const result = await verifier.extractResumeSummary('task-all-fail', 'some raw logs');
+    expect(result).toBeUndefined();
+    expect(fallbackGenerate).toHaveBeenCalledTimes(1);
+  });
+
   it('uses last 20 lines of logs as transcript', async () => {
     const lines = Array.from({ length: 30 }, (_, i) => `line-${String(i + 1)}`);
     generateMock.mockResolvedValueOnce({
@@ -2245,5 +2346,11 @@ describe('OrchestratorCompletionVerifier.extractResumeSummary', () => {
     expect(calledPrompt).toContain('line-11');
     expect(calledPrompt).toContain('line-30');
     expect(calledPrompt).not.toContain('line-10');
+  });
+});
+
+describe('getVerifierTaskId', () => {
+  it('returns null when called outside any AsyncLocalStorage context', () => {
+    expect(getVerifierTaskId()).toBeNull();
   });
 });

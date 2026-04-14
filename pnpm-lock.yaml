@@ -701,9 +701,15 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
+      '@intexuraos/internal-clients':
+        specifier: workspace:*
+        version: link:../../packages/internal-clients
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
+      '@intexuraos/llm-factory':
+        specifier: workspace:*
+        version: link:../../packages/llm-factory
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../../packages/llm-pricing

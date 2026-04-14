@@ -1,4 +1,4 @@
-import type { GeminiClient } from '@intexuraos/infra-gemini';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { Logger } from '@intexuraos/common-core';
 import type { IntentInterpreter } from '../../domain/ports/intentInterpreter.js';
 import type { InterpretedIntent, IntentKind } from '../../domain/models/hellscriptEvent.js';
@@ -14,9 +14,9 @@ const VALID_KINDS = new Set<string>([
 ]);
 
 export class GeminiIntentInterpreter implements IntentInterpreter {
-  private readonly client: GeminiClient;
+  private readonly client: LlmGenerateClient;
 
-  constructor(client: GeminiClient) {
+  constructor(client: LlmGenerateClient) {
     this.client = client;
   }
 

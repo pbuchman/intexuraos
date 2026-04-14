@@ -17,6 +17,7 @@ import {
   FakePruneCandidateRepository,
 } from './fakes.js';
 import { resetServices, setServices } from '../services.js';
+import type { IssuePruningClassifier } from '../domain/index.js';
 
 export const issuer = 'https://test-issuer.example.com/';
 export const audience = 'test-audience';
@@ -223,9 +224,9 @@ export function setupTestContext(withTestLogger = false): TestContext {
       commentRepository: context.commentRepository,
       userServiceClient: context.userServiceClient,
       codeAgentClient: new FakeCodeAgentClient(),
-      issuePruningClassifier: {
-        classifyCandidates: async () => ({ ok: true, value: [] }),
-      },
+      createClassifier: (_llmClient): IssuePruningClassifier => ({
+        classifyCandidates: async () => ({ ok: true as const, value: [] }),
+      }),
       pruneCandidateRepository: context.pruneCandidateRepository,
     });
     clearJwksCache();

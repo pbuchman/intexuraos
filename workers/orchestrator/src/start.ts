@@ -39,10 +39,19 @@ import { WORKER_TYPES } from './services/isolation/types.js';
 import { ensureRepository } from './services/repo-manager.js';
 import type { OrchestratorConfig } from './types/config.js';
 import type { CompletionControlConfig, IsolationConfig } from './services/task-dispatcher.js';
-import { LlmModels } from '@intexuraos/llm-contract';
-import { OrchestratorCompletionVerifier } from './services/completion-verifier.js';
+import {
+  OrchestratorCompletionVerifier,
+  getVerifierTaskId,
+} from './services/completion-verifier.js';
 import { TurnMetricsCollector } from './services/turn-metrics-collector.js';
-import { OrchestratorAgentComplianceValidator } from './services/agent-compliance-validator.js';
+import {
+  OrchestratorAgentComplianceValidator,
+  getValidatorTaskId,
+} from './services/agent-compliance-validator.js';
+import {
+  parseValidationModels,
+  buildValidationClients,
+} from './services/validation-model-clients.js';
 
 const DEFAULT_PORT = 8199;
 const DEFAULT_CAPACITY = 2;
@@ -723,15 +732,49 @@ async function bootstrap(): Promise<void> {
     process.exit(1);
   }
 
-  // Hard gate: completion verification is always enabled and Gemini-only.
-  const geminiVerifierKey = getRequiredEnv('INTEXURAOS_GEMINI_APP_API_KEY');
-  const completionVerifier = new OrchestratorCompletionVerifier(logger, {
-    model: LlmModels.Gemini25Flash,
-    geminiApiKey: geminiVerifierKey,
-    codeAgentUrl: config.codeAgentUrl,
+  // Parse ordered validation model list (shared by completion verifier + compliance validator).
+  const validationModelsRaw = getOptionalEnv(
+    'INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS',
+    'or:google/gemma-4-31b-it:free,gemini-2.5-flash'
+  );
+  const validationModels = parseValidationModels(validationModelsRaw);
+  const geminiApiKey = getRequiredEnv('INTEXURAOS_GEMINI_APP_API_KEY');
+  const openRouterApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
+
+  const sharedValidationConfig = {
+    models: validationModels,
+    openRouterApiKey,
+    geminiApiKey,
     usageWebhookUrl,
     orchestratorSecret: config.orchestratorSecret,
     internalAuthToken: config.internalAuthToken,
+    logger,
+  };
+
+  // Build separate client sets so each usage sink correlates events to the correct task context.
+  const validationClients = buildValidationClients({
+    ...sharedValidationConfig,
+    getCorrelationTaskId: getVerifierTaskId,
+  });
+  const validatorClients = buildValidationClients({
+    ...sharedValidationConfig,
+    getCorrelationTaskId: getValidatorTaskId,
+  });
+
+  const primaryEntry = validationClients[0];
+  if (primaryEntry === undefined) {
+    process.stderr.write(
+      '\n\u274C PRECONDITION FAILED: INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS produced no clients\n\n'
+    );
+    process.exit(1);
+  }
+
+  const primaryModelName = primaryEntry.modelName;
+  const completionVerifier = new OrchestratorCompletionVerifier(logger, {
+    primaryClient: primaryEntry.client,
+    fallbackClients: validationClients.slice(1).map((e) => e.client),
+    primaryModelName,
+    fallbackModelNames: validationClients.slice(1).map((e) => e.modelName),
   });
 
   const completionControl: CompletionControlConfig = {
@@ -746,6 +789,7 @@ async function bootstrap(): Promise<void> {
       preserveWorkerContainers,
       workerImage,
       verifier: completionVerifier.describe(),
+      validationModels: validationModels.map((m) => m.modelId),
     },
     'Completion verification configuration'
   );
@@ -761,33 +805,25 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
-  const openRouterApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
-  const complianceValidatorModel =
-    process.env['INTEXURAOS_COMPLIANCE_MODEL'] ?? 'xiaomi/mimo-v2-pro';
-
   logger.info(
     {
-      complianceValidatorModel,
+      validationModels: validationModels.map((m) => m.modelId),
       hasOpenRouterApiKey: openRouterApiKey.length > 0,
     },
     'Agent compliance validator configuration'
   );
 
-  const agentComplianceValidator =
-    openRouterApiKey !== ''
-      ? new OrchestratorAgentComplianceValidator(logger, {
-          openRouterApiKey,
-          model: complianceValidatorModel,
-          pricing: {
-            inputPricePerMillion: 1.0,
-            outputPricePerMillion: 3.0,
-          },
-          codeAgentUrl: config.codeAgentUrl,
-          usageWebhookUrl,
-          orchestratorSecret: config.orchestratorSecret,
-          internalAuthToken: config.internalAuthToken,
-        })
-      : undefined;
+  // validatorClients is guaranteed non-empty: process.exit(1) above aborts if validationClients
+  // (built from the same models list) is empty, so we can always create the validator.
+  const agentComplianceValidator = new OrchestratorAgentComplianceValidator(logger, {
+    clients: validatorClients.map((e) => e.client),
+    primaryModelName,
+    modelNames: validatorClients.map((e) => e.modelName),
+    codeAgentUrl: config.codeAgentUrl,
+    usageWebhookUrl,
+    orchestratorSecret: config.orchestratorSecret,
+    internalAuthToken: config.internalAuthToken,
+  });
 
   const dispatcher = new TaskDispatcher(
     config,

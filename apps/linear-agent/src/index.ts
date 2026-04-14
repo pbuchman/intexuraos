@@ -21,7 +21,6 @@ const REQUIRED_ENV = [
 ];
 
 const REQUIRED_MODELS: LLMModel[] = [
-  LlmModels.Gemini25Flash,
   LlmModels.Gemini25Pro,
 ];
 

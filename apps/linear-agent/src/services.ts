@@ -27,8 +27,7 @@ import { createUserServiceClient, type UserServiceClient } from '@intexuraos/int
 import { createCodeAgentHttpClient } from './infra/http/codeAgentHttpClient.js';
 import { type IPricingContext, HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { createAppLogger } from '@intexuraos/infra-sentry';
-import { createGeminiClient, TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
-import { LlmModels } from '@intexuraos/llm-contract';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
 const logger = createAppLogger({ name: 'linear-agent' });
 
@@ -44,7 +43,7 @@ export interface ServiceContainer {
   commentRepository: LinearCommentRepository;
   userServiceClient: UserServiceClient;
   codeAgentClient: CodeAgentClient;
-  issuePruningClassifier: IssuePruningClassifier;
+  createClassifier: (llmClient: LlmGenerateClient) => IssuePruningClassifier;
   pruneCandidateRepository: PruneCandidateRepository;
 }
 
@@ -84,29 +83,6 @@ export function initServices(config: ServiceConfig): void {
     logger
   );
 
-  // Create issue pruning classifier using platform Gemini API key
-  const geminiApiKey = process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
-  const geminiClient = geminiApiKey !== undefined && geminiApiKey !== ''
-    ? createGeminiClient({
-        apiKey: geminiApiKey,
-        model: LlmModels.Gemini25Flash,
-        userId: 'system:pruning',
-        pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
-        logger,
-        usageSink: buildUsageSink('issue-pruning'),
-      })
-    : null;
-
-  const issuePruningClassifier = geminiClient !== null
-    ? createIssuePruningClassifier({
-        generate: (prompt: string) => geminiClient.generate(prompt),
-        logger,
-      })
-    : createIssuePruningClassifier({
-        generate: (_prompt: string) => Promise.resolve({ ok: false as const, error: { code: 'INVALID_KEY', message: 'No Gemini API key configured' } }),
-        logger,
-      });
-
   container = {
     connectionRepository: createLinearConnectionRepository(),
     linearApiClient: createLinearApiClient(),
@@ -117,7 +93,8 @@ export function initServices(config: ServiceConfig): void {
     commentRepository: createLinearCommentRepository(),
     userServiceClient,
     codeAgentClient,
-    issuePruningClassifier,
+    createClassifier: (llmClient: LlmGenerateClient): IssuePruningClassifier =>
+      createIssuePruningClassifier({ generate: (prompt) => llmClient.generate(prompt), logger }),
     pruneCandidateRepository: createPruneCandidateRepository(),
   };
 }

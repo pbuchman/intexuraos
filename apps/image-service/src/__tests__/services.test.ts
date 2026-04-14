@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { FakePricingContext } from '@intexuraos/llm-pricing';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import {
   getServices,
@@ -83,17 +83,31 @@ describe('services', () => {
       initializeServices(fakePricingContext);
 
       const services = getServices();
-      const generator = services.createPromptGenerator('google', 'test-key', 'test-user-id', mockLogger);
+      const generator = services.createPromptGenerator(LlmProviders.Google, LlmModels.Gemini25Pro, 'test-key', 'test-user-id', mockLogger);
 
       expect(generator).toBeDefined();
       expect(generator.generateThumbnailPrompt).toBeDefined();
+    });
+
+    it('createPromptGenerator resolves pricing from the passed model, not a hardcoded default', () => {
+      const getPricingSpy = vi.spyOn(fakePricingContext, 'getPricing');
+      initializeServices(fakePricingContext);
+      getPricingSpy.mockClear();
+
+      const services = getServices();
+      services.createPromptGenerator(LlmProviders.Google, LlmModels.Gemini25Pro, 'test-key', 'test-user-id', mockLogger);
+
+      expect(getPricingSpy).toHaveBeenCalledWith(LlmModels.Gemini25Pro);
+      expect(getPricingSpy).not.toHaveBeenCalledWith(LlmModels.Gemini25Flash);
+
+      getPricingSpy.mockRestore();
     });
 
     it('createPromptGenerator returns openai adapter for openai provider', () => {
       initializeServices(fakePricingContext);
 
       const services = getServices();
-      const generator = services.createPromptGenerator('openai', 'test-key', 'test-user-id', mockLogger);
+      const generator = services.createPromptGenerator('openai', 'gpt-4.1', 'test-key', 'test-user-id', mockLogger);
 
       expect(generator).toBeDefined();
       expect(generator.generateThumbnailPrompt).toBeDefined();
