@@ -3,13 +3,8 @@ import type { Logger } from '@intexuraos/common-core';
 import { readFile } from 'node:fs/promises';
 import type { AgentComplianceReport } from '../compliance-report-schema.js';
 
-const { createOpenRouterClientMock, execFileMock } = vi.hoisted(() => ({
-  createOpenRouterClientMock: vi.fn(),
+const { execFileMock } = vi.hoisted(() => ({
   execFileMock: vi.fn(),
-}));
-
-vi.mock('@intexuraos/infra-openrouter', () => ({
-  createOpenRouterClient: createOpenRouterClientMock,
 }));
 
 vi.mock('node:child_process', () => ({
@@ -39,12 +34,8 @@ const generateMock = vi.fn();
 const postedCommentBodies: string[] = [];
 
 const defaultConfig = {
-  openRouterApiKey: 'test-key',
-  model: 'anthropic/claude-sonnet-4',
-  pricing: {
-    inputPricePerMillion: 3.0,
-    outputPricePerMillion: 15.0,
-  },
+  clients: [{ generate: generateMock }] as { generate: typeof generateMock }[],
+  primaryModelName: 'or:google/gemma-4-31b-it:free',
   codeAgentUrl: 'http://localhost:8128',
   usageWebhookUrl: 'http://localhost:8128/internal/webhooks/usage-events',
   orchestratorSecret: 'test-secret',
@@ -102,7 +93,7 @@ const validReport: AgentComplianceReport = {
 beforeEach(() => {
   vi.clearAllMocks();
   postedCommentBodies.length = 0;
-  createOpenRouterClientMock.mockReturnValue({ generate: generateMock });
+  defaultConfig.clients = [{ generate: generateMock }];
   execFileMock.mockImplementation(
     (
       _cmd: string,
@@ -289,7 +280,7 @@ describe('OrchestratorAgentComplianceValidator', () => {
     expect(result?.report).toEqual(validReport);
     expect(result?.transcriptTooLong).toBe(false);
     expect(result?.costUsd).toBe(0.042);
-    expect(result?.model).toBe('anthropic/claude-sonnet-4');
+    expect(result?.model).toBe('or:google/gemma-4-31b-it:free');
     expect(result?.promptVersion).toBe(AGENT_COMPLIANCE_PROMPT_VERSION);
     expect(execFileMock).toHaveBeenCalledTimes(1);
     expect(execFileMock.mock.calls[0]?.[0]).toBe('gh');
@@ -306,7 +297,7 @@ describe('OrchestratorAgentComplianceValidator', () => {
     expect(bodyArg).toContain('### Agent Compliance Report');
     expect(bodyArg).toContain('@ignore');
     const progressCalls = onProgress.mock.calls.map((call) => String(call[0]));
-    expect(progressCalls).toContain('calling OpenRouter for compliance analysis...');
+    expect(progressCalls).toContain('calling LLM for compliance analysis...');
     expect(progressCalls).toContain('compliance response received');
     expect(progressCalls).toContain('posting PR comment...');
     expect(progressCalls).toContain('PR comment posted');
@@ -429,7 +420,7 @@ describe('OrchestratorAgentComplianceValidator', () => {
     expect(result).toBeNull();
     expect(loggerError).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: 'task_abc' }),
-      'Compliance validation LLM call failed'
+      'Compliance validation LLM call failed (all models)'
     );
     const progressCalls = onProgress.mock.calls.map((call) => String(call[0]));
     expect(progressCalls[1]).toContain('LLM call failed');
@@ -526,44 +517,33 @@ describe('OrchestratorAgentComplianceValidator', () => {
     expect(progressCalls).toContain('PR comment failed (see server logs)');
   });
 
-  it('getCorrelationTaskId returns correct taskId during validate() via AsyncLocalStorage', async () => {
-    let capturedTaskId: string | null | undefined;
-    generateMock.mockImplementation(() => {
-      // Capture taskId during generate() — this is when the usage sink would call getCorrelationTaskId
-      const clientConfig = createOpenRouterClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
-      const sink = clientConfig['usageSink'] as Record<string, unknown>;
-      const sinkConfig = (sink as { config: { getCorrelationTaskId?: () => string | null } })[
-        'config'
-      ];
-      capturedTaskId = sinkConfig?.getCorrelationTaskId?.();
-      return Promise.resolve({
-        ok: true as const,
-        value: {
-          content: JSON.stringify(validReport),
-          usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.042 },
-        },
-      });
+  it('falls back to secondary client when primary fails', async () => {
+    const fallbackGenerate = vi.fn();
+    generateMock.mockResolvedValueOnce({
+      ok: false as const,
+      error: { code: 'API_ERROR', message: 'Primary failed' },
     });
-    const validator = new OrchestratorAgentComplianceValidator(logger, defaultConfig);
+    fallbackGenerate.mockResolvedValueOnce({
+      ok: true as const,
+      value: {
+        content: JSON.stringify(validReport),
+        usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.03 },
+      },
+    });
+    const config = {
+      ...defaultConfig,
+      clients: [{ generate: generateMock }, { generate: fallbackGenerate }],
+    };
+    const validator = new OrchestratorAgentComplianceValidator(logger, config);
+    const result = await validator.validate(defaultInput);
 
-    // Capture the usageSink and verify callback exists
-    const clientConfig = createOpenRouterClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(clientConfig).toBeDefined();
-    const sink = clientConfig['usageSink'] as Record<string, unknown>;
-    expect(sink).toBeDefined();
-    const sinkConfig = (sink as { config: { getCorrelationTaskId?: () => string | null } })[
-      'config'
-    ];
-    const getTaskId = sinkConfig?.getCorrelationTaskId;
-    expect(getTaskId).toBeDefined();
-
-    // Outside validate() context, taskId should be null
-    expect(getTaskId?.()).toBeNull();
-
-    await validator.validate(defaultInput);
-
-    // The callback should have returned the correct taskId during generate()
-    expect(capturedTaskId).toBe('task_abc');
+    expect(result).not.toBeNull();
+    expect(result?.report).toEqual(validReport);
+    expect(fallbackGenerate).toHaveBeenCalledTimes(1);
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ modelIndex: 0 }),
+      'Primary compliance model failed, trying fallbacks'
+    );
   });
 
   it('logs stderr from gh command errors', async () => {

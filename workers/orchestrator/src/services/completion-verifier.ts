@@ -1,8 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
-import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
-import { LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
-import { HttpWebhookUsageSink } from '@intexuraos/llm-pricing';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { z } from 'zod';
 import { stripDockerHeaders } from './log-formatter.js';
 import type { ExecutionMemoryPromptContext } from '../types/execution-memory.js';
@@ -119,13 +117,11 @@ export interface CompletionVerifier {
   extractResumeSummary(taskId: string, rawLogs: string): Promise<string | undefined>;
 }
 
-export interface CompletionVerifierConfig {
-  model: string;
-  geminiApiKey: string;
-  codeAgentUrl: string;
-  usageWebhookUrl: string;
-  orchestratorSecret: string;
-  internalAuthToken: string;
+export interface CompletionVerifierClients {
+  primaryClient: LlmGenerateClient;
+  fallbackClients: LlmGenerateClient[];
+  /** Display name of primary model for logging (e.g. 'or:google/gemma-4-31b-it:free') */
+  primaryModelName: string;
 }
 
 export const PLANNING_SCHEMA = z
@@ -217,14 +213,6 @@ export const REMEDIATION_SCHEMA = z
 export const RESUME_SUMMARY_SCHEMA = z.object({
   summary: z.string(),
 });
-
-const VERIFIER_PRICING: Partial<Record<LLMModel, ModelPricing>> = {
-  [LlmModels.Gemini25Flash]: {
-    inputPricePerMillion: 0.3,
-    outputPricePerMillion: 2.5,
-    groundingCostPerRequest: 0,
-  },
-};
 
 const FATAL_EXIT_CODE_PATTERN =
   /\[entrypoint\] (?:Claude|Codex) attempt finished with exit code: (137|139)/;
@@ -565,22 +553,23 @@ function validateMemoryReporting(
 }
 
 export class OrchestratorCompletionVerifier implements CompletionVerifier {
-  private readonly llmClient: LlmGenerateClient;
-  private readonly model: string;
+  private readonly primaryClient: LlmGenerateClient;
+  private readonly fallbackClients: LlmGenerateClient[];
+  private readonly primaryModelName: string;
 
   constructor(
     private readonly logger: Logger,
-    config: CompletionVerifierConfig
+    clients: CompletionVerifierClients
   ) {
-    this.model = config.model;
-    this.llmClient = this.createLlmClient(config);
+    this.primaryClient = clients.primaryClient;
+    this.fallbackClients = clients.fallbackClients;
+    this.primaryModelName = clients.primaryModelName;
   }
 
   describe(): { enabled: boolean; provider?: string; model?: string } {
     return {
       enabled: true,
-      provider: 'gemini',
-      model: this.model,
+      model: this.primaryModelName,
     };
   }
 
@@ -618,7 +607,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         attempt: input.attempt,
         maxAttempts: input.maxAttempts,
         agentType: input.agentType,
-        model: this.model,
+        model: this.primaryModelName,
         promptChars: prompt.length,
         transcript: ((): string => {
           const tLines = transcript.split('\n').filter((l) => l.trim() !== '');
@@ -629,20 +618,20 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
             : `${first}\n  ... (${String(tLines.length - 2)} lines omitted) ...\n${last}`;
         })(),
       },
-      'Gemini completion verifier request'
+      'Completion verifier request'
     );
 
-    const generated = await this.llmClient.generate(prompt);
+    const generated = await this.generateWithFallback(prompt, input.taskId);
     if (!generated.ok) {
       this.logger.error(
         {
           taskId: input.taskId,
           attempt: input.attempt,
-          model: this.model,
+          model: this.primaryModelName,
           errorCode: generated.error.code,
           errorMessage: generated.error.message,
         },
-        'Gemini completion verifier returned no response'
+        'Completion verifier returned no response (all models failed)'
       );
       return {
         passed: false,
@@ -656,11 +645,11 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       {
         taskId: input.taskId,
         attempt: input.attempt,
-        model: this.model,
+        model: this.primaryModelName,
         responseChars: generated.value.content.length,
         response: generated.value.content,
       },
-      'Gemini completion verifier response'
+      'Completion verifier response'
     );
 
     let rawJson: unknown;
@@ -671,11 +660,11 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         {
           taskId: input.taskId,
           attempt: input.attempt,
-          model: this.model,
+          model: this.primaryModelName,
           response: generated.value.content,
           error: getErrorMessage(error),
         },
-        'Gemini completion verifier response parsing failed'
+        'Completion verifier response parsing failed'
       );
       return {
         passed: false,
@@ -692,11 +681,11 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         {
           taskId: input.taskId,
           attempt: input.attempt,
-          model: this.model,
+          model: this.primaryModelName,
           missingFields,
           zodErrors: parseResult.error.issues,
         },
-        'Gemini completion verifier Zod validation failed'
+        'Completion verifier Zod validation failed'
       );
       return {
         passed: false,
@@ -729,7 +718,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
           {
             taskId: input.taskId,
             attempt: input.attempt,
-            model: this.model,
+            model: this.primaryModelName,
             emptyMemoryFields,
           },
           'Memory fields are empty despite memories being injected'
@@ -753,10 +742,10 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         {
           taskId: input.taskId,
           attempt: input.attempt,
-          model: this.model,
+          model: this.primaryModelName,
           memoryValidationFailures,
         },
-        'Gemini completion verifier memory validation failed'
+        'Completion verifier memory validation failed'
       );
       return {
         passed: false,
@@ -770,10 +759,10 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       {
         taskId: input.taskId,
         attempt: input.attempt,
-        model: this.model,
+        model: this.primaryModelName,
         agentData,
       },
-      'Gemini completion verifier parsed verdict'
+      'Completion verifier parsed verdict'
     );
 
     return {
@@ -798,11 +787,11 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     const transcript = getLast20Lines(rawLogs);
     const prompt = buildResumeSummaryPrompt(transcript);
 
-    const generated = await this.llmClient.generate(prompt);
+    const generated = await this.generateWithFallback(prompt, taskId);
     if (!generated.ok) {
       this.logger.error(
         { taskId, errorCode: generated.error.code },
-        'extractResumeSummary: LLM generate failed'
+        'extractResumeSummary: LLM generate failed (all models)'
       );
       return undefined;
     }
@@ -832,37 +821,41 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     return summary;
   }
 
-  private createLlmClient(config: CompletionVerifierConfig): LlmGenerateClient {
-    if (config.model !== LlmModels.Gemini25Flash) {
-      throw new Error('Completion verifier must use model gemini-2.5-flash');
+  private async generateWithFallback(
+    prompt: string,
+    taskId: string
+  ): ReturnType<LlmGenerateClient['generate']> {
+    const result = await this.primaryClient.generate(prompt);
+    if (result.ok) {
+      return result;
     }
 
-    const pricing = VERIFIER_PRICING[config.model];
-    /* v8 ignore start -- upstream: model guard above guarantees pricing entry exists @preserve */
-    if (pricing === undefined) {
-      throw new Error(`Missing completion verifier pricing entry for model: ${config.model}`);
-    }
-    /* v8 ignore stop @preserve */
+    this.logger.warn(
+      {
+        taskId,
+        primaryModel: this.primaryModelName,
+        errorCode: result.error.code,
+        fallbackCount: this.fallbackClients.length,
+      },
+      'Primary validation model failed, trying fallbacks'
+    );
 
-    if (config.geminiApiKey === '') {
-      throw new Error('INTEXURAOS_GEMINI_APP_API_KEY is required');
+    for (const fallbackClient of this.fallbackClients) {
+      const fallbackResult = await fallbackClient.generate(prompt);
+      if (fallbackResult.ok) {
+        this.logger.info(
+          { taskId },
+          'Fallback validation model succeeded'
+        );
+        return fallbackResult;
+      }
+      this.logger.warn(
+        { taskId, errorCode: fallbackResult.error.code },
+        'Fallback validation model also failed'
+      );
     }
 
-    return createLlmClient({
-      apiKey: config.geminiApiKey,
-      model: config.model,
-      userId: 'orchestrator-completion-verifier',
-      pricing,
-      logger: this.logger,
-      usageSink: new HttpWebhookUsageSink({
-        webhookUrl: config.usageWebhookUrl,
-        webhookSecret: config.orchestratorSecret,
-        internalAuthToken: config.internalAuthToken,
-        service: 'orchestrator',
-        component: 'completion-verifier',
-        logger: this.logger,
-        getCorrelationTaskId: (): string | null => verifierTaskIdStorage.getStore() ?? null,
-      }),
-    });
+    // All failed — return the original primary error
+    return result;
   }
 }
