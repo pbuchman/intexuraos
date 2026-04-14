@@ -39,13 +39,20 @@ function createVerifier(
   overrides: Partial<{
     primaryModelName: string;
     fallbackClients: { generate: typeof generateMock }[];
+    fallbackModelNames: string[];
   }> = {}
 ): InstanceType<typeof OrchestratorCompletionVerifier> {
-  return new OrchestratorCompletionVerifier(logger, {
+  const base = {
     primaryClient: { generate: generateMock },
     fallbackClients: overrides.fallbackClients ?? [],
     primaryModelName: overrides.primaryModelName ?? 'or:google/gemma-4-31b-it:free',
-  });
+  };
+  return new OrchestratorCompletionVerifier(
+    logger,
+    overrides.fallbackModelNames !== undefined
+      ? { ...base, fallbackModelNames: overrides.fallbackModelNames }
+      : base
+  );
 }
 
 beforeEach(() => {
@@ -800,6 +807,7 @@ describe('OrchestratorCompletionVerifier', () => {
       });
       const verifier = createVerifier({
         fallbackClients: [{ generate: fallbackGenerate }],
+        fallbackModelNames: ['or:meta-llama/llama-4-scout:free'],
       });
 
       const result = await verifier.verify({
@@ -815,6 +823,16 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(loggerWarn).toHaveBeenCalledWith(
         expect.objectContaining({ primaryModel: 'or:google/gemma-4-31b-it:free' }),
         'Primary validation model failed, trying fallbacks'
+      );
+      // The success log must name the fallback model, not the primary
+      expect(loggerInfo).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'or:meta-llama/llama-4-scout:free' }),
+        'Fallback validation model succeeded'
+      );
+      // The response log must also name the fallback model
+      expect(loggerInfo).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'or:meta-llama/llama-4-scout:free' }),
+        'Completion verifier response'
       );
     });
 

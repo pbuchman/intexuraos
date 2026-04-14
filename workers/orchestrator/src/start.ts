@@ -745,20 +745,20 @@ async function bootstrap(): Promise<void> {
     logger,
   });
 
-  const primaryModelName = validationModels[0]?.modelId ?? 'unknown';
-
-  const primaryClient = validationClients[0];
-  if (primaryClient === undefined) {
+  const primaryEntry = validationClients[0];
+  if (primaryEntry === undefined) {
     process.stderr.write(
       '\n\u274C PRECONDITION FAILED: INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS produced no clients\n\n'
     );
     process.exit(1);
   }
 
+  const primaryModelName = primaryEntry.modelName;
   const completionVerifier = new OrchestratorCompletionVerifier(logger, {
-    primaryClient,
-    fallbackClients: validationClients.slice(1),
+    primaryClient: primaryEntry.client,
+    fallbackClients: validationClients.slice(1).map((e) => e.client),
     primaryModelName,
+    fallbackModelNames: validationClients.slice(1).map((e) => e.modelName),
   });
 
   const completionControl: CompletionControlConfig = {
@@ -800,8 +800,9 @@ async function bootstrap(): Promise<void> {
   const agentComplianceValidator =
     validationClients.length > 0
       ? new OrchestratorAgentComplianceValidator(logger, {
-          clients: validationClients,
+          clients: validationClients.map((e) => e.client),
           primaryModelName,
+          modelNames: validationClients.map((e) => e.modelName),
           codeAgentUrl: config.codeAgentUrl,
           usageWebhookUrl,
           orchestratorSecret: config.orchestratorSecret,

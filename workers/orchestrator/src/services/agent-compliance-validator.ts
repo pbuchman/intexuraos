@@ -258,6 +258,8 @@ export interface AgentComplianceValidatorConfig {
   clients: LlmGenerateClient[];
   /** Display name of the primary model for logging/reports. */
   primaryModelName: string;
+  /** Display names for each client, in the same order as clients. */
+  modelNames?: string[];
   codeAgentUrl: string;
   usageWebhookUrl: string;
   orchestratorSecret: string;
@@ -286,14 +288,19 @@ export interface AgentComplianceValidator {
 }
 
 export class OrchestratorAgentComplianceValidator implements AgentComplianceValidator {
-  private readonly clients: LlmGenerateClient[];
+  /** Each client paired with its display model name, primary first. */
+  private readonly entries: readonly { client: LlmGenerateClient; modelName: string }[];
   private readonly primaryModelName: string;
   constructor(
     private readonly logger: Logger,
     config: AgentComplianceValidatorConfig
   ) {
-    this.clients = config.clients;
+    const modelNames = config.modelNames ?? [];
     this.primaryModelName = config.primaryModelName;
+    this.entries = config.clients.map((client, i) => ({
+      client,
+      modelName: modelNames[i] ?? (i === 0 ? config.primaryModelName : `fallback-${String(i)}`),
+    }));
   }
   async validate(
     input: ComplianceValidationInput,
@@ -348,17 +355,19 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
       onProgress?.('LLM call failed: ' + generated.error.message);
       return null;
     }
+    const generatedModelName = generated.modelName;
+    const generatedContent = generated.value.content; // @allow-result-access -- guarded by if (!generated.ok) early return above
     this.logger.info(
-      { taskId: input.taskId, responseChars: generated.value.content.length },
+      { taskId: input.taskId, responseChars: generatedContent.length },
       'Compliance validation LLM response received'
     );
     onProgress?.('compliance response received');
-    let totalCostUsd = generated.value.usage.costUsd;
-    const parseResult = this.parseResponse(generated.value.content);
+    let totalCostUsd = generated.value.usage.costUsd; // @allow-result-access -- guarded by if (!generated.ok) early return above
+    const parseResult = this.parseResponse(generatedContent);
     if (parseResult.ok) {
       const markdown = renderComplianceMarkdown(parseResult.value, {
         costUsd: totalCostUsd,
-        model: this.primaryModelName,
+        model: generatedModelName,
         promptVersion: AGENT_COMPLIANCE_PROMPT_VERSION,
       });
       onProgress?.('posting PR comment...');
@@ -366,7 +375,7 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
       onProgress?.(posted ? 'PR comment posted' : 'PR comment failed (see server logs)');
       return {
         report: parseResult.value,
-        model: this.primaryModelName,
+        model: generatedModelName,
         promptVersion: AGENT_COMPLIANCE_PROMPT_VERSION,
         costUsd: totalCostUsd,
         transcriptTooLong: false,
@@ -377,12 +386,12 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
       this.logger,
       createLlmParseError({
         errorMessage: parseResult.error,
-        llmResponse: generated.value.content,
+        llmResponse: generatedContent,
         expectedSchema: 'AgentComplianceReport (see compliance-report-schema.ts)',
         operation: 'compliance-validation',
       })
     );
-    const repairPrompt = this.buildRepairPrompt(generated.value.content, parseResult.error);
+    const repairPrompt = this.buildRepairPrompt(generatedContent, parseResult.error);
     const repairResult = await this.generateWithFallback(repairPrompt, input.taskId);
     if (!repairResult.ok) {
       this.logger.warn(
@@ -392,14 +401,16 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
       onProgress?.('repair LLM call also failed');
       return null;
     }
-    totalCostUsd += repairResult.value.usage.costUsd;
-    const repairParseResult = this.parseResponse(repairResult.value.content);
+    const repairModelName = repairResult.modelName;
+    const repairContent = repairResult.value.content; // @allow-result-access -- guarded by if (!repairResult.ok) early return above
+    totalCostUsd += repairResult.value.usage.costUsd; // @allow-result-access -- guarded by if (!repairResult.ok) early return above
+    const repairParseResult = this.parseResponse(repairContent);
     if (!repairParseResult.ok) {
       logLlmParseError(
         this.logger,
         createLlmParseError({
           errorMessage: repairParseResult.error,
-          llmResponse: repairResult.value.content,
+          llmResponse: repairContent,
           expectedSchema: 'AgentComplianceReport (see compliance-report-schema.ts)',
           operation: 'compliance-validation-repair',
         })
@@ -417,7 +428,7 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
     );
     const markdown = renderComplianceMarkdown(repairParseResult.value, {
       costUsd: totalCostUsd,
-      model: this.primaryModelName,
+      model: repairModelName,
       promptVersion: AGENT_COMPLIANCE_PROMPT_VERSION,
     });
     onProgress?.('posting PR comment...');
@@ -425,7 +436,7 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
     onProgress?.(posted ? 'PR comment posted' : 'PR comment failed (see server logs)');
     return {
       report: repairParseResult.value,
-      model: this.primaryModelName,
+      model: repairModelName,
       promptVersion: AGENT_COMPLIANCE_PROMPT_VERSION,
       costUsd: totalCostUsd,
       transcriptTooLong: false,
@@ -434,19 +445,19 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
   private async generateWithFallback(
     prompt: string,
     taskId: string
-  ): ReturnType<LlmGenerateClient['generate']> {
-    let lastResult: Awaited<ReturnType<LlmGenerateClient['generate']>> | undefined;
-    for (const [i, client] of this.clients.entries()) {
-      const result = await client.generate(prompt);
-      lastResult = result;
+  ): Promise<Awaited<ReturnType<LlmGenerateClient['generate']>> & { modelName: string }> {
+    let lastResult: (Awaited<ReturnType<LlmGenerateClient['generate']>> & { modelName: string }) | undefined;
+    for (const [i, entry] of this.entries.entries()) {
+      const result = await entry.client.generate(prompt);
+      lastResult = { ...result, modelName: entry.modelName };
       if (result.ok) {
         if (i > 0) {
           this.logger.info(
-            { taskId, fallbackIndex: i },
+            { taskId, fallbackIndex: i, model: entry.modelName },
             'Compliance validation fallback model succeeded'
           );
         }
-        return result;
+        return lastResult;
       }
       this.logger.warn(
         { taskId, modelIndex: i, errorCode: result.error.code },
@@ -455,7 +466,7 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
           : 'Fallback compliance model also failed'
       );
     }
-    // lastResult is always defined because clients is non-empty (validated at construction).
+    // lastResult is always defined because entries is non-empty (validated at construction).
     // Return the last error so callers see which model ultimately failed.
     return lastResult as NonNullable<typeof lastResult>;
   }
