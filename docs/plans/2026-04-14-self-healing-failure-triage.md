@@ -1609,6 +1609,18 @@ In `apps/code-agent/src/routes/webhookRoutes.ts`, modify the `status === 'failed
               { taskId, action: triageResult.value.action, retryTaskId: triageResult.value.retryTaskId },
               'Task auto-retried by failure triage'
             );
+
+            // Bookkeeping: the original task failed — preserve the full failed-task record.
+            // Even though a retry is in flight, the original task's failure must be mirrored
+            // and its PR lock released so the retry task can re-acquire it.
+            await cleanupLockIfPR();
+            await statusMirrorService.mirrorStatus({
+              actionId: task.actionId,
+              taskStatus: 'failed',
+              errorMessage: taskError.message,
+              traceId,
+            });
+
             // For cooloff retries, the delay is handled at task level — drainTaskQueue
             // will pick up the retry task on next scheduler tick (1-minute interval)
             await flushPendingTaskLogLines(taskId);
