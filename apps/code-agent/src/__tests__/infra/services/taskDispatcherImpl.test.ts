@@ -331,6 +331,163 @@ describe('taskDispatcherImpl', () => {
     });
   });
 
+  describe('failedWorkerLocation filtering', () => {
+    const WORKER_B_URL = 'https://worker-b.example.com';
+
+    const baseDispatchRequest = {
+      prompt: 'Do something',
+      systemPromptHash: 'hash-abc',
+      repository: 'test/repo',
+      baseBranch: 'main',
+      workerType: 'opus' as const,
+      webhookUrl: 'https://example.com/webhook',
+      webhookSecret: 'secret',
+      linearIssueLabels: [],
+      hasChildren: false,
+    };
+
+    it('excludes the failed worker when alternatives exist', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'worker-a': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+        },
+        'worker-b': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+        },
+      });
+
+      const service = createTaskDispatcherService(deps);
+
+      // Only intercept worker-b — if dispatcher hits worker-a the request will be unmatched
+      nock(WORKER_B_URL)
+        .post('/tasks')
+        .reply(200, { status: 'accepted' });
+
+      const result = await service.dispatch({
+        ...baseDispatchRequest,
+        taskId: 'task-exclude-failed',
+        failedWorkerLocation: 'worker-a',
+        workerCredentials: {
+          workers: [
+            {
+              name: 'worker-a',
+              url: WORKER_URL,
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+            },
+            {
+              name: 'worker-b',
+              url: WORKER_B_URL,
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+            },
+          ],
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerLocation).toBe('worker-b');
+      }
+    });
+
+    it('falls back to failed worker when it is the only healthy option', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'worker-a': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+        },
+      });
+
+      const service = createTaskDispatcherService(deps);
+
+      nock(WORKER_URL)
+        .post('/tasks')
+        .reply(200, { status: 'accepted' });
+
+      const result = await service.dispatch({
+        ...baseDispatchRequest,
+        taskId: 'task-fallback-failed',
+        failedWorkerLocation: 'worker-a',
+        workerCredentials: {
+          workers: [
+            {
+              name: 'worker-a',
+              url: WORKER_URL,
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+            },
+          ],
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerLocation).toBe('worker-a');
+      }
+    });
+
+    it('dispatches normally when failedWorkerLocation is undefined', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'worker-a': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+        },
+      });
+
+      const service = createTaskDispatcherService(deps);
+
+      nock(WORKER_URL)
+        .post('/tasks')
+        .reply(200, { status: 'accepted' });
+
+      const result = await service.dispatch({
+        ...baseDispatchRequest,
+        taskId: 'task-no-failed-location',
+        workerCredentials: {
+          workers: [
+            {
+              name: 'worker-a',
+              url: WORKER_URL,
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+            },
+          ],
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerLocation).toBe('worker-a');
+      }
+    });
+  });
+
   describe('cancelOnWorker success path', () => {
     it('completes successfully when worker returns OK status', async () => {
       const service = createTaskDispatcherService(deps);

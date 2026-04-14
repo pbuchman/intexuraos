@@ -160,4 +160,34 @@ export interface WhatsAppNotifier {
       taskId: string;
     }
   ): Promise<Result<void, NotificationError>>;
+
+  /**
+   * Send notification when a task is auto-retried by the failure triage system.
+   * INT-1375
+   *
+   * @param userId - User ID to send notification to
+   * @param task - The failed task being retried
+   * @param info - Retry attempt details
+   * @returns Ok(undefined) on success, Err on failure
+   */
+  notifyTaskAutoRetried(
+    userId: string,
+    task: CodeTask,
+    info: { attempt: number; maxAttempts: number; reason: string }
+  ): Promise<Result<void, NotificationError>>;
+
+  /**
+   * Send notification when auto-retry budget is exhausted.
+   * INT-1375
+   *
+   * @param userId - User ID to send notification to
+   * @param task - The task that exhausted its retry budget
+   * @param info - Failure details
+   * @returns Ok(undefined) on success, Err on failure
+   */
+  notifyTaskAutoRetryExhausted(
+    userId: string,
+    task: CodeTask,
+    info: { attempts: number; errorMessage: string }
+  ): Promise<Result<void, NotificationError>>;
 }

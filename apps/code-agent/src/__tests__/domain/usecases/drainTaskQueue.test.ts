@@ -1360,6 +1360,42 @@ describe('drainTaskQueue', () => {
     );
   });
 
+  it('passes failedWorkerLocation through to dispatcher when set on task', async () => {
+    const task = createMockTask({ failedWorkerLocation: 'mac-dev-1' });
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        failedWorkerLocation: 'mac-dev-1',
+      })
+    );
+  });
+
+  it('omits failedWorkerLocation from dispatch when not set on task', async () => {
+    const task = createMockTask();
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+      expect.not.objectContaining({ failedWorkerLocation: expect.anything() })
+    );
+  });
+
   describe('PR task lock cleanup', () => {
     it('returns locksToCleanup on TTL expiry (PR task)', async () => {
       const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);

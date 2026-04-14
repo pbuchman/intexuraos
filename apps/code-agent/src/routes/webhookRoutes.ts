@@ -19,6 +19,7 @@ import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { parseLinearIdentifierFromUrl } from '../domain/utils/linearIdentifierParser.js';
 import { parseOwnerRepo } from '../domain/utils/parseOwnerRepo.js';
 import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
+import { triageFailedTask } from '../domain/usecases/triageFailedTask.js';
 import { isMemoryEligibleAgent } from '../domain/utils/memoryEligibility.js';
 import { mergePlanPr } from '../domain/utils/mergePlanPr.js';
 import { fetchGitHubToken } from '../domain/utils/gitHubTokenResolver.js';
@@ -1752,6 +1753,60 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as failed');
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
+
+        // Auto-retry triage (INT-1375)
+        // Skip triage for PLANNING_AGENT_UNCLEAR (already handled above with early return)
+        if (taskError.code !== 'PLANNING_AGENT_UNCLEAR') {
+          const { logLineRepo, taskEnqueueService } = getServices();
+          const triageResult = await triageFailedTask(
+            {
+              logger: request.log,
+              codeTaskRepo,
+              taskEnqueueService,
+              whatsappNotifier,
+              logLineRepo,
+              userServiceClient,
+            },
+            { task, completedAt, taskError }
+          );
+
+          const triageValue = triageResult;
+          if (triageValue.action !== 'permanent_failure') {
+            request.log.info(
+              { taskId, action: triageValue.action, retryTaskId: triageValue.retryTaskId },
+              'Task auto-retried by failure triage'
+            );
+
+            // Even though retry is in flight, original task's failure must be mirrored
+            await cleanupLockIfPR();
+            await statusMirrorService.mirrorStatus({
+              actionId: task.actionId,
+              taskStatus: 'failed',
+              errorMessage: taskError.message,
+              traceId,
+            });
+
+            metricsClient.incrementTasksCompleted(task.workerType, 'failed').catch((metricsErr) => {
+              request.log.warn({ taskId, error: metricsErr }, 'Failed to record task completion metric');
+            });
+            if (request.body.duration) {
+              metricsClient.recordTaskDuration(task.workerType, request.body.duration).catch((metricsErr) => {
+                request.log.warn({ taskId, error: metricsErr }, 'Failed to record task duration metric');
+              });
+            }
+
+            await flushPendingTaskLogLines(taskId);
+            await triggerDrainForPR();
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+          // Fall through to permanent failure path
+          request.log.info(
+            { taskId, reason: triageValue.reason },
+            'Failure triage: permanent failure'
+          );
+        }
+
         await cleanupLockIfPR();
 
         await statusMirrorService.mirrorStatus({

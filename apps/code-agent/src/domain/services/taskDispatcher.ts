@@ -78,6 +78,8 @@ export interface DispatchRequest {
   continuationPrBranch?: string;
   /** Review types requested for review agent tasks. */
   reviewTypes?: string[];
+  /** Worker location to exclude from dispatch (auto-retry avoidance). INT-1375 */
+  failedWorkerLocation?: string;
 }
 
 /**
