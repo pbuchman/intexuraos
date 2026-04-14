@@ -6,7 +6,8 @@ import { setServices, resetServices, type ServiceContainer } from '../../service
 import { FakeUsageEventRepository } from '../fakeUsageEventRepository.js';
 import { FakeUsageAggregateRepository } from '../fakeUsageAggregateRepository.js';
 import { FakePricingRepository } from '../fakePricingRepository.js';
-import { createTestEventInput } from '../helpers.js';
+import { FakePricingCache } from '../fakePricingCache.js';
+import { createTestEventInput, createTestEventInputV2 } from '../helpers.js';
 
 const SECRET = 'test-webhook-secret';
 
@@ -35,6 +36,7 @@ describe('webhookUsageRoutes', () => {
       usageEventRepository: eventRepo,
       usageAggregateRepository: aggregateRepo,
       pricingRepository: new FakePricingRepository(),
+      pricingCache: new FakePricingCache(),
       orchestratorSecret: SECRET,
     } satisfies ServiceContainer);
   });
@@ -184,7 +186,7 @@ describe('webhookUsageRoutes', () => {
     });
 
     it('returns 400 for invalid schemaVersion', async () => {
-      const payload = { schemaVersion: 2, events: [] };
+      const payload = { schemaVersion: 3, events: [] };
       const { timestamp, signature } = signPayload(payload);
 
       const response = await app.inject({
@@ -198,6 +200,29 @@ describe('webhookUsageRoutes', () => {
       });
 
       expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 200 for valid signed request with v2 orchestrator events', async () => {
+      const payload = {
+        schemaVersion: 2,
+        events: [createTestEventInputV2({ eventId: 'evt_wh_v2_1' })],
+      };
+      const { timestamp, signature } = signPayload(payload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/usage-events',
+        headers: {
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { accepted: number } };
+      expect(body.success).toBe(true);
+      expect(body.data.accepted).toBe(1);
     });
   });
 });

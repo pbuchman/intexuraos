@@ -1,131 +1,254 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { LlmProviders } from '@intexuraos/llm-contract';
+import type { ModelPricing } from '@intexuraos/llm-contract';
 import { ingestUsageEvents } from '../../../domain/usecases/ingestUsageEvents.js';
 import { FakeUsageEventRepository } from '../../fakeUsageEventRepository.js';
 import { FakeUsageAggregateRepository } from '../../fakeUsageAggregateRepository.js';
-import { createTestEventInput } from '../../helpers.js';
-import type { UsageEventInput } from '../../../domain/models/usageEvent.js';
+import { FakePricingCache } from '../../fakePricingCache.js';
+import { createTestEventInput, createTestEventInputV2 } from '../../helpers.js';
+import type { UsageEventInputAny } from '../../../domain/models/usageEvent.js';
 
 /**
  * Use-case-layer tests for `ingestUsageEvents`.
  *
- * As of the strict-schema refactor, structural validation (schemaVersion, field
- * presence/types/enums, additionalProperties, orchestrator constraint) is performed
- * by the Fastify route schemas `UsageEventInput` / `OrchestratorUsageEventInput`
- * BEFORE this use case runs. Malformed events never reach the use case, so the
- * ~46 field-level rejection tests that previously lived in this file have been
- * deleted — they exercised branches of `validateEvent()` that no longer exist.
- *
- * The tests below cover the remaining use-case responsibilities:
- *   1. Happy path: valid events are stored and aggregates incremented.
- *   2. Deduplication: same eventId is counted as `duplicate`, not `accepted`.
- *   3. Repository failures: Firestore `createEvent` errors are surfaced as rejected entries.
- *   4. Aggregate failures: aggregate increment errors do not block event storage.
- *   5. Sparse arrays: `undefined` holes in the events array are skipped.
- *   6. Mixed batch: valid + duplicate events are handled correctly in a single call.
- *
- * Field-level rejection behavior is now tested at the route layer in
- * `src/__tests__/routes/internalUsageRoutes.test.ts` and
- * `src/__tests__/routes/webhookUsageRoutes.test.ts`.
+ * Tests cover:
+ *   1. V1 backward compatibility (happy path, dedup, repo failure, aggregate failure, sparse arrays, mixed batch)
+ *   2. V2 pending pricing source with pricing found (calculated cost)
+ *   3. V2 pending pricing source with unknown model (default to 0)
+ *   4. V2 provider_reported pricing source
+ *   5. V2 provider_reported with negative providerReportedUsd (clamping)
  */
 describe('ingestUsageEvents', () => {
   let eventRepo: FakeUsageEventRepository;
   let aggregateRepo: FakeUsageAggregateRepository;
+  let pricingCache: FakePricingCache;
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() } as never;
+
+  const anthropicPricing: ModelPricing = {
+    inputPricePerMillion: 3.0,
+    outputPricePerMillion: 15.0,
+  };
 
   beforeEach(() => {
     eventRepo = new FakeUsageEventRepository();
     aggregateRepo = new FakeUsageAggregateRepository();
+    pricingCache = new FakePricingCache();
   });
 
-  it('accepts valid events', async () => {
-    const events = [createTestEventInput({ eventId: 'evt_1' })];
-    const result = await ingestUsageEvents(
-      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
-      events,
-      'internal',
-    );
+  function makeDeps(): { logger: typeof logger; usageEventRepository: FakeUsageEventRepository; usageAggregateRepository: FakeUsageAggregateRepository; pricingCache: FakePricingCache } {
+    return { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo, pricingCache };
+  }
 
-    expect(result.accepted).toBe(1);
-    expect(result.duplicates).toBe(0);
-    expect(result.rejected).toHaveLength(0);
+  // ---------------------------------------------------------------------------
+  // V1 backward compatibility
+  // ---------------------------------------------------------------------------
+  describe('v1 backward compatibility', () => {
+    it('accepts valid events', async () => {
+      const events = [createTestEventInput({ eventId: 'evt_1' })];
+      const result = await ingestUsageEvents(makeDeps(), events, 'internal');
+
+      expect(result.accepted).toBe(1);
+      expect(result.duplicates).toBe(0);
+      expect(result.rejected).toHaveLength(0);
+    });
+
+    it('detects duplicate events and does not double-increment aggregate', async () => {
+      const events = [
+        createTestEventInput({ eventId: 'evt_dup' }),
+        createTestEventInput({ eventId: 'evt_dup' }),
+      ];
+      const result = await ingestUsageEvents(makeDeps(), events, 'internal');
+
+      expect(result.accepted).toBe(1);
+      expect(result.duplicates).toBe(1);
+      expect(aggregateRepo.getIncrementCallCount()).toBe(1);
+    });
+
+    it('handles repository create failure', async () => {
+      eventRepo.setFailure({ code: 'FIRESTORE_ERROR', message: 'connection failed' });
+      const events = [createTestEventInput({ eventId: 'evt_fail' })];
+      const result = await ingestUsageEvents(makeDeps(), events, 'internal');
+
+      expect(result.rejected).toHaveLength(1);
+      expect(result.rejected[0]?.code).toBe('FIRESTORE_ERROR');
+    });
+
+    it('handles aggregate increment failure gracefully (event still stored)', async () => {
+      aggregateRepo.setFailure({ code: 'AGG_ERROR', message: 'aggregate failed' });
+      const events = [createTestEventInput({ eventId: 'evt_agg_fail' })];
+      const result = await ingestUsageEvents(makeDeps(), events, 'internal');
+
+      expect(result.accepted).toBe(1);
+    });
+
+    it('skips undefined events in the array', async () => {
+      const events = [undefined as unknown as UsageEventInputAny, createTestEventInput({ eventId: 'evt_ok' })];
+      const result = await ingestUsageEvents(makeDeps(), events, 'internal');
+
+      expect(result.accepted).toBe(1);
+    });
+
+    it('handles mixed batch (valid + duplicate)', async () => {
+      await ingestUsageEvents(makeDeps(), [createTestEventInput({ eventId: 'evt_dup' })], 'internal');
+      const preIncrementCount = aggregateRepo.getIncrementCallCount();
+
+      const result = await ingestUsageEvents(
+        makeDeps(),
+        [
+          createTestEventInput({ eventId: 'evt_new' }),
+          createTestEventInput({ eventId: 'evt_dup' }),
+        ],
+        'internal',
+      );
+
+      expect(result.accepted).toBe(1);
+      expect(result.duplicates).toBe(1);
+      expect(result.rejected).toHaveLength(0);
+      expect(aggregateRepo.getIncrementCallCount()).toBe(preIncrementCount + 1);
+    });
+
+    it('stores v1 events with schemaVersion 1 as-is', async () => {
+      const events = [createTestEventInput({ eventId: 'evt_v1_check' })];
+      await ingestUsageEvents(makeDeps(), events, 'internal');
+
+      const stored = eventRepo.getStoredEvents();
+      expect(stored).toHaveLength(1);
+      expect(stored[0]?.schemaVersion).toBe(1);
+      expect(stored[0]?.cost.billedUsd).toBe(0.003);
+      expect(stored[0]?.cost.pricingSource).toBe('calculated');
+    });
   });
 
-  it('detects duplicate events and does not double-increment aggregate', async () => {
-    const events = [
-      createTestEventInput({ eventId: 'evt_dup' }),
-      createTestEventInput({ eventId: 'evt_dup' }),
-    ];
-    const result = await ingestUsageEvents(
-      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
-      events,
-      'internal',
-    );
+  // ---------------------------------------------------------------------------
+  // V2 events
+  // ---------------------------------------------------------------------------
+  describe('v2 events', () => {
+    it('enriches pending events with calculated cost when pricing is found', async () => {
+      pricingCache.setPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', anthropicPricing);
 
-    expect(result.accepted).toBe(1);
-    expect(result.duplicates).toBe(1);
-    expect(aggregateRepo.getIncrementCallCount()).toBe(1);
-  });
+      const events = [createTestEventInputV2({
+        eventId: 'evt_v2_pending',
+        cost: { providerReportedUsd: null, pricingSource: 'pending' },
+      })];
 
-  it('handles repository create failure', async () => {
-    eventRepo.setFailure({ code: 'FIRESTORE_ERROR', message: 'connection failed' });
-    const events = [createTestEventInput({ eventId: 'evt_fail' })];
-    const result = await ingestUsageEvents(
-      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
-      events,
-      'internal',
-    );
+      const result = await ingestUsageEvents(makeDeps(), events, 'internal');
 
-    expect(result.rejected).toHaveLength(1);
-    expect(result.rejected[0]?.code).toBe('FIRESTORE_ERROR');
-  });
+      expect(result.accepted).toBe(1);
 
-  it('handles aggregate increment failure gracefully (event still stored)', async () => {
-    aggregateRepo.setFailure({ code: 'AGG_ERROR', message: 'aggregate failed' });
-    const events = [createTestEventInput({ eventId: 'evt_agg_fail' })];
-    const result = await ingestUsageEvents(
-      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
-      events,
-      'internal',
-    );
+      const stored = eventRepo.getStoredEvents();
+      expect(stored).toHaveLength(1);
+      const event = stored[0];
+      expect(event).toBeDefined();
+      expect(event?.schemaVersion).toBe(1);
+      expect(event?.cost.pricingSource).toBe('calculated');
+      expect(event?.cost.providerReportedUsd).toBeNull();
+      expect(event?.cost.calculatedUsd).toBeGreaterThan(0);
+      expect(event?.cost.billedUsd).toBe(event?.cost.calculatedUsd);
+    });
 
-    // Event was still accepted even though aggregation failed
-    expect(result.accepted).toBe(1);
-  });
+    it('defaults cost to 0 when pricing is not found for model', async () => {
+      // No pricing seeded for model — cache returns null
 
-  it('skips undefined events in the array', async () => {
-    const events = [undefined as unknown as UsageEventInput, createTestEventInput({ eventId: 'evt_ok' })];
-    const result = await ingestUsageEvents(
-      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
-      events,
-      'internal',
-    );
+      const events = [createTestEventInputV2({
+        eventId: 'evt_v2_unknown',
+        cost: { providerReportedUsd: null, pricingSource: 'pending' },
+      })];
 
-    expect(result.accepted).toBe(1);
-  });
+      const result = await ingestUsageEvents(makeDeps(), events, 'internal');
 
-  it('handles mixed batch (valid + duplicate)', async () => {
-    // Pre-seed the duplicate
-    await ingestUsageEvents(
-      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
-      [createTestEventInput({ eventId: 'evt_dup' })],
-      'internal',
-    );
+      expect(result.accepted).toBe(1);
 
-    const preIncrementCount = aggregateRepo.getIncrementCallCount();
+      const stored = eventRepo.getStoredEvents();
+      expect(stored).toHaveLength(1);
+      const event = stored[0];
+      expect(event?.cost.billedUsd).toBe(0);
+      expect(event?.cost.calculatedUsd).toBe(0);
+      expect(event?.cost.pricingSource).toBe('calculated');
+      expect(event?.cost.providerReportedUsd).toBeNull();
+    });
 
-    const result = await ingestUsageEvents(
-      { logger, usageEventRepository: eventRepo, usageAggregateRepository: aggregateRepo },
-      [
-        createTestEventInput({ eventId: 'evt_new' }), // valid
-        createTestEventInput({ eventId: 'evt_dup' }), // duplicate (pre-seeded above)
-      ],
-      'internal',
-    );
+    it('uses provider_reported cost when pricingSource is provider_reported and providerReportedUsd is non-null', async () => {
+      const events = [createTestEventInputV2({
+        eventId: 'evt_v2_reported',
+        cost: { providerReportedUsd: 0.0042, pricingSource: 'provider_reported' },
+      })];
 
-    expect(result.accepted).toBe(1);
-    expect(result.duplicates).toBe(1);
-    expect(result.rejected).toHaveLength(0);
-    // Only the new valid event should have incremented the aggregate
-    expect(aggregateRepo.getIncrementCallCount()).toBe(preIncrementCount + 1);
+      const result = await ingestUsageEvents(makeDeps(), events, 'internal');
+
+      expect(result.accepted).toBe(1);
+
+      const stored = eventRepo.getStoredEvents();
+      expect(stored).toHaveLength(1);
+      const event = stored[0];
+      expect(event?.cost.billedUsd).toBe(0.0042);
+      expect(event?.cost.providerReportedUsd).toBe(0.0042);
+      expect(event?.cost.calculatedUsd).toBeNull();
+      expect(event?.cost.pricingSource).toBe('provider_reported');
+    });
+
+    it('clamps negative providerReportedUsd to 0 for billedUsd', async () => {
+      const events = [createTestEventInputV2({
+        eventId: 'evt_v2_negative',
+        cost: { providerReportedUsd: -0.005, pricingSource: 'provider_reported' },
+      })];
+
+      const result = await ingestUsageEvents(makeDeps(), events, 'internal');
+
+      expect(result.accepted).toBe(1);
+
+      const stored = eventRepo.getStoredEvents();
+      const event = stored[0];
+      expect(event?.cost.billedUsd).toBe(0);
+      expect(event?.cost.providerReportedUsd).toBe(-0.005);
+      expect(event?.cost.pricingSource).toBe('provider_reported');
+    });
+
+    it('falls back to calculated pricing when provider_reported has null USD', async () => {
+      pricingCache.setPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', anthropicPricing);
+
+      const events = [createTestEventInputV2({
+        eventId: 'evt_v2_reported_null',
+        cost: { providerReportedUsd: null, pricingSource: 'provider_reported' },
+      })];
+
+      const result = await ingestUsageEvents(makeDeps(), events, 'internal');
+
+      expect(result.accepted).toBe(1);
+
+      const stored = eventRepo.getStoredEvents();
+      const event = stored[0];
+      expect(event?.cost.pricingSource).toBe('calculated');
+      expect(event?.cost.calculatedUsd).toBeGreaterThan(0);
+      expect(event?.cost.billedUsd).toBe(event?.cost.calculatedUsd);
+      expect(event?.cost.providerReportedUsd).toBeNull();
+    });
+
+    it('stores v2 events as schemaVersion 1', async () => {
+      pricingCache.setPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', anthropicPricing);
+
+      const events = [createTestEventInputV2({ eventId: 'evt_v2_stored_v1' })];
+      await ingestUsageEvents(makeDeps(), events, 'internal');
+
+      const stored = eventRepo.getStoredEvents();
+      expect(stored[0]?.schemaVersion).toBe(1);
+    });
+
+    it('handles mixed v1 and v2 events in the same batch', async () => {
+      pricingCache.setPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', anthropicPricing);
+
+      const events: UsageEventInputAny[] = [
+        createTestEventInput({ eventId: 'evt_mix_v1' }),
+        createTestEventInputV2({ eventId: 'evt_mix_v2' }),
+      ];
+
+      const result = await ingestUsageEvents(makeDeps(), events, 'internal');
+
+      expect(result.accepted).toBe(2);
+      const stored = eventRepo.getStoredEvents();
+      expect(stored).toHaveLength(2);
+      // Both stored as schemaVersion 1
+      expect(stored[0]?.schemaVersion).toBe(1);
+      expect(stored[1]?.schemaVersion).toBe(1);
+    });
   });
 });
