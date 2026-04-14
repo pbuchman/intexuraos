@@ -777,7 +777,13 @@ export async function autoRetryTask(
     return err({ code: 'internal_error', message: enqueueResult.error.message });
   }
 
-  // Step 4: Archive the failed task
+  // Step 4: Preserve terminal failure record, then archive the failed task
+  // The webhook handler normally writes completedAt, error, callbackReceived, status, and metrics
+  // on the original task before any early return. For auto-retried tasks we must preserve these
+  // terminal failure fields so the original task's failure is fully recorded before archiving.
+  // The caller (triageFailedTask / webhook handler) is responsible for writing the standard
+  // failure fields (completedAt, error, callbackReceived, status='failed') BEFORE calling
+  // autoRetryTask. This function only transitions the already-recorded failed task to 'archived'.
   const archiveResult = await codeTaskRepo.update(failedTask.id, { status: 'archived' });
   if (!archiveResult.ok) {
     logger.warn(
@@ -929,15 +935,36 @@ Add two methods to the implementation class:
 
 Note: Extract common publish logic into a `publishMessage` helper if not already present, or inline the existing `whatsappPublisher.publishSendMessage` call pattern.
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [ ] **Step 5: Update existing WhatsApp mock factories**
+
+Adding `notifyTaskAutoRetried` and `notifyTaskAutoRetryExhausted` to the `WhatsAppNotifier` interface will break existing typed mocks across multiple test files. Update each mock factory to include stubs for the new methods:
+
+**Files requiring mock updates:**
+- `apps/code-agent/src/__tests__/domain/useCases/createTaskForPR.test.ts` — `createMockWhatsAppNotifier()` factory (line ~160)
+- `apps/code-agent/src/__tests__/usecases/submitTaskFeedback.test.ts` — inline `mockWhatsAppNotifier` object (line ~106)
+- `apps/code-agent/src/__tests__/domain/usecases/sendTaskMessage.test.ts` — `mockWhatsappNotifier` (line ~136)
+- Any other test file with a typed `WhatsAppNotifier` mock (search: `WhatsAppNotifier` in test files)
+
+For each mock, add:
+```typescript
+notifyTaskAutoRetried: vi.fn().mockResolvedValue(ok(undefined)),
+notifyTaskAutoRetryExhausted: vi.fn().mockResolvedValue(ok(undefined)),
+```
+
+Run all affected test suites to confirm no type errors:
+```bash
+cd /repo && pnpm vitest run apps/code-agent/src/__tests__/domain/useCases/createTaskForPR.test.ts apps/code-agent/src/__tests__/usecases/submitTaskFeedback.test.ts apps/code-agent/src/__tests__/domain/usecases/sendTaskMessage.test.ts
+```
+
+- [ ] **Step 6: Run tests to verify they pass**
 
 Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts`
 Expected: All tests PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/services/whatsappNotifier.ts apps/code-agent/src/infra/services/whatsappNotifierImpl.ts apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts
+git add apps/code-agent/src/domain/services/whatsappNotifier.ts apps/code-agent/src/infra/services/whatsappNotifierImpl.ts apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts apps/code-agent/src/__tests__/domain/useCases/createTaskForPR.test.ts apps/code-agent/src/__tests__/usecases/submitTaskFeedback.test.ts apps/code-agent/src/__tests__/domain/usecases/sendTaskMessage.test.ts
 git commit -m "feat(code-agent): WhatsApp notifications for auto-retry (INT-1158)"
 ```
 
@@ -1539,7 +1566,9 @@ Expose it via services (e.g., `failureTriageClient` in the ServiceContainer).
 
 - [ ] **Step 4: Insert triage into webhookRoutes.ts failure path**
 
-In `apps/code-agent/src/routes/webhookRoutes.ts`, modify the `status === 'failed'` block. Insert triage AFTER the `PLANNING_AGENT_UNCLEAR` special case but BEFORE the standard failure update:
+In `apps/code-agent/src/routes/webhookRoutes.ts`, modify the `status === 'failed'` block. Insert triage AFTER the `PLANNING_AGENT_UNCLEAR` special case but BEFORE the standard failure update.
+
+**Important:** The standard failure fields (`completedAt`, `error`, `callbackReceived`, status='failed', metrics) MUST be recorded on the original task BEFORE calling `triageFailedTask`. This ensures the original task's terminal failure state is fully preserved regardless of whether triage decides to auto-retry. The triage/autoRetryTask flow only transitions the already-recorded failed task to 'archived' — it does NOT write the failure fields itself.
 
 ```typescript
       if (status === 'failed') {
@@ -1549,6 +1578,16 @@ In `apps/code-agent/src/routes/webhookRoutes.ts`, modify the `status === 'failed
         if (taskError.code === 'PLANNING_AGENT_UNCLEAR' && result?.planning_outcome_label === 'unclear') {
           // ... existing code unchanged ...
         }
+
+        // Record standard failure fields on the original task BEFORE triage.
+        // This preserves the terminal failure record (completedAt, error, callbackReceived,
+        // status, metrics) so autoRetryTask only needs to transition status to 'archived'.
+        await codeTaskRepo.update(taskId, {
+          status: 'failed',
+          completedAt,
+          error: taskError,
+          callbackReceived: true,
+        });
 
         // NEW: Auto-retry triage (INT-1158)
         // Skip triage for PLANNING_AGENT_UNCLEAR (handled above) to avoid double-processing
