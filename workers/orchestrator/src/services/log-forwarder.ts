@@ -31,7 +31,7 @@ interface QueuedLogChunk {
 }
 
 const MAX_CHUNK_SIZE = 64 * 1024; // 64KB — must exceed largest single JSON message (hook_response with build output)
-const MAX_TOTAL_LOG_SIZE = 4 * 1024 * 1024; // 4MB
+const MAX_TOTAL_LOG_SIZE = 8 * 1024 * 1024; // 8MB
 const CHUNK_INTERVAL_MS = 3 * 1000; // 3 seconds
 const MAX_BATCH_SIZE = 5;
 
