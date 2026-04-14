@@ -106,8 +106,10 @@ describe('buildValidationClients', () => {
     });
 
     expect(clients).toHaveLength(2);
-    expect(clients[0]).toBe(fakeClient1);
-    expect(clients[1]).toBe(fakeClient2);
+    expect(clients[0]?.client).toBe(fakeClient1);
+    expect(clients[0]?.modelName).toBe('or:google/gemma-4-31b-it:free');
+    expect(clients[1]?.client).toBe(fakeClient2);
+    expect(clients[1]?.modelName).toBe('gemini-2.5-flash');
     expect(createLlmClientMock).toHaveBeenCalledTimes(2);
 
     // First call: OpenRouter model

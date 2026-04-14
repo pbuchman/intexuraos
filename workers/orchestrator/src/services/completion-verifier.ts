@@ -122,6 +122,8 @@ export interface CompletionVerifierClients {
   fallbackClients: LlmGenerateClient[];
   /** Display name of primary model for logging (e.g. 'or:google/gemma-4-31b-it:free') */
   primaryModelName: string;
+  /** Display names for each fallback client, in the same order as fallbackClients. */
+  fallbackModelNames?: string[];
 }
 
 export const PLANNING_SCHEMA = z
@@ -554,16 +556,21 @@ function validateMemoryReporting(
 
 export class OrchestratorCompletionVerifier implements CompletionVerifier {
   private readonly primaryClient: LlmGenerateClient;
-  private readonly fallbackClients: LlmGenerateClient[];
   private readonly primaryModelName: string;
+  /** Each fallback client paired with its display model name. */
+  private readonly fallbacks: readonly { client: LlmGenerateClient; modelName: string }[];
 
   constructor(
     private readonly logger: Logger,
     clients: CompletionVerifierClients
   ) {
     this.primaryClient = clients.primaryClient;
-    this.fallbackClients = clients.fallbackClients;
     this.primaryModelName = clients.primaryModelName;
+    const fallbackNames = clients.fallbackModelNames ?? [];
+    this.fallbacks = clients.fallbackClients.map((client, i) => ({
+      client,
+      modelName: fallbackNames[i] ?? `fallback-${String(i + 1)}`,
+    }));
   }
 
   describe(): { enabled: boolean; provider?: string; model?: string } {
@@ -627,7 +634,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         {
           taskId: input.taskId,
           attempt: input.attempt,
-          model: this.primaryModelName,
+          model: generated.modelName,
           errorCode: generated.error.code,
           errorMessage: generated.error.message,
         },
@@ -641,27 +648,29 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       };
     }
 
+    const succeededModelName = generated.modelName;
+    const generatedContent = generated.value.content; // @allow-result-access -- guarded by if (!generated.ok) early return above
     this.logger.info(
       {
         taskId: input.taskId,
         attempt: input.attempt,
-        model: this.primaryModelName,
-        responseChars: generated.value.content.length,
-        response: generated.value.content,
+        model: succeededModelName,
+        responseChars: generatedContent.length,
+        response: generatedContent,
       },
       'Completion verifier response'
     );
 
     let rawJson: unknown;
     try {
-      rawJson = extractAndParseJson(generated.value.content);
+      rawJson = extractAndParseJson(generatedContent);
     } catch (error) {
       this.logger.error(
         {
           taskId: input.taskId,
           attempt: input.attempt,
-          model: this.primaryModelName,
-          response: generated.value.content,
+          model: succeededModelName,
+          response: generatedContent,
           error: getErrorMessage(error),
         },
         'Completion verifier response parsing failed'
@@ -670,7 +679,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         passed: false,
         missingFields: [],
         verifierFailure: true,
-        trace: { transcript, prompt, response: generated.value.content },
+        trace: { transcript, prompt, response: generatedContent },
       };
     }
 
@@ -681,7 +690,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         {
           taskId: input.taskId,
           attempt: input.attempt,
-          model: this.primaryModelName,
+          model: succeededModelName,
           missingFields,
           zodErrors: parseResult.error.issues,
         },
@@ -691,7 +700,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         passed: false,
         missingFields,
         verifierFailure: false,
-        trace: { transcript, prompt, response: generated.value.content },
+        trace: { transcript, prompt, response: generatedContent },
       };
     }
 
@@ -718,7 +727,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
           {
             taskId: input.taskId,
             attempt: input.attempt,
-            model: this.primaryModelName,
+            model: succeededModelName,
             emptyMemoryFields,
           },
           'Memory fields are empty despite memories being injected'
@@ -727,7 +736,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
           passed: false,
           missingFields: emptyMemoryFields,
           verifierFailure: false,
-          trace: { transcript, prompt, response: generated.value.content },
+          trace: { transcript, prompt, response: generatedContent },
         };
       }
     }
@@ -742,7 +751,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         {
           taskId: input.taskId,
           attempt: input.attempt,
-          model: this.primaryModelName,
+          model: succeededModelName,
           memoryValidationFailures,
         },
         'Completion verifier memory validation failed'
@@ -751,7 +760,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         passed: false,
         missingFields: memoryValidationFailures,
         verifierFailure: false,
-        trace: { transcript, prompt, response: generated.value.content },
+        trace: { transcript, prompt, response: generatedContent },
       };
     }
 
@@ -759,7 +768,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       {
         taskId: input.taskId,
         attempt: input.attempt,
-        model: this.primaryModelName,
+        model: succeededModelName,
         agentData,
       },
       'Completion verifier parsed verdict'
@@ -770,7 +779,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       missingFields: [],
       verifierFailure: false,
       agentData,
-      trace: { transcript, prompt, response: generated.value.content },
+      trace: { transcript, prompt, response: generatedContent },
     };
   }
 
@@ -796,9 +805,10 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       return undefined;
     }
 
+    const resumeContent = generated.value.content; // @allow-result-access -- guarded by if (!generated.ok) early return above
     let rawJson: unknown;
     try {
-      rawJson = extractAndParseJson(generated.value.content);
+      rawJson = extractAndParseJson(resumeContent);
     } catch (error) {
       this.logger.error(
         { taskId, error: getErrorMessage(error) },
@@ -824,10 +834,10 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
   private async generateWithFallback(
     prompt: string,
     taskId: string
-  ): ReturnType<LlmGenerateClient['generate']> {
+  ): Promise<Awaited<ReturnType<LlmGenerateClient['generate']>> & { modelName: string }> {
     const result = await this.primaryClient.generate(prompt);
     if (result.ok) {
-      return result;
+      return { ...result, modelName: this.primaryModelName };
     }
 
     this.logger.warn(
@@ -835,16 +845,19 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         taskId,
         primaryModel: this.primaryModelName,
         errorCode: result.error.code,
-        fallbackCount: this.fallbackClients.length,
+        fallbackCount: this.fallbacks.length,
       },
       'Primary validation model failed, trying fallbacks'
     );
 
-    for (const fallbackClient of this.fallbackClients) {
-      const fallbackResult = await fallbackClient.generate(prompt);
+    for (const fallback of this.fallbacks) {
+      const fallbackResult = await fallback.client.generate(prompt);
       if (fallbackResult.ok) {
-        this.logger.info({ taskId }, 'Fallback validation model succeeded');
-        return fallbackResult;
+        this.logger.info(
+          { taskId, model: fallback.modelName },
+          'Fallback validation model succeeded'
+        );
+        return { ...fallbackResult, modelName: fallback.modelName };
       }
       this.logger.warn(
         { taskId, errorCode: fallbackResult.error.code },
@@ -853,6 +866,6 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     }
 
     // All failed — return the original primary error
-    return result;
+    return { ...result, modelName: this.primaryModelName };
   }
 }

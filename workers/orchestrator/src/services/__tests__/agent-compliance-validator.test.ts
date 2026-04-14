@@ -36,6 +36,7 @@ const postedCommentBodies: string[] = [];
 const defaultConfig = {
   clients: [{ generate: generateMock }] as { generate: typeof generateMock }[],
   primaryModelName: 'or:google/gemma-4-31b-it:free',
+  modelNames: ['or:google/gemma-4-31b-it:free'],
   codeAgentUrl: 'http://localhost:8128',
   usageWebhookUrl: 'http://localhost:8128/internal/webhooks/usage-events',
   orchestratorSecret: 'test-secret',
@@ -533,16 +534,23 @@ describe('OrchestratorAgentComplianceValidator', () => {
     const config = {
       ...defaultConfig,
       clients: [{ generate: generateMock }, { generate: fallbackGenerate }],
+      modelNames: ['or:google/gemma-4-31b-it:free', 'or:meta-llama/llama-4-scout:free'],
     };
     const validator = new OrchestratorAgentComplianceValidator(logger, config);
     const result = await validator.validate(defaultInput);
 
     expect(result).not.toBeNull();
     expect(result?.report).toEqual(validReport);
+    // The reported model must be the fallback that actually succeeded
+    expect(result?.model).toBe('or:meta-llama/llama-4-scout:free');
     expect(fallbackGenerate).toHaveBeenCalledTimes(1);
     expect(loggerWarn).toHaveBeenCalledWith(
       expect.objectContaining({ modelIndex: 0 }),
       'Primary compliance model failed, trying fallbacks'
+    );
+    expect(loggerInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'or:meta-llama/llama-4-scout:free' }),
+      'Compliance validation fallback model succeeded'
     );
   });
 

@@ -80,11 +80,19 @@ export interface BuildValidationClientsConfig {
   logger: Logger;
 }
 
+export interface ValidationClientEntry {
+  client: LlmGenerateClient;
+  /** Model ID used for logging/reporting (e.g. 'gemini-2.5-flash' or 'or:google/gemma-4-31b-it:free') */
+  modelName: string;
+}
+
 /**
  * Build LlmGenerateClient instances for each parsed validation model,
  * in the same priority order as the input list.
  */
-export function buildValidationClients(config: BuildValidationClientsConfig): LlmGenerateClient[] {
+export function buildValidationClients(
+  config: BuildValidationClientsConfig
+): ValidationClientEntry[] {
   return config.models.map((model) => {
     if (model.provider === 'openrouter') {
       if (config.openRouterApiKey === '') {
@@ -95,11 +103,41 @@ export function buildValidationClients(config: BuildValidationClientsConfig): Ll
 
       const pricing = getDefaultAllowlistPricing(model.rawId) ?? ZERO_PRICING;
 
-      return createLlmClient({
-        apiKey: config.openRouterApiKey,
+      return {
+        modelName: model.modelId,
+        client: createLlmClient({
+          apiKey: config.openRouterApiKey,
+          model: model.modelId as LLMModel,
+          userId: 'orchestrator-validation',
+          pricing,
+          logger: config.logger,
+          usageSink: new HttpWebhookUsageSink({
+            webhookUrl: config.usageWebhookUrl,
+            webhookSecret: config.orchestratorSecret,
+            internalAuthToken: config.internalAuthToken,
+            service: 'orchestrator',
+            component: 'validation',
+            logger: config.logger,
+            getCorrelationTaskId: () => null,
+          }),
+        }),
+      };
+    }
+
+    // Gemini model
+    if (config.geminiApiKey === '') {
+      throw new Error(
+        `INTEXURAOS_GEMINI_APP_API_KEY is required for Gemini validation model: ${model.modelId}`
+      );
+    }
+
+    return {
+      modelName: model.modelId,
+      client: createLlmClient({
+        apiKey: config.geminiApiKey,
         model: model.modelId as LLMModel,
         userId: 'orchestrator-validation',
-        pricing,
+        pricing: GEMINI_VALIDATION_PRICING,
         logger: config.logger,
         usageSink: new HttpWebhookUsageSink({
           webhookUrl: config.usageWebhookUrl,
@@ -110,31 +148,7 @@ export function buildValidationClients(config: BuildValidationClientsConfig): Ll
           logger: config.logger,
           getCorrelationTaskId: () => null,
         }),
-      });
-    }
-
-    // Gemini model
-    if (config.geminiApiKey === '') {
-      throw new Error(
-        `INTEXURAOS_GEMINI_APP_API_KEY is required for Gemini validation model: ${model.modelId}`
-      );
-    }
-
-    return createLlmClient({
-      apiKey: config.geminiApiKey,
-      model: model.modelId as LLMModel,
-      userId: 'orchestrator-validation',
-      pricing: GEMINI_VALIDATION_PRICING,
-      logger: config.logger,
-      usageSink: new HttpWebhookUsageSink({
-        webhookUrl: config.usageWebhookUrl,
-        webhookSecret: config.orchestratorSecret,
-        internalAuthToken: config.internalAuthToken,
-        service: 'orchestrator',
-        component: 'validation',
-        logger: config.logger,
-        getCorrelationTaskId: () => null,
       }),
-    });
+    };
   });
 }
