@@ -1,9 +1,9 @@
 import { initSentry, createAppLogger } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
-import { createGeminiClient, TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
-import { LlmModels } from '@intexuraos/llm-contract';
-import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
+import { fetchAllPricingWithRetry, createPricingContext, HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
+import { LlmModels, type LLMModel } from '@intexuraos/llm-contract';
+import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
 import { loadConfig } from './config.js';
@@ -14,9 +14,13 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-  'INTEXURAOS_GEMINI_APP_API_KEY',
+  'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'INTEXURAOS_SENTRY_DSN',
+];
+
+const REQUIRED_MODELS: LLMModel[] = [
+  LlmModels.Gemini25Flash,
 ];
 
 /* v8 ignore start -- module-init: entry point bootstrapping not unit-testable @preserve */
@@ -37,23 +41,35 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const logger = createAppLogger({ name: 'hellscript-agent' });
 
-  const geminiClient = createGeminiClient({
-    apiKey: config.geminiApiKey,
-    model: LlmModels.Gemini25Flash,
-    userId: 'hellscript-agent-system',
-    pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
-    logger: createAppLogger({ name: 'gemini-client' }),
+  const pricingResult = await fetchAllPricingWithRetry(config.llmUsageServiceUrl, config.internalAuthToken);
+  if (!pricingResult.ok) {
+    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
+  }
+
+  const pricingContext = createPricingContext(pricingResult.value, REQUIRED_MODELS);
+  process.stdout.write(`Loaded pricing for ${String(REQUIRED_MODELS.length)} models: ${REQUIRED_MODELS.join(', ')}\n`);
+
+  const userServiceClient = createUserServiceClient({
+    baseUrl: config.userServiceUrl,
+    internalAuthToken: config.internalAuthToken,
+    pricingContext,
+    logger: createAppLogger({ name: 'user-service-client' }),
     usageSink: new HttpInternalAuthUsageSink({
       usageServiceUrl: config.llmUsageServiceUrl,
       internalAuthToken: config.internalAuthToken,
       service: 'hellscript-agent',
-      component: 'gemini-client',
+      component: 'user-service-client',
       logger,
     }),
+    platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
+  if (process.env['INTEXURAOS_GEMINI_APP_API_KEY'] === undefined || process.env['INTEXURAOS_GEMINI_APP_API_KEY'].length === 0) {
+    logger.warn('INTEXURAOS_GEMINI_APP_API_KEY is not set — platform Gemini fallback unavailable; users must have their own Gemini API key configured');
+  }
+
   initServices({
-    geminiClient,
+    userServiceClient,
     logger,
   });
 

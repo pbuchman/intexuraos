@@ -7,7 +7,7 @@ export interface Config {
     audience: string;
   };
   internalAuthToken: string;
-  geminiApiKey: string;
+  userServiceUrl: string;
   llmUsageServiceUrl: string;
 }
 
@@ -21,7 +21,7 @@ export function loadConfig(): Config {
       audience: process.env['INTEXURAOS_AUTH_AUDIENCE'] ?? '',
     },
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
-    geminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'] ?? '',
+    userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? '',
     llmUsageServiceUrl: process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '',
   };
 }

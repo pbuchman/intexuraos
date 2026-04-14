@@ -17,6 +17,7 @@ import {
   FakeCodeAgentClient,
 } from '../fakes.js';
 import { setServices, resetServices } from '../../services.js';
+import type { IssuePruningClassifier } from '../../domain/index.js';
 
 describe('internalRoutes', () => {
   let app: FastifyInstance;
@@ -60,9 +61,9 @@ describe('internalRoutes', () => {
       userServiceClient: fakeUserServiceClient,
       commentRepository: null as unknown as import('../../domain/index.js').LinearCommentRepository,
       codeAgentClient: new FakeCodeAgentClient(),
-      issuePruningClassifier: {
-        classifyCandidates: async () => ({ ok: true, value: [] }),
-      },
+      createClassifier: (_llmClient): IssuePruningClassifier => ({
+        classifyCandidates: async () => ({ ok: true as const, value: [] }),
+      }),
       pruneCandidateRepository: {
         clearAll: async () => ({ ok: true as const, value: undefined }),
         storeAll: async () => ({ ok: true as const, value: undefined }),

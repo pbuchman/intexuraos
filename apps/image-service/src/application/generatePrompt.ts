@@ -23,6 +23,7 @@ export interface GeneratePromptDeps {
   userServiceClient: UserServiceClient;
   createPromptGenerator: (
     provider: Google | OpenAI,
+    model: string,
     apiKey: string,
     userId: string,
     logger: Logger
@@ -62,7 +63,7 @@ export function createGeneratePromptUseCase(
     }
 
     deps.logger.info({ model: input.model, provider: modelConfig.provider }, 'Starting prompt generation');
-    const generator = deps.createPromptGenerator(modelConfig.provider, apiKey, input.userId, deps.logger);
+    const generator = deps.createPromptGenerator(modelConfig.provider, modelConfig.modelId, apiKey, input.userId, deps.logger);
     const result = await generator.generateThumbnailPrompt(input.text);
 
     if (!result.ok) {
