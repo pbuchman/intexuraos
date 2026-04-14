@@ -480,6 +480,49 @@ describe('processExecutionMemoryBacklog', () => {
     }));
   });
 
+  it('warns and skips distillation when getLlmClient fails for a task', async () => {
+    const task = createTask({
+      executionMemoryContext: {
+        status: 'none',
+      },
+    });
+    codeTaskRepo.listPendingExecutionMemoryPostRun.mockResolvedValue(ok([task]));
+    codeTaskRepo.update.mockResolvedValue(ok(task));
+    userServiceClient.getLlmClient.mockResolvedValue(err({ code: 'NOT_FOUND', message: 'User model not configured' }));
+
+    const result = await processExecutionMemoryBacklog({
+      logger,
+      codeTaskRepo: codeTaskRepo as never,
+      logLineRepo: logLineRepo as never,
+      turnMetricsRepo: turnMetricsRepo as never,
+      linearAgentClient: linearAgentClient as never,
+      executionMemoryRepo: executionMemoryRepo as never,
+      executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+      userServiceClient: userServiceClient as never,
+      embeddingClient: embeddingClient as never,
+      limit: 10,
+    });
+
+    if (!result.ok) throw new Error(`Expected ok result, got: ${result.error.message}`);
+    expect(result.value).toEqual({
+      claimed: 1,
+      completed: 0,
+      skipped: 1,
+      errored: 0,
+      taskIds: ['task-1'],
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-1', taskId: 'task-1' }),
+      expect.stringContaining('Failed to resolve user LLM client'),
+    );
+    expect(codeTaskRepo.update).toHaveBeenLastCalledWith('task-1', expect.objectContaining({
+      executionMemoryPostRun: expect.objectContaining({
+        status: 'skipped',
+        skipReason: 'insufficient_signal',
+      }),
+    }));
+  });
+
   it('marks the task as error after the third processor failure', async () => {
     const task = createTask({
       executionMemoryContext: {
