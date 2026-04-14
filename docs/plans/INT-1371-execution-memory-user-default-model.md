@@ -29,11 +29,11 @@ These static clients are injected into the `ServiceContainer` and passed to use 
 
 ## Three Call Sites
 
-| Client                           | Used In                                            | When                                 |
-| -------------------------------- | -------------------------------------------------- | ------------------------------------ |
-| `executionMemoryQueryClient`     | `drainTaskQueue` → `prepareExecutionMemoryContext` | Pre-dispatch (query normalization)   |
-| `executionMemoryDistillerClient` | `internalRoutes` → `processExecutionMemoryBacklog` | Post-execution (memory distillation) |
-| `executionMemoryEvaluatorClient` | `internalRoutes` → `processExecutionMemoryBacklog` | Post-execution (memory evaluation)   |
+| Client                           | Used In                                                                                                                                             | When                                 |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `executionMemoryQueryClient`     | `drainTaskQueue` → `prepareExecutionMemoryContext` (called from `codeRoutes.ts`, `webhookRoutes.ts`, `internalRoutes.ts`, and `drainRetryQueue.ts`) | Pre-dispatch (query normalization)   |
+| `executionMemoryDistillerClient` | `internalRoutes` → `processExecutionMemoryBacklog`                                                                                                  | Post-execution (memory distillation) |
+| `executionMemoryEvaluatorClient` | `internalRoutes` → `processExecutionMemoryBacklog`                                                                                                  | Post-execution (memory evaluation)   |
 
 ## Key Design Decision
 
@@ -52,7 +52,7 @@ We reuse this existing function. The static `EXECUTION_MEMORY_MODEL` constant an
 - **Modified:** None (no HTTP endpoint signatures change)
 - **Created:** None
 - **Removed:** None
-- **Unchanged:** `POST /internal/drain-queue`, `POST /internal/execution-memory/process-backlog`
+- **Unchanged:** `POST /internal/drain-queue`, `POST /internal/execution-memory/process`
 
 ---
 
@@ -141,7 +141,12 @@ default model preference."
 - Modify: `apps/code-agent/src/domain/usecases/drainTaskQueue.ts` (add `userServiceClient` to deps, resolve LLM client per-task)
 - Modify: `apps/code-agent/src/domain/usecases/prepareExecutionMemoryContext.ts:49-54` (no interface change needed — `queryClient` is already optional)
 - Modify: `apps/code-agent/src/routes/internalRoutes.ts` (update where drainTaskQueue is called, pass `userServiceClient`)
-- Test: `apps/code-agent/src/domain/usecases/__tests__/drainTaskQueue.test.ts`
+- Modify: `apps/code-agent/src/routes/codeRoutes.ts` (update where drainTaskQueue is called, pass `userServiceClient`)
+- Modify: `apps/code-agent/src/routes/webhookRoutes.ts` (update where drainTaskQueue is called, pass `userServiceClient`)
+- Modify: `apps/code-agent/src/domain/usecases/drainRetryQueue.ts` (also calls `prepareExecutionMemoryContext` with `queryClient` — wire `userServiceClient`)
+- Test: `apps/code-agent/src/__tests__/domain/usecases/drainTaskQueue.test.ts`
+- Test: `apps/code-agent/src/__tests__/domain/usecases/drainRetryQueue.test.ts`
+- Test: `apps/code-agent/src/__tests__/routes/codeRoutes.test.ts`
 
 The `drainTaskQueue` use case already receives `executionMemory?: PrepareExecutionMemoryResources` in its deps (line 74). The `PrepareExecutionMemoryResources` interface includes `queryClient?: LlmGenerateClient`. Currently this queryClient comes from `ServiceContainer`. Instead, we resolve it dynamically using the task's `userId`.
 
@@ -164,7 +169,7 @@ it('resolves execution memory query client from user default model', async () =>
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd apps/code-agent && npx vitest run src/domain/usecases/__tests__/drainTaskQueue.test.ts --reporter=verbose`
+Run: `cd apps/code-agent && npx vitest run src/__tests__/domain/usecases/drainTaskQueue.test.ts --reporter=verbose`
 Expected: FAIL because `userServiceClient` is not yet in `DrainTaskQueueDeps`.
 
 - [ ] **Step 3: Add userServiceClient to DrainTaskQueueDeps and resolve per-task**
@@ -209,13 +214,13 @@ In `apps/code-agent/src/routes/internalRoutes.ts`, where `drainTaskQueue` is cal
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd apps/code-agent && npx vitest run src/domain/usecases/__tests__/drainTaskQueue.test.ts --reporter=verbose`
+Run: `cd apps/code-agent && npx vitest run src/__tests__/domain/usecases/drainTaskQueue.test.ts --reporter=verbose`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/usecases/drainTaskQueue.ts apps/code-agent/src/routes/internalRoutes.ts apps/code-agent/src/domain/usecases/__tests__/drainTaskQueue.test.ts
+git add apps/code-agent/src/domain/usecases/drainTaskQueue.ts apps/code-agent/src/routes/internalRoutes.ts apps/code-agent/src/__tests__/domain/usecases/drainTaskQueue.test.ts
 git commit -m "feat(code-agent): resolve execution memory query client from user default model
 
 drainTaskQueue now calls userServiceClient.getLlmClient(task.userId) to
@@ -230,7 +235,7 @@ instead of using a hard-coded Gemini 2.5 Flash client."
 **Files:**
 - Modify: `apps/code-agent/src/domain/usecases/processExecutionMemoryBacklog.ts` (add `userServiceClient` to deps, resolve per-task)
 - Modify: `apps/code-agent/src/routes/internalRoutes.ts` (update where processExecutionMemoryBacklog is called)
-- Test: `apps/code-agent/src/domain/usecases/__tests__/processExecutionMemoryBacklog.test.ts`
+- Test: `apps/code-agent/src/__tests__/domain/usecases/processExecutionMemoryBacklog.test.ts`
 
 The backlog processor iterates over completed tasks. Each task has a `userId`. For each task, resolve the user's LLM client and use it as both the distiller and evaluator client.
 
@@ -257,7 +262,7 @@ it('resolves distiller and evaluator clients from user default model', async () 
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd apps/code-agent && npx vitest run src/domain/usecases/__tests__/processExecutionMemoryBacklog.test.ts --reporter=verbose`
+Run: `cd apps/code-agent && npx vitest run src/__tests__/domain/usecases/processExecutionMemoryBacklog.test.ts --reporter=verbose`
 Expected: FAIL because `userServiceClient` is not in `ProcessExecutionMemoryBacklogDeps`.
 
 - [ ] **Step 3: Update ProcessExecutionMemoryBacklogDeps**
@@ -314,7 +319,7 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/usecases/processExecutionMemoryBacklog.ts apps/code-agent/src/routes/internalRoutes.ts apps/code-agent/src/domain/usecases/__tests__/processExecutionMemoryBacklog.test.ts
+git add apps/code-agent/src/domain/usecases/processExecutionMemoryBacklog.ts apps/code-agent/src/routes/internalRoutes.ts apps/code-agent/src/__tests__/domain/usecases/processExecutionMemoryBacklog.test.ts
 git commit -m "feat(code-agent): resolve execution memory distiller/evaluator from user default model
 
 processExecutionMemoryBacklog now resolves the user's preferred LLM via
@@ -329,7 +334,7 @@ instead of using the hard-coded Gemini 2.5 Flash clients."
 **Files:**
 - Modify: `apps/code-agent/src/domain/usecases/prepareExecutionMemoryContext.ts:49-54` (simplify `PrepareExecutionMemoryResources`)
 - Modify: `apps/code-agent/src/domain/usecases/drainTaskQueue.ts:74` (update type usage)
-- Test: `apps/code-agent/src/domain/usecases/__tests__/prepareExecutionMemoryContext.test.ts`
+- Test: `apps/code-agent/src/__tests__/domain/useCases/prepareExecutionMemoryContext.test.ts`
 
 After Tasks 1-3, the `queryClient` field in `PrepareExecutionMemoryResources` is no longer populated from the ServiceContainer. It's now passed directly. Clean up the interface to reflect the new pattern.
 
@@ -355,7 +360,7 @@ Expected: PASS
 - [ ] **Step 3: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/usecases/prepareExecutionMemoryContext.ts apps/code-agent/src/domain/usecases/drainTaskQueue.ts apps/code-agent/src/domain/usecases/__tests__/
+git add apps/code-agent/src/domain/usecases/prepareExecutionMemoryContext.ts apps/code-agent/src/domain/usecases/drainTaskQueue.ts apps/code-agent/src/__tests__/domain/
 git commit -m "refactor(code-agent): remove queryClient from PrepareExecutionMemoryResources
 
 queryClient is now resolved per-task from user preferences, not from
