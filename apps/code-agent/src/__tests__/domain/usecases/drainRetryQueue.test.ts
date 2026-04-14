@@ -108,6 +108,9 @@ describe('drainRetryQueue', () => {
   let mockStatusMirrorService: {
     mirrorStatus: ReturnType<typeof vi.fn>;
   };
+  let mockUserServiceClient: {
+    getLlmClient: ReturnType<typeof vi.fn>;
+  };
 
   const workerConfig = {
     name: 'home-mac',
@@ -189,6 +192,7 @@ describe('drainRetryQueue', () => {
       logLineRepo: mockLogLineRepo as unknown as DrainRetryQueueDeps['logLineRepo'],
       statusMirrorService: mockStatusMirrorService as unknown as DrainRetryQueueDeps['statusMirrorService'],
       createTaskForPRFn: mockCreateTaskForPRFn,
+      userServiceClient: mockUserServiceClient as never,
     };
   }
 
@@ -243,6 +247,10 @@ describe('drainRetryQueue', () => {
 
     mockStatusMirrorService = {
       mirrorStatus: vi.fn().mockResolvedValue(ok(undefined)),
+    };
+
+    mockUserServiceClient = {
+      getLlmClient: vi.fn().mockResolvedValue(ok({ generate: vi.fn() })),
     };
   });
 
@@ -365,6 +373,61 @@ describe('drainRetryQueue', () => {
     expect(mockTaskDispatcher.dispatch).toHaveBeenCalled();
     if (!result.ok) return;
     expect(result.value.action).toBe('dispatched');
+  });
+
+  it('falls back to no query client when userServiceClient is not provided', async () => {
+    mockExecutionMemoryEnabled = true;
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      ...sampleTask,
+      linearIssueId: 'INT-1098',
+      agentType: 'execution',
+    }));
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'no_match',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'test query',
+    });
+    mockCodeTaskRepo.update.mockResolvedValue(ok(sampleTask));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const deps = buildDeps();
+    delete (deps as Partial<typeof deps>).userServiceClient;
+    const result = await drainRetryQueue(deps);
+
+    expect(result.ok).toBe(true);
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledWith(
+      expect.objectContaining({ queryClient: undefined }),
+    );
+  });
+
+  it('warns and falls back when getLlmClient fails for execution memory', async () => {
+    mockExecutionMemoryEnabled = true;
+    mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+    mockCodeTaskRepo.findById.mockResolvedValue(ok({
+      ...sampleTask,
+      linearIssueId: 'INT-1098',
+      agentType: 'execution',
+    }));
+    mockUserServiceClient.getLlmClient.mockResolvedValue(err({ code: 'not_found', message: 'User not found' }));
+    prepareExecutionMemoryContextMock.mockResolvedValue({
+      status: 'no_match',
+      retrievalVersion: 'execution-memory-retrieval@1.0.0',
+      querySummary: 'test query',
+    });
+    mockCodeTaskRepo.update.mockResolvedValue(ok(sampleTask));
+    mockTaskDispatcher.dispatch.mockResolvedValue(ok({ workerLocation: 'home-mac' }));
+
+    const result = await drainRetryQueue(buildDeps());
+
+    expect(result.ok).toBe(true);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user_123' }),
+      'Failed to resolve user LLM client for execution memory',
+    );
+    expect(prepareExecutionMemoryContextMock).toHaveBeenCalledWith(
+      expect.objectContaining({ queryClient: undefined }),
+    );
   });
 
   it('prepares execution memory context for planning task retries', async () => {

@@ -47,13 +47,13 @@ export interface ExecutionMemoryEmbeddingClient {
 }
 
 export interface PrepareExecutionMemoryResources {
-  queryClient?: LlmGenerateClient | undefined;
   embeddingClient?: ExecutionMemoryEmbeddingClient | undefined;
   executionMemoryRepo?: Pick<ExecutionMemoryRepository, 'findNearest'> | undefined;
   executionMemoryApplicationRepo?: Pick<ExecutionMemoryApplicationRepository, 'create'> | undefined;
 }
 
 export interface PrepareExecutionMemoryContextParams extends PrepareExecutionMemoryResources {
+  queryClient?: LlmGenerateClient | undefined;
   task: Pick<CodeTask, 'id' | 'prompt' | 'sanitizedPrompt' | 'repository' | 'linearIssueId'>;
   logger: Logger;
   linearAgentClient: Pick<LinearAgentClient, 'getIssueContext'>;

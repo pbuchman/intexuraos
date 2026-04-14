@@ -9,6 +9,8 @@
 
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { CodeTask } from '../models/codeTask.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../services/taskDispatcher.js';
@@ -72,6 +74,7 @@ export interface DrainTaskQueueDeps {
   taskEnqueueService: TaskEnqueueService;
   orchestratorSecret: string;
   executionMemory?: PrepareExecutionMemoryResources;
+  userServiceClient?: Pick<UserServiceClient, 'getLlmClient'>;
 }
 
 export async function drainTaskQueue(
@@ -375,11 +378,21 @@ export async function drainTaskQueue(
       && isMemoryEligibleAgent(agentType)
       && taskExecutionMemoryContext === undefined
     ) {
+      let userLlmClient: LlmGenerateClient | undefined;
+      if (deps.userServiceClient !== undefined) {
+        const llmResult = await deps.userServiceClient.getLlmClient(task.userId);
+        if (llmResult.ok) {
+          userLlmClient = llmResult.value;
+        } else {
+          logger.warn({ userId: task.userId, error: llmResult.error }, 'Failed to resolve user LLM client for execution memory');
+        }
+      }
+
       taskExecutionMemoryContext = await prepareExecutionMemoryContext({
         task,
         logger,
         linearAgentClient,
-        queryClient: deps.executionMemory?.queryClient,
+        queryClient: userLlmClient,
         embeddingClient: deps.executionMemory?.embeddingClient,
         executionMemoryRepo: deps.executionMemory?.executionMemoryRepo,
         executionMemoryApplicationRepo: deps.executionMemory?.executionMemoryApplicationRepo,
