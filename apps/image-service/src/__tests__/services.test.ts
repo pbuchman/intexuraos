@@ -95,7 +95,7 @@ describe('services', () => {
       getPricingSpy.mockClear();
 
       const services = getServices();
-      services.createPromptGenerator('google', LlmModels.Gemini25Pro, 'test-key', 'test-user-id', mockLogger);
+      services.createPromptGenerator(LlmProviders.Google, LlmModels.Gemini25Pro, 'test-key', 'test-user-id', mockLogger);
 
       expect(getPricingSpy).toHaveBeenCalledWith(LlmModels.Gemini25Pro);
       expect(getPricingSpy).not.toHaveBeenCalledWith(LlmModels.Gemini25Flash);
