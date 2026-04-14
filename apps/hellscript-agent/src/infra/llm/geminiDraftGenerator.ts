@@ -1,4 +1,4 @@
-import type { GeminiClient } from '@intexuraos/infra-gemini';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { Result, Logger } from '@intexuraos/common-core';
 import type { DraftGenerator } from '../../domain/ports/draftGenerator.js';
 import type { MaterializedBufferState } from '../../domain/models/materializedBufferState.js';
@@ -6,9 +6,9 @@ import type { WritingCategory } from '../../domain/models/writingCategory.js';
 import { generateDraftPrompt } from '../../prompts/generate-draft-prompt.js';
 
 export class GeminiDraftGenerator implements DraftGenerator {
-  private readonly client: GeminiClient;
+  private readonly client: LlmGenerateClient;
 
-  constructor(client: GeminiClient) {
+  constructor(client: LlmGenerateClient) {
     this.client = client;
   }
 

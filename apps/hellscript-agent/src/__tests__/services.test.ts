@@ -1,25 +1,30 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { getServices, setServices, resetServices, initServices } from '../services.js';
+import { getServices, setServices, resetServices, initServices, type LlmAdapters } from '../services.js';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { FakeHellscriptRepository } from './fakeHellscriptRepository.js';
 import { FakeWritingConfigRepository } from './fakeWritingConfigRepository.js';
-import { FakeIntentInterpreter } from './fakeIntentInterpreter.js';
-import { FakeDraftGenerator } from './fakeDraftGenerator.js';
-import pino from 'pino';
+import { FakeUserServiceClient, FakeLlmGenerateClient } from './fakeUserServiceClient.js';
+import pino from 'pino'; // @allow-pino-import -- test infrastructure only
 
 const logger = pino({ level: 'silent' });
 
 function createContainer(): {
   hellscriptRepository: FakeHellscriptRepository;
   writingConfigRepository: FakeWritingConfigRepository;
-  intentInterpreter: FakeIntentInterpreter;
-  draftGenerator: FakeDraftGenerator;
+  userServiceClient: FakeUserServiceClient;
+  createLlmAdapters: (llmClient: LlmGenerateClient) => LlmAdapters;
   logger: typeof logger;
 } {
+  const fakeInterpreter = { interpret: vi.fn() };
+  const fakeDraftGen = { generate: vi.fn() };
   return {
     hellscriptRepository: new FakeHellscriptRepository(),
     writingConfigRepository: new FakeWritingConfigRepository(),
-    intentInterpreter: new FakeIntentInterpreter(),
-    draftGenerator: new FakeDraftGenerator(),
+    userServiceClient: new FakeUserServiceClient(new FakeLlmGenerateClient()),
+    createLlmAdapters: (_llmClient: LlmGenerateClient): LlmAdapters => ({
+      interpreter: fakeInterpreter,
+      draftGenerator: fakeDraftGen,
+    }),
     logger,
   };
 }
@@ -55,21 +60,18 @@ describe('services', () => {
 
   describe('initServices', () => {
     it('initializes container with real implementations', () => {
-      const mockClient = {
-        generate: vi.fn(),
-        research: vi.fn(),
-      };
+      const fakeUserServiceClient = new FakeUserServiceClient(new FakeLlmGenerateClient());
 
       initServices({
-        geminiClient: mockClient,
+        userServiceClient: fakeUserServiceClient,
         logger,
       });
 
       const services = getServices();
       expect(services.hellscriptRepository).toBeDefined();
       expect(services.writingConfigRepository).toBeDefined();
-      expect(services.intentInterpreter).toBeDefined();
-      expect(services.draftGenerator).toBeDefined();
+      expect(services.userServiceClient).toBe(fakeUserServiceClient);
+      expect(services.createLlmAdapters).toBeDefined();
       expect(services.logger).toBe(logger);
     });
   });
