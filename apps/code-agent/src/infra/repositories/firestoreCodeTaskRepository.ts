@@ -1207,12 +1207,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
           .get();
 
         // Find the first execution-eligible task.
-        // Excludes review, remediation, and merge-conflict follow-up tasks.
+        // Excludes review, remediation, planning, and merge-conflict follow-up tasks.
         for (const doc of snapshot.docs) {
           const data = doc.data();
           const agentType = data['agentType'] as string | undefined;
           // Treat missing agentType as execution-eligible (backward compatibility)
-          if (agentType !== 'review' && agentType !== 'remediation' && !isMergeConflictTaskData(data)) {
+          if (agentType !== 'review' && agentType !== 'remediation' && agentType !== 'planning' && !isMergeConflictTaskData(data)) {
             return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
           }
         }
@@ -1220,7 +1220,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (snapshot.docs.length === 50) {
           logger.warn(
             { repository, prNumber, docsScanned: 50 },
-            'findLatestExecutionTaskByPR exhausted 50-doc window without finding a non-review task',
+            'findLatestExecutionTaskByPR exhausted 50-doc window without finding an execution-eligible task',
           );
         }
 
