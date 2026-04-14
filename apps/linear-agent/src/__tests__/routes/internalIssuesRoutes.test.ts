@@ -21,6 +21,7 @@ import {
   FakeUserServiceClient,
 } from '../fakes.js';
 import type { LinearConnection, LinearIssue, SyncedLinearIssue, LinearComment } from '../../domain/models.js';
+import type { IssuePruningClassifier } from '../../domain/index.js';
 
 // Set up internal auth token for testing
 process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
@@ -63,9 +64,9 @@ describe('internalIssuesRoutes', () => {
       userServiceClient: new FakeUserServiceClient(),
       commentRepository: fakeCommentRepo,
       codeAgentClient: fakeCodeAgentClient,
-      issuePruningClassifier: {
-        classifyCandidates: async () => ({ ok: true, value: [] }),
-      },
+      createClassifier: (_llmClient): IssuePruningClassifier => ({
+        classifyCandidates: async () => ({ ok: true as const, value: [] }),
+      }),
       pruneCandidateRepository: {
         clearAll: async () => ({ ok: true as const, value: undefined }),
         storeAll: async () => ({ ok: true as const, value: undefined }),
