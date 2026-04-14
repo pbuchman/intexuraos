@@ -71,7 +71,7 @@ In the `<tbody>` section (around line 376), add a status cell after the Time cel
           ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
           : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
       }`}>
-        {event.request.success ? 'OK' : 'Fail'}
+        {event.request.success ? 'Success' : 'Failed'}
       </span>
     </td>
     <td className="py-2.5 pr-4 text-slate-600 dark:text-slate-300">{event.owner.id}</td>
@@ -89,7 +89,13 @@ In the `<tbody>` section (around line 376), add a status cell after the Time cel
 
 Run: `cd /repo && pnpm --filter web dev`
 
-Expected: The LLM Usage page now shows a "Status" column with green "OK" badges for successful calls and red "Fail" badges for failed calls. The 0-token entries will now clearly show as "Fail", making it obvious they are error responses, not mysteriously silent calls.
+Navigate to `/#/llm-usage` in the browser. The production Firestore database is shared across environments, so dev already reads real usage events including failed calls. To verify both states are rendered:
+
+1. Open the LLM Usage page — it loads live events from the `llm_usage_events` collection.
+2. Look for paired entries at the same timestamp from `user-service-client` / `google/gemma-4-31b-it:free` — the 0-token entry should show a red "Failed" badge and its retry should show a green "Success" badge.
+3. If no failed events are visible in the current time window, adjust the date range filter to include 2026-04-14 ~19:30–19:50 UTC, where the original reporter's screenshot shows the paired events.
+
+Expected: The LLM Usage page now shows a "Status" column with green "Success" badges for successful calls and red "Failed" badges for failed calls, matching the terminology already used in the detail view (`LlmUsageViewPage.tsx`). The 0-token entries will now clearly show as "Failed", making it obvious they are error responses.
 
 - [ ] **Step 4: Run CI**
 
