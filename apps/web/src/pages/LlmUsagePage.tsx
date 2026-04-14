@@ -363,6 +363,7 @@ function RawEventsList({ events, loading, loadingMore, hasMore, error, onLoadMor
         <thead>
           <tr className="border-b border-slate-200 dark:border-slate-700">
             <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">Time</th>
+            <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">Status</th>
             <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">Owner</th>
             <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">Provider</th>
             <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">Model</th>
@@ -379,6 +380,15 @@ function RawEventsList({ events, loading, loadingMore, hasMore, error, onLoadMor
                 <Link to={`/llm-usage/${event.eventId}`} className="text-blue-600 hover:underline dark:text-blue-400" title={formatDateTime(event.occurredAt)}>
                   {formatRelative(event.occurredAt)}
                 </Link>
+              </td>
+              <td className="py-2.5 pr-4">
+                <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                  event.request.success
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                }`}>
+                  {event.request.success ? 'Success' : 'Failed'}
+                </span>
               </td>
               <td className="py-2.5 pr-4 text-slate-600 dark:text-slate-300">{event.owner.id}</td>
               <td className="py-2.5 pr-4 text-slate-900 dark:text-slate-100">{event.request.provider}</td>
