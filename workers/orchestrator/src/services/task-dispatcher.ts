@@ -108,8 +108,8 @@ export function buildMissingFieldsPrompt(
   ].join('\n');
 }
 
-const TASK_TIMEOUT_WARNING_MS = 175 * 60 * 1000; // 2h 55m
-const TASK_TIMEOUT_KILL_MS = 180 * 60 * 1000; // 3h
+const TASK_TIMEOUT_WARNING_MS = 295 * 60 * 1000; // 4h 55m
+const TASK_TIMEOUT_KILL_MS = 300 * 60 * 1000; // 5h
 const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
 const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
 const IMAGE_PULL_TIMEOUT_MS = 900_000; // 15 minutes — image pulls are network-bound
@@ -977,7 +977,7 @@ export class TaskDispatcher {
           const task = await this.getTask(taskId);
           /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
           if (task !== null && task.status === 'running') {
-            this.logger.warn({ taskId }, 'Task approaching 3-hour timeout');
+            this.logger.warn({ taskId }, 'Task approaching 5-hour timeout');
           }
           /* v8 ignore stop @preserve */
         } catch (error) {

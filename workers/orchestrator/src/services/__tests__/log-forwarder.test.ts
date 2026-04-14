@@ -394,7 +394,7 @@ describe('LogForwarder', () => {
       forwarder.appendChunk('task-codex-nocap', 'formatted bootstrap\n');
       const state = forwarders.get('task-codex-nocap');
       if (state !== undefined) {
-        state.totalBytes = 4 * 1024 * 1024 + 1;
+        state.totalBytes = 8 * 1024 * 1024 + 1;
       }
 
       fetchSpy.mockClear();
@@ -456,7 +456,7 @@ describe('LogForwarder', () => {
       >;
       const state = forwarders.get('task-formatted-stop');
       if (state !== undefined) {
-        state.totalBytes = 4 * 1024 * 1024 + 1;
+        state.totalBytes = 8 * 1024 * 1024 + 1;
         state.formattedUploadsStopped = true;
       }
 
@@ -525,14 +525,14 @@ describe('LogForwarder', () => {
       fwd.appendChunk('task-maxsize', 'init\n');
       await fwd.flush('task-maxsize');
 
-      // Manually set totalBytes to exceed 4MB
+      // Manually set totalBytes to exceed 8MB
       const forwarders = (fwd as unknown as Record<string, unknown>)['forwarders'] as Map<
         string,
         { totalBytes: number; timer: NodeJS.Timeout | null }
       >;
       const state = forwarders.get('task-maxsize');
       if (state !== undefined) {
-        state.totalBytes = 4 * 1024 * 1024 + 1;
+        state.totalBytes = 8 * 1024 * 1024 + 1;
       }
 
       // Append content — the non-force flushBuffer path checks totalBytes
