@@ -45,10 +45,11 @@ export function initializeServices(pricingContext: IPricingContext): void {
   // Get pricing for text prompt generation (GPT model pricing is fixed; Gemini prompt pricing is resolved per-model at call time)
   const gptPricing = pricingContext.getPricing(LlmModels.GPT4oMini);
 
-  // Get pricing for image generation models
+  // Get pricing for image generation models (not for prompt generation — that's resolved per-model at call time)
   const openaiImagePricing = pricingContext.getPricing(LlmModels.GPTImage1);
   const googleImagePricing = pricingContext.getPricing(LlmModels.Gemini25FlashImage);
-  const geminiFlashPricing = pricingContext.getPricing(LlmModels.Gemini25Flash);
+  // Gemini Flash text-model pricing used by GoogleImageGenerator for token accounting during image generation
+  const geminiImageTokenPricing = pricingContext.getPricing(LlmModels.Gemini25Flash);
 
   const container = {
     generatedImageRepository: createGeneratedImageRepository(),
@@ -63,6 +64,8 @@ export function initializeServices(pricingContext: IPricingContext): void {
       logger: Logger
     ): PromptGenerator => {
       if (provider === LlmProviders.Google) {
+        // model is always sourced from IMAGE_PROMPT_MODELS[x].modelId which contains
+        // only LlmModels.* constants, so the cast to LLMModel is safe by construction.
         const pricing = pricingContext.getPricing(model as LLMModel);
         return createGeminiPromptAdapter({
           apiKey,
@@ -105,7 +108,7 @@ export function initializeServices(pricingContext: IPricingContext): void {
         model,
         storage,
         userId,
-        pricing: geminiFlashPricing,
+        pricing: geminiImageTokenPricing,
         imagePricing: googleImagePricing,
         logger,
         usageSink: buildUsageSink('google-image-generator'),
