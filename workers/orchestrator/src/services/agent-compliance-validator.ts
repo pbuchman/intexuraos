@@ -327,7 +327,11 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
       };
     }
     this.logger.info(
-      { taskId: input.taskId, promptChars: promptResult.prompt.length, model: this.primaryModelName },
+      {
+        taskId: input.taskId,
+        promptChars: promptResult.prompt.length,
+        model: this.primaryModelName,
+      },
       'Compliance validation LLM request'
     );
     onProgress?.('calling LLM for compliance analysis...');

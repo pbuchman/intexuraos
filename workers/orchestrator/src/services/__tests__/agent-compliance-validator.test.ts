@@ -546,6 +546,30 @@ describe('OrchestratorAgentComplianceValidator', () => {
     );
   });
 
+  it('returns null when all clients fail', async () => {
+    const fallbackGenerate = vi.fn();
+    generateMock.mockResolvedValueOnce({
+      ok: false as const,
+      error: { code: 'API_ERROR', message: 'Primary failed' },
+    });
+    fallbackGenerate.mockResolvedValueOnce({
+      ok: false as const,
+      error: { code: 'API_ERROR', message: 'Fallback also failed' },
+    });
+    const config = {
+      ...defaultConfig,
+      clients: [{ generate: generateMock }, { generate: fallbackGenerate }],
+    };
+    const validator = new OrchestratorAgentComplianceValidator(logger, config);
+    const result = await validator.validate(defaultInput);
+
+    expect(result).toBeNull();
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ modelIndex: 1 }),
+      'Fallback compliance model also failed'
+    );
+  });
+
   it('logs stderr from gh command errors', async () => {
     generateMock.mockResolvedValue({
       ok: true,

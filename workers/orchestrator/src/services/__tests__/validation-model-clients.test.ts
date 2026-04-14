@@ -16,11 +16,8 @@ vi.mock('@intexuraos/infra-openrouter', () => ({
   getDefaultAllowlistPricing: getDefaultAllowlistPricingMock,
 }));
 
-const {
-  parseValidationModels,
-  buildValidationClients,
-  GEMINI_VALIDATION_PRICING,
-} = await import('../validation-model-clients.js');
+const { parseValidationModels, buildValidationClients, GEMINI_VALIDATION_PRICING } =
+  await import('../validation-model-clients.js');
 
 const fakeLogger = {
   info: vi.fn(),
@@ -35,11 +32,13 @@ beforeEach(() => {
 
 describe('parseValidationModels', () => {
   it('parses comma-separated model list with or: prefix and plain models', () => {
-    const result = parseValidationModels(
-      'or:google/gemma-4-31b-it:free,gemini-2.5-flash'
-    );
+    const result = parseValidationModels('or:google/gemma-4-31b-it:free,gemini-2.5-flash');
     expect(result).toEqual([
-      { provider: 'openrouter', modelId: 'or:google/gemma-4-31b-it:free', rawId: 'google/gemma-4-31b-it:free' },
+      {
+        provider: 'openrouter',
+        modelId: 'or:google/gemma-4-31b-it:free',
+        rawId: 'google/gemma-4-31b-it:free',
+      },
       { provider: 'gemini', modelId: 'gemini-2.5-flash', rawId: 'gemini-2.5-flash' },
     ]);
   });
@@ -89,9 +88,7 @@ describe('buildValidationClients', () => {
   it('builds clients in priority order', () => {
     const fakeClient1 = { generate: vi.fn() };
     const fakeClient2 = { generate: vi.fn() };
-    createLlmClientMock
-      .mockReturnValueOnce(fakeClient1)
-      .mockReturnValueOnce(fakeClient2);
+    createLlmClientMock.mockReturnValueOnce(fakeClient1).mockReturnValueOnce(fakeClient2);
     getDefaultAllowlistPricingMock.mockReturnValue({
       inputPricePerMillion: 0,
       outputPricePerMillion: 0,
