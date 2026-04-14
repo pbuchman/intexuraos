@@ -150,7 +150,6 @@ jobs:
           bash cloudbuild/scripts/build-push-monitored.sh research-agent apps/research-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh commands-agent apps/commands-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh actions-agent apps/actions-agent/Dockerfile &
-          bash cloudbuild/scripts/build-push-monitored.sh data-insights-agent apps/data-insights-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh notes-agent apps/notes-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh todos-agent apps/todos-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh bookmarks-agent apps/bookmarks-agent/Dockerfile &
@@ -172,7 +171,7 @@ jobs:
           SERVICES=(
             image-service api-docs-hub notion-service user-service whatsapp-service
             app-settings-service mobile-notifications-service research-agent
-            commands-agent actions-agent data-insights-agent notes-agent
+            commands-agent actions-agent notes-agent
             todos-agent bookmarks-agent calendar-agent linear-agent
             web-agent code-agent chat-agent cron-agent hellscript-agent
             llm-usage-service
@@ -194,7 +193,6 @@ jobs:
             "research-agent:RESEARCH_AGENT"
             "commands-agent:COMMANDS_AGENT"
             "actions-agent:ACTIONS_AGENT"
-            "data-insights-agent:DATA_INSIGHTS_AGENT"
             "notes-agent:NOTES_AGENT"
             "todos-agent:TODOS_AGENT"
             "bookmarks-agent:BOOKMARKS_AGENT"
@@ -379,7 +377,6 @@ jobs:
                 "research-agent:RESEARCH_AGENT"
                 "commands-agent:COMMANDS_AGENT"
                 "actions-agent:ACTIONS_AGENT"
-                "data-insights-agent:DATA_INSIGHTS_AGENT"
                 "notes-agent:NOTES_AGENT"
                 "todos-agent:TODOS_AGENT"
                 "bookmarks-agent:BOOKMARKS_AGENT"
