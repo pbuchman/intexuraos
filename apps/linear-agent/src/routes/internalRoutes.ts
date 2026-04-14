@@ -670,7 +670,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await handleLinearError(userIdsResult.error, reply);
       }
 
-      if (userIdsResult.value.length === 0) {
+      const [firstUserId] = userIdsResult.value;
+      if (firstUserId === undefined) {
         request.log.info('internal/pruneIssues: no connected users, skipping');
         return await reply.ok({
           skipped: true,
@@ -683,7 +684,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         });
       }
 
-      const firstUserId = userIdsResult.value[0] ?? '';
       const llmClientResult = await services.userServiceClient.getLlmClient(firstUserId);
       if (!llmClientResult.ok) {
         request.log.warn(
@@ -702,9 +702,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const classifier = services.createClassifier(llmClientResult.value);
+      // Pass the already-fetched userIds into pruneIssues to avoid a second Firestore round-trip.
+      const cachedUserIdsResult = userIdsResult;
 
       const result = await pruneIssues({
-        connectionRepo: services.connectionRepository,
+        connectionRepo: {
+          getAllConnectedUserIds: () => Promise.resolve(cachedUserIdsResult),
+        },
         issueRepo: services.issueRepository,
         pruneCandidateRepo: services.pruneCandidateRepository,
         classifier,
