@@ -634,15 +634,110 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       'Completion verifier request'
     );
 
-    const generated = await this.generateWithFallback(prompt, input.taskId);
-    if (!generated.ok) {
+    // Try each model (primary + fallbacks) until one produces a valid, parseable response.
+    const allModels: { client: LlmGenerateClient; modelName: string }[] = [
+      { client: this.primaryClient, modelName: this.primaryModelName },
+      ...this.fallbacks,
+    ];
+
+    let lastGeneratedContent = '';
+    let succeededModelName = '';
+    let parseResult: z.SafeParseReturnType<unknown, unknown> | undefined;
+
+    for (const { client, modelName } of allModels) {
+      const result = await client.generate(prompt);
+      if (!result.ok) {
+        this.logger.warn(
+          {
+            taskId: input.taskId,
+            attempt: input.attempt,
+            model: modelName,
+            errorCode: result.error.code,
+          },
+          'Completion verifier model call failed, trying next'
+        );
+        continue;
+      }
+
+      const content = result.value.content;
+      lastGeneratedContent = content;
+      succeededModelName = modelName;
+      this.logger.info(
+        {
+          taskId: input.taskId,
+          attempt: input.attempt,
+          model: modelName,
+          responseChars: content.length,
+          response: content,
+        },
+        'Completion verifier response'
+      );
+
+      let rawJson: unknown;
+      try {
+        rawJson = extractAndParseJson(content);
+      } catch (error) {
+        this.logger.warn(
+          {
+            taskId: input.taskId,
+            attempt: input.attempt,
+            model: modelName,
+            response: content,
+            error: getErrorMessage(error),
+          },
+          'Completion verifier response parsing failed, trying next model'
+        );
+        continue;
+      }
+
+      const candidate = schema.safeParse(rawJson);
+      if (!candidate.success) {
+        const fields = getMissingFields(candidate.error);
+        this.logger.warn(
+          {
+            taskId: input.taskId,
+            attempt: input.attempt,
+            model: modelName,
+            missingFields: fields,
+            zodErrors: candidate.error.issues,
+          },
+          'Completion verifier Zod validation failed, trying next model'
+        );
+        parseResult = candidate;
+        continue;
+      }
+
+      // All steps succeeded for this model.
+      parseResult = candidate;
+      break;
+    }
+
+    if (!parseResult?.success) {
+      // No model produced a valid response.
+      if (parseResult !== undefined) {
+        // Last attempt had a schema failure.
+        const missingFields = getMissingFields(parseResult.error);
+        this.logger.error(
+          {
+            taskId: input.taskId,
+            attempt: input.attempt,
+            model: succeededModelName,
+            missingFields,
+          },
+          'Completion verifier: all models failed schema validation'
+        );
+        return {
+          passed: false,
+          missingFields,
+          verifierFailure: false,
+          trace: { transcript, prompt, response: lastGeneratedContent },
+        };
+      }
+      // All models failed at the generate or parse step.
       this.logger.error(
         {
           taskId: input.taskId,
           attempt: input.attempt,
-          model: generated.modelName,
-          errorCode: generated.error.code,
-          errorMessage: generated.error.message,
         },
         'Completion verifier returned no response (all models failed)'
       );
@@ -650,63 +745,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         passed: false,
         missingFields: [],
         verifierFailure: true,
-        trace: { transcript, prompt, response: '' },
-      };
-    }
-
-    const succeededModelName = generated.modelName;
-    const generatedContent = generated.value.content; // @allow-result-access -- guarded by if (!generated.ok) early return above
-    this.logger.info(
-      {
-        taskId: input.taskId,
-        attempt: input.attempt,
-        model: succeededModelName,
-        responseChars: generatedContent.length,
-        response: generatedContent,
-      },
-      'Completion verifier response'
-    );
-
-    let rawJson: unknown;
-    try {
-      rawJson = extractAndParseJson(generatedContent);
-    } catch (error) {
-      this.logger.error(
-        {
-          taskId: input.taskId,
-          attempt: input.attempt,
-          model: succeededModelName,
-          response: generatedContent,
-          error: getErrorMessage(error),
-        },
-        'Completion verifier response parsing failed'
-      );
-      return {
-        passed: false,
-        missingFields: [],
-        verifierFailure: true,
-        trace: { transcript, prompt, response: generatedContent },
-      };
-    }
-
-    const parseResult = schema.safeParse(rawJson);
-    if (!parseResult.success) {
-      const missingFields = getMissingFields(parseResult.error);
-      this.logger.warn(
-        {
-          taskId: input.taskId,
-          attempt: input.attempt,
-          model: succeededModelName,
-          missingFields,
-          zodErrors: parseResult.error.issues,
-        },
-        'Completion verifier Zod validation failed'
-      );
-      return {
-        passed: false,
-        missingFields,
-        verifierFailure: false,
-        trace: { transcript, prompt, response: generatedContent },
+        trace: { transcript, prompt, response: lastGeneratedContent },
       };
     }
 
@@ -742,7 +781,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
           passed: false,
           missingFields: emptyMemoryFields,
           verifierFailure: false,
-          trace: { transcript, prompt, response: generatedContent },
+          trace: { transcript, prompt, response: lastGeneratedContent },
         };
       }
     }
@@ -766,7 +805,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         passed: false,
         missingFields: memoryValidationFailures,
         verifierFailure: false,
-        trace: { transcript, prompt, response: generatedContent },
+        trace: { transcript, prompt, response: lastGeneratedContent },
       };
     }
 
@@ -785,7 +824,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       missingFields: [],
       verifierFailure: false,
       agentData,
-      trace: { transcript, prompt, response: generatedContent },
+      trace: { transcript, prompt, response: lastGeneratedContent },
     };
   }
 
