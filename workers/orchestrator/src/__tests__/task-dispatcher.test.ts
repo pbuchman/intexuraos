@@ -725,7 +725,8 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
     });
 
-    it('should log warning at 1h 55m', async () => {
+    it('should keep task running and log warning at 4h 55m', async () => {
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
       const request: CreateTaskRequest = {
         taskId: 'timeout-test',
         workerType: 'auto',
@@ -739,10 +740,17 @@ describe('TaskDispatcher', () => {
       await timeoutDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
 
-      // Advance to 4h 55m (295 minutes)
+      // Advance to 4h 55m (295 minutes) — the warning threshold
       await vi.advanceTimersByTimeAsync(295 * 60 * 1000);
 
+      // Task should still be running (not killed yet)
       expect(timeoutDispatcher.getRunningCount()).toBe(1);
+
+      // Warning should have been logged at the 4h 55m mark
+      expect(warnSpy).toHaveBeenCalledWith(
+        { taskId: 'timeout-test' },
+        'Task approaching 5-hour timeout'
+      );
     });
 
     it('should kill container at 5h timeout', async () => {
