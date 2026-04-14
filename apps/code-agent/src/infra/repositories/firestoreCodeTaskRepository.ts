@@ -1212,7 +1212,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
           const data = doc.data();
           const agentType = data['agentType'] as string | undefined;
           // Treat missing agentType as execution-eligible (backward compatibility)
-          if (agentType !== 'review' && agentType !== 'remediation' && !isMergeConflictTaskData(data)) {
+          if (agentType !== 'review' && agentType !== 'remediation' && agentType !== 'planning' && !isMergeConflictTaskData(data)) {
             return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
           }
         }

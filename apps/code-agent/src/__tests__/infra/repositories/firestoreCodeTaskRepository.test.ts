@@ -2951,6 +2951,29 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value).not.toBeNull();
       expect(result.value?.id).toBe('task-nonreview-older');
     });
+
+    it('should skip planning tasks and return null when only planning tasks exist', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        id: 'task-planning-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'planning',
+        prompt: 'Plan something',
+        sanitizedPrompt: 'plan something',
+      }));
+
+      const result = await repo.findLatestExecutionTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
+    });
   });
 
   describe('findOriginTaskByPR', () => {
