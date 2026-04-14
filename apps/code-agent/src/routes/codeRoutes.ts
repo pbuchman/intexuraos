@@ -4691,9 +4691,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         statusMirrorService: services.statusMirrorService,
         executionMemory: {
           /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
-          ...(services.executionMemoryQueryClient !== undefined && {
-            queryClient: services.executionMemoryQueryClient,
-          }),
           ...(services.executionMemoryEmbeddingClient !== undefined && {
             embeddingClient: services.executionMemoryEmbeddingClient,
           }),
@@ -4705,6 +4702,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           }),
           /* v8 ignore stop @preserve */
         },
+        userServiceClient: services.userServiceClient,
         /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
         ...(services.userLookupService !== undefined && {
           createTaskForPRFn: async (request: { repository: string; prNumber: number; senderLogin: string; comment: string; eventId: string; prTitle?: string; baseBranch?: string }) => {
@@ -4757,9 +4755,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         orchestratorSecret: loadConfig().orchestratorSecret,
         executionMemory: {
           /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
-          ...(services.executionMemoryQueryClient !== undefined && {
-            queryClient: services.executionMemoryQueryClient,
-          }),
           ...(services.executionMemoryEmbeddingClient !== undefined && {
             embeddingClient: services.executionMemoryEmbeddingClient,
           }),
@@ -4771,6 +4766,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           }),
           /* v8 ignore stop @preserve */
         },
+        userServiceClient: services.userServiceClient,
       });
 
       if (!result.ok) {

@@ -41,11 +41,11 @@ describe('processExecutionMemoryBacklog', () => {
     findById: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
   };
-  let evaluatorClient: {
+  let mockLlmClient: {
     generate: ReturnType<typeof vi.fn>;
   };
-  let distillerClient: {
-    generate: ReturnType<typeof vi.fn>;
+  let userServiceClient: {
+    getLlmClient: ReturnType<typeof vi.fn>;
   };
   let embeddingClient: {
     embed: ReturnType<typeof vi.fn>;
@@ -116,12 +116,12 @@ describe('processExecutionMemoryBacklog', () => {
       update: vi.fn(),
     };
 
-    evaluatorClient = {
+    mockLlmClient = {
       generate: vi.fn(),
     };
 
-    distillerClient = {
-      generate: vi.fn(),
+    userServiceClient = {
+      getLlmClient: vi.fn().mockResolvedValue(ok(mockLlmClient)),
     };
 
     embeddingClient = {
@@ -308,7 +308,7 @@ describe('processExecutionMemoryBacklog', () => {
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     }));
-    evaluatorClient.generate.mockResolvedValue(ok({
+    mockLlmClient.generate.mockResolvedValueOnce(ok({
       content: JSON.stringify({
         summary: 'The previous verification memory directly helped the fix.',
         perMemory: [
@@ -330,7 +330,7 @@ describe('processExecutionMemoryBacklog', () => {
       applicationCount: 2,
       positiveCount: 2,
     })));
-    distillerClient.generate.mockResolvedValue(ok({
+    mockLlmClient.generate.mockResolvedValueOnce(ok({
       content: JSON.stringify({
         decision: 'create',
         evidenceSummary: 'Route work produced a reusable lesson.',
@@ -397,8 +397,7 @@ describe('processExecutionMemoryBacklog', () => {
       linearAgentClient: linearAgentClient as never,
       executionMemoryRepo: executionMemoryRepo as never,
       executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-      evaluatorClient: evaluatorClient as never,
-      distillerClient: distillerClient as never,
+      userServiceClient: userServiceClient as never,
       embeddingClient: embeddingClient as never,
       limit: 10,
     });
@@ -460,8 +459,7 @@ describe('processExecutionMemoryBacklog', () => {
       linearAgentClient: linearAgentClient as never,
       executionMemoryRepo: executionMemoryRepo as never,
       executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-      evaluatorClient: evaluatorClient as never,
-      distillerClient: distillerClient as never,
+      userServiceClient: userServiceClient as never,
       embeddingClient: embeddingClient as never,
       limit: 10,
     });
@@ -482,6 +480,49 @@ describe('processExecutionMemoryBacklog', () => {
     }));
   });
 
+  it('warns and skips distillation when getLlmClient fails for a task', async () => {
+    const task = createTask({
+      executionMemoryContext: {
+        status: 'none',
+      },
+    });
+    codeTaskRepo.listPendingExecutionMemoryPostRun.mockResolvedValue(ok([task]));
+    codeTaskRepo.update.mockResolvedValue(ok(task));
+    userServiceClient.getLlmClient.mockResolvedValue(err({ code: 'NOT_FOUND', message: 'User model not configured' }));
+
+    const result = await processExecutionMemoryBacklog({
+      logger,
+      codeTaskRepo: codeTaskRepo as never,
+      logLineRepo: logLineRepo as never,
+      turnMetricsRepo: turnMetricsRepo as never,
+      linearAgentClient: linearAgentClient as never,
+      executionMemoryRepo: executionMemoryRepo as never,
+      executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
+      userServiceClient: userServiceClient as never,
+      embeddingClient: embeddingClient as never,
+      limit: 10,
+    });
+
+    if (!result.ok) throw new Error(`Expected ok result, got: ${result.error.message}`);
+    expect(result.value).toEqual({
+      claimed: 1,
+      completed: 0,
+      skipped: 1,
+      errored: 0,
+      taskIds: ['task-1'],
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-1', taskId: 'task-1' }),
+      expect.stringContaining('Failed to resolve user LLM client'),
+    );
+    expect(codeTaskRepo.update).toHaveBeenLastCalledWith('task-1', expect.objectContaining({
+      executionMemoryPostRun: expect.objectContaining({
+        status: 'skipped',
+        skipReason: 'insufficient_signal',
+      }),
+    }));
+  });
+
   it('marks the task as error after the third processor failure', async () => {
     const task = createTask({
       executionMemoryContext: {
@@ -495,7 +536,7 @@ describe('processExecutionMemoryBacklog', () => {
     });
     codeTaskRepo.listPendingExecutionMemoryPostRun.mockResolvedValue(ok([task]));
     codeTaskRepo.update.mockResolvedValue(ok(task));
-    distillerClient.generate.mockResolvedValue(err({ code: 'API_ERROR', message: 'Gemini unavailable' }));
+    mockLlmClient.generate.mockResolvedValue(err({ code: 'API_ERROR', message: 'Gemini unavailable' }));
 
     const result = await processExecutionMemoryBacklog({
       logger,
@@ -505,8 +546,7 @@ describe('processExecutionMemoryBacklog', () => {
       linearAgentClient: linearAgentClient as never,
       executionMemoryRepo: executionMemoryRepo as never,
       executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-      evaluatorClient: evaluatorClient as never,
-      distillerClient: distillerClient as never,
+      userServiceClient: userServiceClient as never,
       embeddingClient: embeddingClient as never,
       limit: 10,
     });
@@ -538,7 +578,7 @@ describe('processExecutionMemoryBacklog', () => {
     });
     codeTaskRepo.listPendingExecutionMemoryPostRun.mockResolvedValue(ok([task]));
     codeTaskRepo.update.mockResolvedValue(ok(task));
-    distillerClient.generate.mockResolvedValue(err({ code: 'API_ERROR', message: 'distill failed' }));
+    mockLlmClient.generate.mockResolvedValue(err({ code: 'API_ERROR', message: 'distill failed' }));
 
     const result = await processExecutionMemoryBacklog({
       logger,
@@ -548,7 +588,7 @@ describe('processExecutionMemoryBacklog', () => {
       linearAgentClient: linearAgentClient as never,
       executionMemoryRepo: executionMemoryRepo as never,
       executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-      distillerClient: distillerClient as never,
+      userServiceClient: userServiceClient as never,
       limit: 10,
     });
 
@@ -583,8 +623,7 @@ describe('processExecutionMemoryBacklog', () => {
       linearAgentClient: linearAgentClient as never,
       executionMemoryRepo: executionMemoryRepo as never,
       executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-      evaluatorClient: evaluatorClient as never,
-      distillerClient: distillerClient as never,
+      userServiceClient: userServiceClient as never,
       embeddingClient: embeddingClient as never,
       limit: 10,
     });
@@ -612,6 +651,7 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
           limit: 10,
@@ -643,6 +683,7 @@ describe('processExecutionMemoryBacklog', () => {
         logLineRepo: logLineRepo as never,
         turnMetricsRepo: turnMetricsRepo as never,
         linearAgentClient: linearAgentClient as never,
+        userServiceClient: userServiceClient as never,
         executionMemoryRepo: executionMemoryRepo as never,
         executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
         limit: 10,
@@ -671,6 +712,7 @@ describe('processExecutionMemoryBacklog', () => {
         logLineRepo: logLineRepo as never,
         turnMetricsRepo: turnMetricsRepo as never,
         linearAgentClient: linearAgentClient as never,
+        userServiceClient: userServiceClient as never,
         executionMemoryRepo: executionMemoryRepo as never,
         executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
         limit: 10,
@@ -692,16 +734,17 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          evaluatorClient: evaluatorClient as never,
+          evaluatorClient: mockLlmClient as never,
           limit: 10,
         }
       )
     ).rejects.toThrow('application lookup failed');
 
     executionMemoryApplicationRepo.findById.mockResolvedValueOnce(ok(createApplicationRecord()));
-    evaluatorClient.generate.mockResolvedValueOnce(err({ message: 'evaluation model failed' }));
+    mockLlmClient.generate.mockResolvedValueOnce(err({ message: 'evaluation model failed' }));
 
     await expect(
       processExecutionMemoryBacklogTestables.evaluateApplication(
@@ -713,9 +756,10 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          evaluatorClient: evaluatorClient as never,
+          evaluatorClient: mockLlmClient as never,
           limit: 10,
         }
       )
@@ -733,7 +777,7 @@ describe('processExecutionMemoryBacklog', () => {
         },
       ],
     })));
-    evaluatorClient.generate.mockResolvedValueOnce(ok({
+    mockLlmClient.generate.mockResolvedValueOnce(ok({
       content: JSON.stringify({
         summary: 'negative summary',
         perMemory: [
@@ -770,9 +814,10 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          evaluatorClient: evaluatorClient as never,
+          evaluatorClient: mockLlmClient as never,
           limit: 10,
         }
       )
@@ -796,7 +841,7 @@ describe('processExecutionMemoryBacklog', () => {
         },
       ],
     })));
-    evaluatorClient.generate.mockResolvedValueOnce(ok({
+    mockLlmClient.generate.mockResolvedValueOnce(ok({
       content: JSON.stringify({
         summary: 'negative summary',
         perMemory: [
@@ -823,9 +868,10 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          evaluatorClient: evaluatorClient as never,
+          evaluatorClient: mockLlmClient as never,
           limit: 10,
         }
       )
@@ -840,7 +886,7 @@ describe('processExecutionMemoryBacklog', () => {
   it('skips evaluator outcomes for unknown memory indices with a warning', async () => {
     executionMemoryApplicationRepo.findById.mockResolvedValueOnce(ok(createApplicationRecord()));
     executionMemoryApplicationRepo.update.mockResolvedValueOnce(ok(createApplicationRecord()));
-    evaluatorClient.generate.mockResolvedValueOnce(ok({
+    mockLlmClient.generate.mockResolvedValueOnce(ok({
       content: JSON.stringify({
         summary: 'hallucinated evaluation',
         perMemory: [
@@ -871,9 +917,10 @@ describe('processExecutionMemoryBacklog', () => {
         logLineRepo: logLineRepo as never,
         turnMetricsRepo: turnMetricsRepo as never,
         linearAgentClient: linearAgentClient as never,
+        userServiceClient: userServiceClient as never,
         executionMemoryRepo: executionMemoryRepo as never,
         executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-        evaluatorClient: evaluatorClient as never,
+        evaluatorClient: mockLlmClient as never,
         limit: 10,
       }
     );
@@ -897,6 +944,7 @@ describe('processExecutionMemoryBacklog', () => {
       logLineRepo: logLineRepo as never,
       turnMetricsRepo: turnMetricsRepo as never,
       linearAgentClient: linearAgentClient as never,
+      userServiceClient: userServiceClient as never,
       executionMemoryRepo: executionMemoryRepo as never,
       executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
       limit: 10,
@@ -916,7 +964,7 @@ describe('processExecutionMemoryBacklog', () => {
 
   it('throws from evaluation and distillation helpers when the model output is invalid', async () => {
     executionMemoryApplicationRepo.findById.mockResolvedValue(ok(createApplicationRecord()));
-    evaluatorClient.generate.mockResolvedValue(ok({ content: 'missing json' }));
+    mockLlmClient.generate.mockResolvedValue(ok({ content: 'missing json' }));
 
     await expect(
       processExecutionMemoryBacklogTestables.evaluateApplication(
@@ -928,15 +976,16 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          evaluatorClient: evaluatorClient as never,
+          evaluatorClient: mockLlmClient as never,
           limit: 10,
         }
       )
     ).rejects.toThrow('Response did not contain JSON');
 
-    distillerClient.generate.mockResolvedValue(ok({ content: 'missing json' }));
+    mockLlmClient.generate.mockResolvedValue(ok({ content: 'missing json' }));
 
     await expect(
       processExecutionMemoryBacklogTestables.distillTask(
@@ -950,9 +999,10 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          distillerClient: distillerClient as never,
+          distillerClient: mockLlmClient as never,
           limit: 10,
         }
       )
@@ -975,9 +1025,10 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          distillerClient: distillerClient as never,
+          distillerClient: mockLlmClient as never,
           limit: 10,
         }
       )
@@ -1000,6 +1051,7 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
           limit: 10,
@@ -1034,6 +1086,7 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
           limit: 10,
@@ -1082,6 +1135,7 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
           limit: 10,
@@ -1144,7 +1198,7 @@ describe('processExecutionMemoryBacklog', () => {
         ],
       }),
     });
-    distillerClient.generate.mockResolvedValue(distillation);
+    mockLlmClient.generate.mockResolvedValue(distillation);
     embeddingClient.embed
       .mockResolvedValueOnce(ok([0.1, 0.2]))
       .mockResolvedValueOnce(ok([0.3, 0.4]));
@@ -1172,7 +1226,7 @@ describe('processExecutionMemoryBacklog', () => {
           linearAgentClient: linearAgentClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          distillerClient: distillerClient as never,
+          userServiceClient: userServiceClient as never,
           embeddingClient: embeddingClient as never,
           limit: 10,
         }
@@ -1216,7 +1270,7 @@ describe('processExecutionMemoryBacklog', () => {
         ],
       }),
     });
-    distillerClient.generate.mockResolvedValue(distillation);
+    mockLlmClient.generate.mockResolvedValue(distillation);
     embeddingClient.embed.mockResolvedValueOnce(ok([0.5, 0.6]));
     executionMemoryRepo.findByFingerprint.mockResolvedValueOnce(ok(null));
     executionMemoryRepo.findNearest.mockResolvedValueOnce(ok([
@@ -1239,7 +1293,7 @@ describe('processExecutionMemoryBacklog', () => {
         linearAgentClient: linearAgentClient as never,
         executionMemoryRepo: executionMemoryRepo as never,
         executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-        distillerClient: distillerClient as never,
+        userServiceClient: userServiceClient as never,
         embeddingClient: embeddingClient as never,
         limit: 10,
       }
@@ -1271,6 +1325,7 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
           limit: 10,
@@ -1301,6 +1356,7 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
           limit: 10,
@@ -1327,7 +1383,7 @@ describe('processExecutionMemoryBacklog', () => {
           linearAgentClient: linearAgentClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          distillerClient: distillerClient as never,
+          userServiceClient: userServiceClient as never,
           embeddingClient: embeddingClient as never,
           limit: 10,
         }
@@ -1348,14 +1404,14 @@ describe('processExecutionMemoryBacklog', () => {
           linearAgentClient: linearAgentClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          distillerClient: distillerClient as never,
+          userServiceClient: userServiceClient as never,
           embeddingClient: embeddingClient as never,
           limit: 10,
         }
       )
     ).rejects.toThrow('linear lookup failed');
 
-    distillerClient.generate.mockResolvedValue(ok({
+    mockLlmClient.generate.mockResolvedValue(ok({
       content: JSON.stringify({
         decision: 'create',
         evidenceSummary: 'Route work produced a reusable lesson.',
@@ -1392,7 +1448,7 @@ describe('processExecutionMemoryBacklog', () => {
           linearAgentClient: linearAgentClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          distillerClient: distillerClient as never,
+          userServiceClient: userServiceClient as never,
           embeddingClient: embeddingClient as never,
           limit: 10,
         }
@@ -1415,7 +1471,7 @@ describe('processExecutionMemoryBacklog', () => {
           linearAgentClient: linearAgentClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          distillerClient: distillerClient as never,
+          userServiceClient: userServiceClient as never,
           embeddingClient: embeddingClient as never,
           limit: 10,
         }
@@ -1439,7 +1495,7 @@ describe('processExecutionMemoryBacklog', () => {
           linearAgentClient: linearAgentClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          distillerClient: distillerClient as never,
+          userServiceClient: userServiceClient as never,
           embeddingClient: embeddingClient as never,
           limit: 10,
         }
@@ -1448,7 +1504,7 @@ describe('processExecutionMemoryBacklog', () => {
   });
 
   it('surfaces processing failures for missing embeddings, log lookup failures, and first-attempt create errors', async () => {
-    distillerClient.generate.mockResolvedValue(ok({
+    mockLlmClient.generate.mockResolvedValue(ok({
       content: JSON.stringify({
         decision: 'create',
         evidenceSummary: 'Route work produced a reusable lesson.',
@@ -1483,7 +1539,7 @@ describe('processExecutionMemoryBacklog', () => {
           linearAgentClient: linearAgentClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          distillerClient: distillerClient as never,
+          userServiceClient: userServiceClient as never,
           limit: 10,
         }
       )
@@ -1503,7 +1559,7 @@ describe('processExecutionMemoryBacklog', () => {
           linearAgentClient: linearAgentClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          distillerClient: distillerClient as never,
+          userServiceClient: userServiceClient as never,
           embeddingClient: embeddingClient as never,
           limit: 10,
         }
@@ -1533,7 +1589,7 @@ describe('processExecutionMemoryBacklog', () => {
       linearAgentClient: linearAgentClient as never,
       executionMemoryRepo: executionMemoryRepo as never,
       executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-      distillerClient: distillerClient as never,
+      userServiceClient: userServiceClient as never,
       embeddingClient: embeddingClient as never,
       limit: 10,
     });
@@ -1610,7 +1666,7 @@ describe('processExecutionMemoryBacklog', () => {
       // Access via distillTask prompt — we verify the version string is exported
       // by checking it appears in the distiller prompt passed to the client
       const capturedPrompt: string[] = [];
-      distillerClient.generate.mockImplementation((prompt: string) => {
+      mockLlmClient.generate.mockImplementation((prompt: string) => {
         capturedPrompt.push(prompt);
         return Promise.resolve(ok({
           content: JSON.stringify({
@@ -1633,9 +1689,10 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          distillerClient: distillerClient as never,
+          distillerClient: mockLlmClient as never,
           limit: 10,
         }
       );
@@ -1647,7 +1704,7 @@ describe('processExecutionMemoryBacklog', () => {
   describe('distiller prompt schema guidance', () => {
     it('includes explicit JSON schema guidance in the prompt', async () => {
       const capturedPrompt: string[] = [];
-      distillerClient.generate.mockImplementation((prompt: string) => {
+      mockLlmClient.generate.mockImplementation((prompt: string) => {
         capturedPrompt.push(prompt);
         return Promise.resolve(ok({
           content: JSON.stringify({
@@ -1670,9 +1727,10 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          distillerClient: distillerClient as never,
+          distillerClient: mockLlmClient as never,
           limit: 10,
         }
       );
@@ -1700,7 +1758,7 @@ describe('processExecutionMemoryBacklog', () => {
       });
 
       let callCount = 0;
-      distillerClient.generate.mockImplementation(() => {
+      mockLlmClient.generate.mockImplementation(() => {
         callCount++;
         if (callCount === 1) {
           return Promise.resolve(ok({ content: '{"invalid": true}' }));
@@ -1719,9 +1777,10 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          distillerClient: distillerClient as never,
+          distillerClient: mockLlmClient as never,
           limit: 10,
         }
       );
@@ -1735,7 +1794,7 @@ describe('processExecutionMemoryBacklog', () => {
     });
 
     it('throws when both first attempt and retry fail Zod parse', async () => {
-      distillerClient.generate.mockResolvedValue(ok({ content: '{"invalid": true}' }));
+      mockLlmClient.generate.mockResolvedValue(ok({ content: '{"invalid": true}' }));
 
       await expect(
         processExecutionMemoryBacklogTestables.distillTask(
@@ -1749,20 +1808,21 @@ describe('processExecutionMemoryBacklog', () => {
             logLineRepo: logLineRepo as never,
             turnMetricsRepo: turnMetricsRepo as never,
             linearAgentClient: linearAgentClient as never,
+            userServiceClient: userServiceClient as never,
             executionMemoryRepo: executionMemoryRepo as never,
             executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-            distillerClient: distillerClient as never,
+            distillerClient: mockLlmClient as never,
             limit: 10,
           }
         )
       ).rejects.toThrow();
 
-      expect(distillerClient.generate).toHaveBeenCalledTimes(2);
+      expect(mockLlmClient.generate).toHaveBeenCalledTimes(2);
     });
 
     it('throws when retry generate call returns error result', async () => {
       let callCount = 0;
-      distillerClient.generate.mockImplementation(() => {
+      mockLlmClient.generate.mockImplementation(() => {
         callCount++;
         if (callCount === 1) {
           return Promise.resolve(ok({ content: '{"invalid": true}' }));
@@ -1782,9 +1842,10 @@ describe('processExecutionMemoryBacklog', () => {
             logLineRepo: logLineRepo as never,
             turnMetricsRepo: turnMetricsRepo as never,
             linearAgentClient: linearAgentClient as never,
+            userServiceClient: userServiceClient as never,
             executionMemoryRepo: executionMemoryRepo as never,
             executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-            distillerClient: distillerClient as never,
+            distillerClient: mockLlmClient as never,
             limit: 10,
           }
         )
@@ -1803,7 +1864,7 @@ describe('processExecutionMemoryBacklog', () => {
       });
 
       let callCount = 0;
-      distillerClient.generate.mockImplementation((prompt: string) => {
+      mockLlmClient.generate.mockImplementation((prompt: string) => {
         capturedPrompts.push(prompt);
         callCount++;
         if (callCount === 1) {
@@ -1823,9 +1884,10 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          distillerClient: distillerClient as never,
+          distillerClient: mockLlmClient as never,
           limit: 10,
         }
       );
@@ -1848,7 +1910,7 @@ describe('processExecutionMemoryBacklog', () => {
       },
       executionMemoryContext: { status: 'none' },
     });
-    distillerClient.generate.mockResolvedValue(ok({
+    mockLlmClient.generate.mockResolvedValue(ok({
       content: JSON.stringify({
         decision: 'create',
         evidenceSummary: 'Planning produced reusable decomposition.',
@@ -1882,7 +1944,7 @@ describe('processExecutionMemoryBacklog', () => {
       linearAgentClient: linearAgentClient as never,
       executionMemoryRepo: executionMemoryRepo as never,
       executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-      distillerClient: distillerClient as never,
+      userServiceClient: userServiceClient as never,
       embeddingClient: embeddingClient as never,
       limit: 10,
     });
@@ -1910,7 +1972,7 @@ describe('processExecutionMemoryBacklog', () => {
       },
       executionMemoryContext: { status: 'none' },
     });
-    distillerClient.generate.mockResolvedValue(ok({
+    mockLlmClient.generate.mockResolvedValue(ok({
       content: JSON.stringify({
         decision: 'create',
         evidenceSummary: 'Review produced reusable pitfall.',
@@ -1944,7 +2006,7 @@ describe('processExecutionMemoryBacklog', () => {
       linearAgentClient: linearAgentClient as never,
       executionMemoryRepo: executionMemoryRepo as never,
       executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-      distillerClient: distillerClient as never,
+      userServiceClient: userServiceClient as never,
       embeddingClient: embeddingClient as never,
       limit: 10,
     });
@@ -1968,7 +2030,7 @@ describe('processExecutionMemoryBacklog', () => {
       },
       executionMemoryContext: { status: 'none' },
     });
-    distillerClient.generate.mockResolvedValue(ok({
+    mockLlmClient.generate.mockResolvedValue(ok({
       content: JSON.stringify({
         decision: 'create',
         evidenceSummary: 'Planning update.',
@@ -1999,7 +2061,7 @@ describe('processExecutionMemoryBacklog', () => {
       linearAgentClient: linearAgentClient as never,
       executionMemoryRepo: executionMemoryRepo as never,
       executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-      distillerClient: distillerClient as never,
+      userServiceClient: userServiceClient as never,
       embeddingClient: embeddingClient as never,
       limit: 10,
     });
@@ -2028,6 +2090,7 @@ describe('processExecutionMemoryBacklog', () => {
       logLineRepo: logLineRepo as never,
       turnMetricsRepo: turnMetricsRepo as never,
       linearAgentClient: linearAgentClient as never,
+      userServiceClient: userServiceClient as never,
       executionMemoryRepo: executionMemoryRepo as never,
       executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
       limit: 10,
@@ -2292,6 +2355,7 @@ describe('processExecutionMemoryBacklog', () => {
         logLineRepo: logLineRepo as never,
         turnMetricsRepo: turnMetricsRepo as never,
         linearAgentClient: linearAgentClient as never,
+        userServiceClient: userServiceClient as never,
         executionMemoryRepo: executionMemoryRepo as never,
         executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
         limit: 10,
@@ -2319,6 +2383,7 @@ describe('processExecutionMemoryBacklog', () => {
         logLineRepo: logLineRepo as never,
         turnMetricsRepo: turnMetricsRepo as never,
         linearAgentClient: linearAgentClient as never,
+        userServiceClient: userServiceClient as never,
         executionMemoryRepo: executionMemoryRepo as never,
         executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
         limit: 10,
@@ -2342,6 +2407,7 @@ describe('processExecutionMemoryBacklog', () => {
         logLineRepo: logLineRepo as never,
         turnMetricsRepo: turnMetricsRepo as never,
         linearAgentClient: linearAgentClient as never,
+        userServiceClient: userServiceClient as never,
         executionMemoryRepo: executionMemoryRepo as never,
         executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
         limit: 10,
@@ -2365,6 +2431,7 @@ describe('processExecutionMemoryBacklog', () => {
         logLineRepo: logLineRepo as never,
         turnMetricsRepo: turnMetricsRepo as never,
         linearAgentClient: linearAgentClient as never,
+        userServiceClient: userServiceClient as never,
         executionMemoryRepo: executionMemoryRepo as never,
         executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
         limit: 10,
@@ -2388,6 +2455,7 @@ describe('processExecutionMemoryBacklog', () => {
         logLineRepo: logLineRepo as never,
         turnMetricsRepo: turnMetricsRepo as never,
         linearAgentClient: linearAgentClient as never,
+        userServiceClient: userServiceClient as never,
         executionMemoryRepo: executionMemoryRepo as never,
         executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
         limit: 10,
@@ -2498,7 +2566,7 @@ describe('processExecutionMemoryBacklog', () => {
         ],
       });
 
-      evaluatorClient.generate
+      mockLlmClient.generate
         .mockResolvedValueOnce(ok({ content: invalidResponse }))
         .mockResolvedValueOnce(ok({ content: validResponse }));
 
@@ -2517,17 +2585,17 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          evaluatorClient: evaluatorClient as never,
-          distillerClient: distillerClient as never,
+          evaluatorClient: mockLlmClient as never,
           embeddingClient: embeddingClient as never,
           limit: 5,
         },
       );
 
       expect(summary).toBe('Memory was applied successfully.');
-      expect(evaluatorClient.generate).toHaveBeenCalledTimes(2);
+      expect(mockLlmClient.generate).toHaveBeenCalledTimes(2);
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ err: expect.anything() }),
         'Evaluator response failed Zod parse, retrying with refinement prompt',
@@ -2537,7 +2605,7 @@ describe('processExecutionMemoryBacklog', () => {
     it('throws when evaluation repair also fails schema validation', async () => {
       const invalidResponse = '{"perMemory":[]}'; // missing "summary" both times
 
-      evaluatorClient.generate
+      mockLlmClient.generate
         .mockResolvedValueOnce(ok({ content: invalidResponse }))
         .mockResolvedValueOnce(ok({ content: invalidResponse }));
 
@@ -2553,23 +2621,23 @@ describe('processExecutionMemoryBacklog', () => {
             logLineRepo: logLineRepo as never,
             turnMetricsRepo: turnMetricsRepo as never,
             linearAgentClient: linearAgentClient as never,
+            userServiceClient: userServiceClient as never,
             executionMemoryRepo: executionMemoryRepo as never,
             executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-            evaluatorClient: evaluatorClient as never,
-            distillerClient: distillerClient as never,
+            evaluatorClient: mockLlmClient as never,
             embeddingClient: embeddingClient as never,
             limit: 5,
           },
         ),
       ).rejects.toThrow(/Required/);
 
-      expect(evaluatorClient.generate).toHaveBeenCalledTimes(2);
+      expect(mockLlmClient.generate).toHaveBeenCalledTimes(2);
     });
 
     it('throws when evaluation retry generate call returns error result', async () => {
       const invalidResponse = '{"perMemory":[]}'; // missing "summary"
 
-      evaluatorClient.generate
+      mockLlmClient.generate
         .mockResolvedValueOnce(ok({ content: invalidResponse }))
         .mockResolvedValueOnce(err({ message: 'LLM service unavailable' }));
 
@@ -2585,22 +2653,22 @@ describe('processExecutionMemoryBacklog', () => {
             logLineRepo: logLineRepo as never,
             turnMetricsRepo: turnMetricsRepo as never,
             linearAgentClient: linearAgentClient as never,
+            userServiceClient: userServiceClient as never,
             executionMemoryRepo: executionMemoryRepo as never,
             executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-            evaluatorClient: evaluatorClient as never,
-            distillerClient: distillerClient as never,
+            evaluatorClient: mockLlmClient as never,
             embeddingClient: embeddingClient as never,
             limit: 5,
           },
         ),
       ).rejects.toThrow('LLM service unavailable');
 
-      expect(evaluatorClient.generate).toHaveBeenCalledTimes(2);
+      expect(mockLlmClient.generate).toHaveBeenCalledTimes(2);
     });
 
     it('includes EVALUATION_SCHEMA_BLOCK in evaluation prompt', async () => {
       executionMemoryApplicationRepo.findById.mockResolvedValueOnce(ok(createApplicationRecord()));
-      evaluatorClient.generate.mockResolvedValueOnce(ok({
+      mockLlmClient.generate.mockResolvedValueOnce(ok({
         content: JSON.stringify({
           summary: 'Test summary.',
           perMemory: [{ memoryIndex: 1, outcome: 'positive', reason: 'Applied.', confidence: 0.9 }],
@@ -2619,16 +2687,16 @@ describe('processExecutionMemoryBacklog', () => {
           logLineRepo: logLineRepo as never,
           turnMetricsRepo: turnMetricsRepo as never,
           linearAgentClient: linearAgentClient as never,
+          userServiceClient: userServiceClient as never,
           executionMemoryRepo: executionMemoryRepo as never,
           executionMemoryApplicationRepo: executionMemoryApplicationRepo as never,
-          evaluatorClient: evaluatorClient as never,
-          distillerClient: distillerClient as never,
+          evaluatorClient: mockLlmClient as never,
           embeddingClient: embeddingClient as never,
           limit: 5,
         },
       );
 
-      const prompt = evaluatorClient.generate.mock.calls[0]?.[0] as string;
+      const prompt = mockLlmClient.generate.mock.calls[0]?.[0] as string;
       expect(prompt).toContain('"summary"');
       expect(prompt).toContain('"perMemory"');
       expect(prompt).toContain('Return JSON only. Use this exact schema:');

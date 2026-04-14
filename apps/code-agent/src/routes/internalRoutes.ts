@@ -312,13 +312,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         executionMemoryRepo: services.executionMemoryRepo as NonNullable<typeof services.executionMemoryRepo>,
         executionMemoryApplicationRepo:
           services.executionMemoryApplicationRepo as NonNullable<typeof services.executionMemoryApplicationRepo>,
+        userServiceClient: services.userServiceClient,
         /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
-        ...(services.executionMemoryEvaluatorClient !== undefined && {
-          evaluatorClient: services.executionMemoryEvaluatorClient,
-        }),
-        ...(services.executionMemoryDistillerClient !== undefined && {
-          distillerClient: services.executionMemoryDistillerClient,
-        }),
         ...(services.executionMemoryEmbeddingClient !== undefined && {
           embeddingClient: services.executionMemoryEmbeddingClient,
         }),

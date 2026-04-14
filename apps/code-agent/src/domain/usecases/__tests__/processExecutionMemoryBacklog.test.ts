@@ -134,6 +134,7 @@ describe('evaluateApplication - indexed references', () => {
       logLineRepo: { listRecent: vi.fn() },
       turnMetricsRepo: { listByTask: vi.fn() },
       linearAgentClient: { getIssueContext: vi.fn() },
+      userServiceClient: { getLlmClient: vi.fn().mockResolvedValue(ok({ generate: vi.fn() })) },
       executionMemoryRepo: {
         findById: findMemoryFn,
         update: updateMemoryFn,
@@ -205,6 +206,7 @@ describe('evaluateApplication - indexed references', () => {
       logLineRepo: { listRecent: vi.fn() },
       turnMetricsRepo: { listByTask: vi.fn() },
       linearAgentClient: { getIssueContext: vi.fn() },
+      userServiceClient: { getLlmClient: vi.fn().mockResolvedValue(ok({ generate: vi.fn() })) },
       executionMemoryRepo: {
         findById: findMemoryFn,
         update: updateMemoryFn,
@@ -277,6 +279,7 @@ describe('evaluateApplication - indexed references', () => {
       logLineRepo: { listRecent: vi.fn() },
       turnMetricsRepo: { listByTask: vi.fn() },
       linearAgentClient: { getIssueContext: vi.fn() },
+      userServiceClient: { getLlmClient: vi.fn().mockResolvedValue(ok({ generate: vi.fn() })) },
       executionMemoryRepo: {
         findById: findMemoryFn,
         update: updateMemoryFn,
@@ -355,6 +358,7 @@ describe('evaluateApplication - indexed references', () => {
       logLineRepo: { listRecent: vi.fn() },
       turnMetricsRepo: { listByTask: vi.fn() },
       linearAgentClient: { getIssueContext: vi.fn() },
+      userServiceClient: { getLlmClient: vi.fn().mockResolvedValue(ok({ generate: vi.fn() })) },
       executionMemoryRepo: {
         findById: findMemoryFn,
         update: updateMemoryFn,

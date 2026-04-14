@@ -380,8 +380,6 @@ describe('POST /internal/execution-memory/process', () => {
   it('returns 500 with the default limit when optional execution-memory clients are unavailable', async () => {
     const services = getServices();
     const {
-      executionMemoryEvaluatorClient: _evaluatorClient,
-      executionMemoryDistillerClient: _distillerClient,
       executionMemoryEmbeddingClient: _embeddingClient,
       ...servicesWithoutOptionalClients
     } = services;
@@ -402,9 +400,8 @@ describe('POST /internal/execution-memory/process', () => {
       limit: 10,
     }));
     const input = processExecutionMemoryBacklogMock.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(input).not.toHaveProperty('evaluatorClient');
-    expect(input).not.toHaveProperty('distillerClient');
     expect(input).not.toHaveProperty('embeddingClient');
+    expect(input).toHaveProperty('userServiceClient');
   });
 
   it('returns 200 with empty results when body is missing (no JSON payload)', async () => {

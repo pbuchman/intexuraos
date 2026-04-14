@@ -3,6 +3,7 @@ import { ok, err, getErrorMessage, type Logger, type Result } from '@intexuraos/
 import { Timestamp } from '@google-cloud/firestore';
 import { z } from 'zod';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { CodeTask } from '../models/codeTask.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
@@ -65,7 +66,10 @@ export interface ProcessExecutionMemoryBacklogDeps {
     ExecutionMemoryApplicationRepository,
     'findById' | 'update'
   >;
+  userServiceClient: Pick<UserServiceClient, 'getLlmClient'>;
+  /** @internal Resolved per-task by processOneTask from userServiceClient */
   evaluatorClient?: LlmGenerateClient | undefined;
+  /** @internal Resolved per-task by processOneTask from userServiceClient */
   distillerClient?: LlmGenerateClient | undefined;
   embeddingClient?: ExecutionMemoryEmbeddingClient | undefined;
   limit: number;
@@ -192,6 +196,23 @@ async function processOneTask(
   evaluationSummary?: string;
   skipReason?: 'infra_only' | 'insufficient_signal' | 'already_completed' | 'no_reusable_lesson' | 'planning_unclear';
 }> {
+  // Resolve user's LLM client for this task
+  let taskLlmClient: LlmGenerateClient | undefined;
+  const llmResult = await deps.userServiceClient.getLlmClient(task.userId);
+  if (llmResult.ok) {
+    taskLlmClient = llmResult.value;
+  } else {
+    deps.logger.warn({ userId: task.userId, taskId: task.id, error: llmResult.error }, 'Failed to resolve user LLM client for execution memory backlog');
+  }
+
+  const resolvedDeps: ProcessExecutionMemoryBacklogDeps = {
+    ...deps,
+    ...(taskLlmClient !== undefined && {
+      evaluatorClient: taskLlmClient,
+      distillerClient: taskLlmClient,
+    }),
+  };
+
   const logsResult = await deps.logLineRepo.listRecent(task.id, MAX_LOG_LINES);
   if (!logsResult.ok) {
     throw new Error(logsResult.error.message);
@@ -210,7 +231,7 @@ async function processOneTask(
     throw new Error(issueContextResult.error.message);
   }
 
-  const evaluationSummary = await evaluateApplication(task, logsResult.value, deps);
+  const evaluationSummary = await evaluateApplication(task, logsResult.value, resolvedDeps);
 
   const skipCheck = shouldSkipDistillation(task);
   if (skipCheck.skip) {
@@ -222,7 +243,7 @@ async function processOneTask(
     };
   }
 
-  const distillationResult = await distillTask(task, logsResult.value, turnMetricsResult.value, issueContextResult.value, deps);
+  const distillationResult = await distillTask(task, logsResult.value, turnMetricsResult.value, issueContextResult.value, resolvedDeps);
   if (distillationResult.decision === 'skip') {
     return {
       status: 'skipped',
