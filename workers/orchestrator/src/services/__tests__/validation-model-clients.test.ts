@@ -42,8 +42,6 @@ const fakeLogger = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  const spy = (HttpWebhookUsageSinkMock as unknown as Record<string, unknown>)['_spy'] as ReturnType<typeof vi.fn>;
-  spy.mockClear();
 });
 
 describe('parseValidationModels', () => {
