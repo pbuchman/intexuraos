@@ -822,15 +822,10 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.passed).toBe(true);
       expect(fallbackGenerate).toHaveBeenCalledTimes(1);
       expect(loggerWarn).toHaveBeenCalledWith(
-        expect.objectContaining({ primaryModel: 'or:google/gemma-4-31b-it:free' }),
-        'Primary validation model failed, trying fallbacks'
+        expect.objectContaining({ model: 'or:google/gemma-4-31b-it:free' }),
+        'Completion verifier model call failed, trying next'
       );
-      // The success log must name the fallback model, not the primary
-      expect(loggerInfo).toHaveBeenCalledWith(
-        expect.objectContaining({ model: 'or:meta-llama/llama-4-scout:free' }),
-        'Fallback validation model succeeded'
-      );
-      // The response log must also name the fallback model
+      // The response log must name the fallback model, not the primary
       expect(loggerInfo).toHaveBeenCalledWith(
         expect.objectContaining({ model: 'or:meta-llama/llama-4-scout:free' }),
         'Completion verifier response'
@@ -861,6 +856,102 @@ describe('OrchestratorCompletionVerifier', () => {
 
       expect(result.passed).toBe(false);
       expect(result.verifierFailure).toBe(true);
+    });
+
+    it('uses fallback when primary returns unparseable JSON', async () => {
+      const fallbackGenerate = vi.fn();
+      generateMock.mockResolvedValueOnce({
+        ok: true as const,
+        value: {
+          content: 'not valid json',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      fallbackGenerate.mockResolvedValueOnce({
+        ok: true as const,
+        value: {
+          content: JSON.stringify({
+            outcome: 'planned',
+            superpowers_writing_plans: 'used',
+            linear_url: 'https://linear.app/pbuchman/issue/INT-200',
+            is_complex: '0',
+            has_plan_doc: '0',
+            subtask_urls: '',
+            pr_url: 'https://github.com/pbuchman/intexuraos/pull/200',
+            summary: 'Fallback parsed.',
+            unclear_clarification: '',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier({
+        fallbackClients: [{ generate: fallbackGenerate }],
+        fallbackModelNames: ['or:meta-llama/llama-4-scout:free'],
+      });
+
+      const result = await verifier.verify({
+        taskId: 'task-parse-fallback',
+        attempt: 1,
+        maxAttempts: 1,
+        agentType: 'planning',
+        rawLogs: 'test logs',
+      });
+
+      expect(result.passed).toBe(true);
+      expect(fallbackGenerate).toHaveBeenCalledTimes(1);
+      expect(loggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'or:google/gemma-4-31b-it:free' }),
+        'Completion verifier response parsing failed, trying next model'
+      );
+    });
+
+    it('uses fallback when primary fails schema validation', async () => {
+      const fallbackGenerate = vi.fn();
+      // Primary returns valid JSON but incomplete schema for pull_request agent
+      generateMock.mockResolvedValueOnce({
+        ok: true as const,
+        value: {
+          content: JSON.stringify({ gh_pr_url: 'https://github.com/org/repo/pull/1' }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      // Fallback returns valid complete response for planning agent
+      fallbackGenerate.mockResolvedValueOnce({
+        ok: true as const,
+        value: {
+          content: JSON.stringify({
+            outcome: 'planned',
+            superpowers_writing_plans: 'used',
+            linear_url: 'https://linear.app/pbuchman/issue/INT-300',
+            is_complex: '0',
+            has_plan_doc: '0',
+            subtask_urls: '',
+            pr_url: 'https://github.com/pbuchman/intexuraos/pull/300',
+            summary: 'Fallback validated.',
+            unclear_clarification: '',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier({
+        fallbackClients: [{ generate: fallbackGenerate }],
+        fallbackModelNames: ['or:meta-llama/llama-4-scout:free'],
+      });
+
+      const result = await verifier.verify({
+        taskId: 'task-schema-fallback',
+        attempt: 1,
+        maxAttempts: 1,
+        agentType: 'planning',
+        rawLogs: 'test logs',
+      });
+
+      expect(result.passed).toBe(true);
+      expect(fallbackGenerate).toHaveBeenCalledTimes(1);
+      expect(loggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'or:google/gemma-4-31b-it:free' }),
+        'Completion verifier Zod validation failed, trying next model'
+      );
     });
   });
 
@@ -2197,6 +2288,46 @@ describe('OrchestratorCompletionVerifier.extractResumeSummary', () => {
     const verifier = createVerifier();
     const result = await verifier.extractResumeSummary('task-1', 'some raw logs');
     expect(result).toBeUndefined();
+  });
+
+  it('falls back to secondary model when primary fails', async () => {
+    const fallbackGenerate = vi.fn();
+    generateMock.mockResolvedValueOnce({
+      ok: false as const,
+      error: { code: 'API_ERROR', message: 'Primary failed' },
+    });
+    fallbackGenerate.mockResolvedValueOnce({
+      ok: true as const,
+      value: {
+        content: JSON.stringify({ summary: 'Fallback summary.' }),
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15, costUsd: 0.0001 },
+      },
+    });
+    const verifier = createVerifier({
+      fallbackClients: [{ generate: fallbackGenerate }],
+      fallbackModelNames: ['or:meta-llama/llama-4-scout:free'],
+    });
+    const result = await verifier.extractResumeSummary('task-fallback', 'some raw logs');
+    expect(result).toBe('Fallback summary.');
+    expect(fallbackGenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns undefined when all models (primary + fallback) fail', async () => {
+    const fallbackGenerate = vi.fn();
+    generateMock.mockResolvedValueOnce({
+      ok: false as const,
+      error: { code: 'API_ERROR', message: 'Primary failed' },
+    });
+    fallbackGenerate.mockResolvedValueOnce({
+      ok: false as const,
+      error: { code: 'API_ERROR', message: 'Fallback also failed' },
+    });
+    const verifier = createVerifier({
+      fallbackClients: [{ generate: fallbackGenerate }],
+    });
+    const result = await verifier.extractResumeSummary('task-all-fail', 'some raw logs');
+    expect(result).toBeUndefined();
+    expect(fallbackGenerate).toHaveBeenCalledTimes(1);
   });
 
   it('uses last 20 lines of logs as transcript', async () => {

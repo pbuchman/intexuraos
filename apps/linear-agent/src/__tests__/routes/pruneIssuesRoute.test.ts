@@ -170,7 +170,8 @@ describe('POST /internal/linear/prune-issues', () => {
     expect(services.createClassifier).not.toHaveBeenCalled();
   });
 
-  it('returns 200 skipped when LLM client resolution fails', async () => {
+  it('returns 200 skipped when all users fail LLM client resolution', async () => {
+    services.connectionRepository.getAllConnectedUserIds = vi.fn().mockResolvedValue(ok(['user-1', 'user-2']));
     services.userServiceClient.getLlmClient = vi.fn().mockResolvedValue(
       err({ code: 'API_ERROR', message: 'User service unavailable' })
     );
@@ -186,7 +187,28 @@ describe('POST /internal/linear/prune-issues', () => {
     expect(body.success).toBe(true);
     expect(body.data.skipped).toBe(true);
     expect(body.data.skipReason).toBe('No user LLM client available');
+    expect(services.userServiceClient.getLlmClient).toHaveBeenCalledTimes(2);
     expect(services.createClassifier).not.toHaveBeenCalled();
+  });
+
+  it('falls back to second user when first user LLM resolution fails', async () => {
+    services.connectionRepository.getAllConnectedUserIds = vi.fn().mockResolvedValue(ok(['user-a', 'user-b']));
+    const fakeClient = { generate: vi.fn().mockResolvedValue(ok({ content: '[]', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 } })) };
+    services.userServiceClient.getLlmClient = vi.fn()
+      .mockResolvedValueOnce(err({ code: 'API_ERROR', message: 'No key for user-a' }))
+      .mockResolvedValueOnce(ok(fakeClient));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/linear/prune-issues',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(services.userServiceClient.getLlmClient).toHaveBeenCalledTimes(2);
+    expect(services.userServiceClient.getLlmClient).toHaveBeenNthCalledWith(1, 'user-a');
+    expect(services.userServiceClient.getLlmClient).toHaveBeenNthCalledWith(2, 'user-b');
+    expect(services.createClassifier).toHaveBeenCalledWith(fakeClient);
   });
 
   it('returns 500 when getAllConnectedUserIds fails', async () => {
