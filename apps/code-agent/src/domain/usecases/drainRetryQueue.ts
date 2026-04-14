@@ -9,6 +9,7 @@ import { Timestamp } from '@google-cloud/firestore';
 import { ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { DispatchRetry } from '../models/dispatchRetry.js';
 import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
@@ -272,7 +273,7 @@ async function handleNewTaskRetry(
     && isMemoryEligibleAgent(agentType)
     && taskExecutionMemoryContext === undefined
   ) {
-    let userLlmClient: import('@intexuraos/llm-factory').LlmGenerateClient | undefined;
+    let userLlmClient: LlmGenerateClient | undefined;
     if (deps.userServiceClient !== undefined) {
       const llmResult = await deps.userServiceClient.getLlmClient(task.userId);
       if (llmResult.ok) {
