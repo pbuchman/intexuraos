@@ -64,6 +64,7 @@ describe('autoRetryTask', () => {
       codeTaskRepo: mockCodeTaskRepo as unknown as AutoRetryTaskDeps['codeTaskRepo'],
       taskEnqueueService: mockTaskEnqueueService as unknown as AutoRetryTaskDeps['taskEnqueueService'],
       whatsappNotifier: mockWhatsappNotifier as unknown as AutoRetryTaskDeps['whatsappNotifier'],
+      orchestratorSecret: 'test-orch-secret',
     };
   }
 
@@ -211,6 +212,10 @@ describe('autoRetryTask', () => {
         prNumber: 42,
         prBranch: 'feature/fix',
       });
+      // webhookSecret must be set for callback validation
+      expect(createInput?.webhookSecret).toBeDefined();
+      expect(typeof createInput?.webhookSecret).toBe('string');
+      expect(String(createInput?.webhookSecret ?? '').length).toBeGreaterThan(0);
     });
 
     it('enqueues the retry task for dispatch', async () => {

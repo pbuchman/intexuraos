@@ -64,6 +64,7 @@ describe('triageFailedTask', () => {
       whatsappNotifier: mockWhatsappNotifier as unknown as TriageFailedTaskDeps['whatsappNotifier'],
       logLineRepo: mockLogLineRepo as unknown as TriageFailedTaskDeps['logLineRepo'],
       userServiceClient: mockUserServiceClient as unknown as TriageFailedTaskDeps['userServiceClient'],
+      orchestratorSecret: 'test-orch-secret',
     };
   }
 
