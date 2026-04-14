@@ -66,7 +66,7 @@ export interface ProcessExecutionMemoryBacklogDeps {
     ExecutionMemoryApplicationRepository,
     'findById' | 'update'
   >;
-  userServiceClient?: Pick<UserServiceClient, 'getLlmClient'>;
+  userServiceClient: Pick<UserServiceClient, 'getLlmClient'>;
   /** @internal Resolved per-task by processOneTask from userServiceClient */
   evaluatorClient?: LlmGenerateClient | undefined;
   /** @internal Resolved per-task by processOneTask from userServiceClient */
@@ -198,19 +198,19 @@ async function processOneTask(
 }> {
   // Resolve user's LLM client for this task
   let taskLlmClient: LlmGenerateClient | undefined;
-  if (deps.userServiceClient !== undefined) {
-    const llmResult = await deps.userServiceClient.getLlmClient(task.userId);
-    if (llmResult.ok) {
-      taskLlmClient = llmResult.value;
-    } else {
-      deps.logger.warn({ userId: task.userId, taskId: task.id, error: llmResult.error }, 'Failed to resolve user LLM client for execution memory backlog');
-    }
+  const llmResult = await deps.userServiceClient.getLlmClient(task.userId);
+  if (llmResult.ok) {
+    taskLlmClient = llmResult.value;
+  } else {
+    deps.logger.warn({ userId: task.userId, taskId: task.id, error: llmResult.error }, 'Failed to resolve user LLM client for execution memory backlog');
   }
 
   const resolvedDeps: ProcessExecutionMemoryBacklogDeps = {
     ...deps,
-    evaluatorClient: taskLlmClient,
-    distillerClient: taskLlmClient,
+    ...(taskLlmClient !== undefined && {
+      evaluatorClient: taskLlmClient,
+      distillerClient: taskLlmClient,
+    }),
   };
 
   const logsResult = await deps.logLineRepo.listRecent(task.id, MAX_LOG_LINES);

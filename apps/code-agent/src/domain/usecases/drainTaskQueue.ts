@@ -10,6 +10,7 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { CodeTask } from '../models/codeTask.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../services/taskDispatcher.js';
@@ -377,7 +378,7 @@ export async function drainTaskQueue(
       && isMemoryEligibleAgent(agentType)
       && taskExecutionMemoryContext === undefined
     ) {
-      let userLlmClient: import('@intexuraos/llm-factory').LlmGenerateClient | undefined;
+      let userLlmClient: LlmGenerateClient | undefined;
       if (deps.userServiceClient !== undefined) {
         const llmResult = await deps.userServiceClient.getLlmClient(task.userId);
         if (llmResult.ok) {
