@@ -4270,7 +4270,6 @@ describe('codeRoutes', () => {
     it('returns 200 when execution-memory services are not configured', async () => {
       const services = getServices();
       const {
-        executionMemoryQueryClient: _queryClient,
         executionMemoryEmbeddingClient: _embeddingClient,
         executionMemoryRepo: _executionMemoryRepo,
         executionMemoryApplicationRepo: _executionMemoryApplicationRepo,
