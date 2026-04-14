@@ -8942,7 +8942,7 @@ describe('TaskDispatcher', () => {
   });
 
   describe('scheduleTimeoutWarning and scheduleTimeoutKill callbacks', () => {
-    it('scheduleTimeoutWarning logs warning for running task at 2h55m', async () => {
+    it('scheduleTimeoutWarning logs warning for running task at 4h55m', async () => {
       vi.useFakeTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
       const warnState = createStatePersistence();
