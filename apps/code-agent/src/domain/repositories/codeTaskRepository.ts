@@ -213,9 +213,11 @@ export interface CodeTaskRepository {
 
   /**
    * Find the newest execution-eligible task for a PR.
-   * Excludes review, remediation, and merge-conflict follow-up tasks — only
-   * returns planning, execution, or canonical pull_request tasks. Used to route
+   * Excludes review, remediation, planning, and merge-conflict follow-up tasks —
+   * only returns execution or canonical pull_request tasks. Used to route
    * generic PR comments to existing tasks.
+   * Planning tasks are excluded because they run with a planning system prompt
+   * and cannot handle PR comment work (plan PRs should create new pull_request tasks).
    * Treats tasks with missing agentType as execution-eligible (backward compatibility).
    */
   findLatestExecutionTaskByPR(
