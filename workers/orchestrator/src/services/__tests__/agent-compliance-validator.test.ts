@@ -639,7 +639,9 @@ describe('OrchestratorAgentComplianceValidator', () => {
       },
     });
     const configWithShortModelNames = {
-      clients: [{ generate: generateMock }, { generate: fallbackGenerate }] as { generate: typeof generateMock }[],
+      clients: [{ generate: generateMock }, { generate: fallbackGenerate }] as {
+        generate: typeof generateMock;
+      }[],
       primaryModelName: 'or:google/gemma-4-31b-it:free',
       modelNames: ['or:google/gemma-4-31b-it:free'],
       codeAgentUrl: 'http://localhost:8128',

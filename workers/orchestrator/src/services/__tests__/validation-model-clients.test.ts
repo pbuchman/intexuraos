@@ -236,7 +236,10 @@ describe('buildValidationClients', () => {
 
   it('threads getCorrelationTaskId into the HttpWebhookUsageSink for each client', () => {
     createLlmClientMock.mockReturnValue({ generate: vi.fn() });
-    getDefaultAllowlistPricingMock.mockReturnValue({ inputPricePerMillion: 0, outputPricePerMillion: 0 });
+    getDefaultAllowlistPricingMock.mockReturnValue({
+      inputPricePerMillion: 0,
+      outputPricePerMillion: 0,
+    });
 
     const getCorrelationTaskId = vi.fn().mockReturnValue('task-123');
     const models = parseValidationModels('or:google/gemma-4-31b-it:free,gemini-2.5-flash');
@@ -251,7 +254,9 @@ describe('buildValidationClients', () => {
       getCorrelationTaskId,
     });
 
-    const spy = (HttpWebhookUsageSinkMock as unknown as Record<string, unknown>)['_spy'] as ReturnType<typeof vi.fn>;
+    const spy = (HttpWebhookUsageSinkMock as unknown as Record<string, unknown>)[
+      '_spy'
+    ] as ReturnType<typeof vi.fn>;
     expect(spy).toHaveBeenCalledTimes(2);
     const sinkConfig0 = spy.mock.calls[0]?.[0] as Record<string, unknown>;
     const sinkConfig1 = spy.mock.calls[1]?.[0] as Record<string, unknown>;
