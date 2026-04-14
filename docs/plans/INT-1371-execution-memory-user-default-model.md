@@ -144,6 +144,7 @@ default model preference."
 - Modify: `apps/code-agent/src/routes/codeRoutes.ts` (update where drainTaskQueue is called, pass `userServiceClient`)
 - Modify: `apps/code-agent/src/routes/webhookRoutes.ts` (update where drainTaskQueue is called, pass `userServiceClient`)
 - Modify: `apps/code-agent/src/domain/usecases/drainRetryQueue.ts` (also calls `prepareExecutionMemoryContext` with `queryClient` — wire `userServiceClient`)
+- Modify: `apps/code-agent/src/routes/codeRoutes.ts` (update where `drainRetryQueue` is called — pass `userServiceClient` in deps)
 - Test: `apps/code-agent/src/__tests__/domain/usecases/drainTaskQueue.test.ts`
 - Test: `apps/code-agent/src/__tests__/domain/usecases/drainRetryQueue.test.ts`
 - Test: `apps/code-agent/src/__tests__/routes/codeRoutes.test.ts`
@@ -208,9 +209,13 @@ In `apps/code-agent/src/domain/usecases/drainTaskQueue.ts`:
    queryClient: userLlmClient,
    ```
 
-- [ ] **Step 4: Update the call site in internalRoutes.ts**
+- [ ] **Step 4: Update all call sites that pass deps to drainTaskQueue and drainRetryQueue**
 
 In `apps/code-agent/src/routes/internalRoutes.ts`, where `drainTaskQueue` is called, add `userServiceClient: services.userServiceClient` to the deps object.
+
+In `apps/code-agent/src/routes/codeRoutes.ts`, where `drainRetryQueue(...)` is called (the retry path after task dispatch), add `userServiceClient: services.userServiceClient` to the deps object. Without this caller change, the retry path cannot compile once the `DrainRetryQueueDeps` interface adds `userServiceClient`.
+
+In `apps/code-agent/src/routes/webhookRoutes.ts`, where `drainTaskQueue` is called, add `userServiceClient: services.userServiceClient` to the deps object.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
@@ -235,7 +240,7 @@ instead of using a hard-coded Gemini 2.5 Flash client."
 **Files:**
 - Modify: `apps/code-agent/src/domain/usecases/processExecutionMemoryBacklog.ts` (add `userServiceClient` to deps, resolve per-task)
 - Modify: `apps/code-agent/src/routes/internalRoutes.ts` (update where processExecutionMemoryBacklog is called)
-- Test: `apps/code-agent/src/__tests__/domain/usecases/processExecutionMemoryBacklog.test.ts`
+- Test: `apps/code-agent/src/__tests__/domain/useCases/processExecutionMemoryBacklog.test.ts`
 
 The backlog processor iterates over completed tasks. Each task has a `userId`. For each task, resolve the user's LLM client and use it as both the distiller and evaluator client.
 
@@ -262,7 +267,7 @@ it('resolves distiller and evaluator clients from user default model', async () 
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd apps/code-agent && npx vitest run src/__tests__/domain/usecases/processExecutionMemoryBacklog.test.ts --reporter=verbose`
+Run: `cd apps/code-agent && npx vitest run src/__tests__/domain/useCases/processExecutionMemoryBacklog.test.ts --reporter=verbose`
 Expected: FAIL because `userServiceClient` is not in `ProcessExecutionMemoryBacklogDeps`.
 
 - [ ] **Step 3: Update ProcessExecutionMemoryBacklogDeps**
@@ -279,8 +284,7 @@ In `apps/code-agent/src/domain/usecases/processExecutionMemoryBacklog.ts`:
    export interface ProcessExecutionMemoryBacklogDeps {
      // ... existing fields (logger, codeTaskRepo, etc.)
      userServiceClient: Pick<UserServiceClient, 'getLlmClient'>;
-     evaluatorClient?: LlmGenerateClient | undefined;   // keep as optional fallback
-     distillerClient?: LlmGenerateClient | undefined;   // keep as optional fallback
+     // No evaluatorClient/distillerClient — static clients were removed in Task 1
      // ...
    }
    ```
@@ -288,22 +292,20 @@ In `apps/code-agent/src/domain/usecases/processExecutionMemoryBacklog.ts`:
 3. In the per-task processing loop, resolve the user's client:
    ```typescript
    // For each task being processed:
-   let taskLlmClient: LlmGenerateClient | undefined;
    const llmResult = await deps.userServiceClient.getLlmClient(task.userId);
-   if (llmResult.ok) {
-     taskLlmClient = llmResult.value;
-   } else {
+   if (!llmResult.ok) {
      deps.logger.warn(
        { userId: task.userId, taskId: task.id, error: llmResult.error },
-       'Failed to resolve user LLM client for execution memory — falling back to static client'
+       'Failed to resolve user LLM client for execution memory — skipping distillation/evaluation for this task'
      );
+     continue; // skip this task's memory processing
    }
+   const taskLlmClient = llmResult.value;
 
-   // Then use: taskLlmClient ?? deps.evaluatorClient
-   // And:      taskLlmClient ?? deps.distillerClient
+   // Use taskLlmClient as both evaluator and distiller
    ```
 
-4. Update the internal functions that check `deps.evaluatorClient` and `deps.distillerClient` to accept the resolved client as an override parameter.
+4. Update the internal functions that use `deps.evaluatorClient` and `deps.distillerClient` to accept the resolved `taskLlmClient` directly as a parameter instead.
 
 - [ ] **Step 4: Update the call site in internalRoutes.ts**
 
@@ -319,7 +321,7 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/usecases/processExecutionMemoryBacklog.ts apps/code-agent/src/routes/internalRoutes.ts apps/code-agent/src/__tests__/domain/usecases/processExecutionMemoryBacklog.test.ts
+git add apps/code-agent/src/domain/usecases/processExecutionMemoryBacklog.ts apps/code-agent/src/routes/internalRoutes.ts apps/code-agent/src/__tests__/domain/useCases/processExecutionMemoryBacklog.test.ts
 git commit -m "feat(code-agent): resolve execution memory distiller/evaluator from user default model
 
 processExecutionMemoryBacklog now resolves the user's preferred LLM via
