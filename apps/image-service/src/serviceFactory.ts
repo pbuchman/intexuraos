@@ -5,7 +5,7 @@ import {
   type IPricingContext,
   type UsageSink,
 } from '@intexuraos/llm-pricing';
-import { LlmModels, LlmProviders, type Google, type OpenAI } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders, type Google, type LLMModel, type OpenAI } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import type { ImageGenerationModel, PromptGenerator, ImageGenerator } from './domain/index.js';
 import { IMAGE_GENERATION_MODELS } from './domain/index.js';
@@ -42,13 +42,13 @@ export function initializeServices(pricingContext: IPricingContext): void {
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
-  // Get pricing for prompt generation models
-  const geminiPricing = pricingContext.getPricing(LlmModels.Gemini25Flash);
+  // Get pricing for text prompt generation (GPT model pricing is fixed; Gemini prompt pricing is resolved per-model at call time)
   const gptPricing = pricingContext.getPricing(LlmModels.GPT4oMini);
 
   // Get pricing for image generation models
   const openaiImagePricing = pricingContext.getPricing(LlmModels.GPTImage1);
   const googleImagePricing = pricingContext.getPricing(LlmModels.Gemini25FlashImage);
+  const geminiFlashPricing = pricingContext.getPricing(LlmModels.Gemini25Flash);
 
   const container = {
     generatedImageRepository: createGeneratedImageRepository(),
@@ -57,15 +57,18 @@ export function initializeServices(pricingContext: IPricingContext): void {
     pricingContext,
     createPromptGenerator: (
       provider: Google | OpenAI,
+      model: string,
       apiKey: string,
       userId: string,
       logger: Logger
     ): PromptGenerator => {
       if (provider === LlmProviders.Google) {
+        const pricing = pricingContext.getPricing(model as LLMModel);
         return createGeminiPromptAdapter({
           apiKey,
+          model,
           userId,
-          pricing: geminiPricing,
+          pricing,
           logger,
           usageSink: buildUsageSink('gemini-prompt-adapter'),
         });
@@ -102,7 +105,7 @@ export function initializeServices(pricingContext: IPricingContext): void {
         model,
         storage,
         userId,
-        pricing: geminiPricing,
+        pricing: geminiFlashPricing,
         imagePricing: googleImagePricing,
         logger,
         usageSink: buildUsageSink('google-image-generator'),

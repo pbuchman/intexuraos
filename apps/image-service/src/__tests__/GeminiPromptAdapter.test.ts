@@ -72,6 +72,7 @@ describe('GeminiPromptAdapter', () => {
 
       const adapter = new GeminiPromptAdapter({
         apiKey: 'test-key',
+        model: LlmModels.Gemini25Pro,
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
@@ -101,6 +102,7 @@ describe('GeminiPromptAdapter', () => {
 
       const adapter = new GeminiPromptAdapter({
         apiKey: 'test-key',
+        model: LlmModels.Gemini25Pro,
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
@@ -121,6 +123,7 @@ describe('GeminiPromptAdapter', () => {
 
       const adapter = new GeminiPromptAdapter({
         apiKey: 'bad-key',
+        model: LlmModels.Gemini25Pro,
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
@@ -141,6 +144,7 @@ describe('GeminiPromptAdapter', () => {
 
       const adapter = new GeminiPromptAdapter({
         apiKey: 'test-key',
+        model: LlmModels.Gemini25Pro,
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
@@ -159,6 +163,7 @@ describe('GeminiPromptAdapter', () => {
 
       const adapter = new GeminiPromptAdapter({
         apiKey: 'test-key',
+        model: LlmModels.Gemini25Pro,
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
@@ -177,6 +182,7 @@ describe('GeminiPromptAdapter', () => {
 
       const adapter = new GeminiPromptAdapter({
         apiKey: 'test-key',
+        model: LlmModels.Gemini25Pro,
         userId: 'test-user',
         pricing: testPricing,
         logger: mockLogger,
@@ -190,7 +196,7 @@ describe('GeminiPromptAdapter', () => {
       }
     });
 
-    it('uses custom model when specified', async () => {
+    it('uses explicit model when specified', async () => {
       const validResponse = {
         title: 'Test',
         visualSummary: 'Summary',
