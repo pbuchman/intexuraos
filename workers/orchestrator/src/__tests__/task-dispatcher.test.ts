@@ -308,8 +308,9 @@ describe('TaskDispatcher', () => {
   type VerifierMockResult = CompletionVerifierVerdict;
   const dummyTrace = { transcript: '', prompt: '', response: '' };
 
-  // Activity timeout set to 4 hours so it never fires in tests that don't test it explicitly
-  const disabledActivityTimeout = { timeoutMs: 4 * 60 * 60 * 1000, maxRestarts: 3 };
+  // Activity timeout set to 6 hours so it never fires in tests that don't test it explicitly
+  // (must exceed TASK_TIMEOUT_KILL_MS = 5h so tests that advance to kill time don't trip it).
+  const disabledActivityTimeout = { timeoutMs: 6 * 60 * 60 * 1000, maxRestarts: 3 };
 
   const singleAttemptCompletionControl = {
     maxAttempts: 1,
@@ -724,7 +725,8 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
     });
 
-    it('should log warning at 1h 55m', async () => {
+    it('should keep task running and log warning at 4h 55m', async () => {
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
       const request: CreateTaskRequest = {
         taskId: 'timeout-test',
         workerType: 'auto',
@@ -738,13 +740,20 @@ describe('TaskDispatcher', () => {
       await timeoutDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
 
-      // Advance to 2h 55m (175 minutes)
-      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+      // Advance to 4h 55m (295 minutes) — the warning threshold
+      await vi.advanceTimersByTimeAsync(295 * 60 * 1000);
 
+      // Task should still be running (not killed yet)
       expect(timeoutDispatcher.getRunningCount()).toBe(1);
+
+      // Warning should have been logged at the 4h 55m mark
+      expect(warnSpy).toHaveBeenCalledWith(
+        { taskId: 'timeout-test' },
+        'Task approaching 5-hour timeout'
+      );
     });
 
-    it('should kill container at 3h timeout', async () => {
+    it('should kill container at 5h timeout', async () => {
       const request: CreateTaskRequest = {
         taskId: 'timeout-kill-test',
         workerType: 'auto',
@@ -759,8 +768,8 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
       vi.clearAllMocks();
 
-      // Advance to 3h (180 minutes)
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000);
+      // Advance to 5h (300 minutes)
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000);
 
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalled();
     });
@@ -780,12 +789,12 @@ describe('TaskDispatcher', () => {
       await timeoutDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
 
-      // Advance to 2h 55m (175 minutes) - warning timeout
-      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+      // Advance to 4h 55m (295 minutes) - warning timeout
+      await vi.advanceTimersByTimeAsync(295 * 60 * 1000);
 
       expect(warnSpy).toHaveBeenCalledWith(
         { taskId: 'warning-test' },
-        'Task approaching 3-hour timeout'
+        'Task approaching 5-hour timeout'
       );
     });
 
@@ -804,8 +813,8 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
       vi.clearAllMocks();
 
-      // Advance past 3h timeout
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      // Advance past 5h timeout
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
 
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('kill-webhook-test');
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
@@ -830,8 +839,8 @@ describe('TaskDispatcher', () => {
       await timeoutDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
 
-      // Advance past 3h timeout
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      // Advance past 5h timeout
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
 
       const task = await timeoutDispatcher.getTask('interrupted-test');
       expect(task?.status).toBe('interrupted');
@@ -862,8 +871,8 @@ describe('TaskDispatcher', () => {
       // Clear mocks to see what gets called
       vi.clearAllMocks();
 
-      // Advance past 3h timeout - should NOT send interruption webhook since task is already completed
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      // Advance past 5h timeout - should NOT send interruption webhook since task is already completed
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
 
       // Task should still be completed (not interrupted)
       const finalTask = await timeoutDispatcher.getTask('race-test');
@@ -1383,8 +1392,8 @@ describe('TaskDispatcher', () => {
       task.status = 'completed';
       await statePersistence.save(state);
 
-      // Advance past 3h timeout
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      // Advance past 5h timeout
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
 
       // Task should still be completed (not interrupted)
       const finalTask = await dispatcher.getTask('no-timeout-kill-test');
@@ -1589,8 +1598,8 @@ describe('TaskDispatcher', () => {
 
       vi.clearAllMocks();
 
-      // Advance past the 3h kill timeout
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      // Advance past the 5h kill timeout
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
 
       // Task should still be completed (not interrupted)
       const finalTask = await timeoutDispatcher.getTask('status-change-test');
@@ -7580,7 +7589,7 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(timeoutDispatcher.getRunningCount()).toBe(1);
 
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
       expect(timeoutDispatcher.getRunningCount()).toBe(0);
 
       vi.useRealTimers();
@@ -7706,7 +7715,7 @@ describe('TaskDispatcher', () => {
       (killGuardDispatcher as unknown as { runningCount: number }).runningCount = 0;
 
       // Advance past kill timeout — guard should prevent going to -1
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
       expect(killGuardDispatcher.getRunningCount()).toBe(0);
 
       vi.useRealTimers();
@@ -8933,7 +8942,7 @@ describe('TaskDispatcher', () => {
   });
 
   describe('scheduleTimeoutWarning and scheduleTimeoutKill callbacks', () => {
-    it('scheduleTimeoutWarning logs warning for running task at 2h55m', async () => {
+    it('scheduleTimeoutWarning logs warning for running task at 4h55m', async () => {
       vi.useFakeTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
       const warnState = createStatePersistence();
@@ -8963,11 +8972,11 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       const warnSpy = vi.spyOn(mockLogger, 'warn');
-      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(295 * 60 * 1000);
 
       expect(warnSpy).toHaveBeenCalledWith(
         { taskId: 'warn-timer-test' },
-        'Task approaching 3-hour timeout'
+        'Task approaching 5-hour timeout'
       );
 
       vi.useRealTimers();
@@ -9008,7 +9017,7 @@ describe('TaskDispatcher', () => {
       vi.spyOn(errorDispatcher, 'getTask').mockRejectedValue(new Error('DB error'));
       const errorSpy = vi.spyOn(mockLogger, 'error');
 
-      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(295 * 60 * 1000);
 
       expect(errorSpy).toHaveBeenCalledWith(
         { taskId: 'warn-error-test', error: expect.any(Error) },
@@ -9053,7 +9062,7 @@ describe('TaskDispatcher', () => {
       );
       const errorSpy = vi.spyOn(mockLogger, 'error');
 
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
 
       expect(errorSpy).toHaveBeenCalledWith(
         { taskId: 'kill-error-test', error: expect.any(Error) },
@@ -9095,7 +9104,7 @@ describe('TaskDispatcher', () => {
 
       vi.mocked(mockLogForwarder.flushAndStop).mockRejectedValueOnce(new Error('flush failed'));
 
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         { taskId: 'kill-flush-fail-test', error: expect.any(Error) },
@@ -9139,11 +9148,11 @@ describe('TaskDispatcher', () => {
       vi.spyOn(nullTaskDispatcher, 'getTask').mockResolvedValue(null);
       const warnSpy = vi.spyOn(mockLogger, 'warn');
 
-      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(295 * 60 * 1000);
 
       expect(warnSpy).not.toHaveBeenCalledWith(
         expect.objectContaining({ taskId: 'warn-null-task-test' }),
-        'Task approaching 3-hour timeout'
+        'Task approaching 5-hour timeout'
       );
 
       vi.useRealTimers();
@@ -9188,11 +9197,11 @@ describe('TaskDispatcher', () => {
 
       const warnSpy = vi.spyOn(mockLogger, 'warn');
 
-      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(295 * 60 * 1000);
 
       expect(warnSpy).not.toHaveBeenCalledWith(
         expect.objectContaining({ taskId: 'warn-completed-task-test' }),
-        'Task approaching 3-hour timeout'
+        'Task approaching 5-hour timeout'
       );
 
       vi.useRealTimers();
@@ -9241,7 +9250,7 @@ describe('TaskDispatcher', () => {
       (earlyReturnDispatcher as unknown as { runningCount: number }).runningCount = 0;
 
       // Advance past kill timeout — early return (task not running) prevents the decrement
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
 
       // runningCount stays at 0 (not -1) because the early return at `task?.status !== 'running'`
       // fires before reaching the `if (this.runningCount > 0) this.runningCount--` guard
