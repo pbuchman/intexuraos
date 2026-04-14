@@ -17,6 +17,7 @@ export interface ServiceContainer {
   pricingContext: IPricingContext;
   createPromptGenerator: (
     provider: Google | OpenAI,
+    model: string,
     apiKey: string,
     userId: string,
     logger: Logger
