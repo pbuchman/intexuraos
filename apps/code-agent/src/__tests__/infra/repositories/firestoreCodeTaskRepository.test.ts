@@ -2952,6 +2952,42 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value?.id).toBe('task-nonreview-older');
     });
 
+    it('should skip newer planning task in favor of older execution task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create older pull_request task (execution-eligible)
+      await repo.create(createTaskInput({
+        id: 'task-pr-older',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        prompt: 'PR implementation task',
+        sanitizedPrompt: 'pr implementation task',
+      }));
+
+      // Create newer planning task (should be skipped, not mask the older task)
+      await repo.create(createTaskInput({
+        id: 'task-planning-newer',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'planning',
+        prompt: 'Planning task',
+        sanitizedPrompt: 'planning task',
+      }));
+
+      const result = await repo.findLatestExecutionTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // Should return the older pull_request task, not be masked by the newer planning task
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-pr-older');
+    });
+
     it('should skip planning tasks and return null when only planning tasks exist', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
