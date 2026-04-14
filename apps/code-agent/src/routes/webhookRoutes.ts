@@ -1766,14 +1766,14 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               whatsappNotifier,
               logLineRepo,
               userServiceClient,
+              orchestratorSecret: loadConfig().orchestratorSecret,
             },
             { task, completedAt, taskError }
           );
 
-          const triageValue = triageResult;
-          if (triageValue.action !== 'permanent_failure') {
+          if (triageResult.action !== 'permanent_failure') {
             request.log.info(
-              { taskId, action: triageValue.action, retryTaskId: triageValue.retryTaskId },
+              { taskId, action: triageResult.action, retryTaskId: triageResult.retryTaskId },
               'Task auto-retried by failure triage'
             );
 
@@ -1802,7 +1802,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
           // Fall through to permanent failure path
           request.log.info(
-            { taskId, reason: triageValue.reason },
+            { taskId, reason: triageResult.reason },
             'Failure triage: permanent failure'
           );
         }

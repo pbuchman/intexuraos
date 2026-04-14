@@ -32,6 +32,7 @@ export interface TriageFailedTaskDeps {
   whatsappNotifier: WhatsAppNotifier;
   logLineRepo: LogLineRepository;
   userServiceClient: Pick<UserServiceClient, 'getLlmClient'>;
+  orchestratorSecret: string;
 }
 
 export async function triageFailedTask(
@@ -61,7 +62,7 @@ export async function triageFailedTask(
 
   // Step 4: Attempt auto-retry
   const retryResult = await autoRetryTask(
-    { logger, codeTaskRepo, taskEnqueueService, whatsappNotifier },
+    { logger, codeTaskRepo, taskEnqueueService, whatsappNotifier, orchestratorSecret: deps.orchestratorSecret },
     {
       failedTask: task,
       failedWorkerLocation: task.workerLocation,

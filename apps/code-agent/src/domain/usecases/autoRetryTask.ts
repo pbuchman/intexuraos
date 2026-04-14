@@ -17,6 +17,7 @@ import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import { randomUUID } from 'node:crypto';
+import { generateWebhookSecret } from '../utils/secrets.js';
 
 const MAX_AUTO_RETRY_DEPTH = 3;
 
@@ -44,6 +45,7 @@ export interface AutoRetryTaskDeps {
   codeTaskRepo: CodeTaskRepository;
   taskEnqueueService: TaskEnqueueService;
   whatsappNotifier: WhatsAppNotifier;
+  orchestratorSecret: string;
 }
 
 /**
@@ -93,9 +95,11 @@ export async function autoRetryTask(
 
   // Step 2: Create new retry task
   const retryTaskId = `task_${randomUUID()}`;
+  const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, retryTaskId);
 
   const createResult = await codeTaskRepo.create({
     id: retryTaskId,
+    webhookSecret,
     userId: failedTask.userId,
     prompt: failedTask.prompt,
     sanitizedPrompt: failedTask.sanitizedPrompt,
