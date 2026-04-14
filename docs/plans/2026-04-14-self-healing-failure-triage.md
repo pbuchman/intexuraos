@@ -37,16 +37,18 @@ The original issue design had several assumptions that don't match the current c
 
 ### Modified Files
 
-| File                                               | Change                                                                            |
-| -------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `src/domain/models/codeTask.ts`                    | Add `failedWorkerLocation?: string` and `autoRetryAttempt?: number` to `CodeTask` |
-| `src/domain/services/taskDispatcher.ts`            | Add `failedWorkerLocation?: string` to `DispatchRequest`                          |
-| `src/infra/services/taskDispatcherImpl.ts:180-186` | Filter out `failedWorkerLocation` during health probe result processing           |
-| `src/domain/services/whatsappNotifier.ts`          | Add `notifyTaskAutoRetried` method to interface                                   |
-| `src/infra/services/whatsappNotifierImpl.ts`       | Implement `notifyTaskAutoRetried`                                                 |
-| `src/routes/webhookRoutes.ts:1702-1786`            | Insert triage call before standard failure update                                 |
-| `src/services.ts`                                  | Wire `triageFailedTask` deps (Gemini client, log line repo)                       |
-| `src/domain/usecases/drainTaskQueue.ts:435-462`    | Thread `failedWorkerLocation` into dispatch request                               |
+| File                                                    | Change                                                                            |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `src/domain/models/codeTask.ts`                         | Add `failedWorkerLocation?: string` and `autoRetryAttempt?: number` to `CodeTask` |
+| `src/domain/repositories/codeTaskRepository.ts`         | Add `failedWorkerLocation` and `autoRetryAttempt` to `CreateTaskInput`            |
+| `src/infra/repositories/firestoreCodeTaskRepository.ts` | Serialize/deserialize `failedWorkerLocation` and `autoRetryAttempt`               |
+| `src/domain/services/taskDispatcher.ts`                 | Add `failedWorkerLocation?: string` to `DispatchRequest`                          |
+| `src/infra/services/taskDispatcherImpl.ts:180-186`      | Filter out `failedWorkerLocation` during health probe result processing           |
+| `src/domain/services/whatsappNotifier.ts`               | Add `notifyTaskAutoRetried` method to interface                                   |
+| `src/infra/services/whatsappNotifierImpl.ts`            | Implement `notifyTaskAutoRetried`                                                 |
+| `src/routes/webhookRoutes.ts:1702-1786`                 | Insert triage call before standard failure update                                 |
+| `src/services.ts`                                       | Wire `triageFailedTask` deps (Gemini client, log line repo)                       |
+| `src/domain/usecases/drainTaskQueue.ts:435-462`         | Thread `failedWorkerLocation` into dispatch request                               |
 
 ---
 
@@ -54,13 +56,13 @@ The original issue design had several assumptions that don't match the current c
 
 **Files:**
 - Create: `apps/code-agent/src/domain/utils/classifyFailure.ts`
-- Test: `apps/code-agent/src/domain/utils/__tests__/classifyFailure.test.ts`
+- Test: `apps/code-agent/src/__tests__/domain/utils/classifyFailure.test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
 ```typescript
 import { describe, expect, it } from 'vitest';
-import { classifyFailure, type FailureVerdict } from '../classifyFailure.js';
+import { classifyFailure, type FailureVerdict } from '../../../domain/utils/classifyFailure.js';
 
 describe('classifyFailure', () => {
   // Infrastructure — always retry
@@ -134,7 +136,7 @@ describe('classifyFailure', () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/domain/utils/__tests__/classifyFailure.test.ts`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/domain/utils/classifyFailure.test.ts`
 Expected: FAIL with "Cannot find module '../classifyFailure.js'"
 
 - [ ] **Step 3: Write the implementation**
@@ -204,13 +206,13 @@ export function classifyFailure(errorCode: string, errorMessage: string): Failur
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/domain/utils/__tests__/classifyFailure.test.ts`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/domain/utils/classifyFailure.test.ts`
 Expected: All tests PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/utils/classifyFailure.ts apps/code-agent/src/domain/utils/__tests__/classifyFailure.test.ts
+git add apps/code-agent/src/domain/utils/classifyFailure.ts apps/code-agent/src/__tests__/domain/utils/classifyFailure.test.ts
 git commit -m "feat(code-agent): add failure classifier for auto-retry triage (INT-1158)"
 ```
 
@@ -242,16 +244,42 @@ In `apps/code-agent/src/domain/services/taskDispatcher.ts`, add after `reviewTyp
   failedWorkerLocation?: string;
 ```
 
-- [ ] **Step 3: Verify types compile**
+- [ ] **Step 3: Add `failedWorkerLocation` and `autoRetryAttempt` to `CreateTaskInput`**
+
+In `apps/code-agent/src/domain/repositories/codeTaskRepository.ts`, add to `CreateTaskInput` (after `executionMemoryPostRun`):
+
+```typescript
+  // Auto-retry metadata (INT-1158)
+  failedWorkerLocation?: string;
+  autoRetryAttempt?: number;
+```
+
+- [ ] **Step 4: Add `failedWorkerLocation` and `autoRetryAttempt` to Firestore serialization**
+
+In `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts`, update the `create()` method's Firestore document construction to include:
+
+```typescript
+  ...(input.failedWorkerLocation !== undefined && { failedWorkerLocation: input.failedWorkerLocation }),
+  ...(input.autoRetryAttempt !== undefined && { autoRetryAttempt: input.autoRetryAttempt }),
+```
+
+And update the `fromFirestore()` deserialization to read these fields back into the `CodeTask` model:
+
+```typescript
+  failedWorkerLocation: data.failedWorkerLocation as string | undefined,
+  autoRetryAttempt: data.autoRetryAttempt as number | undefined,
+```
+
+- [ ] **Step 5: Verify types compile**
 
 Run: `cd /repo && pnpm --filter code-agent build`
 Expected: Build succeeds with no type errors
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/models/codeTask.ts apps/code-agent/src/domain/services/taskDispatcher.ts
-git commit -m "feat(code-agent): add failedWorkerLocation to CodeTask and DispatchRequest (INT-1158)"
+git add apps/code-agent/src/domain/models/codeTask.ts apps/code-agent/src/domain/services/taskDispatcher.ts apps/code-agent/src/domain/repositories/codeTaskRepository.ts apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts
+git commit -m "feat(code-agent): add failedWorkerLocation to CodeTask, DispatchRequest, and repository contract (INT-1158)"
 ```
 
 ---
@@ -260,7 +288,7 @@ git commit -m "feat(code-agent): add failedWorkerLocation to CodeTask and Dispat
 
 **Files:**
 - Modify: `apps/code-agent/src/infra/services/taskDispatcherImpl.ts:178-186`
-- Test: `apps/code-agent/src/infra/services/__tests__/taskDispatcherImpl.test.ts` (add new describe block)
+- Test: `apps/code-agent/src/__tests__/infra/services/taskDispatcherImpl.test.ts` (add new describe block)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -336,7 +364,7 @@ describe('failedWorkerLocation filtering', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/infra/services/__tests__/taskDispatcherImpl.test.ts -t "failedWorkerLocation"`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/infra/services/taskDispatcherImpl.test.ts -t "failedWorkerLocation"`
 Expected: FAIL — dispatcher doesn't filter yet
 
 - [ ] **Step 3: Implement the filtering in taskDispatcherImpl.ts**
@@ -370,18 +398,18 @@ In `apps/code-agent/src/infra/services/taskDispatcherImpl.ts`, replace the healt
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/infra/services/__tests__/taskDispatcherImpl.test.ts -t "failedWorkerLocation"`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/infra/services/taskDispatcherImpl.test.ts -t "failedWorkerLocation"`
 Expected: All tests PASS
 
 - [ ] **Step 5: Run full dispatcher test suite**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/infra/services/__tests__/taskDispatcherImpl.test.ts`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/infra/services/taskDispatcherImpl.test.ts`
 Expected: All existing tests still PASS (no regression)
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/code-agent/src/infra/services/taskDispatcherImpl.ts apps/code-agent/src/infra/services/__tests__/taskDispatcherImpl.test.ts
+git add apps/code-agent/src/infra/services/taskDispatcherImpl.ts apps/code-agent/src/__tests__/infra/services/taskDispatcherImpl.test.ts
 git commit -m "feat(code-agent): dispatcher excludes failedWorkerLocation on retry (INT-1158)"
 ```
 
@@ -391,7 +419,7 @@ git commit -m "feat(code-agent): dispatcher excludes failedWorkerLocation on ret
 
 **Files:**
 - Modify: `apps/code-agent/src/domain/usecases/drainTaskQueue.ts:435-462`
-- Test: `apps/code-agent/src/domain/usecases/__tests__/drainTaskQueue.test.ts` (add test)
+- Test: `apps/code-agent/src/__tests__/domain/usecases/drainTaskQueue.test.ts` (add test)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -424,7 +452,7 @@ it('omits failedWorkerLocation from dispatch when not set on task', async () => 
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/domain/usecases/__tests__/drainTaskQueue.test.ts -t "failedWorkerLocation"`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/domain/usecases/drainTaskQueue.test.ts -t "failedWorkerLocation"`
 Expected: FAIL — `failedWorkerLocation` not passed through
 
 - [ ] **Step 3: Add failedWorkerLocation to the dispatch call**
@@ -437,13 +465,13 @@ In `apps/code-agent/src/domain/usecases/drainTaskQueue.ts`, in the `taskDispatch
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/domain/usecases/__tests__/drainTaskQueue.test.ts`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/domain/usecases/drainTaskQueue.test.ts`
 Expected: All tests PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/usecases/drainTaskQueue.ts apps/code-agent/src/domain/usecases/__tests__/drainTaskQueue.test.ts
+git add apps/code-agent/src/domain/usecases/drainTaskQueue.ts apps/code-agent/src/__tests__/domain/usecases/drainTaskQueue.test.ts
 git commit -m "feat(code-agent): thread failedWorkerLocation through drainTaskQueue (INT-1158)"
 ```
 
@@ -453,7 +481,7 @@ git commit -m "feat(code-agent): thread failedWorkerLocation through drainTaskQu
 
 **Files:**
 - Create: `apps/code-agent/src/domain/usecases/autoRetryTask.ts`
-- Test: `apps/code-agent/src/domain/usecases/__tests__/autoRetryTask.test.ts`
+- Test: `apps/code-agent/src/__tests__/domain/usecases/autoRetryTask.test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -605,7 +633,7 @@ describe('autoRetryTask', () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/domain/usecases/__tests__/autoRetryTask.test.ts`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/domain/usecases/autoRetryTask.test.ts`
 Expected: FAIL with "Cannot find module '../autoRetryTask.js'"
 
 - [ ] **Step 3: Implement autoRetryTask use case**
@@ -776,13 +804,13 @@ export async function autoRetryTask(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/domain/usecases/__tests__/autoRetryTask.test.ts`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/domain/usecases/autoRetryTask.test.ts`
 Expected: All tests PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/usecases/autoRetryTask.ts apps/code-agent/src/domain/usecases/__tests__/autoRetryTask.test.ts
+git add apps/code-agent/src/domain/usecases/autoRetryTask.ts apps/code-agent/src/__tests__/domain/usecases/autoRetryTask.test.ts
 git commit -m "feat(code-agent): auto-retry use case with budget and chain walking (INT-1158)"
 ```
 
@@ -793,7 +821,7 @@ git commit -m "feat(code-agent): auto-retry use case with budget and chain walki
 **Files:**
 - Modify: `apps/code-agent/src/domain/services/whatsappNotifier.ts` (add interface method)
 - Modify: `apps/code-agent/src/infra/services/whatsappNotifierImpl.ts` (implement)
-- Test: `apps/code-agent/src/infra/services/__tests__/whatsappNotifierImpl.test.ts` (add tests)
+- Test: `apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts` (add tests)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -832,7 +860,7 @@ describe('notifyTaskAutoRetried', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/infra/services/__tests__/whatsappNotifierImpl.test.ts -t "notifyTaskAutoRetried"`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts -t "notifyTaskAutoRetried"`
 Expected: FAIL — method doesn't exist
 
 - [ ] **Step 3: Add methods to WhatsAppNotifier interface**
@@ -903,13 +931,13 @@ Note: Extract common publish logic into a `publishMessage` helper if not already
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/infra/services/__tests__/whatsappNotifierImpl.test.ts`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts`
 Expected: All tests PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/services/whatsappNotifier.ts apps/code-agent/src/infra/services/whatsappNotifierImpl.ts apps/code-agent/src/infra/services/__tests__/whatsappNotifierImpl.test.ts
+git add apps/code-agent/src/domain/services/whatsappNotifier.ts apps/code-agent/src/infra/services/whatsappNotifierImpl.ts apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts
 git commit -m "feat(code-agent): WhatsApp notifications for auto-retry (INT-1158)"
 ```
 
@@ -919,13 +947,13 @@ git commit -m "feat(code-agent): WhatsApp notifications for auto-retry (INT-1158
 
 **Files:**
 - Create: `apps/code-agent/src/domain/prompts/failureTriagePrompt.ts`
-- Test: `apps/code-agent/src/domain/prompts/__tests__/failureTriagePrompt.test.ts`
+- Test: `apps/code-agent/src/__tests__/domain/prompts/failureTriagePrompt.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
 import { describe, expect, it } from 'vitest';
-import { buildFailureTriagePrompt, parseTriageResponse, FAILURE_TRIAGE_PROMPT_VERSION } from '../failureTriagePrompt.js';
+import { buildFailureTriagePrompt, parseTriageResponse, FAILURE_TRIAGE_PROMPT_VERSION } from '../../../domain/prompts/failureTriagePrompt.js';
 
 describe('buildFailureTriagePrompt', () => {
   it('includes error code in prompt', () => {
@@ -985,7 +1013,7 @@ describe('parseTriageResponse', () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/domain/prompts/__tests__/failureTriagePrompt.test.ts`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/domain/prompts/failureTriagePrompt.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Implement the prompt builder**
@@ -1075,13 +1103,13 @@ export function parseTriageResponse(rawResponse: string): TriageResponse {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/domain/prompts/__tests__/failureTriagePrompt.test.ts`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/domain/prompts/failureTriagePrompt.test.ts`
 Expected: All tests PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/prompts/failureTriagePrompt.ts apps/code-agent/src/domain/prompts/__tests__/failureTriagePrompt.test.ts
+git add apps/code-agent/src/domain/prompts/failureTriagePrompt.ts apps/code-agent/src/__tests__/domain/prompts/failureTriagePrompt.test.ts
 git commit -m "feat(code-agent): Gemini failure triage prompt for enforcement errors (INT-1158)"
 ```
 
@@ -1091,7 +1119,7 @@ git commit -m "feat(code-agent): Gemini failure triage prompt for enforcement er
 
 **Files:**
 - Create: `apps/code-agent/src/domain/usecases/triageFailedTask.ts`
-- Test: `apps/code-agent/src/domain/usecases/__tests__/triageFailedTask.test.ts`
+- Test: `apps/code-agent/src/__tests__/domain/usecases/triageFailedTask.test.ts`
 
 This is the main orchestrator that wires together classifier + budget + Gemini + auto-retry.
 
@@ -1099,7 +1127,7 @@ This is the main orchestrator that wires together classifier + budget + Gemini +
 
 ```typescript
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { triageFailedTask, type TriageFailedTaskDeps } from '../triageFailedTask.js';
+import { triageFailedTask, type TriageFailedTaskDeps } from '../../../domain/usecases/triageFailedTask.js';
 
 describe('triageFailedTask', () => {
   let deps: TriageFailedTaskDeps;
@@ -1243,7 +1271,7 @@ describe('triageFailedTask', () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/domain/usecases/__tests__/triageFailedTask.test.ts`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/domain/usecases/triageFailedTask.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Implement triageFailedTask use case**
@@ -1393,13 +1421,13 @@ async function askGeminiForTriage(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/domain/usecases/__tests__/triageFailedTask.test.ts`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/domain/usecases/triageFailedTask.test.ts`
 Expected: All tests PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/code-agent/src/domain/usecases/triageFailedTask.ts apps/code-agent/src/domain/usecases/__tests__/triageFailedTask.test.ts
+git add apps/code-agent/src/domain/usecases/triageFailedTask.ts apps/code-agent/src/__tests__/domain/usecases/triageFailedTask.test.ts
 git commit -m "feat(code-agent): triage orchestrator use case with Gemini path (INT-1158)"
 ```
 
@@ -1410,7 +1438,7 @@ git commit -m "feat(code-agent): triage orchestrator use case with Gemini path (
 **Files:**
 - Modify: `apps/code-agent/src/routes/webhookRoutes.ts:1702-1786`
 - Modify: `apps/code-agent/src/services.ts` (wire Gemini triage client)
-- Test: `apps/code-agent/src/routes/__tests__/webhookRoutes.test.ts` (add triage integration tests)
+- Test: `apps/code-agent/src/__tests__/routes/webhooks.test.ts` (add triage integration tests)
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1487,7 +1515,7 @@ describe('task-complete webhook with failure triage', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/routes/__tests__/webhookRoutes.test.ts -t "failure triage"`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/routes/webhooks.test.ts -t "failure triage"`
 Expected: FAIL — triage not wired yet
 
 - [ ] **Step 3: Wire the Gemini triage client in services.ts**
@@ -1565,7 +1593,7 @@ In `apps/code-agent/src/routes/webhookRoutes.ts`, modify the `status === 'failed
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd /repo && pnpm vitest run apps/code-agent/src/routes/__tests__/webhookRoutes.test.ts`
+Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/routes/webhooks.test.ts`
 Expected: All tests PASS (both new and existing)
 
 - [ ] **Step 6: Run full CI check**
@@ -1576,7 +1604,7 @@ Expected: All tests pass, coverage meets thresholds
 - [ ] **Step 7: Commit**
 
 ```bash
-git add apps/code-agent/src/routes/webhookRoutes.ts apps/code-agent/src/services.ts apps/code-agent/src/routes/__tests__/webhookRoutes.test.ts
+git add apps/code-agent/src/routes/webhookRoutes.ts apps/code-agent/src/services.ts apps/code-agent/src/__tests__/routes/webhooks.test.ts
 git commit -m "feat(code-agent): wire failure triage into task-complete webhook (INT-1158)"
 ```
 
@@ -1612,6 +1640,9 @@ git commit -m "chore(code-agent): fix coverage and CI for failure triage (INT-11
 
 ## Rate-Limit Cooloff Implementation Note
 
-The `retry_after_cooloff` verdict from the classifier signals a 15-minute delay. Rather than adding a scheduled delay mechanism (which would be a new dispatch mechanism — explicitly a non-goal), the implementation relies on the natural 1-minute `drainTaskQueue` scheduler interval. The retry task is enqueued immediately but the failed worker is excluded, so if only one worker exists, the rate-limit has likely cleared by the next successful dispatch attempt. For multi-worker setups, the retry dispatches to an alternate worker immediately (which is fine — the rate limit is per-worker).
+**Intended behavior:** The `retry_after_cooloff` verdict does NOT enforce a fixed 15-minute delay (the original issue description's "15-minute" note was aspirational). Instead, the retry task is enqueued immediately and dispatched on the next `drainTaskQueue` scheduler tick (~1-minute interval). The failed worker is excluded via `failedWorkerLocation`, so:
 
-If a dedicated 15-minute delay is strictly required in the future, this can be added via the existing `drainRetryQueue` TTL mechanism as a follow-up. The current approach is pragmatic and avoids new infrastructure.
+- **Multi-worker:** Retry dispatches to an alternate worker immediately (rate limit is per-worker).
+- **Single-worker:** Retry attempts on the next scheduler tick; the ~1-minute natural delay is usually sufficient for transient 429s.
+
+The `retry_after_cooloff` verdict exists as a distinct classification (separate from `retry`) so that future enhancements can add a dedicated delay mechanism (e.g., via `drainRetryQueue` TTL) without changing the classifier. The current approach is pragmatic and avoids new infrastructure.
