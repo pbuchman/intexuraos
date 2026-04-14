@@ -4,9 +4,9 @@
 
 **Goal:** Automatically classify and retry transient task failures without user intervention, reducing the 68% of infrastructure failures that currently require manual retries.
 
-**Architecture:** A `triageFailedTask` use case intercepts the `task-complete` webhook's failure path. A pure `classifyFailure` function determines the verdict (`retry`, `retry_after_cooloff`, `ask_gemini`, `fail`). Retryable failures create a new auto-retry task (via a new `autoRetryTask` use case) with `failedWorkerLocation` set, which flows through the existing `drainTaskQueue` + `taskDispatcherImpl` dispatch path. The dispatcher filters out the failed worker during health probe processing. Gemini is called only for ambiguous `*_ENFORCEMENT_FAILED` errors.
+**Architecture:** A `triageFailedTask` use case intercepts the `task-complete` webhook's failure path. A pure `classifyFailure` function determines the verdict (`retry`, `retry_after_cooloff`, `ask_llm`, `fail`). Retryable failures create a new auto-retry task (via a new `autoRetryTask` use case) with `failedWorkerLocation` set, which flows through the existing `drainTaskQueue` + `taskDispatcherImpl` dispatch path. The dispatcher filters out the failed worker during health probe processing. For ambiguous `*_ENFORCEMENT_FAILED` errors, the code-agent resolves a per-user `LlmGenerateClient` via `userServiceClient.getLlmClient(task.userId)`, which already honors the user's `defaultModel`, optional `fallbackModel`, OpenRouter models, and platform-Gemini fallback when the user has no provider key.
 
-**Tech Stack:** TypeScript (strict mode), Fastify routes, Firestore, `@intexuraos/llm-factory` (Gemini 2.5 Flash), `@intexuraos/common-core` Result type, WhatsApp Pub/Sub notifications
+**Tech Stack:** TypeScript (strict mode), Fastify routes, Firestore, `@intexuraos/internal-clients` user-service client resolution, `@intexuraos/llm-factory` (`LlmGenerateClient` for Gemini/OpenRouter-backed user-selected models), `@intexuraos/common-core` Result type, WhatsApp Pub/Sub notifications
 
 ---
 
@@ -32,8 +32,8 @@ The original issue design had several assumptions that don't match the current c
 | `src/domain/usecases/autoRetryTask.ts`         | System-initiated auto-retry use case                           |
 | `src/domain/usecases/autoRetryTask.test.ts`    | Tests for auto-retry creation, budget check, chain walking     |
 | `src/domain/usecases/triageFailedTask.ts`      | Orchestrates triage: classify -> budget check -> retry or fail |
-| `src/domain/usecases/triageFailedTask.test.ts` | Tests for triage orchestration including Gemini path           |
-| `src/domain/prompts/failureTriagePrompt.ts`    | Gemini prompt for `*_ENFORCEMENT_FAILED` triage                |
+| `src/domain/usecases/triageFailedTask.test.ts` | Tests for triage orchestration including user-selected LLM path |
+| `src/domain/prompts/failureTriagePrompt.ts`    | Prompt for `*_ENFORCEMENT_FAILED` triage via user-selected LLM |
 
 ### Modified Files
 
@@ -47,7 +47,6 @@ The original issue design had several assumptions that don't match the current c
 | `src/domain/services/whatsappNotifier.ts`               | Add `notifyTaskAutoRetried` method to interface                                   |
 | `src/infra/services/whatsappNotifierImpl.ts`            | Implement `notifyTaskAutoRetried`                                                 |
 | `src/routes/webhookRoutes.ts:1702-1786`                 | Insert triage call before standard failure update                                 |
-| `src/services.ts`                                       | Wire `triageFailedTask` deps (Gemini client, log line repo)                       |
 | `src/domain/usecases/drainTaskQueue.ts:435-462`         | Thread `failedWorkerLocation` into dispatch request                               |
 
 ---
@@ -100,14 +99,14 @@ describe('classifyFailure', () => {
       .toBe('retry_after_cooloff' satisfies FailureVerdict);
   });
 
-  // AI quality failures — ask Gemini
+  // AI quality failures — ask the user's configured LLM
   it.each([
     ['EXECUTION_AGENT_ENFORCEMENT_FAILED', 'Missing required output fields'],
     ['PLANNING_AGENT_ENFORCEMENT_FAILED', 'Plan document not found'],
     ['PULL_REQUEST_AGENT_ENFORCEMENT_FAILED', 'PR URL missing from output'],
     ['REVIEW_AGENT_ENFORCEMENT_FAILED', 'Review summary missing'],
-  ])('returns "ask_gemini" for enforcement code "%s"', (code, message) => {
-    expect(classifyFailure(code, message)).toBe('ask_gemini' satisfies FailureVerdict);
+  ])('returns "ask_llm" for enforcement code "%s"', (code, message) => {
+    expect(classifyFailure(code, message)).toBe('ask_llm' satisfies FailureVerdict);
   });
 
   // Permanent failures
@@ -146,7 +145,7 @@ Expected: FAIL with "Cannot find module '../classifyFailure.js'"
  * Pure failure classifier for task completion errors.
  *
  * Determines whether a task failure is retryable, needs cooloff,
- * should be triaged by Gemini, or is permanent.
+ * should be triaged by a user-selected LLM, or is permanent.
  *
  * This classifies TASK COMPLETION failures (worker ran but failed).
  * Distinct from retryableErrors.ts which classifies DISPATCH failures.
@@ -154,7 +153,7 @@ Expected: FAIL with "Cannot find module '../classifyFailure.js'"
  * INT-1158: Self-healing failure triage.
  */
 
-export type FailureVerdict = 'retry' | 'retry_after_cooloff' | 'ask_gemini' | 'fail';
+export type FailureVerdict = 'retry' | 'retry_after_cooloff' | 'ask_llm' | 'fail';
 
 /** Infrastructure error codes that always indicate transient failures. */
 const INFRA_RETRY_CODES = new Set([
@@ -194,9 +193,9 @@ export function classifyFailure(errorCode: string, errorMessage: string): Failur
     }
   }
 
-  // AI quality failures — ask Gemini
+  // AI quality failures — ask the user's configured LLM
   if (errorCode.endsWith('_ENFORCEMENT_FAILED')) {
-    return 'ask_gemini';
+    return 'ask_llm';
   }
 
   // Everything else — permanent failure
@@ -970,7 +969,7 @@ git commit -m "feat(code-agent): WhatsApp notifications for auto-retry (INT-1158
 
 ---
 
-## Task 7: Gemini failure triage prompt
+## Task 7: LLM failure triage prompt
 
 **Files:**
 - Create: `apps/code-agent/src/domain/prompts/failureTriagePrompt.ts`
@@ -1047,10 +1046,10 @@ Expected: FAIL
 
 ```typescript
 /**
- * Gemini prompt for triaging *_ENFORCEMENT_FAILED errors.
+ * Prompt for triaging *_ENFORCEMENT_FAILED errors.
  *
- * A single Gemini call (not an agent with tools) that reads the error
- * context and recent log lines to decide if retrying would help.
+ * A single user-scoped LLM call (not an agent with tools) that reads the
+ * error context and recent log lines to decide if retrying would help.
  *
  * INT-1158: Self-healing failure triage.
  */
@@ -1137,7 +1136,7 @@ Expected: All tests PASS
 
 ```bash
 git add apps/code-agent/src/domain/prompts/failureTriagePrompt.ts apps/code-agent/src/__tests__/domain/prompts/failureTriagePrompt.test.ts
-git commit -m "feat(code-agent): Gemini failure triage prompt for enforcement errors (INT-1158)"
+git commit -m "feat(code-agent): LLM failure triage prompt for enforcement errors (INT-1158)"
 ```
 
 ---
@@ -1148,7 +1147,7 @@ git commit -m "feat(code-agent): Gemini failure triage prompt for enforcement er
 - Create: `apps/code-agent/src/domain/usecases/triageFailedTask.ts`
 - Test: `apps/code-agent/src/__tests__/domain/usecases/triageFailedTask.test.ts`
 
-This is the main orchestrator that wires together classifier + budget + Gemini + auto-retry.
+This is the main orchestrator that wires together classifier + budget + user-selected LLM triage + auto-retry.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1199,13 +1198,13 @@ describe('triageFailedTask', () => {
     });
   });
 
-  describe('ask_gemini verdict', () => {
-    it('calls Gemini for enforcement failures and retries if shouldRetry', async () => {
+  describe('ask_llm verdict', () => {
+    it('calls the user-selected LLM for enforcement failures and retries if shouldRetry', async () => {
       const task = buildFailedTask({
         error: { code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED', message: 'Missing fields' },
         workerLocation: 'mac-dev-1',
       });
-      fakeGeminiClient.setResponse({ shouldRetry: true, reason: 'Transient formatting issue' });
+      fakeUserLlmClient.setResponse({ shouldRetry: true, reason: 'Transient formatting issue' });
 
       const result = await triageFailedTask(deps, { task, completedAt: new Date(), taskError: task.error! });
 
@@ -1216,12 +1215,12 @@ describe('triageFailedTask', () => {
       expect(fakeLogLineRepo.lastListRecentCall).toEqual({ taskId: task.id, limit: 20 });
     });
 
-    it('falls through to permanent failure when Gemini says no', async () => {
+    it('falls through to permanent failure when the user-selected LLM says no', async () => {
       const task = buildFailedTask({
         error: { code: 'EXECUTION_AGENT_ENFORCEMENT_FAILED', message: 'Logic error' },
         workerLocation: 'mac-dev-1',
       });
-      fakeGeminiClient.setResponse({ shouldRetry: false, reason: 'Systematic misunderstanding' });
+      fakeUserLlmClient.setResponse({ shouldRetry: false, reason: 'Systematic misunderstanding' });
 
       const result = await triageFailedTask(deps, { task, completedAt: new Date(), taskError: task.error! });
 
@@ -1231,12 +1230,12 @@ describe('triageFailedTask', () => {
       }
     });
 
-    it('falls through to permanent failure when Gemini call fails', async () => {
+    it('falls through to permanent failure when LLM client resolution or generation fails', async () => {
       const task = buildFailedTask({
         error: { code: 'PLANNING_AGENT_ENFORCEMENT_FAILED', message: 'Plan missing' },
         workerLocation: 'mac-dev-1',
       });
-      fakeGeminiClient.setError('LLM call failed');
+      fakeUserLlmClient.setError('LLM call failed');
 
       const result = await triageFailedTask(deps, { task, completedAt: new Date(), taskError: task.error! });
 
@@ -1307,7 +1306,7 @@ Expected: FAIL
 /**
  * Use case: Triage a failed task for auto-retry.
  *
- * Orchestrates: classify -> budget check -> (optional Gemini) -> auto-retry or permanent fail.
+ * Orchestrates: classify -> budget check -> (optional user-selected LLM) -> auto-retry or permanent fail.
  *
  * INT-1158: Self-healing failure triage.
  */
@@ -1318,7 +1317,7 @@ import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
-import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { classifyFailure } from '../utils/classifyFailure.js';
 import { autoRetryTask } from './autoRetryTask.js';
 import { buildFailureTriagePrompt, parseTriageResponse } from '../prompts/failureTriagePrompt.js';
@@ -1337,7 +1336,7 @@ export interface TriageFailedTaskDeps {
   taskEnqueueService: TaskEnqueueService;
   whatsappNotifier: WhatsAppNotifier;
   logLineRepo: LogLineRepository;
-  triageClient?: LlmGenerateClient;
+  userServiceClient: Pick<UserServiceClient, 'getLlmClient'>;
   orchestratorSecret: string;
 }
 
@@ -1345,7 +1344,7 @@ export async function triageFailedTask(
   deps: TriageFailedTaskDeps,
   request: { task: CodeTask; completedAt: Date; taskError: TaskError }
 ): Promise<Result<TriageResult, never>> {
-  const { logger, codeTaskRepo, taskEnqueueService, whatsappNotifier, logLineRepo, triageClient, orchestratorSecret } = deps;
+  const { logger, codeTaskRepo, taskEnqueueService, whatsappNotifier, logLineRepo, userServiceClient, orchestratorSecret } = deps;
   const { task, taskError } = request;
 
   // Step 1: Classify the failure
@@ -1357,11 +1356,11 @@ export async function triageFailedTask(
     return ok({ action: 'permanent_failure', reason: `Classified as permanent: ${taskError.code}` });
   }
 
-  // Step 3: For ask_gemini, call Gemini to decide
-  if (verdict === 'ask_gemini') {
-    const geminiDecision = await askGeminiForTriage(deps, task, taskError);
-    if (!geminiDecision.shouldRetry) {
-      return ok({ action: 'permanent_failure', reason: `Gemini: ${geminiDecision.reason}` });
+  // Step 3: For ask_llm, call the user's configured LLM to decide
+  if (verdict === 'ask_llm') {
+    const llmDecision = await askUserLlmForTriage(deps, task, taskError);
+    if (!llmDecision.shouldRetry) {
+      return ok({ action: 'permanent_failure', reason: `LLM triage: ${llmDecision.reason}` });
     }
     // Fall through to retry
   }
@@ -1401,16 +1400,20 @@ export async function triageFailedTask(
   });
 }
 
-async function askGeminiForTriage(
+async function askUserLlmForTriage(
   deps: TriageFailedTaskDeps,
   task: CodeTask,
   taskError: TaskError
 ): Promise<{ shouldRetry: boolean; reason: string }> {
-  const { logger, logLineRepo, triageClient } = deps;
+  const { logger, logLineRepo, userServiceClient } = deps;
 
-  if (triageClient === undefined) {
-    logger.warn({ taskId: task.id }, 'Gemini triage client not configured, defaulting to no-retry');
-    return { shouldRetry: false, reason: 'Gemini triage client not configured' };
+  const llmClientResult = await userServiceClient.getLlmClient(task.userId);
+  if (!llmClientResult.ok) {
+    logger.warn(
+      { taskId: task.id, userId: task.userId, error: llmClientResult.error },
+      'Failed to resolve user LLM client for failure triage, defaulting to no-retry'
+    );
+    return { shouldRetry: false, reason: `User LLM unavailable: ${llmClientResult.error.message}` };
   }
 
   // Fetch recent log lines
@@ -1429,16 +1432,16 @@ async function askGeminiForTriage(
     recentLogLines: logLines,
   });
 
-  const generateResult = await triageClient.generate(prompt);
+  const generateResult = await llmClientResult.value.generate(prompt);
   if (!generateResult.ok) {
-    logger.warn({ taskId: task.id, error: generateResult.error }, 'Gemini triage call failed, defaulting to no-retry');
-    return { shouldRetry: false, reason: `Gemini call failed: ${generateResult.error.message}` };
+    logger.warn({ taskId: task.id, error: generateResult.error }, 'LLM triage call failed, defaulting to no-retry');
+    return { shouldRetry: false, reason: `LLM call failed: ${generateResult.error.message}` };
   }
 
   const triageResponse = parseTriageResponse(generateResult.value.content);
   logger.info(
     { taskId: task.id, shouldRetry: triageResponse.shouldRetry, reason: triageResponse.reason },
-    'Gemini triage decision'
+    'LLM triage decision'
   );
 
   return triageResponse;
@@ -1454,7 +1457,7 @@ Expected: All tests PASS
 
 ```bash
 git add apps/code-agent/src/domain/usecases/triageFailedTask.ts apps/code-agent/src/__tests__/domain/usecases/triageFailedTask.test.ts
-git commit -m "feat(code-agent): triage orchestrator use case with Gemini path (INT-1158)"
+git commit -m "feat(code-agent): triage orchestrator use case with user-selected LLM path (INT-1158)"
 ```
 
 ---
@@ -1463,7 +1466,6 @@ git commit -m "feat(code-agent): triage orchestrator use case with Gemini path (
 
 **Files:**
 - Modify: `apps/code-agent/src/routes/webhookRoutes.ts:1702-1786`
-- Modify: `apps/code-agent/src/services.ts` (wire Gemini triage client)
 - Test: `apps/code-agent/src/__tests__/routes/webhooks.test.ts` (add triage integration tests)
 
 - [ ] **Step 1: Write the failing tests**
@@ -1544,24 +1546,11 @@ describe('task-complete webhook with failure triage', () => {
 Run: `cd /repo && pnpm vitest run apps/code-agent/src/__tests__/routes/webhooks.test.ts -t "failure triage"`
 Expected: FAIL — triage not wired yet
 
-- [ ] **Step 3: Wire the Gemini triage client in services.ts**
+- [ ] **Step 3: Reuse the existing `userServiceClient` from `ServiceContainer`**
 
-In `apps/code-agent/src/services.ts`, add alongside other Gemini clients:
+No new `services.ts` wiring is required. `code-agent` already materializes a `UserServiceClient` in `ServiceContainer`, and other execution-memory call sites (`drainTaskQueue.ts`, `drainRetryQueue.ts`, `processExecutionMemoryBacklog.ts`) already use `userServiceClient.getLlmClient(task.userId)` to resolve a per-user `LlmGenerateClient`.
 
-```typescript
-  const failureTriageClient = config.geminiAppApiKey !== ''
-    ? createLlmClient({
-        apiKey: config.geminiAppApiKey,
-        model: EXECUTION_MEMORY_MODEL,  // Gemini 2.5 Flash — lightweight single call
-        userId: 'system:failure-triage',
-        pricing: GEMINI_TOOL_CALLING_PRICING,
-        logger,
-        usageSink: buildUsageSink('failure-triage'),
-      })
-    : undefined;
-```
-
-Expose it via services (e.g., `failureTriageClient` in the ServiceContainer).
+The webhook triage path should follow the same pattern instead of constructing a Gemini-specific client in `services.ts`.
 
 - [ ] **Step 4: Insert triage into webhookRoutes.ts failure path**
 
@@ -1598,7 +1587,7 @@ In `apps/code-agent/src/routes/webhookRoutes.ts`, modify the `status === 'failed
               taskEnqueueService,
               whatsappNotifier,
               logLineRepo,
-              triageClient: failureTriageClient,
+              userServiceClient,
               orchestratorSecret,
             },
             { task, completedAt, taskError }
@@ -1654,7 +1643,7 @@ Expected: All tests pass, coverage meets thresholds
 - [ ] **Step 7: Commit**
 
 ```bash
-git add apps/code-agent/src/routes/webhookRoutes.ts apps/code-agent/src/services.ts apps/code-agent/src/__tests__/routes/webhooks.test.ts
+git add apps/code-agent/src/routes/webhookRoutes.ts apps/code-agent/src/__tests__/routes/webhooks.test.ts
 git commit -m "feat(code-agent): wire failure triage into task-complete webhook (INT-1158)"
 ```
 
@@ -1683,7 +1672,7 @@ git commit -m "chore(code-agent): fix coverage and CI for failure triage (INT-11
 
 ## Endpoint Changes
 
-* **Modified:** `POST /internal/webhooks/task-complete` — adds auto-retry triage before permanent failure path
+* **Modified:** `POST /internal/webhooks/task-complete` — adds auto-retry triage before permanent failure path, using `userServiceClient.getLlmClient(task.userId)` for ambiguous enforcement failures
 * **Created:** None (no new endpoints)
 * **Removed:** None
 * **Unchanged:** All other endpoints
