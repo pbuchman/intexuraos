@@ -142,18 +142,21 @@ window.addEventListener('pageshow', (event) => {
 
 **File**: `apps/web/src/context/pwa-context.tsx`
 - Handles install prompts, update banners, service worker registration
-- **Missing**: No page lifecycle event handling, no state persistence, no visibility monitoring
+- **Missing**: No `freeze`/`pagehide` lifecycle handling, no state persistence for app checkpoint/restore
 
 **File**: `apps/web/src/context/SyncQueueContext.tsx`
 - Online/offline detection via `online`/`offline` events
 - 5-second sync interval runs continuously regardless of tab visibility
 
+**Existing `visibilitychange` handlers** (data-refresh, not state persistence):
+- `useCodeTasks.ts`, `useActionChanges.ts`, `useCommandChanges.ts`, `useBookmarkChanges.ts`, `useIssueGroups.ts`, `useLlmUsageEvents.ts`, `useResearch.ts` — all re-fetch data when the tab becomes visible again. These handle stale-data refresh but do **not** checkpoint app state for seamless restore after a process kill.
+
 **Missing capabilities**:
-- No `visibilitychange` handler for state saving
-- No `freeze`/`resume` event handling
-- No IndexedDB state persistence for app state
+- No `freeze`/`resume` event handling (persistence-oriented lifecycle)
+- No `pagehide`/`pageshow` BFCache optimization (connections not closed)
+- No IndexedDB state checkpointing for app state (route, scroll, form data, UI state)
+- No seamless restore on page load after OS-level kill
 - No Xiaomi device detection or settings guide
-- No BFCache optimization (connections not closed in `pagehide`)
 
 ---
 
@@ -161,7 +164,7 @@ window.addEventListener('pageshow', (event) => {
 
 1. **IndexedDB state checkpointing** — save route, scroll position, form data, UI state on `visibilitychange`/`freeze`
 2. **Xiaomi device detection + settings guide** — in-app prompt with battery optimization instructions
-3. **`freeze`/`resume`/`visibilitychange` event handling** — graceful state save/restore lifecycle
+3. **`freeze`/`resume`/`pagehide`/`pageshow` event handling** — persistence-oriented lifecycle hooks (existing `visibilitychange` handlers cover data refresh but not state checkpointing)
 4. **BFCache optimization** — close connections in `pagehide`, reopen in `pageshow`
 5. **Persistent storage request** — `navigator.storage.persist()` to prevent data eviction
 
