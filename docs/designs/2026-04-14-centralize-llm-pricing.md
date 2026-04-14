@@ -402,7 +402,7 @@ Rationale:
 
 1. **llm-usage-service: Server-side cost calculation** — Add cost calculator, accept v2 events, dual-schema support
 2. **packages: Remove pricing from client APIs** — Update `llm-factory`, `llm-pricing`, `llm-contract`, `infra-*` packages
-3. **apps: Remove pricing from consumers** — Update `chat-agent`, `code-agent`, `research-agent`, `internal-clients`
+3. **apps: Remove pricing from consumers** — Update `chat-agent`, `code-agent`, `research-agent`, `actions-agent`, `calendar-agent`, `commands-agent`, `hellscript-agent`, `image-service`, `linear-agent`, `todos-agent`, `user-service`, `web-agent`, `cron-agent`, `internal-clients`
 4. **workers: Remove pricing from orchestrator** — Update `orchestrator` validation clients
 
 **Phase 2 (sequential, after Phase 1 merges):**
@@ -514,6 +514,11 @@ Remove `pricing: ModelPricing` from `LlmClientConfig` and `ToolCallingClientConf
 - `createUserServiceClient` config no longer includes `pricingContext`
 - `buildUsageEvent()` emits `schemaVersion: 2` with `cost: { providerReportedUsd, pricingSource }`
 - `GenerateResult.usage.costUsd` field: either removed or set to `0` (discuss: removing it breaks the interface for callers that log it — safer to keep as `0` and document)
+- **Shared type/schema surfaces that must be updated for v2:**
+  - `packages/internal-clients/src/usage-service/types.ts` — request types currently hard-coded to v1 cost shape
+  - `packages/llm-pricing/src/httpInternalAuthUsageSink.ts` — HTTP sink currently serializes v1 cost fields
+  - `packages/llm-pricing/src/httpWebhookUsageSink.ts` — webhook sink currently serializes v1 cost fields
+  - `apps/llm-usage-service/src/domain/models/usageEvent.ts` — domain model must accept both v1 and v2 cost shapes
 
 **Test Requirements:**
 - All existing tests updated to remove pricing from client configs
@@ -524,19 +529,29 @@ Remove `pricing: ModelPricing` from `LlmClientConfig` and `ToolCallingClientConf
 
 ### Child Issue 3: apps — Remove Pricing from Consumer Services
 
-**Scope:** `apps/chat-agent/`, `apps/code-agent/`, `apps/research-agent/`
+**Scope:** `apps/chat-agent/`, `apps/code-agent/`, `apps/research-agent/`, `apps/actions-agent/`, `apps/calendar-agent/`, `apps/commands-agent/`, `apps/hellscript-agent/`, `apps/image-service/`, `apps/linear-agent/`, `apps/todos-agent/`, `apps/user-service/`, `apps/web-agent/`, `apps/cron-agent/`
 
 **Description:**
-Remove pricing-related boot-time logic, `pricingContext` from service containers, and pricing params from LLM adapter factories.
+Remove pricing-related boot-time logic, `pricingContext` from service containers, and pricing params from LLM adapter factories across ALL consumer services.
 
 **Implementation:**
 1. `chat-agent`: Remove `fetchAllPricingWithRetry()` call at boot. Remove `createPricingContext()`. Remove `pricing` from `createLlmClient()` call.
 2. `code-agent`: Delete `GEMINI_TOOL_CALLING_PRICING` constant. Delete stub `pricingContext` object. Remove `pricing` from `createToolCallingClient()` call. Remove `pricingContext` from `createUserServiceClient()`.
 3. `research-agent`: Remove `pricingContext: IPricingContext` from `ServiceContainer`. Remove `pricing: ModelPricing` param from all 5 factory functions in `LlmAdapterFactory.ts`. Remove `pricing` param from all adapter constructors (GeminiAdapter, ClaudeAdapter, etc.). Remove boot-time pricing fetch.
+4. `actions-agent`: Remove `fetchAllPricingWithRetry()` + `createPricingContext()` at boot. Remove `pricingContext` from service container config.
+5. `calendar-agent`: Remove `IPricingContext` import + `pricingContext` from service container and config.
+6. `commands-agent`: Remove `fetchAllPricingWithRetry()` + `createPricingContext()` at boot. Remove `pricingContext` from service container config.
+7. `hellscript-agent`: Remove `fetchAllPricingWithRetry()` + `createPricingContext()` at boot. Remove `pricingContext` from config.
+8. `image-service`: Remove `fetchAllPricingWithRetry()` + `createPricingContext()` at boot. Remove `pricingContext` from `serviceContainer`, `serviceFactory`, and all `getPricing()` calls for image models.
+9. `linear-agent`: Remove `IPricingContext` import + `pricingContext` from service container and config.
+10. `todos-agent`: Remove `fetchAllPricingWithRetry()` + `createPricingContext()` at boot. Remove `pricingContext` from service container config.
+11. `user-service`: Remove `PricingContext` type + `pricingContext` param from `initializeServices()`. Remove all `pricingContext.getPricing()` calls for validation model pricing.
+12. `web-agent`: Remove `IPricingContext` import + `pricingContext` from service container and dependencies config.
+13. `cron-agent`: Remove `TOOL_CALLING_PRICING` import from `@intexuraos/infra-gemini`. Remove `pricing` from both `createGeminiClient()` and `createGeminiToolCallingClient()` calls.
 
 **Contract with other issues:**
 - Depends on Child Issue 2 (packages) being complete (or developed against the same branch)
-- `ServiceContainer` types change: no `pricingContext` field
+- `ServiceContainer` types change: no `pricingContext` field (across all services)
 - Adapter constructors lose `pricing` param
 - No changes to HTTP endpoints or domain logic
 
@@ -544,7 +559,9 @@ Remove pricing-related boot-time logic, `pricingContext` from service containers
 - `chat-agent/src/__tests__/services.test.ts` updated to remove pricing mocks
 - `code-agent` tests updated to remove pricing-related test fixtures
 - `research-agent` adapter tests updated to remove pricing from constructor args
+- `image-service` tests updated to remove `FakePricingContext` usage
 - All service boot tests pass without pricing fetch
+- All services with `pricingContext` in test fixtures (`setServices`, `beforeEach`) must be updated
 
 ### Child Issue 4: workers — Remove Pricing from Orchestrator
 
@@ -576,10 +593,10 @@ Remove `GEMINI_VALIDATION_PRICING`, `ZERO_PRICING`, and `getDefaultAllowlistPric
 
 ### Modified
 
-| Endpoint                            | Service           | Change                                                                            |
-| ----------------------------------- | ----------------- | --------------------------------------------------------------------------------- |
-| `POST /internal/usage`              | llm-usage-service | Accept both `schemaVersion: 1` and `schemaVersion: 2` events; compute cost for v2 |
-| `POST /internal/usage/orchestrator` | llm-usage-service | Same dual-schema support                                                          |
+| Endpoint                                    | Service           | Change                                                                            |
+| ------------------------------------------- | ----------------- | --------------------------------------------------------------------------------- |
+| `POST /internal/usage/events`               | llm-usage-service | Accept both `schemaVersion: 1` and `schemaVersion: 2` events; compute cost for v2 |
+| `POST /internal/webhooks/usage-events`      | llm-usage-service | Same dual-schema support                                                          |
 
 ### Created
 
