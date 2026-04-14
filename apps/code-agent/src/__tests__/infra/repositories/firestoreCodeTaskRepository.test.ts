@@ -3507,7 +3507,7 @@ describe('firestoreCodeTaskRepository', () => {
   });
 
   describe('findLatestExecutionTaskByPR 50-doc exhaustion warning', () => {
-    it('logs warning when 50 docs are scanned without finding a non-review task', async () => {
+    it('logs warning when 50 docs are scanned without finding an execution-eligible task', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -3533,7 +3533,7 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value).toBeNull();
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ repository: 'test/repo', prNumber: 789, docsScanned: 50 }),
-        'findLatestExecutionTaskByPR exhausted 50-doc window without finding a non-review task',
+        'findLatestExecutionTaskByPR exhausted 50-doc window without finding an execution-eligible task',
       );
     });
   });
