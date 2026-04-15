@@ -333,19 +333,9 @@ Add to `issueGroups.test.ts`:
 ```typescript
 describe('POST /code/issue-groups/:groupKey/important', () => {
   it('marks a group as important', async () => {
-    // Setup: create a task so a group summary exists
-    // (Use the same test helpers/fakes already present in the test file)
-    const createResponse = await app.inject({
-      method: 'POST',
-      url: '/code/tasks',
-      headers: { authorization: 'Bearer test-token' },
-      payload: {
-        prompt: 'test prompt',
-        workerType: 'opus',
-        linearIssueId: 'INT-500',
-      },
-    });
-    expect(createResponse.statusCode).toBe(200);
+    // Seed the groupSummaryRepo directly — POST /code/tasks is GET-only in this repo.
+    // Use makeSummary() to produce a valid TaskGroupSummary object.
+    mockSummaries.push(makeSummary({ linearIssueId: 'INT-500' }));
 
     const response = await app.inject({
       method: 'POST',
@@ -360,17 +350,8 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
   });
 
   it('unmarks a group as important', async () => {
-    const createResponse = await app.inject({
-      method: 'POST',
-      url: '/code/tasks',
-      headers: { authorization: 'Bearer test-token' },
-      payload: {
-        prompt: 'test prompt',
-        workerType: 'opus',
-        linearIssueId: 'INT-501',
-      },
-    });
-    expect(createResponse.statusCode).toBe(200);
+    // Seed directly via makeSummary() — no task-creation endpoint needed.
+    mockSummaries.push(makeSummary({ linearIssueId: 'INT-501' }));
 
     // Mark as important first
     await app.inject({
@@ -417,18 +398,10 @@ Add to the existing `GET /code/issue-groups` describe block:
 
 ```typescript
 it('includes isImportant in response when group is marked important', async () => {
-  // Setup: seed the groupSummaryRepo with a summary, then mark it important via the toggle endpoint.
-  // The fake repo is stateful (from Task 4), so setImportant will persist.
-  // Seed mockSummaries with at least one entry for group key 'INT-600':
-  mockSummaries.push({
-    groupKey: 'INT-600',
-    linearIssueId: 'INT-600',
-    title: 'Test issue',
-    taskCount: 1,
-    latestStatus: 'done',
-    latestTaskId: 'task_test',
-    updatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
-  });
+  // Seed the groupSummaryRepo with a valid TaskGroupSummary using the existing makeSummary() helper.
+  // makeSummary() produces a complete object matching the TaskGroupSummary interface, including
+  // required fields like userId, aggregateStatus, latestTaskUpdatedAt, etc.
+  mockSummaries.push(makeSummary({ linearIssueId: 'INT-600' }));
 
   await app.inject({
     method: 'POST',
