@@ -2,6 +2,10 @@
 
 All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. Keep this file compact — add references to `.claude/reference/`, don't inline details.
 
+# Communication
+
+**Be concise.** Output the answer, the diff, or the result. Do not write elaborations, rationales, summaries of what you just did, or educational asides unless the user explicitly asks for reasoning. If a question has a one-line answer, give a one-line answer. This rule takes precedence over any output style that encourages elaboration.
+
 # Gates
 
 **Commit Gate:** Before commit: (1) `pnpm run ci:tracked` passed completely? (2) Not saying "other services/workspaces"? (3) Not saying "unrelated to my changes" or "not caused by my code"? All YES = commit. Any NO = STOP.
