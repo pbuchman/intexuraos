@@ -189,7 +189,7 @@ async function loadModule(): Promise<typeof import('../stateCheckpoint.js')> {
 
 describe('stateCheckpoint', () => {
   const validCheckpoint: StateCheckpoint = {
-    routeHash: '/#/dashboard',
+    routePath: '/#/dashboard',
     scrollY: 150,
     timestamp: Date.now(),
   };
@@ -202,7 +202,7 @@ describe('stateCheckpoint', () => {
       const loaded = await loadCheckpoint();
 
       expect(loaded).not.toBeNull();
-      expect(loaded?.routeHash).toBe(validCheckpoint.routeHash);
+      expect(loaded?.routePath).toBe(validCheckpoint.routePath);
       expect(loaded?.scrollY).toBe(validCheckpoint.scrollY);
       expect(loaded?.timestamp).toBe(validCheckpoint.timestamp);
     });
@@ -221,7 +221,7 @@ describe('stateCheckpoint', () => {
       const { saveCheckpoint, loadCheckpoint } = await loadModule();
 
       const staleCheckpoint: StateCheckpoint = {
-        routeHash: '/#/settings',
+        routePath: '/#/settings',
         scrollY: 0,
         timestamp: Date.now() - 31 * 60 * 1000, // 31 minutes ago
       };
@@ -236,7 +236,7 @@ describe('stateCheckpoint', () => {
       const { saveCheckpoint, loadCheckpoint } = await loadModule();
 
       const borderlineCheckpoint: StateCheckpoint = {
-        routeHash: '/#/tasks',
+        routePath: '/#/tasks',
         scrollY: 200,
         timestamp: Date.now() - 29 * 60 * 1000, // 29 minutes ago
       };
@@ -245,7 +245,7 @@ describe('stateCheckpoint', () => {
       const result = await loadCheckpoint();
 
       expect(result).not.toBeNull();
-      expect(result?.routeHash).toBe('/#/tasks');
+      expect(result?.routePath).toBe('/#/tasks');
     });
   });
 

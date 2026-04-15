@@ -11,7 +11,7 @@ const RECORD_KEY = 'current';
 const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
 
 export interface StateCheckpoint {
-  routeHash: string;
+  routePath: string;
   scrollY: number;
   timestamp: number;
 }

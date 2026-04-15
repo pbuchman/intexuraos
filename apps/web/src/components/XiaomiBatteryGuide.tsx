@@ -49,10 +49,10 @@ export function XiaomiBatteryGuide(): React.JSX.Element | null {
         </p>
 
         <ol className="mb-3 list-inside list-decimal space-y-1 text-sm text-amber-50">
-          <li>Open Settings &rarr; Apps &rarr; Chrome</li>
+          <li>Open Settings &rarr; Apps &rarr; find this app (or Chrome)</li>
           <li>Tap Battery Saver &rarr; select &ldquo;No restrictions&rdquo;</li>
-          <li>Enable Autostart for Chrome</li>
-          <li>Lock Chrome in recent apps (hold &amp; tap padlock)</li>
+          <li>Enable Autostart for the app</li>
+          <li>Lock the app in recent apps (hold &amp; tap padlock)</li>
         </ol>
 
         <a
