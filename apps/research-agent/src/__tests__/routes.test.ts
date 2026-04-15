@@ -9,7 +9,6 @@ import Fastify from 'fastify';
 import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { err, ok, type Result } from '@intexuraos/common-core';
-import { FakePricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels, LlmProviders, type ResearchModel, type LlmProvider } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { MIN_QUALITY_CHARS } from '../routes/internalRoutes.js';
@@ -43,7 +42,6 @@ import type {
   ValidationResult,
 } from '../infra/llm/InputValidationAdapter.js';
 
-const fakePricingContext = new FakePricingContext();
 
 const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const INTEXURAOS_AUTH_AUDIENCE = 'urn:intexuraos:api';
@@ -89,7 +87,6 @@ describe('Research Routes - Unauthenticated', () => {
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-      pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
@@ -100,11 +97,11 @@ describe('Research Routes - Unauthenticated', () => {
       shareStorage: null,
       shareConfig: null,
       webAppUrl: 'https://app.example.com',
-      createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-      createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-      createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-      createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+      createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+      createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+      createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
       notionExporter: createFakeNotionExporter(),
     };
     setServices(services);
@@ -343,7 +340,6 @@ describe('Research Routes - Authenticated', () => {
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-      pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
@@ -354,11 +350,11 @@ describe('Research Routes - Authenticated', () => {
       shareStorage: null,
       shareConfig: null,
       webAppUrl: 'https://app.example.com',
-      createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-      createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-      createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-      createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+      createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+      createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+      createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
       notionExporter: createFakeNotionExporter(),
     };
     setServices(services);
@@ -2184,7 +2180,6 @@ describe('Research Routes - Authenticated', () => {
       const services: ServiceContainer = {
         researchRepo: newFakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: newFakeResearchEventPublisher,
         llmCallPublisher: newFakeLlmCallPublisher,
@@ -2195,11 +2190,11 @@ describe('Research Routes - Authenticated', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFailingSynthesizer('LLM API unavailable'),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFailingSynthesizer('LLM API unavailable'),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
         notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
@@ -2541,15 +2536,14 @@ describe('Research Routes - Authenticated', () => {
       notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: new FakeNotificationSender(),
         llmCallPublisher: new FakeLlmCallPublisher(),
-        pricingContext: fakePricingContext,
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFailingSynthesizer('LLM API unavailable'),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFailingSynthesizer('LLM API unavailable'),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
         notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
@@ -2668,7 +2662,6 @@ describe('Research Routes - Authenticated', () => {
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -2679,11 +2672,11 @@ describe('Research Routes - Authenticated', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => weakValidator,
+        createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _logger) => weakValidator,
         notionExporter: createFakeNotionExporter(),
       };
       setServices(newServices);
@@ -2714,7 +2707,6 @@ describe('Research Routes - Authenticated', () => {
         setServices({
           researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-          pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
           llmCallPublisher: new FakeLlmCallPublisher(),
@@ -2725,11 +2717,11 @@ describe('Research Routes - Authenticated', () => {
           shareStorage: null,
           shareConfig: null,
           webAppUrl: 'https://app.example.com',
-          createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-          createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-          createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-          createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-          createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+          createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+          createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+          createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+          createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+          createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
           notionExporter: createFakeNotionExporter(),
         });
       }
@@ -2759,7 +2751,6 @@ describe('Research Routes - Authenticated', () => {
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -2770,11 +2761,11 @@ describe('Research Routes - Authenticated', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => weakValidator,
+        createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _logger) => weakValidator,
         notionExporter: createFakeNotionExporter(),
       };
       setServices(newServices);
@@ -2805,7 +2796,6 @@ describe('Research Routes - Authenticated', () => {
         setServices({
           researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-          pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
           llmCallPublisher: new FakeLlmCallPublisher(),
@@ -2816,11 +2806,11 @@ describe('Research Routes - Authenticated', () => {
           shareStorage: null,
           shareConfig: null,
           webAppUrl: 'https://app.example.com',
-          createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-          createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-          createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-          createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-          createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+          createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+          createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+          createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+          createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+          createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
           notionExporter: createFakeNotionExporter(),
         });
       }
@@ -2851,7 +2841,6 @@ describe('Research Routes - Authenticated', () => {
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -2862,11 +2851,11 @@ describe('Research Routes - Authenticated', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => weakValidator,
+        createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _logger) => weakValidator,
         notionExporter: createFakeNotionExporter(),
       };
       setServices(newServices);
@@ -2897,7 +2886,6 @@ describe('Research Routes - Authenticated', () => {
         setServices({
           researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-          pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
           llmCallPublisher: new FakeLlmCallPublisher(),
@@ -2908,11 +2896,11 @@ describe('Research Routes - Authenticated', () => {
           shareStorage: null,
           shareConfig: null,
           webAppUrl: 'https://app.example.com',
-          createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-          createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-          createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-          createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-          createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+          createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+          createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+          createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+          createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+          createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
           notionExporter: createFakeNotionExporter(),
         });
       }
@@ -2942,7 +2930,6 @@ describe('Research Routes - Authenticated', () => {
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -2953,11 +2940,11 @@ describe('Research Routes - Authenticated', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => failingValidator,
+        createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _logger) => failingValidator,
         notionExporter: createFakeNotionExporter(),
       };
       setServices(newServices);
@@ -2986,7 +2973,6 @@ describe('Research Routes - Authenticated', () => {
         setServices({
           researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-          pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
           llmCallPublisher: new FakeLlmCallPublisher(),
@@ -2997,11 +2983,11 @@ describe('Research Routes - Authenticated', () => {
           shareStorage: null,
           shareConfig: null,
           webAppUrl: 'https://app.example.com',
-          createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-          createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-          createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-          createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-          createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+          createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+          createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+          createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+          createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+          createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
           notionExporter: createFakeNotionExporter(),
         });
       }
@@ -3108,7 +3094,6 @@ describe('Research Routes - Authenticated', () => {
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -3119,11 +3104,11 @@ describe('Research Routes - Authenticated', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => failingValidator,
+        createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _logger) => failingValidator,
         notionExporter: createFakeNotionExporter(),
       };
       setServices(newServices);
@@ -3151,7 +3136,6 @@ describe('Research Routes - Authenticated', () => {
         setServices({
           researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-          pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
           llmCallPublisher: new FakeLlmCallPublisher(),
@@ -3162,11 +3146,11 @@ describe('Research Routes - Authenticated', () => {
           shareStorage: null,
           shareConfig: null,
           webAppUrl: 'https://app.example.com',
-          createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-          createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-          createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-          createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-          createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+          createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+          createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+          createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+          createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+          createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
           notionExporter: createFakeNotionExporter(),
         });
       }
@@ -3380,7 +3364,6 @@ describe('System Endpoints', () => {
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-      pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
@@ -3391,11 +3374,11 @@ describe('System Endpoints', () => {
       shareStorage: null,
       shareConfig: null,
       webAppUrl: 'https://app.example.com',
-      createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-      createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-      createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-      createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+      createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+      createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+      createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
       notionExporter: createFakeNotionExporter(),
     };
     setServices(services);
@@ -3455,7 +3438,6 @@ describe('Internal Routes', () => {
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-      pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
@@ -3466,11 +3448,11 @@ describe('Internal Routes', () => {
       shareStorage: null,
       shareConfig: null,
       webAppUrl: 'https://app.example.com',
-      createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-      createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-      createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-      createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+      createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+      createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+      createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
       notionExporter: createFakeNotionExporter(),
     };
     setServices(services);
@@ -3957,7 +3939,6 @@ describe('Internal Routes', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: fakeLlmCallPublisher,
@@ -3968,11 +3949,11 @@ describe('Internal Routes', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
         notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
@@ -4519,7 +4500,6 @@ describe('Internal Routes', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -4530,11 +4510,11 @@ describe('Internal Routes', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFailingLlmResearchProvider('LLM API error'),
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        createResearchProvider: (_model, _apiKey, _userId, _logger) => createFailingLlmResearchProvider('LLM API error'),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
         notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
@@ -4692,7 +4672,6 @@ describe('Internal Routes', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -4703,11 +4682,11 @@ describe('Internal Routes', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
         notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
@@ -4757,7 +4736,6 @@ describe('Internal Routes', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: fakeLlmCallPublisher,
@@ -4768,11 +4746,11 @@ describe('Internal Routes', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        createResearchProvider: (_model, _apiKey, _userId, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
         notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
@@ -5066,7 +5044,6 @@ describe('Internal Routes', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: fakeLlmCallPublisher,
@@ -5077,15 +5054,15 @@ describe('Internal Routes', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) =>
+        createResearchProvider: (_model, _apiKey, _userId, _logger) =>
           createFakeLlmResearchProvider('Research content', {
             sources: ['https://example.com/source1', 'https://example.com/source2'],
             usage: { inputTokens: 100, outputTokens: 200, costUsd: 0.005 },
           }),
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
         notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
@@ -5157,7 +5134,6 @@ describe('Internal Routes', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
         researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -5168,12 +5144,12 @@ describe('Internal Routes', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) =>
+        createResearchProvider: (_model, _apiKey, _userId, _logger) =>
           createFakeLlmResearchProvider(shortContent),
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
         notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
@@ -5217,7 +5193,6 @@ describe('Internal Routes', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
         researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -5228,12 +5203,12 @@ describe('Internal Routes', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) =>
+        createResearchProvider: (_model, _apiKey, _userId, _logger) =>
           createFakeLlmResearchProvider(longContent),
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
         notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
@@ -5308,7 +5283,6 @@ describe('Internal Routes', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: fakeLlmCallPublisher,
@@ -5319,12 +5293,12 @@ describe('Internal Routes', () => {
         shareStorage: null,
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
-        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) =>
+        createResearchProvider: (_model, _apiKey, _userId, _logger) =>
           createFailingLlmResearchProvider('LLM failed'),
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
         notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
@@ -5387,7 +5361,6 @@ describe('Internal Routes', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -5402,10 +5375,10 @@ describe('Internal Routes', () => {
           model === LlmModels.Gemini25Pro
             ? createFakeLlmResearchProvider('Success')
             : createFailingLlmResearchProvider('Failed'),
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
         notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
@@ -5464,7 +5437,6 @@ describe('Internal Routes', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
         researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -5620,7 +5592,6 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-      pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
@@ -5631,12 +5602,12 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       shareStorage: null,
       shareConfig: null,
       webAppUrl: 'https://app.example.com',
-      createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) =>
+      createResearchProvider: (_model, _apiKey, _userId, _logger) =>
         createFakeLlmResearchProvider(),
-      createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-      createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-      createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+      createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+      createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
       notionExporter: createFakeNotionExporter(),
     };
     setServices(services);
@@ -5745,7 +5716,6 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: fakeLlmCallPublisher,
@@ -5836,7 +5806,6 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: fakeLlmCallPublisher,
@@ -6183,7 +6152,6 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: fakeLlmCallPublisher,
@@ -6234,7 +6202,6 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: fakeLlmCallPublisher,
@@ -6341,7 +6308,6 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
       researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: fakeLlmCallPublisher,
@@ -7303,7 +7269,6 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
         researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new (await import('./fakes.js')).FakeLlmCallPublisher(),
@@ -7315,10 +7280,10 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         shareConfig: null,
         webAppUrl: 'https://app.example.com',
         createResearchProvider: () => providerWithUsageNoCost,
-        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
-        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
-        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
-        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        createSynthesizer: (_model, _apiKey, _userId, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _logger) => createFakeInputValidator(),
         notionExporter: createFakeNotionExporter(),
       };
       setServices(services);

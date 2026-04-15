@@ -3,11 +3,10 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { TEST_PRICING, FakeUsageSink } from '@intexuraos/llm-pricing';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
 import { LlmModels, type ResearchModel } from '@intexuraos/llm-contract';
 
-const testPricing = TEST_PRICING;
 const mockLogger: Logger = {
   info: vi.fn(),
   error: vi.fn(),
@@ -27,7 +26,6 @@ vi.mock('../../../infra/llm/GeminiAdapter.js', () => ({
       apiKey: string,
       model: string,
       userId: string,
-      _pricing: unknown,
       _logger: Logger,
       _usageSink: unknown,
       researchId?: string
@@ -52,7 +50,6 @@ vi.mock('../../../infra/llm/ClaudeAdapter.js', () => ({
       apiKey: string,
       model: string,
       userId: string,
-      _pricing: unknown,
       _logger: Logger,
       _usageSink: unknown,
       researchId?: string
@@ -77,7 +74,6 @@ vi.mock('../../../infra/llm/GptAdapter.js', () => ({
       apiKey: string,
       model: string,
       userId: string,
-      _pricing: unknown,
       _logger: Logger,
       _usageSink: unknown,
       researchId?: string
@@ -102,7 +98,6 @@ vi.mock('../../../infra/llm/PerplexityAdapter.js', () => ({
       apiKey: string,
       model: string,
       userId: string,
-      _pricing: unknown,
       _logger: Logger,
       _usageSink: unknown,
       researchId?: string
@@ -127,7 +122,6 @@ vi.mock('../../../infra/llm/OpenRouterAdapter.js', () => ({
       apiKey: string,
       model: string,
       userId: string,
-      _pricing: unknown,
       _logger: Logger,
       _usageSink: unknown,
       researchId?: string
@@ -151,7 +145,7 @@ describe('LlmAdapterFactory', () => {
         LlmModels.Gemini25Pro,
         'google-key',
         'test-user-id',
-        testPricing,
+        
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -167,7 +161,7 @@ describe('LlmAdapterFactory', () => {
         LlmModels.ClaudeOpus46,
         'anthropic-key',
         'test-user-id',
-        testPricing,
+        
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -183,7 +177,7 @@ describe('LlmAdapterFactory', () => {
         LlmModels.O4MiniDeepResearch,
         'openai-key',
         'test-user-id',
-        testPricing,
+        
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -199,7 +193,7 @@ describe('LlmAdapterFactory', () => {
         LlmModels.SonarPro,
         'perplexity-key',
         'test-user-id',
-        testPricing,
+        
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -216,7 +210,6 @@ describe('LlmAdapterFactory', () => {
         openRouterModel as ResearchModel,
         'openrouter-key',
         'test-user-id',
-        testPricing,
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -234,7 +227,7 @@ describe('LlmAdapterFactory', () => {
         LlmModels.Gemini25Pro,
         'google-key',
         'test-user-id',
-        testPricing,
+        
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -250,7 +243,7 @@ describe('LlmAdapterFactory', () => {
           LlmModels.ClaudeOpus46,
           'anthropic-key',
           'test-user-id',
-          testPricing,
+          
           mockLogger,
           fakeUsageSink,
           'research-123'
@@ -263,7 +256,7 @@ describe('LlmAdapterFactory', () => {
         LlmModels.O4MiniDeepResearch,
         'openai-key',
         'test-user-id',
-        testPricing,
+        
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -281,7 +274,7 @@ describe('LlmAdapterFactory', () => {
           LlmModels.SonarPro,
           'perplexity-key',
           'test-user-id',
-          testPricing,
+          
           mockLogger,
           fakeUsageSink,
           'research-123'
@@ -295,7 +288,6 @@ describe('LlmAdapterFactory', () => {
         openRouterModel as ResearchModel,
         'openrouter-key',
         'test-user-id',
-        testPricing,
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -312,7 +304,7 @@ describe('LlmAdapterFactory', () => {
         LlmModels.Gemini20Flash,
         'google-key',
         'test-user-id',
-        testPricing,
+        
         mockLogger,
         fakeUsageSink,
         'research-123'
