@@ -235,7 +235,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
   const userServiceClient = createUserServiceClient({
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8081',
     internalAuthToken,
-    pricingContext,
     logger: createAppLogger({ name: 'user-service-client' }),
     usageSink: buildUsageSink('user-service-client'),
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],

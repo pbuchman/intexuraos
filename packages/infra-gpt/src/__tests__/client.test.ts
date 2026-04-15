@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type ModelPricing, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 
@@ -50,38 +50,23 @@ const { createGptClient } = await import('../client.js');
 
 const TEST_MODEL = 'gpt-4o';
 
-const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing => ({
-  inputPricePerMillion: 2.5,
-  outputPricePerMillion: 10.0,
-  cacheReadMultiplier: 0.5,
-  webSearchCostPerCall: 0.03,
-  imagePricing: {
-    '1024x1024': 0.04,
-    '1536x1024': 0.08,
-    '1024x1536': 0.08,
-  },
-  ...overrides,
-});
-
 describe('createGptClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   describe('research', () => {
-    it('returns research result with content and usage from pricing', async () => {
+    it('returns research result with content and usage', async () => {
       mockResponsesCreate.mockResolvedValue({
         output_text: 'Research findings about AI.',
         output: [],
         usage: { input_tokens: 100, output_tokens: 50 },
       });
 
-      const pricing = createTestPricing();
       const client = createGptClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -95,8 +80,7 @@ describe('createGptClient', () => {
           outputTokens: 50,
           totalTokens: 150,
         });
-        // Cost calculated from pricing: (100/1M * 2.5) + (50/1M * 10)
-        expect(result.value.usage.costUsd).toBeCloseTo(0.00075, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -116,7 +100,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -145,7 +128,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -157,19 +139,17 @@ describe('createGptClient', () => {
       }
     });
 
-    it('counts web search calls and adds cost', async () => {
+    it('counts web search calls', async () => {
       mockResponsesCreate.mockResolvedValue({
         output_text: 'Content',
         output: [{ type: 'web_search_call' }, { type: 'web_search_call' }],
         usage: { input_tokens: 100, output_tokens: 50 },
       });
 
-      const pricing = createTestPricing({ webSearchCostPerCall: 0.03 });
       const client = createGptClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -178,12 +158,11 @@ describe('createGptClient', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.usage.webSearchCalls).toBe(2);
-        // Cost: tokens + 2 web search calls = 0.00075 + 0.06 = 0.06075
-        expect(result.value.usage.costUsd).toBeCloseTo(0.06075, 5);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
-    it('handles cached tokens with multiplier', async () => {
+    it('handles cached tokens', async () => {
       mockResponsesCreate.mockResolvedValue({
         output_text: 'Content',
         output: [],
@@ -194,12 +173,10 @@ describe('createGptClient', () => {
         },
       });
 
-      const pricing = createTestPricing({ cacheReadMultiplier: 0.5 });
       const client = createGptClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -208,9 +185,7 @@ describe('createGptClient', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.usage.cacheTokens).toBe(50);
-        // Effective input: 100 - 50*(1-0.5) = 75 tokens charged at full price
-        // Cost: (75/1M * 2.5) + (50/1M * 10) = 0.0001875 + 0.0005 = 0.0006875
-        expect(result.value.usage.costUsd).toBeCloseTo(0.000688, 5);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -225,7 +200,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -249,7 +223,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -268,7 +241,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -289,7 +261,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -308,7 +279,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -324,18 +294,16 @@ describe('createGptClient', () => {
   });
 
   describe('generate', () => {
-    it('returns generate result with content and usage from pricing', async () => {
+    it('returns generate result with content and usage', async () => {
       mockChatCompletionsCreate.mockResolvedValue({
         choices: [{ message: { content: 'Generated text.' } }],
         usage: { prompt_tokens: 50, completion_tokens: 100 },
       });
 
-      const pricing = createTestPricing();
       const client = createGptClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -349,8 +317,7 @@ describe('createGptClient', () => {
           outputTokens: 100,
           totalTokens: 150,
         });
-        // Cost: (50/1M * 2.5) + (100/1M * 10) = 0.000125 + 0.001 = 0.001125
-        expect(result.value.usage.costUsd).toBeCloseTo(0.001125, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -364,7 +331,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -388,7 +354,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -407,7 +372,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -421,20 +385,16 @@ describe('createGptClient', () => {
   });
 
   describe('generateImage', () => {
-    it('returns image result with cost from pricing', async () => {
+    it('returns image result with zero cost', async () => {
       const imageB64 = Buffer.from('fake-image-data').toString('base64');
       mockImagesGenerate.mockResolvedValue({
         data: [{ b64_json: imageB64 }],
       });
 
-      const pricing = createTestPricing({
-        imagePricing: { '1024x1024': 0.04, '1536x1024': 0.08, '1024x1536': 0.08 },
-      });
       const client = createGptClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -445,24 +405,20 @@ describe('createGptClient', () => {
       if (result.ok) {
         expect(result.value.model).toBe(LlmModels.GPTImage1);
         expect(result.value.imageData).toBeInstanceOf(Buffer);
-        expect(result.value.usage.costUsd).toBe(0.04);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
-    it('uses specified image size for cost calculation', async () => {
+    it('uses specified image size', async () => {
       const imageB64 = Buffer.from('fake-image-data').toString('base64');
       mockImagesGenerate.mockResolvedValue({
         data: [{ b64_json: imageB64 }],
       });
 
-      const pricing = createTestPricing({
-        imagePricing: { '1024x1024': 0.04, '1536x1024': 0.08, '1024x1536': 0.08 },
-      });
       const client = createGptClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -471,28 +427,20 @@ describe('createGptClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage.costUsd).toBe(0.08);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
-    it('uses separate imagePricing when provided', async () => {
+    it('returns image with zero cost when no imagePricing', async () => {
       const imageB64 = Buffer.from('fake-image-data').toString('base64');
       mockImagesGenerate.mockResolvedValue({
         data: [{ b64_json: imageB64 }],
       });
 
-      const pricing = createTestPricing();
-      const imagePricing: ModelPricing = {
-        inputPricePerMillion: 0,
-        outputPricePerMillion: 0,
-        imagePricing: { '1024x1024': 0.02, '1536x1024': 0.04, '1024x1536': 0.04 },
-      };
       const client = createGptClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
-        imagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -501,7 +449,7 @@ describe('createGptClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage.costUsd).toBe(0.02);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -514,7 +462,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -538,7 +485,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -568,7 +514,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -591,7 +536,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -616,7 +560,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -644,7 +587,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -671,7 +613,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -701,7 +642,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -729,7 +669,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -756,7 +695,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -777,7 +715,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -797,7 +734,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -817,7 +753,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -840,7 +775,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -863,7 +797,6 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -888,7 +821,6 @@ describe('createGptClient', () => {
       apiKey: 'test-key',
       model: TEST_MODEL,
       userId: 'test-user',
-      pricing: createTestPricing(),
       logger: mockLogger,
       usageSink: mockUsageSink,
       ownerType: 'user',

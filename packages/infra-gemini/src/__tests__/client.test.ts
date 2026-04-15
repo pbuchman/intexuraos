@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type ModelPricing, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 
@@ -35,18 +35,6 @@ const { createUsageLogger } = await import('@intexuraos/llm-pricing');
 
 const TEST_MODEL = LlmModels.Gemini25Flash;
 
-const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing => ({
-  inputPricePerMillion: 0.15,
-  outputPricePerMillion: 0.6,
-  groundingCostPerRequest: 0.035,
-  imagePricing: {
-    '1024x1024': 0.02,
-    '1536x1024': 0.04,
-    '1024x1536': 0.04,
-  },
-  ...overrides,
-});
-
 describe('createGeminiClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -64,7 +52,6 @@ describe('createGeminiClient', () => {
       apiKey: 'test-key',
       model: TEST_MODEL,
       userId: 'test-user',
-      pricing: createTestPricing(),
       logger: mockLogger,
       usageSink,
     });
@@ -80,19 +67,17 @@ describe('createGeminiClient', () => {
   });
 
   describe('research', () => {
-    it('returns research result with content and usage from pricing', async () => {
+    it('returns research result with content and usage', async () => {
       mockGenerateContent.mockResolvedValue({
         text: 'Research findings about AI.',
         usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50 },
         candidates: [{ groundingMetadata: {} }],
       });
 
-      const pricing = createTestPricing();
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -106,8 +91,7 @@ describe('createGeminiClient', () => {
           outputTokens: 50,
           totalTokens: 150,
         });
-        // Cost with grounding: (100/1M * 0.15) + (50/1M * 0.6) + 0.035 = 0.000015 + 0.00003 + 0.035 = 0.035045
-        expect(result.value.usage.costUsd).toBeCloseTo(0.035045, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -131,7 +115,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -164,7 +147,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -183,12 +165,10 @@ describe('createGeminiClient', () => {
         candidates: [{ groundingMetadata: {} }],
       });
 
-      const pricing = createTestPricing({ groundingCostPerRequest: 0.035 });
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -197,8 +177,7 @@ describe('createGeminiClient', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.usage.groundingEnabled).toBe(true);
-        // Cost includes grounding: tokens + 0.035
-        expect(result.value.usage.costUsd).toBeGreaterThan(0.035);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -209,12 +188,10 @@ describe('createGeminiClient', () => {
         candidates: [{}],
       });
 
-      const pricing = createTestPricing({ groundingCostPerRequest: 0.035 });
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -222,8 +199,7 @@ describe('createGeminiClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        // Cost without grounding: only token costs
-        expect(result.value.usage.costUsd).toBeLessThan(0.001);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -238,7 +214,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -262,7 +237,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -281,7 +255,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -300,7 +273,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -319,7 +291,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -344,12 +315,10 @@ describe('createGeminiClient', () => {
         candidates: [{ groundingMetadata: {} }],
       });
 
-      const pricing = createTestPricing();
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -358,30 +327,22 @@ describe('createGeminiClient', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.usage.thinkingTokens).toBe(200);
-        // Cost with thinking + grounding:
-        // input: 100 * 0.15 / 1M = 0.000015
-        // output: 50 * 0.6 / 1M = 0.00003
-        // thinking: 200 * 0.6 / 1M = 0.00012
-        // grounding: 0.035
-        // total: 0.035165
-        expect(result.value.usage.costUsd).toBeCloseTo(0.035165, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
   });
 
   describe('generate', () => {
-    it('returns generate result with content and usage from pricing', async () => {
+    it('returns generate result with content and usage', async () => {
       mockGenerateContent.mockResolvedValue({
         text: 'Generated text.',
         usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 100 },
       });
 
-      const pricing = createTestPricing();
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -395,8 +356,7 @@ describe('createGeminiClient', () => {
           outputTokens: 100,
           totalTokens: 150,
         });
-        // Cost without grounding: (50/1M * 0.15) + (100/1M * 0.6) = 0.0000075 + 0.00006 = 0.0000675
-        expect(result.value.usage.costUsd).toBeCloseTo(0.0000675, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -410,7 +370,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -434,7 +393,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -453,7 +411,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -475,12 +432,10 @@ describe('createGeminiClient', () => {
         },
       });
 
-      const pricing = createTestPricing();
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -489,13 +444,7 @@ describe('createGeminiClient', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.usage.thinkingTokens).toBe(500);
-        // Cost without grounding (scaled integers, then / 1M):
-        // input: 50 * 0.15 = 7.5
-        // output: 100 * 0.6 = 60
-        // thinking: 500 * 0.6 = 300
-        // total scaled: 367.5 → Math.round → 368
-        // costUsd: 368 / 1M = 0.000368
-        expect(result.value.usage.costUsd).toBeCloseTo(0.000368, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -513,7 +462,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -538,7 +486,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -552,7 +499,7 @@ describe('createGeminiClient', () => {
   });
 
   describe('generateImage', () => {
-    it('returns image result with cost from pricing', async () => {
+    it('returns image result with zero cost', async () => {
       const imageB64 = Buffer.from('fake-image-data').toString('base64');
       mockGenerateContent.mockResolvedValue({
         candidates: [
@@ -564,14 +511,10 @@ describe('createGeminiClient', () => {
         ],
       });
 
-      const pricing = createTestPricing({
-        imagePricing: { '1024x1024': 0.02, '1536x1024': 0.04, '1024x1536': 0.04 },
-      });
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -582,11 +525,11 @@ describe('createGeminiClient', () => {
       if (result.ok) {
         expect(result.value.model).toBe(LlmModels.Gemini25FlashImage);
         expect(result.value.imageData).toBeInstanceOf(Buffer);
-        expect(result.value.usage.costUsd).toBe(0.02);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
-    it('uses specified image size for cost calculation', async () => {
+    it('uses specified image size', async () => {
       const imageB64 = Buffer.from('fake-image-data').toString('base64');
       mockGenerateContent.mockResolvedValue({
         candidates: [
@@ -598,14 +541,10 @@ describe('createGeminiClient', () => {
         ],
       });
 
-      const pricing = createTestPricing({
-        imagePricing: { '1024x1024': 0.02, '1536x1024': 0.04, '1024x1536': 0.04 },
-      });
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -614,11 +553,11 @@ describe('createGeminiClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage.costUsd).toBe(0.04);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
-    it('uses separate imagePricing when provided', async () => {
+    it('returns image with zero cost when no imagePricing', async () => {
       const imageB64 = Buffer.from('fake-image-data').toString('base64');
       mockGenerateContent.mockResolvedValue({
         candidates: [
@@ -630,18 +569,10 @@ describe('createGeminiClient', () => {
         ],
       });
 
-      const pricing = createTestPricing();
-      const imagePricing: ModelPricing = {
-        inputPricePerMillion: 0,
-        outputPricePerMillion: 0,
-        imagePricing: { '1024x1024': 0.01, '1536x1024': 0.02, '1024x1536': 0.02 },
-      };
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
-        imagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -650,7 +581,7 @@ describe('createGeminiClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage.costUsd).toBe(0.01);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -669,7 +600,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -699,7 +629,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -721,7 +650,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -743,7 +671,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -762,7 +689,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -781,7 +707,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -800,7 +725,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -819,7 +743,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -838,7 +761,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -857,7 +779,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -876,7 +797,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -895,7 +815,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -914,7 +833,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -934,7 +852,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -954,7 +871,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -974,7 +890,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -994,7 +909,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -1013,7 +927,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -1032,7 +945,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -1057,7 +969,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -1093,7 +1004,6 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -1116,7 +1026,6 @@ describe('createGeminiClient', () => {
       apiKey: 'test-key',
       model: TEST_MODEL,
       userId: 'test-user',
-      pricing: createTestPricing(),
       logger: mockLogger,
       usageSink: mockUsageSink,
       ownerType: 'user',

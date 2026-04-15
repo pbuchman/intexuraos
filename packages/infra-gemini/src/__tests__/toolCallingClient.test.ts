@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LlmModels } from '@intexuraos/llm-contract';
-import type { ModelPricing, ToolCallingClient } from '@intexuraos/llm-contract';
+import type { ToolCallingClient } from '@intexuraos/llm-contract';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
 
@@ -36,16 +36,9 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 }));
 
 const { createUsageLogger } = await import('@intexuraos/llm-pricing');
-const { createGeminiToolCallingClient, TOOL_CALLING_PRICING } =
-  await import('../toolCallingClient.js');
+const { createGeminiToolCallingClient } = await import('../toolCallingClient.js');
 
 const TEST_MODEL = LlmModels.Gemini25Flash;
-
-const TEST_PRICING: ModelPricing = {
-  inputPricePerMillion: 0.5,
-  outputPricePerMillion: 2.0,
-  groundingCostPerRequest: 0,
-};
 
 const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
@@ -54,7 +47,6 @@ function createClient(): ToolCallingClient {
     apiKey: 'test-key',
     model: TEST_MODEL,
     userId: 'test-user',
-    pricing: TEST_PRICING,
     logger: mockLogger,
     usageSink: mockUsageSink,
   });
@@ -474,14 +466,6 @@ describe('createGeminiToolCallingClient', () => {
     );
   });
 
-  it('exports TOOL_CALLING_PRICING with gemini-2.5-flash', () => {
-    expect(TOOL_CALLING_PRICING[LlmModels.Gemini25Flash]).toEqual({
-      inputPricePerMillion: 0.3,
-      outputPricePerMillion: 2.5,
-      groundingCostPerRequest: 0,
-    });
-  });
-
   it('includes thinking tokens in aggregated usage', async () => {
     // First call: tool call with thinking tokens
     mockGenerateContent.mockResolvedValueOnce({
@@ -521,16 +505,10 @@ describe('createGeminiToolCallingClient', () => {
       },
     });
 
-    const pricing: ModelPricing = {
-      inputPricePerMillion: 0.3,
-      outputPricePerMillion: 2.5,
-      groundingCostPerRequest: 0,
-    };
     const client = createGeminiToolCallingClient({
       apiKey: 'test-key',
       model: LlmModels.Gemini25Flash,
       userId: 'test-user',
-      pricing,
       logger: mockLogger,
       usageSink: mockUsageSink,
     });
@@ -554,8 +532,7 @@ describe('createGeminiToolCallingClient', () => {
       expect(result.value.usage.inputTokens).toBe(300);
       expect(result.value.usage.outputTokens).toBe(50);
       expect(result.value.usage.thinkingTokens).toBe(130);
-      // Cost: (300*0.3 + 50*2.5 + 130*2.5) / 1_000_000 = (90 + 125 + 325) / 1_000_000 = 0.00054
-      expect(result.value.usage.costUsd).toBeCloseTo(0.00054, 6);
+      expect(result.value.usage.costUsd).toBe(0);
     }
   });
 
@@ -569,7 +546,6 @@ describe('createGeminiToolCallingClient', () => {
       apiKey: 'test-key',
       model: TEST_MODEL,
       userId: 'test-user',
-      pricing: TEST_PRICING,
       logger: mockLogger,
       usageSink: fakeSink,
     });

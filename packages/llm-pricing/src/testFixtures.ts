@@ -1,5 +1,5 @@
 /**
- * Test fixtures for pricing.
+ * Test fixtures for pricing and usage logging.
  * Provides mock pricing, PricingContext, and UsageSink for tests.
  */
 
@@ -9,6 +9,8 @@ import type { UsageLogParams, UsageSink } from './usageLogger.js';
 
 /**
  * Default test pricing for all models.
+ *
+ * Will be removed once apps stop using client-side pricing.
  */
 export const TEST_PRICING: ModelPricing = {
   inputPricePerMillion: 1.0,
@@ -17,6 +19,8 @@ export const TEST_PRICING: ModelPricing = {
 
 /**
  * Test image pricing.
+ *
+ * Will be removed once apps stop using client-side pricing.
  */
 export const TEST_IMAGE_PRICING: ModelPricing = {
   inputPricePerMillion: 0,
@@ -30,6 +34,8 @@ export const TEST_IMAGE_PRICING: ModelPricing = {
 
 /**
  * Fake PricingContext for tests.
+ *
+ * Will be removed once apps stop using client-side pricing.
  */
 export class FakePricingContext implements IPricingContext {
   readonly testPricing: ModelPricing;
@@ -85,6 +91,8 @@ export class FakePricingContext implements IPricingContext {
 
 /**
  * Create a fake PricingContext for tests.
+ *
+ * Will be removed once apps stop using client-side pricing.
  */
 export function createFakePricingContext(
   pricing: ModelPricing = TEST_PRICING,

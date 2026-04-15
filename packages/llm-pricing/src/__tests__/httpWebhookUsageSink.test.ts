@@ -57,9 +57,7 @@ interface CapturedEvent {
     imageCount: number;
   };
   cost: {
-    billedUsd: number;
     providerReportedUsd: number | null;
-    calculatedUsd: number | null;
     pricingSource: string;
   };
   correlation: {
@@ -141,7 +139,7 @@ describe('HttpWebhookUsageSink', () => {
 
       const event = parsedBody.events[0];
       expect(event).toBeDefined();
-      expect(event?.schemaVersion).toBe(1);
+      expect(event?.schemaVersion).toBe(2);
       expect(event?.eventId).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
       );
@@ -174,10 +172,8 @@ describe('HttpWebhookUsageSink', () => {
         imageCount: 0,
       });
       expect(event?.cost).toEqual({
-        billedUsd: 0.0105,
         providerReportedUsd: null,
-        calculatedUsd: 0.0105,
-        pricingSource: 'calculated',
+        pricingSource: 'pending',
       });
       expect(event?.correlation).toEqual({
         requestId: null,
