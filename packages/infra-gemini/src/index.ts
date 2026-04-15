@@ -12,6 +12,5 @@ export type {
 } from './types.js';
 export {
   createGeminiToolCallingClient,
-  TOOL_CALLING_PRICING,
   type ToolCallingClientConfig,
 } from './toolCallingClient.js';

@@ -15,33 +15,18 @@ import type { Content, FunctionDeclaration, Part } from '@google/genai';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type {
   LLMError,
-  ModelPricing,
   NormalizedUsage,
   ToolCallingClient,
   ToolCallingResult,
   ToolDefinition,
   ToolCallingModel,
 } from '@intexuraos/llm-contract';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmProviders } from '@intexuraos/llm-contract';
 import { createUsageLogger, type UsageSink } from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
 import { normalizeUsage } from './costCalculator.js';
 
 const DEFAULT_MAX_ITERATIONS = 5;
-
-/**
- * Self-contained pricing for tool calling models.
- *
- * Kept for backward compatibility with apps that still reference it.
- * Will be removed once all apps stop passing pricing to tool calling clients.
- */
-export const TOOL_CALLING_PRICING: Record<ToolCallingModel, ModelPricing> = {
-  [LlmModels.Gemini25Flash]: {
-    inputPricePerMillion: 0.3,
-    outputPricePerMillion: 2.5,
-    groundingCostPerRequest: 0,
-  },
-};
 
 /**
  * Configuration for creating a Gemini tool calling client.
@@ -51,11 +36,6 @@ export interface ToolCallingClientConfig {
   apiKey: string;
   model: ToolCallingModel;
   userId: string;
-  /**
-   * No longer used. Costs are computed by llm-usage-service on ingestion.
-   * Kept as optional for backward compatibility with apps that still pass it.
-   */
-  pricing?: ModelPricing;
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
   usageSink: UsageSink;

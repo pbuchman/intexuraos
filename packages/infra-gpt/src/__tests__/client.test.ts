@@ -50,7 +50,6 @@ const { createGptClient } = await import('../client.js');
 
 const TEST_MODEL = 'gpt-4o';
 
-
 describe('createGptClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
