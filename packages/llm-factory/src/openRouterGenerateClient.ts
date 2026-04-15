@@ -13,7 +13,7 @@ export function createOpenRouterGenerateClient(config: LlmClientConfig): LlmGene
     apiKey: config.apiKey,
     model: rawModel,
     userId: config.userId,
-    pricing: config.pricing,
+    ...(config.pricing !== undefined && { pricing: config.pricing }),
     logger: config.logger,
     usageSink: config.usageSink,
     ...(config.ownerType !== undefined && { ownerType: config.ownerType }),

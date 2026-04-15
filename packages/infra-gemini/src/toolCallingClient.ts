@@ -29,6 +29,8 @@ import { normalizeUsage } from './costCalculator.js';
 
 const DEFAULT_MAX_ITERATIONS = 5;
 
+const ZERO_PRICING: ModelPricing = { inputPricePerMillion: 0, outputPricePerMillion: 0 };
+
 /**
  * Self-contained pricing for tool calling models.
  * Same pattern as VERIFIER_PRICING in completion-verifier.ts.
@@ -50,7 +52,7 @@ export interface ToolCallingClientConfig {
   apiKey: string;
   model: ToolCallingModel;
   userId: string;
-  pricing: ModelPricing;
+  pricing?: ModelPricing;
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
   usageSink: UsageSink;
@@ -61,7 +63,7 @@ export interface ToolCallingClientConfig {
  */
 export function createGeminiToolCallingClient(config: ToolCallingClientConfig): ToolCallingClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const { model, userId, pricing, logger, usageSink } = config;
+  const { model, userId, pricing = ZERO_PRICING, logger, usageSink } = config;
 
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
 

@@ -58,8 +58,8 @@ export interface LlmClientConfig {
   model: LLMModel;
   /** User ID for usage tracking */
   userId: string;
-  /** Pricing information for the model */
-  pricing: ModelPricing;
+  /** Pricing information for the model. Optional — defaults to zero cost when omitted. */
+  pricing?: ModelPricing;
   /** Logger for structured LLM usage logging */
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */

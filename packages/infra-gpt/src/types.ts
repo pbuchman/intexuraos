@@ -59,8 +59,8 @@ export interface GptConfig {
   userId: string;
   /** Optional research ID for correlating audit logs to a research run */
   researchId?: string;
-  /** Cost configuration per million tokens for text operations */
-  pricing: import('@intexuraos/llm-contract').ModelPricing;
+  /** Cost configuration per million tokens for text operations. Optional — defaults to zero cost when omitted. */
+  pricing?: import('@intexuraos/llm-contract').ModelPricing;
   /** Optional separate pricing for image generation */
   imagePricing?: import('@intexuraos/llm-contract').ModelPricing;
   /** Pino logger for structured LLM usage logging */

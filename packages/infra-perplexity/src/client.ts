@@ -43,6 +43,7 @@ import {
   LlmModels,
   LlmProviders,
   type LLMClient,
+  type ModelPricing,
   type NormalizedUsage,
   type GenerateResult,
 } from '@intexuraos/llm-contract';
@@ -59,6 +60,8 @@ import type {
 import { normalizeUsage } from './costCalculator.js';
 
 export type PerplexityClient = Pick<LLMClient, 'research' | 'generate'>;
+
+const ZERO_PRICING: ModelPricing = { inputPricePerMillion: 0, outputPricePerMillion: 0 };
 
 const API_BASE_URL = 'https://api.perplexity.ai';
 
@@ -191,7 +194,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
     apiKey,
     model,
     userId,
-    pricing,
+    pricing = ZERO_PRICING,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     logger,
     usageSink,

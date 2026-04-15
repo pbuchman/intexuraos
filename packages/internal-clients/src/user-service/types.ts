@@ -9,7 +9,7 @@ import type { LlmProvider } from '@intexuraos/llm-contract';
 export interface UserServiceConfig {
   baseUrl: string;
   internalAuthToken: string;
-  pricingContext: IPricingContext;
+  pricingContext?: IPricingContext;
   logger: Logger;
   /**
    * Usage sink used when materializing per-user LLM clients via
