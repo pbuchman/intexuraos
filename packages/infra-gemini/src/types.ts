@@ -44,12 +44,12 @@ export interface GeminiConfig {
   /** Optional research ID for correlating audit logs to a research run */
   researchId?: string;
   /**
-   * @deprecated No longer used. Costs are computed by llm-usage-service on ingestion.
+   * No longer used. Costs are computed by llm-usage-service on ingestion.
    * Kept as optional for backward compatibility with apps that still pass it.
    */
   pricing?: import('@intexuraos/llm-contract').ModelPricing;
   /**
-   * @deprecated No longer used. Costs are computed by llm-usage-service on ingestion.
+   * No longer used. Costs are computed by llm-usage-service on ingestion.
    * Kept as optional for backward compatibility with apps that still pass it.
    */
   imagePricing?: import('@intexuraos/llm-contract').ModelPricing;

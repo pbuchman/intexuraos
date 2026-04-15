@@ -59,7 +59,7 @@ export interface LlmClientConfig {
   /** User ID for usage tracking */
   userId: string;
   /**
-   * @deprecated No longer used. Costs are computed by llm-usage-service on ingestion.
+   * No longer used. Costs are computed by llm-usage-service on ingestion.
    * Kept as optional for backward compatibility with apps that still pass it.
    */
   pricing?: import('@intexuraos/llm-contract').ModelPricing;
