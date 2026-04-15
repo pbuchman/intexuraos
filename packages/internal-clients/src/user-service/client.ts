@@ -244,7 +244,12 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
             return { inputPricePerMillion: 0, outputPricePerMillion: 0, useProviderCost: true };
             /* v8 ignore stop @preserve */
           }
-          return config.pricingContext?.getPricing(model as LLMModel) ?? { inputPricePerMillion: 0, outputPricePerMillion: 0 };
+          return (
+            config.pricingContext?.getPricing(model as LLMModel) ?? {
+              inputPricePerMillion: 0,
+              outputPricePerMillion: 0,
+            }
+          );
         }
 
         // Helper: build a client for a given model using the fetched API keys
