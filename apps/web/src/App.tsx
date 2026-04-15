@@ -1,9 +1,10 @@
 import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
 import { AuthProvider, SyncQueueProvider, ThemeProvider, useAuth } from '@/context';
-import { useTimezoneAutoDetect } from '@/hooks';
+import { usePageLifecycle, useTimezoneAutoDetect } from '@/hooks';
 import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
+import { XiaomiBatteryGuide } from '@/components/XiaomiBatteryGuide';
 import { DevBar } from '@/components/DevBar';
 import { Chat } from '@/components/Chat';
 import { config } from '@/config';
@@ -64,6 +65,11 @@ import {
 
 function TimezoneAutoDetect(): null {
   useTimezoneAutoDetect();
+  return null;
+}
+
+function PageLifecycleManager(): null {
+  usePageLifecycle();
   return null;
 }
 
@@ -560,11 +566,13 @@ export function App(): React.JSX.Element {
             <HashRouter>
               <AuthProvider>
                 <TimezoneAutoDetect />
+                <PageLifecycleManager />
                 <SyncQueueProvider>
                   <AppRoutes />
                   <UpdateBanner />
                   <IOSInstallBanner />
                   <AndroidInstallBanner />
+                  <XiaomiBatteryGuide />
                   <DevBar />
                   <Chat />
                 </SyncQueueProvider>
