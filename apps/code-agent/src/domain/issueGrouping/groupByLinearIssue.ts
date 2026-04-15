@@ -102,6 +102,29 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     });
   }
 
+  // Alt-unlock: latest non-archived remediation explicitly said "no re-review needed".
+  // Defense in depth against label-propagation races (see 2026-04-05-fix-stale-merge-action.md
+  // and the remediation-complete label restoration in webhookRoutes.ts). When the
+  // label hasn't propagated back through the Linear cache yet, the terminal remediation's
+  // requiresReReview=false still tells us the group is merge-ready.
+  if (
+    !hasActiveTask &&
+    executionEntry?.step.state === 'completed' &&
+    executionEntry.task.result?.prUrl !== undefined &&
+    !steps.some((s) => s.agentType === 'merge')
+  ) {
+    const latestRemediation = tasks.find(
+      (t) => t.agentType === 'remediation' && t.status !== 'archived',
+    );
+    if (latestRemediation?.requiresReReview === false) {
+      steps.push({
+        agentType: 'merge',
+        state: 'actionable',
+        label: 'Merge',
+      });
+    }
+  }
+
   // Merge-ready fallback for review tasks: if the review step completed with
   // needs_remediation === '0' AND the ready-to-merge label is still present.
   // The label check is essential: handlePrClose removes ready-to-merge when
