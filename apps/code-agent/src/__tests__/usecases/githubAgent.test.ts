@@ -635,6 +635,60 @@ describe('evaluateEvent', () => {
   });
 
   describe('issue_comment events', () => {
+    it('resolves user and calls resolveToolCallingClient for comment events', async () => {
+      const resolveToolCallingClient = createFakeResolveToolCallingClient();
+      const deps = createDeps({ resolveToolCallingClient });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review please check this',
+      });
+
+      await evaluateEvent(deps, event);
+
+      expect(deps.userServiceClient.resolveGitHubUsername).toHaveBeenCalledWith('dev-user');
+      expect(resolveToolCallingClient).toHaveBeenCalledWith('user-1');
+    });
+
+    it('returns USER_NOT_FOUND when comment sender has no linked account', async () => {
+      const deps = createDeps({
+        userServiceClient: {
+          ...createFakeUserServiceClient(),
+          resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
+        },
+      });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review check this',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('USER_NOT_FOUND');
+      }
+    });
+
+    it('returns LLM_FAILED when resolveToolCallingClient fails for comment', async () => {
+      const deps = createDeps({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({ resolveError: true }),
+      });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review check this',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+      }
+    });
+
     it('evaluates @review comment and returns request_review triage with normalized worker type', async () => {
       const toolClient: ToolCallingClient = {
         async run(params): ReturnType<ToolCallingClient['run']> {
