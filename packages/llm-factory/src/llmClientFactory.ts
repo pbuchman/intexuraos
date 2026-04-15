@@ -18,6 +18,7 @@
  *   apiKey: 'sk-...',
  *   model: 'gemini-2.5-flash',
  *   userId: 'user-123',
+ *   pricing: { inputPricePerMillion: 0.3, outputPricePerMillion: 2.5 },
  * });
  *
  * const result = await client.generate('Write a poem');
@@ -47,8 +48,6 @@ import {
 import { createOpenRouterGenerateClient } from './openRouterGenerateClient.js';
 import type { Logger, Result } from '@intexuraos/common-core';
 
-const ZERO_PRICING: ModelPricing = { inputPricePerMillion: 0, outputPricePerMillion: 0 };
-
 /**
  * Configuration for creating an LLM client.
  */
@@ -59,8 +58,8 @@ export interface LlmClientConfig {
   model: LLMModel;
   /** User ID for usage tracking */
   userId: string;
-  /** When omitted, defaults to zero-cost pricing (costs computed server-side by llm-usage-service). */
-  pricing?: ModelPricing;
+  /** Pricing information for the model */
+  pricing: ModelPricing;
   /** Logger for structured LLM usage logging */
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
@@ -121,6 +120,7 @@ type SupportedProvider = typeof LlmProviders.Google | typeof LlmProviders.OpenRo
  *   apiKey: 'sk-...',
  *   model: 'gemini-2.5-flash',
  *   userId: 'user-123',
+ *   pricing: getPricing('gemini-2.5-flash'),
  * });
  * ```
  */
@@ -129,7 +129,7 @@ export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
 
   // OpenRouter models (or: prefix) are routed to the OpenRouter client
   if (isOpenRouterModel(model)) {
-    return createOpenRouterGenerateClient({ ...config, pricing: config.pricing ?? ZERO_PRICING });
+    return createOpenRouterGenerateClient(config);
   }
 
   // Validate model is a known static model
@@ -145,7 +145,7 @@ export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
     );
   }
 
-  return createGeminiClient({ ...config, pricing: config.pricing ?? ZERO_PRICING });
+  return createGeminiClient(config);
 }
 
 /**

@@ -132,46 +132,6 @@ describe('llmClientFactory', () => {
       ).toThrow('Unsupported LLM provider: anthropic');
     });
 
-    it('defaults to zero-cost pricing when pricing is omitted (Gemini)', async () => {
-      const { createGeminiClient } = await import('@intexuraos/infra-gemini');
-
-      createLlmClient({
-        apiKey: 'test-key',
-        model: LlmModels.Gemini25Flash,
-        userId: 'user-123',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-
-      const callArg = vi.mocked(createGeminiClient).mock.calls[0]?.[0] as unknown as Record<
-        string,
-        unknown
-      >;
-      expect(callArg?.['pricing']).toEqual({
-        inputPricePerMillion: 0,
-        outputPricePerMillion: 0,
-      });
-    });
-
-    it('defaults to zero-cost pricing when pricing is omitted (OpenRouter)', async () => {
-      const { createOpenRouterGenerateClient } = await import('../openRouterGenerateClient.js');
-
-      createLlmClient({
-        apiKey: 'test-key',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        model: 'or:google/gemma-4-31b-it:free' as any,
-        userId: 'user-123',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-
-      expect(vi.mocked(createOpenRouterGenerateClient)).toHaveBeenCalledWith(
-        expect.objectContaining({
-          pricing: { inputPricePerMillion: 0, outputPricePerMillion: 0 },
-        })
-      );
-    });
-
     it('creates OpenRouter client for or: prefixed models', () => {
       const client = createLlmClient({
         apiKey: 'test-key',
