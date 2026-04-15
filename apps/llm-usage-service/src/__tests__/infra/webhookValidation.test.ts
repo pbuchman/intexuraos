@@ -26,7 +26,7 @@ describe('validateOrchestratorSignature', () => {
 
   it('returns ok for a valid signature', () => {
     const timestamp = Math.floor(Date.now() / 1000);
-    const body = { schemaVersion: 1, events: [] };
+    const body = { schemaVersion: 2, events: [] };
     const signature = signBody(secret, timestamp, body);
 
     const request = createRequest(

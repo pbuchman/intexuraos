@@ -8,14 +8,6 @@ vi.mock('@intexuraos/llm-factory', () => ({
   createLlmClient: createLlmClientMock,
 }));
 
-const { getDefaultAllowlistPricingMock } = vi.hoisted(() => ({
-  getDefaultAllowlistPricingMock: vi.fn(),
-}));
-
-vi.mock('@intexuraos/infra-openrouter', () => ({
-  getDefaultAllowlistPricing: getDefaultAllowlistPricingMock,
-}));
-
 const { HttpWebhookUsageSinkMock } = vi.hoisted(() => {
   const constructorSpy = vi.fn();
   function HttpWebhookUsageSinkMock(this: Record<string, unknown>, config: unknown): void {
@@ -30,7 +22,7 @@ vi.mock('@intexuraos/llm-pricing', () => ({
   HttpWebhookUsageSink: HttpWebhookUsageSinkMock,
 }));
 
-const { parseValidationModels, buildValidationClients, GEMINI_VALIDATION_PRICING } =
+const { parseValidationModels, buildValidationClients } =
   await import('../validation-model-clients.js');
 
 const fakeLogger = {
@@ -103,10 +95,6 @@ describe('buildValidationClients', () => {
     const fakeClient1 = { generate: vi.fn() };
     const fakeClient2 = { generate: vi.fn() };
     createLlmClientMock.mockReturnValueOnce(fakeClient1).mockReturnValueOnce(fakeClient2);
-    getDefaultAllowlistPricingMock.mockReturnValue({
-      inputPricePerMillion: 0,
-      outputPricePerMillion: 0,
-    });
 
     const models = parseValidationModels('or:google/gemma-4-31b-it:free,gemini-2.5-flash');
     const clients = buildValidationClients({
@@ -131,75 +119,13 @@ describe('buildValidationClients', () => {
     const firstCallConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(firstCallConfig['apiKey']).toBe('or-key');
     expect(firstCallConfig['model']).toBe('or:google/gemma-4-31b-it:free');
+    expect(firstCallConfig['pricing']).toBeUndefined();
 
     // Second call: Gemini model
     const secondCallConfig = createLlmClientMock.mock.calls[1]?.[0] as Record<string, unknown>;
     expect(secondCallConfig['apiKey']).toBe('gem-key');
     expect(secondCallConfig['model']).toBe('gemini-2.5-flash');
-  });
-
-  it('uses getDefaultAllowlistPricing for OpenRouter models', () => {
-    const expectedPricing = { inputPricePerMillion: 0.3, outputPricePerMillion: 1.0 };
-    getDefaultAllowlistPricingMock.mockReturnValue(expectedPricing);
-    createLlmClientMock.mockReturnValue({ generate: vi.fn() });
-
-    const models = parseValidationModels('or:google/gemma-4-31b-it:free');
-    buildValidationClients({
-      models,
-      openRouterApiKey: 'or-key',
-      geminiApiKey: 'gem-key',
-      usageWebhookUrl: 'http://usage',
-      orchestratorSecret: 'secret',
-      internalAuthToken: 'token',
-      logger: fakeLogger,
-      getCorrelationTaskId: () => null,
-    });
-
-    expect(getDefaultAllowlistPricingMock).toHaveBeenCalledWith('google/gemma-4-31b-it:free');
-    const callConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(callConfig['pricing']).toBe(expectedPricing);
-  });
-
-  it('falls back to zero pricing when OpenRouter model is not in default allowlist', () => {
-    getDefaultAllowlistPricingMock.mockReturnValue(undefined);
-    createLlmClientMock.mockReturnValue({ generate: vi.fn() });
-
-    const models = parseValidationModels('or:unknown/model');
-    buildValidationClients({
-      models,
-      openRouterApiKey: 'or-key',
-      geminiApiKey: 'gem-key',
-      usageWebhookUrl: 'http://usage',
-      orchestratorSecret: 'secret',
-      internalAuthToken: 'token',
-      logger: fakeLogger,
-      getCorrelationTaskId: () => null,
-    });
-
-    const callConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(callConfig['pricing']).toEqual({
-      inputPricePerMillion: 0,
-      outputPricePerMillion: 0,
-    });
-  });
-
-  it('uses GEMINI_VALIDATION_PRICING for Gemini models', () => {
-    createLlmClientMock.mockReturnValue({ generate: vi.fn() });
-
-    const models = parseValidationModels('gemini-2.5-flash');
-    buildValidationClients({
-      models,
-      openRouterApiKey: 'or-key',
-      geminiApiKey: 'gem-key',
-      usageWebhookUrl: 'http://usage',
-      orchestratorSecret: 'secret',
-      internalAuthToken: 'token',
-      logger: fakeLogger,
-      getCorrelationTaskId: () => null,
-    });
-
-    const callConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(callConfig['pricing']).toBe(GEMINI_VALIDATION_PRICING);
+    expect(secondCallConfig['pricing']).toBeUndefined();
   });
 
   it('throws when openRouterApiKey is empty and an or: model is present', () => {
@@ -236,10 +162,6 @@ describe('buildValidationClients', () => {
 
   it('threads getCorrelationTaskId into the HttpWebhookUsageSink for each client', () => {
     createLlmClientMock.mockReturnValue({ generate: vi.fn() });
-    getDefaultAllowlistPricingMock.mockReturnValue({
-      inputPricePerMillion: 0,
-      outputPricePerMillion: 0,
-    });
 
     const getCorrelationTaskId = vi.fn().mockReturnValue('task-123');
     const models = parseValidationModels('or:google/gemma-4-31b-it:free,gemini-2.5-flash');

@@ -78,12 +78,21 @@ export interface UsageEvent {
   } | null;
 }
 
-/** UsageEventInput - what callers send (no receivedAt, no ingress) */
-export type UsageEventInput = Omit<UsageEvent, 'receivedAt' | 'ingress'>;
+/** UsageEventInput - what callers send (cost has providerReportedUsd + pending/provider_reported pricingSource) */
+export type UsageEventInput = Omit<
+  UsageEvent,
+  'receivedAt' | 'ingress' | 'schemaVersion' | 'cost'
+> & {
+  schemaVersion: 2;
+  cost: {
+    providerReportedUsd: number | null;
+    pricingSource: 'pending' | 'provider_reported';
+  };
+};
 
 /** Ingest request */
 export interface UsageIngestRequest {
-  schemaVersion: 1;
+  schemaVersion: 2;
   events: UsageEventInput[];
 }
 

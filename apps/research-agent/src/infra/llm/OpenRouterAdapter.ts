@@ -9,7 +9,7 @@
 
 import { createOpenRouterClient, type OpenRouterClient } from '@intexuraos/infra-openrouter';
 import type { Logger, Result } from '@intexuraos/common-core';
-import { type ModelPricing, isOpenRouterModel, getOpenRouterRawId } from '@intexuraos/llm-contract';
+import { isOpenRouterModel, getOpenRouterRawId } from '@intexuraos/llm-contract';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import { buildResearchPrompt, buildSynthesisPrompt, titlePrompt, type ResearchContext, type SynthesisContext } from '@intexuraos/llm-prompts';
 import type {
@@ -30,7 +30,6 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
     apiKey: string,
     model: string,
     userId: string,
-    pricing: ModelPricing,
     logger: Logger,
     usageSink: UsageSink,
     researchId?: string
@@ -42,7 +41,6 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
       model: rawModel,
       userId,
       ...(researchId !== undefined && { researchId }),
-      pricing,
       logger,
       usageSink,
     });

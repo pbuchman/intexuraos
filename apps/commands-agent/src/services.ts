@@ -1,10 +1,5 @@
 import { createAppLogger } from '@intexuraos/infra-sentry';
-import {
-  fetchAllPricingWithRetry,
-  createPricingContext,
-  HttpInternalAuthUsageSink,
-} from '@intexuraos/llm-pricing';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import type { CommandRepository } from './domain/ports/commandRepository.js';
 import type { ClassifierFactory } from './domain/ports/classifier.js';
 import type { EventPublisherPort } from './domain/ports/eventPublisher.js';
@@ -57,27 +52,8 @@ export interface ServiceConfig {
 
 let container: Services | null = null;
 
-/**
- * Models supported for classification.
- */
-const CLASSIFIER_MODELS = [
-  LlmModels.Gemini25Flash,
-] as const;
-
-export async function initServices(config: ServiceConfig): Promise<void> {
+export function initServices(config: ServiceConfig): void {
   const logger = createAppLogger({ name: 'commands-agent' });
-
-  // Fetch pricing data from llm-usage-service
-  const pricingResult = await fetchAllPricingWithRetry(
-    config.llmUsageServiceUrl,
-    config.internalAuthToken
-  );
-
-  if (!pricingResult.ok) {
-    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
-  }
-
-  const pricingContext = createPricingContext(pricingResult.value, [...CLASSIFIER_MODELS] as unknown as typeof LlmModels.Gemini25Flash[]);
 
   const commandRepository = createFirestoreCommandRepository();
   const actionsAgentClient = createActionsAgentClient({
@@ -91,7 +67,6 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
-    pricingContext,
     logger: userServiceClientLogger,
     usageSink: new HttpInternalAuthUsageSink({
       usageServiceUrl: config.llmUsageServiceUrl,

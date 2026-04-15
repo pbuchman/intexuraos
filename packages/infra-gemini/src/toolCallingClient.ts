@@ -15,32 +15,18 @@ import type { Content, FunctionDeclaration, Part } from '@google/genai';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type {
   LLMError,
-  ModelPricing,
   NormalizedUsage,
   ToolCallingClient,
   ToolCallingResult,
   ToolDefinition,
   ToolCallingModel,
 } from '@intexuraos/llm-contract';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmProviders } from '@intexuraos/llm-contract';
 import { createUsageLogger, type UsageSink } from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
 import { normalizeUsage } from './costCalculator.js';
 
 const DEFAULT_MAX_ITERATIONS = 5;
-
-/**
- * Self-contained pricing for tool calling models.
- * Same pattern as VERIFIER_PRICING in completion-verifier.ts.
- * Bypasses code-agent's pricingContext (which throws on pricing operations).
- */
-export const TOOL_CALLING_PRICING: Record<ToolCallingModel, ModelPricing> = {
-  [LlmModels.Gemini25Flash]: {
-    inputPricePerMillion: 0.3,
-    outputPricePerMillion: 2.5,
-    groundingCostPerRequest: 0,
-  },
-};
 
 /**
  * Configuration for creating a Gemini tool calling client.
@@ -50,7 +36,6 @@ export interface ToolCallingClientConfig {
   apiKey: string;
   model: ToolCallingModel;
   userId: string;
-  pricing: ModelPricing;
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
   usageSink: UsageSink;
@@ -61,7 +46,7 @@ export interface ToolCallingClientConfig {
  */
 export function createGeminiToolCallingClient(config: ToolCallingClientConfig): ToolCallingClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const { model, userId, pricing, logger, usageSink } = config;
+  const { model, userId, logger, usageSink } = config;
 
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
@@ -152,13 +137,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
             const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
             const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
             const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
-            const iterationUsage = normalizeUsage(
-              inputTokens,
-              outputTokens,
-              false,
-              pricing,
-              thinkingTokens
-            );
+            const iterationUsage = normalizeUsage(inputTokens, outputTokens, false, thinkingTokens);
             aggregatedUsage = addUsage(aggregatedUsage, iterationUsage);
 
             // Extract parts from response

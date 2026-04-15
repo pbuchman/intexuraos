@@ -104,12 +104,7 @@ import {
   type WhatsAppSendPublisher,
 } from '@intexuraos/infra-pubsub';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
-import {
-  fetchAllPricingWithRetry,
-  createPricingContext,
-  HttpInternalAuthUsageSink,
-} from '@intexuraos/llm-pricing';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 
 export interface Services {
   actionServiceClient: ActionServiceClient;
@@ -175,26 +170,7 @@ export interface ServiceConfig {
 
 let container: Services | null = null;
 
-export async function initServices(config: ServiceConfig): Promise<void> {
-  // Fetch pricing from llm-usage-service
-  const pricingResult = await fetchAllPricingWithRetry(
-    config.llmUsageServiceUrl,
-    config.internalAuthToken
-  );
-
-  if (!pricingResult.ok) {
-    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
-  }
-
-  // Support common models for approval intent classification
-  const pricingContext = createPricingContext(pricingResult.value, [
-    LlmModels.Gemini25Flash,
-    LlmModels.Gemini25Pro,
-    LlmModels.ClaudeSonnet46,
-    LlmModels.GPT54,
-    LlmModels.SonarPro,
-  ]);
-
+export function initServices(config: ServiceConfig): void {
   const actionRepository = createFirestoreActionRepository({
     logger: createAppLogger({ name: 'actionRepository' }),
   });
@@ -206,7 +182,6 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
-    pricingContext,
     logger: userServiceClientLogger,
     usageSink: new HttpInternalAuthUsageSink({
       usageServiceUrl: config.llmUsageServiceUrl,

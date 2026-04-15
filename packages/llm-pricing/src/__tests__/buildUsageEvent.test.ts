@@ -4,12 +4,11 @@ import { buildUsageEvent } from '../buildUsageEvent.js';
 import type { UsageLogParams } from '../usageLogger.js';
 
 interface EventForTests {
+  schemaVersion: number;
   owner: { type: string; id: string };
   source: { service: string; component: string; client: string; environment: string };
   cost: {
-    billedUsd: number;
     providerReportedUsd: number | null;
-    calculatedUsd: number;
     pricingSource: string;
   };
   [k: string]: unknown;
@@ -20,13 +19,18 @@ const baseParams: UsageLogParams = {
   provider: LlmProviders.OpenRouter,
   model: 'or:nvidia/nemotron-3-super-120b-a12b:free',
   callType: 'generate',
-  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0 },
   success: true,
 };
 
 const baseSource = { service: 'linear-agent', component: 'title-gen' };
 
 describe('buildUsageEvent', () => {
+  it('emits schemaVersion 2', () => {
+    const event = buildUsageEvent(baseParams, baseSource) as EventForTests;
+    expect(event.schemaVersion).toBe(2);
+  });
+
   it('defaults owner.type to "system" when ownerType not provided', () => {
     const event = buildUsageEvent(baseParams, baseSource) as EventForTests;
     expect(event.owner).toEqual({ type: 'system', id: 'user-123' });
@@ -58,22 +62,18 @@ describe('buildUsageEvent', () => {
     expect(event.source.client).not.toMatch(/\//);
   });
 
-  it('cost.providerReportedUsd is null and pricingSource is "calculated" by default', () => {
+  it('cost.providerReportedUsd is null and pricingSource is "pending" by default', () => {
     const event = buildUsageEvent(baseParams, baseSource) as EventForTests;
     expect(event.cost.providerReportedUsd).toBeNull();
-    expect(event.cost.pricingSource).toBe('calculated');
-    expect(event.cost.billedUsd).toBe(0.001);
-    expect(event.cost.calculatedUsd).toBe(0.001);
+    expect(event.cost.pricingSource).toBe('pending');
   });
 
-  it('cost uses providerReportedUsd as billedUsd when provided; pricingSource = "provider_reported"', () => {
+  it('cost uses providerReportedUsd when provided; pricingSource = "provider_reported"', () => {
     const event = buildUsageEvent(
       { ...baseParams, providerReportedUsd: 0.0042 },
       baseSource
     ) as EventForTests;
     expect(event.cost.providerReportedUsd).toBe(0.0042);
-    expect(event.cost.billedUsd).toBe(0.0042);
-    expect(event.cost.calculatedUsd).toBe(0.001);
     expect(event.cost.pricingSource).toBe('provider_reported');
   });
 
@@ -83,15 +83,6 @@ describe('buildUsageEvent', () => {
       baseSource
     ) as EventForTests;
     expect(event.cost.providerReportedUsd).toBeNull();
-    expect(event.cost.pricingSource).toBe('calculated');
-    expect(event.cost.billedUsd).toBe(0.001);
-  });
-
-  it('clamps a negative providerReportedUsd to 0 (schema requires billedUsd >= 0)', () => {
-    const event = buildUsageEvent(
-      { ...baseParams, providerReportedUsd: -0.001 },
-      baseSource
-    ) as EventForTests;
-    expect(event.cost.billedUsd).toBeGreaterThanOrEqual(0);
+    expect(event.cost.pricingSource).toBe('pending');
   });
 });

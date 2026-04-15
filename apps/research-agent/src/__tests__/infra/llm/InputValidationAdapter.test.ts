@@ -29,7 +29,6 @@ describe('InputValidationAdapter', () => {
       'test-api-key',
       LlmModels.Gemini25Flash,
       'user-123',
-      { inputPricePerMillion: 0.1, outputPricePerMillion: 0.2 },
       mockLogger,
       new FakeUsageSink()
     );
@@ -202,7 +201,6 @@ describe('InputValidationAdapter', () => {
         'test-api-key',
         LlmModels.Gemini25Flash,
         'user-123',
-        { inputPricePerMillion: 0.1, outputPricePerMillion: 0.2 },
         mockLogger as unknown as import('@intexuraos/common-core').Logger,
         new FakeUsageSink()
       );

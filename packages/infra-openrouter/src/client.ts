@@ -15,13 +15,9 @@
  *   apiKey: process.env.OPENROUTER_API_KEY,
  *   model: 'anthropic/claude-sonnet-4.6',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 3.0,
- *     outputPricePerMillion: 15.0,
- *     useProviderCost: true,
- *   },
  *   timeoutMs: 840000,
  *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  *
  * // Research with web search (append :online to model ID)
@@ -122,7 +118,6 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     apiKey,
     model,
     userId,
-    pricing,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     logger,
     usageSink,
@@ -168,8 +163,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     const normalized = normalizeUsage(
       usage.prompt_tokens,
       usage.completion_tokens,
-      providerReportedUsd ?? undefined,
-      pricing
+      providerReportedUsd ?? undefined
     );
     return { normalized, providerReportedUsd };
   }

@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { FakePricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { resetServices, setServices, type ServiceContainer } from '../services.js';
@@ -36,7 +35,6 @@ describe('Internal Routes', () => {
       generatedImageRepository: fakeRepo,
       imageStorage: fakeStorage,
       userServiceClient: fakeUserClient,
-      pricingContext: new FakePricingContext(),
       createPromptGenerator: () => fakePromptGenerator,
       createImageGenerator: () => fakeGenerator,
       generateId: () => 'test-uuid',

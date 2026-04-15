@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import nock from 'nock';
-import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import { GeminiPromptAdapter } from '../infra/llm/GeminiPromptAdapter.js';
 import type { Logger } from '@intexuraos/common-core';
@@ -11,11 +11,6 @@ vi.mock('@intexuraos/llm-pricing', (): object => ({
     log: vi.fn().mockResolvedValue(undefined),
   }),
 }));
-
-const testPricing: ModelPricing = {
-  inputPricePerMillion: 1.25,
-  outputPricePerMillion: 10.0,
-};
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -74,7 +69,6 @@ describe('GeminiPromptAdapter', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini25Pro,
         userId: 'test-user',
-        pricing: testPricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -104,7 +98,6 @@ describe('GeminiPromptAdapter', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini25Pro,
         userId: 'test-user',
-        pricing: testPricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -125,7 +118,6 @@ describe('GeminiPromptAdapter', () => {
         apiKey: 'bad-key',
         model: LlmModels.Gemini25Pro,
         userId: 'test-user',
-        pricing: testPricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -146,7 +138,6 @@ describe('GeminiPromptAdapter', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini25Pro,
         userId: 'test-user',
-        pricing: testPricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -165,7 +156,6 @@ describe('GeminiPromptAdapter', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini25Pro,
         userId: 'test-user',
-        pricing: testPricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -184,7 +174,6 @@ describe('GeminiPromptAdapter', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini25Pro,
         userId: 'test-user',
-        pricing: testPricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -219,7 +208,6 @@ describe('GeminiPromptAdapter', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini20Flash,
         userId: 'test-user',
-        pricing: testPricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });

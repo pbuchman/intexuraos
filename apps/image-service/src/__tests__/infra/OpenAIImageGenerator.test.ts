@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err, type Logger } from '@intexuraos/common-core';
-import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import { createGptClient } from '@intexuraos/infra-gpt';
 import {
@@ -28,17 +28,6 @@ vi.mock('@intexuraos/llm-pricing', () => ({
     log: vi.fn().mockResolvedValue(undefined),
   }),
 }));
-
-const testPricing: ModelPricing = {
-  inputPricePerMillion: 1.75,
-  outputPricePerMillion: 14.0,
-};
-
-const testImagePricing: ModelPricing = {
-  inputPricePerMillion: 0,
-  outputPricePerMillion: 0,
-  imagePricing: { '1024x1024': 0.04, '1536x1024': 0.08, '1024x1536': 0.08 },
-};
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -109,8 +98,6 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -148,8 +135,6 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -180,8 +165,6 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -208,8 +191,6 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -245,8 +226,6 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -270,8 +249,6 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -296,8 +273,6 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -320,8 +295,6 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -346,8 +319,6 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -375,8 +346,6 @@ describe('OpenAIImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -409,8 +378,6 @@ describe('OpenAIImageGenerator', () => {
         model: testModel,
         storage: mockStorage,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -434,8 +401,6 @@ describe('OpenAIImageGenerator', () => {
         model: testModel,
         storage: mockStorage,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import nock from 'nock';
 import { createUserServiceClient, providerToKeyField } from '../client.js';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
-import { createFakePricingContext, createFakeUsageSink } from '@intexuraos/llm-pricing';
+import { createFakeUsageSink } from '@intexuraos/llm-pricing';
 
 describe('providerToKeyField', () => {
   it('returns google for Google provider', () => {
@@ -34,12 +34,9 @@ describe('createUserServiceClient', () => {
     debug: vi.fn(),
   };
 
-  const mockPricingContext = createFakePricingContext();
-
   const config = {
     baseUrl: 'http://localhost:3000',
     internalAuthToken: 'test-token',
-    pricingContext: mockPricingContext,
     logger: mockLogger,
     usageSink: createFakeUsageSink(),
   };
@@ -716,6 +713,45 @@ describe('createUserServiceClient', () => {
       } else {
         expect.fail('Expected error result');
       }
+    });
+
+    it('returns client with zero pricing when pricingContext is omitted', async () => {
+      const mockSettings = {
+        llmPreferences: {
+          defaultModel: LlmModels.Gemini25Flash,
+        },
+      };
+
+      const mockKeys = {
+        google: 'google-key',
+      };
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: mockSettings });
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: mockKeys });
+
+      const noPricingConfig = {
+        baseUrl: 'http://localhost:3000',
+        internalAuthToken: 'test-token',
+        logger: mockLogger,
+        usageSink: createFakeUsageSink(),
+      };
+
+      const client = createUserServiceClient(noPricingConfig);
+      const result = await client.getLlmClient('user123');
+
+      // Zero pricing is the expected intermediate state during the INT-1377
+      // migration: consumers drop pricingContext now, server-side pricing lands later.
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error('unreachable');
+      expect(result.value).toBeDefined();
+      expect(typeof result.value.generate).toBe('function');
     });
   });
 

@@ -22,7 +22,6 @@ import {
   createFakeNotionExporter,
   createFailingNotionExporter,
 } from '../fakes.js';
-import { FakePricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
 import type { ResearchModel } from '@intexuraos/llm-contract';
 import type { ResearchExportSettingsError } from '../../infra/firestore/researchExportSettingsRepository.js';
@@ -43,7 +42,6 @@ describe('Research Export Routes - Unauthenticated', () => {
     const services: ServiceContainer = {
       researchRepo: new FakeResearchRepository(),
       researchExportSettings: new FakeResearchExportSettings(),
-      pricingContext: new FakePricingContext(),
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: new FakeResearchEventPublisher(),
       llmCallPublisher: new FakeLlmCallPublisher(),
@@ -181,7 +179,6 @@ describe('Research Export Routes - Authenticated', () => {
       const services: ServiceContainer = {
         researchRepo: new FakeResearchRepository(),
         researchExportSettings: fakeResearchExportSettings,
-        pricingContext: new FakePricingContext(),
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -276,7 +273,6 @@ describe('Research Export Routes - Authenticated', () => {
       const services: ServiceContainer = {
         researchRepo: new FakeResearchRepository(),
         researchExportSettings: new FailingFakeResearchExportSettings(),
-        pricingContext: new FakePricingContext(),
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -335,7 +331,6 @@ describe('Research Export Routes - Authenticated', () => {
       const services: ServiceContainer = {
         researchRepo: new FakeResearchRepository(),
         researchExportSettings: new FakeResearchExportSettings(),
-        pricingContext: new FakePricingContext(),
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -503,7 +498,6 @@ describe('Research Export Routes - Authenticated', () => {
       const services: ServiceContainer = {
         researchRepo: new FakeResearchRepository(),
         researchExportSettings: fakeResearchExportSettings,
-        pricingContext: new FakePricingContext(),
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -666,7 +660,6 @@ describe('Research Export Routes - Authenticated', () => {
       const services: ServiceContainer = {
         researchRepo: new FakeResearchRepository(),
         researchExportSettings: new FailingFakeResearchExportSettings(),
-        pricingContext: new FakePricingContext(),
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -735,7 +728,6 @@ describe('Research Export Routes - Authenticated', () => {
       const services: ServiceContainer = {
         researchRepo: fakeResearchRepo,
         researchExportSettings: fakeResearchExportSettings,
-        pricingContext: new FakePricingContext(),
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -1091,7 +1083,6 @@ describe('Research Export Routes - Authenticated', () => {
       const services: ServiceContainer = {
         researchRepo: fakeResearchRepo,
         researchExportSettings: fakeResearchExportSettings,
-        pricingContext: new FakePricingContext(),
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -1158,7 +1149,6 @@ describe('Research Export Routes - Authenticated', () => {
       const services: ServiceContainer = {
         researchRepo: fakeResearchRepo,
         researchExportSettings: fakeResearchExportSettings,
-        pricingContext: new FakePricingContext(),
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -1225,7 +1215,6 @@ describe('Research Export Routes - Authenticated', () => {
       const services: ServiceContainer = {
         researchRepo: fakeResearchRepo,
         researchExportSettings: fakeResearchExportSettings,
-        pricingContext: new FakePricingContext(),
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
@@ -1292,7 +1281,6 @@ describe('Research Export Routes - Authenticated', () => {
       const services: ServiceContainer = {
         researchRepo: fakeResearchRepo,
         researchExportSettings: fakeResearchExportSettings,
-        pricingContext: new FakePricingContext(),
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),

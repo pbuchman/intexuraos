@@ -1,11 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createAppLogger } from '@intexuraos/infra-sentry';
-import {
-  HttpInternalAuthUsageSink,
-  type IPricingContext,
-  type UsageSink,
-} from '@intexuraos/llm-pricing';
-import { LlmModels, LlmProviders, type Google, type LLMModel, type OpenAI } from '@intexuraos/llm-contract';
+import { HttpInternalAuthUsageSink, type UsageSink } from '@intexuraos/llm-pricing';
+import { LlmProviders, type Google, type OpenAI } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import type { ImageGenerationModel, PromptGenerator, ImageGenerator } from './domain/index.js';
 import { IMAGE_GENERATION_MODELS } from './domain/index.js';
@@ -16,7 +12,7 @@ import { createGcsImageStorage } from './infra/storage/index.js';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { setServices } from './serviceContainer.js';
 
-export function initializeServices(pricingContext: IPricingContext): void {
+export function initializeServices(): void {
   const bucketName = process.env['INTEXURAOS_IMAGE_BUCKET'] ?? '';
   const publicBaseUrl = process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'];
   const storage = createGcsImageStorage(bucketName, publicBaseUrl);
@@ -36,26 +32,15 @@ export function initializeServices(pricingContext: IPricingContext): void {
   const userServiceClient = createUserServiceClient({
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8110',
     internalAuthToken,
-    pricingContext,
     logger: createAppLogger({ name: 'user-service-client' }),
     usageSink: buildUsageSink('user-service-client'),
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 
-  // Get pricing for text prompt generation (GPT model pricing is fixed; Gemini prompt pricing is resolved per-model at call time)
-  const gptPricing = pricingContext.getPricing(LlmModels.GPT4oMini);
-
-  // Get pricing for image generation models (not for prompt generation — that's resolved per-model at call time)
-  const openaiImagePricing = pricingContext.getPricing(LlmModels.GPTImage1);
-  const googleImagePricing = pricingContext.getPricing(LlmModels.Gemini25FlashImage);
-  // Gemini Flash text-model pricing used by GoogleImageGenerator for token accounting during image generation
-  const geminiImageTokenPricing = pricingContext.getPricing(LlmModels.Gemini25Flash);
-
   const container = {
     generatedImageRepository: createGeneratedImageRepository(),
     imageStorage: storage,
     userServiceClient,
-    pricingContext,
     createPromptGenerator: (
       provider: Google | OpenAI,
       model: string,
@@ -64,14 +49,10 @@ export function initializeServices(pricingContext: IPricingContext): void {
       logger: Logger
     ): PromptGenerator => {
       if (provider === LlmProviders.Google) {
-        // model is always sourced from IMAGE_PROMPT_MODELS[x].modelId which contains
-        // only LlmModels.* constants, so the cast to LLMModel is safe by construction.
-        const pricing = pricingContext.getPricing(model as LLMModel);
         return createGeminiPromptAdapter({
           apiKey,
           model,
           userId,
-          pricing,
           logger,
           usageSink: buildUsageSink('gemini-prompt-adapter'),
         });
@@ -79,7 +60,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
       return createGptPromptAdapter({
         apiKey,
         userId,
-        pricing: gptPricing,
         logger,
         usageSink: buildUsageSink('gpt-prompt-adapter'),
       });
@@ -97,8 +77,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
           model,
           storage,
           userId,
-          pricing: gptPricing,
-          imagePricing: openaiImagePricing,
           logger,
           usageSink: buildUsageSink('openai-image-generator'),
         });
@@ -108,8 +86,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
         model,
         storage,
         userId,
-        pricing: geminiImageTokenPricing,
-        imagePricing: googleImagePricing,
         logger,
         usageSink: buildUsageSink('google-image-generator'),
       });

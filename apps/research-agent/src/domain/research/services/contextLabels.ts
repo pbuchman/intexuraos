@@ -5,7 +5,7 @@
 
 import { LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
-import type { ModelPricing, Gemini25Flash } from '@intexuraos/llm-contract';
+import type { Gemini25Flash } from '@intexuraos/llm-contract';
 import type { TitleGenerator } from '../ports/llmProvider.js';
 
 export interface ContextWithLabel {
@@ -22,11 +22,9 @@ export async function generateContextLabels(
     model: Gemini25Flash,
     apiKey: string,
     userId: string,
-    pricing: ModelPricing,
     logger: Logger,
     researchId: string | undefined
   ) => TitleGenerator,
-  pricing: ModelPricing,
   logger: Logger
 ): Promise<ContextWithLabel[]> {
   if (googleApiKey === undefined) {
@@ -37,7 +35,6 @@ export async function generateContextLabels(
     LlmModels.Gemini25Flash,
     googleApiKey,
     userId,
-    pricing,
     logger,
     researchId
   );

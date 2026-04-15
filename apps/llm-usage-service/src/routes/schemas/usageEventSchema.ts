@@ -4,8 +4,10 @@ import { LlmProviders } from '@intexuraos/llm-contract';
 const PROVIDER_VALUES = Object.values(LlmProviders);
 
 /**
- * Base usage event input JSON Schema. Mirrors the UsageEventInput TypeScript
+ * Usage event input JSON Schema. Mirrors the UsageEventInput TypeScript
  * type in apps/llm-usage-service/src/domain/models/usageEvent.ts exactly.
+ * The cost object only has providerReportedUsd and pricingSource;
+ * billedUsd and calculatedUsd are computed server-side.
  *
  * Used as the body.items schema for POST /internal/usage/events. The webhook
  * endpoint references the stricter OrchestratorUsageEventInput below.
@@ -30,7 +32,7 @@ export const usageEventInputSchema = {
     'error',
   ],
   properties: {
-    schemaVersion: { type: 'integer', enum: [1] },
+    schemaVersion: { type: 'integer', enum: [2] },
     eventId: { type: 'string', minLength: 1 },
     occurredAt: { type: 'string', format: 'date-time' },
     owner: {
@@ -118,14 +120,12 @@ export const usageEventInputSchema = {
     cost: {
       type: 'object',
       additionalProperties: false,
-      required: ['billedUsd', 'providerReportedUsd', 'calculatedUsd', 'pricingSource'],
+      required: ['providerReportedUsd', 'pricingSource'],
       properties: {
-        billedUsd: { type: 'number', minimum: 0 },
         providerReportedUsd: { type: ['number', 'null'] },
-        calculatedUsd: { type: ['number', 'null'] },
         pricingSource: {
           type: 'string',
-          enum: ['provider_reported', 'calculated', 'mixed', 'external'],
+          enum: ['provider_reported', 'pending'],
         },
       },
     },
@@ -138,8 +138,6 @@ export const usageEventInputSchema = {
         traceId: { type: ['string', 'null'] },
         taskId: { type: ['string', 'null'] },
         researchId: { type: ['string', 'null'] },
-        // Widened to number|null to match the TypeScript type; the schema does not
-        // enforce integer semantics because the TS interface declares plain `number | null`.
         attempt: { type: ['number', 'null'] },
         sessionId: { type: ['string', 'null'] },
       },
@@ -192,12 +190,12 @@ export const orchestratorUsageEventInputSchema = {
 } as const;
 
 /**
- * Registers both usage event schemas with the Fastify app's Ajv instance.
+ * Registers all usage event schemas with the Fastify app's Ajv instance.
  *
  * Must be called AFTER `registerCoreSchemas(app)` and BEFORE any route is
  * registered that references these schemas via `$ref`. Order within this
- * function matters: the base schema must be added before the orchestrator
- * schema resolves its `$ref`.
+ * function matters: the base schemas must be added before the orchestrator
+ * schemas resolve their `$ref`.
  */
 export function registerUsageSchemas(app: FastifyInstance): void {
   app.addSchema(usageEventInputSchema);

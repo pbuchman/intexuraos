@@ -10,7 +10,6 @@
  * GET /research/openrouter/models endpoint.
  */
 
-import type { ModelPricing } from '@intexuraos/llm-contract';
 import { toModelPricing } from './costCalculator.js';
 import type { OpenRouterModelInfo } from './types.js';
 
@@ -165,18 +164,6 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
  */
 export function isAllowedModel(modelId: string): boolean {
   return OPENROUTER_ALLOWED_MODELS.some((m) => m.id === modelId);
-}
-
-/**
- * Get fallback pricing for an allowlisted model.
- * Returns undefined if the model is not in the allowlist.
- */
-export function getAllowlistPricing(rawModelId: string): ModelPricing | undefined {
-  const model = OPENROUTER_ALLOWED_MODELS.find((m) => m.id === rawModelId);
-  if (!model) {
-    return undefined;
-  }
-  return toModelPricing(model.promptPerToken, model.completionPerToken);
 }
 
 /**

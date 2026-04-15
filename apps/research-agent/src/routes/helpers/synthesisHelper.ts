@@ -2,8 +2,8 @@
  * Synthesis helper functions for creating synthesis providers.
  */
 
-import { getProviderForModel, isOpenRouterModel, getOpenRouterRawId, LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
-import { getAllowlistPricing, isAllowedModel } from '@intexuraos/infra-openrouter';
+import { getProviderForModel, isOpenRouterModel, getOpenRouterRawId, LlmModels } from '@intexuraos/llm-contract';
+import { isAllowedModel } from '@intexuraos/infra-openrouter';
 import type { ResearchModel } from '../../domain/research/index.js';
 import type { ServiceContainer, DecryptedApiKeys } from '../../services.js';
 import type { Logger } from '@intexuraos/common-core';
@@ -23,7 +23,7 @@ export function createSynthesisProviders(
   services: ServiceContainer,
   logger: Logger
 ): SynthesisProviders {
-  const { createSynthesizer, createContextInferrer, pricingContext } = services;
+  const { createSynthesizer, createContextInferrer } = services;
 
   const synthesisProvider = getProviderForModel(synthesisModel);
   const synthesisKey = apiKeys[synthesisProvider];
@@ -35,17 +35,6 @@ export function createSynthesisProviders(
     );
   }
 
-  let synthesisPricing: ModelPricing;
-  if (isOpenRouterModel(synthesisModel)) {
-    const pricing = getAllowlistPricing(getOpenRouterRawId(synthesisModel));
-    if (pricing === undefined) {
-      throw new Error(`No pricing for allowlisted model: ${String(synthesisModel)}`);
-    }
-    synthesisPricing = pricing;
-  } else {
-    synthesisPricing = pricingContext.getPricing(synthesisModel as LLMModel);
-  }
-
   if (synthesisKey === undefined || synthesisKey === '') {
     throw new Error(`No API key configured for provider '${synthesisProvider}'`);
   }
@@ -54,7 +43,6 @@ export function createSynthesisProviders(
     synthesisModel,
     synthesisKey,
     userId,
-    synthesisPricing,
     logger,
     researchId
   );
@@ -66,7 +54,6 @@ export function createSynthesisProviders(
       LlmModels.Gemini25Flash,
       apiKeys.google,
       userId,
-      pricingContext.getPricing(LlmModels.Gemini25Flash),
       logger,
       researchId
     );

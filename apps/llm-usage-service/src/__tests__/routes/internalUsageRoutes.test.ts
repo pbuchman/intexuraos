@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import { LlmProviders } from '@intexuraos/llm-contract';
 import { buildServer } from '../../server.js';
 import { setServices, resetServices, type ServiceContainer } from '../../services.js';
 import { FakeUsageEventRepository } from '../fakeUsageEventRepository.js';
 import { FakeUsageAggregateRepository } from '../fakeUsageAggregateRepository.js';
 import { FakePricingRepository } from '../fakePricingRepository.js';
+import { FakePricingCache } from '../fakePricingCache.js';
 import { createTestEventInput } from '../helpers.js';
 
 describe('internalUsageRoutes', () => {
@@ -26,6 +28,7 @@ describe('internalUsageRoutes', () => {
       usageEventRepository: eventRepo,
       usageAggregateRepository: aggregateRepo,
       pricingRepository: new FakePricingRepository(),
+      pricingCache: new FakePricingCache(),
       orchestratorSecret: 'test-secret',
     } satisfies ServiceContainer);
   });
@@ -46,7 +49,7 @@ describe('internalUsageRoutes', () => {
         url: '/internal/usage/events',
         headers: { 'x-internal-auth': AUTH_TOKEN },
         payload: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           events: [createTestEventInput({ eventId: 'evt_test_1' })],
         },
       });
@@ -62,7 +65,7 @@ describe('internalUsageRoutes', () => {
         method: 'POST',
         url: '/internal/usage/events',
         payload: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           events: [],
         },
       });
@@ -76,12 +79,53 @@ describe('internalUsageRoutes', () => {
         url: '/internal/usage/events',
         headers: { 'x-internal-auth': AUTH_TOKEN },
         payload: {
-          schemaVersion: 2,
+          schemaVersion: 3,
           events: [],
         },
       });
 
       expect(response.statusCode).toBe(400);
+    });
+
+    it('accepts v2 events and stores enriched cost in Firestore', async () => {
+      const pricingCache = new FakePricingCache();
+      pricingCache.setPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', {
+        inputPricePerMillion: 3.0,
+        outputPricePerMillion: 15.0,
+      });
+      setServices({
+        usageEventRepository: eventRepo,
+        usageAggregateRepository: aggregateRepo,
+        pricingRepository: new FakePricingRepository(),
+        pricingCache,
+        orchestratorSecret: 'test-secret',
+      } satisfies ServiceContainer);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/events',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: {
+          schemaVersion: 2,
+          events: [createTestEventInput({ eventId: 'evt_v2_1' })],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { accepted: number } };
+      expect(body.success).toBe(true);
+      expect(body.data.accepted).toBe(1);
+
+      // Verify Firestore round-trip: stored event has enriched cost shape
+      const stored = eventRepo.getStoredEvents();
+      expect(stored).toHaveLength(1);
+      const event = stored[0];
+      expect(event).toBeDefined();
+      expect(event?.schemaVersion).toBe(1);
+      expect(event?.cost.pricingSource).toBe('calculated');
+      expect(event?.cost.calculatedUsd).toBeGreaterThan(0);
+      expect(event?.cost.billedUsd).toBe(event?.cost.calculatedUsd);
+      expect(event?.cost.providerReportedUsd).toBeNull();
     });
 
     it('rejects events missing source.environment', async () => {
@@ -92,7 +136,7 @@ describe('internalUsageRoutes', () => {
         url: '/internal/usage/events',
         headers: { 'x-internal-auth': AUTH_TOKEN },
         payload: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           events: [{ ...validEvent, source: sourceWithoutEnv }],
         },
       });
@@ -122,7 +166,7 @@ describe('internalUsageRoutes', () => {
         url: '/internal/usage/events',
         headers: { 'x-internal-auth': AUTH_TOKEN },
         payload: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           events: [{
             ...validEvent,
             source: { ...validEvent.source, environment: 'staging' },
@@ -147,7 +191,7 @@ describe('internalUsageRoutes', () => {
         url: '/internal/usage/events',
         headers: { 'x-internal-auth': AUTH_TOKEN },
         payload: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           events: [{ ...validEvent, bogus: 1 }],
         },
       });
@@ -175,7 +219,7 @@ describe('internalUsageRoutes', () => {
         url: '/internal/usage/events',
         headers: { 'x-internal-auth': AUTH_TOKEN },
         payload: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           events: [validEvent1, malformedEvent, validEvent3],
         },
       });

@@ -3,7 +3,6 @@ import {
   OPENROUTER_ALLOWED_MODELS,
   OPENROUTER_VALIDATION_MODEL,
   isAllowedModel,
-  getAllowlistPricing,
   allowlistModelIds,
   buildModelInfo,
   type CatalogEntry,
@@ -80,42 +79,9 @@ describe('allowlist', () => {
     });
   });
 
-  describe('getAllowlistPricing', () => {
-    it('returns pricing for known model', () => {
-      const pricing = getAllowlistPricing('anthropic/claude-sonnet-4.6');
-      expect(pricing).not.toBeUndefined();
-      if (pricing === undefined) return;
-      expect(pricing.useProviderCost).toBe(true);
-      // Claude Sonnet 4.6: $3.0/million prompt, $15.0/million completion
-      expect(pricing.inputPricePerMillion).toBeCloseTo(3.0, 2);
-      expect(pricing.outputPricePerMillion).toBeCloseTo(15.0, 2);
-    });
-
-    it('returns undefined for unknown model', () => {
-      const pricing = getAllowlistPricing('unknown/model');
-      expect(pricing).toBeUndefined();
-    });
-
-    it('returns valid pricing for all allowlisted models', () => {
-      for (const model of OPENROUTER_ALLOWED_MODELS) {
-        const pricing = getAllowlistPricing(model.id);
-        expect(pricing).not.toBeUndefined();
-        if (pricing === undefined) return;
-        expect(pricing.inputPricePerMillion).toBeGreaterThan(0);
-        expect(pricing.outputPricePerMillion).toBeGreaterThan(0);
-        expect(pricing.useProviderCost).toBe(true);
-      }
-    });
-  });
-
   describe('OPENROUTER_VALIDATION_MODEL', () => {
     it('is in the allowlist', () => {
       expect(isAllowedModel(OPENROUTER_VALIDATION_MODEL)).toBe(true);
-    });
-
-    it('has defined pricing', () => {
-      const pricing = getAllowlistPricing(OPENROUTER_VALIDATION_MODEL);
-      expect(pricing).not.toBeUndefined();
     });
   });
 

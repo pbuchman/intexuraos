@@ -8,7 +8,6 @@ import type { Logger } from 'pino';
 import type { Firestore } from '@google-cloud/firestore';
 import { ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
-import { TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
 import { createToolCallingClient } from '@intexuraos/llm-factory';
@@ -93,7 +92,6 @@ import { createTaskGroupSummaryFirestoreRepository } from './infra/firestore/tas
 import { withGroupUpdates } from './infra/repositories/codeTaskRepositoryWithGroupUpdates.js';
 
 const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
-const GEMINI_TOOL_CALLING_PRICING = TOOL_CALLING_PRICING[LlmModels.Gemini25Flash];
 export interface ServiceContainer {
   firestore: Firestore;
   logger: Logger;
@@ -360,13 +358,6 @@ export function initServices(config: ServiceConfig): void {
     internalAuthToken: config.internalAuthToken,
     logger,
     usageSink: buildUsageSink('user-service-client'),
-    pricingContext: {
-      getPricing() { throw new Error('code-agent does not use LLM pricing'); },
-      hasPricing() { return false; },
-      validateModels() { throw new Error('code-agent does not use LLM pricing'); },
-      validateAllModels() { throw new Error('code-agent does not use LLM pricing'); },
-      getModelsWithPricing() { return []; },
-    },
   });
 
   const usageServiceClient = config.llmUsageServiceUrl !== ''
@@ -435,7 +426,6 @@ export function initServices(config: ServiceConfig): void {
         apiKey: config.geminiAppApiKey,
         model: GEMINI_TOOL_CALLING_MODEL,
         userId: 'system:github-agent',
-        pricing: GEMINI_TOOL_CALLING_PRICING,
         logger,
         usageSink: buildUsageSink('github-agent'),
       })
