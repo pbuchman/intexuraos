@@ -3,7 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
@@ -23,11 +23,6 @@ const { GeminiAdapter } = await import('../../../infra/llm/GeminiAdapter.js');
 
 const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
 
-const testPricing: ModelPricing = {
-  inputPricePerMillion: 1.25,
-  outputPricePerMillion: 10.0,
-};
-
 const mockLogger: Logger = {
   info: vi.fn(),
   error: vi.fn(),
@@ -46,7 +41,6 @@ describe('GeminiAdapter', () => {
       'test-key',
       LlmModels.Gemini25Pro,
       'test-user-id',
-      testPricing,
       mockLogger,
       fakeUsageSink
     );
@@ -59,7 +53,6 @@ describe('GeminiAdapter', () => {
         'test-key',
         LlmModels.Gemini25Pro,
         'test-user-id',
-        testPricing,
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -70,7 +63,6 @@ describe('GeminiAdapter', () => {
         model: LlmModels.Gemini25Pro,
         userId: 'test-user-id',
         researchId: 'research-123',
-        pricing: testPricing,
         logger: mockLogger,
         usageSink: fakeUsageSink,
       });
@@ -81,7 +73,6 @@ describe('GeminiAdapter', () => {
         'test-key',
         LlmModels.Gemini25Pro,
         'test-user-id',
-        testPricing,
         mockLogger,
         fakeUsageSink
       );
@@ -218,7 +209,6 @@ describe('GeminiAdapter', () => {
         'test-key',
         LlmModels.Gemini25Pro,
         'test-user-id',
-        testPricing,
         mockLogger,
         fakeUsageSink
       );

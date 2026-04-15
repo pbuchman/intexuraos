@@ -8,7 +8,6 @@ import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { createSynthesisProviders } from '../../../routes/helpers/synthesisHelper.js';
 import type { DecryptedApiKeys, ServiceContainer } from '../../../services.js';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
-import * as openrouterModule from '@intexuraos/infra-openrouter';
 import type { ResearchModel } from '../../../domain/research/index.js';
 
 const mockLogger = {
@@ -35,9 +34,6 @@ describe('createSynthesisProviders', () => {
   const mockServices: ServiceContainer = {
     createSynthesizer: mockCreateSynthesizer,
     createContextInferrer: mockCreateContextInferrer,
-    pricingContext: {
-      getPricing: () => ({ inputCostPerMillionTokens: 0.1, outputCostPerMillionTokens: 0.2 }),
-    },
   } as unknown as ServiceContainer;
 
   beforeEach(() => {
@@ -63,7 +59,6 @@ describe('createSynthesisProviders', () => {
       'or:anthropic/claude-sonnet-4.6',
       'test-or-key',
       'user-123',
-      expect.any(Object),
       mockLogger,
       'research-123'
     );
@@ -71,7 +66,6 @@ describe('createSynthesisProviders', () => {
       LlmModels.Gemini25Flash,
       'test-google-key',
       'user-123',
-      expect.any(Object),
       mockLogger,
       'research-123'
     );
@@ -169,7 +163,7 @@ describe('createSynthesisProviders', () => {
     ).toThrow("OpenRouter model 'or:unknown-provider/not-in-allowlist' is not in the curated allowlist");
   });
 
-  it('uses allowlist pricing for valid OpenRouter models', () => {
+  it('succeeds for valid allowlisted OpenRouter models', () => {
     const apiKeys: DecryptedApiKeys = {
       openrouter: 'test-or-key',
     };
@@ -189,29 +183,4 @@ describe('createSynthesisProviders', () => {
     expect(result.synthesizer).toBeDefined();
   });
 
-  it('throws when getAllowlistPricing returns undefined for an allowed model', () => {
-    const apiKeys: DecryptedApiKeys = {
-      openrouter: 'test-or-key',
-    };
-
-    const validOrModel = 'or:anthropic/claude-sonnet-4.6' as ResearchModel;
-
-    // Temporarily make getAllowlistPricing return undefined while isAllowedModel still returns true
-    const spy = vi.spyOn(openrouterModule, 'getAllowlistPricing').mockReturnValue(undefined);
-
-    try {
-      expect(() =>
-        createSynthesisProviders(
-          validOrModel,
-          apiKeys,
-          'user-123',
-          undefined,
-          mockServices,
-          mockLogger as never
-        )
-      ).toThrow('No pricing for allowlisted model: or:anthropic/claude-sonnet-4.6');
-    } finally {
-      spy.mockRestore();
-    }
-  });
 });
