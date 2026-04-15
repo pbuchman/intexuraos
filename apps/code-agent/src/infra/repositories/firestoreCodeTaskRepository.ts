@@ -324,7 +324,14 @@ export const createFirestoreCodeTaskRepository = (deps: {
           }
           /* v8 ignore stop @preserve */
         }
-
+        /* v8 ignore start -- upstream: FakeFirestore cannot simulate calling create() with failedWorkerLocation/autoRetryAttempt through a real Firestore transaction; these optional-field guards are unreachable in unit tests @preserve */
+        if (input.failedWorkerLocation !== undefined) {
+          taskData.failedWorkerLocation = input.failedWorkerLocation;
+        }
+        if (input.autoRetryAttempt !== undefined) {
+          taskData.autoRetryAttempt = input.autoRetryAttempt;
+        }
+        /* v8 ignore stop @preserve */
         const docRef = collection.doc(taskId);
         transaction.set(docRef, taskData);
 

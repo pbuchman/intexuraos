@@ -87,6 +87,12 @@ vi.mock('../../domain/usecases/drainTaskQueue.js', () => ({
 }));
 import * as drainTaskQueueModule from '../../domain/usecases/drainTaskQueue.js';
 
+// Mock triageFailedTask so webhook tests can control triage outcomes (INT-1375)
+vi.mock('../../domain/usecases/triageFailedTask.js', () => ({
+  triageFailedTask: vi.fn().mockResolvedValue({ action: 'permanent_failure', reason: 'default mock' }),
+}));
+import * as triageFailedTaskModule from '../../domain/usecases/triageFailedTask.js';
+
 /**
  * In-memory fake for GitHubPRSummaryRepository with declarative seeding.
  */
@@ -11165,5 +11171,441 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
     expect(response.statusCode).toBe(200);
     storeSpy.mockRestore();
     lineSpy.mockRestore();
+  });
+});
+
+describe('POST /internal/webhooks/task-complete - failure triage (INT-1375)', () => {
+  let app: Awaited<ReturnType<typeof buildServer>>;
+  let fakeFirestore: ReturnType<typeof createFakeFirestore>;
+  let logger: Logger;
+  let codeTaskRepo: CodeTaskRepository;
+  let mockWhatsAppPublisher: { publishSendMessage: ReturnType<typeof vi.fn> };
+
+  beforeEach(async () => {
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+
+    mockedJwtVerify.mockResolvedValue({
+      payload: { sub: 'test-user-id', email: 'test@example.com' },
+      protectedHeader: new Uint8Array(),
+    } as never);
+
+    fakeFirestore = createFakeFirestore();
+    setFirestore(fakeFirestore as unknown as Firestore);
+    logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
+
+    codeTaskRepo = createFirestoreCodeTaskRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    const logChunkRepo = createFirestoreLogChunkRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    const logLineRepo = createFirestoreLogLineRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    const taskDispatcher = createTaskDispatcherService({ logger, workerHealthProbe: mockWorkerHealthProbe });
+    const workerSettingsRepo = createWorkerSettingsRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+    mockWhatsAppPublisher = {
+      publishSendMessage: vi.fn().mockResolvedValue(ok(undefined)),
+    };
+    const whatsappNotifier = createWhatsAppNotifier({
+      whatsappPublisher: mockWhatsAppPublisher as unknown as WhatsAppSendPublisher,
+    });
+
+    const actionsAgentClient = createActionsAgentClient({
+      baseUrl: 'http://actions-agent',
+      internalAuthToken: 'test-token',
+      logger,
+    });
+
+    const linearAgentClient = createLinearAgentHttpClient({
+      baseUrl: 'http://linear-agent:8086',
+      internalAuthToken: 'test-token',
+      timeoutMs: 10000,
+    }, logger);
+
+    const linearIssueService = createLinearIssueService({
+      linearAgentClient,
+      logger,
+    });
+
+    const mockFetchWithAuth = fetchWithAuth as ReturnType<typeof vi.fn>;
+    mockFetchWithAuth.mockResolvedValue(ok(undefined));
+
+    setServices({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+      codeTaskRepo,
+      logChunkRepo,
+      logLineRepo,
+      taskDispatcher,
+      workerSettingsRepo,
+      whatsappNotifier,
+      actionsAgentClient,
+      linearAgentClient,
+      linearIssueService,
+      metricsClient: createNoOpMetricsClient(),
+      statusMirrorService: createStatusMirrorService({
+        actionsAgentClient,
+        logger,
+      }),
+      processHeartbeat: createProcessHeartbeatUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      detectZombieTasks: createDetectZombieTasksUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      cleanupTaskLogs: createCleanupTaskLogsUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      workerHealthProbe: mockWorkerHealthProbe,
+      gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
+        logger,
+      }),
+      gitHubPRSummaryRepo: {} as never,
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
+      userServiceClient: mockUserServiceClient,
+      gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
+      toolCallingClient: undefined,
+      eventDecisionRepo: {} as never,
+      dispatchRetryRepo: {} as never,
+      unifiedEvaluator: {} as never,
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+      taskEnqueueService: {} as never,
+      mergeConflictDetector: {
+        detectOnPush: vi.fn().mockResolvedValue(undefined),
+        reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
+      },
+      mergeQueueWatchRepo: {
+        create: vi.fn(),
+        findById: vi.fn(),
+        findActiveByUserAndBranch: vi.fn(),
+        findAllActive: vi.fn(),
+        findByUserAndRepo: vi.fn(),
+        update: vi.fn(),
+        appendMergedPr: vi.fn(),
+      },
+    } as {
+      firestore: Firestore;
+      logger: Logger;
+      codeTaskRepo: CodeTaskRepository;
+      logChunkRepo: LogChunkRepository;
+      logLineRepo: LogLineRepository;
+      taskDispatcher: TaskDispatcherService;
+      workerSettingsRepo: WorkerSettingsRepository;
+      actionsAgentClient: ActionsAgentClient;
+      linearAgentClient: LinearAgentClient;
+      whatsappNotifier: WhatsAppNotifier;
+      linearIssueService: LinearIssueService;
+      statusMirrorService: StatusMirrorService;
+      metricsClient: MetricsClient;
+      processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
+      detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
+      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
+      autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
+      workerHealthProbe: WorkerHealthProbe;
+      gitHubPREventRepo: import('../../domain/repositories/gitHubPREventRepository.js').GitHubPREventRepository;
+      gitHubPRSummaryRepo: import('../../domain/repositories/gitHubPRSummaryRepository.js').GitHubPRSummaryRepository;
+      turnMetricsRepo: import('../../domain/repositories/turnMetricsRepository.js').TurnMetricsRepository;
+      userServiceClient: import('@intexuraos/internal-clients').UserServiceClient;
+      gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
+      webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
+      dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
+      toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+      eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
+      dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
+      unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
+      automationLog: import('../../domain/ports/automationLog.js').AutomationLog;
+      taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
+      mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
+      mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
+    });
+
+    app = await buildServer();
+  });
+
+  afterEach(() => {
+    resetServices();
+    resetFirestore();
+    vi.clearAllMocks();
+  });
+
+  function generateWebhookSignature(body: object, secret: string): { timestamp: string; signature: string } {
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const rawBody = JSON.stringify(body);
+    const message = `${timestamp}.${rawBody}`;
+    const signature = crypto.createHmac('sha256', secret).update(message).digest('hex');
+    return { timestamp, signature };
+  }
+
+  it('auto-retries SETUP_FAILED instead of marking permanent failure', async () => {
+    const mockTriage = vi.mocked(triageFailedTaskModule.triageFailedTask);
+    mockTriage.mockResolvedValueOnce({
+      action: 'retried' as const,
+      retryTaskId: 'task_retry-1',
+      reason: 'SETUP_FAILED',
+    });
+
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_triage_retry',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'failed' as const,
+      duration: 12.5,
+      error: { code: 'SETUP_FAILED', message: 'Worker setup failed' },
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockTriage).toHaveBeenCalledOnce();
+    // WhatsApp failure notification should NOT be sent for auto-retried tasks
+    expect(mockWhatsAppPublisher.publishSendMessage).not.toHaveBeenCalled();
+  });
+
+  it('auto-retries without duration in payload', async () => {
+    const mockTriage = vi.mocked(triageFailedTaskModule.triageFailedTask);
+    mockTriage.mockResolvedValueOnce({
+      action: 'retried' as const,
+      retryTaskId: 'task_retry-2',
+      reason: 'network_error',
+    });
+
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_triage_retry_no_duration',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'failed' as const,
+      error: { code: 'network_error', message: 'Connection refused' },
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockTriage).toHaveBeenCalledOnce();
+  });
+
+  it('skips immediate drain for retried_after_cooloff to allow scheduler-driven cooloff', async () => {
+    const mockTriage = vi.mocked(triageFailedTaskModule.triageFailedTask);
+    mockTriage.mockResolvedValueOnce({
+      action: 'retried_after_cooloff' as const,
+      retryTaskId: 'task_cooloff-1',
+      reason: 'RATE_LIMITED_429',
+    });
+    const mockDrain = vi.mocked(drainTaskQueueModule.drainTaskQueue);
+    mockDrain.mockClear();
+
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_triage_cooloff',
+      webhookSecret: 'test-webhook-secret',
+      prNumber: 42,
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'failed' as const,
+      error: { code: 'RATE_LIMITED_429', message: 'Rate limited by provider' },
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockTriage).toHaveBeenCalledOnce();
+    // Drain should NOT be called for retried_after_cooloff — rely on scheduler tick
+    expect(mockDrain).not.toHaveBeenCalled();
+  });
+
+  it('falls through to permanent failure for unrecognized errors', async () => {
+    const mockTriage = vi.mocked(triageFailedTaskModule.triageFailedTask);
+    mockTriage.mockResolvedValueOnce({
+      action: 'permanent_failure' as const,
+      reason: 'unrecognized',
+    });
+
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_triage_permanent',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'failed' as const,
+      error: { code: 'UNKNOWN_ERROR', message: 'Something went wrong' },
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockTriage).toHaveBeenCalledOnce();
+
+    // Verify task is in failed status
+    const getResult = await codeTaskRepo.findById(task.id);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) throw new Error('Failed to get task');
+    expect(getResult.value.status).toBe('failed');
+
+    // WhatsApp failure notification SHOULD be sent for permanent failures
+    expect(mockWhatsAppPublisher.publishSendMessage).toHaveBeenCalled();
+  });
+
+  it('skips triage for PLANNING_AGENT_UNCLEAR', async () => {
+    const mockTriage = vi.mocked(triageFailedTaskModule.triageFailedTask);
+    mockTriage.mockClear();
+
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_triage_unclear',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'failed' as const,
+      result: { planning_outcome_label: 'unclear' as const },
+      error: { code: 'PLANNING_AGENT_UNCLEAR', message: 'Unclear requirements' },
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    // triageFailedTask should NOT be called for PLANNING_AGENT_UNCLEAR
+    expect(mockTriage).not.toHaveBeenCalled();
   });
 });

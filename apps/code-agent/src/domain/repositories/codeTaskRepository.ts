@@ -49,6 +49,10 @@ export interface CreateTaskInput {
   reviewTypes?: string[];
   executionMemoryContext?: CodeTask['executionMemoryContext'];
   executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
+
+  // Auto-retry metadata (INT-1375)
+  failedWorkerLocation?: string;
+  autoRetryAttempt?: number;
 }
 
 export interface UpdateTaskInput {
