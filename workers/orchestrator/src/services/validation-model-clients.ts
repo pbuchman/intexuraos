@@ -1,8 +1,14 @@
 import type { Logger } from '@intexuraos/common-core';
 import type { LLMModel, ModelPricing } from '@intexuraos/llm-contract';
 import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
-import { getDefaultAllowlistPricing } from '@intexuraos/infra-openrouter';
 import { HttpWebhookUsageSink } from '@intexuraos/llm-pricing';
+
+/**
+ * Temporary zero-cost pricing placeholder.
+ * Once llm-usage-service computes costs server-side (INT-1377, Child Issue 2),
+ * `pricing` will become optional in `LlmClientConfig` and this constant can be removed.
+ */
+const ZERO_PRICING: ModelPricing = { inputPricePerMillion: 0, outputPricePerMillion: 0 };
 
 export interface ParsedValidationModel {
   provider: 'openrouter' | 'gemini';
@@ -11,21 +17,6 @@ export interface ParsedValidationModel {
   /** Raw model ID without or: prefix */
   rawId: string;
 }
-
-/**
- * Static pricing for Gemini models used in validation.
- * Matches the previously-hardcoded VERIFIER_PRICING for Gemini 2.5 Flash.
- */
-export const GEMINI_VALIDATION_PRICING: ModelPricing = {
-  inputPricePerMillion: 0.3,
-  outputPricePerMillion: 2.5,
-  groundingCostPerRequest: 0,
-};
-
-const ZERO_PRICING: ModelPricing = {
-  inputPricePerMillion: 0,
-  outputPricePerMillion: 0,
-};
 
 /**
  * Parse the comma-separated INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS env var
@@ -103,15 +94,13 @@ export function buildValidationClients(
         );
       }
 
-      const pricing = getDefaultAllowlistPricing(model.rawId) ?? ZERO_PRICING;
-
       return {
         modelName: model.modelId,
         client: createLlmClient({
           apiKey: config.openRouterApiKey,
           model: model.modelId as LLMModel,
           userId: 'orchestrator-validation',
-          pricing,
+          pricing: ZERO_PRICING,
           logger: config.logger,
           usageSink: new HttpWebhookUsageSink({
             webhookUrl: config.usageWebhookUrl,
@@ -139,7 +128,7 @@ export function buildValidationClients(
         apiKey: config.geminiApiKey,
         model: model.modelId as LLMModel,
         userId: 'orchestrator-validation',
-        pricing: GEMINI_VALIDATION_PRICING,
+        pricing: ZERO_PRICING,
         logger: config.logger,
         usageSink: new HttpWebhookUsageSink({
           webhookUrl: config.usageWebhookUrl,
