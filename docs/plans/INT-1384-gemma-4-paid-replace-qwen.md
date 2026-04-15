@@ -12,18 +12,51 @@
 
 ## File Map
 
-| File                                                        | Action   | Responsibility                                                                                                             |
-| ----------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `packages/common-core/src/codeTaskWorkerTypes.ts`           | Modify   | Replace `'qwen'` with `'gemma-4'` in worker types array                                                                    |
-| `packages/llm-contract/src/supportedModels.ts`              | Modify   | Replace Qwen entry with paid Gemma 4 in `DEFAULT_OPENROUTER_MODELS`                                                        |
-| `packages/infra-openrouter/src/defaultAllowlist.ts`         | Modify   | Replace Qwen entry with paid Gemma 4 in `DEFAULT_OPENROUTER_ALLOWED_MODELS`                                                |
-| `packages/infra-openrouter/src/allowlist.ts`                | Modify   | Replace 2 Qwen entries with 1 Gemma 4 paid entry; update `OPENROUTER_VALIDATION_MODEL`; update count comment from 14 to 13 |
-| `workers/orchestrator/src/services/isolation/types.ts`      | Modify   | Replace `qwen` worker config with `gemma-4` using OpenRouter API                                                           |
-| `apps/web/src/components/workers/shared.tsx`                | Modify   | Replace `qwen` metadata with `'gemma-4'`; update `openrouter-free` description                                             |
-| `apps/web/src/components/code-tasks/shared.tsx`             | Modify   | Replace `qwen: 'Qwen'` with `'gemma-4': 'Gemma 4'`                                                                         |
-| `apps/web/src/utils/openRouterModelNames.ts`                | Modify   | Remove Qwen display name entries (Gemma 4 entry already exists)                                                            |
-| `apps/web/src/utils/__tests__/openRouterModelNames.test.ts` | Modify   | Remove Qwen test cases, add paid Gemma 4 test                                                                              |
-| `apps/web/src/__tests__/CodeTaskNewPage.test.tsx`           | Modify   | Update worker type button reference from `'Qwen'` to `'Gemma 4'`                                                           |
+| File                                                                            | Action   | Responsibility                                                                                                             |
+| ------------------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `packages/common-core/src/codeTaskWorkerTypes.ts`                               | Modify   | Replace `'qwen'` with `'gemma-4'` in worker types array                                                                    |
+| `packages/llm-contract/src/supportedModels.ts`                                  | Modify   | Replace Qwen entry with paid Gemma 4 in `DEFAULT_OPENROUTER_MODELS`                                                        |
+| `packages/infra-openrouter/src/defaultAllowlist.ts`                             | Modify   | Replace Qwen entry with paid Gemma 4 in `DEFAULT_OPENROUTER_ALLOWED_MODELS`                                                |
+| `packages/infra-openrouter/src/allowlist.ts`                                    | Modify   | Replace 2 Qwen entries with 1 Gemma 4 paid entry; update `OPENROUTER_VALIDATION_MODEL`; update count comment from 14 to 13 |
+| `workers/orchestrator/src/services/isolation/types.ts`                          | Modify   | Replace `qwen` worker config with `gemma-4` using OpenRouter API                                                           |
+| `apps/web/src/components/workers/shared.tsx`                                    | Modify   | Replace `qwen` metadata with `'gemma-4'`; update `openrouter-free` description                                             |
+| `apps/web/src/components/code-tasks/shared.tsx`                                 | Modify   | Replace `qwen: 'Qwen'` with `'gemma-4': 'Gemma 4'`                                                                         |
+| `apps/web/src/utils/openRouterModelNames.ts`                                    | Modify   | Remove Qwen display name entries (Gemma 4 entry already exists)                                                            |
+| `apps/web/src/utils/__tests__/openRouterModelNames.test.ts`                     | Modify   | Remove Qwen test cases, add paid Gemma 4 test                                                                              |
+| `apps/web/src/__tests__/CodeTaskNewPage.test.tsx`                               | Modify   | Update worker type button reference from `'Qwen'` to `'Gemma 4'`                                                           |
+| `apps/code-agent/src/domain/utils/reviewTriage.ts`                              | Modify   | Replace `qwen` with `gemma-4` in worker-type mapping                                                                       |
+| `apps/code-agent/src/domain/utils/dispatchWorkerTriage.ts`                      | Modify   | Replace `qwen` with `gemma-4` in worker-type mapping                                                                       |
+| `apps/code-agent/src/domain/prompts/issueCommentTriagePrompt.ts`                | Modify   | Replace all `qwen`/`Qwen` references with `gemma-4`/`Gemma 4` in prompt text                                               |
+| `apps/actions-agent/src/domain/utils/workerTypeDetection.ts`                    | Modify   | Replace `qwen` with `gemma-4` in worker-type detection logic                                                               |
+| `apps/code-agent/src/__tests__/helpers/mockServices.ts`                         | Modify   | Replace any `qwen` references with `gemma-4` in test helpers                                                               |
+| `workers/orchestrator/src/start.ts`                                             | Modify   | Update startup validation: replace `qwen` DashScope probe with `gemma-4` (or remove since gemma-4 uses OpenRouter)         |
+| `packages/common-core/src/__tests__/codeTaskWorkerTypes.test.ts`                | Modify   | Update `qwen` → `gemma-4` in worker type assertions                                                                        |
+| `workers/orchestrator/src/services/isolation/__tests__/types.test.ts`           | Modify   | Update `qwen` → `gemma-4` in orchestrator isolation type tests                                                             |
+| `packages/llm-contract/src/__tests__/supportedModels.test.ts`                   | Modify   | Update Qwen model assertions to paid Gemma 4                                                                               |
+| `packages/infra-openrouter/src/__tests__/defaultAllowlist.test.ts`              | Modify   | Update Qwen assertions to paid Gemma 4                                                                                     |
+| `packages/infra-openrouter/src/__tests__/allowlist.test.ts`                     | Modify   | Replace Qwen entries with Gemma 4 paid in allowlist test assertions                                                        |
+| `apps/code-agent/src/__tests__/domain/utils/reviewTriage.test.ts`               | Modify   | Update `qwen` → `gemma-4` in review triage tests                                                                           |
+| `apps/code-agent/src/__tests__/domain/utils/dispatchWorkerTriage.test.ts`       | Modify   | Update `qwen` → `gemma-4` in dispatch worker triage tests                                                                  |
+| `apps/code-agent/src/__tests__/domain/prompts/issueCommentTriagePrompt.test.ts` | Modify   | Update `qwen`/`Qwen` → `gemma-4`/`Gemma 4` in prompt tests                                                                 |
+| `apps/code-agent/src/__tests__/routes/codeSubmit.test.ts`                       | Modify   | Update `qwen` → `gemma-4` in code submit route tests                                                                       |
+| `apps/code-agent/src/__tests__/usecases/createReviewTask.test.ts`               | Modify   | Update `qwen` → `gemma-4` in review task tests                                                                             |
+| `apps/code-agent/src/__tests__/usecases/githubAgent.test.ts`                    | Modify   | Update `qwen` → `gemma-4` in GitHub agent tests                                                                            |
+| `apps/code-agent/src/__tests__/routes/webhooks/automationLogFlows.test.ts`      | Modify   | Update `qwen` → `gemma-4` in webhook automation log tests                                                                  |
+| `apps/code-agent/src/__tests__/routes/internalDispatchMetadata.test.ts`         | Modify   | Update `qwen` → `gemma-4` in internal dispatch metadata tests                                                              |
+| `apps/code-agent/src/__tests__/routes/code/github-event-log.test.ts`            | Modify   | Update `qwen` → `gemma-4` in GitHub event log tests                                                                        |
+| `apps/code-agent/src/__tests__/domain/useCases/createTaskForPR.test.ts`         | Modify   | Update `qwen` → `gemma-4` in PR task creation tests                                                                        |
+| `apps/code-agent/src/__tests__/domain/models/codeTask.test.ts`                  | Modify   | Update `qwen` → `gemma-4` in code task model tests                                                                         |
+| `apps/code-agent/src/__tests__/domain/services/unifiedEvaluator.test.ts`        | Modify   | Update `qwen` → `gemma-4` in evaluator tests                                                                               |
+| `apps/code-agent/src/__tests__/domain/services/gitHubDispatchService.test.ts`   | Modify   | Update `qwen` → `gemma-4` in dispatch service tests                                                                        |
+| `apps/code-agent/src/__tests__/infra/firestore/eventDecisionRepository.test.ts` | Modify   | Update `qwen` → `gemma-4` in event decision repo tests                                                                     |
+| `apps/code-agent/src/__tests__/domain/utils/labelUtils.test.ts`                 | Modify   | Update `qwen` → `gemma-4` in label utils tests                                                                             |
+| `apps/code-agent/src/__tests__/routes/webhooks.test.ts`                         | Modify   | Update `qwen` → `gemma-4` in webhook route tests                                                                           |
+| `apps/actions-agent/src/__tests__/infra/http/codeAgentHttpClient.test.ts`       | Modify   | Update `qwen` → `gemma-4` in code agent HTTP client tests                                                                  |
+| `apps/actions-agent/src/domain/utils/workerTypeDetection.test.ts`               | Modify   | Update `qwen` → `gemma-4` in worker type detection tests                                                                   |
+| `apps/research-agent/src/__tests__/routes.test.ts`                              | Modify   | Update `qwen` → `gemma-4` in research agent route tests                                                                    |
+| `apps/user-service/src/__tests__/infra/llmValidator.test.ts`                    | Modify   | Update `qwen` → `gemma-4` in LLM validator tests                                                                           |
+| `apps/web/src/components/__tests__/GitHubEventLogTableRow.test.tsx`             | Modify   | Update `qwen` → `gemma-4` in event log table row tests                                                                     |
+| `apps/web/src/hooks/__tests__/useGitHubEventLog.test.ts`                        | Modify   | Update `qwen` → `gemma-4` in GitHub event log hook tests                                                                   |
 
 ## Key Facts
 
@@ -237,10 +270,11 @@ git commit -m "feat: replace qwen entries with gemma-4 paid in curated allowlist
 
 ---
 
-### Task 5: Update Orchestrator Worker Type Config
+### Task 5: Update Orchestrator Worker Type Config and Startup Validation
 
 **Files:**
 - Modify: `workers/orchestrator/src/services/isolation/types.ts`
+- Modify: `workers/orchestrator/src/start.ts`
 
 - [ ] **Step 1: Replace `qwen` worker config with `gemma-4`**
 
@@ -270,25 +304,52 @@ Key differences from the old `qwen` config:
 - Includes `effort: 'high'` (matches the existing `openrouter-free` pattern)
 - Model ID uses OpenRouter format (`google/gemma-4-31b-it`)
 
-- [ ] **Step 2: Verify `OPENROUTER_API_KEY` is already in `WorkerSecrets`**
+- [ ] **Step 2: Update startup validation in `workers/orchestrator/src/start.ts`**
+
+In `workers/orchestrator/src/start.ts`, around lines 352-363:
+
+```typescript
+// Before:
+  // GLM, Qwen, and Kimi all use the same DashScope API key — validate once via qwen.
+  await Promise.all([
+    ...
+    dashscopeKey !== ''
+      ? validateThirdPartyApiKey('qwen', dashscopeKey, suffix, logger)
+      : Promise.resolve(),
+    ...
+  ]);
+// After:
+  // GLM and Kimi use the same DashScope API key — validate once via glm.
+  await Promise.all([
+    ...
+    dashscopeKey !== ''
+      ? validateThirdPartyApiKey('glm', dashscopeKey, suffix, logger)
+      : Promise.resolve(),
+    ...
+  ]);
+```
+
+The `qwen` worker no longer exists, so the DashScope validation probe must use `glm` (or `kimi`) instead. The comment must also be updated to remove the Qwen reference.
+
+- [ ] **Step 3: Verify `OPENROUTER_API_KEY` is already in `WorkerSecrets`**
 
 Check that `WorkerSecrets` interface (line ~110) already includes `OPENROUTER_API_KEY`. It does — no change needed. `DASHSCOPE_API_KEY` stays because `glm` and `kimi` workers still use it.
 
-- [ ] **Step 3: Build the orchestrator**
+- [ ] **Step 4: Build the orchestrator**
 
 Run: `pnpm --filter orchestrator build`
 Expected: Clean build. The `WORKER_TYPES` record is typed against `CodeTaskWorkerType`, so it must include `'gemma-4'` (from Task 1) and must NOT include `'qwen'`.
 
-- [ ] **Step 4: Run orchestrator tests**
+- [ ] **Step 5: Run orchestrator tests**
 
 Run: `pnpm --filter orchestrator test`
 Expected: All tests pass. If any test references `qwen` worker type, update to `gemma-4`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add workers/orchestrator/src/services/isolation/types.ts
-git commit -m "feat: replace qwen worker with gemma-4 in orchestrator config"
+git add workers/orchestrator/src/services/isolation/types.ts workers/orchestrator/src/start.ts
+git commit -m "feat: replace qwen worker with gemma-4 in orchestrator config and startup validation"
 ```
 
 ---
@@ -354,59 +415,138 @@ git commit -m "feat: update web UI labels and display names for gemma-4 replacin
 
 ---
 
-### Task 7: Update Tests
+### Task 7: Update Code-Agent and Actions-Agent Runtime References
 
 **Files:**
-- Modify: `apps/web/src/utils/__tests__/openRouterModelNames.test.ts`
-- Modify: `apps/web/src/__tests__/CodeTaskNewPage.test.tsx`
+- Modify: `apps/code-agent/src/domain/utils/reviewTriage.ts`
+- Modify: `apps/code-agent/src/domain/utils/dispatchWorkerTriage.ts`
+- Modify: `apps/code-agent/src/domain/prompts/issueCommentTriagePrompt.ts`
+- Modify: `apps/actions-agent/src/domain/utils/workerTypeDetection.ts`
+- Modify: `apps/code-agent/src/__tests__/helpers/mockServices.ts`
 
-- [ ] **Step 1: Update openRouterModelNames tests**
+- [ ] **Step 1: Update `reviewTriage.ts`**
 
-In `apps/web/src/utils/__tests__/openRouterModelNames.test.ts`:
+In `apps/code-agent/src/domain/utils/reviewTriage.ts`, replace `qwen: 'qwen'` with `'gemma-4': 'gemma-4'` in the worker-type mapping.
 
-Remove test cases that reference Qwen models:
-- Remove: `expect(resolveOpenRouterModelName('qwen/qwen3.5-plus-02-15')).toBe('Qwen 3.5 Plus');`
-- Remove: `expect(resolveOpenRouterModelName('qwen/qwen3.6-plus')).toBe('Qwen 3.6 Plus');`
-- Remove: `expect(resolveOpenRouterModelName('qwen/qwen3.5-flash-02-23:online')).toBe('Qwen 3.5 Flash');`
+- [ ] **Step 2: Update `dispatchWorkerTriage.ts`**
 
-Add test case for paid Gemma 4 (if not already covered):
-```typescript
-expect(resolveOpenRouterModelName('google/gemma-4-31b-it')).toBe('Gemma 4 31B IT');
+In `apps/code-agent/src/domain/utils/dispatchWorkerTriage.ts`, replace `qwen: 'qwen'` with `'gemma-4': 'gemma-4'` in the worker-type mapping.
+
+- [ ] **Step 3: Update `issueCommentTriagePrompt.ts`**
+
+In `apps/code-agent/src/domain/prompts/issueCommentTriagePrompt.ts`, replace all `qwen`/`Qwen` references with `gemma-4`/`Gemma 4` in prompt text:
+- `'- Use \`qwen\` for Qwen review requests.'` → `'- Use \`gemma-4\` for Gemma 4 review requests.'`
+- `'- If the comment requests architecture review and does not name a worker, prefer \`qwen\`.'` → `'- If the comment requests architecture review and does not name a worker, prefer \`gemma-4\`.'`
+- Update example lines referencing `qwen` → `gemma-4`
+
+Bump the prompt `version` field (patch or minor as appropriate per Prompt Versioning rules).
+
+- [ ] **Step 4: Update `workerTypeDetection.ts`**
+
+In `apps/actions-agent/src/domain/utils/workerTypeDetection.ts`, replace `qwen` with `gemma-4` in worker-type detection logic.
+
+- [ ] **Step 5: Update `mockServices.ts`**
+
+In `apps/code-agent/src/__tests__/helpers/mockServices.ts`, replace any `qwen` references with `gemma-4`.
+
+- [ ] **Step 6: Build and run code-agent and actions-agent tests**
+
+Run:
+```bash
+pnpm --filter @intexuraos/code-agent build && pnpm --filter @intexuraos/code-agent test
+pnpm --filter @intexuraos/actions-agent build && pnpm --filter @intexuraos/actions-agent test
 ```
-
-- [ ] **Step 2: Update CodeTaskNewPage test**
-
-In `apps/web/src/__tests__/CodeTaskNewPage.test.tsx`, update line 303-304:
-
-```typescript
-// Before:
-    fireEvent.click(screen.getByRole('button', { name: 'Qwen' }));
-    expect(screen.getByText('Advanced Qwen model with thinking enabled')).toBeInTheDocument();
-// After:
-    fireEvent.click(screen.getByRole('button', { name: 'Gemma 4' }));
-    expect(screen.getByText('Google Gemma 4 31B via OpenRouter with paid-tier priority')).toBeInTheDocument();
-```
-
-- [ ] **Step 3: Run all web app tests**
-
-Run: `pnpm --filter @intexuraos/web test`
 Expected: All tests pass.
 
-- [ ] **Step 4: Audit for any remaining Qwen references**
-
-Run: `rg -i "qwen" --type ts --type tsx` from repo root.
-Expected: No remaining references in source code (there may be references in old plan docs — those are fine).
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add apps/web/src/utils/__tests__/openRouterModelNames.test.ts apps/web/src/__tests__/CodeTaskNewPage.test.tsx
-git commit -m "test: update tests for gemma-4 replacing qwen"
+git add apps/code-agent/src/domain/utils/reviewTriage.ts apps/code-agent/src/domain/utils/dispatchWorkerTriage.ts apps/code-agent/src/domain/prompts/issueCommentTriagePrompt.ts apps/actions-agent/src/domain/utils/workerTypeDetection.ts apps/code-agent/src/__tests__/helpers/mockServices.ts
+git commit -m "feat: replace qwen with gemma-4 in code-agent and actions-agent runtime files"
 ```
 
 ---
 
-### Task 8: Full CI Verification
+### Task 8: Update All Tests
+
+**Files (all test files that reference `qwen`):**
+- Modify: `packages/common-core/src/__tests__/codeTaskWorkerTypes.test.ts`
+- Modify: `workers/orchestrator/src/services/isolation/__tests__/types.test.ts`
+- Modify: `packages/llm-contract/src/__tests__/supportedModels.test.ts`
+- Modify: `packages/infra-openrouter/src/__tests__/defaultAllowlist.test.ts`
+- Modify: `packages/infra-openrouter/src/__tests__/allowlist.test.ts`
+- Modify: `apps/web/src/utils/__tests__/openRouterModelNames.test.ts`
+- Modify: `apps/web/src/__tests__/CodeTaskNewPage.test.tsx`
+- Modify: `apps/web/src/components/__tests__/GitHubEventLogTableRow.test.tsx`
+- Modify: `apps/web/src/hooks/__tests__/useGitHubEventLog.test.ts`
+- Modify: `apps/code-agent/src/__tests__/domain/utils/reviewTriage.test.ts`
+- Modify: `apps/code-agent/src/__tests__/domain/utils/dispatchWorkerTriage.test.ts`
+- Modify: `apps/code-agent/src/__tests__/domain/prompts/issueCommentTriagePrompt.test.ts`
+- Modify: `apps/code-agent/src/__tests__/routes/codeSubmit.test.ts`
+- Modify: `apps/code-agent/src/__tests__/usecases/createReviewTask.test.ts`
+- Modify: `apps/code-agent/src/__tests__/usecases/githubAgent.test.ts`
+- Modify: `apps/code-agent/src/__tests__/routes/webhooks/automationLogFlows.test.ts`
+- Modify: `apps/code-agent/src/__tests__/routes/internalDispatchMetadata.test.ts`
+- Modify: `apps/code-agent/src/__tests__/routes/code/github-event-log.test.ts`
+- Modify: `apps/code-agent/src/__tests__/domain/useCases/createTaskForPR.test.ts`
+- Modify: `apps/code-agent/src/__tests__/domain/models/codeTask.test.ts`
+- Modify: `apps/code-agent/src/__tests__/domain/services/unifiedEvaluator.test.ts`
+- Modify: `apps/code-agent/src/__tests__/domain/services/gitHubDispatchService.test.ts`
+- Modify: `apps/code-agent/src/__tests__/infra/firestore/eventDecisionRepository.test.ts`
+- Modify: `apps/code-agent/src/__tests__/domain/utils/labelUtils.test.ts`
+- Modify: `apps/code-agent/src/__tests__/routes/webhooks.test.ts`
+- Modify: `apps/actions-agent/src/__tests__/infra/http/codeAgentHttpClient.test.ts`
+- Modify: `apps/actions-agent/src/domain/utils/workerTypeDetection.test.ts`
+- Modify: `apps/research-agent/src/__tests__/routes.test.ts`
+- Modify: `apps/user-service/src/__tests__/infra/llmValidator.test.ts`
+
+- [ ] **Step 1: Update package-level tests**
+
+In each package test file, replace `qwen`/`Qwen` references with `gemma-4`/`Gemma 4`:
+- `packages/common-core/src/__tests__/codeTaskWorkerTypes.test.ts`: Update worker type assertions
+- `packages/llm-contract/src/__tests__/supportedModels.test.ts`: Update Qwen model assertions to paid Gemma 4
+- `packages/infra-openrouter/src/__tests__/defaultAllowlist.test.ts`: Update Qwen assertions to paid Gemma 4
+- `packages/infra-openrouter/src/__tests__/allowlist.test.ts`: Replace Qwen entries with Gemma 4 paid
+
+- [ ] **Step 2: Update orchestrator tests**
+
+In `workers/orchestrator/src/services/isolation/__tests__/types.test.ts`: Update `qwen` → `gemma-4` in orchestrator isolation type tests.
+
+- [ ] **Step 3: Update code-agent tests**
+
+In all `apps/code-agent/src/__tests__/` files listed above: Replace every `qwen`/`Qwen` reference with `gemma-4`/`Gemma 4`. This includes:
+- Worker type references in test fixtures and assertions
+- Mock data containing `qwen` worker type
+- Prompt text expectations in `issueCommentTriagePrompt.test.ts`
+- Triage/dispatch test expectations
+
+- [ ] **Step 4: Update actions-agent, research-agent, user-service, and web app tests**
+
+- `apps/actions-agent/` tests: Update worker type references
+- `apps/research-agent/src/__tests__/routes.test.ts`: Update `qwen` → `gemma-4`
+- `apps/user-service/src/__tests__/infra/llmValidator.test.ts`: Update Qwen model references
+- `apps/web/` tests: Update openRouterModelNames test, CodeTaskNewPage test, GitHubEventLogTableRow test, useGitHubEventLog test
+
+- [ ] **Step 5: Run full test suite**
+
+Run: `pnpm test`
+Expected: All tests pass across all workspaces.
+
+- [ ] **Step 6: Audit for any remaining Qwen references**
+
+Run: `rg -i "qwen" --glob "*.ts" --glob "*.tsx" --glob "*.json" --glob "*.cjs"` from repo root.
+Expected: No remaining references in source code (plan docs are fine).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add -A
+git commit -m "test: update all tests for gemma-4 replacing qwen across packages, apps, and workers"
+```
+
+---
+
+### Task 9: Full CI Verification
 
 - [ ] **Step 1: Build all packages**
 
