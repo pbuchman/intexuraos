@@ -299,13 +299,14 @@ describe('supportedModels', () => {
 
 describe('DefaultEligibleModel', () => {
   describe('DEFAULT_OPENROUTER_MODELS', () => {
-    it('contains exactly 4 models', () => {
-      expect(DEFAULT_OPENROUTER_MODELS).toHaveLength(4);
+    it('contains exactly 5 models', () => {
+      expect(DEFAULT_OPENROUTER_MODELS).toHaveLength(5);
     });
 
     it('contains expected model IDs', () => {
       const ids = DEFAULT_OPENROUTER_MODELS.map((m) => m.id);
       expect(ids).toContain('google/gemma-4-31b-it:free');
+      expect(ids).toContain('google/gemma-4-31b-it');
       expect(ids).toContain('minimax/minimax-m2.7');
       expect(ids).toContain('qwen/qwen3.6-plus');
       expect(ids).toContain('nvidia/nemotron-3-super-120b-a12b:free');
@@ -331,6 +332,7 @@ describe('DefaultEligibleModel', () => {
 
     it('accepts OpenRouter default models with or: prefix', () => {
       expect(isDefaultEligibleModel('or:google/gemma-4-31b-it:free')).toBe(true);
+      expect(isDefaultEligibleModel('or:google/gemma-4-31b-it')).toBe(true);
       expect(isDefaultEligibleModel('or:minimax/minimax-m2.7')).toBe(true);
       expect(isDefaultEligibleModel('or:qwen/qwen3.6-plus')).toBe(true);
       expect(isDefaultEligibleModel('or:nvidia/nemotron-3-super-120b-a12b:free')).toBe(true);
@@ -382,7 +384,10 @@ describe('DefaultEligibleModel', () => {
     });
 
     it('has correct display names for default OpenRouter models', () => {
-      expect(DEFAULT_MODEL_DISPLAY_NAMES['or:google/gemma-4-31b-it:free']).toBe('Gemma 4 31B IT');
+      expect(DEFAULT_MODEL_DISPLAY_NAMES['or:google/gemma-4-31b-it:free']).toBe(
+        'Gemma 4 31B IT (Free)'
+      );
+      expect(DEFAULT_MODEL_DISPLAY_NAMES['or:google/gemma-4-31b-it']).toBe('Gemma 4 31B IT');
       expect(DEFAULT_MODEL_DISPLAY_NAMES['or:minimax/minimax-m2.7']).toBe('MiniMax M2.7');
       expect(DEFAULT_MODEL_DISPLAY_NAMES['or:qwen/qwen3.6-plus']).toBe('Qwen 3.6 Plus');
       expect(DEFAULT_MODEL_DISPLAY_NAMES['or:nvidia/nemotron-3-super-120b-a12b:free']).toBe(
@@ -390,8 +395,8 @@ describe('DefaultEligibleModel', () => {
       );
     });
 
-    it('has exactly 8 entries (4 fast + 4 OpenRouter)', () => {
-      expect(Object.keys(DEFAULT_MODEL_DISPLAY_NAMES)).toHaveLength(8);
+    it('has exactly 9 entries (4 fast + 5 OpenRouter)', () => {
+      expect(Object.keys(DEFAULT_MODEL_DISPLAY_NAMES)).toHaveLength(9);
     });
   });
 });
