@@ -301,6 +301,31 @@ git commit -m "feat(code-agent): add isImportant to IssueGroup type"
 - Modify: `apps/code-agent/src/routes/code/issueGroupRoutes.ts`
 - Test: `apps/code-agent/src/__tests__/routes/code/issueGroups.test.ts`
 
+- [ ] **Step 0: Update `makeGroupSummaryRepo` default stub to include `setImportant`**
+
+The current `makeGroupSummaryRepo()` helper does not include a `setImportant` method, and all its methods are stateless no-ops. For the toggle endpoint tests to work, `makeGroupSummaryRepo` needs a default `setImportant` stub, and tests that exercise the toggle must use the stateful `createFakeTaskGroupSummaryRepository` fake (from Task 4) instead of the no-op stub.
+
+Add a default no-op `setImportant` to `makeGroupSummaryRepo`:
+
+```typescript
+function makeGroupSummaryRepo(overrides: Partial<TaskGroupSummaryRepository> = {}): TaskGroupSummaryRepository {
+  // ... existing defaults ...
+  return {
+    updateAfterCreate: async (): Promise<void> => { return; },
+    updateAfterStatusChange: async (): Promise<void> => { return; },
+    updateAfterDelete: async (): Promise<void> => { return; },
+    getUserGroupCounts: async (): ReturnType<TaskGroupSummaryRepository['getUserGroupCounts']> => ok(defaultCounts),
+    listGroupSummaries: async (): ReturnType<TaskGroupSummaryRepository['listGroupSummaries']> => ok({ summaries: [] }),
+    recomputeGroupFromTasks: async (): Promise<void> => { return; },
+    recomputeWithLabels: async (): ReturnType<TaskGroupSummaryRepository['recomputeWithLabels']> => ok(undefined),
+    setImportant: async (): ReturnType<TaskGroupSummaryRepository['setImportant']> => ok(undefined),
+    ...overrides,
+  };
+}
+```
+
+For the toggle endpoint tests below, use the `createFakeTaskGroupSummaryRepository` from `fakeTaskGroupSummaryRepository.ts` to get stateful `updateAfterCreate` + `setImportant` behavior. Pass it via `makeBaseServices({ groupSummaryRepo: fakeRepo })`.
+
 - [ ] **Step 1: Write the failing tests for the toggle endpoint**
 
 Add to `issueGroups.test.ts`:
@@ -380,7 +405,9 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
 });
 ```
 
-Note: Adapt the test setup to match the existing patterns in `issueGroups.test.ts` — check how the test app is initialized, how auth tokens work (likely a `FakeAuthPlugin`), and how tasks are created. The test examples above show the intent; the exact request payloads may need adjustment based on the test file's existing `beforeEach` setup.
+**IMPORTANT:** These tests require a **stateful** `groupSummaryRepo` so that `updateAfterCreate` (triggered by `POST /code/tasks`) actually stores a summary, and `setImportant` can then mutate it. Use `createFakeTaskGroupSummaryRepository()` (from Task 4) instead of the default `makeGroupSummaryRepo()` stub. Initialize the test app with `makeBaseServices({ groupSummaryRepo: fakeRepo })`.
+
+Adapt the test setup to match the existing patterns in `issueGroups.test.ts` — check how the test app is initialized, how auth tokens work (likely a `FakeAuthPlugin`), and how tasks are created. The test examples above show the intent; the exact request payloads may need adjustment based on the test file's existing `beforeEach` setup.
 
 - [ ] **Step 2: Write the failing test for `isImportant` in GET response**
 
@@ -588,7 +615,7 @@ export async function setGroupImportant(
     accessToken,
     {
       method: 'POST',
-      body: JSON.stringify({ important }),
+      body: { important },
     },
   );
 }
@@ -642,7 +669,7 @@ Add the implementation inside `useIssueGroups`, before the return statement:
       // Optimistic update: toggle in local state immediately
       setGroups((prev) =>
         prev.map((g) => {
-          const key = g.linearIssueId ?? g.latestTask.id;
+          const key = g.linearIssueId ?? `standalone_${g.latestTask.id}`;
           if (key !== groupKey) return g;
           const newImportant = g.isImportant !== true;
           return { ...g, isImportant: newImportant || undefined };
@@ -653,7 +680,7 @@ Add the implementation inside `useIssueGroups`, before the return statement:
       void (async (): Promise<void> => {
         try {
           const token = await getAccessToken();
-          const currentGroup = groups.find((g) => (g.linearIssueId ?? g.latestTask.id) === groupKey);
+          const currentGroup = groups.find((g) => (g.linearIssueId ?? `standalone_${g.latestTask.id}`) === groupKey);
           const newImportant = currentGroup?.isImportant !== true;
           await setGroupImportant(token, groupKey, newImportant);
         } catch (err) {
@@ -872,6 +899,16 @@ git commit -m "feat(web): add important toggle icon to IssueGroupRow"
 
 **Files:**
 - Modify: `apps/web/src/pages/CodeTasksPage.tsx`
+
+- [ ] **Step 0: Fix `getGroupKey` to match backend standalone key format**
+
+The existing `getGroupKey` function returns `group.latestTask.id` for standalone groups, but the backend stores standalone summaries under `standalone_<taskId>`. Update the function so the frontend key matches the backend key — this is required for the important toggle (and archive/selection) to work correctly for standalone groups:
+
+```typescript
+function getGroupKey(group: IssueGroup): string {
+  return group.linearIssueId ?? `standalone_${group.latestTask.id}`;
+}
+```
 
 - [ ] **Step 1: Destructure `toggleImportant` from `useIssueGroups`**
 
