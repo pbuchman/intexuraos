@@ -98,7 +98,7 @@ function validateCommentTriageState(
 export interface GitHubAgentDeps {
   logger: Logger;
   gitHubPRClient: GitHubPRClient;
-  toolCallingClient: ToolCallingClient;
+  resolveToolCallingClient: (userId: string) => Promise<Result<ToolCallingClient, GitHubAgentError>>;
   userServiceClient: UserServiceClient;
   allowedBots: Set<string>;
 }
@@ -182,7 +182,7 @@ async function evaluatePREventInternal(
   repo: string,
   correctionContext?: string,
 ): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> {
-  const { logger, gitHubPRClient, toolCallingClient, userServiceClient, allowedBots } = deps;
+  const { logger, gitHubPRClient, userServiceClient, allowedBots } = deps;
 
   // Resolve bot login to repo owner before user lookup (e.g. intexuraos-code-worker[bot] → pbuchman)
   const resolvedLogin = resolveLoginForTaskCreation(event.senderLogin, event.repository, allowedBots);
@@ -207,6 +207,13 @@ async function evaluatePREventInternal(
   }
 
   const accessToken = tokenResult.value.accessToken; // @allow-result-access -- narrowed by !tokenResult.ok
+
+  const toolCallingResult = await deps.resolveToolCallingClient(resolvedUser.userId);
+  if (!toolCallingResult.ok) {
+    logger.warn({ userId: resolvedUser.userId, error: toolCallingResult.error }, 'GitHub Agent: failed to resolve tool calling client');
+    return { ok: false, error: toolCallingResult.error };
+  }
+  const toolCallingClient = toolCallingResult.value;
 
   // Fetch PR files
   const filesResult = await gitHubPRClient.getPullRequestFiles(accessToken, owner, repo, event.pullRequestNumber);
