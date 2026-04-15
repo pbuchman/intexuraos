@@ -6,7 +6,7 @@
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { Logger } from 'pino';
 import type { Firestore } from '@google-cloud/firestore';
-import { ok, type Result } from '@intexuraos/common-core';
+import { ok, err, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
@@ -91,7 +91,6 @@ import type { TaskGroupSummaryRepository } from './domain/ports/taskGroupSummary
 import { createTaskGroupSummaryFirestoreRepository } from './infra/firestore/taskGroupSummaryFirestoreRepository.js';
 import { withGroupUpdates } from './infra/repositories/codeTaskRepositoryWithGroupUpdates.js';
 
-const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
 export interface ServiceContainer {
   firestore: Firestore;
   logger: Logger;
@@ -124,7 +123,7 @@ export interface ServiceContainer {
   webhookRules: WebhookRulesService;
   dispatchService: WebhookDispatchService;
   // GitHub Agent (INT-743)
-  toolCallingClient: ToolCallingClient | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
+  resolveToolCallingClient: (userId: string) => Promise<Result<ToolCallingClient, GitHubAgentError>>;
   // INT-744: Unified Webhook Evaluator
   eventDecisionRepo: EventDecisionRepository;
   dispatchRetryRepo: DispatchRetryRepository;
@@ -421,15 +420,41 @@ export function initServices(config: ServiceConfig): void {
     // The original dispatched all edited bot comments without payload inspection.
   ]);
 
-  const toolCallingClient = config.geminiAppApiKey !== ''
-    ? createToolCallingClient({
+  const TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
+  const githubAgentUsageSink = buildUsageSink('github-agent');
+
+  const resolveToolCallingClient = async (userId: string): Promise<Result<ToolCallingClient, GitHubAgentError>> => {
+    // Try user's own Google API key first
+    const keysResult = await userServiceClient.getApiKeys(userId);
+    if (keysResult.ok) {
+      const googleKey = keysResult.value.google;
+      if (googleKey !== undefined) {
+        logger.debug({ userId }, 'GitHub Agent: using user Google API key');
+        return ok(createToolCallingClient({
+          apiKey: googleKey,
+          model: TOOL_CALLING_MODEL,
+          userId,
+          logger,
+          usageSink: githubAgentUsageSink,
+        }));
+      }
+    }
+
+    // Fall back to platform key
+    if (config.geminiAppApiKey !== '') {
+      logger.debug({ userId }, 'GitHub Agent: falling back to platform Gemini API key');
+      return ok(createToolCallingClient({
         apiKey: config.geminiAppApiKey,
-        model: GEMINI_TOOL_CALLING_MODEL,
-        userId: 'system:github-agent',
+        model: TOOL_CALLING_MODEL,
+        userId,
         logger,
-        usageSink: buildUsageSink('github-agent'),
-      })
-    : undefined;
+        usageSink: githubAgentUsageSink,
+      }));
+    }
+
+    return err({ code: 'LLM_FAILED' as const, message: 'No Google API key available for tool calling' });
+  };
+
   const executionMemoryOpenAI = config.openaiAppApiKey !== ''
     ? new OpenAI({ apiKey: config.openaiAppApiKey })
     : undefined;
@@ -507,13 +532,11 @@ export function initServices(config: ServiceConfig): void {
     ciFailureDispatchService: dispatchService,
     eventDecisionRepo,
     gitHubEventLogEntryRepo,
-    evaluateEvent: toolCallingClient !== undefined
-      ? (event: GitHubPREvent, correctionContext?: string): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> => evaluateEvent(
-          { logger, gitHubPRClient, toolCallingClient, userServiceClient, allowedBots: ALLOWED_BOTS },
-          event,
-          correctionContext,
-        )
-      : undefined,
+    evaluateEvent: (event: GitHubPREvent, correctionContext?: string): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> => evaluateEvent(
+      { logger, gitHubPRClient, resolveToolCallingClient, userServiceClient, allowedBots: ALLOWED_BOTS },
+      event,
+      correctionContext,
+    ),
     createReviewTask: (taskLogger, request) => createReviewTask(
       {
         logger: taskLogger,
@@ -596,7 +619,7 @@ export function initServices(config: ServiceConfig): void {
     gitHubPRClient,
     userLookupService,
     webhookRules,
-    toolCallingClient,
+    resolveToolCallingClient,
     dispatchService,
     eventDecisionRepo,
     dispatchRetryRepo,

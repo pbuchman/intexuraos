@@ -268,7 +268,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     }),
     userServiceClient: mockUserServiceClient,
     gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 5000 }),
-    toolCallingClient: undefined,
+    resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
     webhookRules: webhookRules,
     dispatchService: dispatchService,
     eventDecisionRepo: eventDecisionRepo,

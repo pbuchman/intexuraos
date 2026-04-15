@@ -135,7 +135,7 @@ describe('GET /code/queue', () => {
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
-      toolCallingClient: undefined,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
