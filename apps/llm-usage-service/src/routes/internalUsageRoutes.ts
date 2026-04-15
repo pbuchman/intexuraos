@@ -19,20 +19,32 @@ export const internalUsageRoutes: FastifyPluginCallback = (app, _opts, done) => 
         description: 'Internal endpoint for ingesting LLM usage events from other services.',
         tags: ['usage'],
         body: {
-          type: 'object',
-          required: ['schemaVersion', 'events'],
-          properties: {
-            schemaVersion: { type: 'integer', enum: [1, 2] },
-            events: {
-              type: 'array',
-              items: {
-                oneOf: [
-                  { $ref: 'UsageEventInput#' },
-                  { $ref: 'UsageEventInputV2#' },
-                ],
+          oneOf: [
+            {
+              type: 'object',
+              required: ['schemaVersion', 'events'],
+              additionalProperties: false,
+              properties: {
+                schemaVersion: { type: 'integer', enum: [1] },
+                events: {
+                  type: 'array',
+                  items: { $ref: 'UsageEventInput#' },
+                },
               },
             },
-          },
+            {
+              type: 'object',
+              required: ['schemaVersion', 'events'],
+              additionalProperties: false,
+              properties: {
+                schemaVersion: { type: 'integer', enum: [2] },
+                events: {
+                  type: 'array',
+                  items: { $ref: 'UsageEventInputV2#' },
+                },
+              },
+            },
+          ],
         },
         response: {
           200: {
