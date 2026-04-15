@@ -21,9 +21,11 @@ vi.mock('../../context/index.js', () => ({
 }));
 
 const mockListIssueGroups = vi.fn();
+const mockSetGroupImportant = vi.fn();
 
 vi.mock('../../services/issueGroupsApi.js', () => ({
   listIssueGroups: (...args: unknown[]): unknown => mockListIssueGroups(...args),
+  setGroupImportant: (...args: unknown[]): unknown => mockSetGroupImportant(...args),
 }));
 
 /* ── helpers ───────────────────────────────────────────────────────── */
@@ -460,6 +462,105 @@ describe('useIssueGroups', () => {
     expect(result.current.refreshing).toBe(false);
 
     unmount();
+  });
+
+  describe('toggleImportant', () => {
+    beforeEach(() => {
+      mockSetGroupImportant.mockResolvedValue({ important: true });
+    });
+
+    it('sends important=true when toggling a non-important group', async () => {
+      mockListIssueGroups.mockResolvedValue(
+        makeResponse({ groups: [makeGroup({ linearIssueId: 'INT-750', isImportant: undefined })] }),
+      );
+
+      const { result } = renderHook(() => useIssueGroups({}));
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      // Deferred token for the click path only — this creates the exact
+      // window in which the ref-vs-state race occurs: React commits the
+      // optimistic setGroups while the IIFE is suspended on `await
+      // getAccessToken()`.
+      let resolveToken!: (value: string) => void;
+      mockGetAccessToken.mockImplementationOnce(
+        () => new Promise<string>((r) => { resolveToken = r; }),
+      );
+
+      await act(async () => {
+        result.current.toggleImportant('INT-750');
+      });
+
+      // Optimistic update must be committed — UI shows important=true.
+      expect(result.current.groups[0]?.isImportant).toBe(true);
+
+      // Unblock the token; the IIFE resumes and fires the PATCH.
+      await act(async () => {
+        resolveToken('test-token');
+      });
+
+      expect(mockSetGroupImportant).toHaveBeenCalledTimes(1);
+      expect(mockSetGroupImportant).toHaveBeenCalledWith('test-token', 'INT-750', true);
+    });
+
+    it('sends important=false when toggling an already-important group', async () => {
+      mockListIssueGroups.mockResolvedValue(
+        makeResponse({ groups: [makeGroup({ linearIssueId: 'INT-750', isImportant: true })] }),
+      );
+
+      const { result } = renderHook(() => useIssueGroups({}));
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      let resolveToken!: (value: string) => void;
+      mockGetAccessToken.mockImplementationOnce(
+        () => new Promise<string>((r) => { resolveToken = r; }),
+      );
+
+      await act(async () => {
+        result.current.toggleImportant('INT-750');
+      });
+
+      expect(result.current.groups[0]?.isImportant).toBeUndefined();
+
+      await act(async () => {
+        resolveToken('test-token');
+      });
+
+      expect(mockSetGroupImportant).toHaveBeenCalledWith('test-token', 'INT-750', false);
+    });
+
+    it('reverts optimistic update when API call fails', async () => {
+      mockListIssueGroups.mockResolvedValue(
+        makeResponse({ groups: [makeGroup({ linearIssueId: 'INT-750', isImportant: undefined })] }),
+      );
+      mockSetGroupImportant.mockRejectedValue(new Error('network down'));
+
+      const { result } = renderHook(() => useIssueGroups({}));
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      // Next list call (revert via refresh) returns the server truth.
+      mockListIssueGroups.mockResolvedValue(
+        makeResponse({ groups: [makeGroup({ linearIssueId: 'INT-750', isImportant: undefined })] }),
+      );
+
+      await act(async () => {
+        result.current.toggleImportant('INT-750');
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        expect(result.current.groups[0]?.isImportant).toBeUndefined();
+      });
+    });
   });
 
   it('re-fetches when filter options change', async () => {
