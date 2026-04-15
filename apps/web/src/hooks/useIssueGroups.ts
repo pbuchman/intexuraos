@@ -290,7 +290,7 @@ export function useIssueGroups(options: {
           const currentGroup = groups.find((g) => (g.linearIssueId ?? `standalone_${g.latestTask.id}`) === groupKey);
           const newImportant = currentGroup?.isImportant !== true;
           await setGroupImportant(token, groupKey, newImportant);
-        } catch (err) {
+        } catch (_err) {
           // Revert on error by refreshing
           void refresh(false);
         }
