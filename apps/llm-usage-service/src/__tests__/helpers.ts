@@ -99,7 +99,7 @@ export function createTestEventInputV2(
       imageCount: 0,
     },
     cost: {
-      providerReportedUsd: 0.003,
+      providerReportedUsd: null,
       pricingSource: 'pending',
     },
     correlation: {
