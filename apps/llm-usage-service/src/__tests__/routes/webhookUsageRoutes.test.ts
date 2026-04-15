@@ -203,6 +203,50 @@ describe('webhookUsageRoutes', () => {
       expect(response.statusCode).toBe(400);
     });
 
+    it('rejects mismatched envelope — v1 schemaVersion with v2 events', async () => {
+      const v2Event = createTestEventInputV2({ eventId: 'evt_wh_mismatch_1' });
+      const payload = {
+        schemaVersion: 1,
+        events: [v2Event],
+      };
+      const { timestamp, signature } = signPayload(payload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/usage-events',
+        headers: {
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(eventRepo.getStoredEvents()).toHaveLength(0);
+    });
+
+    it('rejects mismatched envelope — v2 schemaVersion with v1 events', async () => {
+      const v1Event = createTestEventInput({ eventId: 'evt_wh_mismatch_2' });
+      const payload = {
+        schemaVersion: 2,
+        events: [v1Event],
+      };
+      const { timestamp, signature } = signPayload(payload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/usage-events',
+        headers: {
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(eventRepo.getStoredEvents()).toHaveLength(0);
+    });
+
     it('accepts v2 orchestrator events and stores enriched cost in Firestore', async () => {
       const pricingCache = new FakePricingCache();
       pricingCache.setPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', {
