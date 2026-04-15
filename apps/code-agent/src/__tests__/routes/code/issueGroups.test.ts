@@ -46,6 +46,8 @@ import { createLinearIssueService } from '../../../domain/services/linearIssueSe
 import { createActionsAgentClient } from '../../../infra/clients/actionsAgentClient.js';
 import type { TaskGroupSummaryRepository } from '../../../domain/ports/taskGroupSummaryRepository.js';
 import type { UserGroupCounts, TaskGroupSummary } from '../../../domain/models/taskGroupSummary.js';
+import { createFakeTaskGroupSummaryRepository } from '../../fakes/fakeTaskGroupSummaryRepository.js';
+import type { FakeTaskGroupSummaryRepository } from '../../fakes/fakeTaskGroupSummaryRepository.js';
 
 function makeLinearAgentClient(): LinearAgentClient {
   const client: LinearAgentClient = {
@@ -95,6 +97,7 @@ function makeGroupSummaryRepo(overrides: Partial<TaskGroupSummaryRepository> = {
     listGroupSummaries: async (): ReturnType<TaskGroupSummaryRepository['listGroupSummaries']> => ok({ summaries: [] }),
     recomputeGroupFromTasks: async (): Promise<void> => { return; },
     recomputeWithLabels: async (): ReturnType<TaskGroupSummaryRepository['recomputeWithLabels']> => ok(undefined),
+    setImportant: async (): ReturnType<TaskGroupSummaryRepository['setImportant']> => ok(undefined),
     ...overrides,
   };
 }
@@ -2338,5 +2341,171 @@ describe('GET /code/issue-groups', () => {
       // Task is not a phantom (it exists), so done count stays at 1
       expect(body.data.counts['done']).toBe(1);
     });
+  });
+});
+
+describe('POST /code/issue-groups/:groupKey/important', () => {
+  let fakeFirestore: ReturnType<typeof createFakeFirestore>;
+  let logger: Logger;
+  let server: Awaited<ReturnType<typeof buildServer>>;
+  let codeTaskRepo: CodeTaskRepository;
+  let fakeRepo: FakeTaskGroupSummaryRepository;
+
+  beforeEach(async () => {
+    mockedJwtVerify.mockResolvedValue({
+      payload: { sub: 'test-user-id', email: 'test@example.com' },
+      protectedHeader: new Uint8Array(),
+    } as never);
+
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] = 'test-orchestrator-secret';
+
+    fakeFirestore = createFakeFirestore();
+    setFirestore(fakeFirestore as unknown as Firestore);
+
+    logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+      child: vi.fn().mockReturnThis(),
+    } as unknown as Logger;
+
+    codeTaskRepo = createFirestoreCodeTaskRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    fakeRepo = createFakeTaskGroupSummaryRepository();
+
+    setServices(makeBaseServices({ codeTaskRepo, groupSummaryRepo: fakeRepo as unknown as ReturnType<typeof makeGroupSummaryRepo> }));
+    server = await buildServer();
+  });
+
+  afterEach(async () => {
+    await server.close();
+    resetServices();
+    resetFirestore();
+    fakeRepo.reset();
+  });
+
+  function makeBaseServices(overrides: {
+    codeTaskRepo?: CodeTaskRepository;
+    groupSummaryRepo?: ReturnType<typeof makeGroupSummaryRepo>;
+  } = {}): ServiceContainer {
+    const actionsClient = createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger });
+    const linearClient = makeLinearAgentClient();
+    const repoToUse = overrides.codeTaskRepo ?? codeTaskRepo;
+    return {
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+      codeTaskRepo: repoToUse,
+      taskDispatcher: {
+        async dispatch(): Promise<Result<DispatchResult, DispatchError>> { return ok({ dispatched: true, workerLocation: 'mac' }); },
+        async cancelOnWorker() { return; },
+        async sendMessageToWorker() { return ok({ action: 'queued' }); },
+      } as TaskDispatcherService,
+      whatsappNotifier: createWhatsAppNotifier({ whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher }),
+      logChunkRepo: createFirestoreLogChunkRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      actionsAgentClient: actionsClient,
+      linearAgentClient: linearClient,
+      linearIssueService: createLinearIssueService({ linearAgentClient: linearClient, logger }),
+      metricsClient: createNoOpMetricsClient(),
+      statusMirrorService: createStatusMirrorService({ actionsAgentClient: actionsClient, logger }),
+      processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: repoToUse, logger }),
+      detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: repoToUse, logger }),
+      cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: repoToUse, logger }),
+      workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      workerHealthProbe: mockWorkerHealthProbe,
+      gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
+      gitHubPRSummaryRepo: {} as never,
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      userServiceClient: mockUserServiceClient,
+      gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
+      toolCallingClient: undefined,
+      eventDecisionRepo: createFirestoreEventDecisionRepository({ logger }),
+      dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
+      unifiedEvaluator: {} as never,
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+      taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
+      mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
+      mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repoToUse, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: repoToUse, logger }),
+      groupSummaryRepo: overrides.groupSummaryRepo ?? makeGroupSummaryRepo(),
+    };
+  }
+
+  async function seedTask(linearIssueId: string): Promise<void> {
+    const result = await codeTaskRepo.create(makeTaskInput({ linearIssueId, traceId: `trace-${String(Date.now())}-${String(Math.random())}` }));
+    if (!result.ok) throw new Error('Failed to create task');
+    const taskResult = await codeTaskRepo.findById(result.value.id);
+    if (!taskResult.ok) throw new Error('Failed to find task');
+    await fakeRepo.updateAfterCreate(taskResult.value);
+  }
+
+  it('marks a group as important', async () => {
+    await seedTask('INT-500');
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/code/issue-groups/INT-500/important',
+      headers: { authorization: 'Bearer test-token' },
+      payload: { important: true },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { data: { important: boolean } };
+    expect(body.data.important).toBe(true);
+  });
+
+  it('unmarks a group as important', async () => {
+    await seedTask('INT-500');
+    await fakeRepo.setImportant('test-user-id', 'INT-500', true);
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/code/issue-groups/INT-500/important',
+      headers: { authorization: 'Bearer test-token' },
+      payload: { important: false },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { data: { important: boolean } };
+    expect(body.data.important).toBe(false);
+  });
+
+  it('returns NOT_FOUND for non-existent group', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/code/issue-groups/nonexistent/important',
+      headers: { authorization: 'Bearer test-token' },
+      payload: { important: true },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('includes isImportant in GET response when group is marked important', async () => {
+    await seedTask('INT-500');
+    await fakeRepo.setImportant('test-user-id', 'INT-500', true);
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { data: { groups: { linearIssueId: string | null; isImportant?: boolean }[] } };
+    const group = body.data.groups.find((g) => g.linearIssueId === 'INT-500');
+    expect(group).toBeDefined();
+    expect(group?.isImportant).toBe(true);
   });
 });
