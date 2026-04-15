@@ -1466,6 +1466,7 @@ describe('WhatsAppNotifier', () => {
         attempt: 2,
         maxAttempts: 3,
         reason: 'Worker crashed unexpectedly',
+        retryTaskId: 'task-retry-456',
       });
 
       expect(result.ok).toBe(true);
@@ -1475,7 +1476,7 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).toContain('Worker crashed unexpectedly');
       expect(callArgs.ctaUrl).toEqual({
         displayText: 'View Task',
-        url: buildTaskUrl('task-123'),
+        url: buildTaskUrl('task-retry-456'),
       });
       expect(callArgs.correlationId).toBe('trace-123');
     });
@@ -1489,6 +1490,7 @@ describe('WhatsAppNotifier', () => {
         attempt: 1,
         maxAttempts: 3,
         reason: 'Timeout',
+        retryTaskId: 'task-retry-789',
       });
 
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
@@ -1506,6 +1508,7 @@ describe('WhatsAppNotifier', () => {
         attempt: 1,
         maxAttempts: 3,
         reason: 'Timeout',
+        retryTaskId: 'task-retry-err',
       });
 
       expect(result.ok).toBe(false);

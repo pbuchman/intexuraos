@@ -1796,7 +1796,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             }
 
             await flushPendingTaskLogLines(taskId);
-            await triggerDrainForPR();
+            // Skip immediate drain for retried_after_cooloff — rely on scheduler tick as natural cooloff
+            if (triageResult.action !== 'retried_after_cooloff') {
+              await triggerDrainForPR();
+            }
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }

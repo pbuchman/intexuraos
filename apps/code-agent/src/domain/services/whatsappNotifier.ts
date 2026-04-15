@@ -173,7 +173,7 @@ export interface WhatsAppNotifier {
   notifyTaskAutoRetried(
     userId: string,
     task: CodeTask,
-    info: { attempt: number; maxAttempts: number; reason: string }
+    info: { attempt: number; maxAttempts: number; reason: string; retryTaskId: string }
   ): Promise<Result<void, NotificationError>>;
 
   /**
