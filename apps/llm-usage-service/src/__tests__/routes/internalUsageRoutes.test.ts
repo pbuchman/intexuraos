@@ -206,6 +206,38 @@ describe('internalUsageRoutes', () => {
       expect(eventRepo.getStoredEvents()).toHaveLength(0);
     });
 
+    it('rejects mismatched envelope — v1 schemaVersion with v2 events', async () => {
+      const v2Event = createTestEventInputV2({ eventId: 'evt_mismatch_1' });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/events',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: {
+          schemaVersion: 1,
+          events: [v2Event],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(eventRepo.getStoredEvents()).toHaveLength(0);
+    });
+
+    it('rejects mismatched envelope — v2 schemaVersion with v1 events', async () => {
+      const v1Event = createTestEventInput({ eventId: 'evt_mismatch_2' });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/events',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: {
+          schemaVersion: 2,
+          events: [v1Event],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(eventRepo.getStoredEvents()).toHaveLength(0);
+    });
+
     it('rejects entire batch when any single event is malformed (full-batch rejection)', async () => {
       const validEvent1 = createTestEventInput({ eventId: 'evt_batch_1' });
       const validEvent3 = createTestEventInput({ eventId: 'evt_batch_3' });

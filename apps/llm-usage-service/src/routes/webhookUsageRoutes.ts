@@ -20,20 +20,32 @@ export const webhookUsageRoutes: FastifyPluginCallback = (app, _opts, done) => {
         description: 'Webhook endpoint for orchestrator to submit LLM usage events with HMAC signature validation.',
         tags: ['usage'],
         body: {
-          type: 'object',
-          required: ['schemaVersion', 'events'],
-          properties: {
-            schemaVersion: { type: 'integer', enum: [1, 2] },
-            events: {
-              type: 'array',
-              items: {
-                oneOf: [
-                  { $ref: 'OrchestratorUsageEventInput#' },
-                  { $ref: 'OrchestratorUsageEventInputV2#' },
-                ],
+          oneOf: [
+            {
+              type: 'object',
+              required: ['schemaVersion', 'events'],
+              additionalProperties: false,
+              properties: {
+                schemaVersion: { type: 'integer', enum: [1] },
+                events: {
+                  type: 'array',
+                  items: { $ref: 'OrchestratorUsageEventInput#' },
+                },
               },
             },
-          },
+            {
+              type: 'object',
+              required: ['schemaVersion', 'events'],
+              additionalProperties: false,
+              properties: {
+                schemaVersion: { type: 'integer', enum: [2] },
+                events: {
+                  type: 'array',
+                  items: { $ref: 'OrchestratorUsageEventInputV2#' },
+                },
+              },
+            },
+          ],
         },
         response: {
           200: {
