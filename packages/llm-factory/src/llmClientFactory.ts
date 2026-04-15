@@ -18,7 +18,8 @@
  *   apiKey: 'sk-...',
  *   model: 'gemini-2.5-flash',
  *   userId: 'user-123',
- *   pricing: { inputPricePerMillion: 0.3, outputPricePerMillion: 2.5 },
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  *
  * const result = await client.generate('Write a poem');
@@ -41,7 +42,6 @@ import {
   LlmProviders,
   type LLMError,
   type LLMModel,
-  type ModelPricing,
   type ToolCallingClient,
   type OwnerType,
 } from '@intexuraos/llm-contract';
@@ -58,8 +58,11 @@ export interface LlmClientConfig {
   model: LLMModel;
   /** User ID for usage tracking */
   userId: string;
-  /** Pricing information for the model */
-  pricing: ModelPricing;
+  /**
+   * @deprecated No longer used. Costs are computed by llm-usage-service on ingestion.
+   * Kept as optional for backward compatibility with apps that still pass it.
+   */
+  pricing?: import('@intexuraos/llm-contract').ModelPricing;
   /** Logger for structured LLM usage logging */
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
@@ -120,7 +123,8 @@ type SupportedProvider = typeof LlmProviders.Google | typeof LlmProviders.OpenRo
  *   apiKey: 'sk-...',
  *   model: 'gemini-2.5-flash',
  *   userId: 'user-123',
- *   pricing: getPricing('gemini-2.5-flash'),
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  * ```
  */

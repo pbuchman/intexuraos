@@ -71,7 +71,7 @@ export type {
   OpenRouter,
 } from './supportedModels.js';
 
-export type { ImageSize, ModelPricing, ProviderPricing, CostCalculator } from './pricing.js';
+export type { ImageSize, ModelPricing, ProviderPricing } from './pricing.js';
 
 export type {
   ToolCallingMessage,

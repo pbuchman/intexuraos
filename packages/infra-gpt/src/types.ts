@@ -16,14 +16,10 @@ export type {
   ImageGenerationResult,
   ImageGenerateOptions,
   SynthesisInput,
-  ModelPricing,
 } from '@intexuraos/llm-contract';
 
 /**
  * Configuration for creating a GPT client.
- *
- * Extends {@link LLMConfig} with OpenAI-specific pricing configuration.
- * Supports both text generation and image generation with separate pricing.
  *
  * @example
  * ```ts
@@ -33,20 +29,8 @@ export type {
  *   apiKey: process.env.OPENAI_API_KEY,
  *   model: 'gpt-4.1',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 2.50,
- *     outputPricePerMillion: 10.00,
- *   },
- *   imagePricing: {
- *     inputPricePerMillion: 0,
- *     outputPricePerMillion: 0,
- *     imagePricing: {
- *       '1024x1024': 0.040,
- *       '1536x1024': 0.050,
- *       '1024x1536': 0.050,
- *     }
- *   },
- *   logger: pinoLogger, // Optional pino logger for structured logging
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  * ```
  */
@@ -59,9 +43,15 @@ export interface GptConfig {
   userId: string;
   /** Optional research ID for correlating audit logs to a research run */
   researchId?: string;
-  /** Cost configuration per million tokens for text operations */
-  pricing: import('@intexuraos/llm-contract').ModelPricing;
-  /** Optional separate pricing for image generation */
+  /**
+   * @deprecated No longer used. Costs are computed by llm-usage-service on ingestion.
+   * Kept as optional for backward compatibility with apps that still pass it.
+   */
+  pricing?: import('@intexuraos/llm-contract').ModelPricing;
+  /**
+   * @deprecated No longer used. Costs are computed by llm-usage-service on ingestion.
+   * Kept as optional for backward compatibility with apps that still pass it.
+   */
   imagePricing?: import('@intexuraos/llm-contract').ModelPricing;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
