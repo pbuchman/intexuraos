@@ -227,7 +227,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           user.userId,
           researchId,
           createTitleGenerator,
-          
           request.log
         );
         submitParams.inputContexts = contextsWithLabels;
@@ -303,7 +302,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           LlmModels.Gemini25Flash,
           apiKeys.google,
           user.userId,
-          
           request.log,
           draftId
         );
@@ -331,7 +329,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           user.userId,
           draftId,
           createTitleGenerator,
-          
           request.log
         );
         const now = new Date().toISOString();
@@ -434,7 +431,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             LlmModels.Gemini25Flash,
             apiKeys.google,
             user.userId,
-            
             request.log,
             existing.id
           );
@@ -462,7 +458,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           user.userId,
           existing.id,
           createTitleGenerator,
-          
           request.log
         );
         const now = new Date().toISOString();
@@ -542,7 +537,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         LlmModels.Gemini25Flash,
         googleKey,
         user.userId,
-        
         request.log
       );
 
@@ -628,7 +622,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         LlmModels.Gemini25Flash,
         googleKey,
         user.userId,
-        
         request.log
       );
 
@@ -1292,7 +1285,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           user.userId,
           id,
           createTitleGenerator,
-          
           request.log
         );
         enhanceInput.additionalContexts = contextsWithLabels;

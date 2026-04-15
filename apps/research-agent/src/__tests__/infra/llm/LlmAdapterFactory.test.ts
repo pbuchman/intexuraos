@@ -145,7 +145,6 @@ describe('LlmAdapterFactory', () => {
         LlmModels.Gemini25Pro,
         'google-key',
         'test-user-id',
-        
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -161,7 +160,6 @@ describe('LlmAdapterFactory', () => {
         LlmModels.ClaudeOpus46,
         'anthropic-key',
         'test-user-id',
-        
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -177,7 +175,6 @@ describe('LlmAdapterFactory', () => {
         LlmModels.O4MiniDeepResearch,
         'openai-key',
         'test-user-id',
-        
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -193,7 +190,6 @@ describe('LlmAdapterFactory', () => {
         LlmModels.SonarPro,
         'perplexity-key',
         'test-user-id',
-        
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -227,7 +223,6 @@ describe('LlmAdapterFactory', () => {
         LlmModels.Gemini25Pro,
         'google-key',
         'test-user-id',
-        
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -243,7 +238,6 @@ describe('LlmAdapterFactory', () => {
           LlmModels.ClaudeOpus46,
           'anthropic-key',
           'test-user-id',
-          
           mockLogger,
           fakeUsageSink,
           'research-123'
@@ -256,7 +250,6 @@ describe('LlmAdapterFactory', () => {
         LlmModels.O4MiniDeepResearch,
         'openai-key',
         'test-user-id',
-        
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -274,7 +267,6 @@ describe('LlmAdapterFactory', () => {
           LlmModels.SonarPro,
           'perplexity-key',
           'test-user-id',
-          
           mockLogger,
           fakeUsageSink,
           'research-123'
@@ -304,7 +296,6 @@ describe('LlmAdapterFactory', () => {
         LlmModels.Gemini20Flash,
         'google-key',
         'test-user-id',
-        
         mockLogger,
         fakeUsageSink,
         'research-123'
