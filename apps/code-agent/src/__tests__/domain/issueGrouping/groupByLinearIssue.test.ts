@@ -563,6 +563,35 @@ describe('derivePipeline', () => {
     expect(mergeStep?.state).toBe('actionable');
   });
 
+  it('does NOT create merge step (execution path) when PR has prClosedAt, even with ready-to-merge label', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-1',
+        status: 'implemented',
+        agentType: 'execution',
+        prClosedAt: '2026-03-01T12:00:00.000Z',
+        result: { prUrl: 'https://github.com/owner/repo/pull/42' },
+        linearIssue: {
+          identifier: 'INT-100',
+          title: 'Test',
+          state: { name: 'In Progress', type: 'started' },
+          priority: 1,
+          assignee: null,
+          labels: [{ name: 'ready-to-merge' }],
+          url: 'https://linear.app/INT-100',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      }),
+    ];
+
+    const pipeline = derivePipeline(tasks);
+
+    expect(pipeline.steps.find((s) => s.agentType === 'merge')).toBeUndefined();
+    expect(pipeline.pr?.status).toBe('closed');
+    expect(deriveAggregateStatus(tasks, pipeline)).toBe('done');
+  });
+
   it('creates merge step via review fallback when review completed with prNumber, needs_remediation=0, and ready-to-merge label', () => {
     const tasks = [
       makeTask({
@@ -591,6 +620,36 @@ describe('derivePipeline', () => {
     const mergeStep = pipeline.steps.find((s) => s.agentType === 'merge');
     expect(mergeStep).toBeDefined();
     expect(mergeStep?.state).toBe('actionable');
+  });
+
+  it('does NOT create merge step (review fallback) when PR has prMergedAt, even with ready-to-merge label', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-1',
+        status: 'reviewed',
+        agentType: 'review',
+        prNumber: 42,
+        prMergedAt: '2026-03-01T12:00:00.000Z',
+        result: { needs_remediation: '0', prUrl: 'https://github.com/owner/repo/pull/42' },
+        linearIssue: {
+          identifier: 'INT-100',
+          parentIdentifier: null,
+          title: 'Test',
+          state: { name: 'Done', type: 'completed' },
+          priority: 2,
+          assignee: null,
+          labels: [{ name: 'ready-to-merge' }],
+          url: 'https://linear.app/test',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      }),
+    ];
+
+    const pipeline = derivePipeline(tasks);
+
+    expect(pipeline.steps.find((s) => s.agentType === 'merge')).toBeUndefined();
+    expect(pipeline.pr?.status).toBe('merged');
   });
 
   it('does NOT create merge step via review fallback when ready-to-merge label is absent', () => {
