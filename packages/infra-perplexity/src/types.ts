@@ -42,11 +42,6 @@ export interface PerplexityConfig {
   userId: string;
   /** Optional research ID for correlating audit logs to a research run */
   researchId?: string;
-  /**
-   * No longer used. Costs are computed by llm-usage-service on ingestion.
-   * Kept as optional for backward compatibility with apps that still pass it.
-   */
-  pricing?: import('@intexuraos/llm-contract').ModelPricing;
   /** Request timeout in milliseconds. Default: 840000 (14 minutes) */
   timeoutMs?: number;
   /** Pino logger for structured LLM usage logging */

@@ -47,7 +47,7 @@ export class HttpWebhookUsageSink implements UsageSink {
       { taskId }
     );
 
-    const body = JSON.stringify({ schemaVersion: 1, events: [event] });
+    const body = JSON.stringify({ schemaVersion: 2, events: [event] });
     const timestamp = Math.floor(Date.now() / 1000);
     const message = `${String(timestamp)}.${body}`;
     const signature = createHmac('sha256', this.config.webhookSecret).update(message).digest('hex');

@@ -1,6 +1,6 @@
 import type { Logger } from '@intexuraos/common-core';
 import { isErr } from '@intexuraos/common-core';
-import type { UsageEventInputAny, UsageEvent, UsageIngestResponse, RejectedEvent } from '../models/usageEvent.js';
+import type { UsageEventInput, UsageEvent, UsageIngestResponse, RejectedEvent } from '../models/usageEvent.js';
 import type { UsageEventRepository } from '../repositories/usageEventRepository.js';
 import type { UsageAggregateRepository } from '../repositories/usageAggregateRepository.js';
 import type { PricingCache } from '../services/pricingCache.js';
@@ -15,7 +15,7 @@ export interface IngestUsageEventsDeps {
 
 export async function ingestUsageEvents(
   deps: IngestUsageEventsDeps,
-  events: UsageEventInputAny[],
+  events: UsageEventInput[],
   ingress: 'internal' | 'orchestrator_webhook',
 ): Promise<UsageIngestResponse> {
   const { logger, usageEventRepository, usageAggregateRepository, pricingCache } = deps;
@@ -32,9 +32,7 @@ export async function ingestUsageEvents(
       continue;
     }
 
-    const fullEvent: UsageEvent = input.schemaVersion === 2
-      ? enrichV2Event(input, receivedAt, ingress, await resolveV2Cost(input, pricingCache, logger))
-      : { ...input, receivedAt, ingress };
+    const fullEvent = enrichEvent(input, receivedAt, ingress, await resolveCost(input, pricingCache, logger));
 
     const createResult = await usageEventRepository.createEvent(fullEvent);
     if (!createResult.ok) {
@@ -82,8 +80,8 @@ interface ResolvedCost {
   pricingSource: 'provider_reported' | 'calculated';
 }
 
-async function resolveV2Cost(
-  input: Extract<UsageEventInputAny, { schemaVersion: 2 }>,
+async function resolveCost(
+  input: UsageEventInput,
   pricingCache: PricingCache,
   logger: Logger,
 ): Promise<ResolvedCost> {
@@ -121,8 +119,8 @@ async function resolveV2Cost(
   };
 }
 
-function enrichV2Event(
-  input: Extract<UsageEventInputAny, { schemaVersion: 2 }>,
+function enrichEvent(
+  input: UsageEventInput,
   receivedAt: string,
   ingress: 'internal' | 'orchestrator_webhook',
   cost: ResolvedCost,

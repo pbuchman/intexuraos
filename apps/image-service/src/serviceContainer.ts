@@ -1,4 +1,3 @@
-import type { IPricingContext } from '@intexuraos/llm-pricing';
 import type { Google, OpenAI } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import type {
@@ -14,7 +13,6 @@ export interface ServiceContainer {
   generatedImageRepository: GeneratedImageRepository;
   imageStorage: ImageStorage;
   userServiceClient: UserServiceClient;
-  pricingContext: IPricingContext;
   createPromptGenerator: (
     provider: Google | OpenAI,
     model: string,

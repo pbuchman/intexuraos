@@ -34,7 +34,7 @@ if (sentryDsn !== undefined) {
 initSentry(sentryConfig);
 
 async function main(): Promise<void> {
-  await initServices({
+  initServices({
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '',
     todosProcessingTopic: process.env['INTEXURAOS_TODOS_PROCESSING_TOPIC'] ?? '',
     internalAuthKey: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',

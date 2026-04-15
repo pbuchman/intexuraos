@@ -45,7 +45,7 @@ export class HttpInternalAuthUsageSink implements UsageSink {
       { taskId }
     );
 
-    const body = JSON.stringify({ schemaVersion: 1, events: [event] });
+    const body = JSON.stringify({ schemaVersion: 2, events: [event] });
     const url = `${this.config.usageServiceUrl}/internal/usage/events`;
 
     try {

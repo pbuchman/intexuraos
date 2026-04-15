@@ -115,19 +115,17 @@ describe('buildValidationClients', () => {
     expect(clients[1]?.modelName).toBe('gemini-2.5-flash');
     expect(createLlmClientMock).toHaveBeenCalledTimes(2);
 
-    const zeroPricing = { inputPricePerMillion: 0, outputPricePerMillion: 0 };
-
     // First call: OpenRouter model
     const firstCallConfig = createLlmClientMock.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(firstCallConfig['apiKey']).toBe('or-key');
     expect(firstCallConfig['model']).toBe('or:google/gemma-4-31b-it:free');
-    expect(firstCallConfig['pricing']).toEqual(zeroPricing);
+    expect(firstCallConfig['pricing']).toBeUndefined();
 
     // Second call: Gemini model
     const secondCallConfig = createLlmClientMock.mock.calls[1]?.[0] as Record<string, unknown>;
     expect(secondCallConfig['apiKey']).toBe('gem-key');
     expect(secondCallConfig['model']).toBe('gemini-2.5-flash');
-    expect(secondCallConfig['pricing']).toEqual(zeroPricing);
+    expect(secondCallConfig['pricing']).toBeUndefined();
   });
 
   it('throws when openRouterApiKey is empty and an or: model is present', () => {

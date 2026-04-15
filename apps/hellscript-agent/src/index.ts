@@ -1,8 +1,7 @@
 import { initSentry, createAppLogger } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
-import { fetchAllPricingWithRetry, createPricingContext, HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
-import { LlmModels, type LLMModel } from '@intexuraos/llm-contract';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
@@ -17,10 +16,6 @@ const REQUIRED_ENV = [
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'INTEXURAOS_SENTRY_DSN',
-];
-
-const REQUIRED_MODELS: LLMModel[] = [
-  LlmModels.Gemini25Flash,
 ];
 
 /* v8 ignore start -- module-init: entry point bootstrapping not unit-testable @preserve */
@@ -41,18 +36,9 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const logger = createAppLogger({ name: 'hellscript-agent' });
 
-  const pricingResult = await fetchAllPricingWithRetry(config.llmUsageServiceUrl, config.internalAuthToken);
-  if (!pricingResult.ok) {
-    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
-  }
-
-  const pricingContext = createPricingContext(pricingResult.value, REQUIRED_MODELS);
-  process.stdout.write(`Loaded pricing for ${String(REQUIRED_MODELS.length)} models: ${REQUIRED_MODELS.join(', ')}\n`);
-
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
-    pricingContext,
     logger: createAppLogger({ name: 'user-service-client' }),
     usageSink: new HttpInternalAuthUsageSink({
       usageServiceUrl: config.llmUsageServiceUrl,

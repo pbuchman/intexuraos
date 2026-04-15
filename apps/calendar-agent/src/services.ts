@@ -15,12 +15,10 @@ import { createProcessedActionRepository } from './infra/firestore/processedActi
 import { createCalendarPreviewRepository } from './infra/firestore/calendarPreviewRepository.js';
 import { createCalendarActionExtractionService } from './infra/gemini/calendarActionExtractionService.js';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
-import { HttpInternalAuthUsageSink, type IPricingContext } from '@intexuraos/llm-pricing';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 
 const logger = createAppLogger({ name: 'calendar-agent' });
-
-export type { IPricingContext as PricingContext };
 
 export interface ServiceContainer {
   googleCalendarClient: GoogleCalendarClient;
@@ -35,7 +33,6 @@ export interface ServiceConfig {
   userServiceUrl: string;
   internalAuthToken: string;
   llmUsageServiceUrl: string;
-  pricingContext: IPricingContext;
 }
 
 let container: ServiceContainer | null = null;

@@ -25,13 +25,11 @@ import { createLinearCommentRepository } from './infra/firestore/linearCommentRe
 import { createIssuePruningClassifier } from './infra/llm/issuePruningClassifier.js';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { createCodeAgentHttpClient } from './infra/http/codeAgentHttpClient.js';
-import { type IPricingContext, HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
 const logger = createAppLogger({ name: 'linear-agent' });
-
-export type { IPricingContext as PricingContext };
 
 export interface ServiceContainer {
   connectionRepository: LinearConnectionRepository;
@@ -51,7 +49,6 @@ export interface ServiceConfig {
   userServiceUrl: string;
   codeAgentUrl: string;
   internalAuthToken: string;
-  pricingContext: IPricingContext;
   llmUsageServiceUrl: string;
 }
 

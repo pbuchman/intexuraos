@@ -5,8 +5,8 @@ import { ingestUsageEvents } from '../../../domain/usecases/ingestUsageEvents.js
 import { FakeUsageEventRepository } from '../../fakeUsageEventRepository.js';
 import { FakeUsageAggregateRepository } from '../../fakeUsageAggregateRepository.js';
 import { FakePricingCache } from '../../fakePricingCache.js';
-import { createTestEventInput, createTestEventInputV2 } from '../../helpers.js';
-import type { UsageEventInputAny } from '../../../domain/models/usageEvent.js';
+import { createTestEventInput } from '../../helpers.js';
+import type { UsageEventInput } from '../../../domain/models/usageEvent.js';
 
 /**
  * Use-case-layer tests for `ingestUsageEvents`.
@@ -40,9 +40,9 @@ describe('ingestUsageEvents', () => {
   }
 
   // ---------------------------------------------------------------------------
-  // V1 backward compatibility
+  // Happy path and failure handling
   // ---------------------------------------------------------------------------
-  describe('v1 backward compatibility', () => {
+  describe('happy path and failure handling', () => {
     it('accepts valid events', async () => {
       const events = [createTestEventInput({ eventId: 'evt_1' })];
       const result = await ingestUsageEvents(makeDeps(), events, 'internal');
@@ -82,7 +82,7 @@ describe('ingestUsageEvents', () => {
     });
 
     it('skips undefined events in the array', async () => {
-      const events = [undefined as unknown as UsageEventInputAny, createTestEventInput({ eventId: 'evt_ok' })];
+      const events = [undefined as unknown as UsageEventInput, createTestEventInput({ eventId: 'evt_ok' })];
       const result = await ingestUsageEvents(makeDeps(), events, 'internal');
 
       expect(result.accepted).toBe(1);
@@ -107,16 +107,6 @@ describe('ingestUsageEvents', () => {
       expect(aggregateRepo.getIncrementCallCount()).toBe(preIncrementCount + 1);
     });
 
-    it('stores v1 events with schemaVersion 1 as-is', async () => {
-      const events = [createTestEventInput({ eventId: 'evt_v1_check' })];
-      await ingestUsageEvents(makeDeps(), events, 'internal');
-
-      const stored = eventRepo.getStoredEvents();
-      expect(stored).toHaveLength(1);
-      expect(stored[0]?.schemaVersion).toBe(1);
-      expect(stored[0]?.cost.billedUsd).toBe(0.003);
-      expect(stored[0]?.cost.pricingSource).toBe('calculated');
-    });
   });
 
   // ---------------------------------------------------------------------------
@@ -126,7 +116,7 @@ describe('ingestUsageEvents', () => {
     it('enriches pending events with calculated cost when pricing is found', async () => {
       pricingCache.setPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', anthropicPricing);
 
-      const events = [createTestEventInputV2({
+      const events = [createTestEventInput({
         eventId: 'evt_v2_pending',
         cost: { providerReportedUsd: null, pricingSource: 'pending' },
       })];
@@ -149,7 +139,7 @@ describe('ingestUsageEvents', () => {
     it('defaults cost to 0 when pricing is not found for model', async () => {
       // No pricing seeded for model — cache returns null
 
-      const events = [createTestEventInputV2({
+      const events = [createTestEventInput({
         eventId: 'evt_v2_unknown',
         cost: { providerReportedUsd: null, pricingSource: 'pending' },
       })];
@@ -168,7 +158,7 @@ describe('ingestUsageEvents', () => {
     });
 
     it('uses provider_reported cost when pricingSource is provider_reported and providerReportedUsd is non-null', async () => {
-      const events = [createTestEventInputV2({
+      const events = [createTestEventInput({
         eventId: 'evt_v2_reported',
         cost: { providerReportedUsd: 0.0042, pricingSource: 'provider_reported' },
       })];
@@ -187,7 +177,7 @@ describe('ingestUsageEvents', () => {
     });
 
     it('clamps negative providerReportedUsd to 0 for billedUsd', async () => {
-      const events = [createTestEventInputV2({
+      const events = [createTestEventInput({
         eventId: 'evt_v2_negative',
         cost: { providerReportedUsd: -0.005, pricingSource: 'provider_reported' },
       })];
@@ -206,7 +196,7 @@ describe('ingestUsageEvents', () => {
     it('falls back to calculated pricing when provider_reported has null USD', async () => {
       pricingCache.setPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', anthropicPricing);
 
-      const events = [createTestEventInputV2({
+      const events = [createTestEventInput({
         eventId: 'evt_v2_reported_null',
         cost: { providerReportedUsd: null, pricingSource: 'provider_reported' },
       })];
@@ -226,29 +216,12 @@ describe('ingestUsageEvents', () => {
     it('stores v2 events as schemaVersion 1', async () => {
       pricingCache.setPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', anthropicPricing);
 
-      const events = [createTestEventInputV2({ eventId: 'evt_v2_stored_v1' })];
+      const events = [createTestEventInput({ eventId: 'evt_v2_stored_v1' })];
       await ingestUsageEvents(makeDeps(), events, 'internal');
 
       const stored = eventRepo.getStoredEvents();
       expect(stored[0]?.schemaVersion).toBe(1);
     });
 
-    it('handles mixed v1 and v2 events in the same batch', async () => {
-      pricingCache.setPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', anthropicPricing);
-
-      const events: UsageEventInputAny[] = [
-        createTestEventInput({ eventId: 'evt_mix_v1' }),
-        createTestEventInputV2({ eventId: 'evt_mix_v2' }),
-      ];
-
-      const result = await ingestUsageEvents(makeDeps(), events, 'internal');
-
-      expect(result.accepted).toBe(2);
-      const stored = eventRepo.getStoredEvents();
-      expect(stored).toHaveLength(2);
-      // Both stored as schemaVersion 1
-      expect(stored[0]?.schemaVersion).toBe(1);
-      expect(stored[1]?.schemaVersion).toBe(1);
-    });
   });
 });

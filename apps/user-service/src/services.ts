@@ -2,14 +2,8 @@
  * Service wiring for user-service.
  * Provides dependency injection for domain adapters.
  */
-import { LlmModels } from '@intexuraos/llm-contract';
 import { createEncryptor, type Encryptor } from './infra/encryption.js';
-import {
-  HttpInternalAuthUsageSink,
-  NoopUsageSink,
-  type PricingContext,
-  type UsageSink,
-} from '@intexuraos/llm-pricing';
+import { HttpInternalAuthUsageSink, NoopUsageSink, type UsageSink } from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { Auth0Client, AuthTokenRepository } from './domain/identity/index.js';
@@ -31,7 +25,6 @@ import {
   loadAuth0Config as loadAuth0ConfigFromInfra,
 } from './infra/auth0/index.js';
 import { LlmValidatorImpl } from './infra/llm/index.js';
-import { getAllowlistPricing, OPENROUTER_VALIDATION_MODEL } from '@intexuraos/infra-openrouter';
 import { GoogleOAuthClientImpl } from './infra/google/index.js';
 import { GitHubOAuthClientImpl } from './infra/github/index.js';
 
@@ -105,27 +98,15 @@ export function getServices(): ServiceContainer {
 
 /**
  * Initialize the service container with all dependencies.
- * @param pricingContext - Pricing context for LLM validation (optional in test env)
  * @param logger - Logger for LLM validation (uses silent logger if not provided)
  */
-export function initializeServices(pricingContext?: PricingContext, logger: Logger = silentLogger): void {
+export function initializeServices(logger: Logger = silentLogger): void {
   const auth0Config = loadAuth0ConfigFromInfra();
   // LlmValidator is null in test environment to skip actual API calls
   const isTestEnv = process.env['NODE_ENV'] === 'test';
 
   let llmValidator: LlmValidator | null = null;
-  if (!isTestEnv && pricingContext !== undefined) {
-    const openrouterPricing = getAllowlistPricing(OPENROUTER_VALIDATION_MODEL);
-    const validationPricing = {
-      google: pricingContext.getPricing(LlmModels.Gemini20Flash),
-      openai: pricingContext.getPricing(LlmModels.GPT4oMini),
-      anthropic: pricingContext.getPricing(LlmModels.ClaudeHaiku35),
-      perplexity: pricingContext.getPricing(LlmModels.Sonar),
-      openrouter: openrouterPricing ?? {
-        inputPricePerMillion: 0.07,
-        outputPricePerMillion: 0.26,
-      },
-    };
+  if (!isTestEnv) {
     const llmUsageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '';
     const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
     const validatorUsageSink: UsageSink =
@@ -138,7 +119,7 @@ export function initializeServices(pricingContext?: PricingContext, logger: Logg
             logger,
           })
         : new NoopUsageSink();
-    llmValidator = new LlmValidatorImpl(validationPricing, logger, validatorUsageSink);
+    llmValidator = new LlmValidatorImpl(logger, validatorUsageSink);
   }
 
   container = {
