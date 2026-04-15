@@ -3,7 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type ModelPricing } from '@intexuraos/llm-contract';
+
 import type { Logger } from '@intexuraos/common-core';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
@@ -24,12 +24,6 @@ vi.mock('@intexuraos/infra-openrouter', () => ({
 
 const { OpenRouterAdapter } = await import('../../../infra/llm/OpenRouterAdapter.js');
 
-const testPricing: ModelPricing = {
-  inputPricePerMillion: 3.0,
-  outputPricePerMillion: 15.0,
-  useProviderCost: true,
-};
-
 const mockLogger: Logger = {
   info: vi.fn(),
   error: vi.fn(),
@@ -48,7 +42,6 @@ describe('OpenRouterAdapter', () => {
       'test-key',
       TEST_MODEL,
       'test-user-id',
-      testPricing,
       mockLogger,
       fakeUsageSink
     );
@@ -61,7 +54,6 @@ describe('OpenRouterAdapter', () => {
         'test-key',
         TEST_MODEL,
         'test-user-id',
-        testPricing,
         mockLogger,
         fakeUsageSink
       );
@@ -70,7 +62,6 @@ describe('OpenRouterAdapter', () => {
         apiKey: 'test-key',
         model: EXPECTED_RAW_MODEL,
         userId: 'test-user-id',
-        pricing: testPricing,
         logger: mockLogger,
         usageSink: fakeUsageSink,
       });
@@ -82,7 +73,6 @@ describe('OpenRouterAdapter', () => {
         'test-key',
         TEST_MODEL,
         'test-user-id',
-        testPricing,
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -93,7 +83,6 @@ describe('OpenRouterAdapter', () => {
         model: EXPECTED_RAW_MODEL,
         userId: 'test-user-id',
         researchId: 'research-123',
-        pricing: testPricing,
         logger: mockLogger,
         usageSink: fakeUsageSink,
       });
@@ -106,7 +95,6 @@ describe('OpenRouterAdapter', () => {
         'test-key',
         nonOpenRouterModel,
         'test-user-id',
-        testPricing,
         mockLogger,
         fakeUsageSink
       );
@@ -115,7 +103,6 @@ describe('OpenRouterAdapter', () => {
         apiKey: 'test-key',
         model: nonOpenRouterModel,
         userId: 'test-user-id',
-        pricing: testPricing,
         logger: mockLogger,
         usageSink: fakeUsageSink,
       });
@@ -425,7 +412,6 @@ describe('OpenRouterAdapter', () => {
         'test-key',
         TEST_MODEL,
         'test-user-id',
-        testPricing,
         mockLoggerLocal,
         fakeUsageSink
       );

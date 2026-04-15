@@ -5,7 +5,6 @@
 
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
 import type { Logger, Result } from '@intexuraos/common-core';
-import type { ModelPricing } from '@intexuraos/llm-contract';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
   buildResearchPrompt,
@@ -34,7 +33,6 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     apiKey: string,
     model: string,
     userId: string,
-    pricing: ModelPricing,
     logger: Logger,
     usageSink: UsageSink,
     researchId?: string
@@ -44,7 +42,6 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
       model,
       userId,
       ...(researchId !== undefined && { researchId }),
-      pricing,
       logger,
       usageSink,
     });

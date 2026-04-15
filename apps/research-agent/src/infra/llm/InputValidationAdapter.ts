@@ -4,7 +4,6 @@
  */
 
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
-import type { ModelPricing } from '@intexuraos/llm-contract';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
   buildImprovementRepairPrompt,
@@ -51,11 +50,10 @@ export class InputValidationAdapter implements InputValidationProvider {
     apiKey: string,
     model: string,
     userId: string,
-    pricing: ModelPricing,
     logger: Logger,
     usageSink: UsageSink
   ) {
-    this.client = createGeminiClient({ apiKey, model, userId, pricing, logger, usageSink });
+    this.client = createGeminiClient({ apiKey, model, userId, logger, usageSink });
     this.model = model;
     this.logger = logger;
   }
