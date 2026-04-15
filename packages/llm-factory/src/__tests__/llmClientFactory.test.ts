@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LlmProviders, LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
+import { LlmProviders, LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 
@@ -36,12 +36,6 @@ vi.mock('../openRouterGenerateClient.js', () => ({
 const { createLlmClient, createToolCallingClient, isSupportedProvider } =
   await import('../llmClientFactory.js');
 
-const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing => ({
-  inputPricePerMillion: 0.6,
-  outputPricePerMillion: 2.2,
-  webSearchCostPerCall: 0.005,
-  ...overrides,
-});
 
 describe('llmClientFactory', () => {
   beforeEach(() => {
@@ -54,7 +48,6 @@ describe('llmClientFactory', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini25Flash,
         userId: 'user-123',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -68,7 +61,6 @@ describe('llmClientFactory', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini25Pro,
         userId: 'user-123',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -82,7 +74,6 @@ describe('llmClientFactory', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini25Flash,
         userId: 'user-123',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -96,7 +87,6 @@ describe('llmClientFactory', () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           model: 'gemini-2.5-flash-exp-unsupported' as any,
           userId: 'user-123',
-          pricing: createTestPricing(),
           logger: mockLogger,
           usageSink: mockUsageSink,
         })
@@ -112,7 +102,6 @@ describe('llmClientFactory', () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           model: 'claude-opus' as any,
           userId: 'user-123',
-          pricing: createTestPricing(),
           logger: mockLogger,
           usageSink: mockUsageSink,
         })
@@ -125,7 +114,6 @@ describe('llmClientFactory', () => {
           apiKey: 'test-key',
           model: LlmModels.ClaudeHaiku35,
           userId: 'user-123',
-          pricing: createTestPricing(),
           logger: mockLogger,
           usageSink: mockUsageSink,
         })
@@ -138,7 +126,6 @@ describe('llmClientFactory', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         model: 'or:google/gemma-4-31b-it:free' as any,
         userId: 'user-123',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -154,7 +141,6 @@ describe('llmClientFactory', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini25Flash,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -169,7 +155,6 @@ describe('llmClientFactory', () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           model: 'nonexistent-model' as any,
           userId: 'test-user',
-          pricing: createTestPricing(),
           logger: mockLogger,
           usageSink: mockUsageSink,
         })
@@ -183,7 +168,6 @@ describe('llmClientFactory', () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           model: LlmModels.ClaudeOpus46 as any,
           userId: 'test-user',
-          pricing: createTestPricing(),
           logger: mockLogger,
           usageSink: mockUsageSink,
         })
@@ -200,7 +184,6 @@ describe('llmClientFactory', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         model: 'or:google/gemma-4-31b-it:free' as any,
         userId: 'user-123',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
         ownerType: 'user',
@@ -218,7 +201,6 @@ describe('llmClientFactory', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini25Flash,
         userId: 'user-123',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
         ownerType: 'user',
@@ -236,7 +218,6 @@ describe('llmClientFactory', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini25Flash,
         userId: 'user-123',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });

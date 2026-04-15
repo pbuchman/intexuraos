@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
-import { type ModelPricing, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 
@@ -27,12 +27,6 @@ const { createOpenRouterClient } = await import('../client.js');
 const API_BASE_URL = 'https://openrouter.ai/api/v1';
 const TEST_MODEL = 'anthropic/claude-sonnet-4.6';
 
-const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing => ({
-  inputPricePerMillion: 3.0,
-  outputPricePerMillion: 15.0,
-  useProviderCost: true,
-  ...overrides,
-});
 
 describe('createOpenRouterClient', () => {
   beforeEach(() => {
@@ -72,7 +66,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -110,7 +103,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: `${TEST_MODEL}:online`, // Model already has :online suffix
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -143,7 +135,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -158,8 +149,7 @@ describe('createOpenRouterClient', () => {
           outputTokens: 50,
           totalTokens: 150,
         });
-        // Cost: 100 * (3.0/1M) + 50 * (15.0/1M) = 0.0003 + 0.00075 = 0.00105
-        expect(result.value.usage.costUsd).toBeCloseTo(0.00105, 5);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -179,7 +169,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -219,7 +208,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -256,7 +244,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -292,7 +279,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -317,7 +303,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -337,7 +322,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -357,7 +341,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -377,7 +360,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -399,7 +381,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -419,7 +400,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -461,7 +441,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -494,7 +473,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -509,8 +487,7 @@ describe('createOpenRouterClient', () => {
           outputTokens: 100,
           totalTokens: 150,
         });
-        // Cost: 50 * (3.0/1M) + 100 * (15.0/1M) = 0.00015 + 0.0015 = 0.00165
-        expect(result.value.usage.costUsd).toBeCloseTo(0.00165, 5);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -536,7 +513,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -558,7 +534,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -578,7 +553,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -598,7 +572,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -618,7 +591,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -638,7 +610,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -658,7 +629,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -693,7 +663,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -733,7 +702,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -770,7 +738,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -796,7 +763,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -834,7 +800,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing({ useProviderCost: true }),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -869,7 +834,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing({ inputPricePerMillion: 1, outputPricePerMillion: 2 }),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -878,7 +842,7 @@ describe('createOpenRouterClient', () => {
 
       const callArg = mockUsageLoggerLog.mock.calls[0]?.[0] as Record<string, unknown>;
       expect(callArg['providerReportedUsd']).toBeUndefined();
-      expect((callArg['usage'] as { costUsd: number }).costUsd).toBeGreaterThan(0); // token-fallback still produces non-zero cost
+      expect((callArg['usage'] as { costUsd: number }).costUsd).toBe(0);
     });
 
     it('forwards providerReportedUsd on the research callType too', async () => {
@@ -903,7 +867,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing({ useProviderCost: true }),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -942,7 +905,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: fakeSink,
       });
@@ -966,7 +928,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -987,7 +948,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'bad-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -1007,7 +967,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -1027,7 +986,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -1047,7 +1005,6 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -1083,7 +1040,6 @@ describe('createOpenRouterClient', () => {
       apiKey: 'test-key',
       model: TEST_MODEL,
       userId: 'test-user',
-      pricing: createTestPricing(),
       logger: mockLogger,
       usageSink: mockUsageSink,
       ownerType: 'user',
