@@ -272,16 +272,22 @@ export function useIssueGroups(options: {
 
   const toggleImportant = useCallback(
     (groupKey: string): void => {
-      // Optimistic update: toggle in local state immediately
+      // Capture the target value BEFORE the optimistic setGroups runs.
+      // Reading groupsRef.current after an await would see the post-commit
+      // state and flip newImportant to the wrong value.
+      const currentGroup = groupsRef.current.find(
+        (g) => (g.linearIssueId ?? `standalone_${g.latestTask.id}`) === groupKey,
+      );
+      const newImportant = currentGroup?.isImportant !== true;
+
+      // Optimistic update: apply target value immediately.
       setGroups((prev) =>
         prev.map((g): IssueGroup => {
           const key = g.linearIssueId ?? `standalone_${g.latestTask.id}`;
           if (key !== groupKey) return g;
-          if (g.isImportant === true) {
-            const { isImportant: _, ...rest } = g;
-            return rest;
-          }
-          return { ...g, isImportant: true };
+          if (newImportant) return { ...g, isImportant: true };
+          const { isImportant: _, ...rest } = g;
+          return rest;
         }),
       );
 
@@ -289,8 +295,6 @@ export function useIssueGroups(options: {
       void (async (): Promise<void> => {
         try {
           const token = await getAccessToken();
-          const currentGroup = groupsRef.current.find((g) => (g.linearIssueId ?? `standalone_${g.latestTask.id}`) === groupKey);
-          const newImportant = currentGroup?.isImportant !== true;
           await setGroupImportant(token, groupKey, newImportant);
         } catch (_err) {
           // Revert on error by refreshing
