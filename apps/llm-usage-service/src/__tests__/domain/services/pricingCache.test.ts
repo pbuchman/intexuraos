@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { LlmProviders } from '@intexuraos/llm-contract';
+import { LlmProviders, LlmModels } from '@intexuraos/llm-contract';
 import type { ProviderPricing } from '@intexuraos/llm-contract';
 import { createPricingCache } from '../../../domain/services/pricingCache.js';
 import { FakePricingRepository } from '../../fakePricingRepository.js';
@@ -18,7 +18,7 @@ const mockAnthropicPricing: ProviderPricing = {
 const mockGooglePricing: ProviderPricing = {
   provider: LlmProviders.Google,
   models: {
-    'gemini-2.5-pro': {
+    [LlmModels.Gemini25Pro]: {
       inputPricePerMillion: 1.25,
       outputPricePerMillion: 10.0,
     },
@@ -84,7 +84,7 @@ describe('pricingCache', () => {
     const cache = createPricingCache(repo, 60_000);
 
     await cache.getModelPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', logger);
-    await cache.getModelPricing(LlmProviders.Google, 'gemini-2.5-pro', logger);
+    await cache.getModelPricing(LlmProviders.Google, LlmModels.Gemini25Pro, logger);
 
     expect(getAllSpy).toHaveBeenCalledTimes(1);
   });
@@ -124,7 +124,7 @@ describe('pricingCache', () => {
     // Fire multiple concurrent requests
     const [r1, r2, r3] = await Promise.all([
       cache.getModelPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', logger),
-      cache.getModelPricing(LlmProviders.Google, 'gemini-2.5-pro', logger),
+      cache.getModelPricing(LlmProviders.Google, LlmModels.Gemini25Pro, logger),
       cache.getModelPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', logger),
     ]);
 
