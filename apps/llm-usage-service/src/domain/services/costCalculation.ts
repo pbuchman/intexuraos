@@ -27,6 +27,11 @@ export interface UsageTokens {
  * All prices in `pricing` are per-million tokens; the function uses
  * scaled integer math with `Math.round()` for precision.
  *
+ * Note: Image cost calculation (`calculateImageCost`) from `infra-gemini`
+ * and `infra-gpt` is NOT consolidated here — image generation events are
+ * not yet emitted with `schemaVersion: 2`. If image events are migrated
+ * in the future, add image cost handling to the relevant provider branches.
+ *
  * @param provider - The LLM provider identifier
  * @param usage - Token usage counts from the request
  * @param pricing - Model pricing configuration (per-million)
@@ -127,7 +132,11 @@ function calculateOpenAICost(usage: UsageTokens, pricing: ModelPricing): number 
 /**
  * Perplexity token-based cost calculation.
  *
- * - webSearchCalls defaults to 1 (Perplexity always charges at least one request)
+ * - webSearchCalls defaults to 1 when 0 (Perplexity always charges at least one
+ *   request fee per API call). This differs from the original infra-perplexity
+ *   calculator which used `?? 1` (nullish coalescing), but the original
+ *   `normalizeUsage()` always hardcoded `webSearchCalls: 1` before calling
+ *   `calculateTextCost`, so the effective behavior is the same.
  * - Request fee is charged per search call via webSearchCostPerCall
  */
 function calculatePerplexityCost(usage: UsageTokens, pricing: ModelPricing): number {
