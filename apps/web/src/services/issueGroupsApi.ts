@@ -36,3 +36,22 @@ export async function listIssueGroups(
   const path = query !== '' ? `/code/issue-groups?${query}` : '/code/issue-groups';
   return await apiRequest<ListIssueGroupsResponse>(config.codeAgentUrl, path, accessToken);
 }
+
+/**
+ * Toggle the important flag on an issue group.
+ */
+export async function setGroupImportant(
+  accessToken: string,
+  groupKey: string,
+  important: boolean,
+): Promise<{ important: boolean }> {
+  return await apiRequest<{ important: boolean }>(
+    config.codeAgentUrl,
+    `/code/issue-groups/${encodeURIComponent(groupKey)}/important`,
+    accessToken,
+    {
+      method: 'POST',
+      body: { important },
+    },
+  );
+}
