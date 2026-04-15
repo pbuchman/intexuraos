@@ -411,6 +411,20 @@ describe('evaluateEvent', () => {
       }
     });
 
+    it('returns LLM_FAILED when resolveToolCallingClient fails for PR event', async () => {
+      const deps = createDeps({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({ resolveError: true }),
+      });
+      const event = createFakePREvent();
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+      }
+    });
+
     it('handles null action by rejecting as invalid', async () => {
       const deps = createDeps();
       const event = createFakePREvent({ action: null });
@@ -648,6 +662,29 @@ describe('evaluateEvent', () => {
 
       expect(deps.userServiceClient.resolveGitHubUsername).toHaveBeenCalledWith('dev-user');
       expect(resolveToolCallingClient).toHaveBeenCalledWith('user-1');
+    });
+
+    it('returns USER_NOT_FOUND when comment sender user resolution fails', async () => {
+      const deps = createDeps({
+        userServiceClient: {
+          ...createFakeUserServiceClient(),
+          resolveGitHubUsername: vi.fn().mockResolvedValue(
+            err({ code: 'NETWORK_ERROR' as const, message: 'Connection refused' })
+          ),
+        },
+      });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review check this',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('USER_NOT_FOUND');
+      }
     });
 
     it('returns USER_NOT_FOUND when comment sender has no linked account', async () => {
