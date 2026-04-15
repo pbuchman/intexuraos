@@ -1,5 +1,5 @@
 /**
- * Default model allowlist for OpenRouter - a curated set of 4 models
+ * Default model allowlist for OpenRouter - a curated set of 5 models
  * suitable for general use, including free and low-cost options.
  */
 
@@ -25,11 +25,19 @@ export interface DefaultAllowedOpenRouterModel {
 }
 
 /**
- * Curated default allowlist of 4 models including free and low-cost options.
+ * Curated default allowlist of 5 models including free and low-cost options.
  */
 export const DEFAULT_OPENROUTER_ALLOWED_MODELS: readonly DefaultAllowedOpenRouterModel[] = [
   {
     id: 'google/gemma-4-31b-it:free',
+    name: 'Gemma 4 31B IT (Free)',
+    provider: 'Google',
+    promptPerToken: '0',
+    completionPerToken: '0',
+  },
+  {
+    // Fallback pricing only — OpenRouter returns live per-call pricing at runtime.
+    id: 'google/gemma-4-31b-it',
     name: 'Gemma 4 31B IT',
     provider: 'Google',
     promptPerToken: '0',
