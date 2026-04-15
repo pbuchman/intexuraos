@@ -100,4 +100,5 @@ export interface IssueGroup {
   latestTask: SerializedTask;
   aggregateStatus: GroupStatus;
   mostRecentDispatchedAt?: string;
+  isImportant?: boolean;
 }
