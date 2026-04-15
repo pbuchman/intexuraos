@@ -109,6 +109,8 @@ export function useIssueGroups(options: {
   const isInitialLoadRef = useRef(true);
   const isInitialMountRef = useRef(true);
   const loadedGroupCountRef = useRef(0);
+  const groupsRef = useRef(groups);
+  groupsRef.current = groups;
 
   const refresh = useCallback(
     async (showLoading?: boolean, silent?: boolean): Promise<void> => {
@@ -287,7 +289,7 @@ export function useIssueGroups(options: {
       void (async (): Promise<void> => {
         try {
           const token = await getAccessToken();
-          const currentGroup = groups.find((g) => (g.linearIssueId ?? `standalone_${g.latestTask.id}`) === groupKey);
+          const currentGroup = groupsRef.current.find((g) => (g.linearIssueId ?? `standalone_${g.latestTask.id}`) === groupKey);
           const newImportant = currentGroup?.isImportant !== true;
           await setGroupImportant(token, groupKey, newImportant);
         } catch (_err) {
@@ -296,7 +298,7 @@ export function useIssueGroups(options: {
         }
       })();
     },
-    [getAccessToken, groups, refresh],
+    [getAccessToken, refresh],
   );
 
   return {
