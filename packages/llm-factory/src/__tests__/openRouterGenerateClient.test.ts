@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type ModelPricing } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
@@ -23,18 +22,10 @@ vi.mock('@intexuraos/infra-openrouter', () => ({
 
 const { createOpenRouterGenerateClient } = await import('../openRouterGenerateClient.js');
 
-const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing => ({
-  inputPricePerMillion: 0.6,
-  outputPricePerMillion: 2.2,
-  webSearchCostPerCall: 0.005,
-  ...overrides,
-});
-
 const baseConfig = {
   apiKey: 'test-key',
   model: 'or:google/gemma-4-31b-it:free' as unknown as import('@intexuraos/llm-contract').LLMModel,
   userId: 'user-123',
-  pricing: createTestPricing(),
   logger: mockLogger,
   usageSink: mockUsageSink,
 };
