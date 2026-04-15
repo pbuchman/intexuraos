@@ -32,6 +32,7 @@ export interface IssueGroup {
   latestTask: CodeTask;
   aggregateStatus: GroupStatus;
   mostRecentDispatchedAt?: string;
+  isImportant?: boolean;
 }
 
 export interface ListIssueGroupsResponse {

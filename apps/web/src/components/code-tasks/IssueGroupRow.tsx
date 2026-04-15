@@ -1,5 +1,5 @@
 import { memo, useState } from 'react';
-import { ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, Clock, ScrollText, Trash2, GitMerge, Archive } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Play, RotateCcw, ExternalLink, Check, X, Loader2, Clock, ScrollText, Trash2, GitMerge, Archive } from 'lucide-react';
 import type { ActioningType, IssueGroup, StepState } from '@/types/issueGroups';
 import { formatRelative } from '@/utils/dateFormat';
 import { IssueTimeline } from '@/components/code-tasks/IssueTimeline';
@@ -30,6 +30,7 @@ interface IssueGroupRowProps {
   isSelectable?: boolean;
   isBatchActioning?: boolean;
   onToggleSelection?: ((groupKey: string) => void) | undefined;
+  onToggleImportant?: ((groupKey: string) => void) | undefined;
   groupKey?: string;
 }
 
@@ -304,6 +305,37 @@ function SelectionCheckbox({
   );
 }
 
+// --- Important toggle ---
+
+function ImportantToggle({
+  isImportant,
+  groupKey,
+  onToggle,
+}: {
+  isImportant: boolean;
+  groupKey: string;
+  onToggle: (key: string) => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={(e): void => {
+        e.stopPropagation();
+        onToggle(groupKey);
+      }}
+      className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
+        isImportant
+          ? 'bg-amber-500 text-white hover:bg-amber-600'
+          : 'text-slate-300 hover:bg-amber-100 hover:text-amber-500 dark:text-slate-600 dark:hover:bg-amber-900/30 dark:hover:text-amber-400'
+      }`}
+      title={isImportant ? 'Remove important flag' : 'Mark as important'}
+      aria-label={isImportant ? 'Remove important flag' : 'Mark as important'}
+    >
+      <AlertTriangle className="h-3 w-3" />
+    </button>
+  );
+}
+
 // --- Main component ---
 
 const IssueGroupRow = memo(function IssueGroupRow({
@@ -318,6 +350,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
   isSelectable = false,
   isBatchActioning = false,
   onToggleSelection,
+  onToggleImportant,
   groupKey,
 }: IssueGroupRowProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
@@ -409,7 +442,17 @@ const IssueGroupRow = memo(function IssueGroupRow({
         className={`group relative cursor-pointer rounded-lg border px-4 py-3 text-sm transition-all duration-300 ${isBeingRemoved ? getRemovalStateClasses(effectiveActionType) : 'border-slate-200 bg-white hover:shadow-md dark:border-slate-700 dark:bg-slate-800'} ${actionAccent ?? getAccentShadow(aggregateStatus)}`}
         onClick={handleRowClick}
       >
-        <div className="hidden grid-cols-[28px_1fr_1fr_140px_120px_36px] items-center gap-2 lg:grid">
+        <div className="hidden grid-cols-[20px_28px_1fr_1fr_140px_120px_36px] items-center gap-2 lg:grid">
+          {/* Important column */}
+          <div className="flex items-center justify-center">
+            {onToggleImportant !== undefined && groupKey !== undefined ? (
+              <ImportantToggle
+                isImportant={group.isImportant === true}
+                groupKey={groupKey}
+                onToggle={onToggleImportant}
+              />
+            ) : null}
+          </div>
           {/* Checkbox column */}
           <div className="flex items-center justify-center">
             {isSelectable && onToggleSelection !== undefined && groupKey !== undefined ? (
@@ -516,6 +559,13 @@ const IssueGroupRow = memo(function IssueGroupRow({
         {/* Mobile layout (< lg) */}
         <div className="flex flex-col gap-2 lg:hidden">
           <div className="flex items-center gap-2">
+            {onToggleImportant !== undefined && groupKey !== undefined ? (
+              <ImportantToggle
+                isImportant={group.isImportant === true}
+                groupKey={groupKey}
+                onToggle={onToggleImportant}
+              />
+            ) : null}
             {isSelectable && onToggleSelection !== undefined && groupKey !== undefined ? (
               <SelectionCheckbox
                 isSelected={isSelected}
@@ -692,6 +742,7 @@ const IssueGroupRow = memo(function IssueGroupRow({
   prev.group.pipeline.pr?.status === next.group.pipeline.pr?.status &&
   prev.group.pipeline.failedAttempts === next.group.pipeline.failedAttempts &&
   prev.group.mostRecentDispatchedAt === next.group.mostRecentDispatchedAt &&
+  prev.group.isImportant === next.group.isImportant &&
   prev.actioningTaskId === next.actioningTaskId &&
   prev.actioningType === next.actioningType &&
   prev.isSelected === next.isSelected &&
@@ -702,7 +753,8 @@ const IssueGroupRow = memo(function IssueGroupRow({
   prev.onAction === next.onAction &&
   prev.onArchiveGroup === next.onArchiveGroup &&
   prev.onOpenLogs === next.onOpenLogs &&
-  prev.onToggleSelection === next.onToggleSelection,
+  prev.onToggleSelection === next.onToggleSelection &&
+  prev.onToggleImportant === next.onToggleImportant,
 );
 
 export { IssueGroupRow };

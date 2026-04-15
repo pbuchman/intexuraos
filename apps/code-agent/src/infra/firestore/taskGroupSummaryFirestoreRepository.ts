@@ -4,7 +4,7 @@
  */
 
 /* eslint-disable no-restricted-imports, @typescript-eslint/no-base-to-string, @typescript-eslint/no-unnecessary-type-arguments */
-import { Timestamp } from '@google-cloud/firestore';
+import { Timestamp, FieldValue } from '@google-cloud/firestore';
 import type { Firestore, DocumentData, DocumentReference } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
@@ -147,6 +147,9 @@ function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
       : {}),
     ...(data['labelsUpdatedAt'] !== undefined && data['labelsUpdatedAt'] !== null
       ? { labelsUpdatedAt: toTimestamp(data['labelsUpdatedAt']) }
+      : {}),
+    ...(data['isImportant'] === true
+      ? { isImportant: true }
       : {}),
     updatedAt: toTimestamp(data['updatedAt']),
   };
@@ -936,6 +939,32 @@ export function createTaskGroupSummaryFirestoreRepository(deps: {
           code: 'FIRESTORE_ERROR',
           message: getErrorMessage(error, 'Failed to recompute group summary with labels'),
         });
+      }
+    },
+
+    async setImportant(
+      userId: string,
+      groupKey: string,
+      important: boolean,
+    ): Promise<Result<void, GroupSummaryError>> {
+      const docId = `${userId}_${groupKey}`;
+      const docRef = firestore.collection(SUMMARIES_COLLECTION).doc(docId);
+      try {
+        const snapshot = await docRef.get();
+        if (!snapshot.exists) {
+          return err({ code: 'NOT_FOUND', message: `No group summary found for ${userId}/${groupKey}` });
+        }
+        if (important) {
+          await docRef.update({ isImportant: true, updatedAt: Timestamp.now() });
+        } else {
+          await docRef.update({
+            isImportant: FieldValue.delete(),
+            updatedAt: Timestamp.now(),
+          });
+        }
+        return ok(undefined);
+      } catch (error) {
+        return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error) });
       }
     },
   };
