@@ -59,7 +59,7 @@ export interface LlmClientConfig {
   model: LLMModel;
   /** User ID for usage tracking */
   userId: string;
-  /** Optional. When omitted, local cost calculation is skipped (costs computed server-side). */
+  /** When omitted, defaults to zero-cost pricing (costs computed server-side by llm-usage-service). */
   pricing?: ModelPricing;
   /** Logger for structured LLM usage logging */
   logger: Logger;

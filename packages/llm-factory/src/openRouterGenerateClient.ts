@@ -1,10 +1,16 @@
 import { createOpenRouterClient } from '@intexuraos/infra-openrouter';
-import { getOpenRouterRawId, isOpenRouterModel } from '@intexuraos/llm-contract';
+import { getOpenRouterRawId, isOpenRouterModel, type ModelPricing } from '@intexuraos/llm-contract';
 import type { LlmClientConfig, LlmGenerateClient, GenerateResult } from './llmClientFactory.js';
 import type { LLMError } from '@intexuraos/llm-contract';
 import type { Result } from '@intexuraos/common-core';
 
-export function createOpenRouterGenerateClient(config: LlmClientConfig): LlmGenerateClient {
+/**
+ * Create an OpenRouter generate client.
+ * Requires pricing to be resolved (provided by {@link createLlmClient} which defaults to zero pricing).
+ */
+export function createOpenRouterGenerateClient(
+  config: LlmClientConfig & { pricing: ModelPricing }
+): LlmGenerateClient {
   const rawModel = isOpenRouterModel(config.model as string)
     ? getOpenRouterRawId(config.model as string)
     : (config.model as string);
@@ -13,7 +19,7 @@ export function createOpenRouterGenerateClient(config: LlmClientConfig): LlmGene
     apiKey: config.apiKey,
     model: rawModel,
     userId: config.userId,
-    pricing: config.pricing ?? { inputPricePerMillion: 0, outputPricePerMillion: 0 },
+    pricing: config.pricing,
     logger: config.logger,
     usageSink: config.usageSink,
     ...(config.ownerType !== undefined && { ownerType: config.ownerType }),
