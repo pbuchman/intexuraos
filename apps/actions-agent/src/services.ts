@@ -106,10 +106,8 @@ import {
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import {
   fetchAllPricingWithRetry,
-  createPricingContext,
   HttpInternalAuthUsageSink,
 } from '@intexuraos/llm-pricing';
-import { LlmModels } from '@intexuraos/llm-contract';
 
 export interface Services {
   actionServiceClient: ActionServiceClient;
@@ -186,15 +184,6 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
   }
 
-  // Support common models for approval intent classification
-  const pricingContext = createPricingContext(pricingResult.value, [
-    LlmModels.Gemini25Flash,
-    LlmModels.Gemini25Pro,
-    LlmModels.ClaudeSonnet46,
-    LlmModels.GPT54,
-    LlmModels.SonarPro,
-  ]);
-
   const actionRepository = createFirestoreActionRepository({
     logger: createAppLogger({ name: 'actionRepository' }),
   });
@@ -206,7 +195,6 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
-    pricingContext,
     logger: userServiceClientLogger,
     usageSink: new HttpInternalAuthUsageSink({
       usageServiceUrl: config.llmUsageServiceUrl,

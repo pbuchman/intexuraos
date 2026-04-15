@@ -35,7 +35,6 @@ const { createUsageLogger } = await import('@intexuraos/llm-pricing');
 
 const TEST_MODEL = LlmModels.Gemini25Flash;
 
-
 describe('createGeminiClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();

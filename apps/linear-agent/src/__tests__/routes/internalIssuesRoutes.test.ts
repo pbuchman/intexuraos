@@ -3,7 +3,6 @@ import { err } from '@intexuraos/common-core';
 
 vi.mock('@intexuraos/infra-gemini', () => ({
   createGeminiClient: vi.fn(),
-  TOOL_CALLING_PRICING: {},
 }));
 
 import { buildServer } from '../../server.js';

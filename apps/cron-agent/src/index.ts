@@ -8,7 +8,7 @@ import { createAppLogger } from '@intexuraos/infra-sentry';
 import { FirestoreScheduleRepository } from './infra/firestore-schedule-repository.js';
 import { FirestoreExecutionRepository } from './infra/firestore-execution-repository.js';
 import { OpenApiToolRegistry } from './infra/openapi-tool-registry.js';
-import { createGeminiClient, createGeminiToolCallingClient, TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
+import { createGeminiClient, createGeminiToolCallingClient } from '@intexuraos/infra-gemini';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 
@@ -70,7 +70,6 @@ async function main(): Promise<void> {
     apiKey: config.geminiApiKey,
     model: LlmModels.Gemini25Flash,
     userId: 'cron-agent-system',
-    pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
     logger: createAppLogger({ name: 'tool-calling' }),
     usageSink: buildUsageSink('tool-calling'),
   });
@@ -79,7 +78,6 @@ async function main(): Promise<void> {
     apiKey: config.geminiApiKey,
     model: LlmModels.Gemini25Flash,
     userId: 'cron-agent-system',
-    pricing: TOOL_CALLING_PRICING[LlmModels.Gemini25Flash],
     logger: createAppLogger({ name: 'gemini-client' }),
     usageSink: buildUsageSink('gemini-client'),
   });

@@ -27,7 +27,6 @@ const { createPerplexityClient } = await import('../client.js');
 const API_BASE_URL = 'https://api.perplexity.ai';
 const TEST_MODEL = LlmModels.SonarPro;
 
-
 /**
  * Helper to create SSE stream response body for research() tests.
  * Returns a string in SSE format that nock can use.

@@ -27,7 +27,6 @@ const { createOpenRouterClient } = await import('../client.js');
 const API_BASE_URL = 'https://openrouter.ai/api/v1';
 const TEST_MODEL = 'anthropic/claude-sonnet-4.6';
 
-
 describe('createOpenRouterClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();

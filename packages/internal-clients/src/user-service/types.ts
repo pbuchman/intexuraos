@@ -1,5 +1,5 @@
 import type { Logger, Result } from '@intexuraos/common-core';
-import type { IPricingContext, UsageSink } from '@intexuraos/llm-pricing';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { LlmProvider } from '@intexuraos/llm-contract';
 
@@ -9,11 +9,6 @@ import type { LlmProvider } from '@intexuraos/llm-contract';
 export interface UserServiceConfig {
   baseUrl: string;
   internalAuthToken: string;
-  /**
-   * No longer used. Costs are computed by llm-usage-service on ingestion.
-   * Kept as optional for backward compatibility with apps that still pass it.
-   */
-  pricingContext?: IPricingContext;
   logger: Logger;
   /**
    * Usage sink used when materializing per-user LLM clients via

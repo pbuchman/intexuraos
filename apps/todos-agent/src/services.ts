@@ -9,10 +9,8 @@ import { createUserServiceClient, type UserServiceClient } from '@intexuraos/int
 import { createTodoItemExtractionService, type TodoItemExtractionService } from './infra/gemini/todoItemExtractionService.js';
 import {
   fetchAllPricingWithRetry,
-  createPricingContext,
   HttpInternalAuthUsageSink,
 } from '@intexuraos/llm-pricing';
-import { LlmModels } from '@intexuraos/llm-contract';
 
 export interface ServiceContainer {
   todoRepository: TodoRepository;
@@ -41,15 +39,10 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
   }
 
-  const pricingContext = createPricingContext(pricingResult.value, [
-    LlmModels.Gemini25Flash,
-  ]);
-
   const userServiceClientLogger = createAppLogger({ name: 'userServiceClient' });
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthKey,
-    pricingContext,
     logger: userServiceClientLogger,
     usageSink: new HttpInternalAuthUsageSink({
       usageServiceUrl: config.llmUsageServiceUrl,

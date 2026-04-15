@@ -36,7 +36,6 @@ vi.mock('../openRouterGenerateClient.js', () => ({
 const { createLlmClient, createToolCallingClient, isSupportedProvider } =
   await import('../llmClientFactory.js');
 
-
 describe('llmClientFactory', () => {
   beforeEach(() => {
     vi.clearAllMocks();

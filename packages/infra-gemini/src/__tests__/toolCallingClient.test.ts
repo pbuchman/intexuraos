@@ -36,11 +36,9 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 }));
 
 const { createUsageLogger } = await import('@intexuraos/llm-pricing');
-const { createGeminiToolCallingClient, TOOL_CALLING_PRICING } =
-  await import('../toolCallingClient.js');
+const { createGeminiToolCallingClient } = await import('../toolCallingClient.js');
 
 const TEST_MODEL = LlmModels.Gemini25Flash;
-
 
 const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
@@ -466,14 +464,6 @@ describe('createGeminiToolCallingClient', () => {
         success: true,
       })
     );
-  });
-
-  it('exports TOOL_CALLING_PRICING with gemini-2.5-flash', () => {
-    expect(TOOL_CALLING_PRICING[LlmModels.Gemini25Flash]).toEqual({
-      inputPricePerMillion: 0.3,
-      outputPricePerMillion: 2.5,
-      groundingCostPerRequest: 0,
-    });
   });
 
   it('includes thinking tokens in aggregated usage', async () => {

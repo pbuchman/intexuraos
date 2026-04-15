@@ -44,7 +44,6 @@ export function initServices(config: ServiceConfig): void {
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
-    pricingContext: config.pricingContext,
     logger: logger,
     usageSink: new HttpInternalAuthUsageSink({
       usageServiceUrl: config.llmUsageServiceUrl,

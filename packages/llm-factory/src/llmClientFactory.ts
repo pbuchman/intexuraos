@@ -58,11 +58,6 @@ export interface LlmClientConfig {
   model: LLMModel;
   /** User ID for usage tracking */
   userId: string;
-  /**
-   * No longer used. Costs are computed by llm-usage-service on ingestion.
-   * Kept as optional for backward compatibility with apps that still pass it.
-   */
-  pricing?: import('@intexuraos/llm-contract').ModelPricing;
   /** Logger for structured LLM usage logging */
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */

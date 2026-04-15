@@ -70,7 +70,6 @@ export function initServices(config: ServiceConfig): void {
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
-    pricingContext: config.pricingContext,
     logger: logger,
     usageSink: buildUsageSink('user-service-client'),
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
