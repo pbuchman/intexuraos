@@ -1,5 +1,8 @@
-import type { LlmProvider, ModelPricing } from '@intexuraos/llm-contract';
+import type { LlmProvider, ModelPricing, ImageSize } from '@intexuraos/llm-contract';
 import { LlmProviders } from '@intexuraos/llm-contract';
+
+/** Default image size used when only an image count is available (no per-request size). */
+const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
 
 /**
  * Token usage fields relevant to cost calculation.
@@ -27,10 +30,9 @@ export interface UsageTokens {
  * All prices in `pricing` are per-million tokens; the function uses
  * scaled integer math with `Math.round()` for precision.
  *
- * Note: Image cost calculation (`calculateImageCost`) from `infra-gemini`
- * and `infra-gpt` is NOT consolidated here — image generation events are
- * not yet emitted with `schemaVersion: 2`. If image events are migrated
- * in the future, add image cost handling to the relevant provider branches.
+ * Image generation costs are also handled: when `imageCount > 0` and the
+ * model has `imagePricing`, the per-image price for the default size
+ * (`1024x1024`) is multiplied by `imageCount` and added to the token cost.
  *
  * @param provider - The LLM provider identifier
  * @param usage - Token usage counts from the request
@@ -100,8 +102,9 @@ function calculateGoogleCost(usage: UsageTokens, pricing: ModelPricing): number 
   const outputCost = usage.outputTokens * outputPrice;
   const thinkingCost = usage.thinkingTokens * outputPrice;
   const groundingCostScaled = (usage.groundingEnabled ? groundingPrice : 0) * 1_000_000;
+  const imageCost = calculateImageCost(usage.imageCount, pricing);
 
-  return Math.round(inputCost + outputCost + thinkingCost + groundingCostScaled) / 1_000_000;
+  return Math.round(inputCost + outputCost + thinkingCost + groundingCostScaled) / 1_000_000 + imageCost;
 }
 
 /**
@@ -123,9 +126,10 @@ function calculateOpenAICost(usage: UsageTokens, pricing: ModelPricing): number 
   const cachedInputCost = usage.cachedTokens * inputPrice * cacheMultiplier;
   const outputCost = usage.outputTokens * outputPrice;
   const searchCostScaled = usage.webSearchCalls * searchPrice * 1_000_000;
+  const imageCost = calculateImageCost(usage.imageCount, pricing);
 
   return (
-    Math.round(regularInputCost + cachedInputCost + outputCost + searchCostScaled) / 1_000_000
+    Math.round(regularInputCost + cachedInputCost + outputCost + searchCostScaled) / 1_000_000 + imageCost
   );
 }
 
@@ -164,4 +168,20 @@ function calculateOpenRouterCost(usage: UsageTokens, pricing: ModelPricing): num
   const outputCost = usage.outputTokens * (pricing.outputPricePerMillion / 1_000_000);
 
   return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000;
+}
+
+/**
+ * Calculate image generation cost.
+ *
+ * Consolidated from `infra-gemini` and `infra-gpt` `calculateImageCost`.
+ * Uses the default image size (`1024x1024`) when only a count is available,
+ * since the usage event carries `imageCount` but not per-image dimensions.
+ *
+ * @returns Total image cost in USD (0 when no images or no imagePricing)
+ */
+function calculateImageCost(imageCount: number, pricing: ModelPricing): number {
+  if (imageCount <= 0) return 0;
+  if (pricing.imagePricing === undefined) return 0;
+  const perImagePrice = pricing.imagePricing[DEFAULT_IMAGE_SIZE] ?? 0;
+  return perImagePrice * imageCount;
 }

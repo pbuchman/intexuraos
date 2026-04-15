@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import { LlmProviders } from '@intexuraos/llm-contract';
 import { buildServer } from '../../server.js';
 import { setServices, resetServices, type ServiceContainer } from '../../services.js';
 import { FakeUsageEventRepository } from '../fakeUsageEventRepository.js';
@@ -86,7 +87,20 @@ describe('internalUsageRoutes', () => {
       expect(response.statusCode).toBe(400);
     });
 
-    it('returns 200 for v2 events', async () => {
+    it('accepts v2 events and stores enriched cost in Firestore', async () => {
+      const pricingCache = new FakePricingCache();
+      pricingCache.setPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', {
+        inputPricePerMillion: 3.0,
+        outputPricePerMillion: 15.0,
+      });
+      setServices({
+        usageEventRepository: eventRepo,
+        usageAggregateRepository: aggregateRepo,
+        pricingRepository: new FakePricingRepository(),
+        pricingCache,
+        orchestratorSecret: 'test-secret',
+      } satisfies ServiceContainer);
+
       const response = await app.inject({
         method: 'POST',
         url: '/internal/usage/events',
@@ -101,6 +115,17 @@ describe('internalUsageRoutes', () => {
       const body = JSON.parse(response.body) as { success: boolean; data: { accepted: number } };
       expect(body.success).toBe(true);
       expect(body.data.accepted).toBe(1);
+
+      // Verify Firestore round-trip: stored event has enriched cost shape
+      const stored = eventRepo.getStoredEvents();
+      expect(stored).toHaveLength(1);
+      const event = stored[0];
+      expect(event).toBeDefined();
+      expect(event?.schemaVersion).toBe(1);
+      expect(event?.cost.pricingSource).toBe('calculated');
+      expect(event?.cost.calculatedUsd).toBeGreaterThan(0);
+      expect(event?.cost.billedUsd).toBe(event?.cost.calculatedUsd);
+      expect(event?.cost.providerReportedUsd).toBeNull();
     });
 
     it('rejects events missing source.environment', async () => {
