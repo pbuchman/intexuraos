@@ -467,6 +467,7 @@ export async function drainTaskQueue(
       // INT-949: Dispatch metadata fields from task document
       ...(task.trackingCommentId !== undefined && { trackingCommentId: task.trackingCommentId }),
       ...(task.retriedFrom !== undefined && { retriedFrom: task.retriedFrom }),
+      ...(task.failedWorkerLocation !== undefined && { failedWorkerLocation: task.failedWorkerLocation }),
       ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
       ...(dispatchExecutionMemoryContext !== undefined && {
         executionMemoryContext: dispatchExecutionMemoryContext,
