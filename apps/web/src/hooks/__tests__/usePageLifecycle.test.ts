@@ -99,7 +99,7 @@ describe('usePageLifecycle', () => {
     });
 
     expect(mockSaveCheckpoint).toHaveBeenCalledWith({
-      routeHash: '/dashboard',
+      routePath: '/dashboard',
       scrollY: 150,
       timestamp: expect.any(Number) as number,
     });
@@ -107,7 +107,7 @@ describe('usePageLifecycle', () => {
 
   it('calls loadCheckpoint on mount and navigates if checkpoint found', async () => {
     mockLoadCheckpoint.mockResolvedValue({
-      routeHash: '/settings',
+      routePath: '/settings',
       scrollY: 300,
       timestamp: Date.now(),
     });
@@ -182,7 +182,7 @@ describe('usePageLifecycle', () => {
     });
 
     expect(mockSaveCheckpoint).toHaveBeenCalledWith({
-      routeHash: '/dashboard',
+      routePath: '/dashboard',
       scrollY: 200,
       timestamp: expect.any(Number) as number,
     });
@@ -190,7 +190,7 @@ describe('usePageLifecycle', () => {
 
   it('restores scroll position after navigating from checkpoint', async () => {
     mockLoadCheckpoint.mockResolvedValue({
-      routeHash: '/settings',
+      routePath: '/settings',
       scrollY: 450,
       timestamp: Date.now(),
     });
@@ -216,7 +216,7 @@ describe('usePageLifecycle', () => {
 
   it('clears checkpoint after restoring', async () => {
     mockLoadCheckpoint.mockResolvedValue({
-      routeHash: '/settings',
+      routePath: '/settings',
       scrollY: 0,
       timestamp: Date.now(),
     });

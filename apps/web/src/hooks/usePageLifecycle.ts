@@ -34,11 +34,14 @@ export function usePageLifecycle(): void {
       try {
         const checkpoint = await loadCheckpoint();
         if (checkpoint !== null) {
-          void navigate(checkpoint.routeHash);
+          void navigate(checkpoint.routePath);
           const scrollY = checkpoint.scrollY;
-          window.setTimeout(() => {
-            window.scrollTo(0, scrollY);
-          }, 50);
+          // Use double-rAF to wait for route render before restoring scroll
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              window.scrollTo(0, scrollY);
+            });
+          });
           await clearCheckpoint();
         }
       } catch {
@@ -61,7 +64,7 @@ export function usePageLifecycle(): void {
     const handleSave = (): void => {
       const loc = locationRef.current;
       void saveCheckpoint({
-        routeHash: loc.pathname + loc.search,
+        routePath: loc.pathname + loc.search,
         scrollY: window.scrollY,
         timestamp: Date.now(),
       });
@@ -84,8 +87,9 @@ export function usePageLifecycle(): void {
 
     const handlePageShow = (event: PageTransitionEvent): void => {
       if (event.persisted) {
-        // Restored from BFCache — could refresh data here if needed
-        void loadCheckpoint();
+        // Restored from BFCache — existing hooks already refresh data on
+        // visibilitychange (visible). This handler is a future extension
+        // point for re-establishing connections (WebSocket, etc.) if needed.
       }
     };
 
