@@ -429,7 +429,7 @@ export function initServices(config: ServiceConfig): void {
     if (keysResult.ok) {
       const googleKey = keysResult.value.google;
       if (googleKey !== undefined) {
-        logger.info({ userId }, 'GitHub Agent: using user Google API key');
+        logger.debug({ userId }, 'GitHub Agent: using user Google API key');
         return ok(createToolCallingClient({
           apiKey: googleKey,
           model: TOOL_CALLING_MODEL,
@@ -442,7 +442,7 @@ export function initServices(config: ServiceConfig): void {
 
     // Fall back to platform key
     if (config.geminiAppApiKey !== '') {
-      logger.info({ userId }, 'GitHub Agent: falling back to platform Gemini API key');
+      logger.debug({ userId }, 'GitHub Agent: falling back to platform Gemini API key');
       return ok(createToolCallingClient({
         apiKey: config.geminiAppApiKey,
         model: TOOL_CALLING_MODEL,
