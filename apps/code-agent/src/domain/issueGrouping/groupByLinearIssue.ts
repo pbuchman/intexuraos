@@ -88,9 +88,16 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
   // Guard: do not show merge button while any task is actively processing
   const hasActiveTask = tasks.some((t) => ACTIVE_STATUSES.has(t.status));
 
+  // Authoritative PR terminal state — the Linear ready-to-merge label may lag
+  // after handlePrClose, so prMergedAt/prClosedAt take precedence.
+  const isMerged = tasks.some((t) => t.prMergedAt !== undefined);
+  const isClosed = tasks.some((t) => t.prClosedAt !== undefined);
+  const isPrClosedOrMerged = isMerged || isClosed;
+
   // Merge-ready logic: if execution step is completed, PR exists, and ready-to-merge label present
   if (
     !hasActiveTask &&
+    !isPrClosedOrMerged &&
     executionEntry?.step.state === 'completed' &&
     executionEntry.task.result?.prUrl !== undefined &&
     hasMergeReadyLabel(executionEntry.task.linearIssue?.labels)
@@ -134,6 +141,7 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
   const reviewEntry = stepMap.get('review');
   if (
     !hasActiveTask &&
+    !isPrClosedOrMerged &&
     reviewEntry?.step.state === 'completed' &&
     reviewEntry.task.prNumber !== undefined &&
     reviewEntry.task.result?.needs_remediation === REMEDIATION_NOT_NEEDED &&
@@ -156,10 +164,7 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     if (prUrl !== undefined) {
       const match = PR_URL_REGEX.exec(prUrl);
       if (match?.[1] !== undefined) {
-        // Derive PR status from task data
         const hasMergeStep = steps.some((s) => s.agentType === 'merge' && s.state === 'actionable');
-        const isMerged = tasks.some((t) => t.prMergedAt !== undefined);
-        const isClosed = tasks.some((t) => t.prClosedAt !== undefined);
 
         let status: 'open' | 'merged' | 'closed' | 'mergeable';
         if (isMerged) {
@@ -178,11 +183,12 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     }
   }
 
-  // failedAttempts: count of tasks with status === 'failed'
-  const failedAttempts = tasks.filter((t) => t.status === 'failed').length;
-
-  // archivedCount: count of tasks with status === 'archived'
-  const archivedCount = tasks.filter((t) => t.status === 'archived').length;
+  let failedAttempts = 0;
+  let archivedCount = 0;
+  for (const t of tasks) {
+    if (t.status === 'failed') failedAttempts++;
+    else if (t.status === 'archived') archivedCount++;
+  }
 
   return { steps, pr, failedAttempts, archivedCount };
 }
