@@ -28,8 +28,7 @@ export type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
  *   webSearchCostPerCall: 0.0035, // $0.0035 per web search call
  * };
  *
- * // Calculate cost for a request:
- * const cost = calculateTextCost(usage, claudePricing);
+ * // Used by llm-usage-service for server-side cost calculation
  * ```
  */
 export interface ModelPricing {

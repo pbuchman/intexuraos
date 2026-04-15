@@ -31,7 +31,7 @@
  * if (result.ok) {
  *   console.log(result.data.content);
  *   console.log('Sources:', result.data.sources);
- *   console.log('Cost:', result.data.usage.costUsd);
+ *   console.log('Tokens:', result.data.usage.totalTokens);
  * }
  * ```
  */
@@ -218,11 +218,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
     if (usage === undefined) {
       return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 };
     }
-    return normalizeUsage(
-      usage.prompt_tokens,
-      usage.completion_tokens,
-      usage.cost?.total_cost
-    );
+    return normalizeUsage(usage.prompt_tokens, usage.completion_tokens, usage.cost?.total_cost);
   }
 
   return {
