@@ -49,6 +49,7 @@ import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import {
   LlmProviders,
   type LLMClient,
+  type ModelPricing,
   type NormalizedUsage,
   type GenerateResult,
 } from '@intexuraos/llm-contract';
@@ -57,6 +58,8 @@ import type { ClaudeConfig, ClaudeError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
 export type ClaudeClient = LLMClient;
+
+const ZERO_PRICING: ModelPricing = { inputPricePerMillion: 0, outputPricePerMillion: 0 };
 
 const MAX_TOKENS = 8192;
 
@@ -88,7 +91,7 @@ const MAX_TOKENS = 8192;
  */
 export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   const client = new Anthropic({ apiKey: config.apiKey });
-  const { model, userId, pricing, logger, usageSink, ownerType } = config;
+  const { model, userId, pricing = ZERO_PRICING, logger, usageSink, ownerType } = config;
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
   function trackUsage(

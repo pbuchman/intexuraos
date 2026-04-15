@@ -38,6 +38,7 @@ import {
   LlmModels,
   LlmProviders,
   type LLMClient,
+  type ModelPricing,
   type NormalizedUsage,
   type ImageGenerateOptions,
   type ImageGenerationResult,
@@ -51,12 +52,14 @@ import { resolveVertexRedirectUrls } from './vertexUrlResolver.js';
 
 export type GeminiClient = LLMClient;
 
+const ZERO_PRICING: ModelPricing = { inputPricePerMillion: 0, outputPricePerMillion: 0 };
+
 const IMAGE_MODEL = LlmModels.Gemini25FlashImage;
 const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
 
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const { model, userId, pricing, imagePricing, logger, usageSink, ownerType } = config;
+  const { model, userId, pricing = ZERO_PRICING, imagePricing, logger, usageSink, ownerType } = config;
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
   function trackUsage(

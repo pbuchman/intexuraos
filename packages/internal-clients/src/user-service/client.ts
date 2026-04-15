@@ -204,12 +204,12 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
               'No API key for provider, falling back to platform Gemini25Flash'
             );
             const fallbackModel = LlmModels.Gemini25Flash;
-            const fallbackPricing = config.pricingContext.getPricing(fallbackModel);
+            const fallbackPricing = config.pricingContext?.getPricing(fallbackModel);
             const fallbackClient = createLlmClient({
               apiKey: config.platformGeminiApiKey,
               model: fallbackModel,
               userId,
-              pricing: fallbackPricing,
+              ...(fallbackPricing !== undefined && { pricing: fallbackPricing }),
               logger: config.logger,
               usageSink: config.usageSink,
               ownerType: 'user',
@@ -244,7 +244,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
             return { inputPricePerMillion: 0, outputPricePerMillion: 0, useProviderCost: true };
             /* v8 ignore stop @preserve */
           }
-          return config.pricingContext.getPricing(model as LLMModel);
+          return config.pricingContext?.getPricing(model as LLMModel) ?? { inputPricePerMillion: 0, outputPricePerMillion: 0 };
         }
 
         // Helper: build a client for a given model using the fetched API keys

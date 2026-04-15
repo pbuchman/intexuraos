@@ -40,6 +40,7 @@ import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import {
   LlmProviders,
   type LLMClient,
+  type ModelPricing,
   type NormalizedUsage,
   type GenerateResult,
 } from '@intexuraos/llm-contract';
@@ -71,6 +72,8 @@ export type OpenRouterClient = Pick<LLMClient, 'research'> & {
    */
   validateKey: (apiKey: string) => Promise<Result<OpenRouterKeyInfo, OpenRouterError>>;
 };
+
+const ZERO_PRICING: ModelPricing = { inputPricePerMillion: 0, outputPricePerMillion: 0 };
 
 /** OpenRouter API base URL */
 const API_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -122,7 +125,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     apiKey,
     model,
     userId,
-    pricing,
+    pricing = ZERO_PRICING,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     logger,
     usageSink,

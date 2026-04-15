@@ -45,6 +45,7 @@ import {
   LlmModels,
   LlmProviders,
   type LLMClient,
+  type ModelPricing,
   type NormalizedUsage,
   type ImageGenerateOptions,
   type ImageGenerationResult,
@@ -56,6 +57,8 @@ import type { GptConfig, GptError, ResearchResult } from './types.js';
 import { normalizeUsage, calculateImageCost } from './costCalculator.js';
 
 export type GptClient = LLMClient;
+
+const ZERO_PRICING: ModelPricing = { inputPricePerMillion: 0, outputPricePerMillion: 0 };
 
 const MAX_TOKENS = 8192;
 const IMAGE_MODEL = LlmModels.GPTImage1;
@@ -91,7 +94,7 @@ const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
  */
 export function createGptClient(config: GptConfig): GptClient {
   const client = new OpenAI({ apiKey: config.apiKey });
-  const { model, userId, pricing, imagePricing, logger, usageSink, ownerType } = config;
+  const { model, userId, pricing = ZERO_PRICING, imagePricing, logger, usageSink, ownerType } = config;
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
   function trackUsage(
