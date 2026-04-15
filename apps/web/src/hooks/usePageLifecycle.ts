@@ -95,17 +95,14 @@ export function usePageLifecycle(): void {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     document.addEventListener('freeze', handleFreeze);
-    document.addEventListener('pagehide', handlePageHide);
-    document.addEventListener('pageshow', handlePageShow as EventListener);
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('pageshow', handlePageShow);
 
     return (): void => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener('freeze', handleFreeze);
-      document.removeEventListener('pagehide', handlePageHide);
-      document.removeEventListener(
-        'pageshow',
-        handlePageShow as EventListener
-      );
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('pageshow', handlePageShow);
     };
   }, []);
 }
