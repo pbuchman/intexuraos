@@ -714,6 +714,45 @@ describe('createUserServiceClient', () => {
         expect.fail('Expected error result');
       }
     });
+
+    it('returns client with zero pricing when pricingContext is omitted', async () => {
+      const mockSettings = {
+        llmPreferences: {
+          defaultModel: LlmModels.Gemini25Flash,
+        },
+      };
+
+      const mockKeys = {
+        google: 'google-key',
+      };
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: mockSettings });
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: mockKeys });
+
+      const noPricingConfig = {
+        baseUrl: 'http://localhost:3000',
+        internalAuthToken: 'test-token',
+        logger: mockLogger,
+        usageSink: createFakeUsageSink(),
+      };
+
+      const client = createUserServiceClient(noPricingConfig);
+      const result = await client.getLlmClient('user123');
+
+      // Zero pricing is the expected intermediate state during the INT-1377
+      // migration: consumers drop pricingContext now, server-side pricing lands later.
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error('unreachable');
+      expect(result.value).toBeDefined();
+      expect(typeof result.value.generate).toBe('function');
+    });
   });
 
   describe('reportLlmSuccess', () => {

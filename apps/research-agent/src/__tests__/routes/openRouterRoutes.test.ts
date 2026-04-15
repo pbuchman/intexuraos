@@ -22,7 +22,6 @@ import {
   FakeNotionServiceClient,
   createFakeNotionExporter,
 } from '../fakes.js';
-import { FakePricingContext } from '@intexuraos/llm-pricing';
 import { OPENROUTER_ALLOWED_MODELS } from '@intexuraos/infra-openrouter';
 
 const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
@@ -87,7 +86,6 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     const services: ServiceContainer = {
       researchRepo: new FakeResearchRepository(),
       researchExportSettings: new FakeResearchExportSettings(),
-      pricingContext: new FakePricingContext(),
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: new FakeResearchEventPublisher(),
       llmCallPublisher: new FakeLlmCallPublisher(),

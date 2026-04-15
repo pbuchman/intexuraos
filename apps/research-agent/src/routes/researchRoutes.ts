@@ -177,7 +177,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         researchEventPublisher,
         userServiceClient,
         createTitleGenerator,
-        pricingContext,
       } = getServices();
 
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
@@ -228,7 +227,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           user.userId,
           researchId,
           createTitleGenerator,
-          pricingContext.getPricing(LlmModels.Gemini25Flash),
           request.log
         );
         submitParams.inputContexts = contextsWithLabels;
@@ -289,7 +287,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const body = request.body as SaveDraftBody;
-      const { researchRepo, generateId, userServiceClient, createTitleGenerator, pricingContext } =
+      const { researchRepo, generateId, userServiceClient, createTitleGenerator } =
         getServices();
       const draftId = generateId();
 
@@ -304,7 +302,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           LlmModels.Gemini25Flash,
           apiKeys.google,
           user.userId,
-          pricingContext.getPricing(LlmModels.Gemini25Flash),
           request.log,
           draftId
         );
@@ -332,7 +329,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           user.userId,
           draftId,
           createTitleGenerator,
-          pricingContext.getPricing(LlmModels.Gemini25Flash),
           request.log
         );
         const now = new Date().toISOString();
@@ -399,7 +395,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { id } = request.params as { id: string };
       const body = request.body as SaveDraftBody;
-      const { researchRepo, generateId, userServiceClient, createTitleGenerator, pricingContext } =
+      const { researchRepo, generateId, userServiceClient, createTitleGenerator } =
         getServices();
 
       // Get existing research
@@ -435,7 +431,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             LlmModels.Gemini25Flash,
             apiKeys.google,
             user.userId,
-            pricingContext.getPricing(LlmModels.Gemini25Flash),
             request.log,
             existing.id
           );
@@ -463,7 +458,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           user.userId,
           existing.id,
           createTitleGenerator,
-          pricingContext.getPricing(LlmModels.Gemini25Flash),
           request.log
         );
         const now = new Date().toISOString();
@@ -522,7 +516,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const body = request.body as { prompt: string; includeImprovement?: boolean };
-      const { userServiceClient, createInputValidator, pricingContext, generateId } = getServices();
+      const { userServiceClient, createInputValidator, generateId } = getServices();
       const requestId = generateId();
       const startTime = Date.now();
 
@@ -543,7 +537,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         LlmModels.Gemini25Flash,
         googleKey,
         user.userId,
-        pricingContext.getPricing(LlmModels.Gemini25Flash),
         request.log
       );
 
@@ -609,7 +602,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const body = request.body as { prompt: string };
-      const { userServiceClient, createInputValidator, pricingContext, generateId } = getServices();
+      const { userServiceClient, createInputValidator, generateId } = getServices();
       const requestId = generateId();
       const startTime = Date.now();
 
@@ -629,7 +622,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         LlmModels.Gemini25Flash,
         googleKey,
         user.userId,
-        pricingContext.getPricing(LlmModels.Gemini25Flash),
         request.log
       );
 
@@ -1235,7 +1227,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         researchEventPublisher,
         userServiceClient,
         createTitleGenerator,
-        pricingContext,
       } = getServices();
 
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
@@ -1294,7 +1285,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           user.userId,
           id,
           createTitleGenerator,
-          pricingContext.getPricing(LlmModels.Gemini25Flash),
           request.log
         );
         enhanceInput.additionalContexts = contextsWithLabels;

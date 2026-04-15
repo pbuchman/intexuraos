@@ -5,10 +5,7 @@
 
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
-import {
-  fetchAllPricingWithRetry,
-  HttpInternalAuthUsageSink,
-} from '@intexuraos/llm-pricing';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
 import { FirestoreEmbeddingRepository } from './infra/firestore/embeddingRepository.js';
@@ -66,9 +63,8 @@ export function resetServices(): void {
 
 /**
  * Initialize the service container with all dependencies.
- * Fetches pricing data from llm-usage-service at startup.
  */
-export async function initializeServices(): Promise<void> {
+export function initializeServices(): void {
   const openaiApiKey = process.env['INTEXURAOS_OPENAI_APP_API_KEY'];
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'];
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
@@ -99,13 +95,6 @@ export async function initializeServices(): Promise<void> {
     name: 'chat-agent',
     level: (process.env['LOG_LEVEL'] ?? 'info') as 'error' | 'info' | 'warn' | 'debug' | 'silent',
   });
-
-  // Fetch pricing data from llm-usage-service
-  const pricingResult = await fetchAllPricingWithRetry(llmUsageServiceUrl, internalAuthToken);
-
-  if (!pricingResult.ok) {
-    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
-  }
 
   // Create OpenAI instance for embeddings
   const openai = new OpenAI({ apiKey: openaiApiKey });

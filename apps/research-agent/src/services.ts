@@ -39,8 +39,7 @@ import {
 export type { DecryptedApiKeys } from '@intexuraos/internal-clients';
 export type { ImageServiceClient, GeneratedImageData, PromptModel, ImageModel } from './infra/image/index.js';
 import type { Logger, Result } from '@intexuraos/common-core';
-import type { ModelPricing, ResearchModel, FastModel } from '@intexuraos/llm-contract';
-import type { IPricingContext } from '@intexuraos/llm-pricing';
+import type { ResearchModel, FastModel } from '@intexuraos/llm-contract';
 import {
   type LlmResearchProvider,
   type LlmSynthesisProvider,
@@ -81,7 +80,6 @@ export interface ResearchExportSettingsPort {
 export interface ServiceContainer {
   researchRepo: ResearchRepository;
   researchExportSettings: ResearchExportSettingsPort;
-  pricingContext: IPricingContext;
   generateId: () => string;
   researchEventPublisher: ResearchEventPublisher;
   llmCallPublisher: LlmCallPublisher;
@@ -96,7 +94,6 @@ export interface ServiceContainer {
     model: ResearchModel,
     apiKey: string,
     userId: string,
-    pricing: ModelPricing,
     logger: Logger,
     researchId: string | undefined // @allow-undefined-type -- positional arg preserved for call-site compat
   ) => LlmResearchProvider;
@@ -104,7 +101,6 @@ export interface ServiceContainer {
     model: ResearchModel,
     apiKey: string,
     userId: string,
-    pricing: ModelPricing,
     logger: Logger,
     researchId: string | undefined // @allow-undefined-type -- positional arg preserved for call-site compat
   ) => LlmSynthesisProvider;
@@ -112,7 +108,6 @@ export interface ServiceContainer {
     model: FastModel,
     apiKey: string,
     userId: string,
-    pricing: ModelPricing,
     logger: Logger,
     researchId: string | undefined // @allow-undefined-type -- positional arg preserved for call-site compat
   ) => TitleGenerator;
@@ -120,7 +115,6 @@ export interface ServiceContainer {
     model: FastModel,
     apiKey: string,
     userId: string,
-    pricing: ModelPricing,
     logger: Logger,
     researchId: string | undefined // @allow-undefined-type -- positional arg preserved for call-site compat
   ) => ContextInferenceProvider;
@@ -128,7 +122,6 @@ export interface ServiceContainer {
     model: FastModel,
     apiKey: string,
     userId: string,
-    pricing: ModelPricing,
     logger: Logger
   ) => InputValidationProvider;
   notionExporter: typeof exportResearchToNotion;
@@ -217,7 +210,7 @@ function createShareStorageAndConfig(): {
 /**
  * Initialize the service container with all dependencies.
  */
-export function initializeServices(pricingContext: IPricingContext): void {
+export function initializeServices(): void {
   const researchRepo = new FirestoreResearchRepository();
 
   const llmUsageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '';
@@ -278,7 +271,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
       getResearchSettings,
       saveResearchSettings,
     },
-    pricingContext,
     generateId: (): string => crypto.randomUUID(),
     researchEventPublisher,
     llmCallPublisher,
@@ -293,7 +285,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
       model: ResearchModel,
       apiKey: string,
       userId: string,
-      pricing: ModelPricing,
       logger: Logger,
       researchId: string | undefined // @allow-undefined-type -- positional arg matches container type
     ): LlmResearchProvider =>
@@ -301,7 +292,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
         model,
         apiKey,
         userId,
-        pricing,
         logger,
         buildUsageSink(`research:${model}`),
         researchId
@@ -310,7 +300,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
       model: ResearchModel,
       apiKey: string,
       userId: string,
-      pricing: ModelPricing,
       logger: Logger,
       researchId: string | undefined // @allow-undefined-type -- positional arg matches container type
     ): LlmSynthesisProvider =>
@@ -318,7 +307,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
         model,
         apiKey,
         userId,
-        pricing,
         logger,
         buildUsageSink(`synthesis:${model}`),
         researchId
@@ -327,7 +315,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
       model: FastModel,
       apiKey: string,
       userId: string,
-      pricing: ModelPricing,
       logger: Logger,
       researchId: string | undefined // @allow-undefined-type -- positional arg matches container type
     ): TitleGenerator =>
@@ -335,7 +322,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
         model,
         apiKey,
         userId,
-        pricing,
         logger,
         buildUsageSink('title-generator'),
         researchId
@@ -344,7 +330,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
       model: FastModel,
       apiKey: string,
       userId: string,
-      pricing: ModelPricing,
       logger: Logger,
       researchId: string | undefined // @allow-undefined-type -- positional arg matches container type
     ): ContextInferenceProvider =>
@@ -352,7 +337,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
         model,
         apiKey,
         userId,
-        pricing,
         logger,
         buildUsageSink('context-inferrer'),
         researchId
@@ -361,14 +345,12 @@ export function initializeServices(pricingContext: IPricingContext): void {
       model: FastModel,
       apiKey: string,
       userId: string,
-      pricing: ModelPricing,
       logger: Logger
     ): InputValidationProvider =>
       createInputValidator(
         model,
         apiKey,
         userId,
-        pricing,
         logger,
         buildUsageSink('input-validator')
       ),
