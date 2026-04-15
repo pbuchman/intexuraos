@@ -2492,6 +2492,25 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
     expect(response.statusCode).toBe(404);
   });
 
+  it('returns 500 when setImportant encounters a Firestore error', async () => {
+    // Override fakeRepo.setImportant to simulate FIRESTORE_ERROR
+    const originalSetImportant = fakeRepo.setImportant.bind(fakeRepo);
+    fakeRepo.setImportant = async (): ReturnType<typeof fakeRepo.setImportant> =>
+      err({ code: 'FIRESTORE_ERROR', message: 'Simulated Firestore failure' });
+
+    await seedTask('INT-500');
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/code/issue-groups/INT-500/important',
+      headers: { authorization: 'Bearer test-token' },
+      payload: { important: true },
+    });
+
+    expect(response.statusCode).toBe(500);
+    fakeRepo.setImportant = originalSetImportant;
+  });
+
   it('includes isImportant in GET response when group is marked important', async () => {
     await seedTask('INT-500');
     await fakeRepo.setImportant('test-user-id', 'INT-500', true);
