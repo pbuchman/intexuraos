@@ -1,21 +1,24 @@
 import type { Logger } from '@intexuraos/common-core';
 import { isErr } from '@intexuraos/common-core';
-import type { UsageEventInput, UsageIngestResponse, RejectedEvent, UsageEvent } from '../models/usageEvent.js';
+import type { UsageEventInputAny, UsageEvent, UsageIngestResponse, RejectedEvent } from '../models/usageEvent.js';
 import type { UsageEventRepository } from '../repositories/usageEventRepository.js';
 import type { UsageAggregateRepository } from '../repositories/usageAggregateRepository.js';
+import type { PricingCache } from '../services/pricingCache.js';
+import { calculateCost } from '../services/costCalculation.js';
 
 export interface IngestUsageEventsDeps {
   logger: Logger;
   usageEventRepository: UsageEventRepository;
   usageAggregateRepository: UsageAggregateRepository;
+  pricingCache: PricingCache;
 }
 
 export async function ingestUsageEvents(
   deps: IngestUsageEventsDeps,
-  events: UsageEventInput[],
+  events: UsageEventInputAny[],
   ingress: 'internal' | 'orchestrator_webhook',
 ): Promise<UsageIngestResponse> {
-  const { logger, usageEventRepository, usageAggregateRepository } = deps;
+  const { logger, usageEventRepository, usageAggregateRepository, pricingCache } = deps;
 
   let accepted = 0;
   let duplicates = 0;
@@ -29,16 +32,9 @@ export async function ingestUsageEvents(
       continue;
     }
 
-    // Structural validation (schemaVersion, field presence/types/enums, additionalProperties)
-    // is performed by the Fastify route schema (UsageEventInput / OrchestratorUsageEventInput)
-    // before this use case runs. Malformed events never reach here; the only rejection path
-    // remaining is Firestore createEvent failures below.
-
-    const fullEvent: UsageEvent = {
-      ...input,
-      receivedAt,
-      ingress,
-    };
+    const fullEvent: UsageEvent = input.schemaVersion === 2
+      ? enrichV2Event(input, receivedAt, ingress, await resolveV2Cost(input, pricingCache, logger))
+      : { ...input, receivedAt, ingress };
 
     const createResult = await usageEventRepository.createEvent(fullEvent);
     if (!createResult.ok) {
@@ -77,4 +73,72 @@ export async function ingestUsageEvents(
   );
 
   return { accepted, duplicates, rejected };
+}
+
+interface ResolvedCost {
+  billedUsd: number;
+  providerReportedUsd: number | null;
+  calculatedUsd: number | null;
+  pricingSource: 'provider_reported' | 'calculated';
+}
+
+async function resolveV2Cost(
+  input: Extract<UsageEventInputAny, { schemaVersion: 2 }>,
+  pricingCache: PricingCache,
+  logger: Logger,
+): Promise<ResolvedCost> {
+  if (input.cost.pricingSource === 'provider_reported' && input.cost.providerReportedUsd !== null) {
+    return {
+      billedUsd: Math.max(0, input.cost.providerReportedUsd),
+      providerReportedUsd: input.cost.providerReportedUsd,
+      calculatedUsd: null,
+      pricingSource: 'provider_reported',
+    };
+  }
+
+  // pricingSource === 'pending' (or provider_reported with null USD)
+  const pricing = await pricingCache.getModelPricing(input.request.provider, input.request.model, logger);
+
+  if (pricing !== null) {
+    const calculatedUsd = calculateCost(input.request.provider, input.usage, pricing);
+    return {
+      billedUsd: calculatedUsd,
+      providerReportedUsd: null,
+      calculatedUsd,
+      pricingSource: 'calculated',
+    };
+  }
+
+  logger.warn(
+    { provider: input.request.provider, model: input.request.model },
+    'No pricing found for model; defaulting cost to 0',
+  );
+  return {
+    billedUsd: 0,
+    providerReportedUsd: null,
+    calculatedUsd: 0,
+    pricingSource: 'calculated',
+  };
+}
+
+function enrichV2Event(
+  input: Extract<UsageEventInputAny, { schemaVersion: 2 }>,
+  receivedAt: string,
+  ingress: 'internal' | 'orchestrator_webhook',
+  cost: ResolvedCost,
+): UsageEvent {
+  return {
+    schemaVersion: 1,
+    eventId: input.eventId,
+    occurredAt: input.occurredAt,
+    receivedAt,
+    ingress,
+    owner: input.owner,
+    source: input.source,
+    request: input.request,
+    usage: input.usage,
+    cost,
+    correlation: input.correlation,
+    error: input.error,
+  };
 }

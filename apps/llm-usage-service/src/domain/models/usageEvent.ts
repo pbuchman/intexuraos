@@ -78,13 +78,28 @@ export interface UsageEvent {
   } | null;
 }
 
-/** UsageEventInput - what callers send (no receivedAt, no ingress) */
+/** UsageEventInput - what v1 callers send (no receivedAt, no ingress) */
 export type UsageEventInput = Omit<UsageEvent, 'receivedAt' | 'ingress'>;
+
+/** UsageEventInputV2 - what v2 callers send (cost has only providerReportedUsd + pending/provider_reported pricingSource) */
+export type UsageEventInputV2 = Omit<
+  UsageEvent,
+  'receivedAt' | 'ingress' | 'schemaVersion' | 'cost'
+> & {
+  schemaVersion: 2;
+  cost: {
+    providerReportedUsd: number | null;
+    pricingSource: 'pending' | 'provider_reported';
+  };
+};
+
+/** Discriminated union of all input event versions */
+export type UsageEventInputAny = UsageEventInput | UsageEventInputV2;
 
 /** Ingest request */
 export interface UsageIngestRequest {
-  schemaVersion: 1;
-  events: UsageEventInput[];
+  schemaVersion: 1 | 2;
+  events: UsageEventInputAny[];
 }
 
 /** Ingest response */
