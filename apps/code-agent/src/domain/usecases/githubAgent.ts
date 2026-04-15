@@ -98,7 +98,7 @@ function validateCommentTriageState(
 export interface GitHubAgentDeps {
   logger: Logger;
   gitHubPRClient: GitHubPRClient;
-  toolCallingClient: ToolCallingClient;
+  resolveToolCallingClient: (userId: string) => Promise<Result<ToolCallingClient, GitHubAgentError>>;
   userServiceClient: UserServiceClient;
   allowedBots: Set<string>;
 }
@@ -182,7 +182,7 @@ async function evaluatePREventInternal(
   repo: string,
   correctionContext?: string,
 ): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> {
-  const { logger, gitHubPRClient, toolCallingClient, userServiceClient, allowedBots } = deps;
+  const { logger, gitHubPRClient, userServiceClient, allowedBots } = deps;
 
   // Resolve bot login to repo owner before user lookup (e.g. intexuraos-code-worker[bot] → pbuchman)
   const resolvedLogin = resolveLoginForTaskCreation(event.senderLogin, event.repository, allowedBots);
@@ -207,6 +207,13 @@ async function evaluatePREventInternal(
   }
 
   const accessToken = tokenResult.value.accessToken; // @allow-result-access -- narrowed by !tokenResult.ok
+
+  const toolCallingResult = await deps.resolveToolCallingClient(resolvedUser.userId);
+  if (!toolCallingResult.ok) {
+    logger.warn({ userId: resolvedUser.userId, error: toolCallingResult.error }, 'GitHub Agent: failed to resolve tool calling client');
+    return { ok: false, error: toolCallingResult.error };
+  }
+  const toolCallingClient = toolCallingResult.value;
 
   // Fetch PR files
   const filesResult = await gitHubPRClient.getPullRequestFiles(accessToken, owner, repo, event.pullRequestNumber);
@@ -363,9 +370,30 @@ async function evaluateCommentEventInternal(
   event: GitHubPREvent,
   correctionContext?: string,
 ): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> {
-  const { logger, toolCallingClient, allowedBots } = deps;
+  const { logger, userServiceClient, allowedBots } = deps;
   const commentBody = event.body ?? '';
   const isReviewCommand = isReviewCommandComment(commentBody);
+
+  // Resolve user for this comment sender
+  const resolvedLogin = resolveLoginForTaskCreation(event.senderLogin, event.repository, allowedBots);
+  const userResult = await userServiceClient.resolveGitHubUsername(resolvedLogin);
+  if (!userResult.ok) {
+    logger.warn({ senderLogin: resolvedLogin, error: userResult.error.code }, 'GitHub Agent: user resolution failed for comment');
+    return { ok: false, error: { code: 'USER_NOT_FOUND', message: `Failed to resolve GitHub user: ${resolvedLogin}` } };
+  }
+
+  const resolvedUser = userResult.value;
+  if (resolvedUser === null) {
+    logger.info({ senderLogin: resolvedLogin }, 'GitHub Agent: comment sender has no linked IntexuraOS account');
+    return { ok: false, error: { code: 'USER_NOT_FOUND', message: `No IntexuraOS account linked for GitHub user: ${resolvedLogin}` } };
+  }
+
+  const toolCallingResult = await deps.resolveToolCallingClient(resolvedUser.userId);
+  if (!toolCallingResult.ok) {
+    logger.warn({ userId: resolvedUser.userId, error: toolCallingResult.error }, 'GitHub Agent: failed to resolve tool calling client for comment');
+    return { ok: false, error: toolCallingResult.error };
+  }
+  const toolCallingClient = toolCallingResult.value;
   const state = {
     dispatchTemplate: undefined as 'pr_comment' | 'bot_review_edit' | undefined,
     reviewTypes: [] as string[],

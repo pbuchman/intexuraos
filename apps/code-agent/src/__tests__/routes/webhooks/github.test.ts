@@ -261,7 +261,7 @@ describe('POST /webhooks/github', () => {
         new SkipPrefixRule(['@claude', '@codex', '@ignore']),
       ]),
       dispatchService: { dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: false }) },
-      toolCallingClient: undefined,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
       eventDecisionRepo: mockEventDecisionRepo,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: { evaluate: vi.fn().mockResolvedValue(undefined) },
