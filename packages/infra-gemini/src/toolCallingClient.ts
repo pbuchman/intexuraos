@@ -32,7 +32,7 @@ const DEFAULT_MAX_ITERATIONS = 5;
 /**
  * Self-contained pricing for tool calling models.
  *
- * @deprecated Kept for backward compatibility with apps that still reference it.
+ * Kept for backward compatibility with apps that still reference it.
  * Will be removed once all apps stop passing pricing to tool calling clients.
  */
 export const TOOL_CALLING_PRICING: Record<ToolCallingModel, ModelPricing> = {
@@ -52,7 +52,7 @@ export interface ToolCallingClientConfig {
   model: ToolCallingModel;
   userId: string;
   /**
-   * @deprecated No longer used. Costs are computed by llm-usage-service on ingestion.
+   * No longer used. Costs are computed by llm-usage-service on ingestion.
    * Kept as optional for backward compatibility with apps that still pass it.
    */
   pricing?: ModelPricing;
@@ -157,12 +157,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
             const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
             const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
             const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
-            const iterationUsage = normalizeUsage(
-              inputTokens,
-              outputTokens,
-              false,
-              thinkingTokens
-            );
+            const iterationUsage = normalizeUsage(inputTokens, outputTokens, false, thinkingTokens);
             aggregatedUsage = addUsage(aggregatedUsage, iterationUsage);
 
             // Extract parts from response

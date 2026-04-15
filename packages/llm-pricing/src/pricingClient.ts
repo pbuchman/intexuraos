@@ -10,8 +10,8 @@
  * Pricing data is fetched from `/internal/pricing` endpoint
  * and cached in a `PricingContext` for efficient runtime access.
  *
- * @deprecated The fetch/retry/context functions in this module are slated for
- * removal once all apps have migrated away from client-side pricing. New code
+ * Note: The fetch/retry/context functions in this module will be removed
+ * once all apps have migrated away from client-side pricing. New code
  * should NOT depend on fetchAllPricing, fetchAllPricingWithRetry,
  * PricingContext, or createPricingContext.
  */
@@ -60,7 +60,7 @@ export interface PricingClientError {
 /**
  * Fetch all LLM pricing from llm-usage-service.
  *
- * @deprecated Will be removed once apps stop using client-side pricing.
+ * Will be removed once apps stop using client-side pricing.
  */
 export async function fetchAllPricing(
   baseUrl: string,
@@ -112,7 +112,7 @@ export async function fetchAllPricing(
 /**
  * Configuration for retry behavior in {@link fetchAllPricingWithRetry}.
  *
- * @deprecated Will be removed once apps stop using client-side pricing.
+ * Will be removed once apps stop using client-side pricing.
  */
 export interface PricingRetryOptions {
   /** Maximum number of retry attempts (default: 5) */
@@ -152,7 +152,7 @@ function defaultDelay(ms: number): Promise<void> {
 /**
  * Fetch all LLM pricing with exponential backoff retries.
  *
- * @deprecated Will be removed once apps stop using client-side pricing.
+ * Will be removed once apps stop using client-side pricing.
  */
 export async function fetchAllPricingWithRetry(
   baseUrl: string,
@@ -200,7 +200,7 @@ export async function fetchAllPricingWithRetry(
 /**
  * Interface for pricing context.
  *
- * @deprecated Will be removed once apps stop using client-side pricing.
+ * Will be removed once apps stop using client-side pricing.
  */
 export interface IPricingContext {
   /** Get pricing for a model; returns zero pricing for unknown models with a warn for ops audit */
@@ -218,7 +218,7 @@ export interface IPricingContext {
 /**
  * Runtime pricing lookup context.
  *
- * @deprecated Will be removed once apps stop using client-side pricing.
+ * Will be removed once apps stop using client-side pricing.
  */
 export class PricingContext implements IPricingContext {
   /** Map of model to pricing for O(1) lookups */
@@ -285,7 +285,7 @@ function isValidLLMModel(model: string): model is LLMModel {
 /**
  * Create a PricingContext from fetched pricing.
  *
- * @deprecated Will be removed once apps stop using client-side pricing.
+ * Will be removed once apps stop using client-side pricing.
  */
 export function createPricingContext(
   allPricing: AllPricingResponse,
