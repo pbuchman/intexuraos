@@ -147,7 +147,7 @@ export async function autoRetryTask(
   await whatsappNotifier.notifyTaskAutoRetried(
     failedTask.userId,
     failedTask,
-    { attempt: attemptNumber, maxAttempts: MAX_AUTO_RETRY_DEPTH, reason }
+    { attempt: attemptNumber, maxAttempts: MAX_AUTO_RETRY_DEPTH, reason, retryTaskId }
   );
 
   logger.info(

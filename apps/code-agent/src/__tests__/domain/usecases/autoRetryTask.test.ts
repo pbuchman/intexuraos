@@ -298,7 +298,7 @@ describe('autoRetryTask', () => {
       expect(mockWhatsappNotifier.notifyTaskAutoRetried).toHaveBeenCalledWith(
         'user_123',
         failedTask,
-        { attempt: 1, maxAttempts: 3, reason: 'oom_killed' }
+        { attempt: 1, maxAttempts: 3, reason: 'oom_killed', retryTaskId: expect.stringContaining('task_') }
       );
     });
 

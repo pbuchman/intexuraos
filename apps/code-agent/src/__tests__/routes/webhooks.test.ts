@@ -11457,6 +11457,58 @@ describe('POST /internal/webhooks/task-complete - failure triage (INT-1375)', ()
     expect(mockTriage).toHaveBeenCalledOnce();
   });
 
+  it('skips immediate drain for retried_after_cooloff to allow scheduler-driven cooloff', async () => {
+    const mockTriage = vi.mocked(triageFailedTaskModule.triageFailedTask);
+    mockTriage.mockResolvedValueOnce({
+      action: 'retried_after_cooloff' as const,
+      retryTaskId: 'task_cooloff-1',
+      reason: 'RATE_LIMITED_429',
+    });
+    const mockDrain = vi.mocked(drainTaskQueueModule.drainTaskQueue);
+    mockDrain.mockClear();
+
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the bug',
+      sanitizedPrompt: 'Fix the bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_triage_cooloff',
+      webhookSecret: 'test-webhook-secret',
+      prNumber: 42,
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'failed' as const,
+      error: { code: 'RATE_LIMITED_429', message: 'Rate limited by provider' },
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockTriage).toHaveBeenCalledOnce();
+    // Drain should NOT be called for retried_after_cooloff — rely on scheduler tick
+    expect(mockDrain).not.toHaveBeenCalled();
+  });
+
   it('falls through to permanent failure for unrecognized errors', async () => {
     const mockTriage = vi.mocked(triageFailedTaskModule.triageFailedTask);
     mockTriage.mockResolvedValueOnce({

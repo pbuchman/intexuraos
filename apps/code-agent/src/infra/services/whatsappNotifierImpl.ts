@@ -461,7 +461,7 @@ A follow-up fix task has been automatically dispatched.`;
     async notifyTaskAutoRetried(
       userId: string,
       task: CodeTask,
-      info: { attempt: number; maxAttempts: number; reason: string }
+      info: { attempt: number; maxAttempts: number; reason: string; retryTaskId: string }
     ): Promise<Result<void, NotificationError>> {
       const title = await resolveTaskTitle(linearAgentClient, userId, task);
       const linearPrefix = task.linearIssueId !== undefined ? `${task.linearIssueId} | ` : '';
@@ -470,7 +470,7 @@ A follow-up fix task has been automatically dispatched.`;
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
-        ctaUrl: { displayText: 'View Task', url: buildTaskUrl(task.id) },
+        ctaUrl: { displayText: 'View Task', url: buildTaskUrl(info.retryTaskId) },
         correlationId: task.traceId,
       });
 
