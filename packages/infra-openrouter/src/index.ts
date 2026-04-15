@@ -22,7 +22,7 @@ export {
   getDefaultAllowlistPricing,
   type DefaultAllowedOpenRouterModel,
 } from './defaultAllowlist.js';
-export { calculateTextCost, normalizeUsage, toModelPricing } from './costCalculator.js';
+export { normalizeUsage, toModelPricing } from './costCalculator.js';
 export type {
   GenerateOptions,
   OpenRouterConfig,

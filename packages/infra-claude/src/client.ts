@@ -17,13 +17,8 @@
  *   apiKey: process.env.ANTHROPIC_API_KEY,
  *   model: 'claude-sonnet-4-5',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 3.00,
- *     outputPricePerMillion: 15.00,
- *     cacheReadMultiplier: 0.1,
- *     cacheWriteMultiplier: 1.25,
- *     webSearchCostPerCall: 0.0035,
- *   }
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  *
  * // Research with web search
@@ -31,7 +26,6 @@
  * if (research.ok) {
  *   console.log(research.data.content);
  *   console.log('Sources:', research.data.sources);
- *   console.log('Cost:', research.data.usage.costUsd);
  * }
  *
  * // Simple generation
@@ -63,11 +57,10 @@ const MAX_TOKENS = 8192;
 /**
  * Creates a configured Anthropic Claude client.
  *
- * The client implements {@link LLMClient} with automatic cost calculation,
- * usage logging, and audit tracking. All costs are calculated from the
- * provided `pricing` configuration.
+ * The client implements {@link LLMClient} with usage logging and audit
+ * tracking. Cost calculation is handled server-side by llm-usage-service.
  *
- * @param config - Client configuration including API key, model, user ID, and pricing
+ * @param config - Client configuration including API key, model, user ID
  * @returns A configured {@link ClaudeClient} instance
  *
  * @example
@@ -76,19 +69,14 @@ const MAX_TOKENS = 8192;
  *   apiKey: process.env.ANTHROPIC_API_KEY,
  *   model: 'claude-sonnet-4-5',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 3.00,
- *     outputPricePerMillion: 15.00,
- *     cacheReadMultiplier: 0.1,
- *     cacheWriteMultiplier: 1.25,
- *     webSearchCostPerCall: 0.0035,
- *   }
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  * ```
  */
 export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   const client = new Anthropic({ apiKey: config.apiKey });
-  const { model, userId, pricing, logger, usageSink, ownerType } = config;
+  const { model, userId, logger, usageSink, ownerType } = config;
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
   function trackUsage(
@@ -147,8 +135,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           usageDetails.outputTokens,
           usageDetails.cacheReadTokens,
           usageDetails.cacheCreationTokens,
-          webSearchCalls,
-          pricing
+          webSearchCalls
         );
 
         trackUsage('research', usage, true);
@@ -185,8 +172,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           usageDetails.outputTokens,
           usageDetails.cacheReadTokens,
           usageDetails.cacheCreationTokens,
-          0,
-          pricing
+          0
         );
 
         trackUsage('generate', usage, true);

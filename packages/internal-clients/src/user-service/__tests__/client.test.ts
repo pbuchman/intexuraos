@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import nock from 'nock';
 import { createUserServiceClient, providerToKeyField } from '../client.js';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
-import { createFakePricingContext, createFakeUsageSink } from '@intexuraos/llm-pricing';
+import { createFakeUsageSink } from '@intexuraos/llm-pricing';
 
 describe('providerToKeyField', () => {
   it('returns google for Google provider', () => {
@@ -34,12 +34,9 @@ describe('createUserServiceClient', () => {
     debug: vi.fn(),
   };
 
-  const mockPricingContext = createFakePricingContext();
-
   const config = {
     baseUrl: 'http://localhost:3000',
     internalAuthToken: 'test-token',
-    pricingContext: mockPricingContext,
     logger: mockLogger,
     usageSink: createFakeUsageSink(),
   };

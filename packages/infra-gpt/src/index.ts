@@ -1,5 +1,5 @@
 export { createGptClient, type GptClient } from './client.js';
-export { calculateTextCost, calculateImageCost, normalizeUsage } from './costCalculator.js';
+export { normalizeUsage } from './costCalculator.js';
 export {
   EmbeddingClient,
   type EmbeddingClientDeps,

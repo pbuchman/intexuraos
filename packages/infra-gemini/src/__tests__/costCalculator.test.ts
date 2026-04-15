@@ -1,118 +1,49 @@
 import { describe, expect, it } from 'vitest';
-import { calculateTextCost, calculateImageCost, normalizeUsage } from '../costCalculator.js';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import { normalizeUsage } from '../costCalculator.js';
 
 describe('infra-gemini costCalculator', () => {
-  const basePricing: ModelPricing = {
-    inputPricePerMillion: 0.1,
-    outputPricePerMillion: 0.4,
-    groundingCostPerRequest: 0.035,
-  };
-
-  describe('calculateTextCost', () => {
-    it('calculates basic cost without grounding', () => {
-      const usage = { inputTokens: 1000, outputTokens: 500 };
-      expect(calculateTextCost(usage, basePricing)).toBeCloseTo(0.0003, 6);
-    });
-
-    it('adds grounding cost when enabled', () => {
-      const usage = { inputTokens: 1000, outputTokens: 500, groundingEnabled: true };
-      expect(calculateTextCost(usage, basePricing)).toBeCloseTo(0.0353, 6);
-    });
-
-    it('uses zero grounding cost when not provided in pricing', () => {
-      const minimalPricing: ModelPricing = {
-        inputPricePerMillion: 0.1,
-        outputPricePerMillion: 0.4,
-      };
-      const usage = { inputTokens: 1000, outputTokens: 500, groundingEnabled: true };
-      // No grounding cost added: just input + output
-      expect(calculateTextCost(usage, minimalPricing)).toBeCloseTo(0.0003, 6);
-    });
-
-    it('includes thinking tokens at output rate', () => {
-      const usage = { inputTokens: 1000, outputTokens: 500, thinkingTokens: 300 };
-      // input: 1000 * 0.1 = 100, output: 500 * 0.4 = 200, thinking: 300 * 0.4 = 120
-      // total scaled = 420, / 1_000_000 = 0.00042
-      expect(calculateTextCost(usage, basePricing)).toBeCloseTo(0.00042, 6);
-    });
-
-    it('treats undefined thinkingTokens as zero', () => {
-      const usage = { inputTokens: 1000, outputTokens: 500 };
-      expect(calculateTextCost(usage, basePricing)).toBeCloseTo(0.0003, 6);
-    });
-  });
-
-  describe('calculateImageCost', () => {
-    it('returns price for existing size', () => {
-      const pricingWithImage: ModelPricing = {
-        inputPricePerMillion: 0.1,
-        outputPricePerMillion: 0.4,
-        imagePricing: { '1024x1024': 0.04, '1536x1024': 0.06 },
-      };
-      expect(calculateImageCost('1024x1024', pricingWithImage)).toBe(0.04);
-    });
-
-    it('returns 0 when imagePricing is undefined', () => {
-      const pricingNoImage: ModelPricing = {
-        inputPricePerMillion: 0.1,
-        outputPricePerMillion: 0.4,
-      };
-      expect(calculateImageCost('1024x1024', pricingNoImage)).toBe(0);
-    });
-
-    it('returns 0 for missing size in imagePricing', () => {
-      const pricingWithImage: ModelPricing = {
-        inputPricePerMillion: 0.1,
-        outputPricePerMillion: 0.4,
-        imagePricing: { '1536x1024': 0.06 },
-      };
-      expect(calculateImageCost('1024x1024', pricingWithImage)).toBe(0);
-    });
-  });
-
   describe('normalizeUsage', () => {
-    it('returns normalized usage with cost', () => {
-      const result = normalizeUsage(1000, 500, true, basePricing);
+    it('returns normalized usage with costUsd always 0', () => {
+      const result = normalizeUsage(1000, 500, true);
       expect(result).toEqual({
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
-        costUsd: expect.closeTo(0.0353, 6),
+        costUsd: 0,
         groundingEnabled: true,
       });
     });
 
     it('omits groundingEnabled when false', () => {
-      const result = normalizeUsage(1000, 500, false, basePricing);
+      const result = normalizeUsage(1000, 500, false);
       expect(result).toEqual({
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
-        costUsd: expect.closeTo(0.0003, 6),
+        costUsd: 0,
       });
       expect(result.groundingEnabled).toBeUndefined();
     });
 
-    it('includes thinkingTokens in cost and exposes on result', () => {
-      const result = normalizeUsage(1000, 500, false, basePricing, 300);
+    it('includes thinkingTokens when provided and non-zero', () => {
+      const result = normalizeUsage(1000, 500, false, 300);
       expect(result).toEqual({
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
-        costUsd: expect.closeTo(0.00042, 6),
+        costUsd: 0,
         thinkingTokens: 300,
       });
     });
 
     it('omits thinkingTokens from result when zero', () => {
-      const result = normalizeUsage(1000, 500, false, basePricing, 0);
+      const result = normalizeUsage(1000, 500, false, 0);
       expect(result.thinkingTokens).toBeUndefined();
-      expect(result.costUsd).toBeCloseTo(0.0003, 6);
+      expect(result.costUsd).toBe(0);
     });
 
     it('omits thinkingTokens from result when undefined', () => {
-      const result = normalizeUsage(1000, 500, false, basePricing);
+      const result = normalizeUsage(1000, 500, false);
       expect(result.thinkingTokens).toBeUndefined();
     });
   });

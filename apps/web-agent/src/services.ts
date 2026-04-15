@@ -47,7 +47,6 @@ export function initServices(dependencies: ServiceDependencies): void {
     userServiceClient: createUserServiceClient({
       baseUrl: dependencies.userServiceUrl,
       internalAuthToken: dependencies.internalAuthToken,
-      pricingContext: dependencies.pricingContext,
       logger: createAppLogger({ name: 'userServiceClient' }),
       usageSink: new HttpInternalAuthUsageSink({
         usageServiceUrl: dependencies.llmUsageServiceUrl,
