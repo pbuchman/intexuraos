@@ -246,6 +246,96 @@ describe('groupByLinearIssue', () => {
     expect(mergeStep).toBeDefined();
     expect(mergeStep?.state).toBe('actionable');
   });
+
+  it('alt-unlock: adds merge step when terminal remediation has requiresReReview=false (label race)', () => {
+    const tasks: SerializedTask[] = [
+      makeTask({
+        id: 'task-exec',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-04-15T10:00:00.000Z',
+        updatedAt: '2026-04-15T10:00:00.000Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        linearIssueId: 'INT-100',
+        linearIssue: {
+          identifier: 'INT-100',
+          title: 'Test',
+          state: { name: 'In Review', type: 'started' },
+          priority: 3,
+          assignee: null,
+          // No ready-to-merge label — simulates label-propagation lag
+          labels: [],
+          url: 'https://linear.app/test/INT-100',
+          commentCount: 0,
+          lastCommentAt: null,
+        },
+      }),
+      makeTask({
+        id: 'task-rem',
+        agentType: 'remediation',
+        status: 'implemented',
+        createdAt: '2026-04-15T11:00:00.000Z',
+        updatedAt: '2026-04-15T11:00:00.000Z',
+        requiresReReview: false,
+        linearIssueId: 'INT-100',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    const mergeStep = groups[0]?.pipeline.steps.find((s) => s.agentType === 'merge');
+    expect(mergeStep).toBeDefined();
+    expect(mergeStep?.state).toBe('actionable');
+  });
+
+  it('alt-unlock: does NOT add merge step when remediation has requiresReReview=true', () => {
+    const tasks: SerializedTask[] = [
+      makeTask({
+        id: 'task-exec',
+        agentType: 'execution',
+        status: 'implemented',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        linearIssueId: 'INT-100',
+      }),
+      makeTask({
+        id: 'task-rem',
+        agentType: 'remediation',
+        status: 'implemented',
+        createdAt: '2026-04-15T11:00:00.000Z',
+        updatedAt: '2026-04-15T11:00:00.000Z',
+        requiresReReview: true,
+        linearIssueId: 'INT-100',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    const mergeStep = groups[0]?.pipeline.steps.find((s) => s.agentType === 'merge');
+    expect(mergeStep).toBeUndefined();
+  });
+
+  it('alt-unlock: does NOT add merge step when remediation has no requiresReReview field (legacy data)', () => {
+    const tasks: SerializedTask[] = [
+      makeTask({
+        id: 'task-exec',
+        agentType: 'execution',
+        status: 'implemented',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+        linearIssueId: 'INT-100',
+      }),
+      makeTask({
+        id: 'task-rem',
+        agentType: 'remediation',
+        status: 'implemented',
+        createdAt: '2026-04-15T11:00:00.000Z',
+        updatedAt: '2026-04-15T11:00:00.000Z',
+        // requiresReReview intentionally omitted — legacy remediation task
+        linearIssueId: 'INT-100',
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    const mergeStep = groups[0]?.pipeline.steps.find((s) => s.agentType === 'merge');
+    expect(mergeStep).toBeUndefined();
+  });
 });
 
 describe('deriveAggregateStatus', () => {

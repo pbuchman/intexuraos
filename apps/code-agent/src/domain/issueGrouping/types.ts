@@ -53,6 +53,7 @@ export interface SerializedTask {
   prNumber?: number;
   prMergedAt?: string; // ISO timestamp — set when PR was merged
   prClosedAt?: string; // ISO timestamp — set when PR was closed without merge
+  requiresReReview?: boolean; // set on remediation tasks via task-complete callback
   result?: {
     prUrl?: string;
     branch?: string;
@@ -65,6 +66,8 @@ export interface SerializedTask {
     review_types?: string;
     requirements_tracker_updated?: string;
     needs_remediation?: string;
+    requires_re_review?: string;
+    execution_outcome_label?: string;
   };
   error?: {
     code: string;

@@ -5996,6 +5996,135 @@ describe('POST /internal/webhooks/task-complete', () => {
     });
   });
 
+  describe('remediation task-complete → ready-to-merge restoration', () => {
+    async function seedExecutionOrigin(traceId: string, prNumber: number): Promise<void> {
+      const result = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Create a PR',
+        sanitizedPrompt: 'Create a PR',
+        systemPromptHash: 'origin-auto',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId,
+        prNumber,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'execution',
+        linearIssueId: 'INT-500',
+      });
+      if (!result.ok) throw new Error('Failed to seed execution origin task');
+      await codeTaskRepo.update(result.value.id, {
+        status: 'implemented',
+        result: { prUrl: `https://github.com/pbuchman/intexuraos/pull/${String(prNumber)}` },
+      });
+    }
+
+    async function seedRemediationTask(traceId: string, prNumber: number): Promise<import('../../domain/models/codeTask.js').CodeTask> {
+      const result = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Fix review findings',
+        sanitizedPrompt: 'Fix review findings',
+        systemPromptHash: 'remediation-auto',
+        workerType: 'codex',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId,
+        prNumber,
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'remediation',
+        linearIssueId: 'INT-500',
+      });
+      if (!result.ok) throw new Error('Failed to seed remediation task');
+      return result.value;
+    }
+
+    async function sendRemediationComplete(
+      taskId: string,
+      result: {
+        summary: string;
+        requires_re_review?: string;
+        execution_outcome_label?: string;
+        prUrl: string;
+      },
+    ): Promise<import('fastify').LightMyRequestResponse> {
+      const payload = { taskId, status: 'completed' as const, result };
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      return app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+    }
+
+    it('applies ready-to-merge when remediation completes with requires_re_review=0 and already_completed', async () => {
+      await seedExecutionOrigin('trace_rem_already_completed_origin', 700);
+      const task = await seedRemediationTask('trace_rem_already_completed', 700);
+
+      const response = await sendRemediationComplete(task.id, {
+        summary: 'All findings already fixed by prior remediation',
+        requires_re_review: '0',
+        execution_outcome_label: 'already_completed',
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/700',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      expect(metadataSpy).toHaveBeenCalledWith({
+        userId: 'user-123',
+        issueId: 'linear-issue-uuid',
+        addLabels: ['ready-to-merge'],
+      });
+    });
+
+    it('does NOT apply ready-to-merge when execution_outcome_label is implemented (new commits pushed)', async () => {
+      await seedExecutionOrigin('trace_rem_implemented_origin', 701);
+      const task = await seedRemediationTask('trace_rem_implemented', 701);
+
+      const response = await sendRemediationComplete(task.id, {
+        summary: 'Pushed a fix commit',
+        requires_re_review: '0',
+        execution_outcome_label: 'implemented',
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/701',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const readyToMergeCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels?.includes('ready-to-merge') === true,
+      );
+      expect(readyToMergeCalls).toHaveLength(0);
+    });
+
+    it('does NOT apply ready-to-merge when requires_re_review=1', async () => {
+      await seedExecutionOrigin('trace_rem_reqrev1_origin', 702);
+      const task = await seedRemediationTask('trace_rem_reqrev1', 702);
+
+      const response = await sendRemediationComplete(task.id, {
+        summary: 'Fixed findings, re-review needed',
+        requires_re_review: '1',
+        execution_outcome_label: 'implemented',
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/702',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { linearAgentClient: lac } = getServices();
+      const metadataSpy = vi.mocked(lac.updateIssueMetadata);
+      const readyToMergeCalls = metadataSpy.mock.calls.filter(
+        (call) => call[0].addLabels?.includes('ready-to-merge') === true,
+      );
+      expect(readyToMergeCalls).toHaveLength(0);
+    });
+  });
+
   describe('planning-agent unclear failure mapping', () => {
     it('stores failed planning unclear webhook error and preserves flattened planning result', async () => {
       const createResult = await codeTaskRepo.create({

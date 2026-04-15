@@ -59,6 +59,7 @@ function taskToSerializedTask(task: {
   prNumber?: number;
   prMergedAt?: unknown;   // Firestore Timestamp | string
   prClosedAt?: unknown;   // Firestore Timestamp | string
+  requiresReReview?: boolean;
   result?: {
     prUrl?: string;
     branch?: string;
@@ -71,6 +72,8 @@ function taskToSerializedTask(task: {
     review_types?: string;
     requirements_tracker_updated?: string;
     needs_remediation?: string;
+    requires_re_review?: string;
+    execution_outcome_label?: string;
   };
   error?: {
     code: string;
@@ -130,6 +133,7 @@ function taskToSerializedTask(task: {
   /* v8 ignore stop @preserve */
   if (prMergedAt !== undefined) { serialized.prMergedAt = prMergedAt; }
   if (prClosedAt !== undefined) { serialized.prClosedAt = prClosedAt; }
+  if (task.requiresReReview !== undefined) { serialized.requiresReReview = task.requiresReReview; }
   if (task.result !== undefined) { serialized.result = task.result; }
   if (task.error !== undefined) { serialized.error = task.error; }
 
