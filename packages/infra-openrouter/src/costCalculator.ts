@@ -5,7 +5,7 @@
  * and handles usage normalization.
  */
 
-import type { TokenUsage, NormalizedUsage, ModelPricing } from '@intexuraos/llm-contract';
+import type { NormalizedUsage, ModelPricing } from '@intexuraos/llm-contract';
 
 /**
  * Convert OpenRouter per-token pricing strings to per-million ModelPricing.
@@ -30,51 +30,17 @@ export function toModelPricing(promptPerToken: string, completionPerToken: strin
 }
 
 /**
- * Calculate text generation cost based on token usage and pricing.
- * Prioritizes direct provider cost. Falls back to calculation from token prices.
- */
-export function calculateTextCost(
-  usage: TokenUsage,
-  pricing: ModelPricing,
-  providerCost: number | undefined
-): number {
-  // 1. Direct Provider Cost (Priority)
-  if (pricing.useProviderCost === true && providerCost !== undefined) {
-    return providerCost;
-  }
-  /* v8 ignore start -- upstream: usage.providerCost fallback when provider doesn't supply direct cost @preserve */
-  if (usage.providerCost !== undefined) {
-    return usage.providerCost;
-  }
-  /* v8 ignore stop @preserve */
-
-  // 2. Fallback Calculation using per-million prices
-  // Formula: tokens * (pricePerMillion / 1_000_000) = tokens * pricePerToken
-  const inputCost = usage.inputTokens * (pricing.inputPricePerMillion / 1_000_000);
-  const outputCost = usage.outputTokens * (pricing.outputPricePerMillion / 1_000_000);
-
-  return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000;
-}
-
-/**
  * Normalize OpenRouter usage into our standard format.
  */
 export function normalizeUsage(
   inputTokens: number,
   outputTokens: number,
-  providerCost: number | undefined,
-  pricing: ModelPricing
+  _providerCost: number | null | undefined
 ): NormalizedUsage {
-  const usage: TokenUsage = {
-    inputTokens,
-    outputTokens,
-    ...(providerCost !== undefined && { providerCost }),
-  };
-
   return {
     inputTokens,
     outputTokens,
     totalTokens: inputTokens + outputTokens,
-    costUsd: calculateTextCost(usage, pricing, providerCost),
+    costUsd: 0,
   };
 }

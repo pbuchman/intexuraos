@@ -18,17 +18,14 @@
  *   apiKey: process.env.OPENAI_API_KEY,
  *   model: 'gpt-4.1',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 2.50,
- *     outputPricePerMillion: 10.00,
- *   }
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  *
  * // Research with web search
  * const research = await client.research('Latest TypeScript features');
  * if (research.ok) {
  *   console.log(research.data.content);
- *   console.log('Cost:', research.data.usage.costUsd);
  * }
  *
  * // Image generation
@@ -53,7 +50,7 @@ import {
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import type { GptConfig, GptError, ResearchResult } from './types.js';
-import { normalizeUsage, calculateImageCost } from './costCalculator.js';
+import { normalizeUsage } from './costCalculator.js';
 
 export type GptClient = LLMClient;
 
@@ -77,21 +74,14 @@ const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
  *   apiKey: process.env.OPENAI_API_KEY,
  *   model: 'gpt-4.1',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 2.50,
- *     outputPricePerMillion: 10.00,
- *   },
- *   imagePricing: {
- *     inputPricePerMillion: 0,
- *     outputPricePerMillion: 0,
- *     imagePricing: { '1024x1024': 0.040 }
- *   }
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  * ```
  */
 export function createGptClient(config: GptConfig): GptClient {
   const client = new OpenAI({ apiKey: config.apiKey });
-  const { model, userId, pricing, imagePricing, logger, usageSink, ownerType } = config;
+  const { model, userId, logger, usageSink, ownerType } = config;
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
   function trackUsage(
@@ -162,8 +152,7 @@ export function createGptClient(config: GptConfig): GptClient {
           usageDetails.outputTokens,
           usageDetails.cachedTokens,
           webSearchCalls,
-          usageDetails.reasoningTokens,
-          pricing
+          usageDetails.reasoningTokens
         );
 
         trackUsage('research', usage, true);
@@ -197,8 +186,7 @@ export function createGptClient(config: GptConfig): GptClient {
           usageDetails.outputTokens,
           usageDetails.cachedTokens,
           0,
-          usageDetails.reasoningTokens,
-          pricing
+          usageDetails.reasoningTokens
         );
 
         trackUsage('generate', usage, true);
@@ -252,14 +240,11 @@ export function createGptClient(config: GptConfig): GptClient {
           imageBuffer = Buffer.from(arrayBuffer);
         }
 
-        const pricingConfig = imagePricing ?? pricing;
-        const imageCost = calculateImageCost(size, pricingConfig);
-
         const usage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
           totalTokens: 0,
-          costUsd: imageCost,
+          costUsd: 0,
         };
 
         trackUsage('image_generation', usage, true);

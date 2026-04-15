@@ -22,11 +22,9 @@
  *   apiKey: process.env.PERPLEXITY_API_KEY,
  *   model: 'sonar-pro',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 1.00,
- *     outputPricePerMillion: 1.00,
- *   },
  *   timeoutMs: 840000, // 14 minutes for deep research
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  *
  * const result = await client.research('Latest AI developments');
@@ -191,7 +189,6 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
     apiKey,
     model,
     userId,
-    pricing,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     logger,
     usageSink,
@@ -224,8 +221,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
     return normalizeUsage(
       usage.prompt_tokens,
       usage.completion_tokens,
-      usage.cost?.total_cost,
-      pricing
+      usage.cost?.total_cost
     );
   }
 

@@ -31,8 +31,9 @@ const DEFAULT_MAX_ITERATIONS = 5;
 
 /**
  * Self-contained pricing for tool calling models.
- * Same pattern as VERIFIER_PRICING in completion-verifier.ts.
- * Bypasses code-agent's pricingContext (which throws on pricing operations).
+ *
+ * @deprecated Kept for backward compatibility with apps that still reference it.
+ * Will be removed once all apps stop passing pricing to tool calling clients.
  */
 export const TOOL_CALLING_PRICING: Record<ToolCallingModel, ModelPricing> = {
   [LlmModels.Gemini25Flash]: {
@@ -50,7 +51,11 @@ export interface ToolCallingClientConfig {
   apiKey: string;
   model: ToolCallingModel;
   userId: string;
-  pricing: ModelPricing;
+  /**
+   * @deprecated No longer used. Costs are computed by llm-usage-service on ingestion.
+   * Kept as optional for backward compatibility with apps that still pass it.
+   */
+  pricing?: ModelPricing;
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
   usageSink: UsageSink;
@@ -61,7 +66,7 @@ export interface ToolCallingClientConfig {
  */
 export function createGeminiToolCallingClient(config: ToolCallingClientConfig): ToolCallingClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const { model, userId, pricing, logger, usageSink } = config;
+  const { model, userId, logger, usageSink } = config;
 
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
@@ -156,7 +161,6 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
               inputTokens,
               outputTokens,
               false,
-              pricing,
               thinkingTokens
             );
             aggregatedUsage = addUsage(aggregatedUsage, iterationUsage);

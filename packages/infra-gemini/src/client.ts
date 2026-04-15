@@ -17,17 +17,13 @@
  *   apiKey: process.env.GOOGLE_API_KEY,
  *   model: 'gemini-2.5-flash',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 0.075,
- *     outputPricePerMillion: 0.30,
- *     groundingCostPerRequest: 0.002,
- *   }
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  *
  * const result = await client.generate('Explain quantum computing');
  * if (result.ok) {
  *   console.log(result.data.content);
- *   console.log('Cost:', result.data.usage.costUsd);
  * }
  * ```
  */
@@ -42,21 +38,19 @@ import {
   type ImageGenerateOptions,
   type ImageGenerationResult,
   type GenerateResult,
-  type ImageSize,
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import type { GeminiConfig, GeminiError, ResearchResult } from './types.js';
-import { normalizeUsage, calculateImageCost } from './costCalculator.js';
+import { normalizeUsage } from './costCalculator.js';
 import { resolveVertexRedirectUrls } from './vertexUrlResolver.js';
 
 export type GeminiClient = LLMClient;
 
 const IMAGE_MODEL = LlmModels.Gemini25FlashImage;
-const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
 
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const { model, userId, pricing, imagePricing, logger, usageSink, ownerType } = config;
+  const { model, userId, logger, usageSink, ownerType } = config;
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
   function trackUsage(
@@ -97,7 +91,6 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
           inputTokens,
           outputTokens,
           groundingEnabled,
-          pricing,
           thinkingTokens
         );
 
@@ -124,7 +117,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
         const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
         const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
-        const usage = normalizeUsage(inputTokens, outputTokens, false, pricing, thinkingTokens);
+        const usage = normalizeUsage(inputTokens, outputTokens, false, thinkingTokens);
 
         trackUsage('generate', usage, true);
 
@@ -144,7 +137,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 
     async generateImage(
       prompt: string,
-      options?: ImageGenerateOptions
+      _options?: ImageGenerateOptions
     ): Promise<Result<ImageGenerationResult, GeminiError>> {
       try {
         const response = await ai.models.generateContent({
@@ -161,15 +154,12 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         }
 
         const imageBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
-        const size: ImageSize = options?.size ?? DEFAULT_IMAGE_SIZE;
-        const pricingConfig = imagePricing ?? pricing;
-        const imageCost = calculateImageCost(size, pricingConfig);
 
         const usage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
           totalTokens: 0,
-          costUsd: imageCost,
+          costUsd: 0,
         };
 
         trackUsage('image_generation', usage, true);

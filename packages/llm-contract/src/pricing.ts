@@ -1,13 +1,12 @@
 /**
  * Pricing types for LLM cost calculation.
  *
- * Used by llm-usage-service (for fetching/storing prices) and infra-*
- * packages (for calculating request costs).
+ * Used by llm-usage-service for fetching/storing prices and computing
+ * costs on ingestion. Client packages no longer calculate costs locally.
  *
  * @packageDocumentation
  */
 
-import type { TokenUsage } from './types.js';
 import type { LlmProvider } from './supportedModels.js';
 
 /** Supported image generation dimensions */
@@ -89,30 +88,4 @@ export interface ProviderPricing {
    * Metadata marker for providers whose pricing table entries are informational only.
    */
   costSource?: string;
-}
-
-/**
- * Interface for calculating LLM operation costs.
- *
- * Implemented by individual provider packages (infra-claude, infra-gpt, etc.)
- * to handle provider-specific cost calculations.
- */
-export interface CostCalculator {
-  /**
-   * Calculate text generation cost from token usage.
-   *
-   * @param usage - Raw token usage from provider response
-   * @param pricing - Model pricing configuration
-   * @returns Cost in USD
-   */
-  calculateTextCost(usage: TokenUsage, pricing: ModelPricing): number;
-
-  /**
-   * Calculate image generation cost.
-   *
-   * @param size - Image dimensions
-   * @param pricing - Model pricing configuration (must include imagePricing)
-   * @returns Cost in USD
-   */
-  calculateImageCost(size: ImageSize, pricing: ModelPricing): number;
 }

@@ -26,6 +26,8 @@ export type UsageEventPayload = Record<string, unknown>;
  * Shared helper that maps UsageLogParams to a usage event payload.
  * Used by both HttpWebhookUsageSink and HttpInternalAuthUsageSink to avoid duplication.
  *
+ * Schema v2: clients emit raw token counts; llm-usage-service computes costs on ingestion.
+ *
  * @internal
  */
 export function buildUsageEvent(
@@ -39,12 +41,9 @@ export function buildUsageEvent(
   const clientName = params.clientName ?? source.component;
   const providerReportedUsd = params.providerReportedUsd ?? null;
   const useProviderCost = providerReportedUsd !== null;
-  // Schema requires billedUsd >= 0; clamp defensively so a misbehaving provider can't 400 the receiver.
-  const billedUsd = useProviderCost ? Math.max(0, providerReportedUsd) : params.usage.costUsd;
-  const pricingSource = useProviderCost ? 'provider_reported' : 'calculated';
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     eventId: crypto.randomUUID(),
     occurredAt: new Date().toISOString(),
     owner: { type: ownerType, id: params.userId },
@@ -75,10 +74,8 @@ export function buildUsageEvent(
       imageCount: 0,
     },
     cost: {
-      billedUsd,
       providerReportedUsd,
-      calculatedUsd: params.usage.costUsd,
-      pricingSource,
+      pricingSource: useProviderCost ? 'provider_reported' : 'pending',
     },
     correlation: {
       requestId: correlationOverrides?.requestId ?? null,
