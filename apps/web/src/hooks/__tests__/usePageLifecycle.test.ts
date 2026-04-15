@@ -28,8 +28,10 @@ vi.mock('react-router-dom', () => ({
 const { usePageLifecycle } = await import('../usePageLifecycle.js');
 
 describe('usePageLifecycle', () => {
-  let addEventListenerSpy: ReturnType<typeof vi.spyOn>;
-  let removeEventListenerSpy: ReturnType<typeof vi.spyOn>;
+  let docAddEventListenerSpy: ReturnType<typeof vi.spyOn>;
+  let docRemoveEventListenerSpy: ReturnType<typeof vi.spyOn>;
+  let winAddEventListenerSpy: ReturnType<typeof vi.spyOn>;
+  let winRemoveEventListenerSpy: ReturnType<typeof vi.spyOn>;
   let originalScrollTo: typeof window.scrollTo;
 
   beforeEach(() => {
@@ -37,8 +39,10 @@ describe('usePageLifecycle', () => {
     mockLocation = { pathname: '/dashboard', search: '', hash: '' };
     mockLoadCheckpoint.mockResolvedValue(null);
 
-    addEventListenerSpy = vi.spyOn(document, 'addEventListener');
-    removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
+    docAddEventListenerSpy = vi.spyOn(document, 'addEventListener');
+    docRemoveEventListenerSpy = vi.spyOn(document, 'removeEventListener');
+    winAddEventListenerSpy = vi.spyOn(window, 'addEventListener');
+    winRemoveEventListenerSpy = vi.spyOn(window, 'removeEventListener');
     originalScrollTo = window.scrollTo;
     window.scrollTo = vi.fn();
 
@@ -58,11 +62,13 @@ describe('usePageLifecycle', () => {
   it('registers event listeners on mount', () => {
     renderHook(() => usePageLifecycle());
 
-    const registeredEvents = addEventListenerSpy.mock.calls.map((call) => call[0]);
-    expect(registeredEvents).toContain('visibilitychange');
-    expect(registeredEvents).toContain('freeze');
-    expect(registeredEvents).toContain('pagehide');
-    expect(registeredEvents).toContain('pageshow');
+    const docEvents = docAddEventListenerSpy.mock.calls.map((call) => call[0]);
+    expect(docEvents).toContain('visibilitychange');
+    expect(docEvents).toContain('freeze');
+
+    const winEvents = winAddEventListenerSpy.mock.calls.map((call) => call[0]);
+    expect(winEvents).toContain('pagehide');
+    expect(winEvents).toContain('pageshow');
   });
 
   it('calls saveCheckpoint with current route and scroll on visibilitychange to hidden', async () => {
@@ -87,7 +93,7 @@ describe('usePageLifecycle', () => {
     });
 
     // Trigger visibilitychange
-    const visibilityHandler = addEventListenerSpy.mock.calls.find(
+    const visibilityHandler = docAddEventListenerSpy.mock.calls.find(
       (call) => call[0] === 'visibilitychange'
     )?.[1] as EventListener | undefined;
 
@@ -149,11 +155,45 @@ describe('usePageLifecycle', () => {
 
     unmount();
 
-    const removedEvents = removeEventListenerSpy.mock.calls.map((call) => call[0]);
-    expect(removedEvents).toContain('visibilitychange');
-    expect(removedEvents).toContain('freeze');
-    expect(removedEvents).toContain('pagehide');
-    expect(removedEvents).toContain('pageshow');
+    const docRemovedEvents = docRemoveEventListenerSpy.mock.calls.map((call) => call[0]);
+    expect(docRemovedEvents).toContain('visibilitychange');
+    expect(docRemovedEvents).toContain('freeze');
+
+    const winRemovedEvents = winRemoveEventListenerSpy.mock.calls.map((call) => call[0]);
+    expect(winRemovedEvents).toContain('pagehide');
+    expect(winRemovedEvents).toContain('pageshow');
+  });
+
+  it('saves checkpoint on pagehide event (registered on window)', async () => {
+    mockSaveCheckpoint.mockResolvedValue(undefined);
+    Object.defineProperty(window, 'scrollY', {
+      value: 350,
+      writable: true,
+      configurable: true,
+    });
+
+    renderHook(() => usePageLifecycle());
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const pagehideHandler = winAddEventListenerSpy.mock.calls.find(
+      (call) => call[0] === 'pagehide'
+    )?.[1] as EventListener | undefined;
+
+    if (pagehideHandler === undefined) {
+      throw new Error('pagehide handler not registered on window');
+    }
+    act(() => {
+      pagehideHandler(new Event('pagehide'));
+    });
+
+    expect(mockSaveCheckpoint).toHaveBeenCalledWith({
+      routePath: '/dashboard',
+      scrollY: 350,
+      timestamp: expect.any(Number) as number,
+    });
   });
 
   it('saves checkpoint on freeze event', async () => {
@@ -170,7 +210,7 @@ describe('usePageLifecycle', () => {
       await Promise.resolve();
     });
 
-    const freezeHandler = addEventListenerSpy.mock.calls.find(
+    const freezeHandler = docAddEventListenerSpy.mock.calls.find(
       (call) => call[0] === 'freeze'
     )?.[1] as EventListener | undefined;
 
@@ -244,7 +284,7 @@ describe('usePageLifecycle', () => {
       await Promise.resolve();
     });
 
-    const visibilityHandler = addEventListenerSpy.mock.calls.find(
+    const visibilityHandler = docAddEventListenerSpy.mock.calls.find(
       (call) => call[0] === 'visibilitychange'
     )?.[1] as EventListener | undefined;
 
