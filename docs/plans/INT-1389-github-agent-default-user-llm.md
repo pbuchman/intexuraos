@@ -375,7 +375,7 @@ Add the factory function after the `buildUsageSink` definition (around line 422)
   };
 ```
 
-You will need to import `ok`, `err` from `@intexuraos/common-core` (check if already imported) and `GitHubAgentError` from the githubAgent use case.
+You will need to add `err` to the existing `@intexuraos/common-core` import (currently imports `ok` and `Result` only — line 9: `import { ok, type Result } from '@intexuraos/common-core';` → `import { ok, err, type Result } from '@intexuraos/common-core';`). Also import `GitHubAgentError` from the githubAgent use case.
 
 - [ ] **Step 2: Update `ServiceContainer` interface**
 
@@ -413,7 +413,16 @@ Note: The `evaluateEvent` callback is no longer conditional on `toolCallingClien
 
 In the return statement of `buildServices`, replace `toolCallingClient,` with `resolveToolCallingClient,`.
 
-- [ ] **Step 5: Search for other references to `toolCallingClient` in `services.ts`**
+- [ ] **Step 5: Verify `UnifiedEvaluator` type compatibility**
+
+The `UnifiedEvaluator` type in `apps/code-agent/src/domain/services/unifiedEvaluator.ts` (line 37) defines `evaluateEvent` as optional:
+```typescript
+evaluateEvent?: ((event: GitHubPREvent, correctionContext?: string) => Promise<Result<GitHubAgentEvalResult, GitHubAgentError>>) | undefined;
+```
+
+After this change, `evaluateEvent` is always provided (the factory handles unavailability internally). The `UnifiedEvaluator` type's optional `evaluateEvent` property does NOT need to change — making a previously-optional property always-present is backwards compatible. The `undefined` check in `unifiedEvaluator.ts` (line 179: `if (deps.evaluateEvent === undefined)`) remains valid as a defensive guard. No type changes needed.
+
+- [ ] **Step 6: Search for other references to `toolCallingClient` in `services.ts`**
 
 Run: `rg 'toolCallingClient' apps/code-agent/src/services.ts`
 
@@ -423,12 +432,12 @@ Run: `rg 'ServiceContainer' apps/code-agent/src/ --type ts`
 
 Update any files that reference `container.toolCallingClient`.
 
-- [ ] **Step 6: Build and verify**
+- [ ] **Step 7: Build and verify**
 
 Run: `cd /repo && pnpm build`
 Expected: Clean build, no type errors.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add apps/code-agent/src/services.ts
@@ -440,42 +449,105 @@ git commit -m "feat(code-agent): replace static toolCallingClient with per-user 
 ## Task 4: Update all test files referencing `toolCallingClient` in `ServiceContainer`
 
 **Files:**
-- Modify: Any test files in `apps/code-agent/src/__tests__/` that reference `toolCallingClient` in service container setup.
+- Modify: 27+ test files in `apps/code-agent/src/__tests__/` plus the shared `mockServices.ts` helper.
 
 ### Context
 
-Tests that create fake service containers may reference `toolCallingClient`. These need to be updated to use `resolveToolCallingClient`.
+Tests that create fake service containers reference `toolCallingClient` in `setServices()` calls. A codebase grep reveals **27 test files** with the following distinct patterns:
+
+**Pattern A — Initialization + type assertion (most route tests, ~20 files):**
+```typescript
+// In setServices() call:
+toolCallingClient: undefined,
+// In type assertion block:
+toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+```
+Files: `codeSubmit.test.ts`, `codeRoutes.test.ts`, `codeProcess.test.ts`, `codeCancel.test.ts`, `codeInternalSubmit.test.ts`, `codeRoutes.archive.test.ts`, `codeRoutes.branches.test.ts`, `codeQueue.test.ts`, `codeTasks.test.ts`, `askAgentActive.test.ts`, `askAgentStart.test.ts`, `server.test.ts`, `openapi-contract.test.ts`, `internalUsageWebhookRoute.test.ts`, `workerSettingsRoutes.test.ts`, `complianceReport.test.ts`, `github.test.ts`, `taskEvent.test.ts`, `automationLogFlows.test.ts`, `mergeQueueRoutes.test.ts`, `github-event-log.test.ts`, `github-pre-events.test.ts`, `github-pr-summaries.test.ts`, `groupSummaryRecompute.test.ts`
+
+**Pattern B — Shared helper (1 file):**
+```typescript
+// In mockServices.ts:
+toolCallingClient: undefined,
+```
+File: `helpers/mockServices.ts`
+
+**Pattern C — Heavy usage (2 files):**
+```typescript
+// Multiple setServices() blocks, each with toolCallingClient: undefined + type assertion
+```
+Files: `webhooks.test.ts` (14 refs across 7 blocks), `issueGroups.test.ts` (8 refs across 4 blocks)
+
+**Pattern D — Main domain test (1 file):**
+```typescript
+// Already updated in Tasks 1-2 (githubAgent.test.ts with ~42 refs)
+```
+File: `usecases/githubAgent.test.ts` — handled by Tasks 1-2, skip here.
 
 ### Steps
 
-- [ ] **Step 1: Find all test files referencing `toolCallingClient`**
+- [ ] **Step 1: Update `mockServices.ts` shared helper first**
 
-Run: `rg 'toolCallingClient' apps/code-agent/src/__tests__/ --type ts -l`
-
-- [ ] **Step 2: Update each test file**
-
-For each file found, replace `toolCallingClient: <value>` with:
+In `apps/code-agent/src/__tests__/helpers/mockServices.ts`, replace:
+```typescript
+toolCallingClient: undefined,
+```
+with:
 ```typescript
 resolveToolCallingClient: vi.fn().mockResolvedValue(ok(createFakeToolCallingClient())),
 ```
 
-Or if the test doesn't need tool calling:
+Add the necessary imports (`ok` from `@intexuraos/common-core`, `createFakeToolCallingClient` if not already imported). Since most route tests don't exercise tool calling, the mock just needs to satisfy the type — it won't be called.
+
+- [ ] **Step 2: Update Pattern A files — initialization value**
+
+For each Pattern A file, do a **find-and-replace** of the initialization pattern:
+
 ```typescript
-resolveToolCallingClient: vi.fn().mockResolvedValue(err({ code: 'LLM_FAILED', message: 'Not configured' })),
+// OLD:
+toolCallingClient: undefined,
+// NEW:
+resolveToolCallingClient: vi.fn().mockResolvedValue(ok(createFakeToolCallingClient())),
 ```
 
-Adapt based on what each test expects. Preserve the existing `createFakeToolCallingClient` helper for use inside the factory mock.
+Since these route tests don't exercise tool calling, the mock factory just satisfies the `ServiceContainer` type. If `ok` and `createFakeToolCallingClient` are not imported, add them. Many files may already import from `@intexuraos/common-core` — just add `ok` to the existing import.
 
-- [ ] **Step 3: Run full test suite for code-agent**
+- [ ] **Step 3: Update Pattern A files — type assertion**
+
+For each Pattern A file, update the type assertion:
+
+```typescript
+// OLD:
+toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+// NEW:
+resolveToolCallingClient: (userId: string) => Promise<import('@intexuraos/common-core').Result<import('@intexuraos/llm-contract').ToolCallingClient, import('../../../domain/usecases/githubAgent.js').GitHubAgentError>>;
+```
+
+**Alternative:** If the type assertion block uses `as ServiceContainer`, no per-field type annotation is needed — just ensure the property name is updated.
+
+- [ ] **Step 4: Update Pattern C files (webhooks.test.ts, issueGroups.test.ts)**
+
+These files have multiple `setServices()` blocks. Apply the same replacement as Pattern A to **every** block:
+- `webhooks.test.ts`: 7 blocks (lines with `toolCallingClient: undefined` + corresponding type assertions)
+- `issueGroups.test.ts`: 4 blocks
+
+Use `rg 'toolCallingClient' <file> -n` to find all occurrences and update each one.
+
+- [ ] **Step 5: Verify no remaining references**
+
+Run: `rg 'toolCallingClient' apps/code-agent/src/__tests__/ --type ts`
+
+Expected: Only references in `githubAgent.test.ts` (handled by Tasks 1-2) and zero references using the old `ServiceContainer` shape.
+
+- [ ] **Step 6: Run full test suite for code-agent**
 
 Run: `cd /repo && pnpm run verify:workspace:tracked -- code-agent`
-Expected: PASS
+Expected: PASS — all 27+ files compile and tests pass.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add apps/code-agent/src/__tests__/
-git commit -m "test(code-agent): update test fakes for resolveToolCallingClient factory pattern"
+git commit -m "test(code-agent): update 27+ test fakes for resolveToolCallingClient factory pattern"
 ```
 
 ---
@@ -525,3 +597,7 @@ git commit -m "fix(code-agent): address coverage gaps for resolveToolCallingClie
 4. **No changes to `llm-contract` or `llm-factory`:** Tool calling remains Gemini-only. The migration is about whose API key is used, not which model. The `ToolCallingModel` type and `createToolCallingClient` factory remain unchanged.
 
 5. **`evaluateEvent` is no longer conditional:** Previously, the `unifiedEvaluator` received `evaluateEvent: undefined` when no platform Gemini key was configured. Now, `evaluateEvent` is always provided — the factory returns an error Result when no key is available (user or platform), and the caller handles it gracefully.
+
+6. **`getApiKeys` failure falls through to platform key (conscious design):** When `userServiceClient.getApiKeys(userId)` fails (e.g., `NETWORK_ERROR`, `NO_API_KEY`), the factory falls through to the platform key rather than returning an error. This is intentional — a transient user-service failure should not block GitHub Agent functionality when a valid platform key exists. Only when both the user key lookup fails AND no platform key is configured does the factory return `err({ code: 'LLM_FAILED' })`.
+
+7. **Line numbers are advisory:** This plan references specific line numbers (e.g., "line 185", "line 366") that are accurate as of the commit this plan was written against. If other PRs merge to `development` before implementation, line numbers may drift. Use the surrounding code context (function names, variable names) to locate the correct positions.
