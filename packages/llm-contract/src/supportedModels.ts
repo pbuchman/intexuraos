@@ -258,7 +258,8 @@ export interface DefaultOpenRouterModel {
 }
 
 export const DEFAULT_OPENROUTER_MODELS: readonly DefaultOpenRouterModel[] = [
-  { id: 'google/gemma-4-31b-it:free', name: 'Gemma 4 31B IT', provider: 'Google' },
+  { id: 'google/gemma-4-31b-it:free', name: 'Gemma 4 31B IT (Free)', provider: 'Google' },
+  { id: 'google/gemma-4-31b-it', name: 'Gemma 4 31B IT', provider: 'Google' },
   { id: 'minimax/minimax-m2.7', name: 'MiniMax M2.7', provider: 'MiniMax' },
   { id: 'qwen/qwen3.6-plus', name: 'Qwen 3.6 Plus', provider: 'Qwen' },
   {
@@ -278,7 +279,7 @@ const DEFAULT_OPENROUTER_MODEL_IDS: ReadonlySet<string> = new Set(
  *
  * Note: The type includes all OpenRouterModelId values for type ergonomics,
  * but runtime validation via `isDefaultEligibleModel()` only accepts the
- * 4 curated models in `DEFAULT_OPENROUTER_MODELS`. Always validate at runtime.
+ * curated models in `DEFAULT_OPENROUTER_MODELS`. Always validate at runtime.
  */
 export type DefaultEligibleModel = FastModel | OpenRouterModelId;
 
