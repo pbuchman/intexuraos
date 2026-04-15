@@ -405,9 +405,11 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
 });
 ```
 
-**IMPORTANT:** These tests require a **stateful** `groupSummaryRepo` so that `updateAfterCreate` (triggered by `POST /code/tasks`) actually stores a summary, and `setImportant` can then mutate it. Use `createFakeTaskGroupSummaryRepository()` (from Task 4) instead of the default `makeGroupSummaryRepo()` stub. Initialize the test app with `makeBaseServices({ groupSummaryRepo: fakeRepo })`.
+**IMPORTANT:** These tests require a **stateful** `groupSummaryRepo` so that `updateAfterCreate` actually stores a summary, and `setImportant` can then mutate it. Use `createFakeTaskGroupSummaryRepository()` (from Task 4) instead of the default `makeGroupSummaryRepo()` stub. Initialize the test app with `makeBaseServices({ groupSummaryRepo: fakeRepo })`.
 
-Adapt the test setup to match the existing patterns in `issueGroups.test.ts` — check how the test app is initialized, how auth tokens work (likely a `FakeAuthPlugin`), and how tasks are created. The test examples above show the intent; the exact request payloads may need adjustment based on the test file's existing `beforeEach` setup.
+**Note:** Task creation in this repo uses `POST /code/submit` (not `POST /code/tasks`, which is GET-only). However, for these route tests the recommended approach is **direct repository setup** — seed the `groupSummaryRepo` fake with the required summary entries in `beforeEach` rather than creating tasks via HTTP. This matches the existing test patterns in `issueGroups.test.ts`, which use mocked summaries (`mockSummaries`) and never call task-creation endpoints.
+
+Adapt the test setup to match the existing patterns in `issueGroups.test.ts` — check how the test app is initialized, how auth tokens work (likely a `FakeAuthPlugin`), and how the mock summaries are seeded. The test examples below show the intent; the exact setup may need adjustment based on the test file's existing `beforeEach`.
 
 - [ ] **Step 2: Write the failing test for `isImportant` in GET response**
 
@@ -415,17 +417,19 @@ Add to the existing `GET /code/issue-groups` describe block:
 
 ```typescript
 it('includes isImportant in response when group is marked important', async () => {
-  // Setup: create task and mark group as important
-  await app.inject({
-    method: 'POST',
-    url: '/code/tasks',
-    headers: { authorization: 'Bearer test-token' },
-    payload: {
-      prompt: 'test prompt',
-      workerType: 'opus',
-      linearIssueId: 'INT-600',
-    },
+  // Setup: seed the groupSummaryRepo with a summary, then mark it important via the toggle endpoint.
+  // The fake repo is stateful (from Task 4), so setImportant will persist.
+  // Seed mockSummaries with at least one entry for group key 'INT-600':
+  mockSummaries.push({
+    groupKey: 'INT-600',
+    linearIssueId: 'INT-600',
+    title: 'Test issue',
+    taskCount: 1,
+    latestStatus: 'done',
+    latestTaskId: 'task_test',
+    updatedAt: new Date() as unknown as import('@google-cloud/firestore').Timestamp,
   });
+
   await app.inject({
     method: 'POST',
     url: '/code/issue-groups/INT-600/important',
