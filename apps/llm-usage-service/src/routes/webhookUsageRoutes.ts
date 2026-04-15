@@ -3,11 +3,11 @@ import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { ingestUsageEvents } from '../domain/usecases/ingestUsageEvents.js';
 import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
-import type { UsageEventInput } from '../domain/models/usageEvent.js';
+import type { UsageEventInputAny } from '../domain/models/usageEvent.js';
 
 interface WebhookIngestBody {
   schemaVersion: number;
-  events: UsageEventInput[];
+  events: UsageEventInputAny[];
 }
 
 export const webhookUsageRoutes: FastifyPluginCallback = (app, _opts, done) => {
@@ -20,15 +20,32 @@ export const webhookUsageRoutes: FastifyPluginCallback = (app, _opts, done) => {
         description: 'Webhook endpoint for orchestrator to submit LLM usage events with HMAC signature validation.',
         tags: ['usage'],
         body: {
-          type: 'object',
-          required: ['schemaVersion', 'events'],
-          properties: {
-            schemaVersion: { type: 'integer', enum: [1] },
-            events: {
-              type: 'array',
-              items: { $ref: 'OrchestratorUsageEventInput#' },
+          oneOf: [
+            {
+              type: 'object',
+              required: ['schemaVersion', 'events'],
+              additionalProperties: false,
+              properties: {
+                schemaVersion: { type: 'integer', enum: [1] },
+                events: {
+                  type: 'array',
+                  items: { $ref: 'OrchestratorUsageEventInput#' },
+                },
+              },
             },
-          },
+            {
+              type: 'object',
+              required: ['schemaVersion', 'events'],
+              additionalProperties: false,
+              properties: {
+                schemaVersion: { type: 'integer', enum: [2] },
+                events: {
+                  type: 'array',
+                  items: { $ref: 'OrchestratorUsageEventInputV2#' },
+                },
+              },
+            },
+          ],
         },
         response: {
           200: {
@@ -61,7 +78,7 @@ export const webhookUsageRoutes: FastifyPluginCallback = (app, _opts, done) => {
     async (request: FastifyRequest, reply: FastifyReply) => {
       logIncomingRequest(request, { message: 'Orchestrator webhook usage event ingest' });
 
-      const { orchestratorSecret, usageEventRepository, usageAggregateRepository } = getServices();
+      const { orchestratorSecret, usageEventRepository, usageAggregateRepository, pricingCache } = getServices();
 
       const authResult = validateOrchestratorSignature(request, { orchestratorSecret });
       if (!authResult.ok) {
@@ -69,12 +86,10 @@ export const webhookUsageRoutes: FastifyPluginCallback = (app, _opts, done) => {
         return await reply.fail('UNAUTHORIZED', authResult.error.message);
       }
 
-      // schemaVersion, event shapes, and source.service === 'orchestrator' constraint
-      // are all validated by the Fastify route schema (OrchestratorUsageEventInput).
       const body = request.body as WebhookIngestBody;
 
       const result = await ingestUsageEvents(
-        { logger: request.log, usageEventRepository, usageAggregateRepository },
+        { logger: request.log, usageEventRepository, usageAggregateRepository, pricingCache },
         body.events,
         'orchestrator_webhook',
       );

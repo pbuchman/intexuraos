@@ -1,14 +1,17 @@
 import type { UsageEventRepository } from './domain/repositories/usageEventRepository.js';
 import type { UsageAggregateRepository } from './domain/repositories/usageAggregateRepository.js';
 import type { PricingRepository } from './domain/repositories/pricingRepository.js';
+import type { PricingCache } from './domain/services/pricingCache.js';
 import { FirestoreUsageEventRepository } from './infra/firestore/firestoreUsageEventRepository.js';
 import { FirestoreUsageAggregateRepository } from './infra/firestore/firestoreUsageAggregateRepository.js';
 import { FirestorePricingRepository } from './infra/firestore/firestorePricingRepository.js';
+import { createPricingCache } from './domain/services/pricingCache.js';
 
 export interface ServiceContainer {
   usageEventRepository: UsageEventRepository;
   usageAggregateRepository: UsageAggregateRepository;
   pricingRepository: PricingRepository;
+  pricingCache: PricingCache;
   orchestratorSecret: string;
 }
 
@@ -27,10 +30,12 @@ export function initializeServices(): void {
     throw new Error('INTEXURAOS_ORCHESTRATOR_SECRET is required');
   }
 
+  const pricingRepository = new FirestorePricingRepository();
   container = {
     usageEventRepository: new FirestoreUsageEventRepository(),
     usageAggregateRepository: new FirestoreUsageAggregateRepository(),
-    pricingRepository: new FirestorePricingRepository(),
+    pricingRepository,
+    pricingCache: createPricingCache(pricingRepository),
     orchestratorSecret,
   };
 }

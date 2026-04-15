@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import { LlmProviders } from '@intexuraos/llm-contract';
 import { buildServer } from '../../server.js';
 import { setServices, resetServices, type ServiceContainer } from '../../services.js';
 import { FakeUsageEventRepository } from '../fakeUsageEventRepository.js';
 import { FakeUsageAggregateRepository } from '../fakeUsageAggregateRepository.js';
 import { FakePricingRepository } from '../fakePricingRepository.js';
-import { createTestEventInput } from '../helpers.js';
+import { FakePricingCache } from '../fakePricingCache.js';
+import { createTestEventInput, createTestEventInputV2 } from '../helpers.js';
 
 describe('internalUsageRoutes', () => {
   let app: FastifyInstance;
@@ -26,6 +28,7 @@ describe('internalUsageRoutes', () => {
       usageEventRepository: eventRepo,
       usageAggregateRepository: aggregateRepo,
       pricingRepository: new FakePricingRepository(),
+      pricingCache: new FakePricingCache(),
       orchestratorSecret: 'test-secret',
     } satisfies ServiceContainer);
   });
@@ -76,12 +79,53 @@ describe('internalUsageRoutes', () => {
         url: '/internal/usage/events',
         headers: { 'x-internal-auth': AUTH_TOKEN },
         payload: {
-          schemaVersion: 2,
+          schemaVersion: 3,
           events: [],
         },
       });
 
       expect(response.statusCode).toBe(400);
+    });
+
+    it('accepts v2 events and stores enriched cost in Firestore', async () => {
+      const pricingCache = new FakePricingCache();
+      pricingCache.setPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', {
+        inputPricePerMillion: 3.0,
+        outputPricePerMillion: 15.0,
+      });
+      setServices({
+        usageEventRepository: eventRepo,
+        usageAggregateRepository: aggregateRepo,
+        pricingRepository: new FakePricingRepository(),
+        pricingCache,
+        orchestratorSecret: 'test-secret',
+      } satisfies ServiceContainer);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/events',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: {
+          schemaVersion: 2,
+          events: [createTestEventInputV2({ eventId: 'evt_v2_1' })],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { accepted: number } };
+      expect(body.success).toBe(true);
+      expect(body.data.accepted).toBe(1);
+
+      // Verify Firestore round-trip: stored event has enriched cost shape
+      const stored = eventRepo.getStoredEvents();
+      expect(stored).toHaveLength(1);
+      const event = stored[0];
+      expect(event).toBeDefined();
+      expect(event?.schemaVersion).toBe(1);
+      expect(event?.cost.pricingSource).toBe('calculated');
+      expect(event?.cost.calculatedUsd).toBeGreaterThan(0);
+      expect(event?.cost.billedUsd).toBe(event?.cost.calculatedUsd);
+      expect(event?.cost.providerReportedUsd).toBeNull();
     });
 
     it('rejects events missing source.environment', async () => {
@@ -159,6 +203,38 @@ describe('internalUsageRoutes', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(eventRepo.getStoredEvents()).toHaveLength(0);
+    });
+
+    it('rejects mismatched envelope — v1 schemaVersion with v2 events', async () => {
+      const v2Event = createTestEventInputV2({ eventId: 'evt_mismatch_1' });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/events',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: {
+          schemaVersion: 1,
+          events: [v2Event],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(eventRepo.getStoredEvents()).toHaveLength(0);
+    });
+
+    it('rejects mismatched envelope — v2 schemaVersion with v1 events', async () => {
+      const v1Event = createTestEventInput({ eventId: 'evt_mismatch_2' });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/events',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: {
+          schemaVersion: 2,
+          events: [v1Event],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
       expect(eventRepo.getStoredEvents()).toHaveLength(0);
     });
 
