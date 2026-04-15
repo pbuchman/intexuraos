@@ -57,11 +57,10 @@ const MAX_TOKENS = 8192;
 /**
  * Creates a configured Anthropic Claude client.
  *
- * The client implements {@link LLMClient} with automatic cost calculation,
- * usage logging, and audit tracking. All costs are calculated from the
- * provided `pricing` configuration.
+ * The client implements {@link LLMClient} with usage logging and audit
+ * tracking. Cost calculation is handled server-side by llm-usage-service.
  *
- * @param config - Client configuration including API key, model, user ID, and pricing
+ * @param config - Client configuration including API key, model, user ID
  * @returns A configured {@link ClaudeClient} instance
  *
  * @example

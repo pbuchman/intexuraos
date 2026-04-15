@@ -61,11 +61,11 @@ const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
 /**
  * Creates a configured OpenAI GPT client.
  *
- * The client implements {@link LLMClient} with automatic cost calculation,
- * usage logging, and audit tracking. Supports text generation, research,
- * and image generation.
+ * The client implements {@link LLMClient} with usage logging and audit
+ * tracking. Supports text generation, research, and image generation.
+ * Cost calculation is handled server-side by llm-usage-service.
  *
- * @param config - Client configuration including API key, model, user ID, and pricing
+ * @param config - Client configuration including API key, model, user ID
  * @returns A configured {@link GptClient} instance
  *
  * @example
