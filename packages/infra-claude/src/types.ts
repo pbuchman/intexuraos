@@ -41,11 +41,6 @@ export interface ClaudeConfig {
   userId: string;
   /** Optional research ID for correlating audit logs to a research run */
   researchId?: string;
-  /**
-   * No longer used. Costs are computed by llm-usage-service on ingestion.
-   * Kept as optional for backward compatibility with apps that still pass it.
-   */
-  pricing?: import('@intexuraos/llm-contract').ModelPricing;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */

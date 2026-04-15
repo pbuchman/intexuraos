@@ -4,8 +4,10 @@ import { LlmProviders } from '@intexuraos/llm-contract';
 const PROVIDER_VALUES = Object.values(LlmProviders);
 
 /**
- * Base usage event input JSON Schema. Mirrors the UsageEventInput TypeScript
+ * Usage event input JSON Schema. Mirrors the UsageEventInput TypeScript
  * type in apps/llm-usage-service/src/domain/models/usageEvent.ts exactly.
+ * The cost object only has providerReportedUsd and pricingSource;
+ * billedUsd and calculatedUsd are computed server-side.
  *
  * Used as the body.items schema for POST /internal/usage/events. The webhook
  * endpoint references the stricter OrchestratorUsageEventInput below.
@@ -15,159 +17,6 @@ const PROVIDER_VALUES = Object.values(LlmProviders);
  */
 export const usageEventInputSchema = {
   $id: 'UsageEventInput',
-  type: 'object',
-  additionalProperties: false,
-  required: [
-    'schemaVersion',
-    'eventId',
-    'occurredAt',
-    'owner',
-    'source',
-    'request',
-    'usage',
-    'cost',
-    'correlation',
-    'error',
-  ],
-  properties: {
-    schemaVersion: { type: 'integer', enum: [1] },
-    eventId: { type: 'string', minLength: 1 },
-    occurredAt: { type: 'string', format: 'date-time' },
-    owner: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['type', 'id'],
-      properties: {
-        type: { type: 'string', enum: ['user', 'system'] },
-        id: { type: 'string', minLength: 1 },
-      },
-    },
-    source: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['service', 'component', 'client', 'environment'],
-      properties: {
-        service: { type: 'string', minLength: 1 },
-        component: { type: 'string', minLength: 1 },
-        client: { type: 'string', minLength: 1 },
-        environment: {
-          type: 'string',
-          enum: ['dev', 'prod', 'test'],
-          description:
-            'The intexuraos environment of the caller that originated this usage. For events emitted by the orchestrator, this is the environment of the code-agent that dispatched the task, NOT the orchestrator\'s own environment (the orchestrator has no environment, only a location).',
-        },
-        workerLocation: {
-          type: 'string',
-          minLength: 1,
-          description:
-            "Physical location identifier of the orchestrator that produced this event (e.g. 'home-dev', 'mac-dev', 'office-pc'). Required at the webhook endpoint (via OrchestratorUsageEventInput); optional on the internal endpoint.",
-        },
-      },
-    },
-    request: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['provider', 'model', 'operation', 'success', 'durationMs'],
-      properties: {
-        provider: { type: 'string', enum: PROVIDER_VALUES },
-        model: { type: 'string', minLength: 1 },
-        operation: {
-          type: 'string',
-          enum: [
-            'research',
-            'generate',
-            'image_generation',
-            'tool_calling',
-            'other',
-          ],
-        },
-        success: { type: 'boolean' },
-        durationMs: { type: 'number', minimum: 0 },
-      },
-    },
-    usage: {
-      type: 'object',
-      additionalProperties: false,
-      required: [
-        'inputTokens',
-        'outputTokens',
-        'totalTokens',
-        'cacheReadTokens',
-        'cacheWriteTokens',
-        'cachedTokens',
-        'reasoningTokens',
-        'thinkingTokens',
-        'webSearchCalls',
-        'groundingEnabled',
-        'imageCount',
-      ],
-      properties: {
-        inputTokens: { type: 'number', minimum: 0 },
-        outputTokens: { type: 'number', minimum: 0 },
-        totalTokens: { type: 'number', minimum: 0 },
-        cacheReadTokens: { type: 'number', minimum: 0 },
-        cacheWriteTokens: { type: 'number', minimum: 0 },
-        cachedTokens: { type: 'number', minimum: 0 },
-        reasoningTokens: { type: 'number', minimum: 0 },
-        thinkingTokens: { type: 'number', minimum: 0 },
-        webSearchCalls: { type: 'number', minimum: 0 },
-        groundingEnabled: { type: 'boolean' },
-        imageCount: { type: 'number', minimum: 0 },
-      },
-    },
-    cost: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['billedUsd', 'providerReportedUsd', 'calculatedUsd', 'pricingSource'],
-      properties: {
-        billedUsd: { type: 'number', minimum: 0 },
-        providerReportedUsd: { type: ['number', 'null'] },
-        calculatedUsd: { type: ['number', 'null'] },
-        pricingSource: {
-          type: 'string',
-          enum: ['provider_reported', 'calculated', 'mixed', 'external'],
-        },
-      },
-    },
-    correlation: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['requestId', 'traceId', 'taskId', 'researchId', 'attempt', 'sessionId'],
-      properties: {
-        requestId: { type: ['string', 'null'] },
-        traceId: { type: ['string', 'null'] },
-        taskId: { type: ['string', 'null'] },
-        researchId: { type: ['string', 'null'] },
-        // Widened to number|null to match the TypeScript type; the schema does not
-        // enforce integer semantics because the TS interface declares plain `number | null`.
-        attempt: { type: ['number', 'null'] },
-        sessionId: { type: ['string', 'null'] },
-      },
-    },
-    error: {
-      anyOf: [
-        { type: 'null' },
-        {
-          type: 'object',
-          additionalProperties: false,
-          required: ['code', 'message'],
-          properties: {
-            code: { type: ['string', 'null'] },
-            message: { type: ['string', 'null'] },
-          },
-        },
-      ],
-    },
-  },
-} as const;
-
-/**
- * V2 usage event input JSON Schema. Mirrors the UsageEventInputV2 TypeScript
- * type. The cost object only has providerReportedUsd and pricingSource;
- * billedUsd and calculatedUsd are computed server-side.
- */
-export const usageEventInputV2Schema = {
-  $id: 'UsageEventInputV2',
   type: 'object',
   additionalProperties: false,
   required: [
@@ -341,32 +190,6 @@ export const orchestratorUsageEventInputSchema = {
 } as const;
 
 /**
- * Orchestrator-specific V2 usage event input schema. Extends the V2 base via `allOf`:
- *
- *   1. Pins `source.service` to the literal `'orchestrator'`.
- *   2. Makes `source.workerLocation` a required field.
- */
-export const orchestratorUsageEventInputV2Schema = {
-  $id: 'OrchestratorUsageEventInputV2',
-  allOf: [
-    { $ref: 'UsageEventInputV2#' },
-    {
-      type: 'object',
-      required: ['source'],
-      properties: {
-        source: {
-          type: 'object',
-          required: ['service', 'workerLocation'],
-          properties: {
-            service: { const: 'orchestrator' },
-          },
-        },
-      },
-    },
-  ],
-} as const;
-
-/**
  * Registers all usage event schemas with the Fastify app's Ajv instance.
  *
  * Must be called AFTER `registerCoreSchemas(app)` and BEFORE any route is
@@ -376,7 +199,5 @@ export const orchestratorUsageEventInputV2Schema = {
  */
 export function registerUsageSchemas(app: FastifyInstance): void {
   app.addSchema(usageEventInputSchema);
-  app.addSchema(usageEventInputV2Schema);
   app.addSchema(orchestratorUsageEventInputSchema);
-  app.addSchema(orchestratorUsageEventInputV2Schema);
 }

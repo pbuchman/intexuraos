@@ -1,14 +1,7 @@
 import type { Logger } from '@intexuraos/common-core';
-import type { LLMModel, ModelPricing } from '@intexuraos/llm-contract';
+import type { LLMModel } from '@intexuraos/llm-contract';
 import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
 import { HttpWebhookUsageSink } from '@intexuraos/llm-pricing';
-
-/**
- * Temporary zero-cost pricing placeholder.
- * Once llm-usage-service computes costs server-side (INT-1377, Child Issue 2),
- * `pricing` will become optional in `LlmClientConfig` and this constant can be removed.
- */
-const ZERO_PRICING: ModelPricing = { inputPricePerMillion: 0, outputPricePerMillion: 0 };
 
 export interface ParsedValidationModel {
   provider: 'openrouter' | 'gemini';
@@ -100,7 +93,6 @@ export function buildValidationClients(
           apiKey: config.openRouterApiKey,
           model: model.modelId as LLMModel,
           userId: 'orchestrator-validation',
-          pricing: ZERO_PRICING,
           logger: config.logger,
           usageSink: new HttpWebhookUsageSink({
             webhookUrl: config.usageWebhookUrl,
@@ -128,7 +120,6 @@ export function buildValidationClients(
         apiKey: config.geminiApiKey,
         model: model.modelId as LLMModel,
         userId: 'orchestrator-validation',
-        pricing: ZERO_PRICING,
         logger: config.logger,
         usageSink: new HttpWebhookUsageSink({
           webhookUrl: config.usageWebhookUrl,

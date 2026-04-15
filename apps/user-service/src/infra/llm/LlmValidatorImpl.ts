@@ -8,7 +8,7 @@ import { createGptClient } from '@intexuraos/infra-gpt';
 import { createClaudeClient } from '@intexuraos/infra-claude';
 import { createPerplexityClient } from '@intexuraos/infra-perplexity';
 import { createOpenRouterClient, OPENROUTER_VALIDATION_MODEL } from '@intexuraos/infra-openrouter';
-import { LlmModels, LlmProviders, type ModelPricing } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import type {
   LlmProvider,
@@ -28,27 +28,14 @@ const VALIDATION_MODELS = {
 } as const;
 
 /**
- * Pricing configuration for validation models.
- */
-export interface ValidationPricing {
-  google: ModelPricing;
-  openai: ModelPricing;
-  anthropic: ModelPricing;
-  perplexity: ModelPricing;
-  openrouter: ModelPricing;
-}
-
-/**
  * Implementation of LlmValidator that delegates to infra packages.
  * Uses cheap/fast models for validation to minimize costs.
  */
 export class LlmValidatorImpl implements LlmValidator {
-  private readonly pricing: ValidationPricing;
   private readonly logger: Logger;
   private readonly usageSink: UsageSink;
 
-  constructor(pricing: ValidationPricing, logger: Logger, usageSink: UsageSink) {
-    this.pricing = pricing;
+  constructor(logger: Logger, usageSink: UsageSink) {
     this.logger = logger;
     this.usageSink = usageSink;
   }
@@ -64,7 +51,6 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.Google],
           userId,
-          pricing: this.pricing.google,
           logger: this.logger,
           usageSink: this.usageSink,
         });
@@ -85,7 +71,6 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.OpenAI],
           userId,
-          pricing: this.pricing.openai,
           logger: this.logger,
           usageSink: this.usageSink,
         });
@@ -106,7 +91,6 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.Anthropic],
           userId,
-          pricing: this.pricing.anthropic,
           logger: this.logger,
           usageSink: this.usageSink,
         });
@@ -127,7 +111,6 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.Perplexity],
           userId,
-          pricing: this.pricing.perplexity,
           logger: this.logger,
           usageSink: this.usageSink,
         });
@@ -149,7 +132,6 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.OpenRouter],
           userId,
-          pricing: this.pricing.openrouter,
           logger: this.logger,
           usageSink: this.usageSink,
         });
@@ -180,7 +162,6 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.Google],
           userId,
-          pricing: this.pricing.google,
           logger: this.logger,
           usageSink: this.usageSink,
         });
@@ -198,7 +179,6 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.OpenAI],
           userId,
-          pricing: this.pricing.openai,
           logger: this.logger,
           usageSink: this.usageSink,
         });
@@ -216,7 +196,6 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.Anthropic],
           userId,
-          pricing: this.pricing.anthropic,
           logger: this.logger,
           usageSink: this.usageSink,
         });
@@ -234,7 +213,6 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.Perplexity],
           userId,
-          pricing: this.pricing.perplexity,
           logger: this.logger,
           usageSink: this.usageSink,
         });
@@ -252,7 +230,6 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.OpenRouter],
           userId,
-          pricing: this.pricing.openrouter,
           logger: this.logger,
           usageSink: this.usageSink,
         });

@@ -104,10 +104,7 @@ import {
   type WhatsAppSendPublisher,
 } from '@intexuraos/infra-pubsub';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
-import {
-  fetchAllPricingWithRetry,
-  HttpInternalAuthUsageSink,
-} from '@intexuraos/llm-pricing';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 
 export interface Services {
   actionServiceClient: ActionServiceClient;
@@ -173,17 +170,7 @@ export interface ServiceConfig {
 
 let container: Services | null = null;
 
-export async function initServices(config: ServiceConfig): Promise<void> {
-  // Fetch pricing from llm-usage-service
-  const pricingResult = await fetchAllPricingWithRetry(
-    config.llmUsageServiceUrl,
-    config.internalAuthToken
-  );
-
-  if (!pricingResult.ok) {
-    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
-  }
-
+export function initServices(config: ServiceConfig): void {
   const actionRepository = createFirestoreActionRepository({
     logger: createAppLogger({ name: 'actionRepository' }),
   });

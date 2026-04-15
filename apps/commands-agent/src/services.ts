@@ -1,8 +1,5 @@
 import { createAppLogger } from '@intexuraos/infra-sentry';
-import {
-  fetchAllPricingWithRetry,
-  HttpInternalAuthUsageSink,
-} from '@intexuraos/llm-pricing';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import type { CommandRepository } from './domain/ports/commandRepository.js';
 import type { ClassifierFactory } from './domain/ports/classifier.js';
 import type { EventPublisherPort } from './domain/ports/eventPublisher.js';
@@ -55,18 +52,8 @@ export interface ServiceConfig {
 
 let container: Services | null = null;
 
-export async function initServices(config: ServiceConfig): Promise<void> {
+export function initServices(config: ServiceConfig): void {
   const logger = createAppLogger({ name: 'commands-agent' });
-
-  // Fetch pricing data from llm-usage-service
-  const pricingResult = await fetchAllPricingWithRetry(
-    config.llmUsageServiceUrl,
-    config.internalAuthToken
-  );
-
-  if (!pricingResult.ok) {
-    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
-  }
 
   const commandRepository = createFirestoreCommandRepository();
   const actionsAgentClient = createActionsAgentClient({

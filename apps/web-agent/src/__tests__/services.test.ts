@@ -6,11 +6,8 @@ import {
   FakeLlmSummarizer,
   FakeUserServiceClient,
 } from './fakes.js';
-import { FakePricingContext } from '@intexuraos/llm-pricing';
 
 describe('services', () => {
-  const mockPricingContext = new FakePricingContext();
-
   afterEach(() => {
     resetServices();
   });
@@ -23,7 +20,6 @@ describe('services', () => {
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
         llmUsageServiceUrl: 'http://localhost:8132',
-        pricingContext: mockPricingContext,
       });
 
       const services = getServices();
@@ -55,7 +51,6 @@ describe('services', () => {
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
         llmUsageServiceUrl: 'http://localhost:8132',
-        pricingContext: mockPricingContext,
       });
 
       expect(() => getServices()).not.toThrow();
@@ -93,7 +88,6 @@ describe('services', () => {
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
         llmUsageServiceUrl: 'http://localhost:8132',
-        pricingContext: mockPricingContext,
       });
       resetServices();
 

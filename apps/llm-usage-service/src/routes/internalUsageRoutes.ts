@@ -2,11 +2,11 @@ import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastif
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { ingestUsageEvents } from '../domain/usecases/ingestUsageEvents.js';
-import type { UsageEventInputAny } from '../domain/models/usageEvent.js';
+import type { UsageEventInput } from '../domain/models/usageEvent.js';
 
 interface IngestBody {
   schemaVersion: number;
-  events: UsageEventInputAny[];
+  events: UsageEventInput[];
 }
 
 export const internalUsageRoutes: FastifyPluginCallback = (app, _opts, done) => {
@@ -19,32 +19,16 @@ export const internalUsageRoutes: FastifyPluginCallback = (app, _opts, done) => 
         description: 'Internal endpoint for ingesting LLM usage events from other services.',
         tags: ['usage'],
         body: {
-          oneOf: [
-            {
-              type: 'object',
-              required: ['schemaVersion', 'events'],
-              additionalProperties: false,
-              properties: {
-                schemaVersion: { type: 'integer', enum: [1] },
-                events: {
-                  type: 'array',
-                  items: { $ref: 'UsageEventInput#' },
-                },
-              },
+          type: 'object',
+          required: ['schemaVersion', 'events'],
+          additionalProperties: false,
+          properties: {
+            schemaVersion: { type: 'integer', enum: [2] },
+            events: {
+              type: 'array',
+              items: { $ref: 'UsageEventInput#' },
             },
-            {
-              type: 'object',
-              required: ['schemaVersion', 'events'],
-              additionalProperties: false,
-              properties: {
-                schemaVersion: { type: 'integer', enum: [2] },
-                events: {
-                  type: 'array',
-                  items: { $ref: 'UsageEventInputV2#' },
-                },
-              },
-            },
-          ],
+          },
         },
         response: {
           200: {

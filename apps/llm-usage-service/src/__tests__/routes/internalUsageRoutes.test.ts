@@ -7,7 +7,7 @@ import { FakeUsageEventRepository } from '../fakeUsageEventRepository.js';
 import { FakeUsageAggregateRepository } from '../fakeUsageAggregateRepository.js';
 import { FakePricingRepository } from '../fakePricingRepository.js';
 import { FakePricingCache } from '../fakePricingCache.js';
-import { createTestEventInput, createTestEventInputV2 } from '../helpers.js';
+import { createTestEventInput } from '../helpers.js';
 
 describe('internalUsageRoutes', () => {
   let app: FastifyInstance;
@@ -49,7 +49,7 @@ describe('internalUsageRoutes', () => {
         url: '/internal/usage/events',
         headers: { 'x-internal-auth': AUTH_TOKEN },
         payload: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           events: [createTestEventInput({ eventId: 'evt_test_1' })],
         },
       });
@@ -65,7 +65,7 @@ describe('internalUsageRoutes', () => {
         method: 'POST',
         url: '/internal/usage/events',
         payload: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           events: [],
         },
       });
@@ -107,7 +107,7 @@ describe('internalUsageRoutes', () => {
         headers: { 'x-internal-auth': AUTH_TOKEN },
         payload: {
           schemaVersion: 2,
-          events: [createTestEventInputV2({ eventId: 'evt_v2_1' })],
+          events: [createTestEventInput({ eventId: 'evt_v2_1' })],
         },
       });
 
@@ -136,7 +136,7 @@ describe('internalUsageRoutes', () => {
         url: '/internal/usage/events',
         headers: { 'x-internal-auth': AUTH_TOKEN },
         payload: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           events: [{ ...validEvent, source: sourceWithoutEnv }],
         },
       });
@@ -166,7 +166,7 @@ describe('internalUsageRoutes', () => {
         url: '/internal/usage/events',
         headers: { 'x-internal-auth': AUTH_TOKEN },
         payload: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           events: [{
             ...validEvent,
             source: { ...validEvent.source, environment: 'staging' },
@@ -191,7 +191,7 @@ describe('internalUsageRoutes', () => {
         url: '/internal/usage/events',
         headers: { 'x-internal-auth': AUTH_TOKEN },
         payload: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           events: [{ ...validEvent, bogus: 1 }],
         },
       });
@@ -203,38 +203,6 @@ describe('internalUsageRoutes', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INVALID_REQUEST');
-      expect(eventRepo.getStoredEvents()).toHaveLength(0);
-    });
-
-    it('rejects mismatched envelope — v1 schemaVersion with v2 events', async () => {
-      const v2Event = createTestEventInputV2({ eventId: 'evt_mismatch_1' });
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/usage/events',
-        headers: { 'x-internal-auth': AUTH_TOKEN },
-        payload: {
-          schemaVersion: 1,
-          events: [v2Event],
-        },
-      });
-
-      expect(response.statusCode).toBe(400);
-      expect(eventRepo.getStoredEvents()).toHaveLength(0);
-    });
-
-    it('rejects mismatched envelope — v2 schemaVersion with v1 events', async () => {
-      const v1Event = createTestEventInput({ eventId: 'evt_mismatch_2' });
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/usage/events',
-        headers: { 'x-internal-auth': AUTH_TOKEN },
-        payload: {
-          schemaVersion: 2,
-          events: [v1Event],
-        },
-      });
-
-      expect(response.statusCode).toBe(400);
       expect(eventRepo.getStoredEvents()).toHaveLength(0);
     });
 
@@ -251,7 +219,7 @@ describe('internalUsageRoutes', () => {
         url: '/internal/usage/events',
         headers: { 'x-internal-auth': AUTH_TOKEN },
         payload: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           events: [validEvent1, malformedEvent, validEvent3],
         },
       });

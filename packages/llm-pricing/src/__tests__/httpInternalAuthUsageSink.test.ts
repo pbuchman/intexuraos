@@ -140,7 +140,7 @@ describe('HttpInternalAuthUsageSink', () => {
 
       // Verify body structure
       const parsedBody = parseBody(capturedBody);
-      expect(parsedBody.schemaVersion).toBe(1);
+      expect(parsedBody.schemaVersion).toBe(2);
       expect(parsedBody.events).toHaveLength(1);
 
       const event = parsedBody.events[0];

@@ -6,7 +6,7 @@ import { LlmModels } from '@intexuraos/llm-contract';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok, type Logger } from '@intexuraos/common-core';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
-import { LlmValidatorImpl, type ValidationPricing } from '../../infra/llm/LlmValidatorImpl.js';
+import { LlmValidatorImpl } from '../../infra/llm/LlmValidatorImpl.js';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -44,14 +44,6 @@ const { createClaudeClient } = await import('@intexuraos/infra-claude');
 const { createPerplexityClient } = await import('@intexuraos/infra-perplexity');
 const { createOpenRouterClient } = await import('@intexuraos/infra-openrouter');
 
-const testPricing: ValidationPricing = {
-  google: { inputPricePerMillion: 0.1, outputPricePerMillion: 0.4 },
-  openai: { inputPricePerMillion: 0.15, outputPricePerMillion: 0.6 },
-  anthropic: { inputPricePerMillion: 0.8, outputPricePerMillion: 4.0 },
-  perplexity: { inputPricePerMillion: 1.0, outputPricePerMillion: 1.0, useProviderCost: true },
-  openrouter: { inputPricePerMillion: 0.07, outputPricePerMillion: 0.26 },
-};
-
 describe('LlmValidatorImpl', () => {
   let validator: LlmValidatorImpl;
   let fakeUsageSink: FakeUsageSink;
@@ -61,7 +53,7 @@ describe('LlmValidatorImpl', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fakeUsageSink = new FakeUsageSink();
-    validator = new LlmValidatorImpl(testPricing, mockLogger, fakeUsageSink);
+    validator = new LlmValidatorImpl(mockLogger, fakeUsageSink);
   });
 
   describe('validateKey', () => {
@@ -79,7 +71,6 @@ describe('LlmValidatorImpl', () => {
           apiKey: 'test-api-key',
           model: LlmModels.Gemini20Flash,
           userId: testUserId,
-          pricing: testPricing.google,
           logger: mockLogger,
           usageSink: fakeUsageSink,
         });
@@ -133,7 +124,6 @@ describe('LlmValidatorImpl', () => {
           apiKey: 'sk-test-key',
           model: LlmModels.GPT4oMini,
           userId: testUserId,
-          pricing: testPricing.openai,
           logger: mockLogger,
           usageSink: fakeUsageSink,
         });
@@ -184,7 +174,6 @@ describe('LlmValidatorImpl', () => {
           apiKey: 'sk-ant-key',
           model: LlmModels.ClaudeHaiku35,
           userId: testUserId,
-          pricing: testPricing.anthropic,
           logger: mockLogger,
           usageSink: fakeUsageSink,
         });
@@ -237,7 +226,6 @@ describe('LlmValidatorImpl', () => {
           apiKey: 'pplx-test-key',
           model: LlmModels.Sonar,
           userId: testUserId,
-          pricing: testPricing.perplexity,
           logger: mockLogger,
           usageSink: fakeUsageSink,
         });
@@ -288,7 +276,6 @@ describe('LlmValidatorImpl', () => {
           apiKey: 'or-test-key',
           model: 'qwen/qwen3.5-flash-02-23',
           userId: testUserId,
-          pricing: testPricing.openrouter,
           logger: mockLogger,
           usageSink: fakeUsageSink,
         });
