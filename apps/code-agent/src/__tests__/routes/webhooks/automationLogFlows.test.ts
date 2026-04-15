@@ -238,7 +238,7 @@ describe('Automation log integration flows', () => {
       gitHubPRClient: {} as never,
       webhookRules,
       dispatchService: mockDispatchService as unknown as WebhookDispatchService,
-      toolCallingClient: undefined,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
       eventDecisionRepo: mockEventDecisionRepo,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator,

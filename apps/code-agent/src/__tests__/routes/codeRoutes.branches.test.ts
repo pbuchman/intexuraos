@@ -228,7 +228,7 @@ describe('codeRoutes branch coverage', () => {
       gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 5000 }),
       webhookRules: {} as never,
       dispatchService: {} as never,
-      toolCallingClient: undefined,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {
         async findOldest() { return ok(null); },

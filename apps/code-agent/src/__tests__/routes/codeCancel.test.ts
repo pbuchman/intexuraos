@@ -171,7 +171,7 @@ describe('POST /code/cancel', () => {
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
-      toolCallingClient: undefined,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
@@ -217,7 +217,7 @@ describe('POST /code/cancel', () => {
       gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
       webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
-      toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+      resolveToolCallingClient: (userId: string) => Promise<import('@intexuraos/common-core').Result<import('@intexuraos/llm-contract').ToolCallingClient, import('../../domain/usecases/githubAgent.js').GitHubAgentError>>;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
