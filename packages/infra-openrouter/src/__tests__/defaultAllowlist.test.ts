@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_OPENROUTER_ALLOWED_MODELS,
   isDefaultAllowedModel,
-  getDefaultAllowlistPricing,
   type DefaultAllowedOpenRouterModel,
 } from '../defaultAllowlist.js';
 
@@ -52,43 +51,6 @@ describe('defaultAllowlist', () => {
       expect(isDefaultAllowedModel('unknown/model')).toBe(false);
       expect(isDefaultAllowedModel('')).toBe(false);
       expect(isDefaultAllowedModel('qwen/qwen3.5-plus-02-15')).toBe(false);
-    });
-  });
-
-  describe('getDefaultAllowlistPricing', () => {
-    it('returns pricing for allowed models with non-negative prices', () => {
-      for (const model of DEFAULT_OPENROUTER_ALLOWED_MODELS) {
-        const pricing = getDefaultAllowlistPricing(model.id);
-        expect(pricing).not.toBeUndefined();
-        if (pricing === undefined) return;
-        expect(pricing.inputPricePerMillion).toBeGreaterThanOrEqual(0);
-        expect(pricing.outputPricePerMillion).toBeGreaterThanOrEqual(0);
-      }
-    });
-
-    it('returns correct pricing for paid model (minimax/minimax-m2.7)', () => {
-      const pricing = getDefaultAllowlistPricing('minimax/minimax-m2.7');
-      expect(pricing).not.toBeUndefined();
-      if (pricing === undefined) return;
-      // 0.0000003 per token * 1_000_000 = 0.3
-      expect(pricing.inputPricePerMillion).toBeCloseTo(0.3, 5);
-      // 0.0000012 per token * 1_000_000 = 1.2
-      expect(pricing.outputPricePerMillion).toBeCloseTo(1.2, 5);
-      expect(pricing.useProviderCost).toBe(true);
-    });
-
-    it('returns zero pricing for free models', () => {
-      const pricing = getDefaultAllowlistPricing('google/gemma-4-31b-it:free');
-      expect(pricing).not.toBeUndefined();
-      if (pricing === undefined) return;
-      expect(pricing.inputPricePerMillion).toBe(0);
-      expect(pricing.outputPricePerMillion).toBe(0);
-    });
-
-    it('returns undefined for non-allowed models', () => {
-      expect(getDefaultAllowlistPricing('unknown/model')).toBeUndefined();
-      expect(getDefaultAllowlistPricing('')).toBeUndefined();
-      expect(getDefaultAllowlistPricing('qwen/qwen3.5-plus-02-15')).toBeUndefined();
     });
   });
 });

@@ -118,9 +118,6 @@ describe('handleAllCompleted', () => {
             })
           ),
         }),
-        pricingContext: {
-          getPricing: () => ({ inputPricePerMillion: 0.1, outputPricePerMillion: 0.2 }),
-        },
       } as unknown as AllCompletedHandlerParams['services'],
       userServiceClient: {
         reportLlmSuccess: vi.fn().mockResolvedValue(ok(undefined)),
@@ -265,9 +262,6 @@ describe('handleAllCompleted', () => {
           })
         ),
       }),
-      pricingContext: {
-        getPricing: () => ({ inputPricePerMillion: 0.1, outputPricePerMillion: 0.2 }),
-      },
     } as unknown as AllCompletedHandlerParams['services'];
 
     await handleAllCompleted(mockParams);
@@ -353,9 +347,6 @@ describe('handleAllCompleted', () => {
           })
         ),
       }),
-      pricingContext: {
-        getPricing: () => ({ inputPricePerMillion: 0.1, outputPricePerMillion: 0.2 }),
-      },
     } as unknown as AllCompletedHandlerParams['services'];
 
     await handleAllCompleted(mockParams);

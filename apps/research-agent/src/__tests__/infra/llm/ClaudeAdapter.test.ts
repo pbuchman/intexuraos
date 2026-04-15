@@ -3,7 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
@@ -18,11 +18,6 @@ vi.mock('@intexuraos/infra-claude', () => ({
 }));
 
 const { ClaudeAdapter } = await import('../../../infra/llm/ClaudeAdapter.js');
-
-const testPricing: ModelPricing = {
-  inputPricePerMillion: 5.0,
-  outputPricePerMillion: 25.0,
-};
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -42,7 +37,6 @@ describe('ClaudeAdapter', () => {
       'test-key',
       LlmModels.ClaudeOpus46,
       'test-user-id',
-      testPricing,
       mockLogger,
       fakeUsageSink
     );
@@ -55,7 +49,6 @@ describe('ClaudeAdapter', () => {
         'test-key',
         LlmModels.ClaudeOpus46,
         'test-user-id',
-        testPricing,
         mockLogger,
         fakeUsageSink,
         'research-123'
@@ -66,7 +59,6 @@ describe('ClaudeAdapter', () => {
         model: LlmModels.ClaudeOpus46,
         userId: 'test-user-id',
         researchId: 'research-123',
-        pricing: testPricing,
         logger: mockLogger,
         usageSink: fakeUsageSink,
       });

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err, type Logger } from '@intexuraos/common-core';
-import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
 import {
@@ -28,17 +28,6 @@ vi.mock('@intexuraos/llm-pricing', () => ({
     log: vi.fn().mockResolvedValue(undefined),
   }),
 }));
-
-const testPricing: ModelPricing = {
-  inputPricePerMillion: 0.3,
-  outputPricePerMillion: 2.5,
-};
-
-const testImagePricing: ModelPricing = {
-  inputPricePerMillion: 0,
-  outputPricePerMillion: 0,
-  imagePricing: { '1024x1024': 0.03, '1536x1024': 0.04, '1024x1536': 0.04 },
-};
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -109,8 +98,6 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -148,8 +135,6 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -180,8 +165,6 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -208,8 +191,6 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -245,8 +226,6 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -270,8 +249,6 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -294,8 +271,6 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -318,8 +293,6 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -344,8 +317,6 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -373,8 +344,6 @@ describe('GoogleImageGenerator', () => {
         storage: mockStorage,
         generateId: (): string => testImageId,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -407,8 +376,6 @@ describe('GoogleImageGenerator', () => {
         model: testModel,
         storage: mockStorage,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
@@ -432,8 +399,6 @@ describe('GoogleImageGenerator', () => {
         model: testModel,
         storage: mockStorage,
         userId: 'test-user-id',
-        pricing: testPricing,
-        imagePricing: testImagePricing,
         logger: mockLogger,
         usageSink: mockUsageSink,
       });

@@ -1,6 +1,5 @@
 import { err, type Logger, type Result } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
-import type { ModelPricing } from '@intexuraos/llm-contract';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import { generateThumbnailPrompt } from '@intexuraos/llm-prompts';
 import type { ThumbnailPrompt } from '../../domain/index.js';
@@ -10,7 +9,6 @@ export interface GeminiPromptAdapterConfig {
   apiKey: string;
   userId: string;
   model: string;
-  pricing: ModelPricing;
   logger: Logger;
   usageSink: UsageSink;
 }
@@ -19,7 +17,6 @@ export class GeminiPromptAdapter implements PromptGenerator {
   private readonly apiKey: string;
   private readonly userId: string;
   private readonly model: string;
-  private readonly pricing: ModelPricing;
   private readonly logger: Logger;
   private readonly usageSink: UsageSink;
 
@@ -27,7 +24,6 @@ export class GeminiPromptAdapter implements PromptGenerator {
     this.apiKey = config.apiKey;
     this.userId = config.userId;
     this.model = config.model;
-    this.pricing = config.pricing;
     this.logger = config.logger;
     this.usageSink = config.usageSink;
   }
@@ -39,7 +35,6 @@ export class GeminiPromptAdapter implements PromptGenerator {
       apiKey: this.apiKey,
       model: this.model,
       userId: this.userId,
-      pricing: this.pricing,
       logger: this.logger,
       usageSink: this.usageSink,
     });

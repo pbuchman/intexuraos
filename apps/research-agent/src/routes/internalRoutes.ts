@@ -22,8 +22,8 @@ import {
   type TextGenerationClient,
 } from '../domain/research/index.js';
 import { formatLlmError } from '../domain/research/formatLlmError.js';
-import { getProviderForModel, isOpenRouterModel, getOpenRouterRawId, LlmModels, type LLMModel, type ModelPricing } from '@intexuraos/llm-contract';
-import { getAllowlistPricing, isAllowedModel } from '@intexuraos/infra-openrouter';
+import { getProviderForModel, isOpenRouterModel, getOpenRouterRawId, LlmModels } from '@intexuraos/llm-contract';
+import { isAllowedModel } from '@intexuraos/infra-openrouter';
 import { getServices, type DecryptedApiKeys } from '../services.js';
 import { createSynthesisProviders } from './helpers/synthesisHelper.js';
 import { handleAllCompleted } from './helpers/completionHandlers.js';
@@ -451,7 +451,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             LlmModels.Gemini25Flash,
             apiKeys.google,
             research.userId,
-            services.pricingContext.getPricing(LlmModels.Gemini25Flash),
             request.log,
             event.researchId
           );
@@ -875,24 +874,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return await reply.fail('INVALID_REQUEST', 'Model not in curated allowlist');
         }
 
-        let researchPricing: ModelPricing;
-        if (isOpenRouterModel(event.model)) {
-          const pricing = getAllowlistPricing(getOpenRouterRawId(event.model));
-          /* v8 ignore start -- upstream: prior isAllowedModel guard validated the model; this defensive null check is guaranteed unreachable @preserve */
-          if (pricing === undefined) {
-            throw new Error(`No pricing for allowlisted model: ${String(event.model)}`);
-          }
-          /* v8 ignore stop @preserve */
-          researchPricing = pricing;
-        } else {
-          researchPricing = services.pricingContext.getPricing(event.model as LLMModel);
-        }
-
         const llmProvider = services.createResearchProvider(
           event.model,
           apiKey,
           event.userId,
-          researchPricing,
           request.log,
           event.researchId
         );

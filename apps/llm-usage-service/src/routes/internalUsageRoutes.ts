@@ -21,8 +21,9 @@ export const internalUsageRoutes: FastifyPluginCallback = (app, _opts, done) => 
         body: {
           type: 'object',
           required: ['schemaVersion', 'events'],
+          additionalProperties: false,
           properties: {
-            schemaVersion: { type: 'integer', enum: [1] },
+            schemaVersion: { type: 'integer', enum: [2] },
             events: {
               type: 'array',
               items: { $ref: 'UsageEventInput#' },
@@ -66,13 +67,12 @@ export const internalUsageRoutes: FastifyPluginCallback = (app, _opts, done) => 
         return await reply.fail('UNAUTHORIZED', 'Internal auth failed');
       }
 
-      // schemaVersion and events are validated by Fastify schema (enum: [1], type: array)
       const body = request.body as IngestBody;
 
-      const { usageEventRepository, usageAggregateRepository } = getServices();
+      const { usageEventRepository, usageAggregateRepository, pricingCache } = getServices();
 
       const result = await ingestUsageEvents(
-        { logger: request.log, usageEventRepository, usageAggregateRepository },
+        { logger: request.log, usageEventRepository, usageAggregateRepository, pricingCache },
         body.events,
         'internal',
       );

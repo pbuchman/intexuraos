@@ -12,7 +12,6 @@ export type {
   LLMError as OpenRouterError,
   ResearchResult,
   GenerateResult,
-  ModelPricing,
 } from '@intexuraos/llm-contract';
 
 /**
@@ -37,12 +36,8 @@ export interface GenerateOptions {
  *   apiKey: process.env.OPENROUTER_API_KEY,
  *   model: 'anthropic/claude-sonnet-4.6',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 3.0,
- *     outputPricePerMillion: 15.0,
- *     useProviderCost: true,
- *   },
  *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  * ```
  */
@@ -55,8 +50,6 @@ export interface OpenRouterConfig {
   userId: string;
   /** Optional research ID for correlating audit logs to a research run */
   researchId?: string;
-  /** Cost configuration per million tokens */
-  pricing: import('@intexuraos/llm-contract').ModelPricing;
   /** Request timeout in milliseconds. Default: 840000 (14 minutes) */
   timeoutMs?: number;
   /** Pino logger for structured LLM usage logging */

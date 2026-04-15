@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import nock from 'nock';
 import { LlmModels } from '@intexuraos/llm-contract';
-import { createFakePricingContext, createFakeUsageSink } from '@intexuraos/llm-pricing';
+import { createFakeUsageSink } from '@intexuraos/llm-pricing';
 import type { LlmClientConfig } from '@intexuraos/llm-factory';
 import type { LlmGenerateClient, GenerateResult } from '@intexuraos/llm-factory';
 import type { Result } from '@intexuraos/common-core';
@@ -37,7 +37,6 @@ const mockLogger = {
 const config = {
   baseUrl: 'http://localhost:3000',
   internalAuthToken: 'test-token',
-  pricingContext: createFakePricingContext(),
   logger: mockLogger,
   usageSink: createFakeUsageSink(),
 };

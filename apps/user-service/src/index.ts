@@ -1,8 +1,6 @@
 import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
-import { fetchAllPricingWithRetry, createPricingContext } from '@intexuraos/llm-pricing';
-import { LlmModels, type ValidationModel } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { initializeServices } from './services.js';
 
@@ -36,27 +34,8 @@ initSentry({
 const PORT = Number(process.env['PORT'] ?? 8080);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
 
-/** Validation models used by user-service */
-const REQUIRED_MODELS: ValidationModel[] = [
-  LlmModels.Gemini20Flash,
-  LlmModels.GPT4oMini,
-  LlmModels.ClaudeHaiku35,
-  LlmModels.Sonar,
-];
-
 async function main(): Promise<void> {
-  const usageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '';
-  const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
-
-  process.stdout.write(`Fetching pricing from ${usageServiceUrl}\n`);
-  const pricingResult = await fetchAllPricingWithRetry(usageServiceUrl, internalAuthToken);
-  if (!pricingResult.ok) {
-    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
-  }
-
-  const pricingContext = createPricingContext(pricingResult.value, REQUIRED_MODELS);
-  process.stdout.write(`Loaded pricing for ${String(REQUIRED_MODELS.length)} models: ${REQUIRED_MODELS.join(', ')}\n`);
-  initializeServices(pricingContext);
+  initializeServices();
 
   const app = await buildServer();
 

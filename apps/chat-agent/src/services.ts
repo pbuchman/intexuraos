@@ -5,11 +5,7 @@
 
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
-import {
-  fetchAllPricingWithRetry,
-  createPricingContext,
-  HttpInternalAuthUsageSink,
-} from '@intexuraos/llm-pricing';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
 import { FirestoreEmbeddingRepository } from './infra/firestore/embeddingRepository.js';
@@ -24,14 +20,6 @@ import type { Logger } from 'pino';
 
 // Re-export createChatClient for use in routes (via services layer)
 export { createChatClient };
-
-/**
- * Models supported for chat responses.
- * These are validated at startup to ensure pricing is available.
- */
-const CHAT_MODELS = [
-  LlmModels.Gemini25Flash,
-] as const;
 
 /**
  * Service container holding all adapter instances.
@@ -75,9 +63,8 @@ export function resetServices(): void {
 
 /**
  * Initialize the service container with all dependencies.
- * Fetches pricing data from llm-usage-service at startup.
  */
-export async function initializeServices(): Promise<void> {
+export function initializeServices(): void {
   const openaiApiKey = process.env['INTEXURAOS_OPENAI_APP_API_KEY'];
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'];
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
@@ -109,18 +96,6 @@ export async function initializeServices(): Promise<void> {
     level: (process.env['LOG_LEVEL'] ?? 'info') as 'error' | 'info' | 'warn' | 'debug' | 'silent',
   });
 
-  // Fetch pricing data from llm-usage-service
-  const pricingResult = await fetchAllPricingWithRetry(llmUsageServiceUrl, internalAuthToken);
-
-  if (!pricingResult.ok) {
-    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
-  }
-
-  const pricingContext = createPricingContext(
-    pricingResult.value,
-    [...CHAT_MODELS] as unknown as (typeof LlmModels.Gemini25Flash)[]
-  );
-
   // Create OpenAI instance for embeddings
   const openai = new OpenAI({ apiKey: openaiApiKey });
 
@@ -145,7 +120,6 @@ export async function initializeServices(): Promise<void> {
     apiKey: guestGeminiApiKey,
     model: LlmModels.Gemini25Flash,
     userId: 'guest',
-    pricing: pricingContext.getPricing(LlmModels.Gemini25Flash),
     logger,
     usageSink: guestUsageSink,
   });
@@ -160,7 +134,6 @@ export async function initializeServices(): Promise<void> {
     userServiceClient: createUserServiceClient({
       baseUrl: userServiceUrl,
       internalAuthToken,
-      pricingContext,
       logger,
       usageSink: userServiceUsageSink,
       platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],

@@ -8,8 +8,6 @@ import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import {
   getProviderForModel,
   isDefaultEligibleModel,
-  isOpenRouterModel,
-  getOpenRouterRawId,
   LlmModels,
   LlmProviders,
   type LlmProvider,
@@ -20,7 +18,6 @@ import {
   type LlmClientConfig,
   type LlmGenerateClient,
 } from '@intexuraos/llm-factory';
-import { getDefaultAllowlistPricing } from '@intexuraos/infra-openrouter';
 
 import type {
   UserServiceConfig,
@@ -204,12 +201,10 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
               'No API key for provider, falling back to platform Gemini25Flash'
             );
             const fallbackModel = LlmModels.Gemini25Flash;
-            const fallbackPricing = config.pricingContext.getPricing(fallbackModel);
             const fallbackClient = createLlmClient({
               apiKey: config.platformGeminiApiKey,
               model: fallbackModel,
               userId,
-              pricing: fallbackPricing,
               logger: config.logger,
               usageSink: config.usageSink,
               ownerType: 'user',
@@ -230,23 +225,6 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           });
         }
 
-        // Helper: resolve pricing for a model (static or OpenRouter)
-        function resolvePricing(model: string): {
-          inputPricePerMillion: number;
-          outputPricePerMillion: number;
-          useProviderCost?: boolean;
-        } {
-          if (isOpenRouterModel(model)) {
-            const rawId = getOpenRouterRawId(model);
-            const allowlistPricing = getDefaultAllowlistPricing(rawId);
-            /* v8 ignore start -- upstream: isDefaultEligibleModel rejects non-allowlist models before resolvePricing runs; getDefaultAllowlistPricing always returns defined for allowlisted models @preserve */
-            if (allowlistPricing !== undefined) return allowlistPricing;
-            return { inputPricePerMillion: 0, outputPricePerMillion: 0, useProviderCost: true };
-            /* v8 ignore stop @preserve */
-          }
-          return config.pricingContext.getPricing(model as LLMModel);
-        }
-
         // Helper: build a client for a given model using the fetched API keys
         function buildClientForModel(
           model: string,
@@ -261,22 +239,17 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
             apiKey: modelApiKey,
             model: model as LLMModel,
             userId,
-            pricing: resolvePricing(model),
             logger: config.logger,
             usageSink: config.usageSink,
             ownerType: 'user',
           });
         }
 
-        // Step 4: Get pricing for the model
-        const pricing = resolvePricing(defaultModel);
-
-        // Step 5: Create and return the LLM client
+        // Step 4: Create and return the LLM client
         const clientConfig: LlmClientConfig = {
           apiKey,
           model: defaultModel as LLMModel,
           userId,
-          pricing,
           logger: config.logger,
           usageSink: config.usageSink,
           ownerType: 'user',

@@ -3,9 +3,6 @@
  * suitable for general use, including free and low-cost options.
  */
 
-import type { ModelPricing } from '@intexuraos/llm-contract';
-import { toModelPricing } from './costCalculator.js';
-
 /**
  * Individual default allowlist entry with pricing.
  * Unlike AllowedOpenRouterModel, this does not include contextLength
@@ -71,14 +68,4 @@ export const DEFAULT_OPENROUTER_ALLOWED_MODELS: readonly DefaultAllowedOpenRoute
  */
 export function isDefaultAllowedModel(modelId: string): boolean {
   return DEFAULT_OPENROUTER_ALLOWED_MODELS.some((m) => m.id === modelId);
-}
-
-/**
- * Get pricing for a model in the default allowlist.
- * Returns undefined if the model is not in the default allowlist.
- */
-export function getDefaultAllowlistPricing(rawModelId: string): ModelPricing | undefined {
-  const model = DEFAULT_OPENROUTER_ALLOWED_MODELS.find((m) => m.id === rawModelId);
-  if (model === undefined) return undefined;
-  return toModelPricing(model.promptPerToken, model.completionPerToken);
 }

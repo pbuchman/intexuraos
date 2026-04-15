@@ -34,7 +34,7 @@ initSentry({
 });
 
 async function main(): Promise<void> {
-  await initServices({
+  initServices({
     ResearchAgentUrl: process.env['INTEXURAOS_RESEARCH_AGENT_URL'] as string,
     userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] as string,
     commandsAgentUrl: process.env['INTEXURAOS_COMMANDS_AGENT_URL'] as string,

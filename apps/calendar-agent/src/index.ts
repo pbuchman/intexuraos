@@ -4,8 +4,6 @@
 
 import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
-import { fetchAllPricingWithRetry, createPricingContext } from '@intexuraos/llm-pricing';
-import { LlmModels, type LLMModel } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
 
@@ -17,11 +15,6 @@ const REQUIRED_ENV = [
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_LLM_USAGE_SERVICE_URL',
-];
-
-const REQUIRED_MODELS: LLMModel[] = [
-  LlmModels.Gemini25Flash,
-  LlmModels.Gemini25Pro,
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
@@ -42,19 +35,10 @@ async function main(): Promise<void> {
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
   const usageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '';
 
-  const pricingResult = await fetchAllPricingWithRetry(usageServiceUrl, internalAuthToken);
-  if (!pricingResult.ok) {
-    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
-  }
-
-  const pricingContext = createPricingContext(pricingResult.value, REQUIRED_MODELS);
-  process.stdout.write(`Loaded pricing for ${String(REQUIRED_MODELS.length)} models: ${REQUIRED_MODELS.join(', ')}\n`);
-
   initServices({
     userServiceUrl,
     internalAuthToken,
     llmUsageServiceUrl: usageServiceUrl,
-    pricingContext,
   });
 
   const app = await buildServer();

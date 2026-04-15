@@ -9,7 +9,7 @@ import {
   type UserServiceClient,
   type LlmSummarizer,
 } from './infra/index.js';
-import { HttpInternalAuthUsageSink, type IPricingContext } from '@intexuraos/llm-pricing';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 
 export interface ServiceContainer {
   linkPreviewFetcher: LinkPreviewFetcherPort;
@@ -24,7 +24,6 @@ export interface ServiceDependencies {
   userServiceUrl: string;
   internalAuthToken: string;
   llmUsageServiceUrl: string;
-  pricingContext: IPricingContext;
 }
 
 let container: ServiceContainer | undefined;
@@ -47,7 +46,6 @@ export function initServices(dependencies: ServiceDependencies): void {
     userServiceClient: createUserServiceClient({
       baseUrl: dependencies.userServiceUrl,
       internalAuthToken: dependencies.internalAuthToken,
-      pricingContext: dependencies.pricingContext,
       logger: createAppLogger({ name: 'userServiceClient' }),
       usageSink: new HttpInternalAuthUsageSink({
         usageServiceUrl: dependencies.llmUsageServiceUrl,
