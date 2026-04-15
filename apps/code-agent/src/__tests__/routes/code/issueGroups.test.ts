@@ -907,6 +907,38 @@ describe('GET /code/issue-groups', () => {
     expect(task?.createdAt).not.toBe('');
   });
 
+  it('serializes requiresReReview on remediation tasks (INT-1286 alt-unlock signal)', async () => {
+    const r = await codeTaskRepo.create(makeTaskInput({
+      linearIssueId: 'INT-1210',
+      traceId: 'trace-serialize-requiresReReview',
+      agentType: 'remediation',
+    }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+
+    await codeTaskRepo.update(r.value.id, {
+      status: 'implemented',
+      requiresReReview: false,
+    });
+
+    mockSummaries = [makeSummary({ linearIssueId: 'INT-1210', aggregateStatus: 'done', latestTaskStatus: 'implemented', hasPrUrl: false })];
+    mockCounts = { ...mockCounts, done: 1, totalGroups: 1 };
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: { groups: { linearIssueId: string | null; tasks: { requiresReReview?: boolean }[] }[] };
+    };
+    const group = body.data.groups.find((g) => g.linearIssueId === 'INT-1210');
+    const task = group?.tasks[0];
+    expect(task?.requiresReReview).toBe(false);
+  });
+
   // Note: sortBy validation (item 15) and limit default (item 16) are covered by
   // v8 ignore comments because Fastify JSON Schema enforces enum/default before
   // the handler runs, making the fallback branches unreachable in tests.
