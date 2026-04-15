@@ -328,14 +328,32 @@ For the toggle endpoint tests below, use the `createFakeTaskGroupSummaryReposito
 
 - [ ] **Step 1: Write the failing tests for the toggle endpoint**
 
-Add to `issueGroups.test.ts`:
+These tests need a **stateful** `groupSummaryRepo` — use `createFakeTaskGroupSummaryRepository()` (from Task 4) so that `setImportant()` can actually mutate stored summaries. Do NOT use the default `makeGroupSummaryRepo()` stub or `mockSummaries` for these tests — those are stateless no-ops and cannot verify mutation.
+
+Seed data into the stateful fake by calling `fakeRepo.updateAfterCreate(fakeTask)`, which internally computes and stores a `TaskGroupSummary`. Then pass the fake repo via `makeBaseServices({ groupSummaryRepo: fakeRepo })` when building the test app.
+
+Add a new `describe` block to `issueGroups.test.ts`:
 
 ```typescript
 describe('POST /code/issue-groups/:groupKey/important', () => {
+  let fakeRepo: FakeTaskGroupSummaryRepository;
+
+  beforeEach(async () => {
+    fakeRepo = createFakeTaskGroupSummaryRepository();
+    // Build the test app with the stateful fake repo
+    app = await buildApp({
+      groupSummaryRepo: fakeRepo,
+      // ... other overrides as needed by the existing test setup
+    });
+  });
+
+  afterEach(() => {
+    fakeRepo.reset();
+  });
+
   it('marks a group as important', async () => {
-    // Seed the groupSummaryRepo directly — POST /code/tasks is GET-only in this repo.
-    // Use makeSummary() to produce a valid TaskGroupSummary object.
-    mockSummaries.push(makeSummary({ linearIssueId: 'INT-500' }));
+    // Seed via updateAfterCreate — this stores a real TaskGroupSummary in the fake
+    await fakeRepo.updateAfterCreate(makeFakeCodeTask({ linearIssueId: 'INT-500' }));
 
     const response = await app.inject({
       method: 'POST',
@@ -350,8 +368,7 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
   });
 
   it('unmarks a group as important', async () => {
-    // Seed directly via makeSummary() — no task-creation endpoint needed.
-    mockSummaries.push(makeSummary({ linearIssueId: 'INT-501' }));
+    await fakeRepo.updateAfterCreate(makeFakeCodeTask({ linearIssueId: 'INT-501' }));
 
     // Mark as important first
     await app.inject({
@@ -386,22 +403,16 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
 });
 ```
 
-**IMPORTANT:** These tests require a **stateful** `groupSummaryRepo` so that `updateAfterCreate` actually stores a summary, and `setImportant` can then mutate it. Use `createFakeTaskGroupSummaryRepository()` (from Task 4) instead of the default `makeGroupSummaryRepo()` stub. Initialize the test app with `makeBaseServices({ groupSummaryRepo: fakeRepo })`.
-
-**Note:** Task creation in this repo uses `POST /code/submit` (not `POST /code/tasks`, which is GET-only). However, for these route tests the recommended approach is **direct repository setup** — seed the `groupSummaryRepo` fake with the required summary entries in `beforeEach` rather than creating tasks via HTTP. This matches the existing test patterns in `issueGroups.test.ts`, which use mocked summaries (`mockSummaries`) and never call task-creation endpoints.
-
-Adapt the test setup to match the existing patterns in `issueGroups.test.ts` — check how the test app is initialized, how auth tokens work (likely a `FakeAuthPlugin`), and how the mock summaries are seeded. The test examples below show the intent; the exact setup may need adjustment based on the test file's existing `beforeEach`.
+**Note:** The exact app-building call and `makeFakeCodeTask` helper depend on the existing test file's setup patterns — adapt accordingly. The key constraint is: use `createFakeTaskGroupSummaryRepository()` for all toggle tests so that `setImportant()` mutates the same store that `listGroupSummaries()` reads from.
 
 - [ ] **Step 2: Write the failing test for `isImportant` in GET response**
 
-Add to the existing `GET /code/issue-groups` describe block:
+This test also needs the stateful fake repo — `setImportant()` via the POST toggle must persist so the subsequent GET reflects the change. Add inside the same `describe` block from Step 1 (which already uses `createFakeTaskGroupSummaryRepository()`):
 
 ```typescript
 it('includes isImportant in response when group is marked important', async () => {
-  // Seed the groupSummaryRepo with a valid TaskGroupSummary using the existing makeSummary() helper.
-  // makeSummary() produces a complete object matching the TaskGroupSummary interface, including
-  // required fields like userId, aggregateStatus, latestTaskUpdatedAt, etc.
-  mockSummaries.push(makeSummary({ linearIssueId: 'INT-600' }));
+  // Seed via the stateful fake repo — same pattern as Step 1
+  await fakeRepo.updateAfterCreate(makeFakeCodeTask({ linearIssueId: 'INT-600' }));
 
   await app.inject({
     method: 'POST',
