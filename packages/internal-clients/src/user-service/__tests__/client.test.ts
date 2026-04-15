@@ -749,11 +749,12 @@ describe('createUserServiceClient', () => {
       const client = createUserServiceClient(noPricingConfig);
       const result = await client.getLlmClient('user123');
 
-      if (result.ok) {
-        expect(result.value).toBeDefined();
-      } else {
-        expect.fail('Expected successful result');
-      }
+      // Zero pricing is the expected intermediate state during the INT-1377
+      // migration: consumers drop pricingContext now, server-side pricing lands later.
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error('unreachable');
+      expect(result.value).toBeDefined();
+      expect(typeof result.value.generate).toBe('function');
     });
   });
 
