@@ -98,6 +98,13 @@ describe('filterAndDedupeNotifications', () => {
       expect(result).toHaveLength(1);
       expect(result[0]?.postTimeSec).toBe(1700000000);
     });
+
+    it('truncates float-string postTime to integer', () => {
+      const raw = [makeRaw({ postTime: '1000.9' })];
+      const result = filterAndDedupeNotifications(raw);
+      expect(result).toHaveLength(1);
+      expect(result[0]?.postTimeSec).toBe(1000);
+    });
   });
 
   describe('deduplication within 90-second window', () => {
@@ -157,6 +164,18 @@ describe('filterAndDedupeNotifications', () => {
       const result = filterAndDedupeNotifications(raw);
       expect(result).toHaveLength(1);
       expect(result[0]?.postTimeSec).toBe(1000);
+    });
+
+    it('uses anchor-reset semantics: kept message becomes new anchor', () => {
+      const raw = [
+        makeRaw({ sender: 'Alice', text: 'Hi', postTime: '1000' }),
+        makeRaw({ sender: 'Alice', text: 'Hi', postTime: '1080' }),
+        makeRaw({ sender: 'Alice', text: 'Hi', postTime: '1160' }),
+      ];
+      const result = filterAndDedupeNotifications(raw);
+      expect(result).toHaveLength(2);
+      expect(result[0]?.postTimeSec).toBe(1000);
+      expect(result[1]?.postTimeSec).toBe(1160);
     });
   });
 
