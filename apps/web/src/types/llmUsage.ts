@@ -33,6 +33,7 @@ export interface UsageEvent {
     operation: string;
     success: boolean;
     durationMs: number;
+    promptType?: string;
   };
 
   usage: {
