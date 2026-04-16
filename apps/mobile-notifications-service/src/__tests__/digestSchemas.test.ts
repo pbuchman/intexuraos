@@ -125,18 +125,19 @@ describe('DailySummarySchema', () => {
   });
 });
 
+const minimalGroupState = {
+  userId: 'user-abc',
+  groupKey: 'group-123',
+  updatedAt: '2024-01-15T12:00:00Z',
+  identityLedger: [],
+  moderatorEvents: [],
+  openThreads: [],
+  recentSummaryDates: [],
+};
+
 describe('GroupStateSchema', () => {
   it('parses a valid minimal GroupState with empty arrays', () => {
-    const input = {
-      userId: 'user-abc',
-      groupKey: 'group-123',
-      updatedAt: '2024-01-15T12:00:00Z',
-      identityLedger: [],
-      moderatorEvents: [],
-      openThreads: [],
-      recentSummaryDates: [],
-    };
-    const result = GroupStateSchema.safeParse(input);
+    const result = GroupStateSchema.safeParse(minimalGroupState);
     expect(result.success).toBe(true);
   });
 
@@ -189,6 +190,31 @@ describe('GroupStateSchema', () => {
     const result = GroupStateSchema.safeParse({
       ...validGroupState,
       identityLedger: [{ ...validIdentityEntry, role: 'admin' }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('identityLedger entry with notes present parses', () => {
+    const result = GroupStateSchema.safeParse({
+      ...minimalGroupState,
+      identityLedger: [
+        {
+          sender: 'Piotr',
+          firstSeen: '2024-01-01',
+          totalMessages: 5,
+          activeDays: 3,
+          role: 'member',
+          notes: 'Frequent contributor',
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('identityLedger entry with invalid role rejects', () => {
+    const result = GroupStateSchema.safeParse({
+      ...minimalGroupState,
+      identityLedger: [{ sender: 'Alice', firstSeen: '2024-01-01', totalMessages: 1, activeDays: 1, role: 'admin' }],
     });
     expect(result.success).toBe(false);
   });
