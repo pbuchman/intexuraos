@@ -176,6 +176,12 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     error?: {
       code: string;
       message: string;
+      remediation?: {
+        action?: 'retry' | 'wait' | 'fix_code' | 'contact_support' | 'retry_smaller';
+        retryAfter?: number;
+        manualSteps?: string;
+        supportLink?: string;
+      };
     };
     duration?: number;
     resumedCompletion?: boolean;
@@ -235,6 +241,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               properties: {
                 code: { type: 'string' },
                 message: { type: 'string' },
+                remediation: {
+                  type: 'object',
+                  properties: {
+                    action: { type: 'string', enum: ['retry', 'wait', 'fix_code', 'contact_support', 'retry_smaller'] },
+                    retryAfter: { type: 'number' },
+                    manualSteps: { type: 'string' },
+                    supportLink: { type: 'string' },
+                  },
+                  required: [],
+                },
               },
               required: ['code', 'message'],
             },
@@ -1763,6 +1779,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           error: {
             code: taskError.code,
             message: taskError.message,
+            ...(taskError.remediation !== undefined && { remediation: taskError.remediation }),
           },
           ...(shouldQueueExecutionMemoryPostRun({
             agentType: task.agentType,

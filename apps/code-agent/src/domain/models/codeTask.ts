@@ -138,6 +138,7 @@ export interface TaskError {
   code: string;             // Error code (see design lines 1774-1812)
   message: string;          // Human-readable message
   remediation?: {           // Design reference: Lines 1818-1848
+    action?: 'retry' | 'wait' | 'fix_code' | 'contact_support' | 'retry_smaller';  // Orchestrator hint; honored by classifyFailure as fallback
     retryAfter?: number;    // Seconds to wait before retry
     manualSteps?: string;   // Instructions for user
     supportLink?: string;   // Link to docs/support
