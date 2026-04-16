@@ -60,6 +60,42 @@ describe('internalUsageRoutes', () => {
       expect(body.data.accepted).toBe(1);
     });
 
+    it('accepts events with promptType in request', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/events',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: {
+          schemaVersion: 2,
+          events: [
+            createTestEventInput({
+              eventId: 'evt_prompt_type',
+              request: {
+                provider: LlmProviders.Anthropic,
+                model: 'claude-sonnet-4-20250514',
+                operation: 'generate',
+                success: true,
+                durationMs: 1500,
+                promptType: 'plan-analysis',
+              },
+            }),
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { accepted: number } };
+      expect(body.success).toBe(true);
+      expect(body.data.accepted).toBe(1);
+
+      // Verify promptType was stored
+      const stored = eventRepo.getStoredEvents();
+      expect(stored).toHaveLength(1);
+      const event = stored[0];
+      expect(event).toBeDefined();
+      expect(event?.request.promptType).toBe('plan-analysis');
+    });
+
     it('returns 401 for missing auth token', async () => {
       const response = await app.inject({
         method: 'POST',

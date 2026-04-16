@@ -323,7 +323,14 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         const content = firstChoice.message.content;
         const { normalized, providerReportedUsd } = extractUsage(data.usage);
 
-        trackUsage('generate', normalized, true, undefined, providerReportedUsd, options?.promptType);
+        trackUsage(
+          'generate',
+          normalized,
+          true,
+          undefined,
+          providerReportedUsd,
+          options?.promptType
+        );
 
         return ok({ content, usage: normalized });
       } catch (error) {
