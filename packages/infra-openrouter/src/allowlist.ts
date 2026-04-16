@@ -1,5 +1,5 @@
 /**
- * Curated allowlist of 14 frontier models from 10 providers.
+ * Curated allowlist of 15 frontier models from 10 providers.
  *
  * This is a hardcoded list instead of fetching the full OpenRouter catalog
  * to avoid overwhelming users and ensure quality. Each entry includes
@@ -32,7 +32,7 @@ export interface AllowedOpenRouterModel {
 }
 
 /**
- * Curated allowlist of 14 frontier models from 10 providers.
+ * Curated allowlist of 15 frontier models from 10 providers.
  * Fallback pricing is used when live pricing is unavailable.
  */
 export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
@@ -117,6 +117,14 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
   {
     id: 'google/gemini-2.5-flash',
     name: 'Gemini 2.5 Flash',
+    provider: 'Google',
+    contextLength: 1_000_000,
+    promptPerToken: '0.0000003',
+    completionPerToken: '0.0000025',
+  },
+  {
+    id: 'google/gemini-3-flash-preview',
+    name: 'Gemini 3 Flash Preview',
     provider: 'Google',
     contextLength: 1_000_000,
     promptPerToken: '0.0000003',
