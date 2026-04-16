@@ -16,7 +16,7 @@ import { resolveOpenRouterModelName } from '@/utils/openRouterModelNames';
 
 // --- Types ---
 
-type GroupByMode = 'none' | 'day' | 'component' | 'service' | 'model' | 'openrouter-model';
+type GroupByMode = 'none' | 'day' | 'component' | 'service' | 'model' | 'openrouter-model' | 'promptType';
 
 interface SortState {
   field: UsageEventSortField;
@@ -53,6 +53,7 @@ const GROUP_BY_MAP: Record<GroupByMode, string[]> = {
   service: ['source.service'],
   model: ['request.model'],
   'openrouter-model': ['request.provider', 'request.model'],
+  promptType: ['request.promptType'],
 };
 
 const GROUP_BY_OPTIONS: { key: GroupByMode; label: string }[] = [
@@ -62,6 +63,7 @@ const GROUP_BY_OPTIONS: { key: GroupByMode; label: string }[] = [
   { key: 'service', label: 'Service' },
   { key: 'model', label: 'Model' },
   { key: 'openrouter-model', label: 'OpenRouter Model' },
+  { key: 'promptType', label: 'Prompt Type' },
 ];
 
 // "Most expensive" / "Most tokens" sorts are intentionally omitted:
@@ -116,7 +118,7 @@ function isSortState(v: unknown): v is SortState {
 }
 
 function isGroupByMode(v: unknown): v is GroupByMode {
-  return typeof v === 'string' && ['none', 'day', 'component', 'service', 'model', 'openrouter-model'].includes(v);
+  return typeof v === 'string' && ['none', 'day', 'component', 'service', 'model', 'openrouter-model', 'promptType'].includes(v);
 }
 
 // --- Defaults ---
