@@ -1,5 +1,5 @@
 /**
- * Curated allowlist of 14 frontier models from 10 providers.
+ * Curated allowlist of 15 frontier models from 10 providers.
  *
  * This is a hardcoded list instead of fetching the full OpenRouter catalog
  * to avoid overwhelming users and ensure quality. Each entry includes
@@ -32,7 +32,7 @@ export interface AllowedOpenRouterModel {
 }
 
 /**
- * Curated allowlist of 14 frontier models from 10 providers.
+ * Curated allowlist of 15 frontier models from 10 providers.
  * Fallback pricing is used when live pricing is unavailable.
  */
 export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
