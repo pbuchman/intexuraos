@@ -418,6 +418,186 @@ describe('FirestoreNotificationRepository', () => {
     });
   });
 
+  describe('title filter pagination — Strategy A', () => {
+    it('returns all matches spanning more than 5 batches (removes old cap)', async () => {
+      // 200 docs: first 190 have title "other stuff", last 10 have title "target message"
+      // The fake Firestore orders by receivedAt desc, so we need the "target" docs to have
+      // older receivedAt timestamps so they appear AFTER the "other" docs in the result set.
+      const baseTime = Date.now();
+      const docs = Array.from({ length: 200 }, (_, i) => ({
+        id: `doc-many-${String(i)}`,
+        data: {
+          userId: 'user-many-batches',
+          source: 'android',
+          device: 'Pixel',
+          app: 'com.app',
+          // first 190 docs (i=0..189) have "other stuff"; last 10 (i=190..199) have "target message"
+          // receivedAt DESC means i=0 is newest, i=199 is oldest
+          // So target docs (i=190..199) are at the END of the result set
+          title: i < 190 ? 'other stuff' : 'target message',
+          text: 'text',
+          timestamp: baseTime - i * 1000,
+          postTime: new Date(baseTime - i * 1000).toISOString(),
+          receivedAt: new Date(baseTime - i * 1000).toISOString(),
+          notificationId: `notif-many-${String(i)}`,
+        },
+      }));
+      fakeFirestore.seedCollection('mobile_notifications', docs);
+
+      const result = await repository.findByUserIdPaginated('user-many-batches', {
+        limit: 10,
+        filter: { title: 'target' },
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.notifications).toHaveLength(10);
+        for (const n of result.value.notifications) {
+          expect(n.title.toLowerCase()).toContain('target');
+        }
+      }
+    });
+
+    it('triggers safety guard when scan limit is exceeded', async () => {
+      const smallLimitRepository = new FirestoreNotificationRepository(50);
+      const baseTime = Date.now();
+      const docs = Array.from({ length: 60 }, (_, i) => ({
+        id: `doc-safety-${String(i)}`,
+        data: {
+          userId: 'user-safety',
+          source: 'android',
+          device: 'Pixel',
+          app: 'com.app',
+          title: 'no-match',
+          text: 'text',
+          timestamp: baseTime - i * 1000,
+          postTime: new Date(baseTime - i * 1000).toISOString(),
+          receivedAt: new Date(baseTime - i * 1000).toISOString(),
+          notificationId: `notif-safety-${String(i)}`,
+        },
+      }));
+      fakeFirestore.seedCollection('mobile_notifications', docs);
+
+      const result = await smallLimitRepository.findByUserIdPaginated('user-safety', {
+        limit: 5,
+        filter: { title: 'target' },
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Scan safety limit exceeded');
+      }
+    });
+
+    it('respects limit exactly with title filter', async () => {
+      const baseTime = Date.now();
+      const docs = Array.from({ length: 100 }, (_, i) => ({
+        id: `doc-exact-${String(i)}`,
+        data: {
+          userId: 'user-exact-limit',
+          source: 'android',
+          device: 'Pixel',
+          app: 'com.app',
+          title: 'matching title',
+          text: 'text',
+          timestamp: baseTime - i * 1000,
+          postTime: new Date(baseTime - i * 1000).toISOString(),
+          receivedAt: new Date(baseTime - i * 1000).toISOString(),
+          notificationId: `notif-exact-${String(i)}`,
+        },
+      }));
+      fakeFirestore.seedCollection('mobile_notifications', docs);
+
+      const result = await repository.findByUserIdPaginated('user-exact-limit', {
+        limit: 5,
+        filter: { title: 'matching' },
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.notifications).toHaveLength(5);
+      }
+    });
+
+    it('cursor-based pagination round-trip with title filter', async () => {
+      const baseTime = Date.now();
+      const docs = Array.from({ length: 20 }, (_, i) => ({
+        id: `doc-page-${String(i)}`,
+        data: {
+          userId: 'user-page',
+          source: 'android',
+          device: 'Pixel',
+          app: 'com.app',
+          title: 'paginated title',
+          text: 'text',
+          timestamp: baseTime - i * 1000,
+          postTime: new Date(baseTime - i * 1000).toISOString(),
+          receivedAt: new Date(baseTime - i * 1000).toISOString(),
+          notificationId: `notif-page-${String(i)}`,
+        },
+      }));
+      fakeFirestore.seedCollection('mobile_notifications', docs);
+
+      const firstPage = await repository.findByUserIdPaginated('user-page', {
+        limit: 5,
+        filter: { title: 'paginated' },
+      });
+
+      expect(firstPage.ok).toBe(true);
+      if (!firstPage.ok) return;
+      expect(firstPage.value.notifications).toHaveLength(5);
+      expect(firstPage.value.nextCursor).toBeDefined();
+
+      const nextCursor = firstPage.value.nextCursor;
+      if (nextCursor === undefined) throw new Error('Expected nextCursor to be defined');
+
+      const secondPage = await repository.findByUserIdPaginated('user-page', {
+        limit: 5,
+        cursor: nextCursor,
+        filter: { title: 'paginated' },
+      });
+
+      expect(secondPage.ok).toBe(true);
+      if (!secondPage.ok) return;
+      expect(secondPage.value.notifications).toHaveLength(5);
+
+      // No overlap: all IDs should be unique
+      const firstIds = new Set(firstPage.value.notifications.map((n) => n.id));
+      for (const n of secondPage.value.notifications) {
+        expect(firstIds.has(n.id)).toBe(false);
+      }
+    });
+
+    it('no regression for single-batch query without title filter', async () => {
+      const baseTime = Date.now();
+      const docs = Array.from({ length: 3 }, (_, i) => ({
+        id: `doc-single-${String(i)}`,
+        data: {
+          userId: 'user-single',
+          source: 'android',
+          device: 'Pixel',
+          app: 'com.app',
+          title: `Notification ${String(i)}`,
+          text: 'text',
+          timestamp: baseTime - i * 1000,
+          postTime: new Date(baseTime - i * 1000).toISOString(),
+          receivedAt: new Date(baseTime - i * 1000).toISOString(),
+          notificationId: `notif-single-${String(i)}`,
+        },
+      }));
+      fakeFirestore.seedCollection('mobile_notifications', docs);
+
+      const result = await repository.findByUserIdPaginated('user-single', { limit: 10 });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.notifications).toHaveLength(3);
+        expect(result.value.nextCursor).toBeUndefined();
+      }
+    });
+  });
+
   describe('error handling', () => {
     it('returns error when findById fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('Read error') });
