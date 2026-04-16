@@ -167,19 +167,20 @@ export class FirestoreNotificationRepository implements NotificationRepository {
       let hasMoreInDb = true;
       let totalRowsScanned = 0;
 
+      const batchSize = hasTitleFilter ? options.limit * 2 : options.limit + 1;
+
       while (notifications.length < options.limit && hasMoreInDb) {
         const query = buildQuery(currentCursor);
-        const batchSize = hasTitleFilter ? options.limit * 2 : options.limit + 1;
         const snapshot = await query.limit(batchSize).get();
 
         const docs = snapshot.docs;
         hasMoreInDb = docs.length === batchSize;
 
         totalRowsScanned += docs.length;
-        if (totalRowsScanned > this.maxScanLimit) {
+        if (totalRowsScanned >= this.maxScanLimit) {
           return err({
             code: 'INTERNAL_ERROR',
-            message: `Scan safety limit exceeded: scanned ${String(totalRowsScanned)} rows without completing title filter`,
+            message: `Scan safety limit exceeded: scanned ${String(totalRowsScanned)} rows`,
           });
         }
 
@@ -203,8 +204,7 @@ export class FirestoreNotificationRepository implements NotificationRepository {
         // Update cursor for next iteration (tracks DB position, not filtered results)
         if (docs.length > 0) {
           const lastDoc = docs[docs.length - 1];
-          // @allow-empty-if: v8-ignore block below for ts-type narrowing edge case
-          /* v8 ignore start -- ts-type: TypeScript narrows docs.length > 0 but array access returns T | undefined due to noUncheckedIndexedAccess @preserve */
+            /* v8 ignore start -- ts-type: TypeScript narrows docs.length > 0 but array access returns T | undefined due to noUncheckedIndexedAccess @preserve */
           if (lastDoc !== undefined) {
             const lastData = lastDoc.data() as NotificationDoc;
             currentCursor = encodeCursor(lastData.receivedAt, lastDoc.id);
