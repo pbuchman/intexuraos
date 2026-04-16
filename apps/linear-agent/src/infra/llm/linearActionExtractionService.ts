@@ -55,7 +55,7 @@ export function createLinearActionExtractionService(
 
       log.info({ userId, promptLength: prompt.length }, 'Sending LLM generation request');
 
-      const result = await llmClient.generate(prompt);
+      const result = await llmClient.generate(prompt, { promptType: linearActionExtractionPrompt.name });
 
       if (!result.ok) {
         log.error({ userId, error: result.error.message }, 'LLM generation failed');
