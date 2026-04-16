@@ -21,7 +21,7 @@ export interface GenerateOptions {
   /** Request a specific response format from the model (e.g., JSON mode). */
   responseFormat?: { type: 'json_object' | 'text' };
   /** Semantic identifier for what the prompt was used for (e.g., 'linear-issue-title', 'code-worker-validation') */
-  promptType?: string;
+  promptType: string;
 }
 
 /**

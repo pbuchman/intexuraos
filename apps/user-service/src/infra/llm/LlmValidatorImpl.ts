@@ -54,7 +54,7 @@ export class LlmValidatorImpl implements LlmValidator {
           logger: this.logger,
           usageSink: this.usageSink,
         });
-        const result = await client.generate(VALIDATION_PROMPT);
+        const result = await client.generate(VALIDATION_PROMPT, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
@@ -74,7 +74,7 @@ export class LlmValidatorImpl implements LlmValidator {
           logger: this.logger,
           usageSink: this.usageSink,
         });
-        const result = await client.generate(VALIDATION_PROMPT);
+        const result = await client.generate(VALIDATION_PROMPT, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
@@ -94,7 +94,7 @@ export class LlmValidatorImpl implements LlmValidator {
           logger: this.logger,
           usageSink: this.usageSink,
         });
-        const result = await client.generate(VALIDATION_PROMPT);
+        const result = await client.generate(VALIDATION_PROMPT, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
@@ -114,7 +114,7 @@ export class LlmValidatorImpl implements LlmValidator {
           logger: this.logger,
           usageSink: this.usageSink,
         });
-        const result = await client.generate(VALIDATION_PROMPT);
+        const result = await client.generate(VALIDATION_PROMPT, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
@@ -165,7 +165,7 @@ export class LlmValidatorImpl implements LlmValidator {
           logger: this.logger,
           usageSink: this.usageSink,
         });
-        const result = await client.generate(prompt);
+        const result = await client.generate(prompt, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: 'API_ERROR',
@@ -182,7 +182,7 @@ export class LlmValidatorImpl implements LlmValidator {
           logger: this.logger,
           usageSink: this.usageSink,
         });
-        const result = await client.generate(prompt);
+        const result = await client.generate(prompt, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: 'API_ERROR',
@@ -199,7 +199,7 @@ export class LlmValidatorImpl implements LlmValidator {
           logger: this.logger,
           usageSink: this.usageSink,
         });
-        const result = await client.generate(prompt);
+        const result = await client.generate(prompt, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: 'API_ERROR',
@@ -216,7 +216,7 @@ export class LlmValidatorImpl implements LlmValidator {
           logger: this.logger,
           usageSink: this.usageSink,
         });
-        const result = await client.generate(prompt);
+        const result = await client.generate(prompt, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: 'API_ERROR',
@@ -233,7 +233,7 @@ export class LlmValidatorImpl implements LlmValidator {
           logger: this.logger,
           usageSink: this.usageSink,
         });
-        const result = await client.generate(prompt);
+        const result = await client.generate(prompt, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: 'API_ERROR',

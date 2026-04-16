@@ -10,6 +10,7 @@ export {
   type LlmClientConfig,
   type ToolCallingClientConfig,
   type LlmGenerateClient,
+  type GenerateOptions,
   type GenerateResult,
   type LLMError,
   isSupportedProvider,

@@ -17,6 +17,7 @@ import {
   createLlmClient,
   type LlmClientConfig,
   type LlmGenerateClient,
+  type GenerateOptions,
 } from '@intexuraos/llm-factory';
 
 import type {
@@ -263,8 +264,8 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         if (fallbackModelRaw !== undefined && isDefaultEligibleModel(fallbackModelRaw)) {
           const primaryClient = client;
           const wrappedClient: LlmGenerateClient = {
-            async generate(prompt: string) {
-              const primaryResult = await primaryClient.generate(prompt);
+            async generate(prompt: string, options: GenerateOptions) {
+              const primaryResult = await primaryClient.generate(prompt, options);
               if (primaryResult.ok) return primaryResult;
 
               logger.warn(
@@ -286,7 +287,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
                 return primaryResult;
               }
 
-              const fallbackResult = await fallbackClient.generate(prompt);
+              const fallbackResult = await fallbackClient.generate(prompt, options);
               if (fallbackResult.ok) {
                 logger.info(
                   { userId, primaryModel: defaultModel, fallbackModel: fallbackModelRaw },

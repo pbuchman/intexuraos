@@ -1,7 +1,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
-import type { LLMClient } from '@intexuraos/llm-contract';
+import type { GeminiClient } from '@intexuraos/infra-gemini';
 import cronParser from 'cron-parser';
 import { parseSchedulePrompt } from '../../prompts/parse-schedule-prompt.js';
 
@@ -17,7 +17,7 @@ export interface ParseScheduleResult {
 
 export interface ParseScheduleDeps {
   logger: Logger;
-  geminiClient: LLMClient;
+  geminiClient: GeminiClient;
 }
 
 export async function parseSchedule(
@@ -27,7 +27,7 @@ export async function parseSchedule(
   const { logger, geminiClient } = deps;
 
   const prompt = parseSchedulePrompt.build({ description: schedule });
-  const result = await geminiClient.generate(prompt);
+  const result = await geminiClient.generate(prompt, { promptType: 'cron-schedule-parse' });
 
   if (!result.ok) {
     logger.error({ error: result.error }, 'LLM call failed for schedule parsing');

@@ -54,11 +54,11 @@ import { normalizeUsage } from './costCalculator.js';
 export type OpenRouterClient = Pick<LLMClient, 'research'> & {
   /**
    * Generates text completion without web search.
-   * Optionally accepts generation options (e.g., response format).
+   * Accepts generation options (e.g., response format, promptType).
    */
   generate: (
     prompt: string,
-    options?: GenerateOptions
+    options: GenerateOptions
   ) => Promise<Result<GenerateResult, OpenRouterError>>;
 
   /**
@@ -263,7 +263,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
 
     async generate(
       prompt: string,
-      options?: GenerateOptions
+      options: GenerateOptions
     ): Promise<Result<GenerateResult, OpenRouterError>> {
       try {
         const requestBody = {
@@ -275,7 +275,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             },
           ],
           temperature: 0.2,
-          ...(options?.responseFormat !== undefined && {
+          ...(options.responseFormat !== undefined && {
             response_format: options.responseFormat,
           }),
         };
@@ -305,7 +305,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             totalTokens: 0,
             costUsd: 0,
           };
-          trackUsage('generate', emptyUsage, false, errorMsg, undefined, options?.promptType);
+          trackUsage('generate', emptyUsage, false, errorMsg, undefined, options.promptType);
           return err(mapOpenRouterError(apiError));
         }
 
@@ -329,7 +329,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           true,
           undefined,
           providerReportedUsd,
-          options?.promptType
+          options.promptType
         );
 
         return ok({ content, usage: normalized });
@@ -341,7 +341,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('generate', emptyUsage, false, errorMsg, undefined, options?.promptType);
+        trackUsage('generate', emptyUsage, false, errorMsg, undefined, options.promptType);
         return err(mapOpenRouterError(error));
       }
     },

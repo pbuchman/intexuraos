@@ -30,7 +30,7 @@ export class GeminiDraftGenerator implements DraftGenerator {
       category,
     });
 
-    const result = await this.client.generate(prompt);
+    const result = await this.client.generate(prompt, { promptType: 'hellscript-draft-generation' });
 
     if (!result.ok) {
       logger.error({ error: result.error }, 'Draft generation failed');

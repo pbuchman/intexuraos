@@ -81,7 +81,7 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
       synthesisContext !== undefined
         ? buildSynthesisPrompt(originalPrompt, reports, synthesisContext, additionalSources)
         : buildSynthesisPrompt(originalPrompt, reports, additionalSources);
-    const result = await this.client.generate(synthesisPrompt);
+    const result = await this.client.generate(synthesisPrompt, { promptType: 'research-synthesis' });
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -112,7 +112,7 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
       { content: prompt },
       { wordRange: { min: 5, max: 8 } }
     );
-    const result = await this.client.generate(builtPrompt);
+    const result = await this.client.generate(builtPrompt, { promptType: 'research-context-build' });
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);

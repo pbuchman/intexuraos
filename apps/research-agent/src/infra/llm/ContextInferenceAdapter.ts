@@ -93,7 +93,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     opts?: InferResearchContextOptions
   ): Promise<Result<ResearchContextResult, LlmError>> {
     const prompt = buildInferResearchContextPrompt(userQuery, opts);
-    const result = await this.client.generate(prompt);
+    const result = await this.client.generate(prompt, { promptType: 'research-context-inference' });
 
     if (!result.ok) {
       return { ok: false, error: mapToLlmError(result.error) };
@@ -154,7 +154,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     params: InferSynthesisContextParams
   ): Promise<Result<SynthesisContextResult, LlmError>> {
     const prompt = buildInferSynthesisContextPrompt(params);
-    const result = await this.client.generate(prompt);
+    const result = await this.client.generate(prompt, { promptType: 'research-context-inference' });
 
     if (!result.ok) {
       return { ok: false, error: mapToLlmError(result.error) };
@@ -221,7 +221,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       invalidResponse,
       errorMessage
     );
-    const result = await this.client.generate(repairPrompt);
+    const result = await this.client.generate(repairPrompt, { promptType: 'research-context-inference-repair' });
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -269,7 +269,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       invalidResponse,
       errorMessage
     );
-    const result = await this.client.generate(repairPrompt);
+    const result = await this.client.generate(repairPrompt, { promptType: 'research-context-inference-repair' });
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);

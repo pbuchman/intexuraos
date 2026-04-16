@@ -4,8 +4,19 @@
  */
 
 import { err, ok, type Result } from '@intexuraos/common-core';
-import type { LLMClient, LLMError, GenerateResult } from '@intexuraos/llm-contract';
+import type { LLMError, GenerateResult } from '@intexuraos/llm-contract';
 import { thumbnailPrompt } from './thumbnailPrompt.js';
+
+/**
+ * Minimal interface for clients that support the generate method with promptType.
+ * Subset of GeminiClient / infra client interfaces.
+ */
+interface GeneratingClient {
+  generate(
+    prompt: string,
+    options: { promptType: string }
+  ): Promise<Result<GenerateResult, LLMError>>;
+}
 
 export type RealismStyle = 'photorealistic' | 'cinematic illustration' | 'clean vector';
 
@@ -121,12 +132,14 @@ function parseThumbnailPromptResponse(
 }
 
 export async function generateThumbnailPrompt(
-  client: LLMClient,
+  client: GeneratingClient,
   text: string
 ): Promise<Result<ThumbnailPromptResult, ThumbnailPromptError>> {
   const fullPrompt = thumbnailPrompt.build({ text });
 
-  const generateResult = await client.generate(fullPrompt);
+  const generateResult = await client.generate(fullPrompt, {
+    promptType: 'image-thumbnail-prompt',
+  });
 
   if (!generateResult.ok) {
     return err({

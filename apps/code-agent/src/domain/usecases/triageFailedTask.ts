@@ -124,7 +124,7 @@ async function askUserLlmForTriage(
     recentLogLines: logLines,
   });
 
-  const generateResult = await llmClientResult.value.generate(prompt);
+  const generateResult = await llmClientResult.value.generate(prompt, { promptType: 'failed-task-triage' });
   if (!generateResult.ok) {
     logger.warn({ taskId: task.id, error: generateResult.error }, 'LLM triage call failed, defaulting to no-retry');
     return { shouldRetry: false, reason: `LLM call failed: ${generateResult.error.message}` };

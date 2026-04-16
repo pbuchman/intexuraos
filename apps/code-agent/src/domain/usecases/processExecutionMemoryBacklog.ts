@@ -454,7 +454,7 @@ async function evaluateApplication(
     EVALUATION_SCHEMA_BLOCK,
   ].join('\n\n');
 
-  const evaluationResult = await deps.evaluatorClient.generate(evaluationPrompt);
+  const evaluationResult = await deps.evaluatorClient.generate(evaluationPrompt, { promptType: 'execution-memory-evaluation' });
   if (!evaluationResult.ok) {
     throw new Error(evaluationResult.error.message);
   }
@@ -473,7 +473,7 @@ async function evaluateApplication(
       'Fix the JSON schema violation and return valid JSON matching the exact schema above.',
     ].join('\n');
 
-    const retryResult = await deps.evaluatorClient.generate(refinementPrompt);
+    const retryResult = await deps.evaluatorClient.generate(refinementPrompt, { promptType: 'execution-memory-evaluation-retry' });
     if (!retryResult.ok) {
       throw new Error(retryResult.error.message);
     }
@@ -750,7 +750,7 @@ async function distillTask(
 
   const prompt = buildDistillationPrompt(task, logs, turnMetrics, issueContext);
 
-  const result = await deps.distillerClient.generate(prompt);
+  const result = await deps.distillerClient.generate(prompt, { promptType: 'execution-memory-distillation' });
   if (!result.ok) {
     throw new Error(result.error.message);
   }
@@ -768,7 +768,7 @@ async function distillTask(
       'Fix the JSON schema violation and return valid JSON matching the exact schema above.',
     ].join('\n');
 
-    const retryResult = await deps.distillerClient.generate(refinementPrompt);
+    const retryResult = await deps.distillerClient.generate(refinementPrompt, { promptType: 'execution-memory-distillation-retry' });
     if (!retryResult.ok) {
       throw new Error(retryResult.error.message);
     }

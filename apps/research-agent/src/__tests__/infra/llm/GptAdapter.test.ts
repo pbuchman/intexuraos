@@ -136,8 +136,8 @@ describe('GptAdapter', () => {
           costUsd: 0.001,
         });
       }
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Prompt'));
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Claude result'));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Prompt'), expect.any(Object));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Claude result'), expect.any(Object));
     });
 
     it('includes external reports in synthesis prompt', async () => {
@@ -149,7 +149,7 @@ describe('GptAdapter', () => {
         [{ content: 'External context' }]
       );
 
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External context'));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External context'), expect.any(Object));
     });
 
     it('uses synthesis context when provided', async () => {
@@ -237,10 +237,11 @@ describe('GptAdapter', () => {
         expect(result.value.usage.costUsd).toBe(0.001);
       }
       expect(mockGenerate).toHaveBeenCalledWith(
-        expect.stringContaining('Generate a short, concise title')
+        expect.stringContaining('Generate a short, concise title'),
+        expect.any(Object)
       );
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('SAME LANGUAGE'));
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Test prompt'));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('SAME LANGUAGE'), expect.any(Object));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Test prompt'), expect.any(Object));
     });
 
     it('maps errors correctly', async () => {
