@@ -839,16 +839,17 @@ describe('DockerProvider', () => {
     it('moves worker from active to preserved map', async () => {
       await provider.createWorker(createTestConfig({ taskId: 'task-1' }));
 
-      await provider.preserveWorker('task-1');
+      const preserved = await provider.preserveWorker('task-1');
 
+      expect(preserved).toBe(true);
       const workers = await provider.listWorkers();
       expect(workers).toHaveLength(0);
 
-      const preserved = await provider.listPreservedWorkers();
-      expect(preserved).toHaveLength(1);
-      expect(preserved[0]?.taskId).toBe('task-1');
-      expect(preserved[0]?.containerId).toBe('test-container-id');
-      expect(preserved[0]?.preservedAt).toBeDefined();
+      const preservedList = await provider.listPreservedWorkers();
+      expect(preservedList).toHaveLength(1);
+      expect(preservedList[0]?.taskId).toBe('task-1');
+      expect(preservedList[0]?.containerId).toBe('test-container-id');
+      expect(preservedList[0]?.preservedAt).toBeDefined();
     });
 
     it('frees concurrency slot so new workers can be created', async () => {
@@ -894,11 +895,16 @@ describe('DockerProvider', () => {
       expect(mocks.mockContainer.remove).not.toHaveBeenCalled();
     });
 
-    it('returns early for non-existent worker', async () => {
-      await provider.preserveWorker('non-existent');
+    it('returns false and warns for non-existent worker', async () => {
+      const preserved = await provider.preserveWorker('non-existent');
 
-      const preserved = await provider.listPreservedWorkers();
-      expect(preserved).toHaveLength(0);
+      expect(preserved).toBe(false);
+      const preservedList = await provider.listPreservedWorkers();
+      expect(preservedList).toHaveLength(0);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'non-existent' }),
+        expect.stringContaining('preserveWorker called for unknown worker')
+      );
     });
 
     it('logs secrets cleanup failure without throwing', async () => {

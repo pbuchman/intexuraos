@@ -208,7 +208,12 @@ export interface IsolationProvider {
    */
   cleanupTaskSession?(taskId: string): Promise<void>;
 
-  preserveWorker?(taskId: string): Promise<void>;
+  /**
+   * Preserve a worker's container for post-mortem debugging instead of
+   * destroying it. Returns true when the container was moved into the
+   * preserved set, false when no matching worker is tracked.
+   */
+  preserveWorker?(taskId: string): Promise<boolean>;
 
   listPreservedWorkers?(): Promise<{ containerId: string; taskId: string; preservedAt: string }[]>;
 
