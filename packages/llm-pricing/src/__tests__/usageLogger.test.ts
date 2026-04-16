@@ -232,5 +232,51 @@ describe('usageLogger', () => {
       expect(callArg['clientName']).toBeUndefined();
       expect(callArg['providerReportedUsd']).toBeUndefined();
     });
+
+    it('forwards promptType to the sink when provided', async () => {
+      const fakeSink = { log: vi.fn().mockResolvedValue(undefined) };
+      const logger = createUsageLogger({ logger: fakeLogger, sink: fakeSink });
+
+      await logger.log({
+        ...baseParams,
+        promptType: 'linear-issue-title',
+      });
+
+      expect(fakeSink.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          promptType: 'linear-issue-title',
+        })
+      );
+    });
+
+    it('includes promptType in structured log when provided', async () => {
+      const fakeSink = { log: vi.fn().mockResolvedValue(undefined) };
+      const logger = createUsageLogger({ logger: fakeLogger, sink: fakeSink });
+
+      await logger.log({
+        ...baseParams,
+        promptType: 'code-worker-validation',
+      });
+
+      expect(fakeLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          promptType: 'code-worker-validation',
+        }),
+        'LLM usage logged'
+      );
+    });
+
+    it('omits promptType from structured log when not provided', async () => {
+      const fakeSink = { log: vi.fn().mockResolvedValue(undefined) };
+      const logger = createUsageLogger({ logger: fakeLogger, sink: fakeSink });
+
+      await logger.log(baseParams);
+
+      // When promptType is not provided, it should not appear in the logged object
+      expect(fakeLogger.info).toHaveBeenCalledWith(
+        expect.not.objectContaining({ promptType: expect.anything() }),
+        'LLM usage logged'
+      );
+    });
   });
 });
