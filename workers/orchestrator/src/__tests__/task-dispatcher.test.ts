@@ -3267,7 +3267,7 @@ describe('TaskDispatcher', () => {
       vi.useFakeTimers();
       const preserveState = createStatePersistence();
       const localDestroyWorker = vi.fn(async () => undefined);
-      const localPreserveWorker = vi.fn(async () => undefined);
+      const localPreserveWorker = vi.fn(async () => true);
       const localIsolationProvider: IsolationProvider = {
         ...mockIsolationProvider,
         destroyWorker: localDestroyWorker,
@@ -3326,15 +3326,271 @@ describe('TaskDispatcher', () => {
       expect(localPreserveWorker).toHaveBeenCalledWith('preserve-failed-container-task');
       expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
         'preserve-failed-container-task',
-        expect.stringContaining('Preserving worker container for debugging')
+        expect.stringContaining('Preserved worker container for debugging')
       );
       vi.useRealTimers();
+    });
+
+    it('preserves worker container on TASK_EXIT_CODE_OVERRIDE when preserveWorkerContainers is enabled', async () => {
+      vi.useFakeTimers();
+      try {
+        const preserveState = createStatePersistence();
+        const localDestroyWorker = vi.fn(async () => undefined);
+        const localPreserveWorker = vi.fn(async () => true);
+        const localCleanupSession = vi.fn(async () => undefined);
+        const localIsolationProvider: IsolationProvider = {
+          ...mockIsolationProvider,
+          destroyWorker: localDestroyWorker,
+          preserveWorker: localPreserveWorker,
+          cleanupTaskSession: localCleanupSession,
+          isWorkerRunning: vi.fn(async () => false),
+        };
+        const localIsolation: IsolationConfig = {
+          ...mockIsolationConfig,
+          provider: localIsolationProvider,
+        };
+        const verify = vi.fn().mockResolvedValue({
+          passed: true,
+          missingFields: [],
+          verifierFailure: false,
+          trace: dummyTrace,
+          agentData: {
+            agentType: 'execution' as const,
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'not used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: '',
+            memory_ids_used: '',
+            memory_ids_rejected: '',
+            memory_usage_summary: '',
+            summary: 'Execution completed',
+          },
+        });
+
+        const preserveDispatcher = new TaskDispatcher(
+          mockConfig,
+          preserveState,
+          mockWorktreeManager,
+          mockLogForwarder,
+          mockWebhookClient,
+          mockGitHubTokenService,
+          mockLogger,
+          localIsolation,
+          {
+            maxAttempts: 1,
+            activityTimeout: disabledActivityTimeout,
+            preserveWorkerContainers: true,
+            verifier: {
+              verify,
+              describe: (): { enabled: boolean } => ({ enabled: true }),
+              extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+            },
+          }
+        );
+
+        const request: CreateTaskRequest = {
+          taskId: 'preserve-exit-override',
+          workerType: 'auto',
+          prompt: 'Pass verifier but exit nonzero',
+          webhookUrl: 'https://example.com/webhook',
+          webhookSecret: 'secret',
+          linearIssueLabels: [],
+          hasChildren: false,
+          agentType: 'execution',
+        };
+
+        await preserveDispatcher.submitTask(request);
+        await vi.advanceTimersByTimeAsync(0);
+
+        const internalExitCodes = preserveDispatcher as unknown as {
+          taskExitCodes: Map<string, number>;
+        };
+        internalExitCodes.taskExitCodes.set('preserve-exit-override', 1);
+
+        await vi.advanceTimersByTimeAsync(30 * 1000);
+
+        const task = await preserveDispatcher.getTask('preserve-exit-override');
+        expect(task?.status).toBe('failed');
+        expect(localPreserveWorker).toHaveBeenCalledWith('preserve-exit-override');
+        expect(localDestroyWorker).not.toHaveBeenCalled();
+        expect(localCleanupSession).not.toHaveBeenCalled();
+        expect(mockWebhookClient.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            payload: expect.objectContaining({
+              status: 'failed',
+              error: expect.objectContaining({ code: 'TASK_EXIT_CODE_OVERRIDE' }),
+            }),
+          })
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('preserves worker container on TASK_FATAL_EXIT_CODE when preserveWorkerContainers is enabled', async () => {
+      vi.useFakeTimers();
+      try {
+        const preserveState = createStatePersistence();
+        const localDestroyWorker = vi.fn(async () => undefined);
+        const localPreserveWorker = vi.fn(async () => true);
+        const localCleanupSession = vi.fn(async () => undefined);
+        const localIsolationProvider: IsolationProvider = {
+          ...mockIsolationProvider,
+          destroyWorker: localDestroyWorker,
+          preserveWorker: localPreserveWorker,
+          cleanupTaskSession: localCleanupSession,
+          isWorkerRunning: vi.fn(async () => false),
+        };
+        const localIsolation: IsolationConfig = {
+          ...mockIsolationConfig,
+          provider: localIsolationProvider,
+        };
+        const verify = vi.fn().mockResolvedValue({
+          passed: false,
+          missingFields: ['fatal_exit_code_137'],
+          verifierFailure: false,
+          trace: dummyTrace,
+        });
+
+        const preserveDispatcher = new TaskDispatcher(
+          mockConfig,
+          preserveState,
+          mockWorktreeManager,
+          mockLogForwarder,
+          mockWebhookClient,
+          mockGitHubTokenService,
+          mockLogger,
+          localIsolation,
+          {
+            maxAttempts: 3,
+            activityTimeout: disabledActivityTimeout,
+            preserveWorkerContainers: true,
+            verifier: {
+              verify,
+              describe: (): { enabled: boolean } => ({ enabled: true }),
+              extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+            },
+          }
+        );
+
+        const request: CreateTaskRequest = {
+          taskId: 'preserve-fatal-exit',
+          workerType: 'auto',
+          prompt: 'Crash with SIGKILL',
+          webhookUrl: 'https://example.com/webhook',
+          webhookSecret: 'secret',
+          linearIssueLabels: [],
+          hasChildren: false,
+          agentType: 'execution',
+        };
+
+        await preserveDispatcher.submitTask(request);
+        await vi.advanceTimersByTimeAsync(0);
+
+        await vi.advanceTimersByTimeAsync(30 * 1000);
+
+        const task = await preserveDispatcher.getTask('preserve-fatal-exit');
+        expect(task?.status).toBe('failed');
+        expect(localPreserveWorker).toHaveBeenCalledWith('preserve-fatal-exit');
+        expect(localDestroyWorker).not.toHaveBeenCalled();
+        expect(localCleanupSession).not.toHaveBeenCalled();
+        expect(mockWebhookClient.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            payload: expect.objectContaining({
+              status: 'failed',
+              error: expect.objectContaining({
+                code: 'TASK_FATAL_EXIT_CODE',
+                message: expect.stringContaining('fatal_exit_code_137'),
+              }),
+            }),
+          })
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('falls back to teardownAttempt and logs failure when preserveWorker returns false', async () => {
+      const preserveState = createStatePersistence();
+      const localDestroyWorker = vi.fn(async () => undefined);
+      const localPreserveWorker = vi.fn(async () => false);
+      const localCleanupSession = vi.fn(async () => undefined);
+      const localIsolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        destroyWorker: localDestroyWorker,
+        preserveWorker: localPreserveWorker,
+        cleanupTaskSession: localCleanupSession,
+      };
+      const localIsolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: localIsolationProvider,
+      };
+
+      const preserveDispatcher = new TaskDispatcher(
+        mockConfig,
+        preserveState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        localIsolation,
+        {
+          maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
+          preserveWorkerContainers: true,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: true,
+              missingFields: [],
+              verifierFailure: false,
+              trace: dummyTrace,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+          },
+        }
+      );
+
+      const taskId = 'preserve-fallback-teardown';
+      await preserveDispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'Preservation will be reported as failed',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+      await flushAsync();
+
+      const task = await preserveDispatcher.getTask(taskId);
+      if (task === null) {
+        throw new Error('Task not found');
+      }
+
+      const preserveInternal = preserveDispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'failed',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await preserveInternal.finalizeTask(task as unknown as Record<string, unknown>, 'failed', {});
+
+      expect(localPreserveWorker).toHaveBeenCalledWith(taskId);
+      expect(localDestroyWorker).toHaveBeenCalledWith(taskId);
+      expect(localCleanupSession).toHaveBeenCalledWith(taskId);
+      expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
+        taskId,
+        expect.stringContaining('Failed to preserve worker container (no tracked worker)')
+      );
     });
 
     it('preserves container when interrupted finalization is invoked with preserve flag', async () => {
       const preserveState = createStatePersistence();
       const localDestroyWorker = vi.fn(async () => undefined);
-      const localPreserveWorker = vi.fn(async () => undefined);
+      const localPreserveWorker = vi.fn(async () => true);
       const localIsolationProvider: IsolationProvider = {
         ...mockIsolationProvider,
         destroyWorker: localDestroyWorker,
@@ -3405,7 +3661,7 @@ describe('TaskDispatcher', () => {
       expect(localPreserveWorker).toHaveBeenCalledWith(taskId);
       expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
         taskId,
-        expect.stringContaining('Preserving worker container for debugging')
+        expect.stringContaining('Preserved worker container for debugging')
       );
     });
 
@@ -3416,7 +3672,7 @@ describe('TaskDispatcher', () => {
     } {
       const state = createStatePersistence();
       const destroyWorker = vi.fn(async () => undefined);
-      const preserveWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => true);
       const cleanupTaskSession = vi.fn(async () => undefined);
       const isolationProvider: IsolationProvider = {
         ...mockIsolationProvider,
@@ -3575,7 +3831,7 @@ describe('TaskDispatcher', () => {
     it('destroys existing preserved pull_request container for same PR before preserving new one', async () => {
       const state = createStatePersistence();
       const destroyWorker = vi.fn(async () => undefined);
-      const preserveWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => true);
       const oldTaskId = 'pr-old-task';
       const newTaskId = 'pr-new-task';
       const prNumber = 100;
@@ -3684,7 +3940,7 @@ describe('TaskDispatcher', () => {
     it('does not destroy preserved pull_request container for different PR', async () => {
       const state = createStatePersistence();
       const destroyWorker = vi.fn(async () => undefined);
-      const preserveWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => true);
       const oldTaskId = 'pr-different-old-task';
       const newTaskId = 'pr-different-new-task';
 
@@ -3793,7 +4049,7 @@ describe('TaskDispatcher', () => {
     it('skips destroyWorker loop when listPreservedWorkers returns empty array', async () => {
       const state = createStatePersistence();
       const destroyWorker = vi.fn(async () => undefined);
-      const preserveWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => true);
       const listPreservedWorkers = vi.fn(async () => []);
 
       const isolationProvider: IsolationProvider = {
@@ -3876,7 +4132,7 @@ describe('TaskDispatcher', () => {
     it('skips listPreservedWorkers check when provider does not implement it', async () => {
       const state = createStatePersistence();
       const destroyWorker = vi.fn(async () => undefined);
-      const preserveWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => true);
 
       // Intentionally omit listPreservedWorkers to exercise optional chaining
       const isolationProvider: IsolationProvider = {

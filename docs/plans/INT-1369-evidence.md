@@ -31,16 +31,16 @@
 
 ## File Structure
 
-| Area | Files | Responsibility |
-| --- | --- | --- |
-| Orchestrator env + boot | `workers/orchestrator/src/start.ts`, `terraform/environments/dev/main.tf`, `ecosystem.config.cjs`, `workers/orchestrator/README.md` | Parse one ordered validation-model env var, wire required secrets, document the new configuration |
-| Orchestrator client selection | `workers/orchestrator/src/services/completion-verifier.ts`, `workers/orchestrator/src/services/agent-compliance-validator.ts`, new helper in `workers/orchestrator/src/services/` | Build provider-agnostic validation clients from prioritized models and retry/fallback on failure |
-| Orchestrator tests | `workers/orchestrator/src/services/__tests__/completion-verifier.test.ts`, `workers/orchestrator/src/services/__tests__/agent-compliance-validator.test.ts`, possibly `workers/orchestrator/src/__tests__/task-dispatcher.test.ts` | Cover ordered-model parsing, missing-key handling, primary failure -> secondary fallback, and logging |
-| Hellscript migration | `apps/hellscript-agent/src/index.ts`, `apps/hellscript-agent/src/services.ts`, `apps/hellscript-agent/src/infra/llm/geminiIntentInterpreter.ts`, `apps/hellscript-agent/src/infra/llm/geminiDraftGenerator.ts`, related tests | Remove direct Gemini bootstrapping and use a generic user-backed generate client |
-| Image-service migration | `apps/image-service/src/serviceFactory.ts`, `apps/image-service/src/infra/llm/GeminiPromptAdapter.ts`, `apps/image-service/src/application/generatePrompt.ts`, related tests | Resolve prompt-generation model and pricing dynamically from user defaults instead of Gemini constants |
-| Linear-agent migration | `apps/linear-agent/src/index.ts`, `apps/linear-agent/src/services.ts`, prune route tests | Stop creating a fixed `Gemini25Flash` pruning client at startup; resolve a user-backed client at classification time |
-| Chat-agent migration | `apps/chat-agent/src/services.ts`, `apps/chat-agent/src/routes/chatRoutes.ts`, related tests | Keep guest Gemini fixed, but route authenticated user generation through the default user client with fallback |
-| Audit appendix | `docs/plans/INT-1369-evidence.md` | Preserve the migration list plus classify omitted hardcoded Gemini/OpenRouter sites so the document is complete |
+| Area                          | Files                                                                                                                                                                                                                              | Responsibility                                                                                                       |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Orchestrator env + boot       | `workers/orchestrator/src/start.ts`, `terraform/environments/dev/main.tf`, `ecosystem.config.cjs`, `workers/orchestrator/README.md`                                                                                                | Parse one ordered validation-model env var, wire required secrets, document the new configuration                    |
+| Orchestrator client selection | `workers/orchestrator/src/services/completion-verifier.ts`, `workers/orchestrator/src/services/agent-compliance-validator.ts`, new helper in `workers/orchestrator/src/services/`                                                  | Build provider-agnostic validation clients from prioritized models and retry/fallback on failure                     |
+| Orchestrator tests            | `workers/orchestrator/src/services/__tests__/completion-verifier.test.ts`, `workers/orchestrator/src/services/__tests__/agent-compliance-validator.test.ts`, possibly `workers/orchestrator/src/__tests__/task-dispatcher.test.ts` | Cover ordered-model parsing, missing-key handling, primary failure -> secondary fallback, and logging                |
+| Hellscript migration          | `apps/hellscript-agent/src/index.ts`, `apps/hellscript-agent/src/services.ts`, `apps/hellscript-agent/src/infra/llm/geminiIntentInterpreter.ts`, `apps/hellscript-agent/src/infra/llm/geminiDraftGenerator.ts`, related tests      | Remove direct Gemini bootstrapping and use a generic user-backed generate client                                     |
+| Image-service migration       | `apps/image-service/src/serviceFactory.ts`, `apps/image-service/src/infra/llm/GeminiPromptAdapter.ts`, `apps/image-service/src/application/generatePrompt.ts`, related tests                                                       | Resolve prompt-generation model and pricing dynamically from user defaults instead of Gemini constants               |
+| Linear-agent migration        | `apps/linear-agent/src/index.ts`, `apps/linear-agent/src/services.ts`, prune route tests                                                                                                                                           | Stop creating a fixed `Gemini25Flash` pruning client at startup; resolve a user-backed client at classification time |
+| Chat-agent migration          | `apps/chat-agent/src/services.ts`, `apps/chat-agent/src/routes/chatRoutes.ts`, related tests                                                                                                                                       | Keep guest Gemini fixed, but route authenticated user generation through the default user client with fallback       |
+| Audit appendix                | `docs/plans/INT-1369-evidence.md`                                                                                                                                                                                                  | Preserve the migration list plus classify omitted hardcoded Gemini/OpenRouter sites so the document is complete      |
 
 ## Endpoint Changes
 
@@ -202,16 +202,16 @@ None.
 
 These are the eight user-facing points the owner explicitly approved for migration:
 
-| # | Service | File | Migration intent |
-| --- | --- | --- | --- |
-| 1 | hellscript-agent | `src/index.ts` | remove startup Gemini singleton |
-| 2 | hellscript-agent | `src/services.ts` | remove Gemini-specific container typing |
-| 3 | hellscript-agent | `src/infra/llm/geminiDraftGenerator.ts` | accept generic generate client |
-| 4 | hellscript-agent | `src/infra/llm/geminiIntentInterpreter.ts` | accept generic generate client |
-| 5 | image-service | `src/infra/llm/GeminiPromptAdapter.ts` | resolve model dynamically from user defaults |
-| 6 | image-service | `src/serviceFactory.ts` | remove Gemini-only pricing assumption |
-| 7 | linear-agent | `src/services.ts` | replace fixed pruning client with user-backed client |
-| 8 | chat-agent | `src/services.ts` | keep guest Gemini, migrate authenticated path |
+| #   | Service          | File                                       | Migration intent                                     |
+| --- | ---------------- | ------------------------------------------ | ---------------------------------------------------- |
+| 1   | hellscript-agent | `src/index.ts`                             | remove startup Gemini singleton                      |
+| 2   | hellscript-agent | `src/services.ts`                          | remove Gemini-specific container typing              |
+| 3   | hellscript-agent | `src/infra/llm/geminiDraftGenerator.ts`    | accept generic generate client                       |
+| 4   | hellscript-agent | `src/infra/llm/geminiIntentInterpreter.ts` | accept generic generate client                       |
+| 5   | image-service    | `src/infra/llm/GeminiPromptAdapter.ts`     | resolve model dynamically from user defaults         |
+| 6   | image-service    | `src/serviceFactory.ts`                    | remove Gemini-only pricing assumption                |
+| 7   | linear-agent     | `src/services.ts`                          | replace fixed pruning client with user-backed client |
+| 8   | chat-agent       | `src/services.ts`                          | keep guest Gemini, migrate authenticated path        |
 
 ---
 
@@ -219,16 +219,16 @@ These are the eight user-facing points the owner explicitly approved for migrati
 
 These sites were missing from the original audit. They are not part of the approved migration scope, but they are now classified so this document is complete.
 
-| File | Current hardcoding | Classification | Reason |
-| --- | --- | --- | --- |
-| `workers/orchestrator/src/start.ts`, `workers/orchestrator/src/services/completion-verifier.ts`, `workers/orchestrator/src/services/agent-compliance-validator.ts` | validation models | **Change in this task** | owner explicitly asked for prioritized primary/secondary validation clients |
-| `apps/cron-agent/src/index.ts` | `Gemini25Flash` tool-calling + generate clients | **No change in this task** | platform-owned scheduler, no user context |
-| `apps/code-agent/src/services.ts` | Gemini tool-calling + execution-memory models | **No change in this task** | system-owned orchestration/classification path, not one of the approved eight migration points |
-| `apps/research-agent/src/routes/researchRoutes.ts`, `apps/research-agent/src/routes/internalRoutes.ts`, `apps/research-agent/src/routes/helpers/synthesisHelper.ts` | `Gemini25Flash` for title/context helpers | **No change in this task** | research helper flows are product-defined Google helpers, not user default-model replacement scope here |
-| `packages/llm-prompts/src/research/modelExtractionPrompt.ts`, `apps/research-agent/src/domain/research/usecases/extractModelPreferences.ts`, `apps/research-agent/src/infra/llm/GeminiAdapter.ts` | research Gemini selection infrastructure | **No change in this task** | explicit research-model selection must stay provider/model aware |
-| `apps/user-service/src/infra/llm/LlmValidatorImpl.ts` | `Gemini20Flash` validation probe | **No change in this task** | cheapest-provider validation probe |
-| `apps/image-service/src/infra/image/GoogleImageGenerator.ts`, `packages/infra-gemini/src/client.ts` | `Gemini25FlashImage` | **No change in this task** | capability-specific image generation |
-| `packages/infra-gemini/src/toolCallingClient.ts` | `TOOL_CALLING_PRICING[Gemini25Flash]` | **No change in this task** | tool-calling support is currently Gemini-specific |
+| File                                                                                                                                                                                              | Current hardcoding                              | Classification             | Reason                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `workers/orchestrator/src/start.ts`, `workers/orchestrator/src/services/completion-verifier.ts`, `workers/orchestrator/src/services/agent-compliance-validator.ts`                                | validation models                               | **Change in this task**    | owner explicitly asked for prioritized primary/secondary validation clients                             |
+| `apps/cron-agent/src/index.ts`                                                                                                                                                                    | `Gemini25Flash` tool-calling + generate clients | **No change in this task** | platform-owned scheduler, no user context                                                               |
+| `apps/code-agent/src/services.ts`                                                                                                                                                                 | Gemini tool-calling + execution-memory models   | **No change in this task** | system-owned orchestration/classification path, not one of the approved eight migration points          |
+| `apps/research-agent/src/routes/researchRoutes.ts`, `apps/research-agent/src/routes/internalRoutes.ts`, `apps/research-agent/src/routes/helpers/synthesisHelper.ts`                               | `Gemini25Flash` for title/context helpers       | **No change in this task** | research helper flows are product-defined Google helpers, not user default-model replacement scope here |
+| `packages/llm-prompts/src/research/modelExtractionPrompt.ts`, `apps/research-agent/src/domain/research/usecases/extractModelPreferences.ts`, `apps/research-agent/src/infra/llm/GeminiAdapter.ts` | research Gemini selection infrastructure        | **No change in this task** | explicit research-model selection must stay provider/model aware                                        |
+| `apps/user-service/src/infra/llm/LlmValidatorImpl.ts`                                                                                                                                             | `Gemini20Flash` validation probe                | **No change in this task** | cheapest-provider validation probe                                                                      |
+| `apps/image-service/src/infra/image/GoogleImageGenerator.ts`, `packages/infra-gemini/src/client.ts`                                                                                               | `Gemini25FlashImage`                            | **No change in this task** | capability-specific image generation                                                                    |
+| `packages/infra-gemini/src/toolCallingClient.ts`                                                                                                                                                  | `TOOL_CALLING_PRICING[Gemini25Flash]`           | **No change in this task** | tool-calling support is currently Gemini-specific                                                       |
 
 ---
 
