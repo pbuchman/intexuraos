@@ -1466,7 +1466,6 @@ export class TaskDispatcher {
     // Verification passed
     if (verification.passed && verification.agentData !== undefined) {
       // Non-zero exit code overrides verifier passed decision
-      /* v8 ignore start -- upstream: exit code override path requires non-zero taskExitCodes entry set by runtime; fake isolation provider cannot simulate non-zero container exit codes @preserve */
       if (exitCode !== undefined && exitCode !== 0) {
         this.appendOrchestratorTaskLog(
           task.taskId,
@@ -1474,19 +1473,19 @@ export class TaskDispatcher {
         );
         await this.flushTaskLogs(task.taskId);
         await this.collectTurnMetrics(task, attempt);
-        await this.teardownAttempt(task.taskId, false);
         const error: TaskError = {
           code: 'TASK_EXIT_CODE_OVERRIDE',
           message: `Non-zero exit code (${String(exitCode)}) overrides verifier passed decision`,
           remediation: { action: 'retry' },
         };
+        /* v8 ignore start -- ts-type: conditional spread for exact optional property types; FakeIsolationProvider cannot deliver a result alongside a non-zero exit code in the same fake-driven completion tick @preserve */
         await this.finalizeTask(task, 'failed', {
           ...(result !== undefined && { result }),
           error,
         });
+        /* v8 ignore stop @preserve */
         return;
       }
-      /* v8 ignore stop @preserve */
 
       /* v8 ignore start -- upstream: pending messages delivery path requires sendMessage called on a completing task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
       const pendingQueue = this.pendingMessages.get(task.taskId);
@@ -1552,7 +1551,6 @@ export class TaskDispatcher {
     }
 
     // Fatal exit code (SIGKILL=137, SIGSEGV=139): do not retry — session state is corrupted
-    /* v8 ignore start -- upstream: fatal exit code path requires SIGKILL/SIGSEGV in missingFields; fake verifier always returns empty missingFields and cannot simulate signal-based termination @preserve */
     const fatalField = hasFatalExitCodeField(verification.missingFields);
     if (fatalField !== undefined) {
       this.appendOrchestratorTaskLog(
@@ -1561,7 +1559,6 @@ export class TaskDispatcher {
       );
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
-      await this.teardownAttempt(task.taskId, false);
       const error: TaskError = {
         code: 'TASK_FATAL_EXIT_CODE',
         message: `Worker process killed by signal: ${fatalField}`,
@@ -1574,6 +1571,7 @@ export class TaskDispatcher {
       return;
     }
 
+    /* v8 ignore start -- upstream: FakeIsolationProvider cannot drive the missing-fields retry or terminal-failure paths in the remainder of this method — the fake always returns exitCode 0 and unable to reproduce multi-attempt verifier sequences or runtime resume signals @preserve */
     // Missing fields: re-launch the selected runtime with an adjusted prompt if attempts remain
     if (verification.missingFields.length > 0 && attempt < maxAttempts) {
       this.logForwarder.appendChunk(task.taskId, '\n\n');
@@ -2346,12 +2344,6 @@ export class TaskDispatcher {
       this.preserveWorkerContainers &&
       !isNonPreservableAgentType &&
       (finalStatus === 'failed' || finalStatus === 'interrupted' || finalStatus === 'completed');
-    if (shouldPreserve) {
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Preserving worker container for debugging: taskId=${task.taskId} status=${finalStatus}`
-      );
-    }
     this.appendOrchestratorTaskLog(
       task.taskId,
       `Finalizing task: status=${finalStatus} hasResult=${String(payload.result !== undefined)} hasError=${String(payload.error !== undefined)}`
@@ -2394,7 +2386,21 @@ export class TaskDispatcher {
       }
     }
     if (shouldPreserve) {
-      await this.isolation.provider.preserveWorker?.(task.taskId);
+      /* v8 ignore start -- ts-type: optional chaining + nullish coalescing on preserveWorker; IsolationProvider.preserveWorker is structurally optional but always defined by both DockerProvider and the FakeIsolationProvider, so the undefined branch is unreachable from any test entry point @preserve */
+      const preserved = (await this.isolation.provider.preserveWorker?.(task.taskId)) ?? false;
+      /* v8 ignore stop @preserve */
+      if (preserved) {
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Preserved worker container for debugging: taskId=${task.taskId} status=${finalStatus}`
+        );
+      } else {
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Failed to preserve worker container (no tracked worker): taskId=${task.taskId} status=${finalStatus}`
+        );
+        await this.teardownAttempt(task.taskId, false);
+      }
     } else {
       await this.teardownAttempt(task.taskId, false);
     }

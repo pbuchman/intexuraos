@@ -25,15 +25,15 @@ The original issue design had several assumptions that don't match the current c
 
 ### New Files
 
-| File                                           | Responsibility                                                 |
-| ---------------------------------------------- | -------------------------------------------------------------- |
-| `src/domain/utils/classifyFailure.ts`          | Pure failure classifier function (~40 lines)                   |
-| `src/domain/utils/classifyFailure.test.ts`     | Tests for classifier (all 11 error codes + edge cases)         |
-| `src/domain/usecases/autoRetryTask.ts`         | System-initiated auto-retry use case                           |
-| `src/domain/usecases/autoRetryTask.test.ts`    | Tests for auto-retry creation, budget check, chain walking     |
-| `src/domain/usecases/triageFailedTask.ts`      | Orchestrates triage: classify -> budget check -> retry or fail |
+| File                                           | Responsibility                                                  |
+| ---------------------------------------------- | --------------------------------------------------------------- |
+| `src/domain/utils/classifyFailure.ts`          | Pure failure classifier function (~40 lines)                    |
+| `src/domain/utils/classifyFailure.test.ts`     | Tests for classifier (all 11 error codes + edge cases)          |
+| `src/domain/usecases/autoRetryTask.ts`         | System-initiated auto-retry use case                            |
+| `src/domain/usecases/autoRetryTask.test.ts`    | Tests for auto-retry creation, budget check, chain walking      |
+| `src/domain/usecases/triageFailedTask.ts`      | Orchestrates triage: classify -> budget check -> retry or fail  |
 | `src/domain/usecases/triageFailedTask.test.ts` | Tests for triage orchestration including user-selected LLM path |
-| `src/domain/prompts/failureTriagePrompt.ts`    | Prompt for `*_ENFORCEMENT_FAILED` triage via user-selected LLM |
+| `src/domain/prompts/failureTriagePrompt.ts`    | Prompt for `*_ENFORCEMENT_FAILED` triage via user-selected LLM  |
 
 ### Modified Files
 
