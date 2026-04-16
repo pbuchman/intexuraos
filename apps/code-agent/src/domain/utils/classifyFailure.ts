@@ -10,6 +10,8 @@
  * INT-1375: Self-healing failure triage.
  */
 
+import type { TaskError } from '../models/codeTask.js';
+
 export type FailureVerdict = 'retry' | 'retry_after_cooloff' | 'ask_llm' | 'fail';
 
 /** Infrastructure error codes that always indicate transient failures. */
@@ -20,9 +22,15 @@ const INFRA_RETRY_CODES = new Set([
   'queue_full',
   'worker_unavailable',
   'network_error',
+  // Verifier ran and passed but worker exited non-zero. Root causes observed so
+  // far (git lock file, stale container state) are transient. The orchestrator
+  // attaches remediation.action=retry; we also match by code for belt-and-suspenders.
+  'TASK_EXIT_CODE_OVERRIDE',
 ]);
 
-export function classifyFailure(errorCode: string, errorMessage: string): FailureVerdict {
+export function classifyFailure(error: TaskError): FailureVerdict {
+  const { code: errorCode, message: errorMessage, remediation } = error;
+
   // Infrastructure — always retry
   if (INFRA_RETRY_CODES.has(errorCode)) {
     return 'retry';
@@ -53,6 +61,14 @@ export function classifyFailure(errorCode: string, errorMessage: string): Failur
   // AI quality failures — ask the user's configured LLM
   if (errorCode.endsWith('_ENFORCEMENT_FAILED')) {
     return 'ask_llm';
+  }
+
+  // Orchestrator remediation hint — honor it as a fallback before defaulting to fail.
+  // The orchestrator has direct context (exit code, verifier result) this classifier
+  // only sees via stringified code/message. Guards against drift when new orchestrator
+  // error codes are added without a matching classifier branch.
+  if (remediation?.action === 'retry') {
+    return 'retry';
   }
 
   // Everything else — permanent failure

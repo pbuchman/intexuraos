@@ -43,7 +43,7 @@ export async function triageFailedTask(
   const { task, taskError } = request;
 
   // Step 1: Classify the failure
-  const verdict = classifyFailure(taskError.code, taskError.message);
+  const verdict = classifyFailure(taskError);
   logger.info({ taskId: task.id, errorCode: taskError.code, verdict }, 'Failure classified');
 
   // Step 2: Handle permanent failures immediately
