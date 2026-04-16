@@ -52,7 +52,13 @@ import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import type { GptConfig, GptError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
-export type GptClient = LLMClient;
+export interface GenerateOptions {
+  promptType: string;
+}
+
+export type GptClient = Omit<LLMClient, 'generate'> & {
+  generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, GptError>>;
+};
 
 const MAX_TOKENS = 8192;
 const IMAGE_MODEL = LlmModels.GPTImage1;
@@ -88,7 +94,8 @@ export function createGptClient(config: GptConfig): GptClient {
     callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
-    errorMessage?: string
+    errorMessage?: string,
+    promptType?: string
   ): void {
     void usageLogger.log({
       userId,
@@ -99,6 +106,7 @@ export function createGptClient(config: GptConfig): GptClient {
       success,
       ...(errorMessage !== undefined && { errorMessage }),
       ...(ownerType !== undefined && { ownerType }),
+      ...(promptType !== undefined && { promptType }),
     });
   }
 
@@ -171,7 +179,10 @@ export function createGptClient(config: GptConfig): GptClient {
       }
     },
 
-    async generate(prompt: string): Promise<Result<GenerateResult, GptError>> {
+    async generate(
+      prompt: string,
+      options: GenerateOptions
+    ): Promise<Result<GenerateResult, GptError>> {
       try {
         const response = await client.chat.completions.create({
           model,
@@ -189,7 +200,7 @@ export function createGptClient(config: GptConfig): GptClient {
           usageDetails.reasoningTokens
         );
 
-        trackUsage('generate', usage, true);
+        trackUsage('generate', usage, true, undefined, options.promptType);
 
         return ok({ content: text, usage });
       } catch (error) {
@@ -200,7 +211,7 @@ export function createGptClient(config: GptConfig): GptClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('generate', emptyUsage, false, errorMsg);
+        trackUsage('generate', emptyUsage, false, errorMsg, options.promptType);
         return err(mapGptError(error));
       }
     },

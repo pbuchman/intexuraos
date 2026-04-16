@@ -50,7 +50,13 @@ import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import type { ClaudeConfig, ClaudeError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
-export type ClaudeClient = LLMClient;
+export interface GenerateOptions {
+  promptType: string;
+}
+
+export type ClaudeClient = Omit<LLMClient, 'generate'> & {
+  generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, ClaudeError>>;
+};
 
 const MAX_TOKENS = 8192;
 
@@ -83,7 +89,8 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
     callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
-    errorMessage?: string
+    errorMessage?: string,
+    promptType?: string
   ): void {
     void usageLogger.log({
       userId,
@@ -94,6 +101,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       success,
       ...(errorMessage !== undefined && { errorMessage }),
       ...(ownerType !== undefined && { ownerType }),
+      ...(promptType !== undefined && { promptType }),
     });
   }
 
@@ -154,7 +162,10 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       }
     },
 
-    async generate(prompt: string): Promise<Result<GenerateResult, ClaudeError>> {
+    async generate(
+      prompt: string,
+      options: GenerateOptions
+    ): Promise<Result<GenerateResult, ClaudeError>> {
       try {
         const response = await client.messages.create({
           model,
@@ -175,7 +186,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           0
         );
 
-        trackUsage('generate', usage, true);
+        trackUsage('generate', usage, true, undefined, options.promptType);
 
         return ok({ content: text, usage });
       } catch (error) {
@@ -186,7 +197,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('generate', emptyUsage, false, errorMsg);
+        trackUsage('generate', emptyUsage, false, errorMsg, options.promptType);
         return err(mapClaudeError(error));
       }
     },

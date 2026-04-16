@@ -328,7 +328,7 @@ describe('createClaudeClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Generate something');
+      const result = await client.generate('Generate something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -355,7 +355,7 @@ describe('createClaudeClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test prompt');
+      const result = await client.generate('Test prompt', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -373,7 +373,7 @@ describe('createClaudeClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test prompt');
+      const result = await client.generate('Test prompt', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -396,7 +396,7 @@ describe('createClaudeClient', () => {
       usageSink: mockUsageSink,
       ownerType: 'user',
     });
-    await client.generate('hello');
+    await client.generate('hello', { promptType: 'test-prompt' });
 
     expect(mockUsageLoggerLog).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'user' }));
   });

@@ -275,9 +275,13 @@ export interface LLMClient {
    * Uses only the model's training data. Faster and cheaper than research.
    *
    * @param prompt - The input prompt for generation
+   * @param options - Generation options including promptType for usage tracking
    * @returns Promise resolving to {@link GenerateResult} or {@link LLMError}
    */
-  generate(prompt: string): Promise<Result<GenerateResult, LLMError>>;
+  generate(
+    prompt: string,
+    options: { promptType: string }
+  ): Promise<Result<GenerateResult, LLMError>>;
 
   /**
    * Generates an image from a text description.

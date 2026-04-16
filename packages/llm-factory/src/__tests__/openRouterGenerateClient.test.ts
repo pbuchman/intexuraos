@@ -49,7 +49,7 @@ describe('createOpenRouterGenerateClient', () => {
     mockOrGenerate.mockResolvedValue(ok(expectedResult));
 
     const client = createOpenRouterGenerateClient(baseConfig);
-    const result = await client.generate('Say hello');
+    const result = await client.generate('Say hello', { promptType: 'test-prompt' });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -91,7 +91,7 @@ describe('createOpenRouterGenerateClient', () => {
     mockOrGenerate.mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Bad API key' }));
 
     const client = createOpenRouterGenerateClient(baseConfig);
-    const result = await client.generate('test prompt');
+    const result = await client.generate('test prompt', { promptType: 'test-prompt' });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -104,7 +104,7 @@ describe('createOpenRouterGenerateClient', () => {
     mockOrGenerate.mockResolvedValue(err({ code: 'RATE_LIMITED', message: 'Too many requests' }));
 
     const client = createOpenRouterGenerateClient(baseConfig);
-    const result = await client.generate('test prompt');
+    const result = await client.generate('test prompt', { promptType: 'test-prompt' });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -117,7 +117,7 @@ describe('createOpenRouterGenerateClient', () => {
     mockOrGenerate.mockResolvedValue(err({ code: 'TIMEOUT', message: 'Request timed out' }));
 
     const client = createOpenRouterGenerateClient(baseConfig);
-    const result = await client.generate('test prompt');
+    const result = await client.generate('test prompt', { promptType: 'test-prompt' });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -129,7 +129,7 @@ describe('createOpenRouterGenerateClient', () => {
     mockOrGenerate.mockResolvedValue(err({ code: 'OVERLOADED', message: 'Server overloaded' }));
 
     const client = createOpenRouterGenerateClient(baseConfig);
-    const result = await client.generate('test prompt');
+    const result = await client.generate('test prompt', { promptType: 'test-prompt' });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {

@@ -143,8 +143,8 @@ describe('GeminiAdapter', () => {
           costUsd: 0.001,
         });
       }
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Prompt'));
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('GPT result'));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Prompt'), expect.any(Object));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('GPT result'), expect.any(Object));
     });
 
     it('includes external reports in synthesis prompt', async () => {
@@ -156,7 +156,7 @@ describe('GeminiAdapter', () => {
         [{ content: 'External context' }]
       );
 
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External context'));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External context'), expect.any(Object));
     });
 
     it('uses synthesis context when provided', async () => {
@@ -242,10 +242,11 @@ describe('GeminiAdapter', () => {
         expect(result.value.usage.costUsd).toBe(0.001);
       }
       expect(mockGenerate).toHaveBeenCalledWith(
-        expect.stringContaining('Generate a short, concise title')
+        expect.stringContaining('Generate a short, concise title'),
+        expect.any(Object)
       );
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('CRITICAL REQUIREMENTS'));
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Test prompt'));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('CRITICAL REQUIREMENTS'), expect.any(Object));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Test prompt'), expect.any(Object));
     });
 
     it('maps errors correctly', async () => {
@@ -278,9 +279,10 @@ describe('GeminiAdapter', () => {
         expect(result.value.usage.costUsd).toBe(0.001);
       }
       expect(mockGenerate).toHaveBeenCalledWith(
-        expect.stringContaining('Generate a very short label')
+        expect.stringContaining('Generate a very short label'),
+        expect.any(Object)
       );
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Short context content'));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Short context content'), expect.any(Object));
     });
 
     it('truncates long content to 2000 characters', async () => {

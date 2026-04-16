@@ -331,7 +331,7 @@ async function normalizeQuery(params: {
     params.issueContext
   );
 
-  const generationResult = await params.queryClient.generate(normalizationPrompt);
+  const generationResult = await params.queryClient.generate(normalizationPrompt, { promptType: 'execution-memory-context-normalization' });
   if (!generationResult.ok) {
     params.logger.warn(
       { error: generationResult.error, version: QUERY_NORMALIZER_VERSION },

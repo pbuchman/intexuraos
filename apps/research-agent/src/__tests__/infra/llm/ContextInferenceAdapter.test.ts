@@ -137,7 +137,7 @@ describe('ContextInferenceAdapter', () => {
         expect(result.value.context.language).toBe('en');
         expect(result.value.usage.costUsd).toBe(mockUsage.costUsd);
       }
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Test query'));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Test query'), expect.any(Object));
     });
 
     it('passes options to prompt builder', async () => {
@@ -151,7 +151,7 @@ describe('ContextInferenceAdapter', () => {
         defaultCountryOrRegion: 'UK',
       });
 
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('2024-06-15'));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('2024-06-15'), expect.any(Object));
     });
 
     it('returns error when generate fails', async () => {
@@ -478,7 +478,7 @@ describe('ContextInferenceAdapter', () => {
         additionalSources: [{ content: 'External data', label: 'Source A' }],
       });
 
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External data'));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External data'), expect.any(Object));
     });
   });
 
