@@ -172,7 +172,7 @@ describe('CodeTaskLogViewer integration', () => {
     expect(workerButton).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('when worker filter is active, only claude-tagged lines (with links) are shown', async () => {
+  it('when worker filter is active, only claude- and msg-tagged lines are shown', async () => {
     const claudeUrl = 'https://example.com/claude-line';
     const otherUrl = 'https://example.com/other-line';
     const logs: LogLine[] = [
@@ -217,8 +217,9 @@ describe('CodeTaskLogViewer integration', () => {
     if (workerButton === undefined) throw new Error('Worker filter button not found');
     await userEvent.click(workerButton);
 
-    // Both msg and tool lines are shown, but tool is filtered out (only msg remains)
+    // After filter: msg line (worker-tagged) remains visible
     expect(screen.getByRole('link', { name: msgUrl })).toBeInTheDocument();
+    // After filter: tool line (non-worker-tagged) is hidden
     expect(screen.queryByRole('link', { name: toolUrl })).not.toBeInTheDocument();
   });
 
