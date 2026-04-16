@@ -459,6 +459,7 @@ describe('FirestoreNotificationRepository', () => {
     });
 
     it('triggers safety guard when scan limit is exceeded', async () => {
+      // Uses smaller limit but still reads from the shared fakeFirestore set up in beforeEach
       const smallLimitRepository = new FirestoreNotificationRepository(50);
       const baseTime = Date.now();
       const docs = Array.from({ length: 60 }, (_, i) => ({
