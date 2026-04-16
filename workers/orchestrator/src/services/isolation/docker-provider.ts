@@ -1074,10 +1074,14 @@ export class DockerProvider implements IsolationProvider {
     }
   }
 
-  async preserveWorker(taskId: string): Promise<void> {
+  async preserveWorker(taskId: string): Promise<boolean> {
     const worker = this.workers.get(taskId);
     if (worker === undefined) {
-      return;
+      this.logger.warn(
+        { taskId },
+        'preserveWorker called for unknown worker — container may already be destroyed'
+      );
+      return false;
     }
 
     this.preservedWorkers.set(taskId, {
@@ -1105,6 +1109,7 @@ export class DockerProvider implements IsolationProvider {
     }
 
     this.logger.info({ taskId, containerId: worker.containerId }, 'Worker preserved for debugging');
+    return true;
   }
 
   async listPreservedWorkers(): Promise<
