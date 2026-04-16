@@ -232,6 +232,16 @@
     "llm_pricing": {
       "owner": "llm-usage-service",
       "description": "LLM pricing per provider (one doc per provider, keyed by provider ID)"
+    },
+    "notification_daily_digests": {
+      "owner": "mobile-notifications-service",
+      "description": "Daily WhatsApp digest summaries per user and group. Doc ID format: {userId}_{groupKey}_{YYYY-MM-DD}. Immutable after write.",
+      "docIdFormat": "{userId}_{groupKey}_{YYYY-MM-DD}"
+    },
+    "notification_group_states": {
+      "owner": "mobile-notifications-service",
+      "description": "Persistent state for one WhatsApp group per user, rewritten each digest run. Doc ID format: {userId}_{groupKey}.",
+      "docIdFormat": "{userId}_{groupKey}"
     }
   }
 }
