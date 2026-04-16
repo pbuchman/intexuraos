@@ -56,7 +56,16 @@ import type {
 } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
-export type PerplexityClient = Pick<LLMClient, 'research' | 'generate'>;
+export interface GenerateOptions {
+  promptType: string;
+}
+
+export type PerplexityClient = Pick<LLMClient, 'research'> & {
+  generate(
+    prompt: string,
+    options: GenerateOptions
+  ): Promise<Result<GenerateResult, PerplexityError>>;
+};
 
 const API_BASE_URL = 'https://api.perplexity.ai';
 
@@ -200,7 +209,8 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
     callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
-    errorMessage?: string
+    errorMessage?: string,
+    promptType?: string
   ): void {
     void usageLogger.log({
       userId,
@@ -211,6 +221,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
       success,
       ...(errorMessage !== undefined && { errorMessage }),
       ...(ownerType !== undefined && { ownerType }),
+      ...(promptType !== undefined && { promptType }),
     });
   }
 
@@ -294,7 +305,10 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
       }
     },
 
-    async generate(prompt: string): Promise<Result<GenerateResult, PerplexityError>> {
+    async generate(
+      prompt: string,
+      options: GenerateOptions
+    ): Promise<Result<GenerateResult, PerplexityError>> {
       try {
         const requestBody: PerplexityRequestBody = {
           model,
@@ -331,7 +345,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
             totalTokens: 0,
             costUsd: 0,
           };
-          trackUsage('generate', emptyUsage, false, errorMsg);
+          trackUsage('generate', emptyUsage, false, errorMsg, options.promptType);
           return err(mapPerplexityError(apiError));
         }
 
@@ -340,7 +354,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
         const content = data.choices[0]?.message.content ?? '';
         const usage = extractUsage(data.usage);
 
-        trackUsage('generate', usage, true);
+        trackUsage('generate', usage, true, undefined, options.promptType);
 
         return ok({ content, usage });
       } catch (error) {
@@ -351,7 +365,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('generate', emptyUsage, false, errorMsg);
+        trackUsage('generate', emptyUsage, false, errorMsg, options.promptType);
         return err(mapPerplexityError(error));
       }
     },

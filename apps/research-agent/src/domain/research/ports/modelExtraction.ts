@@ -37,8 +37,16 @@ export interface TextGenerationResult {
 }
 
 /**
+ * Options for text generation.
+ */
+export interface TextGenerationOptions {
+  /** Semantic identifier for the prompt type */
+  promptType: string;
+}
+
+/**
  * Simple text generation client for model extraction.
  */
 export interface TextGenerationClient {
-  generate(prompt: string): Promise<Result<TextGenerationResult, TextGenerationError>>;
+  generate(prompt: string, options: TextGenerationOptions): Promise<Result<TextGenerationResult, TextGenerationError>>;
 }

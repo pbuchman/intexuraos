@@ -143,7 +143,7 @@ export function createCalendarActionExtractionService(
         'Sending LLM generation request'
       );
 
-      const result = await llmClient.generate(prompt);
+      const result = await llmClient.generate(prompt, { promptType: 'calendar-action-extraction' });
 
       if (!result.ok) {
         const llmError = result.error;
@@ -167,12 +167,12 @@ export function createCalendarActionExtractionService(
       log.info(
         {
           userId,
-          responseLength: result.value.content.length,
+          responseLength: result.value.content.length, // @allow-result-access -- ok checked at line 148
         },
         'LLM generation successful'
       );
 
-      const parseResult = parseAndValidateResponse(result.value.content);
+      const parseResult = parseAndValidateResponse(result.value.content); // @allow-result-access -- ok checked at line 148
 
       if (parseResult.success) {
         log.info(
@@ -214,7 +214,7 @@ export function createCalendarActionExtractionService(
           'Sending repair prompt'
         );
 
-        const repairResult = await llmClient.generate(repairPrompt);
+        const repairResult = await llmClient.generate(repairPrompt, { promptType: 'calendar-action-extraction-repair' });
 
         if (!repairResult.ok) {
           log.error(
@@ -233,12 +233,12 @@ export function createCalendarActionExtractionService(
           {
             userId,
             repairAttempt: attempt + 1,
-            responseLength: repairResult.value.content.length,
+            responseLength: repairResult.value.content.length, // @allow-result-access -- ok checked at line 219
           },
           'Repair LLM generation successful'
         );
 
-        const repairParseResult = parseAndValidateResponse(repairResult.value.content);
+        const repairParseResult = parseAndValidateResponse(repairResult.value.content); // @allow-result-access -- ok checked at line 219
 
         if (repairParseResult.success) {
           log.info(

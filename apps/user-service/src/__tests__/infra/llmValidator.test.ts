@@ -332,7 +332,10 @@ describe('LlmValidatorImpl', () => {
         if (result.ok) {
           expect(result.value.content).toBe('Hello from Gemini!');
         }
-        expect(mockClient.generate).toHaveBeenCalledWith(testPrompt);
+        expect(mockClient.generate).toHaveBeenCalledWith(
+          testPrompt,
+          expect.objectContaining({ promptType: 'user-service-validation' })
+        );
       });
 
       it('returns API_ERROR when test fails', async () => {
@@ -445,7 +448,10 @@ describe('LlmValidatorImpl', () => {
         if (result.ok) {
           expect(result.value.content).toBe('Hello from Perplexity!');
         }
-        expect(mockClient.generate).toHaveBeenCalledWith(testPrompt);
+        expect(mockClient.generate).toHaveBeenCalledWith(
+          testPrompt,
+          expect.objectContaining({ promptType: 'user-service-validation' })
+        );
       });
 
       it('returns API_ERROR when test fails', async () => {
@@ -484,7 +490,10 @@ describe('LlmValidatorImpl', () => {
         if (result.ok) {
           expect(result.value.content).toBe('Hello from OpenRouter!');
         }
-        expect(mockClient.generate).toHaveBeenCalledWith(testPrompt);
+        expect(mockClient.generate).toHaveBeenCalledWith(
+          testPrompt,
+          expect.objectContaining({ promptType: 'user-service-validation' })
+        );
       });
 
       it('returns API_ERROR when test fails', async () => {

@@ -27,7 +27,7 @@ export class GeminiIntentInterpreter implements IntentInterpreter {
   ): Promise<InterpretedIntent> {
     const prompt = interpretImposePrompt.build({ utterance, currentState });
 
-    const result = await this.client.generate(prompt);
+    const result = await this.client.generate(prompt, { promptType: 'hellscript-intent-interpretation' });
 
     if (!result.ok) {
       logger.warn({ error: result.error }, 'LLM interpretation failed, using fallback');

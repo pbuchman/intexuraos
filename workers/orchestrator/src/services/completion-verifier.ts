@@ -657,7 +657,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     let parseResult: z.SafeParseReturnType<unknown, unknown> | undefined;
 
     for (const { client, modelName } of allModels) {
-      const result = await client.generate(prompt);
+      const result = await client.generate(prompt, { promptType: 'completion-verification' });
       if (!result.ok) {
         this.logger.warn(
           {
@@ -896,7 +896,9 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     prompt: string,
     taskId: string
   ): Promise<Awaited<ReturnType<LlmGenerateClient['generate']>> & { modelName: string }> {
-    const result = await this.primaryClient.generate(prompt);
+    const result = await this.primaryClient.generate(prompt, {
+      promptType: 'resume-summary-extraction',
+    });
     if (result.ok) {
       return { ...result, modelName: this.primaryModelName };
     }
@@ -912,7 +914,9 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     );
 
     for (const fallback of this.fallbacks) {
-      const fallbackResult = await fallback.client.generate(prompt);
+      const fallbackResult = await fallback.client.generate(prompt, {
+        promptType: 'resume-summary-extraction',
+      });
       if (fallbackResult.ok) {
         this.logger.info(
           { taskId, model: fallback.modelName },

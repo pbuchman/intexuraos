@@ -44,19 +44,19 @@ import type { GeminiConfig, GeminiError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 import { resolveVertexRedirectUrls } from './vertexUrlResolver.js';
 
-export interface GeminiClient extends LLMClient {
+export interface GeminiClient extends Omit<LLMClient, 'generate'> {
   /**
    * Generates text completion without web search.
    *
    * Uses only the model's training data. Faster and cheaper than research.
    *
    * @param prompt - The input prompt for generation
-   * @param options - Optional generation options including promptType for usage tracking
+   * @param options - Generation options including promptType for usage tracking
    * @returns Promise resolving to {@link GenerateResult} or {@link GeminiError}
    */
   generate(
     prompt: string,
-    options?: { promptType?: string }
+    options: { promptType: string }
   ): Promise<Result<GenerateResult, GeminiError>>;
 }
 
@@ -123,7 +123,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 
     async generate(
       prompt: string,
-      options?: { promptType?: string }
+      options: { promptType: string }
     ): Promise<Result<GenerateResult, GeminiError>> {
       try {
         const response = await ai.models.generateContent({ model, contents: prompt });
@@ -133,7 +133,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
         const usage = normalizeUsage(inputTokens, outputTokens, false, thinkingTokens);
 
-        trackUsage('generate', usage, true, undefined, options?.promptType);
+        trackUsage('generate', usage, true, undefined, options.promptType);
 
         return ok({ content: text, usage });
       } catch (error) {
@@ -144,7 +144,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('generate', emptyUsage, false, errorMsg, options?.promptType);
+        trackUsage('generate', emptyUsage, false, errorMsg, options.promptType);
         return err(mapGeminiError(error));
       }
     },

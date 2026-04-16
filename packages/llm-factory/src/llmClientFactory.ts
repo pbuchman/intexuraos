@@ -90,7 +90,7 @@ export interface GenerateResult {
  */
 export interface GenerateOptions {
   /** Semantic identifier for the prompt type (e.g., 'linear-issue-title', 'code-worker-validation') */
-  promptType?: string;
+  promptType: string;
 }
 
 /**
@@ -101,10 +101,10 @@ export interface LlmGenerateClient {
   /**
    * Generate text using the LLM.
    * @param prompt - Text prompt to send to the LLM
-   * @param options - Optional generation options including promptType for usage tracking
+   * @param options - Generation options including promptType for usage tracking
    * @returns Result with content and usage, or error
    */
-  generate(prompt: string, options?: GenerateOptions): Promise<Result<GenerateResult, LLMError>>;
+  generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, LLMError>>;
 }
 
 /**

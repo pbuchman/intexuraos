@@ -59,8 +59,8 @@ async function attemptRepair(
   invalidResponse: string,
   parseError: ParseError,
   url: string,
-  title: string | undefined,
-  description: string | undefined,
+  title: string | undefined, // @allow-undefined-type -- function parameter, not interface property
+  description: string | undefined, // @allow-undefined-type -- function parameter, not interface property
   logger: Logger
 ): Promise<Result<PageSummary, PageSummaryError>> {
   logger.warn(
@@ -77,7 +77,7 @@ async function attemptRepair(
     ...(description !== undefined && { description }),
   });
 
-  const repairResult = await llmClient.generate(repairPrompt);
+  const repairResult = await llmClient.generate(repairPrompt, { promptType: 'page-summary-repair' });
 
   if (!repairResult.ok) {
     return err({
@@ -98,17 +98,17 @@ async function attemptRepair(
     });
   }
 
-  const estimatedReadingMinutes = calculateReadingMinutes(parsed.value.wordCount);
+  const estimatedReadingMinutes = calculateReadingMinutes(parsed.value.wordCount); // @allow-result-access -- ok checked at line 90
 
   logger.info(
-    { wordCount: parsed.value.wordCount, estimatedReadingMinutes },
+    { wordCount: parsed.value.wordCount, estimatedReadingMinutes }, // @allow-result-access -- ok checked at line 90
     'Summary repair successful'
   );
 
   return ok({
     url,
-    summary: parsed.value.summary,
-    wordCount: parsed.value.wordCount,
+    summary: parsed.value.summary, // @allow-result-access -- ok checked at line 90
+    wordCount: parsed.value.wordCount, // @allow-result-access -- ok checked at line 90
     estimatedReadingMinutes,
   });
 }
@@ -153,7 +153,7 @@ export function createLlmSummarizer(logger: Logger): LlmSummarizer {
       const fullPrompt = `${prompt}\n\nContent to summarize:\n${content}`;
 
       // Generate summary
-      const result = await llmClient.generate(fullPrompt);
+      const result = await llmClient.generate(fullPrompt, { promptType: 'page-summary' });
 
       if (!result.ok) {
         logger.error({ error: result.error.message }, 'LLM generation failed');
@@ -171,7 +171,7 @@ export function createLlmSummarizer(logger: Logger): LlmSummarizer {
         return await attemptRepair(
           llmClient,
           content,
-          result.value.content,
+          result.value.content, // @allow-result-access -- ok checked 16 lines above
           parsed.error,
           options.url,
           options.title,
@@ -180,22 +180,22 @@ export function createLlmSummarizer(logger: Logger): LlmSummarizer {
         );
       }
 
-      const estimatedReadingMinutes = calculateReadingMinutes(parsed.value.wordCount);
+      const estimatedReadingMinutes = calculateReadingMinutes(parsed.value.wordCount); // @allow-result-access -- ok checked at line 169
 
       logger.info(
         {
           url: options.url,
-          wordCount: parsed.value.wordCount,
+          wordCount: parsed.value.wordCount, // @allow-result-access -- ok checked at line 169
           estimatedReadingMinutes,
-          summaryLength: parsed.value.summary.length,
+          summaryLength: parsed.value.summary.length, // @allow-result-access -- ok checked at line 169
         },
         'LLM summarization completed successfully'
       );
 
       return ok({
         url: options.url,
-        summary: parsed.value.summary,
-        wordCount: parsed.value.wordCount,
+        summary: parsed.value.summary, // @allow-result-access -- ok checked at line 169
+        wordCount: parsed.value.wordCount, // @allow-result-access -- ok checked at line 169
         estimatedReadingMinutes,
       });
     },

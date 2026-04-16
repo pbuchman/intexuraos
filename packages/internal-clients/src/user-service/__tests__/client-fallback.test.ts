@@ -103,7 +103,9 @@ describe('getLlmClient fallback behavior', () => {
 
     if (!result.ok) expect.fail('Expected ok result');
 
-    const generateResult = await result.value.generate('test prompt');
+    const generateResult = await result.value.generate('test prompt', {
+      promptType: 'test-prompt',
+    });
 
     expect(generateResult.ok).toBe(true);
     if (generateResult.ok) {
@@ -132,7 +134,9 @@ describe('getLlmClient fallback behavior', () => {
 
     if (!result.ok) expect.fail('Expected ok result');
 
-    const generateResult = await result.value.generate('test prompt');
+    const generateResult = await result.value.generate('test prompt', {
+      promptType: 'test-prompt',
+    });
 
     expect(generateResult.ok).toBe(true);
     if (generateResult.ok) {
@@ -163,7 +167,9 @@ describe('getLlmClient fallback behavior', () => {
 
     if (!result.ok) expect.fail('Expected ok result');
 
-    const generateResult = await result.value.generate('test prompt');
+    const generateResult = await result.value.generate('test prompt', {
+      promptType: 'test-prompt',
+    });
 
     expect(generateResult.ok).toBe(false);
     if (!generateResult.ok) {
@@ -191,7 +197,9 @@ describe('getLlmClient fallback behavior', () => {
 
     if (!result.ok) expect.fail('Expected ok result');
 
-    const generateResult = await result.value.generate('test prompt');
+    const generateResult = await result.value.generate('test prompt', {
+      promptType: 'test-prompt',
+    });
 
     expect(generateResult.ok).toBe(false);
     if (!generateResult.ok) {
@@ -240,7 +248,9 @@ describe('getLlmClient fallback behavior', () => {
     if (!result.ok) expect.fail('Expected ok result');
 
     // Unlisted model fails isDefaultEligibleModel → no wrapping → primary error returned directly
-    const generateResult = await result.value.generate('test prompt');
+    const generateResult = await result.value.generate('test prompt', {
+      promptType: 'test-prompt',
+    });
 
     expect(generateResult.ok).toBe(false);
     if (!generateResult.ok) {
@@ -288,7 +298,9 @@ describe('getLlmClient fallback behavior', () => {
 
     if (!result.ok) expect.fail('Expected ok result');
 
-    const generateResult = await result.value.generate('test prompt');
+    const generateResult = await result.value.generate('test prompt', {
+      promptType: 'test-prompt',
+    });
 
     expect(generateResult.ok).toBe(false);
     if (!generateResult.ok) {
@@ -348,7 +360,7 @@ describe('getLlmClient ownerType tagging', () => {
     if (!result.ok) expect.fail(`Expected ok, got ${JSON.stringify(result.error)}`);
 
     // Trigger fallback so buildClientForModel is invoked
-    await result.value.generate('test prompt');
+    await result.value.generate('test prompt', { promptType: 'test-prompt' });
 
     // Two calls: primary (call site 3) and fallback (call site 2 inside buildClientForModel)
     expect(mockCreateLlmClient).toHaveBeenCalledTimes(2);
