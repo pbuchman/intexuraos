@@ -1,6 +1,11 @@
 import { createOpenRouterClient } from '@intexuraos/infra-openrouter';
 import { getOpenRouterRawId, isOpenRouterModel } from '@intexuraos/llm-contract';
-import type { LlmClientConfig, LlmGenerateClient, GenerateResult } from './llmClientFactory.js';
+import type {
+  LlmClientConfig,
+  LlmGenerateClient,
+  GenerateResult,
+  GenerateOptions,
+} from './llmClientFactory.js';
 import type { LLMError } from '@intexuraos/llm-contract';
 import type { Result } from '@intexuraos/common-core';
 
@@ -19,8 +24,11 @@ export function createOpenRouterGenerateClient(config: LlmClientConfig): LlmGene
   });
 
   return {
-    async generate(prompt: string): Promise<Result<GenerateResult, LLMError>> {
-      return await orClient.generate(prompt);
+    async generate(
+      prompt: string,
+      options: GenerateOptions
+    ): Promise<Result<GenerateResult, LLMError>> {
+      return await orClient.generate(prompt, options);
     },
   };
 }

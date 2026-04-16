@@ -61,7 +61,7 @@ export class InputValidationAdapter implements InputValidationProvider {
   async validateInput(prompt: string): Promise<Result<ValidationResult, LlmError>> {
     this.logger.info({ model: this.model, promptLength: prompt.length }, 'Input validation started');
     const builtPrompt = inputQualityPrompt.build({ prompt });
-    const result = await this.client.generate(builtPrompt);
+    const result = await this.client.generate(builtPrompt, { promptType: 'research-input-validation' });
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -99,7 +99,7 @@ export class InputValidationAdapter implements InputValidationProvider {
   async improveInput(prompt: string): Promise<Result<ImprovementResult, LlmError>> {
     this.logger.info({ model: this.model, promptLength: prompt.length }, 'Input improvement started');
     const builtPrompt = inputImprovementPrompt.build({ prompt });
-    const result = await this.client.generate(builtPrompt);
+    const result = await this.client.generate(builtPrompt, { promptType: 'research-input-improvement' });
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -150,7 +150,7 @@ export class InputValidationAdapter implements InputValidationProvider {
     );
 
     const repairPrompt = buildValidationRepairPrompt(originalPrompt, invalidResponse, errorMessage);
-    const result = await this.client.generate(repairPrompt);
+    const result = await this.client.generate(repairPrompt, { promptType: 'research-input-validation-repair' });
 
     if (!result.ok) {
       return {
@@ -218,7 +218,7 @@ export class InputValidationAdapter implements InputValidationProvider {
     );
 
     const repairPrompt = buildImprovementRepairPrompt(originalPrompt, invalidResponse, errorMessage);
-    const result = await this.client.generate(repairPrompt);
+    const result = await this.client.generate(repairPrompt, { promptType: 'research-input-improvement-repair' });
 
     if (!result.ok) {
       return {

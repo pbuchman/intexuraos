@@ -444,7 +444,7 @@ describe('createOpenRouterClient', () => {
         usageSink: mockUsageSink,
       });
 
-      await client.generate('Write something');
+      await client.generate('Write something', { promptType: 'test-prompt' });
 
       // Verify NO :online suffix for synthesis
       expect(capturedBody?.['model']).toBe(TEST_MODEL);
@@ -476,7 +476,7 @@ describe('createOpenRouterClient', () => {
         usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -516,7 +516,7 @@ describe('createOpenRouterClient', () => {
         usageSink: mockUsageSink,
       });
 
-      await client.generate('Write something');
+      await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -537,7 +537,7 @@ describe('createOpenRouterClient', () => {
         usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -556,7 +556,7 @@ describe('createOpenRouterClient', () => {
         usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -575,7 +575,7 @@ describe('createOpenRouterClient', () => {
         usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -594,7 +594,7 @@ describe('createOpenRouterClient', () => {
         usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -613,7 +613,7 @@ describe('createOpenRouterClient', () => {
         usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -632,7 +632,7 @@ describe('createOpenRouterClient', () => {
         usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -666,7 +666,7 @@ describe('createOpenRouterClient', () => {
         usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -705,7 +705,10 @@ describe('createOpenRouterClient', () => {
         usageSink: mockUsageSink,
       });
 
-      await client.generate('Return JSON', { responseFormat: { type: 'json_object' } });
+      await client.generate('Return JSON', {
+        responseFormat: { type: 'json_object' },
+        promptType: 'test-prompt',
+      });
 
       expect(capturedBody).toHaveProperty('response_format', { type: 'json_object' });
     });
@@ -741,7 +744,7 @@ describe('createOpenRouterClient', () => {
         usageSink: mockUsageSink,
       });
 
-      await client.generate('Write something');
+      await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(capturedBody).not.toHaveProperty('response_format');
     });
@@ -766,7 +769,7 @@ describe('createOpenRouterClient', () => {
         usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       // Should return empty content when choices is empty
       expect(result.ok).toBe(true);
@@ -803,7 +806,7 @@ describe('createOpenRouterClient', () => {
         usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('hello');
+      const result = await client.generate('hello', { promptType: 'test-prompt' });
       expect(result.ok).toBe(true);
 
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
@@ -837,7 +840,7 @@ describe('createOpenRouterClient', () => {
         usageSink: mockUsageSink,
       });
 
-      await client.generate('hello');
+      await client.generate('hello', { promptType: 'test-prompt' });
 
       const callArg = mockUsageLoggerLog.mock.calls[0]?.[0] as Record<string, unknown>;
       expect(callArg['providerReportedUsd']).toBeUndefined();
@@ -908,7 +911,7 @@ describe('createOpenRouterClient', () => {
         usageSink: fakeSink,
       });
 
-      await client.generate('ping');
+      await client.generate('ping', { promptType: 'test-prompt' });
 
       expect(createUsageLogger).toHaveBeenCalledWith(expect.objectContaining({ sink: fakeSink }));
     });
@@ -1043,7 +1046,7 @@ describe('createOpenRouterClient', () => {
       usageSink: mockUsageSink,
       ownerType: 'user',
     });
-    await client.generate('hello');
+    await client.generate('hello', { promptType: 'test-prompt' });
 
     expect(mockUsageLoggerLog).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'user' }));
   });
@@ -1103,7 +1106,7 @@ describe('createOpenRouterClient', () => {
       );
     });
 
-    it('omits promptType when not provided', async () => {
+    it('passes promptType to usage logger', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions')
         .reply(200, {
@@ -1129,10 +1132,10 @@ describe('createOpenRouterClient', () => {
         usageSink: mockUsageSink,
       });
 
-      await client.generate('hello');
+      await client.generate('hello', { promptType: 'test-prompt' });
 
       const callArg = mockUsageLoggerLog.mock.calls[0]?.[0] as Record<string, unknown>;
-      expect(callArg['promptType']).toBeUndefined();
+      expect(callArg['promptType']).toBe('test-prompt');
     });
   });
 });

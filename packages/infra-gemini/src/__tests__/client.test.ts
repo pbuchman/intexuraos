@@ -56,7 +56,7 @@ describe('createGeminiClient', () => {
       usageSink,
     });
 
-    await client.generate('hello');
+    await client.generate('hello', { promptType: 'test-prompt' });
 
     expect(createUsageLogger).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -346,7 +346,7 @@ describe('createGeminiClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -373,7 +373,7 @@ describe('createGeminiClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      await client.generate('Write something');
+      await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -396,7 +396,7 @@ describe('createGeminiClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -414,7 +414,7 @@ describe('createGeminiClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -439,7 +439,7 @@ describe('createGeminiClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -465,7 +465,7 @@ describe('createGeminiClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -489,7 +489,7 @@ describe('createGeminiClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -519,7 +519,7 @@ describe('createGeminiClient', () => {
       );
     });
 
-    it('omits promptType in usage log when not provided', async () => {
+    it('passes promptType to usage log when provided', async () => {
       mockGenerateContent.mockResolvedValue({
         text: 'Generated text.',
         usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 100 },
@@ -532,17 +532,15 @@ describe('createGeminiClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      await client.generate('Write something');
+      await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           callType: 'generate',
           success: true,
+          promptType: 'test-prompt',
         })
       );
-      // Verify promptType was NOT in the call
-      const callArgs = mockUsageLoggerLog.mock.calls[0]?.[0];
-      expect(callArgs?.promptType).toBeUndefined();
     });
 
     it('passes promptType to usage logger on error', async () => {
@@ -832,7 +830,7 @@ describe('createGeminiClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test');
+      const result = await client.generate('Test', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -850,7 +848,7 @@ describe('createGeminiClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test');
+      const result = await client.generate('Test', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -868,7 +866,7 @@ describe('createGeminiClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test');
+      const result = await client.generate('Test', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -886,7 +884,7 @@ describe('createGeminiClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test');
+      const result = await client.generate('Test', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -998,7 +996,7 @@ describe('createGeminiClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test');
+      const result = await client.generate('Test', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -1098,7 +1096,7 @@ describe('createGeminiClient', () => {
       usageSink: mockUsageSink,
       ownerType: 'user',
     });
-    await client.generate('hello');
+    await client.generate('hello', { promptType: 'test-prompt' });
 
     expect(mockUsageLoggerLog).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'user' }));
   });

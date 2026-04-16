@@ -460,7 +460,9 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
       | (Awaited<ReturnType<LlmGenerateClient['generate']>> & { modelName: string })
       | undefined;
     for (const [i, entry] of this.entries.entries()) {
-      const result = await entry.client.generate(prompt);
+      const result = await entry.client.generate(prompt, {
+        promptType: 'agent-compliance-validation',
+      });
       lastResult = { ...result, modelName: entry.modelName };
       if (result.ok) {
         if (i > 0) {

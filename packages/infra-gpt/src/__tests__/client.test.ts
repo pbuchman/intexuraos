@@ -307,7 +307,7 @@ describe('createGptClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -334,7 +334,7 @@ describe('createGptClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      await client.generate('Write something');
+      await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -357,7 +357,7 @@ describe('createGptClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -375,7 +375,7 @@ describe('createGptClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -563,7 +563,7 @@ describe('createGptClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test');
+      const result = await client.generate('Test', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -737,7 +737,7 @@ describe('createGptClient', () => {
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test prompt');
+      const result = await client.generate('Test prompt', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -825,8 +825,28 @@ describe('createGptClient', () => {
       usageSink: mockUsageSink,
       ownerType: 'user',
     });
-    await client.generate('hello');
+    await client.generate('hello', { promptType: 'test-prompt' });
 
     expect(mockUsageLoggerLog).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'user' }));
+  });
+
+  it('passes promptType to usage logger', async () => {
+    mockChatCompletionsCreate.mockResolvedValue({
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 5, completion_tokens: 5 },
+    });
+
+    const client = createGptClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+    await client.generate('hello', { promptType: 'test-prompt' });
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ promptType: 'test-prompt' })
+    );
   });
 });

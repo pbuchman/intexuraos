@@ -165,7 +165,7 @@ export interface SynthesisInput {
  *
  * @example
  * ```ts
- * const result = await client.generate('Explain TypeScript');
+ * const result = await client.generate('Explain TypeScript', { promptType: 'ts-explanation' });
  * if (!result.ok) {
  *   switch (result.error.code) {
  *     case 'RATE_LIMITED':
@@ -174,7 +174,7 @@ export interface SynthesisInput {
  *       break;
  *     case 'CONTEXT_LENGTH':
  *       // Truncate prompt and retry
- *       return await client.generate(prompt.slice(0, -1000));
+ *       return await client.generate(prompt.slice(0, -1000), { promptType: 'ts-explanation' });
  *     case 'INVALID_KEY':
  *       // Log configuration error
  *       logger.error('Invalid API key configured');
@@ -245,7 +245,7 @@ export interface LLMError {
  * }
  *
  * // Simple generation
- * const result = await client.generate('Explain TypeScript in one sentence');
+ * const result = await client.generate('Explain TypeScript in one sentence', { promptType: 'ts-explanation' });
  * if (result.ok) {
  *   console.log(result.data.content);
  * } else {
@@ -275,9 +275,13 @@ export interface LLMClient {
    * Uses only the model's training data. Faster and cheaper than research.
    *
    * @param prompt - The input prompt for generation
+   * @param options - Generation options including promptType for usage tracking
    * @returns Promise resolving to {@link GenerateResult} or {@link LLMError}
    */
-  generate(prompt: string): Promise<Result<GenerateResult, LLMError>>;
+  generate(
+    prompt: string,
+    options: { promptType: string }
+  ): Promise<Result<GenerateResult, LLMError>>;
 
   /**
    * Generates an image from a text description.

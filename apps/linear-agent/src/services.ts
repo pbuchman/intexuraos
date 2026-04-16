@@ -90,7 +90,7 @@ export function initServices(config: ServiceConfig): void {
     userServiceClient,
     codeAgentClient,
     createClassifier: (llmClient: LlmGenerateClient): IssuePruningClassifier =>
-      createIssuePruningClassifier({ generate: (prompt) => llmClient.generate(prompt), logger }),
+      createIssuePruningClassifier({ generate: (prompt) => llmClient.generate(prompt, { promptType: 'issue-pruning-classification' }), logger }),
     pruneCandidateRepository: createPruneCandidateRepository(),
   };
 }
