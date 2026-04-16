@@ -1320,4 +1320,199 @@ describe('derivePipeline pr.status', () => {
     const pipeline = derivePipeline(tasks);
     expect(pipeline.pr?.status).toBe('open');
   });
+
+  // Sibling-PR contamination: plan PR and execution PR share one Linear issue.
+  // handlePrClose sets prMergedAt on whichever task matches the merged PR's prNumber.
+  // The merge-actionable gate and the badge must scope their terminal-state checks to
+  // the task that owns the PR the group currently acts on, not any task in the group.
+  // These tests go through groupByLinearIssue so tasks are sorted by updatedAt desc as
+  // derivePipeline's caller contract requires.
+
+  it('shows actionable merge step when plan PR is merged but execution PR is still open', () => {
+    const execLinearIssue = {
+      identifier: 'INT-1393',
+      title: 'Test',
+      state: { name: 'In Review', type: 'started' },
+      priority: 2,
+      assignee: null,
+      labels: [{ name: 'ready-to-merge' }],
+      url: 'https://linear.app/INT-1393',
+      commentCount: 0,
+      lastCommentAt: null,
+    };
+    const tasks: SerializedTask[] = [
+      makeTask({
+        id: 'task-plan',
+        linearIssueId: 'INT-1393',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: '2026-04-16T19:38:48.000Z',
+        updatedAt: '2026-04-16T20:16:19.000Z',
+        prNumber: 1840,
+        implementationTaskId: 'task-exec',
+        result: { prUrl: 'https://github.com/owner/repo/pull/1840' },
+      }),
+      makeTask({
+        id: 'task-plan-review',
+        linearIssueId: 'INT-1393',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: '2026-04-16T20:09:20.000Z',
+        updatedAt: '2026-04-16T20:17:10.000Z',
+        prNumber: 1840,
+        prMergedAt: '2026-04-16T20:14:18.000Z',
+        result: { needs_remediation: '0', prUrl: 'https://github.com/owner/repo/pull/1840' },
+      }),
+      makeTask({
+        id: 'task-exec',
+        linearIssueId: 'INT-1393',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-04-16T20:14:19.000Z',
+        updatedAt: '2026-04-16T20:41:51.000Z',
+        result: { prUrl: 'https://github.com/owner/repo/pull/1841' },
+        linearIssue: execLinearIssue,
+      }),
+      makeTask({
+        id: 'task-exec-review',
+        linearIssueId: 'INT-1393',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: '2026-04-16T20:37:24.000Z',
+        updatedAt: '2026-04-16T20:46:07.000Z',
+        prNumber: 1841,
+        result: { needs_remediation: '0', prUrl: 'https://github.com/owner/repo/pull/1841' },
+        linearIssue: execLinearIssue,
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    const mergeStep = groups[0]?.pipeline.steps.find((s) => s.agentType === 'merge');
+    expect(mergeStep).toBeDefined();
+    expect(mergeStep?.state).toBe('actionable');
+  });
+
+  it('PR badge reflects execution PR (1841) mergeable state, not the sibling plan PR that is merged', () => {
+    const execLinearIssue = {
+      identifier: 'INT-1393',
+      title: 'Test',
+      state: { name: 'In Review', type: 'started' },
+      priority: 2,
+      assignee: null,
+      labels: [{ name: 'ready-to-merge' }],
+      url: 'https://linear.app/INT-1393',
+      commentCount: 0,
+      lastCommentAt: null,
+    };
+    const tasks: SerializedTask[] = [
+      makeTask({
+        id: 'task-plan-review',
+        linearIssueId: 'INT-1393',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: '2026-04-16T20:09:20.000Z',
+        updatedAt: '2026-04-16T20:17:10.000Z',
+        prNumber: 1840,
+        prMergedAt: '2026-04-16T20:14:18.000Z',
+        result: { needs_remediation: '0', prUrl: 'https://github.com/owner/repo/pull/1840' },
+      }),
+      makeTask({
+        id: 'task-exec',
+        linearIssueId: 'INT-1393',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-04-16T20:14:19.000Z',
+        updatedAt: '2026-04-16T20:41:51.000Z',
+        result: { prUrl: 'https://github.com/owner/repo/pull/1841' },
+        linearIssue: execLinearIssue,
+      }),
+      makeTask({
+        id: 'task-exec-review',
+        linearIssueId: 'INT-1393',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: '2026-04-16T20:37:24.000Z',
+        updatedAt: '2026-04-16T20:46:07.000Z',
+        prNumber: 1841,
+        result: { needs_remediation: '0', prUrl: 'https://github.com/owner/repo/pull/1841' },
+        linearIssue: execLinearIssue,
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    expect(groups[0]?.pipeline.pr?.number).toBe('1841');
+    expect(groups[0]?.pipeline.pr?.status).toBe('mergeable');
+  });
+
+  it('removes merge step and marks PR merged once the execution PR is itself merged', () => {
+    const execLinearIssue = {
+      identifier: 'INT-1393',
+      title: 'Test',
+      state: { name: 'QA', type: 'started' },
+      priority: 2,
+      assignee: null,
+      // handlePrClose removes ready-to-merge post-merge
+      labels: [{ name: 'code-task' }],
+      url: 'https://linear.app/INT-1393',
+      commentCount: 0,
+      lastCommentAt: null,
+    };
+    const tasks: SerializedTask[] = [
+      makeTask({
+        id: 'task-plan-review',
+        linearIssueId: 'INT-1393',
+        agentType: 'review',
+        status: 'reviewed',
+        createdAt: '2026-04-16T20:09:20.000Z',
+        updatedAt: '2026-04-16T20:17:10.000Z',
+        prNumber: 1840,
+        prMergedAt: '2026-04-16T20:14:18.000Z',
+        result: { needs_remediation: '0', prUrl: 'https://github.com/owner/repo/pull/1840' },
+      }),
+      makeTask({
+        id: 'task-exec',
+        linearIssueId: 'INT-1393',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-04-16T20:14:19.000Z',
+        updatedAt: '2026-04-16T20:41:51.000Z',
+        prMergedAt: '2026-04-16T21:17:52.000Z',
+        result: { prUrl: 'https://github.com/owner/repo/pull/1841' },
+        linearIssue: execLinearIssue,
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    expect(groups[0]?.pipeline.steps.find((s) => s.agentType === 'merge')).toBeUndefined();
+    expect(groups[0]?.pipeline.pr?.number).toBe('1841');
+    expect(groups[0]?.pipeline.pr?.status).toBe('merged');
+  });
+
+  it('alt-unlock (remediation path) does NOT create merge step after the execution PR is merged', () => {
+    // Mirrors Path 1/Path 3 invariants: merge action is invalid once the exec PR is terminal.
+    const tasks: SerializedTask[] = [
+      makeTask({
+        id: 'task-exec',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-04-15T10:00:00.000Z',
+        updatedAt: '2026-04-15T10:00:00.000Z',
+        prMergedAt: '2026-04-15T13:00:00.000Z',
+        result: { prUrl: 'https://github.com/org/repo/pull/42' },
+      }),
+      makeTask({
+        id: 'task-rem',
+        linearIssueId: 'INT-100',
+        agentType: 'remediation',
+        status: 'implemented',
+        createdAt: '2026-04-15T11:00:00.000Z',
+        updatedAt: '2026-04-15T11:00:00.000Z',
+        requiresReReview: false,
+      }),
+    ];
+
+    const groups = groupByLinearIssue(tasks);
+    expect(groups[0]?.pipeline.steps.find((s) => s.agentType === 'merge')).toBeUndefined();
+  });
 });

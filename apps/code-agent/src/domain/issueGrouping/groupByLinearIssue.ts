@@ -88,10 +88,15 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
   // Guard: do not show merge button while any task is actively processing
   const hasActiveTask = tasks.some((t) => ACTIVE_STATUSES.has(t.status));
 
-  // Authoritative PR terminal state — the Linear ready-to-merge label may lag
-  // after handlePrClose, so prMergedAt/prClosedAt take precedence.
-  const isMerged = tasks.some((t) => t.prMergedAt !== undefined);
-  const isClosed = tasks.some((t) => t.prClosedAt !== undefined);
+  // Identify the task that owns the group's representative PR. A single Linear
+  // issue can have sibling PRs (e.g. plan PR merged, execution PR still open);
+  // the merge step and PR badge must scope terminal state to one PR, otherwise
+  // a merged plan PR poisons the open execution PR's gate.
+  const prOwnerTask = tasks.find(
+    (t) => t.status !== 'archived' && t.result?.prUrl !== undefined,
+  );
+  const isMerged = prOwnerTask?.prMergedAt !== undefined;
+  const isClosed = prOwnerTask?.prClosedAt !== undefined;
   const isPrClosedOrMerged = isMerged || isClosed;
 
   // Merge-ready logic: if execution step is completed, PR exists, and ready-to-merge label present
@@ -116,6 +121,7 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
   // requiresReReview=false still tells us the group is merge-ready.
   if (
     !hasActiveTask &&
+    !isPrClosedOrMerged &&
     executionEntry?.step.state === 'completed' &&
     executionEntry.task.result?.prUrl !== undefined &&
     !steps.some((s) => s.agentType === 'merge')
@@ -156,30 +162,26 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     });
   }
 
-  // PR step -- extract from first non-archived task that has a prUrl
+  // PR step -- derive from prOwnerTask (same task used for terminal-state detection above)
   let pr: PipelineState['pr'] = null;
-  for (const task of tasks) {
-    if (task.status === 'archived') continue;
-    const prUrl = task.result?.prUrl;
-    if (prUrl !== undefined) {
-      const match = PR_URL_REGEX.exec(prUrl);
-      if (match?.[1] !== undefined) {
-        const hasMergeStep = steps.some((s) => s.agentType === 'merge' && s.state === 'actionable');
+  const ownerPrUrl = prOwnerTask?.result?.prUrl;
+  if (ownerPrUrl !== undefined) {
+    const match = PR_URL_REGEX.exec(ownerPrUrl);
+    if (match?.[1] !== undefined) {
+      const hasMergeStep = steps.some((s) => s.agentType === 'merge' && s.state === 'actionable');
 
-        let status: 'open' | 'merged' | 'closed' | 'mergeable';
-        if (isMerged) {
-          status = 'merged';
-        } else if (isClosed) {
-          status = 'closed';
-        } else if (hasMergeStep) {
-          status = 'mergeable';
-        } else {
-          status = 'open';
-        }
-
-        pr = { url: prUrl, number: match[1], status };
-        break;
+      let status: 'open' | 'merged' | 'closed' | 'mergeable';
+      if (isMerged) {
+        status = 'merged';
+      } else if (isClosed) {
+        status = 'closed';
+      } else if (hasMergeStep) {
+        status = 'mergeable';
+      } else {
+        status = 'open';
       }
+
+      pr = { url: ownerPrUrl, number: match[1], status };
     }
   }
 
