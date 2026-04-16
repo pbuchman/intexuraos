@@ -159,7 +159,7 @@ describe('CodeTaskLogViewer integration', () => {
     expect(copyButton).toBeDefined();
   });
 
-  it('claude filter button has aria-pressed attribute', () => {
+  it('worker filter button has aria-pressed attribute', () => {
     const props = makeProps({
       logs: [makeLog(1, '[claude] Some claude output with https://example.com/filter')],
     });
@@ -167,12 +167,12 @@ describe('CodeTaskLogViewer integration', () => {
     render(<CodeTaskLogViewer {...props} />);
 
     const buttons = screen.getAllByRole('button');
-    const claudeButton = buttons.find((b) => b.textContent?.trim() === 'Claude');
-    expect(claudeButton).toBeDefined();
-    expect(claudeButton).toHaveAttribute('aria-pressed', 'false');
+    const workerButton = buttons.find((b) => b.textContent?.trim() === 'Worker');
+    expect(workerButton).toBeDefined();
+    expect(workerButton).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('when claude filter is active, only claude-tagged lines (with links) are shown', async () => {
+  it('when worker filter is active, only claude-tagged lines (with links) are shown', async () => {
     const claudeUrl = 'https://example.com/claude-line';
     const otherUrl = 'https://example.com/other-line';
     const logs: LogLine[] = [
@@ -186,15 +186,40 @@ describe('CodeTaskLogViewer integration', () => {
     expect(screen.getByRole('link', { name: claudeUrl })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: otherUrl })).toBeInTheDocument();
 
-    // Activate the Claude filter
+    // Activate the Worker filter
     const buttons = screen.getAllByRole('button');
-    const claudeButton = buttons.find((b) => b.textContent?.trim() === 'Claude');
-    if (claudeButton === undefined) throw new Error('Claude filter button not found');
-    await userEvent.click(claudeButton);
+    const workerButton = buttons.find((b) => b.textContent?.trim() === 'Worker');
+    if (workerButton === undefined) throw new Error('Worker filter button not found');
+    await userEvent.click(workerButton);
 
     // Only the claude-tagged line should remain visible
     expect(screen.getByRole('link', { name: claudeUrl })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: otherUrl })).not.toBeInTheDocument();
+  });
+
+  it('when worker filter is active, lines tagged [msg] are also shown', async () => {
+    const msgUrl = 'https://example.com/msg-line';
+    const toolUrl = 'https://example.com/tool-line';
+    const logs: LogLine[] = [
+      makeLog(1, `[msg] Message output: ${msgUrl}`),
+      makeLog(2, `[tool] Tool output: ${toolUrl}`),
+    ];
+
+    render(<CodeTaskLogViewer {...makeProps({ logs })} />);
+
+    // Both links visible before filter
+    expect(screen.getByRole('link', { name: msgUrl })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: toolUrl })).toBeInTheDocument();
+
+    // Activate the Worker filter
+    const buttons = screen.getAllByRole('button');
+    const workerButton = buttons.find((b) => b.textContent?.trim() === 'Worker');
+    if (workerButton === undefined) throw new Error('Worker filter button not found');
+    await userEvent.click(workerButton);
+
+    // Both msg and tool lines are shown, but tool is filtered out (only msg remains)
+    expect(screen.getByRole('link', { name: msgUrl })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: toolUrl })).not.toBeInTheDocument();
   });
 
   it('collapsible blocks still work correctly when log lines contain URLs', async () => {
