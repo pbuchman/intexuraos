@@ -14,6 +14,7 @@ const {
   buildExecutionPrompt,
   buildPullRequestPrompt,
   buildReviewPrompt,
+  buildRemediationPrompt,
   buildResumeSummaryPrompt,
   getLast50Lines,
   getLast50ClaudeLines,
@@ -608,8 +609,8 @@ describe('buildPlanningPrompt', () => {
     expect(prompt).toContain(
       'LLM agent delivers its summary in one of the last assistant messages'
     );
-    expect(prompt).toContain('Sample Linear URL format');
-    expect(prompt).toContain('Sample PR URL format');
+    expect(prompt).toContain('Linear URL format example');
+    expect(prompt).toContain('GitHub PR URL format example');
   });
 });
 
@@ -2166,6 +2167,245 @@ describe('verify — fatal exit code pre-check', () => {
     expect(result.passed).toBe(true);
     expect(generateMock).toHaveBeenCalledOnce();
   });
+});
+
+// ---------------------------------------------------------------------------
+// verify — fatal exit code pre-check via lastExitCode input
+// ---------------------------------------------------------------------------
+
+describe('verify — fatal exit code via lastExitCode input', () => {
+  it.each([
+    { exitCode: 137, signal: 'SIGKILL' },
+    { exitCode: 139, signal: 'SIGSEGV' },
+  ])(
+    'short-circuits for lastExitCode=$exitCode ($signal) without calling any model',
+    async ({ exitCode }) => {
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: `task-lastexit-${String(exitCode)}`,
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'execution',
+        rawLogs: 'worker made no terminal entrypoint log before being killed externally',
+        lastExitCode: exitCode,
+      });
+      expect(result.passed).toBe(false);
+      expect(result.missingFields).toEqual([`fatal_exit_code_${String(exitCode)}`]);
+      expect(result.verifierFailure).toBe(false);
+      expect(result.agentData).toBeUndefined();
+      expect(generateMock).not.toHaveBeenCalled();
+    }
+  );
+
+  it('proceeds to verification for lastExitCode=0', async () => {
+    generateMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify({
+          outcome: 'planned',
+          superpowers_writing_plans: 'used',
+          linear_url: 'https://linear.app/pbuchman/issue/INT-100',
+          is_complex: '0',
+          has_plan_doc: '0',
+          subtask_urls: '',
+          pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
+          summary: 'Planned.',
+          unclear_clarification: '',
+        }),
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+      },
+    });
+    const verifier = createVerifier();
+    const result = await verifier.verify({
+      taskId: 'task-exit-zero',
+      attempt: 1,
+      maxAttempts: 5,
+      agentType: 'planning',
+      rawLogs: 'output',
+      lastExitCode: 0,
+    });
+    expect(result.passed).toBe(true);
+    expect(generateMock).toHaveBeenCalledOnce();
+  });
+
+  it('proceeds to verification when lastExitCode is undefined', async () => {
+    generateMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify({
+          outcome: 'planned',
+          superpowers_writing_plans: 'used',
+          linear_url: 'https://linear.app/pbuchman/issue/INT-100',
+          is_complex: '0',
+          has_plan_doc: '0',
+          subtask_urls: '',
+          pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
+          summary: 'Planned.',
+          unclear_clarification: '',
+        }),
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+      },
+    });
+    const verifier = createVerifier();
+    const result = await verifier.verify({
+      taskId: 'task-exit-undefined',
+      attempt: 1,
+      maxAttempts: 5,
+      agentType: 'planning',
+      rawLogs: 'output',
+    });
+    expect(result.passed).toBe(true);
+    expect(generateMock).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// verify — succeededModelName threading
+// ---------------------------------------------------------------------------
+
+describe('verify — succeededModelName', () => {
+  const validPlanningContent = JSON.stringify({
+    outcome: 'planned',
+    superpowers_writing_plans: 'used',
+    linear_url: 'https://linear.app/pbuchman/issue/INT-100',
+    is_complex: '0',
+    has_plan_doc: '0',
+    subtask_urls: '',
+    pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
+    summary: 'Planned.',
+    unclear_clarification: '',
+  });
+
+  it('reports the primary model name when primary succeeds', async () => {
+    generateMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: validPlanningContent,
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+      },
+    });
+    const verifier = createVerifier({ primaryModelName: 'or:google/gemma-4-31b-it:free' });
+    const result = await verifier.verify({
+      taskId: 'task-primary',
+      attempt: 1,
+      maxAttempts: 5,
+      agentType: 'planning',
+      rawLogs: 'logs',
+    });
+    expect(result.passed).toBe(true);
+    expect(result.succeededModelName).toBe('or:google/gemma-4-31b-it:free');
+  });
+
+  it('reports the fallback model name when primary fails and fallback succeeds', async () => {
+    const fallbackGenerate = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: validPlanningContent,
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+      },
+    });
+    generateMock.mockResolvedValueOnce({
+      ok: false,
+      error: { code: 'API_ERROR', message: 'primary down' },
+    });
+    const verifier = createVerifier({
+      primaryModelName: 'or:google/gemma-4-31b-it:free',
+      fallbackClients: [{ generate: fallbackGenerate }],
+      fallbackModelNames: ['gemini-2.5-flash'],
+    });
+    const result = await verifier.verify({
+      taskId: 'task-fallback-name',
+      attempt: 1,
+      maxAttempts: 5,
+      agentType: 'planning',
+      rawLogs: 'logs',
+    });
+    expect(result.passed).toBe(true);
+    expect(result.succeededModelName).toBe('gemini-2.5-flash');
+  });
+
+  it('reports the model name even on schema validation failure', async () => {
+    generateMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify({ outcome: 'planned' }), // missing required fields
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+      },
+    });
+    const verifier = createVerifier({ primaryModelName: 'or:google/gemma-4-31b-it:free' });
+    const result = await verifier.verify({
+      taskId: 'task-schema-fail',
+      attempt: 1,
+      maxAttempts: 5,
+      agentType: 'planning',
+      rawLogs: 'logs',
+    });
+    expect(result.passed).toBe(false);
+    expect(result.succeededModelName).toBe('or:google/gemma-4-31b-it:free');
+  });
+
+  it('leaves succeededModelName undefined when all models fail to generate', async () => {
+    generateMock.mockResolvedValueOnce({
+      ok: false,
+      error: { code: 'API_ERROR', message: 'primary down' },
+    });
+    const verifier = createVerifier({ primaryModelName: 'or:google/gemma-4-31b-it:free' });
+    const result = await verifier.verify({
+      taskId: 'task-all-fail',
+      attempt: 1,
+      maxAttempts: 5,
+      agentType: 'planning',
+      rawLogs: 'logs',
+    });
+    expect(result.passed).toBe(false);
+    expect(result.verifierFailure).toBe(true);
+    expect(result.succeededModelName).toBeUndefined();
+  });
+
+  it('leaves succeededModelName undefined on fatal exit code short-circuit', async () => {
+    const verifier = createVerifier();
+    const result = await verifier.verify({
+      taskId: 'task-fatal',
+      attempt: 1,
+      maxAttempts: 5,
+      agentType: 'execution',
+      rawLogs: 'output\n[entrypoint] Claude attempt finished with exit code: 137\n',
+    });
+    expect(result.passed).toBe(false);
+    expect(result.succeededModelName).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// prompt examples — no anchoring URLs
+// ---------------------------------------------------------------------------
+
+describe('prompt examples contain no real repo/issue URLs', () => {
+  const forbiddenFragments = [
+    'pbuchman/intexuraos/pull/944',
+    'pbuchman/intexuraos/pull/901',
+    'pbuchman/intexuraos/pull/950',
+    'INT-631',
+    'INT-632',
+    'INT-633',
+  ];
+
+  const builders = [
+    { name: 'buildPlanningPrompt', build: buildPlanningPrompt },
+    { name: 'buildExecutionPrompt', build: buildExecutionPrompt },
+    { name: 'buildPullRequestPrompt', build: buildPullRequestPrompt },
+    { name: 'buildReviewPrompt', build: buildReviewPrompt },
+    { name: 'buildRemediationPrompt', build: buildRemediationPrompt },
+  ] as const;
+
+  for (const { name, build } of builders) {
+    for (const fragment of forbiddenFragments) {
+      it(`${name} prompt does not contain "${fragment}"`, () => {
+        const prompt = build('sample transcript');
+        expect(prompt).not.toContain(fragment);
+      });
+    }
+  }
 });
 
 // ---------------------------------------------------------------------------
