@@ -4082,6 +4082,56 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(getResult.value.callbackReceived).toBe(true);
     });
 
+    it('persists error.remediation when orchestrator includes it on failed webhook', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'user-123',
+        prompt: 'Task that fails with remediation hint',
+        sanitizedPrompt: 'Task that fails with remediation hint',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_remediation_persist',
+        webhookSecret: 'test-webhook-secret',
+        agentType: 'execution',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const task = createResult.value;
+
+      const payload = {
+        taskId: task.id,
+        status: 'failed' as const,
+        error: {
+          code: 'TASK_EXIT_CODE_OVERRIDE',
+          message: 'Non-zero exit code (255) overrides verifier passed decision',
+          remediation: { action: 'retry' as const },
+        },
+      };
+
+      const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/webhooks/task-complete',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const getResult = await codeTaskRepo.findById(task.id);
+      expect(getResult.ok).toBe(true);
+      if (!getResult.ok) throw new Error('Failed to get task');
+      expect(getResult.value.status).toBe('failed');
+      expect(getResult.value.error?.code).toBe('TASK_EXIT_CODE_OVERRIDE');
+      expect(getResult.value.error?.remediation?.action).toBe('retry');
+    });
+
     it('populates prNumber and prBranch from result.prUrl on completion (INT-465)', async () => {
       const createResult = await codeTaskRepo.create({
         userId: 'user-123',
