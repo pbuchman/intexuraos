@@ -131,7 +131,8 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     usage: NormalizedUsage,
     success: boolean,
     errorMessage?: string,
-    providerReportedUsd?: number | null
+    providerReportedUsd?: number | null,
+    promptType?: string
   ): void {
     void usageLogger.log({
       userId,
@@ -144,6 +145,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       ...(providerReportedUsd !== undefined &&
         providerReportedUsd !== null && { providerReportedUsd }),
       ...(ownerType !== undefined && { ownerType }),
+      ...(promptType !== undefined && { promptType }),
     });
   }
 
@@ -303,7 +305,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             totalTokens: 0,
             costUsd: 0,
           };
-          trackUsage('generate', emptyUsage, false, errorMsg);
+          trackUsage('generate', emptyUsage, false, errorMsg, undefined, options?.promptType);
           return err(mapOpenRouterError(apiError));
         }
 
@@ -321,7 +323,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         const content = firstChoice.message.content;
         const { normalized, providerReportedUsd } = extractUsage(data.usage);
 
-        trackUsage('generate', normalized, true, undefined, providerReportedUsd);
+        trackUsage('generate', normalized, true, undefined, providerReportedUsd, options?.promptType);
 
         return ok({ content, usage: normalized });
       } catch (error) {
@@ -332,7 +334,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('generate', emptyUsage, false, errorMsg);
+        trackUsage('generate', emptyUsage, false, errorMsg, undefined, options?.promptType);
         return err(mapOpenRouterError(error));
       }
     },
