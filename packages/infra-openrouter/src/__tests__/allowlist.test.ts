@@ -11,7 +11,7 @@ import { LlmModels } from '@intexuraos/llm-contract';
 
 describe('allowlist', () => {
   describe('OPENROUTER_ALLOWED_MODELS', () => {
-    it('has exactly 14 entries', () => {
+    it('has exactly 15 entries', () => {
       expect(OPENROUTER_ALLOWED_MODELS).toHaveLength(15);
     });
 
