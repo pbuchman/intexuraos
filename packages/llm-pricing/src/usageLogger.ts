@@ -62,6 +62,8 @@ export interface UsageLogParams {
   clientName?: string;
   /** Cost reported by the provider (e.g. OpenRouter usage.cost). When set, the receiver records pricingSource: 'provider_reported'. */
   providerReportedUsd?: number | null;
+  /** Semantic identifier for what the prompt was used for (e.g. 'linear-issue-title', 'code-worker-validation') */
+  promptType?: string;
 }
 
 /**
@@ -139,6 +141,7 @@ export class UsageLogger {
         costUsd: params.usage.costUsd,
         success: params.success,
         ...(params.errorMessage !== undefined && { errorMessage: params.errorMessage }),
+        ...(params.promptType !== undefined && { promptType: params.promptType }),
       },
       'LLM usage logged'
     );

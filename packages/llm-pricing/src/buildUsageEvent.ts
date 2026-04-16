@@ -59,6 +59,7 @@ export function buildUsageEvent(
       operation: params.callType,
       success: params.success,
       durationMs: 0, // Not tracked at the UsageLogParams level; NormalizedUsage carries token counts only
+      ...(params.promptType !== undefined && { promptType: params.promptType }),
     },
     usage: {
       inputTokens: params.usage.inputTokens,
