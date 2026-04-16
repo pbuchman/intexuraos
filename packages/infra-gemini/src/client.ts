@@ -44,7 +44,21 @@ import type { GeminiConfig, GeminiError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 import { resolveVertexRedirectUrls } from './vertexUrlResolver.js';
 
-export type GeminiClient = LLMClient;
+export interface GeminiClient extends LLMClient {
+  /**
+   * Generates text completion without web search.
+   *
+   * Uses only the model's training data. Faster and cheaper than research.
+   *
+   * @param prompt - The input prompt for generation
+   * @param options - Optional generation options including promptType for usage tracking
+   * @returns Promise resolving to {@link GenerateResult} or {@link GeminiError}
+   */
+  generate(
+    prompt: string,
+    options?: { promptType?: string }
+  ): Promise<Result<GenerateResult, GeminiError>>;
+}
 
 const IMAGE_MODEL = LlmModels.Gemini25FlashImage;
 
@@ -57,7 +71,8 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
     callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
-    errorMessage?: string
+    errorMessage?: string,
+    promptType?: string
   ): void {
     void usageLogger.log({
       userId,
@@ -68,6 +83,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       success,
       ...(errorMessage !== undefined && { errorMessage }),
       ...(ownerType !== undefined && { ownerType }),
+      ...(promptType !== undefined && { promptType }),
     });
   }
 
@@ -105,7 +121,10 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       }
     },
 
-    async generate(prompt: string): Promise<Result<GenerateResult, GeminiError>> {
+    async generate(
+      prompt: string,
+      options?: { promptType?: string }
+    ): Promise<Result<GenerateResult, GeminiError>> {
       try {
         const response = await ai.models.generateContent({ model, contents: prompt });
         const text = response.text ?? '';
@@ -114,7 +133,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
         const usage = normalizeUsage(inputTokens, outputTokens, false, thinkingTokens);
 
-        trackUsage('generate', usage, true);
+        trackUsage('generate', usage, true, undefined, options?.promptType);
 
         return ok({ content: text, usage });
       } catch (error) {
@@ -125,7 +144,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('generate', emptyUsage, false, errorMsg);
+        trackUsage('generate', emptyUsage, false, errorMsg, options?.promptType);
         return err(mapGeminiError(error));
       }
     },

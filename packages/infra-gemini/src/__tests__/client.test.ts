@@ -496,6 +496,74 @@ describe('createGeminiClient', () => {
         expect(result.value.usage.thinkingTokens).toBeUndefined();
       }
     });
+
+    it('passes promptType to usage logger when provided', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Generated text.',
+        usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 100 },
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('Write something', { promptType: 'linear-issue-title' });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          promptType: 'linear-issue-title',
+        })
+      );
+    });
+
+    it('omits promptType in usage log when not provided', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Generated text.',
+        usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 100 },
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('Write something');
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'generate',
+          success: true,
+        })
+      );
+      // Verify promptType was NOT in the call
+      const callArgs = mockUsageLoggerLog.mock.calls[0]?.[0];
+      expect(callArgs?.promptType).toBeUndefined();
+    });
+
+    it('passes promptType to usage logger on error', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('API error'));
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('Write something', { promptType: 'code-validation' });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          promptType: 'code-validation',
+          success: false,
+        })
+      );
+    });
   });
 
   describe('generateImage', () => {

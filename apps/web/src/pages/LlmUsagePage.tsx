@@ -16,7 +16,7 @@ import { resolveOpenRouterModelName } from '@/utils/openRouterModelNames';
 
 // --- Types ---
 
-type GroupByMode = 'none' | 'day' | 'component' | 'service' | 'model' | 'openrouter-model';
+type GroupByMode = 'none' | 'day' | 'component' | 'service' | 'model' | 'openrouter-model' | 'promptType';
 
 interface SortState {
   field: UsageEventSortField;
@@ -53,6 +53,7 @@ const GROUP_BY_MAP: Record<GroupByMode, string[]> = {
   service: ['source.service'],
   model: ['request.model'],
   'openrouter-model': ['request.provider', 'request.model'],
+  promptType: ['request.promptType'],
 };
 
 const GROUP_BY_OPTIONS: { key: GroupByMode; label: string }[] = [
@@ -62,6 +63,7 @@ const GROUP_BY_OPTIONS: { key: GroupByMode; label: string }[] = [
   { key: 'service', label: 'Service' },
   { key: 'model', label: 'Model' },
   { key: 'openrouter-model', label: 'OpenRouter Model' },
+  { key: 'promptType', label: 'Prompt Type' },
 ];
 
 // "Most expensive" / "Most tokens" sorts are intentionally omitted:
@@ -116,7 +118,7 @@ function isSortState(v: unknown): v is SortState {
 }
 
 function isGroupByMode(v: unknown): v is GroupByMode {
-  return typeof v === 'string' && ['none', 'day', 'component', 'service', 'model', 'openrouter-model'].includes(v);
+  return typeof v === 'string' && ['none', 'day', 'component', 'service', 'model', 'openrouter-model', 'promptType'].includes(v);
 }
 
 // --- Defaults ---
@@ -369,6 +371,7 @@ function RawEventsList({ events, loading, loadingMore, hasMore, error, onLoadMor
             <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">Model</th>
             <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">Component</th>
             <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">Service</th>
+            <th className="py-2 pr-4 text-left font-medium text-slate-500 dark:text-slate-400">Prompt Type</th>
             <th className="py-2 pr-4 text-right font-medium text-slate-500 dark:text-slate-400">Tokens</th>
             <th className="py-2 text-right font-medium text-slate-500 dark:text-slate-400">Cost</th>
           </tr>
@@ -395,6 +398,7 @@ function RawEventsList({ events, loading, loadingMore, hasMore, error, onLoadMor
               <td className="py-2.5 pr-4 text-slate-600 dark:text-slate-300">{event.request.model}</td>
               <td className="py-2.5 pr-4 text-slate-600 dark:text-slate-300">{event.source.component}</td>
               <td className="py-2.5 pr-4 text-slate-600 dark:text-slate-300">{event.source.service}</td>
+              <td className="py-2.5 pr-4 text-slate-600 dark:text-slate-300">{event.request.promptType ?? '-'}</td>
               <td className="py-2.5 pr-4 text-right font-mono text-slate-700 dark:text-slate-300">{formatTokens(event.usage.totalTokens)}</td>
               <td className="py-2.5 text-right font-mono text-slate-700 dark:text-slate-300">{formatCost(event.cost.billedUsd)}</td>
             </tr>

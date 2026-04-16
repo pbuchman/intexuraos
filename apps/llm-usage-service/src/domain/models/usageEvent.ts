@@ -40,6 +40,7 @@ export interface UsageEvent {
       | 'other';
     success: boolean;
     durationMs: number;
+    promptType?: string;
   };
 
   usage: {

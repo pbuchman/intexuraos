@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LlmProviders } from '@intexuraos/llm-contract';
+import { LlmProviders, LlmModels } from '@intexuraos/llm-contract';
 import { buildUsageEvent } from '../buildUsageEvent.js';
 import type { UsageLogParams } from '../usageLogger.js';
 
@@ -10,6 +10,14 @@ interface EventForTests {
   cost: {
     providerReportedUsd: number | null;
     pricingSource: string;
+  };
+  request: {
+    provider: string;
+    model: string;
+    operation: string;
+    success: boolean;
+    durationMs: number;
+    promptType?: string;
   };
   [k: string]: unknown;
 }
@@ -84,5 +92,44 @@ describe('buildUsageEvent', () => {
     ) as EventForTests;
     expect(event.cost.providerReportedUsd).toBeNull();
     expect(event.cost.pricingSource).toBe('pending');
+  });
+});
+
+describe('buildUsageEvent with promptType', () => {
+  it('should include promptType in request field when provided', () => {
+    const params = {
+      userId: 'user-123',
+      provider: LlmProviders.Google,
+      model: LlmModels.Gemini25Flash,
+      callType: 'generate' as const,
+      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
+      success: true,
+      promptType: 'linear-issue-title',
+    };
+
+    const event = buildUsageEvent(params, {
+      service: 'linear-agent',
+      component: 'llm-client',
+    }) as EventForTests;
+
+    expect(event.request.promptType).toBe('linear-issue-title');
+  });
+
+  it('should omit promptType when not provided', () => {
+    const params = {
+      userId: 'user-123',
+      provider: LlmProviders.Google,
+      model: LlmModels.Gemini25Flash,
+      callType: 'generate' as const,
+      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
+      success: true,
+    };
+
+    const event = buildUsageEvent(params, {
+      service: 'linear-agent',
+      component: 'llm-client',
+    }) as EventForTests;
+
+    expect(event.request.promptType).toBeUndefined();
   });
 });

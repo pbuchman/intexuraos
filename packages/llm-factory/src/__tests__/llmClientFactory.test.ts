@@ -229,6 +229,36 @@ describe('llmClientFactory', () => {
     });
   });
 
+  describe('LlmGenerateClient.generate with options', () => {
+    it('should accept promptType in generate options', async () => {
+      const client = createLlmClient({
+        apiKey: 'test-key',
+        model: LlmModels.Gemini25Flash,
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      // Mock the generate to return success
+      mockGeminiGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: 'test response',
+          usage: {
+            inputTokens: 10,
+            outputTokens: 5,
+            totalTokens: 15,
+            costUsd: 0.001,
+          },
+        },
+      });
+
+      // Should accept options with promptType
+      const result = await client.generate('test prompt', { promptType: 'linear-issue-title' });
+      expect(result.ok).toBe(true);
+    });
+  });
+
   describe('isSupportedProvider', () => {
     it('returns true for Google provider', () => {
       expect(isSupportedProvider(LlmProviders.Google)).toBe(true);

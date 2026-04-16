@@ -85,6 +85,7 @@ export const usageEventInputSchema = {
         },
         success: { type: 'boolean' },
         durationMs: { type: 'number', minimum: 0 },
+        promptType: { type: 'string' },
       },
     },
     usage: {
