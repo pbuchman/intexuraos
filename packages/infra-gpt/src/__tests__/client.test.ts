@@ -829,4 +829,24 @@ describe('createGptClient', () => {
 
     expect(mockUsageLoggerLog).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'user' }));
   });
+
+  it('passes promptType to usage logger', async () => {
+    mockChatCompletionsCreate.mockResolvedValue({
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 5, completion_tokens: 5 },
+    });
+
+    const client = createGptClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+    await client.generate('hello', { promptType: 'test-prompt' });
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ promptType: 'test-prompt' })
+    );
+  });
 });
