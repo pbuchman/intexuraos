@@ -105,7 +105,7 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
       { content: prompt },
       { wordRange: { min: 5, max: 8 } }
     );
-    const result = await this.client.generate(builtPrompt, { promptType: 'research-context-build' });
+    const result = await this.client.generate(builtPrompt, { promptType: 'research-title-generation' });
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);

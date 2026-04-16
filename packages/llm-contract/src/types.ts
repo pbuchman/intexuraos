@@ -165,7 +165,7 @@ export interface SynthesisInput {
  *
  * @example
  * ```ts
- * const result = await client.generate('Explain TypeScript');
+ * const result = await client.generate('Explain TypeScript', { promptType: 'ts-explanation' });
  * if (!result.ok) {
  *   switch (result.error.code) {
  *     case 'RATE_LIMITED':
@@ -174,7 +174,7 @@ export interface SynthesisInput {
  *       break;
  *     case 'CONTEXT_LENGTH':
  *       // Truncate prompt and retry
- *       return await client.generate(prompt.slice(0, -1000));
+ *       return await client.generate(prompt.slice(0, -1000), { promptType: 'ts-explanation' });
  *     case 'INVALID_KEY':
  *       // Log configuration error
  *       logger.error('Invalid API key configured');
@@ -245,7 +245,7 @@ export interface LLMError {
  * }
  *
  * // Simple generation
- * const result = await client.generate('Explain TypeScript in one sentence');
+ * const result = await client.generate('Explain TypeScript in one sentence', { promptType: 'ts-explanation' });
  * if (result.ok) {
  *   console.log(result.data.content);
  * } else {
