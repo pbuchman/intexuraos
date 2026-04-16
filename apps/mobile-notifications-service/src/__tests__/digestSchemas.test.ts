@@ -211,11 +211,9 @@ describe('GroupStateSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('identityLedger entry with invalid role rejects', () => {
-    const result = GroupStateSchema.safeParse({
-      ...minimalGroupState,
-      identityLedger: [{ sender: 'Alice', firstSeen: '2024-01-01', totalMessages: 1, activeDays: 1, role: 'admin' }],
-    });
+  it('rejects when updatedAt is missing', () => {
+    const { updatedAt: _, ...withoutUpdatedAt } = minimalGroupState;
+    const result = GroupStateSchema.safeParse(withoutUpdatedAt);
     expect(result.success).toBe(false);
   });
 });
