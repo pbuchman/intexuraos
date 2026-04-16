@@ -26,6 +26,11 @@ export interface CompletionVerifierInput {
   maxAttempts: number;
   agentType: CompletionAgentType;
   rawLogs: string;
+  /** Exit code of the worker process if known (Docker exit code). When set to
+   *  137 (SIGKILL) or 139 (SIGSEGV), verification short-circuits without
+   *  calling any LLM — used to catch cases where the entrypoint was killed
+   *  externally and never wrote its own exit-code line. */
+  lastExitCode?: number;
   executionMemoryContext?: ExecutionMemoryPromptContext;
 }
 
@@ -46,6 +51,10 @@ export interface CompletionVerifierVerdict {
     | PullRequestAgentData
     | ReviewAgentData
     | RemediationAgentData;
+  /** Model name that produced the response. Undefined when no model produced
+   *  content (all generate() calls failed) or when the short-circuit on
+   *  fatal exit codes fires before any model is called. */
+  succeededModelName?: string;
   trace: CompletionVerifierTrace;
 }
 
@@ -257,8 +266,8 @@ function sharedPreamble(): string[] {
     '- Analyze the transcript from the END toward the beginning. The most recent output takes priority — e.g. pnpm run ci:tracked may have failed and then succeeded; the expected result is the final outcome.',
     '- The LLM agent delivers its summary in one of the last assistant messages.',
     '- superpowers_writing_plans: "used" only if the agent explicitly claims it invoked the writing-plans superpowers skill.',
-    '- Sample Linear URL format: https://linear.app/pbuchman/issue/INT-631/feature-introduce-github-webhook-agent-ownership-orchestration',
-    '- Sample PR URL format: https://github.com/pbuchman/intexuraos/pull/944',
+    '- Linear URL format example (DO NOT copy this URL; extract the real one from the transcript): https://linear.app/example-org/issue/EXAMPLE-1/example-issue-slug',
+    '- GitHub PR URL format example (DO NOT copy this URL; extract the real one from the transcript): https://github.com/example-org/example-repo/pull/999',
     '',
   ];
 }
@@ -284,8 +293,8 @@ export function buildPlanningPrompt(transcript: string): string {
     '- summary: concise bullet-point summary (markdown *, max 5-6 points) of what happened — the LLM agent typically states this clearly as a summary block in its final output',
     '- unclear_clarification: required when outcome is "unclear" — the message explaining why; empty string if outcome is "planned"',
     '',
-    'Example valid response:',
-    '{"outcome":"planned","superpowers_writing_plans":"used","linear_url":"https://linear.app/pbuchman/issue/INT-631/feature-introduce-github-webhook-agent-ownership-orchestration","is_complex":"1","has_plan_doc":"1","subtask_urls":"https://linear.app/pbuchman/issue/INT-632/subtask-one,https://linear.app/pbuchman/issue/INT-633/subtask-two","pr_url":"https://github.com/pbuchman/intexuraos/pull/944","memory_ids_used":"mem_142","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the planning memory to keep the implementation split aligned with prior architecture.","summary":"* Analyzed task requirements for the GitHub webhook agent ownership feature\\n* Decided on a complex implementation requiring parallel subtasks\\n* Created 5 child issues covering API endpoints, database schema, and test strategy\\n* Produced a plan PR with the full implementation design","unclear_clarification":""}',
+    'Example valid response (placeholder URLs — do NOT copy these; extract real ones from the transcript):',
+    '{"outcome":"planned","superpowers_writing_plans":"used","linear_url":"https://linear.app/example-org/issue/EXAMPLE-1/example-issue-slug","is_complex":"1","has_plan_doc":"1","subtask_urls":"https://linear.app/example-org/issue/EXAMPLE-2/example-subtask-a,https://linear.app/example-org/issue/EXAMPLE-3/example-subtask-b","pr_url":"https://github.com/example-org/example-repo/pull/999","memory_ids_used":"mem_142","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the planning memory to keep the implementation split aligned with prior architecture.","summary":"* Analyzed task requirements\\n* Decided on a complex implementation requiring parallel subtasks\\n* Created 5 child issues covering API endpoints, database schema, and test strategy\\n* Produced a plan PR with the full implementation design","unclear_clarification":""}',
     '',
     'Transcript (last 50 lines):',
     transcript,
@@ -309,9 +318,9 @@ export function buildExecutionPrompt(transcript: string): string {
     '- memory_usage_summary: one-sentence summary of how the memories helped or why they were rejected (string, empty string if not found)',
     '- summary: concise bullet-point summary (markdown *, max 5-6 points) of what was implemented — the LLM agent typically states this clearly as a summary block in its final output',
     '',
-    'Example valid responses:',
-    '{"outcome":"implemented","superpowers_subagent_driven_dev":"used","superpowers_requesting_code_review":"used","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","memory_ids_used":"mem_142,mem_155","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the route logging and coverage memories to keep the callback fix aligned with existing verification patterns.","summary":"* Implemented the feature with 3 new API endpoints and updated database schema\\n* CI passed on the first attempt\\n* Created PR targeting the development branch"}',
-    '{"outcome":"already_completed","superpowers_subagent_driven_dev":"used","superpowers_requesting_code_review":"not used","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/950","memory_ids_used":"","memory_ids_rejected":"mem_188","memory_usage_summary":"Rejected the supplied memory because the codebase already matched the current repo state.","summary":"* Discovered the requested work was already implemented and merged into development\\n* Verified all tests pass and the feature is present in the codebase\\n* Created evidence PR documenting completion"}',
+    'Example valid responses (placeholder URLs — do NOT copy these; extract real ones from the transcript):',
+    '{"outcome":"implemented","superpowers_subagent_driven_dev":"used","superpowers_requesting_code_review":"used","gh_pr_url":"https://github.com/example-org/example-repo/pull/999","memory_ids_used":"mem_142,mem_155","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the route logging and coverage memories to keep the callback fix aligned with existing verification patterns.","summary":"* Implemented the feature with 3 new API endpoints and updated database schema\\n* CI passed on the first attempt\\n* Created PR targeting the development branch"}',
+    '{"outcome":"already_completed","superpowers_subagent_driven_dev":"used","superpowers_requesting_code_review":"not used","gh_pr_url":"https://github.com/example-org/example-repo/pull/998","memory_ids_used":"","memory_ids_rejected":"mem_188","memory_usage_summary":"Rejected the supplied memory because the codebase already matched the current repo state.","summary":"* Discovered the requested work was already implemented and merged into development\\n* Verified all tests pass and the feature is present in the codebase\\n* Created evidence PR documenting completion"}',
     '',
     'Transcript (last 50 lines):',
     transcript,
@@ -334,8 +343,8 @@ export function buildPullRequestPrompt(transcript: string): string {
     '- memory_usage_summary: one-sentence summary of how injected memories influenced the PR work, or empty string if none were injected',
     '- summary: concise bullet-point summary (markdown *, max 5-6 points) of what was done — the LLM agent typically states this clearly as a summary block in its final output',
     '',
-    'Example valid response:',
-    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","comments_replied":"yes","tracking_comment_id":"2345678","memory_ids_used":"mem_142","memory_ids_rejected":"","memory_usage_summary":"Used the injected PR memory to keep the replies aligned with existing workflow expectations.","summary":"* Addressed 3 review comments on PR #901\\n* Pushed code changes and CI passed\\n* All reviewer feedback resolved"}',
+    'Example valid response (placeholder URL — do NOT copy this; extract the real one from the transcript):',
+    '{"gh_pr_url":"https://github.com/example-org/example-repo/pull/999","comments_replied":"yes","tracking_comment_id":"2345678","memory_ids_used":"mem_142","memory_ids_rejected":"","memory_usage_summary":"Used the injected PR memory to keep the replies aligned with existing workflow expectations.","summary":"* Addressed 3 review comments on the PR\\n* Pushed code changes and CI passed\\n* All reviewer feedback resolved"}',
     '',
     'Transcript (last 50 lines):',
     transcript,
@@ -362,8 +371,8 @@ export function buildReviewPrompt(transcript: string): string {
     '- needs_remediation: "0" if the PR is clean or all findings are informational only, "1" if any finding requires code changes. Operational/manual verification steps (deploying migrations, running commands in environments, manual testing in dev/prod) are post-merge activities and do NOT count as code remediation',
     '- summary: concise bullet-point summary (markdown *, max 5-6 points) of the review findings — the LLM agent typically states this clearly as a summary block in its final output',
     '',
-    'Example valid response:',
-    '{"gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","review_id":"321654987","review_comments_posted":"3","review_types":"code_quality,security","memory_ids_used":"mem_142","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the injected review memory to validate the architecture findings against prior incidents.","requirements_tracker_updated":"yes","gh_actions_status":"all passed","needs_remediation":"1","summary":"* Reviewed PR #901 for code quality and security issues\\n* Found 3 issues: missing null check, unused import, and potential XSS vulnerability\\n* All findings posted as inline review comments"}',
+    'Example valid response (placeholder URL — do NOT copy this; extract the real one from the transcript):',
+    '{"gh_pr_url":"https://github.com/example-org/example-repo/pull/999","review_id":"321654987","review_comments_posted":"3","review_types":"code_quality,security","memory_ids_used":"mem_142","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the injected review memory to validate the architecture findings against prior incidents.","requirements_tracker_updated":"yes","gh_actions_status":"all passed","needs_remediation":"1","summary":"* Reviewed the PR for code quality and security issues\\n* Found 3 issues: missing null check, unused import, and potential XSS vulnerability\\n* All findings posted as inline review comments"}',
     '',
     'The review_id must be the numeric GitHub review ID created by the single POST /reviews call, not a comment ID. If the transcript does not contain it, omit review_id instead of inventing or blanking it.',
     '',
@@ -388,9 +397,9 @@ export function buildRemediationPrompt(transcript: string): string {
     '- requires_re_review: "1" if the agent decided the PR must be re-reviewed after the changes, "0" otherwise',
     '- summary: concise bullet-point summary (markdown *, max 5-6 points) of the remediation work — the LLM agent typically states this clearly as a summary block in its final output',
     '',
-    'Example valid responses:',
-    '{"outcome":"implemented","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","memory_ids_used":"mem_142","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the remediation memory to keep the fix scoped to the reviewed invariant.","requires_re_review":"1","summary":"* Addressed review findings on the existing PR branch and updated affected tests\\n* Pushed fixes to the PR\\n* Marked for re-review due to changes in reviewed areas"}',
-    '{"outcome":"already_completed","gh_pr_url":"https://github.com/pbuchman/intexuraos/pull/901","memory_ids_used":"","memory_ids_rejected":"mem_188","memory_usage_summary":"Rejected the supplied remediation memory because the fix was already present on the branch.","requires_re_review":"0","summary":"* Verified reported findings were already resolved on the PR branch\\n* No new code changes or push required"}',
+    'Example valid responses (placeholder URLs — do NOT copy these; extract real ones from the transcript):',
+    '{"outcome":"implemented","gh_pr_url":"https://github.com/example-org/example-repo/pull/999","memory_ids_used":"mem_142","memory_ids_rejected":"mem_188","memory_usage_summary":"Used the remediation memory to keep the fix scoped to the reviewed invariant.","requires_re_review":"1","summary":"* Addressed review findings on the existing PR branch and updated affected tests\\n* Pushed fixes to the PR\\n* Marked for re-review due to changes in reviewed areas"}',
+    '{"outcome":"already_completed","gh_pr_url":"https://github.com/example-org/example-repo/pull/999","memory_ids_used":"","memory_ids_rejected":"mem_188","memory_usage_summary":"Rejected the supplied remediation memory because the fix was already present on the branch.","requires_re_review":"0","summary":"* Verified reported findings were already resolved on the PR branch\\n* No new code changes or push required"}',
     '',
     'Transcript (last 50 lines):',
     transcript,
@@ -593,7 +602,9 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
   private async doVerify(input: CompletionVerifierInput): Promise<CompletionVerifierVerdict> {
     const transcript = getLast50Lines(input.rawLogs);
 
-    const fatalExitCode = detectFatalExitCode(input.rawLogs);
+    const directExitCode =
+      input.lastExitCode === 137 || input.lastExitCode === 139 ? input.lastExitCode : undefined;
+    const fatalExitCode = directExitCode ?? detectFatalExitCode(input.rawLogs);
     if (fatalExitCode !== undefined) {
       this.logger.warn(
         {
@@ -601,6 +612,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
           attempt: input.attempt,
           agentType: input.agentType,
           exitCode: fatalExitCode,
+          source: directExitCode !== undefined ? 'lastExitCode' : 'rawLogs',
         },
         'Fatal exit code detected — skipping completion verification'
       );
@@ -730,6 +742,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
           passed: false,
           missingFields,
           verifierFailure: false,
+          succeededModelName,
           trace: { transcript, prompt, response: lastGeneratedContent },
         };
       }
@@ -781,6 +794,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
           passed: false,
           missingFields: emptyMemoryFields,
           verifierFailure: false,
+          succeededModelName,
           trace: { transcript, prompt, response: lastGeneratedContent },
         };
       }
@@ -805,6 +819,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         passed: false,
         missingFields: memoryValidationFailures,
         verifierFailure: false,
+        succeededModelName,
         trace: { transcript, prompt, response: lastGeneratedContent },
       };
     }
@@ -824,6 +839,7 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       missingFields: [],
       verifierFailure: false,
       agentData,
+      succeededModelName,
       trace: { transcript, prompt, response: lastGeneratedContent },
     };
   }
