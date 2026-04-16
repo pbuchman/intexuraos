@@ -107,6 +107,25 @@ describe('OpenRouterAdapter', () => {
         usageSink: fakeUsageSink,
       });
     });
+
+    it('strips or: prefix for google/gemini-3-flash-preview', () => {
+      mockCreateOpenRouterClient.mockClear();
+      new OpenRouterAdapter(
+        'test-key',
+        'or:google/gemini-3-flash-preview',
+        'test-user-id',
+        mockLogger,
+        fakeUsageSink
+      );
+
+      expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
+        apiKey: 'test-key',
+        model: 'google/gemini-3-flash-preview',
+        userId: 'test-user-id',
+        logger: mockLogger,
+        usageSink: fakeUsageSink,
+      });
+    });
   });
 
   describe('research', () => {
