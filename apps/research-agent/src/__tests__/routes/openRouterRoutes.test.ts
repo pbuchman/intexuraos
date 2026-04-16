@@ -132,7 +132,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     expect(body.error?.code).toBe('NOT_FOUND');
   });
 
-  it('returns 14 models with live pricing when catalog fetch succeeds', async () => {
+  it('returns 15 models with live pricing when catalog fetch succeeds', async () => {
     fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
 
     const catalogData = OPENROUTER_ALLOWED_MODELS.map((m) => ({
@@ -158,7 +158,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
       data: { models: { id: string; contextLength: number; pricing: { inputPricePerMillion: number } }[]; cachedAt: string };
     };
     expect(body.success).toBe(true);
-    expect(body.data.models).toHaveLength(14);
+    expect(body.data.models).toHaveLength(15);
 
     // Verify live pricing was used (not fallback)
     const firstModel = body.data.models[0];
@@ -187,7 +187,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
       data: { models: { id: string; contextLength: number }[] };
     };
     expect(body.success).toBe(true);
-    expect(body.data.models).toHaveLength(14);
+    expect(body.data.models).toHaveLength(15);
 
     // Verify fallback context lengths from allowlist were used
     const firstModel = body.data.models[0];
@@ -237,7 +237,7 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
       data: { models: { id: string }[] };
     };
     expect(body.success).toBe(true);
-    expect(body.data.models).toHaveLength(14);
+    expect(body.data.models).toHaveLength(15);
 
     // If nock had received a second request it would have thrown —
     // reaching here confirms the cache was used
@@ -346,8 +346,8 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
       data: { models: { id: string }[] };
     };
     expect(body.success).toBe(true);
-    // All 14 allowlisted models are returned (unknown model is skipped)
-    expect(body.data.models).toHaveLength(14);
+    // All 15 allowlisted models are returned (unknown model is skipped)
+    expect(body.data.models).toHaveLength(15);
   });
 
   it('uses parseFloat fallback when prompt is null', async () => {

@@ -12,7 +12,7 @@ import { LlmModels } from '@intexuraos/llm-contract';
 describe('allowlist', () => {
   describe('OPENROUTER_ALLOWED_MODELS', () => {
     it('has exactly 14 entries', () => {
-      expect(OPENROUTER_ALLOWED_MODELS).toHaveLength(14);
+      expect(OPENROUTER_ALLOWED_MODELS).toHaveLength(15);
     });
 
     it('contains all expected providers', () => {
@@ -77,6 +77,10 @@ describe('allowlist', () => {
     it('returns false for or: prefixed IDs (expecting raw ID)', () => {
       expect(isAllowedModel('or:anthropic/claude-sonnet-4.6')).toBe(false);
     });
+
+    it('accepts google/gemini-3-flash-preview', () => {
+      expect(isAllowedModel('google/gemini-3-flash-preview')).toBe(true);
+    });
   });
 
   describe('OPENROUTER_VALIDATION_MODEL', () => {
@@ -88,7 +92,7 @@ describe('allowlist', () => {
   describe('allowlistModelIds', () => {
     it('returns comma-separated list of all model IDs', () => {
       const ids = allowlistModelIds();
-      expect(ids.split(', ')).toHaveLength(14);
+      expect(ids.split(', ')).toHaveLength(15);
       expect(ids).toContain('anthropic/claude-sonnet-4.6');
       expect(ids).toContain('x-ai/grok-4.1-fast');
     });
