@@ -177,6 +177,11 @@ export class TaskDispatcher {
   private readonly taskExitCodes = new Map<string, number>();
   private readonly attemptCompletionSignals = new Set<string>();
   private readonly completionInProgress = new Set<string>();
+  /** Task IDs whose handleInactivityRestart is currently mid-flight (after the
+   *  old worker was killed, before the restart worker is up). The completion
+   *  monitor skips these to avoid running verification on the stale transcript
+   *  of the killed session. */
+  private readonly inactivityRestartInProgress = new Set<string>();
   private readonly pendingMessages = new Map<string, string[]>();
   private readonly lastOutputAt = new Map<string, number>();
   private readonly completionMaxAttempts: number;
@@ -1059,6 +1064,18 @@ export class TaskDispatcher {
   }
 
   private async handleInactivityRestart(taskId: string): Promise<void> {
+    // Mark the restart as in-flight synchronously before any await so the
+    // completion monitor cannot race and run verification on the stale
+    // transcript while destroyWorker/startWorkerAttempt are pending.
+    this.inactivityRestartInProgress.add(taskId);
+    try {
+      await this.doHandleInactivityRestart(taskId);
+    } finally {
+      this.inactivityRestartInProgress.delete(taskId);
+    }
+  }
+
+  private async doHandleInactivityRestart(taskId: string): Promise<void> {
     // Guard: skip if completion is already in progress
     if (this.completionInProgress.has(taskId)) {
       this.logger.debug({ taskId }, 'Inactivity restart skipped: completion already in progress');
@@ -1205,6 +1222,16 @@ export class TaskDispatcher {
             if (this.completionInProgress.has(taskId)) {
               return;
             }
+            // Skip: an inactivity restart is mid-flight (old worker destroyed,
+            // new one not yet up). Running completion now would verify on the
+            // stale transcript of the killed session.
+            if (this.inactivityRestartInProgress.has(taskId)) {
+              this.logger.debug(
+                { taskId },
+                'Completion monitor tick skipped: inactivity restart in progress'
+              );
+              return;
+            }
             this.completionInProgress.add(taskId);
             try {
               await this.handleTaskCompletion(task);
@@ -1348,6 +1375,7 @@ export class TaskDispatcher {
       maxAttempts,
       agentType: completionAgentType,
       rawLogs,
+      ...(exitCode !== undefined && { lastExitCode: exitCode }),
       ...(task.executionMemoryContext !== undefined && {
         executionMemoryContext: task.executionMemoryContext,
       }),
@@ -1380,7 +1408,7 @@ export class TaskDispatcher {
     /* v8 ignore start -- ts-type: optional chaining on agentData creates narrowing branch; agentData guaranteed to have summary when present @preserve */
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `🤖 Gemini summary: ${verification.agentData?.summary ?? '(no summary extracted)'}`
+      `🤖 Verifier summary (${verification.succeededModelName ?? 'unknown'}): ${verification.agentData?.summary ?? '(no summary extracted)'}`
     );
     /* v8 ignore stop @preserve */
 
@@ -1400,13 +1428,13 @@ export class TaskDispatcher {
       },
     ];
 
-    // Verifier failure (Gemini down/parse error): retry Gemini immediately if attempts remain
-    /* v8 ignore start -- upstream: verifierFailure path requires Gemini to return parse errors; FakeCompletionVerifier always returns valid responses and cannot simulate upstream failures @preserve */
+    // Verifier failure (all validation models down or unparseable output): retry immediately if attempts remain
+    /* v8 ignore start -- upstream: verifierFailure path requires all validation models to return parse errors; FakeCompletionVerifier always returns valid responses and cannot simulate upstream failures @preserve */
     if (verification.verifierFailure) {
       if (attempt < maxAttempts) {
         this.appendOrchestratorTaskLog(
           task.taskId,
-          `Verifier failure; retrying Gemini (${String(attempt + 1)}/${String(maxAttempts)})`
+          `Verifier failure; retrying verifier (${String(attempt + 1)}/${String(maxAttempts)})`
         );
         // Re-call verifier with same logs — counts as an attempt
         const retryVerification = await this.completionVerifier.verify({
@@ -1443,12 +1471,12 @@ export class TaskDispatcher {
 
       const error: TaskError = {
         code: 'TASK_COMPLETION_VERIFIER_FAILED',
-        message: 'Gemini verifier unavailable',
+        message: 'Completion verifier unavailable (all validation models failed)',
         remediation: {
           action: 'contact_support',
           manualSteps: [
-            'Ensure INTEXURAOS_GEMINI_APP_API_KEY is configured for orchestrator.',
-            'Check Gemini provider connectivity and retry task after verifier is healthy.',
+            'Ensure INTEXURAOS_GEMINI_APP_API_KEY and INTEXURAOS_OPENROUTER_APP_API_KEY are configured for orchestrator.',
+            'Check connectivity to all configured validation models and retry task after verifier is healthy.',
           ],
         },
       };

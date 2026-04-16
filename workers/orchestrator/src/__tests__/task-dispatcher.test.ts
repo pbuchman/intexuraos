@@ -3029,7 +3029,7 @@ describe('TaskDispatcher', () => {
       vi.useRealTimers();
     });
 
-    it('fails immediately when verifier reports Gemini failure', async () => {
+    it('fails immediately when verifier reports all-models failure', async () => {
       vi.useFakeTimers();
       const verifierFailureState = createStatePersistence();
       const verify = vi.fn().mockResolvedValue({
@@ -3089,12 +3089,12 @@ describe('TaskDispatcher', () => {
 
       const task = await verifierFailureDispatcher.getTask('verifier-failure-task');
       expect(task?.status).toBe('failed');
-      // attemptCount is 2 because verifier retries Gemini once (attempt + 1)
+      // attemptCount is 2 because verifier retries once (attempt + 1)
       expect(task?.attemptCount).toBe(2);
       expect(task?.verificationHistory?.[0]?.verifierFailure).toBe(true);
-      // Gemini retry also recorded
+      // Verifier retry also recorded
       expect(task?.verificationHistory?.[1]?.verifierFailure).toBe(true);
-      // createWorker called once (only task worker, not the Gemini retry)
+      // createWorker called once (only task worker, not the verifier retry)
       expect(mockIsolationProvider.createWorker).toHaveBeenCalledTimes(1);
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -3105,7 +3105,7 @@ describe('TaskDispatcher', () => {
             }),
             error: expect.objectContaining({
               code: 'TASK_COMPLETION_VERIFIER_FAILED',
-              message: expect.stringContaining('Gemini verifier unavailable'),
+              message: expect.stringContaining('Completion verifier unavailable'),
             }),
           }),
         })
@@ -10194,6 +10194,155 @@ describe('TaskDispatcher', () => {
           }),
         })
       );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('completion monitor does not verify while inactivity restart is in progress', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const raceState = createStatePersistence();
+      const raceVerify = vi.fn(async () => ({
+        passed: true,
+        missingFields: [] as string[],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'planning' as const,
+          outcome: 'planned' as const,
+          superpowers_writing_plans: 'used' as const,
+          linear_url: '',
+          is_complex: '0' as const,
+          has_plan_doc: '0' as const,
+          subtask_urls: '',
+          pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
+          summary: 'Task completed',
+          unclear_clarification: '',
+        },
+      }));
+      const raceDispatcher = new TaskDispatcher(
+        mockConfig,
+        raceState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: {
+            verify: raceVerify,
+            describe: (): { enabled: boolean; provider: string; model: string } => ({
+              enabled: true,
+              provider: 'gemini',
+              model: 'gemini-2.5-flash',
+            }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+          },
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'race-restart-verify',
+        workerType: 'auto',
+        prompt: 'Test race guard',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await raceDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Simulate "inactivity restart in progress" by seeding the flag directly.
+      // Production sets it synchronously at the top of handleInactivityRestart,
+      // before any await — guaranteeing the monitor tick sees it during the
+      // destroyWorker/startWorkerAttempt window.
+      const internal = raceDispatcher as unknown as {
+        inactivityRestartInProgress: Set<string>;
+      };
+      internal.inactivityRestartInProgress.add('race-restart-verify');
+
+      // Container is gone during the restart window
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+
+      // Advance multiple monitor intervals — the monitor must not call verify
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(raceVerify).not.toHaveBeenCalled();
+
+      internal.inactivityRestartInProgress.delete('race-restart-verify');
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('passes the worker exitCode to the completion verifier as lastExitCode', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const exitCodeVerify = vi.fn(async () => ({
+        passed: false,
+        missingFields: ['fatal_exit_code_137'],
+        verifierFailure: false,
+        trace: dummyTrace,
+      }));
+      const exitCodeState = createStatePersistence();
+      const exitCodeDispatcher = new TaskDispatcher(
+        mockConfig,
+        exitCodeState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
+          verifier: {
+            verify: exitCodeVerify,
+            describe: (): { enabled: boolean; provider: string; model: string } => ({
+              enabled: true,
+              provider: 'gemini',
+              model: 'gemini-2.5-flash',
+            }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+          },
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'exitcode-137-passthrough',
+        workerType: 'auto',
+        prompt: 'Test exit code propagation',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await exitCodeDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onComplete).toBeDefined();
+
+      onComplete?.(137);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(exitCodeVerify).toHaveBeenCalledWith(expect.objectContaining({ lastExitCode: 137 }));
 
       vi.useRealTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
