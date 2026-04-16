@@ -89,6 +89,7 @@ function RequestCard({ request }: { request: UsageEvent['request'] }): React.JSX
       <DetailRow label="Operation" value={request.operation} />
       <DetailRow label="Success" value={request.success} />
       <DetailRow label="Duration" value={formatDurationMs(request.durationMs)} />
+      <DetailRow label="Prompt Type" value={request.promptType} />
     </Card>
   );
 }
