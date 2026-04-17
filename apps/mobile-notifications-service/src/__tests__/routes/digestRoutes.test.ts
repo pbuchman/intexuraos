@@ -918,3 +918,46 @@ describe('POST /internal/notifications/digest/run (error paths)', () => {
     await app.close();
   });
 });
+
+describe('unknown subscription returns 400', () => {
+  it('POST /internal/notifications/digest/run rejects unknown (userId, groupKey)', async () => {
+    setMockServices({ digestSubscriptions: [] });
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/internal/notifications/digest/run',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      payload: { userId: 'u', groupKey: 'g', date: '2026-04-15' },
+    });
+    expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('POST /notifications/digests/run rejects unknown groupKey', async () => {
+    setMockServices({ digestSubscriptions: [] });
+    const app = await buildServer();
+    const token = await createToken({ sub: 'google-oauth2|test-user' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/notifications/digests/run',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { groupKey: 'unknown', date: '2026-04-15' },
+    });
+    expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('POST /notifications/digests/backfill rejects unknown groupKey', async () => {
+    setMockServices({ digestSubscriptions: [] });
+    const app = await buildServer();
+    const token = await createToken({ sub: 'google-oauth2|test-user' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/notifications/digests/backfill',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { groupKey: 'unknown', fromDate: '2026-04-01', toDate: '2026-04-03' },
+    });
+    expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+});

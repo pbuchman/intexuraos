@@ -21,6 +21,7 @@ export interface RunDigestForGroupDeps {
 export interface RunDigestForGroupInput {
   readonly userId: string;
   readonly groupKey: string;
+  readonly groupTitlePrefix: string;
   readonly date: string; // YYYY-MM-DD (CET interpretation)
   readonly holder: DigestLockHolder;
 }
@@ -60,7 +61,7 @@ export async function runDigestForGroup(
       }),
       services.notificationRepository.findByUserIdPaginated(input.userId, {
         limit: 1000,
-        filter: { title: input.groupKey, app: ['com.whatsapp'] },
+        filter: { title: input.groupTitlePrefix, app: ['com.whatsapp'] },
       }),
     ]);
     if (!previousState.ok) return err(persistenceFailed(previousState.error.message));
