@@ -8,11 +8,11 @@ export interface DigestPromptInput {
   readonly date: string; // YYYY-MM-DD
   readonly previousState: unknown; // GroupState or null on cold start
   readonly last3Summaries: readonly unknown[]; // DailySummary[]
-  readonly todaysMessages: ReadonlyArray<{
+  readonly todaysMessages: readonly {
     readonly sender: string;
     readonly text: string;
     readonly postTimeSec: number;
-  }>;
+  }[];
 }
 
 export function buildDigestPrompt(input: DigestPromptInput): string {
