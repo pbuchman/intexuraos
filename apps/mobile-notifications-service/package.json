@@ -25,6 +25,8 @@
     "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
+    "@intexuraos/llm-factory": "workspace:*",
+    "@intexuraos/llm-prompts": "workspace:*",
     "fastify": "^5.1.0",
     "pino": "^10.1.1",
     "zod": "^3.24.1"
