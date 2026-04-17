@@ -77,6 +77,11 @@ export function FilterSheet(props: FilterSheetProps): React.JSX.Element | null {
       const last = focusables[focusables.length - 1];
       if (first === undefined || last === undefined) return;
       const active = document.activeElement;
+      if (!root.contains(active)) {
+        e.preventDefault();
+        first.focus();
+        return;
+      }
       if (e.shiftKey) {
         if (active === first || active === root) {
           e.preventDefault();
@@ -152,6 +157,13 @@ export function FilterSheet(props: FilterSheetProps): React.JSX.Element | null {
           <Section title="Group by">
             <GroupBySelector groupBy={groupBy} onChange={onGroupByChange} />
           </Section>
+          {/*
+            Sort section is always shown in the mobile sheet even when groupBy !== 'none',
+            to avoid visual jitter when the user changes groupBy inside the sheet. The
+            desktop FilterBar hides Sort in that case (via `showSort={isRawMode}`);
+            LlmUsagePage ignores sort when grouping is active, so this has no functional
+            effect — it is purely about a steady mobile layout. See INT-1400.
+          */}
           <Section title="Sort">
             <SortSelector sortBy={sortBy} onChange={onSortChange} />
           </Section>

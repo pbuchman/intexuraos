@@ -24,8 +24,8 @@ import {
   DEFAULT_TIME_RANGE,
   type GroupByMode,
   type SortState,
-} from '@/components/llm-usage/filterConstants';
-import { FilterBar } from '@/components/llm-usage/FilterBar';
+} from '@/components/llm-usage/filterConstants.js';
+import { FilterBar } from '@/components/llm-usage/FilterBar.js';
 
 const STORAGE_KEY_TIME_RANGE = 'llm-usage-time-range';
 const STORAGE_KEY_FILTERS = 'llm-usage-filters';

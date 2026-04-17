@@ -42,8 +42,16 @@ export function computeActiveFilters({ timeRange, filters, groupBy, sortBy }: In
 
   // Time range chip — always shown, marked "active" when non-default.
   const isCustom = timeRange.preset === 'custom';
+  const hasBothCustomDates =
+    isCustom &&
+    timeRange.customFrom !== undefined &&
+    timeRange.customFrom !== '' &&
+    timeRange.customTo !== undefined &&
+    timeRange.customTo !== '';
   const timeLabel = isCustom
-    ? `${formatDateShort(timeRange.customFrom)} \u2013 ${formatDateShort(timeRange.customTo)}`
+    ? (hasBothCustomDates
+        ? `${formatDateShort(timeRange.customFrom)} \u2013 ${formatDateShort(timeRange.customTo)}`
+        : 'Custom')
     : (PRESET_OPTIONS.find((p) => p.key === timeRange.preset)?.label ?? timeRange.preset);
   const timeIsDefault = timeRange.preset === DEFAULT_TIME_RANGE.preset;
   chips.push({ key: 'timeRange', label: timeLabel, tone: timeIsDefault ? 'neutral' : 'active' });
