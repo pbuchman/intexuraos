@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createHmac } from 'node:crypto';
 import { registerRoutes, cleanUpExpiredNonces } from '../routes.js';
+import { buildSystemPrompt } from '../services/system-prompt.js';
 import type { TaskDispatcher } from '../services/task-dispatcher.js';
 import type { GitHubTokenService } from '../github/token-service.js';
 import type { IsolationProvider } from '../services/isolation/types.js';
@@ -557,6 +558,57 @@ describe('Routes', () => {
       expect(dispatcher.submitTask).toHaveBeenCalledWith(
         expect.objectContaining({ retriedFrom: 'task_original_abc' })
       );
+    });
+
+    it('executionMemoryContext flows from POST body into the rendered system prompt', async () => {
+      const memoryContext = {
+        applicationId: 'app_e2e',
+        retrievalVersion: 'v1',
+        querySummary: 'q',
+        matchedMemories: [
+          {
+            memoryId: 'mem_e2e_abc',
+            title: 'Check composite index before query',
+            memoryType: 'verification_pattern' as const,
+            score: 0.7,
+            appliesWhen: 'multi-field firestore queries',
+            action: 'add index to firestore-collections.json',
+            avoid: 'running query without index',
+            verification: 'query returns results without error',
+          },
+        ],
+      };
+      const payload = {
+        taskId: 'e2e-1',
+        workerType: 'auto',
+        prompt: 'p',
+        webhookUrl: 'https://example.com/hook',
+        webhookSecret: 'sec',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'review',
+        executionMemoryContext: memoryContext,
+      };
+      const { headers, body } = createSignedRequest(payload);
+      const response = await app.inject({ method: 'POST', url: '/tasks', headers, body });
+      expect(response.statusCode).toBe(202);
+
+      const submitCalls = (dispatcher.submitTask as ReturnType<typeof vi.fn>).mock.calls;
+      expect(submitCalls.length).toBeGreaterThanOrEqual(1);
+      const firstCall = submitCalls[0];
+      expect(firstCall).toBeDefined();
+      const submitted = (firstCall as unknown as [Record<string, unknown>])[0];
+      expect(submitted['executionMemoryContext']).toEqual(memoryContext);
+
+      const rendered = buildSystemPrompt({
+        taskId: submitted['taskId'] as string,
+        linearIssueLabels: submitted['linearIssueLabels'] as string[],
+        agentType: 'review',
+        executionMemoryContext: submitted['executionMemoryContext'] as typeof memoryContext,
+      });
+      expect(rendered).toContain('### Execution Memory Context');
+      expect(rendered).toContain('mem_e2e_abc');
+      expect(rendered).toContain('Execution Memories Received');
     });
   });
 
