@@ -2074,6 +2074,38 @@ resource "google_cloud_scheduler_job" "merge_queue_tick" {
   ]
 }
 
+resource "google_cloud_scheduler_job" "code_tasks_zombie_sweep" {
+  name        = "intexuraos-code-tasks-zombie-sweep-${var.environment}"
+  description = "Sweep stuck code tasks with stale lastHeartbeat and mark them interrupted"
+  schedule    = "*/5 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/code/detect-zombies"
+    body        = base64encode("{}")
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
 # -----------------------------------------------------------------------------
 # Cloud Scheduler - Archive Stale Issue Groups (Hourly)
 # -----------------------------------------------------------------------------
