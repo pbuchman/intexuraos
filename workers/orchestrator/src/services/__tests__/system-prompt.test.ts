@@ -1272,8 +1272,8 @@ describe('system-prompt', () => {
     expect(executionPrompt.version).toBe('9.1.0');
   });
 
-  it('remediation prompt version is 3.3.0', () => {
-    expect(remediationPrompt.version).toBe('3.3.0');
+  it('remediation prompt version is 4.0.0', () => {
+    expect(remediationPrompt.version).toBe('4.0.0');
   });
 
   it('injects execution memory section only for execution tasks', () => {
