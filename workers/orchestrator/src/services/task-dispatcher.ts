@@ -1118,6 +1118,25 @@ export class TaskDispatcher {
       'Inactivity restart triggered'
     );
 
+    const evidenceDir = `/var/log/orchestrator/inactivity-evidence/${taskId}/`;
+    try {
+      await this.isolation.provider.copyOut(taskId, '/tmp', evidenceDir);
+    } catch (evidenceError) {
+      this.logger.warn(
+        { taskId, error: getErrorMessage(evidenceError) },
+        'Failed to copy /tmp evidence before inactivity kill'
+      );
+    }
+    try {
+      const stats = await this.isolation.provider.statsSnapshot(taskId);
+      this.logger.warn({ taskId, stats }, 'Container stats at inactivity kill');
+    } catch (statsError) {
+      this.logger.warn(
+        { taskId, error: getErrorMessage(statsError) },
+        'Failed to capture container stats before inactivity kill'
+      );
+    }
+
     try {
       await this.isolation.provider.destroyWorker(taskId);
     } catch (destroyError) {

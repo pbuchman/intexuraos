@@ -225,6 +225,25 @@ export const RESUME_SUMMARY_SCHEMA = z.object({
 const FATAL_EXIT_CODE_PATTERN =
   /\[entrypoint\] (?:Claude|Codex) attempt finished with exit code: (137|139)/;
 
+const MIN_MEANINGFUL_TRANSCRIPT_LINES = 5;
+
+const INFRASTRUCTURE_LINE_PREFIXES = ['[orchestrator]', '[hook]', '[entrypoint]', '[system]'];
+
+export function countMeaningfulTranscriptLines(transcript: string): number {
+  let count = 0;
+  for (const line of transcript.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed === '') {
+      continue;
+    }
+    if (INFRASTRUCTURE_LINE_PREFIXES.some((prefix) => trimmed.startsWith(prefix))) {
+      continue;
+    }
+    count += 1;
+  }
+  return count;
+}
+
 export function detectFatalExitCode(rawLogs: string): number | undefined {
   // Only search the last 5 lines to avoid false positives from Claude's
   // stream-json output containing test fixtures or code snippets with the pattern.
@@ -612,6 +631,25 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       };
     }
 
+    const meaningfulLines = countMeaningfulTranscriptLines(transcript);
+    if (meaningfulLines < MIN_MEANINGFUL_TRANSCRIPT_LINES) {
+      this.logger.warn(
+        {
+          taskId: input.taskId,
+          attempt: input.attempt,
+          agentType: input.agentType,
+          meaningfulLines,
+        },
+        'Completion verifier: transcript too short, refusing to call LLM'
+      );
+      return {
+        passed: false,
+        missingFields: ['transcript_too_short'],
+        verifierFailure: false,
+        trace: { transcript, prompt: '', response: '' },
+      };
+    }
+
     const { schema, prompt } = selectSchemaAndPrompt(input.agentType, transcript);
 
     this.logger.info(
@@ -624,11 +662,11 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         promptChars: prompt.length,
         transcript: ((): string => {
           const tLines = transcript.split('\n').filter((l) => l.trim() !== '');
+          /* v8 ignore start -- ts-type: nullish coalescing on array access required by noUncheckedIndexedAccess; transcript guard guarantees tLines.length >= MIN_MEANINGFUL_TRANSCRIPT_LINES @preserve */
           const first = tLines[0] ?? '';
           const last = tLines[tLines.length - 1] ?? '';
-          return tLines.length <= 2
-            ? tLines.join('\n')
-            : `${first}\n  ... (${String(tLines.length - 2)} lines omitted) ...\n${last}`;
+          /* v8 ignore stop @preserve */
+          return `${first}\n  ... (${String(tLines.length - 2)} lines omitted) ...\n${last}`;
         })(),
       },
       'Completion verifier request'
