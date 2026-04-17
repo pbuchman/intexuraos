@@ -9,7 +9,7 @@ afterEach(cleanup);
 
 describe('MonthPicker', () => {
   it('renders Polish month label and year', () => {
-    render(<MonthPicker month="2026-04" onChange={() => {}} />);
+    render(<MonthPicker month="2026-04" onChange={vi.fn()} />);
     expect(screen.getByText(/kwiecień|kwietnia|kwieci/i)).toBeInTheDocument();
     expect(screen.getByText(/2026/)).toBeInTheDocument();
   });
