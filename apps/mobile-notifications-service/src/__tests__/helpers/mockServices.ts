@@ -16,6 +16,7 @@ export function setMockServices(overrides: Partial<ServiceContainer>): ServiceCo
     digestRepository: overrides.digestRepository ?? stub('digestRepository'),
     groupStateRepository: overrides.groupStateRepository ?? stub('groupStateRepository'),
     digestLockRepository: overrides.digestLockRepository ?? stub('digestLockRepository'),
+    backfillRunRepository: overrides.backfillRunRepository ?? stub('backfillRunRepository'),
   };
   setServices(container);
   return container;
