@@ -528,6 +528,31 @@ function normalizeMemoryCsv(value: string): string[] {
     .filter((part) => part !== '');
 }
 
+/**
+ * Regex builder for the per-memory acknowledgment bullet the worker must emit.
+ *
+ * The system prompt (see `workers/orchestrator/src/services/system-prompt.ts`
+ * `buildExecutionMemorySection`) emits one bullet per injected memory in this
+ * exact shape:
+ *
+ *   - [<index>] <memoryId> — "<title>" — APPLICABLE|NOT APPLICABLE because …
+ *
+ * We match the leading `- [<digits>] <memoryId>` token (allowing an optional
+ * log-driver prefix like `[claude] ` that the orchestrator prepends to every
+ * worker stdout line) so:
+ *  * mentions of the memoryId elsewhere (e.g. `memory_ids_used: <id>`) don't
+ *    satisfy the acknowledgment requirement, and
+ *  * the legacy `[<memoryId>]` format fails loudly, surfacing any
+ *    prompt/verifier drift immediately.
+ *
+ * Exported so the regression-guard test can pin the verifier against the
+ * runtime pattern (not a hand-typed literal that could drift independently).
+ */
+export function buildMemoryAcknowledgmentPattern(memoryId: string): RegExp {
+  const escaped = memoryId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(String.raw`^\s*(?:\[[^\]]+\]\s+)?-\s*\[\d+\]\s+${escaped}\b`, 'm');
+}
+
 function validateMemoryReporting(
   rawLogs: string,
   executionMemoryContext: ExecutionMemoryPromptContext,
@@ -545,26 +570,11 @@ function validateMemoryReporting(
   const normalizedLogs = stripDockerHeaders(rawLogs);
   const missingFields: string[] = [];
 
-  // System prompt emits one bullet per memory in this exact shape:
-  //   - [<index>] <memoryId> — "<title>" — APPLICABLE|NOT APPLICABLE because …
-  // See workers/orchestrator/src/services/system-prompt.ts buildExecutionMemorySection.
-  // We match the leading `- [<digits>] <memoryId>` token (allowing an optional
-  // log-driver prefix like `[claude] ` that the orchestrator prepends to every
-  // worker stdout line) so:
-  //  * mentions of the memoryId elsewhere (e.g. memory_ids_used: <id>) don't
-  //    satisfy the acknowledgment requirement, and
-  //  * the legacy `[<memoryId>]` format still fails loudly, surfacing any
-  //    prompt/verifier drift immediately.
-  const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const ackLinePattern = (memoryId: string): RegExp =>
-    new RegExp(
-      String.raw`^\s*(?:\[[^\]]+\]\s+)?-\s*\[\d+\]\s+${escapeRegex(memoryId)}\b`,
-      'm'
-    );
-
   const hasAcknowledgment =
     normalizedLogs.includes('Execution Memories Received') &&
-    injectedIds.every((memoryId) => ackLinePattern(memoryId).test(normalizedLogs));
+    injectedIds.every((memoryId) =>
+      buildMemoryAcknowledgmentPattern(memoryId).test(normalizedLogs)
+    );
   if (!hasAcknowledgment) {
     missingFields.push('memory_acknowledgment');
   }

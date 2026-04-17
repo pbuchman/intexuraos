@@ -22,6 +22,7 @@ const {
   getLast20Lines,
   detectFatalExitCode,
   getVerifierTaskId,
+  buildMemoryAcknowledgmentPattern,
 } = await import('../completion-verifier.js');
 
 const loggerInfo = vi.fn();
@@ -1374,10 +1375,26 @@ describe('OrchestratorCompletionVerifier', () => {
           retrievalVersion: 'execution-memory-retrieval@3.0.0',
           querySummary: '',
           matchedMemories: [
-            { memoryId: 'mem_a', title: 'A', memoryType: 'pitfall_pattern', score: 0.9,
-              appliesWhen: 'x', action: 'x', avoid: 'x', verification: 'x' },
-            { memoryId: 'mem_b', title: 'B', memoryType: 'pitfall_pattern', score: 0.9,
-              appliesWhen: 'x', action: 'x', avoid: 'x', verification: 'x' },
+            {
+              memoryId: 'mem_a',
+              title: 'A',
+              memoryType: 'pitfall_pattern',
+              score: 0.9,
+              appliesWhen: 'x',
+              action: 'x',
+              avoid: 'x',
+              verification: 'x',
+            },
+            {
+              memoryId: 'mem_b',
+              title: 'B',
+              memoryType: 'pitfall_pattern',
+              score: 0.9,
+              appliesWhen: 'x',
+              action: 'x',
+              avoid: 'x',
+              verification: 'x',
+            },
           ],
         },
       });
@@ -1400,17 +1417,34 @@ describe('OrchestratorCompletionVerifier', () => {
           retrievalVersion: 'v',
           querySummary: 'q',
           matchedMemories: [
-            { memoryId: 'mem_xyz', title: 'T', memoryType: 'pitfall_pattern', score: 0.9,
-              appliesWhen: 'x', action: 'x', avoid: 'x', verification: 'x' },
+            {
+              memoryId: 'mem_xyz',
+              title: 'T',
+              memoryType: 'pitfall_pattern',
+              score: 0.9,
+              appliesWhen: 'x',
+              action: 'x',
+              avoid: 'x',
+              verification: 'x',
+            },
           ],
         },
       });
 
       // Prompt instructs the agent to emit "- [1] mem_xyz — …"
       expect(rendered).toMatch(/- \[\{index\}\] \{memoryId\}/);
-      // Verifier regex accepts that shape for a concrete memoryId.
-      const ackLine = '- [1] mem_xyz — "T" — APPLICABLE because reason';
-      expect(/^\s*-\s*\[\d+\]\s+mem_xyz\b/m.test(ackLine)).toBe(true);
+      // Verifier regex — imported from production code, NOT hand-typed — accepts
+      // that shape for a concrete memoryId. If either side drifts, this test fails.
+      const ackPattern = buildMemoryAcknowledgmentPattern('mem_xyz');
+      expect(ackPattern.test('- [1] mem_xyz — "T" — APPLICABLE because reason')).toBe(true);
+      expect(ackPattern.test('[claude] - [1] mem_xyz — "T" — APPLICABLE because reason')).toBe(
+        true
+      );
+      // And rejects the legacy `[<memoryId>]` format so prompt/verifier drift is loud.
+      expect(ackPattern.test('- [mem_xyz] some-label')).toBe(false);
+      // And rejects naked mentions elsewhere (e.g. in the final block) — the
+      // acknowledgment must be an explicit bullet, not a stray memoryId reference.
+      expect(ackPattern.test('memory_ids_used: mem_xyz')).toBe(false);
     });
   });
 
