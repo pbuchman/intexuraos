@@ -13,6 +13,8 @@ export type {
   TodosProcessingPublisherConfig,
   CalendarPreviewGenerateEvent,
   CalendarPreviewPublisherConfig,
+  PRTriageEvent,
+  PRTriagePublisherConfig,
 } from './types.js';
 
 export {
@@ -35,3 +37,8 @@ export {
   type CalendarPreviewPublisher,
   createCalendarPreviewPublisher,
 } from './calendarPreviewPublisher.js';
+
+export {
+  type PRTriagePublisher,
+  createPRTriagePublisher,
+} from './prTriagePublisher.js';
