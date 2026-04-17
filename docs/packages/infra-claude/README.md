@@ -19,7 +19,7 @@ import { createClaudeClient } from '@intexuraos/infra-claude';
 
 const client = createClaudeClient({
   apiKey: process.env.ANTHROPIC_API_KEY,
-  model: 'claude-sonnet-4-5',
+  model: 'claude-sonnet-4-6',
   userId: 'user-123',
   pricing: {
     inputPricePerMillion: 3.0,
@@ -63,7 +63,7 @@ Converts raw Anthropic usage data into the standardized `NormalizedUsage` format
 ```ts
 interface ClaudeConfig {
   apiKey: string;   // Anthropic API key
-  model: string;    // e.g., 'claude-sonnet-4-5', 'claude-haiku-3-5'
+  model: string;    // e.g., 'claude-sonnet-4-6', 'claude-haiku-3-5'
   userId: string;   // User ID for usage tracking
   pricing: ModelPricing; // Cost configuration per million tokens
   logger: Logger;   // Pino logger for structured logging
@@ -105,12 +105,10 @@ All methods return `Result<T, ClaudeError>`. Error mapping:
 - **Cache tracking:** The Anthropic SDK does not expose `cache_read_input_tokens` and `cache_creation_input_tokens` as typed fields. These are extracted via `as` casts on the usage object.
 - **Web search:** Uses the `web_search_20250305` tool type, passed with `as const` assertions to satisfy the SDK's type union.
 - **Source extraction:** URLs are extracted both from text block content (regex) and from `web_search_tool_result` blocks.
-- **Audit sink:** This client does not accept injectable `auditSink`/`usageSink` — it uses the default Firestore sinks.
 - **MAX_TOKENS:** Hardcoded to 8192.
 
 ## Cross-Cutting Concerns
 
-- **Audit trail:** Every request creates an `AuditContext` via `@intexuraos/llm-audit`
 - **Usage logging:** Automatic fire-and-forget logging via `@intexuraos/llm-pricing` `UsageLogger`
 - **Prompt building:** Research prompts are built via `@intexuraos/llm-prompts` `buildResearchPrompt()`
 
@@ -129,7 +127,6 @@ All methods return `Result<T, ClaudeError>`. Error mapping:
 | `@intexuraos/common-core`   | `Result` types, `getErrorMessage`, `Logger`              |
 | `@intexuraos/llm-contract`  | `LLMClient` interface, `NormalizedUsage`, `ModelPricing` |
 | `@intexuraos/llm-prompts`   | `buildResearchPrompt`                                    |
-| `@intexuraos/llm-audit`     | `createAuditContext`                                     |
 | `@intexuraos/llm-pricing`   | `createUsageLogger`                                      |
 
 ## Recent Changes

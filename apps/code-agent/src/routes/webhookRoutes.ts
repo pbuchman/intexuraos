@@ -19,9 +19,11 @@ import { deletePRTaskLock } from '../domain/utils/prTaskLock.js';
 import { parseLinearIdentifierFromUrl } from '../domain/utils/linearIdentifierParser.js';
 import { parseOwnerRepo } from '../domain/utils/parseOwnerRepo.js';
 import { drainTaskQueue } from '../domain/usecases/drainTaskQueue.js';
+import { triageFailedTask } from '../domain/usecases/triageFailedTask.js';
 import { isMemoryEligibleAgent } from '../domain/utils/memoryEligibility.js';
 import { mergePlanPr } from '../domain/utils/mergePlanPr.js';
 import { fetchGitHubToken } from '../domain/utils/gitHubTokenResolver.js';
+import { validatePrUrl } from '../domain/utils/validatePrUrl.js';
 
 /**
  * Best-effort: record a task_failed automation log event for PR-linked tasks.
@@ -174,6 +176,12 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     error?: {
       code: string;
       message: string;
+      remediation?: {
+        action?: 'retry' | 'wait' | 'fix_code' | 'contact_support' | 'retry_smaller';
+        retryAfter?: number;
+        manualSteps?: string;
+        supportLink?: string;
+      };
     };
     duration?: number;
     resumedCompletion?: boolean;
@@ -233,6 +241,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               properties: {
                 code: { type: 'string' },
                 message: { type: 'string' },
+                remediation: {
+                  type: 'object',
+                  properties: {
+                    action: { type: 'string', enum: ['retry', 'wait', 'fix_code', 'contact_support', 'retry_smaller'] },
+                    retryAfter: { type: 'number' },
+                    manualSteps: { type: 'string' },
+                    supportLink: { type: 'string' },
+                  },
+                  required: [],
+                },
               },
               required: ['code', 'message'],
             },
@@ -309,7 +327,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         codeTaskRepo,
         statusMirrorService,
         whatsappNotifier,
-        rateLimitService,
         metricsClient,
         linearIssueService,
         linearAgentClient,
@@ -347,6 +364,166 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const task = taskResult.value;
       const completedAt = new Date();
+
+      // Set `ready-to-merge` on the Linear issue associated with a PR.
+      // Shared between two callbacks that produce the same outcome:
+      //   1. review completed with `needs_remediation='0'`
+      //   2. remediation completed with `requires_re_review='0'` and
+      //      `execution_outcome_label='already_completed'` (no new commits pushed)
+      // Guarded by a PR-already-merged check (summary + GitHub API fallback) and
+      // a planning-origin guard that auto-merges the plan PR instead of labeling.
+      const applyReadyToMergeLabel = async (prNumber: number): Promise<void> => {
+        // Best-effort: set review-outcome label on the associated Linear issue
+        // Skip if PR is already merged — handlePrClose already cleaned up labels.
+        let prAlreadyMerged = false;
+        try {
+          const prMergeSummary = await gitHubPRSummaryRepo.findByPullRequest(task.repository, prNumber);
+          prAlreadyMerged = prMergeSummary.ok && prMergeSummary.value !== null && prMergeSummary.value.mergedAt !== null;
+        } catch {
+          // gitHubPRSummaryRepo may not be fully initialized — assume not merged
+        }
+
+        // Fallback: if summary says not-merged, check GitHub API directly.
+        // The summary is updated by a webhook that may arrive after this callback.
+        if (!prAlreadyMerged) {
+          try {
+            const tokenResult = await userServiceClient.getOAuthToken(task.userId, 'github');
+            if (tokenResult.ok) {
+              const parsed = parseOwnerRepo(task.repository);
+              /* v8 ignore start -- ts-type: task creation helpers always defined with valid owner/repo strings; no fake mechanism can inject a malformed repository field post-task-creation @preserve */
+              if (parsed !== null) {
+              /* v8 ignore stop @preserve */
+                const prStatus = await gitHubPRClient.getPullRequestStatus(tokenResult.value.accessToken, parsed.owner, parsed.repo, prNumber);
+                if (prStatus.ok && prStatus.value.mergedAt !== null) {
+                  prAlreadyMerged = true;
+                  request.log.info({ taskId, prNumber },
+                    'prAlreadyMerged detected via GitHub API fallback (summary was stale)');
+                }
+              }
+            }
+          } catch {
+            // GitHub API unavailable — proceed with summary-based decision
+          }
+        }
+
+        if (prAlreadyMerged) {
+          request.log.debug({ taskId, prNumber }, 'Skipping review-outcome label — PR already merged');
+          return;
+        }
+
+        try {
+          const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
+          let targetLinearIssueId: string | undefined;
+          let targetUserId: string | undefined;
+          let label: string | undefined;
+          let source: string | undefined;
+
+          if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
+            if (originResult.value.agentType === 'planning') {
+              // Plan-phase reviews do not auto-advance to execution.
+              // The user must explicitly trigger execution from the UI.
+              // But we DO auto-merge the plan PR so the plan docs land on development immediately.
+              request.log.info({ taskId, prNumber, linearIssueId: originResult.value.linearIssueId },
+                'Plan review passed — auto-merging plan PR (user must explicitly trigger execution)');
+
+              const planningPrUrl = originResult.value.result?.planning_pr_url ?? originResult.value.result?.prUrl;
+              if (planningPrUrl !== undefined && planningPrUrl !== '') {
+                try {
+                  const gitHubToken = await fetchGitHubToken(userServiceClient, task.userId, request.log);
+                  if (gitHubToken !== null) {
+                    const mergeResult = await mergePlanPr(
+                      { logger: request.log, gitHubPRClient },
+                      { planningPrUrl, repository: task.repository, token: gitHubToken },
+                    );
+                    if (mergeResult.ok) {
+                      request.log.info({ prNumber, planningPrUrl }, 'Plan PR auto-merged on review pass');
+                    } else {
+                      request.log.warn({ prNumber, planningPrUrl, error: mergeResult.error }, 'Plan PR auto-merge failed (best-effort)');
+                    }
+                  } else {
+                    request.log.warn({ prNumber }, 'Skipping plan PR auto-merge — no GitHub token available');
+                  }
+                } catch (mergeError: unknown) {
+                  request.log.warn({ prNumber, planningPrUrl, error: mergeError }, 'Plan PR auto-merge threw (best-effort)');
+                }
+              } else {
+                request.log.debug({ prNumber, taskId: originResult.value.id }, 'No planning_pr_url on origin task — skipping plan PR auto-merge');
+              }
+            } else {
+              targetLinearIssueId = originResult.value.linearIssueId;
+              targetUserId = originResult.value.userId;
+              label = 'ready-to-merge';
+              source = 'origin';
+            }
+          } else {
+            // Fallback: use review task's own issue (common for external PRs)
+            targetLinearIssueId = task.linearIssueId;
+            targetUserId = task.userId;
+            label = 'ready-to-merge';
+            source = 'review-fallback';
+
+            if (!originResult.ok) {
+              request.log.warn({ taskId, prNumber, error: originResult.error },
+                'Origin task lookup failed, falling back to review task issue');
+            } else {
+              request.log.info({ taskId, prNumber,
+                originFound: originResult.value !== null,
+                originHasLinearId: originResult.value?.linearIssueId !== undefined },
+                'No origin task with linearIssueId, falling back to review task issue');
+            }
+          }
+
+          if (targetLinearIssueId === undefined) {
+            request.log.warn({ taskId, prNumber },
+              'No Linear issue available for review-outcome label — skipping');
+          } else {
+            const issueValidation = await linearAgentClient.validateIssue({
+              userId: targetUserId!,
+              identifier: targetLinearIssueId,
+            });
+            if (issueValidation.ok) {
+              const labelResult = await linearAgentClient.updateIssueMetadata({
+                userId: targetUserId!,
+                issueId: issueValidation.value.id,
+                addLabels: [label!],
+              });
+              if (labelResult.ok) {
+                if (labelResult.value.droppedLabels.length > 0) {
+                  request.log.warn({ taskId, prNumber, droppedLabels: labelResult.value.droppedLabels, linearIssueId: targetLinearIssueId },
+                    'Review-outcome label not found in Linear team — label not applied');
+                } else {
+                  request.log.info({ taskId, prNumber, label, linearIssueId: targetLinearIssueId, source },
+                    'Set review-outcome label');
+
+                  // Best-effort: recompute group summary with the new label so
+                  // cached aggregateStatus reflects the actionable state.
+                  const { groupSummaryRepo: summaryRepoForLabel } = getServices();
+                  if (summaryRepoForLabel !== undefined && targetLinearIssueId !== undefined) {
+                    const updatedLabels: { id: string; name: string }[] = [
+                      ...issueValidation.value.labels.map((l) => ({ id: '', name: l })),
+                      { id: '', name: label! },
+                    ];
+                    void summaryRepoForLabel.recomputeWithLabels(
+                      targetUserId!, targetLinearIssueId, updatedLabels, completedAt.toISOString(),
+                    ).catch((recomputeErr: unknown) => {
+                      request.log.warn({ linearIssueId: targetLinearIssueId, error: recomputeErr },
+                        'Failed to recompute group summary after review-outcome label (best-effort)');
+                    });
+                  }
+                }
+              } else {
+                request.log.warn({ taskId, prNumber, label, error: labelResult.error },
+                  'Failed to set review-outcome label (best-effort)');
+              }
+            } else {
+              request.log.warn({ taskId, prNumber, linearIssueId: targetLinearIssueId, error: issueValidation.error },
+                'Failed to validate issue for review-outcome label (best-effort)');
+            }
+          }
+        } catch (labelError: unknown) {
+          request.log.warn({ error: labelError, taskId, prNumber }, 'Failed to set review-outcome label (best-effort)');
+        }
+      };
 
       // Step 2.5: Ignore stale callbacks for already-cancelled tasks
       if (task.status === 'cancelled') {
@@ -581,7 +758,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const enforceExecutionOutcome = async (
         executionResult: NonNullable<typeof result>
-      ): Promise<{ ok: true } | { ok: false; message: string; code: string }> => {
+      ): Promise<{ ok: true } | { ok: false; message: string; code: string; prUrlValidationErrors?: string[] }> => {
         if (task.linearIssueId === undefined) {
           return {
             ok: false,
@@ -712,6 +889,42 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             message:
               `Execution agent reported different Linear issue (routed=${task.linearIssueId}, reported=${reportedIdentifier})`,
           };
+        }
+
+        // PR URL validation (INT-1361): verify PR exists, title matches, and recency
+        const prNumberFromUrl = /\/pull\/(\d+)/.exec(executionResult.prUrl);
+        /* v8 ignore start -- ts-type: prUrl always returns a match for /pull/N after enforcement check at line 658; parseOwnerRepo cannot return null for valid task.repository @preserve */
+        if (prNumberFromUrl?.[1] !== undefined) {
+          const parsedOwnerRepo = parseOwnerRepo(task.repository);
+          if (parsedOwnerRepo !== null) {
+          /* v8 ignore stop @preserve */
+            const token = await fetchGitHubToken(userServiceClient, task.userId, logger);
+            if (token !== null) {
+              const validationResult = await validatePrUrl({
+                prUrl: executionResult.prUrl,
+                prNumber: Number(prNumberFromUrl[1]),
+                linearIssueId: task.linearIssueId,
+                /* v8 ignore start -- ts-type: conditional spread for optional Timestamp field @preserve */
+                ...(task.dispatchedAt !== undefined && { dispatchedAt: task.dispatchedAt.toDate() }),
+                /* v8 ignore stop @preserve */
+                token,
+                owner: parsedOwnerRepo.owner,
+                repo: parsedOwnerRepo.repo,
+                gitHubPRClient,
+                logger,
+              });
+              if (validationResult.failed) {
+                return {
+                  ok: false,
+                  code: 'EXECUTION_AGENT_PR_URL_VALIDATION_FAILED',
+                  message: validationResult.errors.join('; '),
+                  prUrlValidationErrors: validationResult.errors,
+                };
+              }
+            } else {
+              logger.warn({ taskId, userId: task.userId }, 'PR URL validation skipped: no GitHub token available');
+            }
+          }
         }
 
         const commentResult = await linearAgentClient.addComment({
@@ -881,9 +1094,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             orchestratorSecret: loadConfig().orchestratorSecret,
             executionMemory: {
               /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
-              ...(services.executionMemoryQueryClient !== undefined && {
-                queryClient: services.executionMemoryQueryClient,
-              }),
               ...(services.executionMemoryEmbeddingClient !== undefined && {
                 embeddingClient: services.executionMemoryEmbeddingClient,
               }),
@@ -895,6 +1105,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               }),
               /* v8 ignore stop @preserve */
             },
+            userServiceClient: services.userServiceClient,
           });
         } catch (drainErr) {
           logger.warn({ taskId, prNumber: task.prNumber, error: drainErr }, 'Post-completion drain failed (non-blocking)');
@@ -956,6 +1167,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 code: executionEnforcement.code,
                 message: executionEnforcement.message,
               },
+              ...(executionEnforcement.prUrlValidationErrors !== undefined && {
+                prUrlValidationFailed: true,
+                prUrlValidationErrors: executionEnforcement.prUrlValidationErrors,
+              }),
               callbackReceived: true,
             });
             if (!failResult.ok) {
@@ -972,7 +1187,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
-
         }
 
         if (task.agentType === 'pull_request') {
@@ -1318,155 +1532,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 signal: remediationSignal,
               });
 
-              // Best-effort: set review-outcome label on the associated Linear issue
-              // Skip if PR is already merged — handlePrClose already cleaned up labels.
-              let prAlreadyMerged = false;
-              try {
-                const prMergeSummary = await gitHubPRSummaryRepo.findByPullRequest(task.repository, prNumber);
-                prAlreadyMerged = prMergeSummary.ok && prMergeSummary.value !== null && prMergeSummary.value.mergedAt !== null;
-              } catch {
-                // gitHubPRSummaryRepo may not be fully initialized — assume not merged
-              }
-
-              // Fallback: if summary says not-merged, check GitHub API directly.
-              // The summary is updated by a webhook that may arrive after this callback.
-              if (!prAlreadyMerged) {
-                try {
-                  const tokenResult = await userServiceClient.getOAuthToken(task.userId, 'github');
-                  if (tokenResult.ok) {
-                    const parsed = parseOwnerRepo(task.repository);
-                    /* v8 ignore start -- ts-type: task creation helpers always defined with valid owner/repo strings; no fake mechanism can inject a malformed repository field post-task-creation @preserve */
-                    if (parsed !== null) {
-                    /* v8 ignore stop @preserve */
-                      const prStatus = await gitHubPRClient.getPullRequestStatus(tokenResult.value.accessToken, parsed.owner, parsed.repo, prNumber);
-                      if (prStatus.ok && prStatus.value.mergedAt !== null) {
-                        prAlreadyMerged = true;
-                        request.log.info({ taskId, prNumber },
-                          'prAlreadyMerged detected via GitHub API fallback (summary was stale)');
-                      }
-                    }
-                  }
-                } catch {
-                  // GitHub API unavailable — proceed with summary-based decision
-                }
-              }
-
-              if (prAlreadyMerged) {
-                request.log.debug({ taskId, prNumber }, 'Skipping review-outcome label — PR already merged');
-              } else {
-              try {
-                const originResult = await codeTaskRepo.findOriginTaskByPR(task.repository, prNumber);
-                let targetLinearIssueId: string | undefined;
-                let targetUserId: string | undefined;
-                let label: string | undefined;
-                let source: string | undefined;
-
-                if (originResult.ok && originResult.value !== null && originResult.value.linearIssueId !== undefined) {
-                  if (originResult.value.agentType === 'planning') {
-                    // Plan-phase reviews do not auto-advance to execution.
-                    // The user must explicitly trigger execution from the UI.
-                    // But we DO auto-merge the plan PR so the plan docs land on development immediately.
-                    request.log.info({ taskId, prNumber, linearIssueId: originResult.value.linearIssueId },
-                      'Plan review passed — auto-merging plan PR (user must explicitly trigger execution)');
-
-                    const planningPrUrl = originResult.value.result?.planning_pr_url ?? originResult.value.result?.prUrl;
-                    if (planningPrUrl !== undefined && planningPrUrl !== '') {
-                      try {
-                        const gitHubToken = await fetchGitHubToken(userServiceClient, task.userId, request.log);
-                        if (gitHubToken !== null) {
-                          const mergeResult = await mergePlanPr(
-                            { logger: request.log, gitHubPRClient },
-                            { planningPrUrl, repository: task.repository, token: gitHubToken },
-                          );
-                          if (mergeResult.ok) {
-                            request.log.info({ prNumber, planningPrUrl }, 'Plan PR auto-merged on review pass');
-                          } else {
-                            request.log.warn({ prNumber, planningPrUrl, error: mergeResult.error }, 'Plan PR auto-merge failed (best-effort)');
-                          }
-                        } else {
-                          request.log.warn({ prNumber }, 'Skipping plan PR auto-merge — no GitHub token available');
-                        }
-                      } catch (mergeError: unknown) {
-                        request.log.warn({ prNumber, planningPrUrl, error: mergeError }, 'Plan PR auto-merge threw (best-effort)');
-                      }
-                    } else {
-                      request.log.debug({ prNumber, taskId: originResult.value.id }, 'No planning_pr_url on origin task — skipping plan PR auto-merge');
-                    }
-                  } else {
-                    targetLinearIssueId = originResult.value.linearIssueId;
-                    targetUserId = originResult.value.userId;
-                    label = 'ready-to-merge';
-                    source = 'origin';
-                  }
-                } else {
-                  // Fallback: use review task's own issue (common for external PRs)
-                  targetLinearIssueId = task.linearIssueId;
-                  targetUserId = task.userId;
-                  label = 'ready-to-merge';
-                  source = 'review-fallback';
-
-                  if (!originResult.ok) {
-                    request.log.warn({ taskId, prNumber, error: originResult.error },
-                      'Origin task lookup failed, falling back to review task issue');
-                  } else {
-                    request.log.info({ taskId, prNumber,
-                      originFound: originResult.value !== null,
-                      originHasLinearId: originResult.value?.linearIssueId !== undefined },
-                      'No origin task with linearIssueId, falling back to review task issue');
-                  }
-                }
-
-                if (targetLinearIssueId === undefined) {
-                  request.log.warn({ taskId, prNumber },
-                    'No Linear issue available for review-outcome label — skipping');
-                } else {
-                  const issueValidation = await linearAgentClient.validateIssue({
-                    userId: targetUserId!,
-                    identifier: targetLinearIssueId,
-                  });
-                  if (issueValidation.ok) {
-                    const labelResult = await linearAgentClient.updateIssueMetadata({
-                      userId: targetUserId!,
-                      issueId: issueValidation.value.id,
-                      addLabels: [label!],
-                    });
-                    if (labelResult.ok) {
-                      if (labelResult.value.droppedLabels.length > 0) {
-                        request.log.warn({ taskId, prNumber, droppedLabels: labelResult.value.droppedLabels, linearIssueId: targetLinearIssueId },
-                          'Review-outcome label not found in Linear team — label not applied');
-                      } else {
-                        request.log.info({ taskId, prNumber, label, linearIssueId: targetLinearIssueId, source },
-                          'Set review-outcome label');
-
-                        // Best-effort: recompute group summary with the new label so
-                        // cached aggregateStatus reflects the actionable state.
-                        const { groupSummaryRepo: summaryRepoForLabel } = getServices();
-                        if (summaryRepoForLabel !== undefined && targetLinearIssueId !== undefined) {
-                          const updatedLabels: { id: string; name: string }[] = [
-                            ...issueValidation.value.labels.map((l) => ({ id: '', name: l })),
-                            { id: '', name: label! },
-                          ];
-                          void summaryRepoForLabel.recomputeWithLabels(
-                            targetUserId!, targetLinearIssueId, updatedLabels, completedAt.toISOString(),
-                          ).catch((recomputeErr: unknown) => {
-                            request.log.warn({ linearIssueId: targetLinearIssueId, error: recomputeErr },
-                              'Failed to recompute group summary after review-outcome label (best-effort)');
-                          });
-                        }
-                      }
-                    } else {
-                      request.log.warn({ taskId, prNumber, label, error: labelResult.error },
-                        'Failed to set review-outcome label (best-effort)');
-                    }
-                  } else {
-                    request.log.warn({ taskId, prNumber, linearIssueId: targetLinearIssueId, error: issueValidation.error },
-                      'Failed to validate issue for review-outcome label (best-effort)');
-                  }
-                }
-              } catch (labelError: unknown) {
-                request.log.warn({ error: labelError, taskId, prNumber }, 'Failed to set review-outcome label (best-effort)');
-              }
-              }
+              await applyReadyToMergeLabel(prNumber);
             } else {
               // Best-effort: remove stale review-outcome label from the associated Linear issue.
               // A prior passing review may have set ready-to-merge / ready-to-implement;
@@ -1579,6 +1645,26 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         }
 
+        // Remediation-complete with "already_completed" outcome: restore ready-to-merge.
+        // A prior review (needs_remediation='1') removed the label and queued this
+        // remediation. The remediation concluded all findings were already fixed by an
+        // earlier run (requires_re_review='0', execution_outcome_label='already_completed').
+        // Since no new commits were pushed, the existing review state is still valid —
+        // re-apply the label so the UI surfaces the Merge action again.
+        //
+        // GUARD: execution_outcome_label MUST be 'already_completed'. If the remediation
+        // actually pushed commits ('implemented'), a fresh review MUST run and set the
+        // label via the normal review-complete path — short-circuiting here would skip
+        // review of new code.
+        if (
+          task.agentType === 'remediation' &&
+          prNumber !== undefined &&
+          result?.requires_re_review === '0' &&
+          result.execution_outcome_label === 'already_completed'
+        ) {
+          await applyReadyToMergeLabel(prNumber);
+        }
+
         // Best-effort In Review transition for agent types without deterministic enforcement
         // (planning, execution, and pull_request agents handle this in their own enforcement paths)
         if (task.agentType !== 'execution' && task.agentType !== 'pull_request' && task.agentType !== 'planning' && task.agentType !== 'remediation' && prNumber !== undefined && task.linearIssueId !== undefined) {
@@ -1622,9 +1708,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         }
 
-        rateLimitService.recordTaskComplete(task.userId).catch((err) => {
-          request.log.error({ taskId, userId: task.userId, error: err }, 'Failed to record task completion for rate limiting');
-        });
         metricsClient.incrementTasksCompleted(task.workerType, resolvedStatus).catch((err) => {
           request.log.warn({ taskId, error: err }, 'Failed to record task completion metric');
         });
@@ -1686,6 +1769,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           error: {
             code: taskError.code,
             message: taskError.message,
+            ...(taskError.remediation !== undefined && { remediation: taskError.remediation }),
           },
           ...(shouldQueueExecutionMemoryPostRun({
             agentType: task.agentType,
@@ -1708,6 +1792,63 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.error({ taskId, error: updateResult.error }, 'Failed to update task as failed');
           return reply.fail('INTERNAL_ERROR', updateResult.error.message);
         }
+
+        // Auto-retry triage (INT-1375)
+        // Skip triage for PLANNING_AGENT_UNCLEAR (already handled above with early return)
+        if (taskError.code !== 'PLANNING_AGENT_UNCLEAR') {
+          const { logLineRepo, taskEnqueueService } = getServices();
+          const triageResult = await triageFailedTask(
+            {
+              logger: request.log,
+              codeTaskRepo,
+              taskEnqueueService,
+              whatsappNotifier,
+              logLineRepo,
+              userServiceClient,
+              orchestratorSecret: loadConfig().orchestratorSecret,
+            },
+            { task, completedAt, taskError }
+          );
+
+          if (triageResult.action !== 'permanent_failure') {
+            request.log.info(
+              { taskId, action: triageResult.action, retryTaskId: triageResult.retryTaskId },
+              'Task auto-retried by failure triage'
+            );
+
+            // Even though retry is in flight, original task's failure must be mirrored
+            await cleanupLockIfPR();
+            await statusMirrorService.mirrorStatus({
+              actionId: task.actionId,
+              taskStatus: 'failed',
+              errorMessage: taskError.message,
+              traceId,
+            });
+
+            metricsClient.incrementTasksCompleted(task.workerType, 'failed').catch((metricsErr) => {
+              request.log.warn({ taskId, error: metricsErr }, 'Failed to record task completion metric');
+            });
+            if (request.body.duration) {
+              metricsClient.recordTaskDuration(task.workerType, request.body.duration).catch((metricsErr) => {
+                request.log.warn({ taskId, error: metricsErr }, 'Failed to record task duration metric');
+              });
+            }
+
+            await flushPendingTaskLogLines(taskId);
+            // Skip immediate drain for retried_after_cooloff — rely on scheduler tick as natural cooloff
+            if (triageResult.action !== 'retried_after_cooloff') {
+              await triggerDrainForPR();
+            }
+            // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
+            return await reply.send({ received: true });
+          }
+          // Fall through to permanent failure path
+          request.log.info(
+            { taskId, reason: triageResult.reason },
+            'Failure triage: permanent failure'
+          );
+        }
+
         await cleanupLockIfPR();
 
         await statusMirrorService.mirrorStatus({
@@ -1723,9 +1864,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           taskError
         );
 
-        rateLimitService.recordTaskComplete(task.userId).catch((err) => {
-          request.log.error({ taskId, userId: task.userId, error: err }, 'Failed to record task completion for rate limiting');
-        });
         metricsClient.incrementTasksCompleted(task.workerType, 'failed').catch((err) => {
           request.log.warn({ taskId, error: err }, 'Failed to record task completion metric');
         });
@@ -1776,9 +1914,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         );
 
-        rateLimitService.recordTaskComplete(task.userId).catch((err) => {
-          request.log.error({ taskId, userId: task.userId, error: err }, 'Failed to record task completion for rate limiting');
-        });
         metricsClient.incrementTasksCompleted(task.workerType, 'interrupted').catch((err) => {
           request.log.warn({ taskId, error: err }, 'Failed to record task completion metric');
         });
@@ -1829,9 +1964,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         );
 
-        rateLimitService.recordTaskComplete(task.userId).catch((err) => {
-          request.log.error({ taskId, userId: task.userId, error: err }, 'Failed to record task completion for rate limiting');
-        });
         metricsClient.incrementTasksCompleted(task.workerType, 'cancelled').catch((err) => {
           request.log.warn({ taskId, error: err }, 'Failed to record task completion metric');
         });

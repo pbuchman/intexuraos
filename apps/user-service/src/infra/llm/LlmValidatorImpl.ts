@@ -8,7 +8,8 @@ import { createGptClient } from '@intexuraos/infra-gpt';
 import { createClaudeClient } from '@intexuraos/infra-claude';
 import { createPerplexityClient } from '@intexuraos/infra-perplexity';
 import { createOpenRouterClient, OPENROUTER_VALIDATION_MODEL } from '@intexuraos/infra-openrouter';
-import { LlmModels, LlmProviders, type ModelPricing } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import type {
   LlmProvider,
   LlmTestResponse,
@@ -27,27 +28,16 @@ const VALIDATION_MODELS = {
 } as const;
 
 /**
- * Pricing configuration for validation models.
- */
-export interface ValidationPricing {
-  google: ModelPricing;
-  openai: ModelPricing;
-  anthropic: ModelPricing;
-  perplexity: ModelPricing;
-  openrouter: ModelPricing;
-}
-
-/**
  * Implementation of LlmValidator that delegates to infra packages.
  * Uses cheap/fast models for validation to minimize costs.
  */
 export class LlmValidatorImpl implements LlmValidator {
-  private readonly pricing: ValidationPricing;
   private readonly logger: Logger;
+  private readonly usageSink: UsageSink;
 
-  constructor(pricing: ValidationPricing, logger: Logger) {
-    this.pricing = pricing;
+  constructor(logger: Logger, usageSink: UsageSink) {
     this.logger = logger;
+    this.usageSink = usageSink;
   }
 
   async validateKey(
@@ -61,10 +51,10 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.Google],
           userId,
-          pricing: this.pricing.google,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
-        const result = await client.generate(VALIDATION_PROMPT);
+        const result = await client.generate(VALIDATION_PROMPT, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
@@ -81,10 +71,10 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.OpenAI],
           userId,
-          pricing: this.pricing.openai,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
-        const result = await client.generate(VALIDATION_PROMPT);
+        const result = await client.generate(VALIDATION_PROMPT, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
@@ -101,10 +91,10 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.Anthropic],
           userId,
-          pricing: this.pricing.anthropic,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
-        const result = await client.generate(VALIDATION_PROMPT);
+        const result = await client.generate(VALIDATION_PROMPT, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
@@ -121,10 +111,10 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.Perplexity],
           userId,
-          pricing: this.pricing.perplexity,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
-        const result = await client.generate(VALIDATION_PROMPT);
+        const result = await client.generate(VALIDATION_PROMPT, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
@@ -142,8 +132,8 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.OpenRouter],
           userId,
-          pricing: this.pricing.openrouter,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
         const result = await client.validateKey(apiKey);
         if (!result.ok) {
@@ -172,10 +162,10 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.Google],
           userId,
-          pricing: this.pricing.google,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
-        const result = await client.generate(prompt);
+        const result = await client.generate(prompt, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: 'API_ERROR',
@@ -189,10 +179,10 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.OpenAI],
           userId,
-          pricing: this.pricing.openai,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
-        const result = await client.generate(prompt);
+        const result = await client.generate(prompt, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: 'API_ERROR',
@@ -206,10 +196,10 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.Anthropic],
           userId,
-          pricing: this.pricing.anthropic,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
-        const result = await client.generate(prompt);
+        const result = await client.generate(prompt, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: 'API_ERROR',
@@ -223,10 +213,10 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.Perplexity],
           userId,
-          pricing: this.pricing.perplexity,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
-        const result = await client.generate(prompt);
+        const result = await client.generate(prompt, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: 'API_ERROR',
@@ -240,10 +230,10 @@ export class LlmValidatorImpl implements LlmValidator {
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.OpenRouter],
           userId,
-          pricing: this.pricing.openrouter,
           logger: this.logger,
+          usageSink: this.usageSink,
         });
-        const result = await client.generate(prompt);
+        const result = await client.generate(prompt, { promptType: 'user-service-validation' });
         if (!result.ok) {
           return err({
             code: 'API_ERROR',

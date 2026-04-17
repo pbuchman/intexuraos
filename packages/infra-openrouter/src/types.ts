@@ -6,12 +6,12 @@
 
 import type { Logger } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
+import type { OwnerType } from '@intexuraos/llm-contract';
 
 export type {
   LLMError as OpenRouterError,
   ResearchResult,
   GenerateResult,
-  ModelPricing,
 } from '@intexuraos/llm-contract';
 
 /**
@@ -20,6 +20,8 @@ export type {
 export interface GenerateOptions {
   /** Request a specific response format from the model (e.g., JSON mode). */
   responseFormat?: { type: 'json_object' | 'text' };
+  /** Semantic identifier for what the prompt was used for (e.g., 'linear-issue-title', 'code-worker-validation') */
+  promptType: string;
 }
 
 /**
@@ -36,12 +38,8 @@ export interface GenerateOptions {
  *   apiKey: process.env.OPENROUTER_API_KEY,
  *   model: 'anthropic/claude-sonnet-4.6',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 3.0,
- *     outputPricePerMillion: 15.0,
- *     useProviderCost: true,
- *   },
  *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  * ```
  */
@@ -54,14 +52,14 @@ export interface OpenRouterConfig {
   userId: string;
   /** Optional research ID for correlating audit logs to a research run */
   researchId?: string;
-  /** Cost configuration per million tokens */
-  pricing: import('@intexuraos/llm-contract').ModelPricing;
   /** Request timeout in milliseconds. Default: 840000 (14 minutes) */
   timeoutMs?: number;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
-  /** Optional usage sink override. Defaults to FirestoreUsageSink. */
-  usageSink?: UsageSink;
+  /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
+  usageSink: UsageSink;
+  /** Owner scope of the call. When omitted, the usage sink defaults to 'system'. */
+  ownerType?: OwnerType;
 }
 
 /**
@@ -101,6 +99,7 @@ export interface OpenRouterUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  cost?: number; // OpenRouter reports USD cost per request (always present per docs, optional for back-compat)
 }
 
 /**

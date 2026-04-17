@@ -32,15 +32,15 @@ const PROVIDER_MODELS: ProviderConfig[] = [
     id: LlmProviders.Anthropic,
     displayName: 'Anthropic',
     models: [
-      { id: LlmModels.ClaudeSonnet45, name: 'Claude Sonnet' },
-      { id: LlmModels.ClaudeOpus45, name: 'Claude Opus' },
+      { id: LlmModels.ClaudeSonnet46, name: 'Claude Sonnet' },
+      { id: LlmModels.ClaudeOpus46, name: 'Claude Opus' },
     ],
   },
   {
     id: LlmProviders.OpenAI,
     displayName: 'OpenAI',
     models: [
-      { id: LlmModels.GPT52, name: 'GPT-5.2' },
+      { id: LlmModels.GPT54, name: 'GPT-5.4' },
       { id: LlmModels.O4MiniDeepResearch, name: 'O4 Mini' },
     ],
   },

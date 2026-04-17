@@ -331,7 +331,7 @@ describe('InputQualitySchema', () => {
       });
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0].path[0]).toBe('quality');
+        expect(result.error.issues[0]?.path[0]).toBe('quality');
       }
     });
 
@@ -386,7 +386,7 @@ describe('InputQualitySchema', () => {
       });
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0].path[0]).toBe('reason');
+        expect(result.error.issues[0]?.path[0]).toBe('reason');
       }
     });
 

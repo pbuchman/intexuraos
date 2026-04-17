@@ -13,7 +13,6 @@ import { createFirestoreLogLineRepository } from '../../infra/repositories/fires
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
-import type { RateLimitService } from '../../domain/services/rateLimitService.js';
 import { ok, err } from '@intexuraos/common-core';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
@@ -98,18 +97,6 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
   const fakeFirestore = createFakeFirestore() as unknown as Firestore;
   setFirestore(fakeFirestore);
   const logger = pino({ name: 'test', level: 'silent' });
-
-  const rateLimitService: RateLimitService = {
-    async checkLimits() {
-      return ok(undefined);
-    },
-    async recordTaskStart() {
-      return;
-    },
-    async recordTaskComplete() {
-      return;
-    },
-  };
 
   const metricsClient = createNoOpMetricsClient();
 
@@ -200,6 +187,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
   const container: ServiceContainer = {
     firestore: fakeFirestore,
     logger,
+    serviceUrl: 'http://localhost:8080',
     codeTaskRepo,
     logChunkRepo: createFirestoreLogChunkRepository({
       firestore: fakeFirestore,
@@ -220,7 +208,6 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       actionsAgentClient,
       logger,
     }),
-    rateLimitService,
     linearIssueService,
     metricsClient,
     processHeartbeat: createProcessHeartbeatUseCase({
@@ -281,7 +268,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     }),
     userServiceClient: mockUserServiceClient,
     gitHubPRClient: createGitHubPRHttpClient({ timeoutMs: 5000 }),
-    toolCallingClient: undefined,
+    resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
     webhookRules: webhookRules,
     dispatchService: dispatchService,
     eventDecisionRepo: eventDecisionRepo,

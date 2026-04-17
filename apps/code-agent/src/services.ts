@@ -6,12 +6,12 @@
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { Logger } from 'pino';
 import type { Firestore } from '@google-cloud/firestore';
-import { ok, type Result } from '@intexuraos/common-core';
+import { ok, err, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
-import { TOOL_CALLING_PRICING } from '@intexuraos/infra-gemini';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
-import { createLlmClient, createToolCallingClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
+import { createToolCallingClient } from '@intexuraos/llm-factory';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { EmbeddingClient } from '@intexuraos/infra-gpt';
 import OpenAI from 'openai';
 import type { CreateEmbeddingResponse } from 'openai/resources';
@@ -21,7 +21,6 @@ import type { LogLineRepository } from './domain/repositories/logLineRepository.
 import type { TaskDispatcherService } from './domain/services/taskDispatcher.js';
 import type { WhatsAppNotifier } from './domain/services/whatsappNotifier.js';
 import type { ActionsAgentClient } from './infra/clients/actionsAgentClient.js';
-import type { RateLimitService } from './domain/services/rateLimitService.js';
 import type { WorkerSettingsRepository } from './domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from './domain/ports/workerHealthProbe.js';
 import type { UserLookupService } from './domain/ports/userLookupService.js';
@@ -31,8 +30,6 @@ import { createFirestoreLogLineRepository } from './infra/repositories/firestore
 import { createTaskDispatcherService } from './infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from './infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from './infra/clients/actionsAgentClient.js';
-import { createUserUsageFirestoreRepository } from './infra/firestore/userUsageFirestoreRepository.js';
-import { createRateLimitService } from './domain/services/rateLimitService.js';
 import { createLinearAgentHttpClient } from './infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService, type LinearIssueService } from './domain/services/linearIssueService.js';
 import type { LinearAgentClient, IssueContext, LinearAgentError } from './domain/ports/linearAgentClient.js';
@@ -58,10 +55,10 @@ import type { GitHubPRSummaryRepository } from './domain/repositories/gitHubPRSu
 import { createFirestoreGitHubPRSummariesRepository } from './infra/firestore/gitHubPRSummariesRepository.js';
 import type { GitHubPRClient } from './domain/ports/gitHubPRClient.js';
 import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
-import type { UserServiceClient } from '@intexuraos/internal-clients';
-import { createUserServiceClient } from '@intexuraos/internal-clients';
+import type { UserServiceClient, UsageServiceClient } from '@intexuraos/internal-clients';
+import { createUserServiceClient, createUsageServiceClient } from '@intexuraos/internal-clients';
 import { createGitHubUsernameResolver } from './infra/services/gitHubUsernameResolverImpl.js';
-import { CodeWorkerOutputRule, ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, CIFailureRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
+import { CodeWorkerOutputRule, DraftPRRule, ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, CIFailureRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
 import { createWebhookDispatchService, type WebhookDispatchService, type CIFailureDispatchService } from './domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
 import { ALLOWED_BOTS, CODE_WORKER_BOTS } from './routes/webhooks/github.js';
@@ -94,14 +91,10 @@ import type { TaskGroupSummaryRepository } from './domain/ports/taskGroupSummary
 import { createTaskGroupSummaryFirestoreRepository } from './infra/firestore/taskGroupSummaryFirestoreRepository.js';
 import { withGroupUpdates } from './infra/repositories/codeTaskRepositoryWithGroupUpdates.js';
 
-const GEMINI_TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
-const GEMINI_TOOL_CALLING_PRICING = TOOL_CALLING_PRICING[LlmModels.Gemini25Flash];
-const EXECUTION_MEMORY_MODEL = LlmModels.Gemini25Flash;
-const EXECUTION_MEMORY_USER_ID = 'system:execution-memory';
-
 export interface ServiceContainer {
   firestore: Firestore;
   logger: Logger;
+  serviceUrl?: string;
   codeTaskRepo: CodeTaskRepository;
   logChunkRepo: LogChunkRepository;
   logLineRepo: LogLineRepository;
@@ -109,7 +102,6 @@ export interface ServiceContainer {
   whatsappNotifier: WhatsAppNotifier;
   actionsAgentClient: ActionsAgentClient;
   linearAgentClient: LinearAgentClient;
-  rateLimitService: RateLimitService;
   linearIssueService: LinearIssueService;
   statusMirrorService: StatusMirrorService;
   processHeartbeat: ProcessHeartbeatUseCase;
@@ -131,7 +123,7 @@ export interface ServiceContainer {
   webhookRules: WebhookRulesService;
   dispatchService: WebhookDispatchService;
   // GitHub Agent (INT-743)
-  toolCallingClient: ToolCallingClient | undefined; // @allow-undefined-type -- exactOptionalPropertyTypes requires explicit | undefined for conditional initialization
+  resolveToolCallingClient: (userId: string) => Promise<Result<ToolCallingClient, GitHubAgentError>>;
   // INT-744: Unified Webhook Evaluator
   eventDecisionRepo: EventDecisionRepository;
   dispatchRetryRepo: DispatchRetryRepository;
@@ -142,10 +134,8 @@ export interface ServiceContainer {
   mergeQueueWatchRepo: MergeQueueWatchRepository;
   executionMemoryRepo?: ExecutionMemoryRepository;
   executionMemoryApplicationRepo?: ExecutionMemoryApplicationRepository;
-  executionMemoryQueryClient?: LlmGenerateClient;
-  executionMemoryDistillerClient?: LlmGenerateClient;
-  executionMemoryEvaluatorClient?: LlmGenerateClient;
   executionMemoryEmbeddingClient?: EmbeddingClient;
+  usageServiceClient?: UsageServiceClient;
   // Optional so existing setServices() call sites in tests don't need updating
   groupSummaryRepo?: TaskGroupSummaryRepository;
   createRemediationTaskFn?: (logger: Logger, request: CreateRemediationTaskRequest) => Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
@@ -167,6 +157,7 @@ export interface ServiceConfig {
   // GitHub Agent (INT-743)
   geminiAppApiKey: string;
   openaiAppApiKey: string;
+  llmUsageServiceUrl: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -352,18 +343,29 @@ export function initServices(config: ServiceConfig): void {
         logger: createAppLogger({ name: 'whatsapp-publisher' }),
       });
 
+  const buildUsageSink = (component: string): HttpInternalAuthUsageSink =>
+    new HttpInternalAuthUsageSink({
+      usageServiceUrl: config.llmUsageServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+      service: 'code-agent',
+      component,
+      logger,
+    });
+
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
     logger,
-    pricingContext: {
-      getPricing() { throw new Error('code-agent does not use LLM pricing'); },
-      hasPricing() { return false; },
-      validateModels() { throw new Error('code-agent does not use LLM pricing'); },
-      validateAllModels() { throw new Error('code-agent does not use LLM pricing'); },
-      getModelsWithPricing() { return []; },
-    },
+    usageSink: buildUsageSink('user-service-client'),
   });
+
+  const usageServiceClient = config.llmUsageServiceUrl !== ''
+    ? createUsageServiceClient({
+        baseUrl: config.llmUsageServiceUrl,
+        internalAuthToken: config.internalAuthToken,
+        logger,
+      })
+    : undefined;
 
   const rawCodeTaskRepo = createFirestoreCodeTaskRepository({ firestore, logger });
   const groupSummaryRepo = createTaskGroupSummaryFirestoreRepository({ firestore, logger });
@@ -402,6 +404,9 @@ export function initServices(config: ServiceConfig): void {
     // both intexuraos/* and */intexuraos patterns. Adding it here would be
     // redundant and risks scope mismatch (see PR #997 review).
     new CodeWorkerOutputRule(CODE_WORKER_BOTS),
+    // DraftPRRule must come before CIFailureRule and ActionableEventRule
+    // to block ALL code-tasks on draft PRs before any dispatch/triage cost.
+    new DraftPRRule(),
     // CIFailureRule must come BEFORE ActionableEventRule to catch check_suite
     // events before ActionableEventRule short-circuits with "skip" (check_suite
     // is not in ActionableEventRule's list of known event types).
@@ -415,44 +420,43 @@ export function initServices(config: ServiceConfig): void {
     // The original dispatched all edited bot comments without payload inspection.
   ]);
 
-  const toolCallingClient = config.geminiAppApiKey !== ''
-    ? createToolCallingClient({
+  const TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
+  const githubAgentUsageSink = buildUsageSink('github-agent');
+
+  const resolveToolCallingClient = async (userId: string): Promise<Result<ToolCallingClient, GitHubAgentError>> => {
+    // Try user's own Google API key first
+    const keysResult = await userServiceClient.getApiKeys(userId);
+    if (keysResult.ok) {
+      const googleKey = keysResult.value.google;
+      if (googleKey !== undefined) {
+        logger.debug({ userId }, 'GitHub Agent: using user Google API key');
+        return ok(createToolCallingClient({
+          apiKey: googleKey,
+          model: TOOL_CALLING_MODEL,
+          userId,
+          logger,
+          usageSink: githubAgentUsageSink,
+        }));
+      }
+    }
+
+    // Fall back to platform key
+    if (config.geminiAppApiKey !== '') {
+      logger.debug({ userId }, 'GitHub Agent: falling back to platform Gemini API key');
+      return ok(createToolCallingClient({
         apiKey: config.geminiAppApiKey,
-        model: GEMINI_TOOL_CALLING_MODEL,
-        userId: 'system:github-agent',
-        pricing: GEMINI_TOOL_CALLING_PRICING,
+        model: TOOL_CALLING_MODEL,
+        userId,
         logger,
-      })
-    : undefined;
+        usageSink: githubAgentUsageSink,
+      }));
+    }
+
+    return err({ code: 'LLM_FAILED' as const, message: 'No Google API key available for tool calling' });
+  };
+
   const executionMemoryOpenAI = config.openaiAppApiKey !== ''
     ? new OpenAI({ apiKey: config.openaiAppApiKey })
-    : undefined;
-  const executionMemoryQueryClient = config.geminiAppApiKey !== ''
-    ? createLlmClient({
-        apiKey: config.geminiAppApiKey,
-        model: EXECUTION_MEMORY_MODEL,
-        userId: EXECUTION_MEMORY_USER_ID,
-        pricing: GEMINI_TOOL_CALLING_PRICING,
-        logger,
-      })
-    : undefined;
-  const executionMemoryDistillerClient = config.geminiAppApiKey !== ''
-    ? createLlmClient({
-        apiKey: config.geminiAppApiKey,
-        model: EXECUTION_MEMORY_MODEL,
-        userId: EXECUTION_MEMORY_USER_ID,
-        pricing: GEMINI_TOOL_CALLING_PRICING,
-        logger,
-      })
-    : undefined;
-  const executionMemoryEvaluatorClient = config.geminiAppApiKey !== ''
-    ? createLlmClient({
-        apiKey: config.geminiAppApiKey,
-        model: EXECUTION_MEMORY_MODEL,
-        userId: EXECUTION_MEMORY_USER_ID,
-        pricing: GEMINI_TOOL_CALLING_PRICING,
-        logger,
-      })
     : undefined;
   const executionMemoryEmbeddingClient = executionMemoryOpenAI !== undefined
     ? new EmbeddingClient({
@@ -528,13 +532,11 @@ export function initServices(config: ServiceConfig): void {
     ciFailureDispatchService: dispatchService,
     eventDecisionRepo,
     gitHubEventLogEntryRepo,
-    evaluateEvent: toolCallingClient !== undefined
-      ? (event: GitHubPREvent, correctionContext?: string): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> => evaluateEvent(
-          { logger, gitHubPRClient, toolCallingClient, userServiceClient, allowedBots: ALLOWED_BOTS },
-          event,
-          correctionContext,
-        )
-      : undefined,
+    evaluateEvent: (event: GitHubPREvent, correctionContext?: string): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> => evaluateEvent(
+      { logger, gitHubPRClient, resolveToolCallingClient, userServiceClient, allowedBots: ALLOWED_BOTS },
+      event,
+      correctionContext,
+    ),
     createReviewTask: (taskLogger, request) => createReviewTask(
       {
         logger: taskLogger,
@@ -575,6 +577,7 @@ export function initServices(config: ServiceConfig): void {
   container = {
     firestore,
     logger,
+    serviceUrl: config.serviceUrl,
     codeTaskRepo,
     logChunkRepo: createFirestoreLogChunkRepository({ firestore, logger }),
     logLineRepo,
@@ -583,10 +586,6 @@ export function initServices(config: ServiceConfig): void {
     actionsAgentClient,
     linearAgentClient,
     statusMirrorService,
-    rateLimitService: createRateLimitService({
-      userUsageRepository: createUserUsageFirestoreRepository(firestore, logger),
-      logger,
-    }),
     linearIssueService,
     processHeartbeat: createProcessHeartbeatUseCase({
       codeTaskRepository: codeTaskRepo,
@@ -620,7 +619,7 @@ export function initServices(config: ServiceConfig): void {
     gitHubPRClient,
     userLookupService,
     webhookRules,
-    toolCallingClient,
+    resolveToolCallingClient,
     dispatchService,
     eventDecisionRepo,
     dispatchRetryRepo,
@@ -631,10 +630,8 @@ export function initServices(config: ServiceConfig): void {
     mergeQueueWatchRepo,
     executionMemoryRepo,
     executionMemoryApplicationRepo,
-    ...(executionMemoryQueryClient !== undefined && { executionMemoryQueryClient }),
-    ...(executionMemoryDistillerClient !== undefined && { executionMemoryDistillerClient }),
-    ...(executionMemoryEvaluatorClient !== undefined && { executionMemoryEvaluatorClient }),
     ...(executionMemoryEmbeddingClient !== undefined && { executionMemoryEmbeddingClient }),
+    ...(usageServiceClient !== undefined && { usageServiceClient }),
     groupSummaryRepo,
     createRemediationTaskFn: (taskLogger: Logger, request: CreateRemediationTaskRequest): Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>> => createRemediationTask(
       {

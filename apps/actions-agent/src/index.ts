@@ -17,7 +17,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_CALENDAR_AGENT_URL',
   'INTEXURAOS_LINEAR_AGENT_URL',
   'INTEXURAOS_CODE_AGENT_URL',
-  'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
+  'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_PUBSUB_ACTIONS_QUEUE',
   'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
@@ -34,7 +34,7 @@ initSentry({
 });
 
 async function main(): Promise<void> {
-  await initServices({
+  initServices({
     ResearchAgentUrl: process.env['INTEXURAOS_RESEARCH_AGENT_URL'] as string,
     userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] as string,
     commandsAgentUrl: process.env['INTEXURAOS_COMMANDS_AGENT_URL'] as string,
@@ -44,7 +44,7 @@ async function main(): Promise<void> {
     calendarAgentUrl: process.env['INTEXURAOS_CALENDAR_AGENT_URL'] as string,
     linearAgentUrl: process.env['INTEXURAOS_LINEAR_AGENT_URL'] as string,
     codeAgentUrl: process.env['INTEXURAOS_CODE_AGENT_URL'] as string,
-    appSettingsServiceUrl: process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] as string,
+    llmUsageServiceUrl: process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] as string,
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] as string,
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] as string,
     whatsappSendTopic: process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'] as string,

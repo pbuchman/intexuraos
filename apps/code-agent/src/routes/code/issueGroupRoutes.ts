@@ -59,6 +59,7 @@ function taskToSerializedTask(task: {
   prNumber?: number;
   prMergedAt?: unknown;   // Firestore Timestamp | string
   prClosedAt?: unknown;   // Firestore Timestamp | string
+  requiresReReview?: boolean;
   result?: {
     prUrl?: string;
     branch?: string;
@@ -71,6 +72,8 @@ function taskToSerializedTask(task: {
     review_types?: string;
     requirements_tracker_updated?: string;
     needs_remediation?: string;
+    requires_re_review?: string;
+    execution_outcome_label?: string;
   };
   error?: {
     code: string;
@@ -130,6 +133,7 @@ function taskToSerializedTask(task: {
   /* v8 ignore stop @preserve */
   if (prMergedAt !== undefined) { serialized.prMergedAt = prMergedAt; }
   if (prClosedAt !== undefined) { serialized.prClosedAt = prClosedAt; }
+  if (task.requiresReReview !== undefined) { serialized.requiresReReview = task.requiresReReview; }
   if (task.result !== undefined) { serialized.result = task.result; }
   if (task.error !== undefined) { serialized.error = task.error; }
 
@@ -368,6 +372,22 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         const unsortedGroups = groupByLinearIssue(allPageTasks);
         const paginatedGroups = sortIssueGroups(unsortedGroups, sortBy);
 
+        // Build isImportant lookup from summaries
+        const importantByGroupKey = new Map<string, boolean>();
+        for (const summary of summaries) {
+          if (summary.isImportant === true) {
+            importantByGroupKey.set(summary.groupKey, true);
+          }
+        }
+
+        // Attach isImportant to groups
+        for (const group of paginatedGroups) {
+          const groupKey = group.linearIssueId ?? `standalone_${group.latestTask.id}`;
+          if (importantByGroupKey.get(groupKey) === true) {
+            group.isImportant = true;
+          }
+        }
+
         // 5b. Detect phantom summaries: summaries returned by the query that
         // produced zero displayable tasks (all tasks archived or ask_agent).
         // Their status must be subtracted from the precomputed counts so the
@@ -437,6 +457,59 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           totalGroups,
           ...(summariesNextCursor !== undefined && { nextCursor: summariesNextCursor }),
         });
+      }
+    );
+
+    fastify.post<{
+      Params: { groupKey: string };
+      Body: { important: boolean };
+    }>(
+      '/code/issue-groups/:groupKey/important',
+      {
+        schema: {
+          params: {
+            type: 'object',
+            properties: {
+              groupKey: { type: 'string' },
+            },
+            required: ['groupKey'],
+          },
+          body: {
+            type: 'object',
+            properties: {
+              important: { type: 'boolean' },
+            },
+            required: ['important'],
+          },
+        },
+      },
+      async (request: FastifyRequest<{ Params: { groupKey: string }; Body: { important: boolean } }>, reply: FastifyReply) => {
+        logIncomingRequest(request, {
+          message: 'Received request to POST /code/issue-groups/:groupKey/important',
+          includeParams: true,
+        });
+
+        const { groupSummaryRepo } = getServices();
+        const summaryRepo = groupSummaryRepo as NonNullable<typeof groupSummaryRepo>;
+        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId -- ?? fallback unreachable @preserve */
+        const userId = request.user?.userId ?? 'unknown-user';
+        /* v8 ignore stop @preserve */
+
+        const { groupKey } = request.params;
+        const { important } = request.body;
+
+        const result = await summaryRepo.setImportant(userId, groupKey, important);
+
+        if (!result.ok) {
+          if (result.error.code === 'NOT_FOUND') {
+            return await reply.fail('NOT_FOUND', result.error.message);
+          }
+          request.log.error({ error: result.error, groupKey }, 'Failed to set important flag');
+          return await reply.fail('INTERNAL_ERROR', result.error.message);
+        }
+
+        request.log.info({ userId, groupKey, important }, 'Group important flag updated');
+        return await reply.ok({ important });
       }
     );
   });

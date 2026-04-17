@@ -3,8 +3,9 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type ModelPricing } from '@intexuraos/llm-contract';
+
 import type { Logger } from '@intexuraos/common-core';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const TEST_MODEL = 'or:deepseek/deepseek-v3-0324';
 const EXPECTED_RAW_MODEL = 'deepseek/deepseek-v3-0324';
@@ -23,12 +24,6 @@ vi.mock('@intexuraos/infra-openrouter', () => ({
 
 const { OpenRouterAdapter } = await import('../../../infra/llm/OpenRouterAdapter.js');
 
-const testPricing: ModelPricing = {
-  inputPricePerMillion: 3.0,
-  outputPricePerMillion: 15.0,
-  useProviderCost: true,
-};
-
 const mockLogger: Logger = {
   info: vi.fn(),
   error: vi.fn(),
@@ -38,15 +33,17 @@ const mockLogger: Logger = {
 
 describe('OpenRouterAdapter', () => {
   let adapter: InstanceType<typeof OpenRouterAdapter>;
+  let fakeUsageSink: FakeUsageSink;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    fakeUsageSink = new FakeUsageSink();
     adapter = new OpenRouterAdapter(
       'test-key',
       TEST_MODEL,
       'test-user-id',
-      testPricing,
-      mockLogger
+      mockLogger,
+      fakeUsageSink
     );
   });
 
@@ -57,16 +54,16 @@ describe('OpenRouterAdapter', () => {
         'test-key',
         TEST_MODEL,
         'test-user-id',
-        testPricing,
-        mockLogger
+        mockLogger,
+        fakeUsageSink
       );
 
       expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: EXPECTED_RAW_MODEL,
         userId: 'test-user-id',
-        pricing: testPricing,
         logger: mockLogger,
+        usageSink: fakeUsageSink,
       });
     });
 
@@ -76,8 +73,8 @@ describe('OpenRouterAdapter', () => {
         'test-key',
         TEST_MODEL,
         'test-user-id',
-        testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -86,8 +83,8 @@ describe('OpenRouterAdapter', () => {
         model: EXPECTED_RAW_MODEL,
         userId: 'test-user-id',
         researchId: 'research-123',
-        pricing: testPricing,
         logger: mockLogger,
+        usageSink: fakeUsageSink,
       });
     });
 
@@ -98,16 +95,35 @@ describe('OpenRouterAdapter', () => {
         'test-key',
         nonOpenRouterModel,
         'test-user-id',
-        testPricing,
-        mockLogger
+        mockLogger,
+        fakeUsageSink
       );
 
       expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: nonOpenRouterModel,
         userId: 'test-user-id',
-        pricing: testPricing,
         logger: mockLogger,
+        usageSink: fakeUsageSink,
+      });
+    });
+
+    it('strips or: prefix for google/gemini-3-flash-preview', () => {
+      mockCreateOpenRouterClient.mockClear();
+      new OpenRouterAdapter(
+        'test-key',
+        'or:google/gemini-3-flash-preview',
+        'test-user-id',
+        mockLogger,
+        fakeUsageSink
+      );
+
+      expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
+        apiKey: 'test-key',
+        model: 'google/gemini-3-flash-preview',
+        userId: 'test-user-id',
+        logger: mockLogger,
+        usageSink: fakeUsageSink,
       });
     });
   });
@@ -258,8 +274,14 @@ describe('OpenRouterAdapter', () => {
           costUsd: 0.001,
         });
       }
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Prompt'));
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Claude result'));
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('Prompt'),
+        expect.objectContaining({ promptType: 'research-synthesis' })
+      );
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('Claude result'),
+        expect.objectContaining({ promptType: 'research-synthesis' })
+      );
     });
 
     it('includes external reports in synthesis prompt', async () => {
@@ -269,7 +291,10 @@ describe('OpenRouterAdapter', () => {
         { content: 'External context' },
       ]);
 
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External context'));
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('External context'),
+        expect.objectContaining({ promptType: 'research-synthesis' })
+      );
     });
 
     it('uses synthesis context when provided', async () => {
@@ -415,8 +440,8 @@ describe('OpenRouterAdapter', () => {
         'test-key',
         TEST_MODEL,
         'test-user-id',
-        testPricing,
-        mockLoggerLocal
+        mockLoggerLocal,
+        fakeUsageSink
       );
 
       mockGenerate.mockResolvedValue({
@@ -450,10 +475,17 @@ describe('OpenRouterAdapter', () => {
         expect(result.value.usage.costUsd).toBe(0.001);
       }
       expect(mockGenerate).toHaveBeenCalledWith(
-        expect.stringContaining('Generate a short, concise title')
+        expect.stringContaining('Generate a short, concise title'),
+        expect.objectContaining({ promptType: 'research-title-generation' })
       );
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('SAME LANGUAGE'));
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Test prompt'));
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('SAME LANGUAGE'),
+        expect.objectContaining({ promptType: 'research-title-generation' })
+      );
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('Test prompt'),
+        expect.objectContaining({ promptType: 'research-title-generation' })
+      );
     });
 
     it('maps RATE_LIMITED error correctly', async () => {

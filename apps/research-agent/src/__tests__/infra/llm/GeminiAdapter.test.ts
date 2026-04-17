@@ -3,8 +3,9 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockResearch = vi.fn();
 const mockGenerate = vi.fn();
@@ -22,11 +23,6 @@ const { GeminiAdapter } = await import('../../../infra/llm/GeminiAdapter.js');
 
 const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
 
-const testPricing: ModelPricing = {
-  inputPricePerMillion: 1.25,
-  outputPricePerMillion: 10.0,
-};
-
 const mockLogger: Logger = {
   info: vi.fn(),
   error: vi.fn(),
@@ -36,24 +32,39 @@ const mockLogger: Logger = {
 
 describe('GeminiAdapter', () => {
   let adapter: InstanceType<typeof GeminiAdapter>;
+  let fakeUsageSink: FakeUsageSink;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GeminiAdapter('test-key', LlmModels.Gemini25Pro, 'test-user-id', testPricing, mockLogger);
+    fakeUsageSink = new FakeUsageSink();
+    adapter = new GeminiAdapter(
+      'test-key',
+      LlmModels.Gemini25Pro,
+      'test-user-id',
+      mockLogger,
+      fakeUsageSink
+    );
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateGeminiClient.mockClear();
-      new GeminiAdapter('test-key', LlmModels.Gemini25Pro, 'test-user-id', testPricing, mockLogger, 'research-123');
+      new GeminiAdapter(
+        'test-key',
+        LlmModels.Gemini25Pro,
+        'test-user-id',
+        mockLogger,
+        fakeUsageSink,
+        'research-123'
+      );
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: LlmModels.Gemini25Pro,
         userId: 'test-user-id',
         researchId: 'research-123',
-        pricing: testPricing,
         logger: mockLogger,
+        usageSink: fakeUsageSink,
       });
     });
 
@@ -62,8 +73,8 @@ describe('GeminiAdapter', () => {
         'test-key',
         LlmModels.Gemini25Pro,
         'test-user-id',
-        testPricing,
-        mockLogger
+        mockLogger,
+        fakeUsageSink
       );
       expect(testAdapter).toBeDefined();
     });
@@ -132,8 +143,14 @@ describe('GeminiAdapter', () => {
           costUsd: 0.001,
         });
       }
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Prompt'));
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('GPT result'));
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('Prompt'),
+        expect.objectContaining({ promptType: 'research-synthesis' })
+      );
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('GPT result'),
+        expect.objectContaining({ promptType: 'research-synthesis' })
+      );
     });
 
     it('includes external reports in synthesis prompt', async () => {
@@ -145,7 +162,10 @@ describe('GeminiAdapter', () => {
         [{ content: 'External context' }]
       );
 
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External context'));
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('External context'),
+        expect.objectContaining({ promptType: 'research-synthesis' })
+      );
     });
 
     it('uses synthesis context when provided', async () => {
@@ -198,8 +218,8 @@ describe('GeminiAdapter', () => {
         'test-key',
         LlmModels.Gemini25Pro,
         'test-user-id',
-        testPricing,
-        mockLogger
+        mockLogger,
+        fakeUsageSink
       );
 
       mockGenerate.mockResolvedValue({
@@ -231,10 +251,17 @@ describe('GeminiAdapter', () => {
         expect(result.value.usage.costUsd).toBe(0.001);
       }
       expect(mockGenerate).toHaveBeenCalledWith(
-        expect.stringContaining('Generate a short, concise title')
+        expect.stringContaining('Generate a short, concise title'),
+        expect.objectContaining({ promptType: 'research-title-generation' })
       );
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('CRITICAL REQUIREMENTS'));
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Test prompt'));
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('CRITICAL REQUIREMENTS'),
+        expect.objectContaining({ promptType: 'research-title-generation' })
+      );
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('Test prompt'),
+        expect.objectContaining({ promptType: 'research-title-generation' })
+      );
     });
 
     it('maps errors correctly', async () => {
@@ -267,9 +294,13 @@ describe('GeminiAdapter', () => {
         expect(result.value.usage.costUsd).toBe(0.001);
       }
       expect(mockGenerate).toHaveBeenCalledWith(
-        expect.stringContaining('Generate a very short label')
+        expect.stringContaining('Generate a very short label'),
+        expect.objectContaining({ promptType: 'research-context-label' })
       );
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Short context content'));
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('Short context content'),
+        expect.objectContaining({ promptType: 'research-context-label' })
+      );
     });
 
     it('truncates long content to 2000 characters', async () => {

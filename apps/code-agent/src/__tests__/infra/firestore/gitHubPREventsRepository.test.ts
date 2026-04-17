@@ -11,7 +11,7 @@ vi.mock('@intexuraos/infra-firestore', () => ({
   getFirestore: vi.fn(),
 }));
 
-import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
+import { createFirestoreGitHubPREventsRepository, readIsDraft } from '../../../infra/firestore/gitHubPREventsRepository.js';
 import { getFirestore } from '@intexuraos/infra-firestore';
 
 const mockGetFirestore = vi.mocked(getFirestore);
@@ -44,6 +44,7 @@ function createEventInput(
     title: 'Test PR',
     body: 'Test body',
     state: 'open',
+    isDraft: null,
     baseBranch: null,
     mergedAt: null,
     createdAt: new Date('2024-01-01T00:00:00Z'),
@@ -127,6 +128,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: 'Existing PR',
         body: 'Existing body',
         state: 'open',
+        isDraft: null,
         baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-01T00:00:00Z'),
@@ -275,6 +277,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: 'First PR',
         body: 'First body',
         state: 'open',
+        isDraft: null,
         baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-02T00:00:00Z'),
@@ -386,6 +389,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: 'PR with Timestamps',
         body: 'Body',
         state: 'closed',
+        isDraft: null,
         baseBranch: null,
         mergedAt: { toDate: (): Date => mergedAtDate },
         createdAt: { toDate: (): Date => createdAtDate },
@@ -440,6 +444,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: 'PR 1',
         body: 'Body 1',
         state: 'open',
+        isDraft: null,
         baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-02T00:00:00Z'),
@@ -563,6 +568,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: 'Merged PR',
         body: 'Body',
         state: 'closed',
+        isDraft: null,
         baseBranch: null,
         mergedAt: new Date('2024-01-02T00:00:00Z'),
         createdAt: new Date('2024-01-01T00:00:00Z'),
@@ -613,6 +619,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: 'Open PR',
         body: 'Body',
         state: 'open',
+        isDraft: null,
         baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-01T00:00:00Z'),
@@ -666,6 +673,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: 'Test PR',
         body: 'Test body',
         state: 'closed',
+        isDraft: null,
         baseBranch: null,
         mergedAt: { toDate: (): Date => mergedAtDate },
         createdAt: { toDate: (): Date => createdAtDate },
@@ -720,6 +728,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: 'PR 1',
         body: 'Body 1',
         state: 'open',
+        isDraft: null,
         baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-02T00:00:00Z'),
@@ -743,6 +752,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: 'PR 2',
         body: 'Body 2',
         state: 'closed',
+        isDraft: null,
         baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-01T00:00:00Z'),
@@ -867,6 +877,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: 'PR with Timestamps',
         body: 'Body',
         state: 'closed',
+        isDraft: null,
         baseBranch: null,
         mergedAt: { toDate: (): Date => mergedAtDate },
         createdAt: { toDate: (): Date => createdAtDate },
@@ -920,6 +931,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: null,
         body: 'Fix this line',
         state: 'open',
+        isDraft: null,
         baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-02T00:00:00Z'),
@@ -982,6 +994,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: null,
         body: 'Matching comment',
         state: 'open',
+        isDraft: null,
         baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-02T00:00:00Z'),
@@ -1097,6 +1110,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: null,
         body: 'LGTM',
         state: 'closed',
+        isDraft: null,
         baseBranch: 'main',
         mergedAt: { toDate: (): Date => mergedAtDate },
         createdAt: { toDate: (): Date => new Date('2024-01-20T00:00:00Z') },
@@ -1191,6 +1205,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: 'PR with audit',
         body: 'Body',
         state: 'open',
+        isDraft: null,
         baseBranch: 'main',
         mergedAt: null,
         createdAt: new Date('2024-01-02T00:00:00Z'),
@@ -1244,6 +1259,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: 'Repo PR',
         body: 'Body',
         state: 'closed',
+        isDraft: null,
         baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-03T00:00:00Z'),
@@ -1294,6 +1310,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: null,
         body: 'Review comment body',
         state: 'open',
+        isDraft: null,
         baseBranch: 'develop',
         mergedAt: null,
         createdAt: new Date('2024-01-02T00:00:00Z'),
@@ -1350,6 +1367,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: 'PR all',
         body: 'Body',
         state: 'open',
+        isDraft: null,
         baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-04T00:00:00Z'),
@@ -1400,6 +1418,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: 'PR with string dates',
         body: 'Body',
         state: 'open',
+        isDraft: null,
         baseBranch: null,
         mergedAt: null,
         createdAt: '2024-01-02T00:00:00.000Z',
@@ -1452,6 +1471,7 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         title: 'PR with numeric delivery',
         body: 'Body',
         state: 'open',
+        isDraft: null,
         baseBranch: null,
         mergedAt: null,
         createdAt: new Date('2024-01-02T00:00:00Z'),
@@ -1483,5 +1503,28 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         expect(result.value[0]?.deliveryId).toBeNull();
       }
     });
+  });
+});
+
+describe('readIsDraft', () => {
+  it('should return true when isDraft is true', () => {
+    expect(readIsDraft({ isDraft: true })).toBe(true);
+  });
+
+  it('should return false when isDraft is false', () => {
+    expect(readIsDraft({ isDraft: false })).toBe(false);
+  });
+
+  it('should return null when isDraft is undefined (old document)', () => {
+    expect(readIsDraft({})).toBeNull();
+  });
+
+  it('should return null when isDraft is null', () => {
+    expect(readIsDraft({ isDraft: null })).toBeNull();
+  });
+
+  it('should return null when isDraft is a non-boolean value', () => {
+    expect(readIsDraft({ isDraft: 'yes' })).toBeNull();
+    expect(readIsDraft({ isDraft: 1 })).toBeNull();
   });
 });

@@ -24,7 +24,6 @@ graph TB
         BKMK[bookmarks-agent]
         CAL[calendar-agent]
         LIN[linear-agent]
-        DATA[data-insights-agent]
         NOTIF[mobile-notifications]
         SETTINGS[app-settings-service]
         NOTION[notion-service]
@@ -151,7 +150,6 @@ apps/web/src/
 │   ├── ResearchAgentPage.tsx  # Research query form
 │   ├── CalendarPage.tsx       # Calendar events list
 │   ├── LinearIssuesPage.tsx   # 3-column board with sub-issues and assignees
-│   ├── VisualizationsListPage.tsx # Saved data visualizations
 │   └── ...
 ├── services/           # API client functions
 │   ├── apiClient.ts       # Base API request handler
@@ -202,14 +200,6 @@ apps/web/src/
 | `/notes`                                | WhatsAppNotesPage                 | Yes                             | WhatsApp notes                       |
 | `/calendar`                             | CalendarPage                      | Yes                             | Calendar events                      |
 | `/linear`                               | LinearIssuesPage                  | Yes                             | Linear issues dashboard              |
-| `/data-insights`                        | CompositeFeedsListPage            | Yes                             | Data insights feeds                  |
-| `/data-insights/new`                    | CompositeFeedFormPage             | Yes                             | Create composite feed                |
-| `/data-insights/visualizations`         | VisualizationsListPage            | Yes                             | Saved visualizations                 |
-| `/data-insights/:feedId/visualizations` | DataInsightsPage                  | Yes                             | Saved visualizations for a feed      |
-| `/data-insights/:id`                    | CompositeFeedFormPage             | Yes                             | Edit composite feed                  |
-| `/data-insights/static-sources`         | DataSourcesListPage               | Yes                             | Static data sources                  |
-| `/data-insights/static-sources/new`     | DataSourceFormPage                | Yes                             | Create data source                   |
-| `/data-insights/static-sources/:id`     | DataSourceFormPage                | Yes                             | Edit data source                     |
 | `/notifications`                        | MobileNotificationsListPage       | Yes                             | Push notifications history           |
 | `/settings/whatsapp`                    | WhatsAppConnectionPage            | Yes                             | WhatsApp connection                  |
 | `/settings/mobile`                      | MobileNotificationsConnectionPage | Yes                             | Mobile notification settings         |
@@ -220,7 +210,6 @@ apps/web/src/
 | `/settings/code`                        | WorkerSettingsPage                | Yes                             | Code worker configuration            |
 | `/settings/api-keys`                    | ApiKeysSettingsPage               | Yes                             | LLM API key management               |
 | `/settings/llm-pricing`                 | LlmPricingPage                    | Yes                             | LLM pricing configuration            |
-| `/settings/usage-costs`                 | LlmCostsPage                      | Yes                             | LLM usage cost tracking              |
 | `/settings/share-history`               | ShareHistoryPage                  | Yes                             | PWA share history                    |
 | `/share-target`                         | ShareTargetPage                   | Yes                             | PWA share target handler             |
 
@@ -382,7 +371,6 @@ Environment variables (prefixed `INTEXURAOS_`, read via `import.meta.env`):
 | `INTEXURAOS_RESEARCH_AGENT_URL`               | research-agent endpoint               | Yes      |
 | `INTEXURAOS_COMMANDS_AGENT_URL`               | commands-agent endpoint               | Yes      |
 | `INTEXURAOS_ACTIONS_AGENT_URL`                | actions-agent endpoint                | Yes      |
-| `INTEXURAOS_DATA_INSIGHTS_AGENT_URL`          | data-insights-agent endpoint          | Yes      |
 | `INTEXURAOS_NOTES_AGENT_URL`                  | notes-agent endpoint                  | Yes      |
 | `INTEXURAOS_TODOS_AGENT_URL`                  | todos-agent endpoint                  | Yes      |
 | `INTEXURAOS_BOOKMARKS_AGENT_URL`              | bookmarks-agent endpoint              | Yes      |
@@ -390,7 +378,7 @@ Environment variables (prefixed `INTEXURAOS_`, read via `import.meta.env`):
 | `INTEXURAOS_LINEAR_AGENT_URL`                 | linear-agent endpoint                 | Yes      |
 | `INTEXURAOS_CODE_AGENT_URL`                   | code-agent endpoint                   | Yes      |
 | `INTEXURAOS_CHAT_AGENT_URL`                   | chat-agent endpoint                   | Yes      |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`         | app-settings-service endpoint         | Yes      |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`            | llm-usage-service endpoint            | Yes      |
 | `INTEXURAOS_FIREBASE_PROJECT_ID`              | Firebase project ID                   | Yes      |
 | `INTEXURAOS_FIREBASE_API_KEY`                 | Firebase API key                      | Yes      |
 | `INTEXURAOS_FIREBASE_AUTH_DOMAIN`             | Firebase auth domain                  | Yes      |

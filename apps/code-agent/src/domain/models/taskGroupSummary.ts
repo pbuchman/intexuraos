@@ -39,6 +39,10 @@ export interface TaskGroupSummary {
   hasMergeReadyLabel?: boolean;
   labelsUpdatedAt?: Timestamp;
 
+  // User-set flags
+  /** True when the user has marked this group as important. Absent = not important. */
+  isImportant?: boolean;
+
   // Precomputed
   aggregateStatus: GroupStatus;
 

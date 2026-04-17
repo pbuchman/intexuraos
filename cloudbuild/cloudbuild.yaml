@@ -31,7 +31,6 @@
 # │ BATCH 4 - Agents A                                                      │
 # │   1. commands-agent                                                     │
 # │   2. actions-agent                                                      │
-# │   3. data-insights-agent                                                │
 # ├─────────────────────────────────────────────────────────────────────────┤
 # │ BATCH 5 - Agents B                                                      │
 # │   1. notes-agent                                                        │
@@ -50,6 +49,7 @@
 # ├─────────────────────────────────────────────────────────────────────────┤
 # │ BATCH 8 - Agents D (add new services HERE)                              │
 # │   1. hellscript-agent                                                   │
+# │   2. llm-usage-service                                                  │
 # ├─────────────────────────────────────────────────────────────────────────┤
 # │ BATCH 9 - Cloud Functions Workers (parallel with Batch 1-8)             │
 # │   1. vm-lifecycle                                                       │
@@ -83,17 +83,17 @@ steps:
         npm install -g pnpm@10
         pnpm install --frozen-lockfile
 
-  # Build claude-worker Docker image (no deploy, runs in parallel with pnpm-install)
+  # Build code-worker Docker image (no deploy, runs in parallel with pnpm-install)
   - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-claude-worker'
+    id: 'build-push-code-worker'
     waitFor: ['-'] # Start immediately, no dependencies
     timeout: 900s
     entrypoint: 'bash'
     args:
       [
         'cloudbuild/scripts/build-push-monitored.sh',
-        'claude-worker',
-        'workers/claude-worker/Dockerfile',
+        'code-worker',
+        'workers/code-worker/Dockerfile',
       ]
     env:
       - 'DOCKER_BUILDKIT=1'
@@ -387,27 +387,6 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'COMMIT_SHA=$COMMIT_SHA'
 
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-data-insights-agent'
-    waitFor:
-      [
-        'deploy-app-settings-service',
-        'deploy-mobile-notifications-service',
-        'deploy-research-agent',
-      ]
-    timeout: 900s
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'data-insights-agent',
-        'apps/data-insights-agent/Dockerfile',
-      ]
-    env:
-      - 'DOCKER_BUILDKIT=1'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'COMMIT_SHA=$COMMIT_SHA'
-
   # --- Batch 4 Deploys ---
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-commands-agent'
@@ -431,17 +410,6 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy-data-insights-agent'
-    waitFor: ['build-push-data-insights-agent']
-    entrypoint: 'bash'
-    args: ['-c', 'bash cloudbuild/scripts/deploy-data-insights-agent.sh']
-    env:
-      - 'COMMIT_SHA=$COMMIT_SHA'
-      - 'REGION=${_REGION}'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'ENVIRONMENT=${_ENVIRONMENT}'
-
   # ===========================================================================
   # BATCH 5 - Agents B (3 services)
   # ===========================================================================
@@ -449,7 +417,7 @@ steps:
   # --- Batch 5 Builds (wait for Batch 4 deploys) ---
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-notes-agent'
-    waitFor: ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
+    waitFor: ['deploy-commands-agent', 'deploy-actions-agent']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -461,7 +429,7 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-todos-agent'
-    waitFor: ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
+    waitFor: ['deploy-commands-agent', 'deploy-actions-agent']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -473,7 +441,7 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-bookmarks-agent'
-    waitFor: ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
+    waitFor: ['deploy-commands-agent', 'deploy-actions-agent']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -672,7 +640,7 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   # ===========================================================================
-  # BATCH 8 - Agents D (hellscript-agent)
+  # BATCH 8 - Agents D (hellscript-agent, llm-usage-service)
   # ===========================================================================
 
   # --- Batch 8 Builds (wait for Batch 7 deploys) ---
@@ -692,12 +660,39 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'COMMIT_SHA=$COMMIT_SHA'
 
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-llm-usage-service'
+    waitFor: ['deploy-code-agent', 'deploy-chat-agent', 'deploy-cron-agent']
+    timeout: 900s
+    entrypoint: 'bash'
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'llm-usage-service',
+        'apps/llm-usage-service/Dockerfile',
+      ]
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
   # --- Batch 8 Deploys ---
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-hellscript-agent'
     waitFor: ['build-push-hellscript-agent']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-hellscript-agent.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-llm-usage-service'
+    waitFor: ['build-push-llm-usage-service']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-llm-usage-service.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -734,7 +729,7 @@ steps:
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-config'
-    waitFor: ['deploy-hellscript-agent', 'deploy-all-workers']
+    waitFor: ['deploy-hellscript-agent', 'deploy-llm-usage-service', 'deploy-all-workers']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -751,7 +746,6 @@ steps:
           "research-agent:RESEARCH_AGENT"
           "commands-agent:COMMANDS_AGENT"
           "actions-agent:ACTIONS_AGENT"
-          "data-insights-agent:DATA_INSIGHTS_AGENT"
           "notes-agent:NOTES_AGENT"
           "todos-agent:TODOS_AGENT"
           "bookmarks-agent:BOOKMARKS_AGENT"

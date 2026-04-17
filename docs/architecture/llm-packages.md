@@ -15,7 +15,6 @@ graph TB
         CA[calendar-agent]
         TA[todos-agent]
         LA[linear-agent]
-        DIA[data-insights-agent]
     end
 
     subgraph "Prompt Layer"
@@ -37,14 +36,12 @@ graph TB
     subgraph "Foundation Layer"
         LC[llm-contract]
         LPR[llm-pricing]
-        LA2[llm-audit]
     end
 
     RA --> LP
     CA --> LP
     TA --> LP
     LA --> LP
-    DIA --> LP
 
     LP --> LC
     LU --> LC
@@ -106,15 +103,6 @@ const cost = calculateCost({
 });
 ```
 
-#### `@intexuraos/llm-audit`
-
-**Purpose:** Usage tracking and audit logging via Pub/Sub.
-
-| Export              | Description                     |
-| ------------------- | ------------------------------- |
-| `LlmAuditPublisher` | Pub/Sub publisher for LLM calls |
-| `LlmCallEvent`      | Event schema type               |
-
 ---
 
 ### Prompt Package
@@ -127,7 +115,7 @@ const cost = calculateCost({
 
 | Domain           | Prompts                                                                                     | Purpose                    |
 | ---------------- | ------------------------------------------------------------------------------------------- | -------------------------- |
-| `generation`     | `titlePrompt`, `labelPrompt`, `feedNamePrompt`                                              | Generate text from content |
+| `generation`     | `titlePrompt`, `labelPrompt`                                                                | Generate text from content |
 | `classification` | `commandClassifierPrompt`, `calendarActionExtractionPrompt`, `linearActionExtractionPrompt` | Classify and extract       |
 | `validation`     | `inputQualityPrompt`, `inputImprovementPrompt`                                              | Validate input quality     |
 | `research`       | `buildResearchPrompt`, `buildInferResearchContextPrompt`                                    | Research operations        |
@@ -193,8 +181,8 @@ All provider packages implement the same interface but wrap different APIs.
 | Package                        | Provider   | Models                  |
 | ------------------------------ | ---------- | ----------------------- |
 | `@intexuraos/infra-gemini`     | Google AI  | Gemini 2.5 Flash, Pro   |
-| `@intexuraos/infra-gpt`        | OpenAI     | GPT-5.2, O4 Mini        |
-| `@intexuraos/infra-claude`     | Anthropic  | Claude Opus 4.5, Sonnet |
+| `@intexuraos/infra-gpt`        | OpenAI     | GPT-5.4, O4 Mini        |
+| `@intexuraos/infra-claude`     | Anthropic  | Claude Opus 4.6, Sonnet |
 | `@intexuraos/infra-perplexity` | Perplexity | Sonar, Sonar Pro        |
 
 ---

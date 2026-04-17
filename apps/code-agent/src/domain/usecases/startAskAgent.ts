@@ -9,7 +9,6 @@ import type { Result, Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import { randomUUID } from 'node:crypto';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
-import type { RateLimitService } from '../services/rateLimitService.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import { sanitizePrompt } from '../utils/promptSanitization.js';
@@ -27,8 +26,6 @@ export interface StartAskAgentResult {
 }
 
 export type StartAskAgentErrorCode =
-  | 'rate_limited'
-  | 'service_unavailable'
   | 'worker_not_configured'
   | 'duplicate_prompt'
   | 'queue_full'
@@ -42,7 +39,6 @@ export interface StartAskAgentError {
 export interface StartAskAgentDeps {
   logger: Logger;
   codeTaskRepo: CodeTaskRepository;
-  rateLimitService: RateLimitService;
   workerSettingsRepo: WorkerSettingsRepository;
   taskEnqueueService: TaskEnqueueService;
 }
@@ -51,21 +47,10 @@ export async function startAskAgent(
   deps: StartAskAgentDeps,
   request: StartAskAgentRequest,
 ): Promise<Result<StartAskAgentResult, StartAskAgentError>> {
-  const { logger, codeTaskRepo, rateLimitService, workerSettingsRepo, taskEnqueueService } = deps;
+  const { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService } = deps;
   const { userId, prompt } = request;
 
-  // 1. Check rate limits
-  const limitCheck = await rateLimitService.checkLimits(userId, prompt.length);
-  if (!limitCheck.ok) {
-    const { error } = limitCheck;
-    logger.warn({ userId, error }, 'Rate limit exceeded for ask-agent');
-    if (error.code === 'service_unavailable') {
-      return err({ code: 'service_unavailable', message: error.message });
-    }
-    return err({ code: 'rate_limited', message: error.message });
-  }
-
-  // 2. Sanitize prompt
+  // 1. Sanitize prompt
   const sanitizedPromptText = sanitizePrompt(prompt);
 
   // 3. Generate task ID and webhook secret
@@ -136,9 +121,6 @@ export async function startAskAgent(
     }
     return err({ code: 'internal_error', message: enqueueResult.error.message });
   }
-
-  // 7. Record rate limit start
-  await rateLimitService.recordTaskStart(userId);
 
   logger.info({ taskId: task.id }, 'Ask-agent task submitted and enqueued successfully');
 

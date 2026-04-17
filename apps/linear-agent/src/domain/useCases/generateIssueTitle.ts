@@ -65,7 +65,7 @@ export async function generateIssueTitle(
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const isLastAttempt = attempt === MAX_ATTEMPTS;
 
-    const result = await llmClient.generate(prompt);
+    const result = await llmClient.generate(prompt, { promptType: linearIssueTitlePrompt.name });
 
     if (!result.ok) {
       if (isLastAttempt) {

@@ -92,7 +92,7 @@ function loadFiltersFromStorage(): GroupStatus[] {
 }
 
 function getGroupKey(group: IssueGroup): string {
-  return group.linearIssueId ?? group.latestTask.id;
+  return group.linearIssueId ?? `standalone_${group.latestTask.id}`;
 }
 
 function isArchiveEligible(group: IssueGroup): boolean {
@@ -227,7 +227,8 @@ function SortSelector({ activeSort, onChangeSort }: SortSelectorProps): React.JS
 
 function ColumnHeader(): React.JSX.Element {
   return (
-    <div className="mb-1 hidden grid-cols-[28px_1fr_1fr_140px_120px_36px] px-4 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 lg:grid">
+    <div className="mb-1 hidden grid-cols-[20px_28px_1fr_1fr_140px_120px_36px] px-4 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-500 lg:grid">
+      <div />
       <div></div>
       <div>Issue</div>
       <div>Pipeline</div>
@@ -267,6 +268,7 @@ export function CodeTasksPage(): React.JSX.Element {
     hasMore,
     loadMore,
     refresh,
+    toggleImportant,
   } = useIssueGroups({
     groupStatus: activeFilters,
     sortBy: activeSort,
@@ -313,6 +315,11 @@ export function CodeTasksPage(): React.JSX.Element {
       return next;
     });
   }, []);
+
+  const handleToggleImportant = useCallback(
+    (groupKey: string): void => { toggleImportant(groupKey); },
+    [toggleImportant],
+  );
 
   const handleSelectAllEligible = useCallback((): void => {
     setSelectedGroupKeys(new Set(eligibleGroups.map(getGroupKey)));
@@ -600,6 +607,7 @@ export function CodeTasksPage(): React.JSX.Element {
                   isSelected={selectedGroupKeys.has(key)}
                   isBatchActioning={batchActionGroupKeys.has(key)}
                   onToggleSelection={selectable && !isViewingArchived ? handleToggleSelection : undefined}
+                  onToggleImportant={handleToggleImportant}
                 />
               );
             })}

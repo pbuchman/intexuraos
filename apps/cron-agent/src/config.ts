@@ -17,6 +17,7 @@ export interface CronAgentConfig {
   environment: string;
   allowedServices: ServiceDefinition[];
   geminiApiKey: string;
+  llmUsageServiceUrl: string;
 }
 
 const INTERNAL_API_SERVICE_CATALOG = [
@@ -68,13 +69,6 @@ const INTERNAL_API_SERVICE_CATALOG = [
     baseUrlEnvVar: 'INTEXURAOS_ACTIONS_AGENT_URL',
     openApiUrlEnvVar: 'INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL',
     allowedOperations: ['createAction'] as readonly string[],
-  },
-  {
-    key: 'data-insights-agent',
-    name: 'Data Insights Agent',
-    baseUrlEnvVar: 'INTEXURAOS_DATA_INSIGHTS_AGENT_URL',
-    openApiUrlEnvVar: 'INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL',
-    allowedOperations: ['computeVisualization'] as readonly string[],
   },
   {
     key: 'image-service',
@@ -198,5 +192,6 @@ export function loadConfig(): CronAgentConfig {
     environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
     allowedServices,
     geminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'] ?? '',
+    llmUsageServiceUrl: process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '',
   };
 }

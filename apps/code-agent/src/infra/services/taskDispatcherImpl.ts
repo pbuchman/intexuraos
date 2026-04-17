@@ -176,13 +176,26 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     const healthResults = await this.workerHealthProbe.probeAllWorkers(probeConfigs);
 
     // Filter to healthy workers and extract available capacity in a single pass.
-    // This avoids separate filter + lookup that would create unreachable fallback branches.
+    // If failedWorkerLocation is set, prefer workers OTHER than the failed one.
+    // Fall back to the failed worker only when no alternatives exist (transient failures often self-resolve).
     const workersWithCapacity: { worker: WorkerConfigWithCredentials; available: number }[] = [];
+    const failedWorkerFallback: { worker: WorkerConfigWithCredentials; available: number }[] = [];
+
     for (const w of workers) {
       const health = healthResults[w.name];
       if (health?._tag === 'healthy') {
-        workersWithCapacity.push({ worker: w, available: health.available });
+        const entry = { worker: w, available: health.available };
+        if (request.failedWorkerLocation !== undefined && w.name === request.failedWorkerLocation) {
+          failedWorkerFallback.push(entry);
+        } else {
+          workersWithCapacity.push(entry);
+        }
       }
+    }
+
+    // Fall back to the failed worker if no alternatives are healthy
+    if (workersWithCapacity.length === 0) {
+      workersWithCapacity.push(...failedWorkerFallback);
     }
 
     if (workersWithCapacity.length === 0) {
@@ -453,6 +466,15 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       });
 
       if (!response.ok) {
+        // HTTP 410 Gone indicates the session has expired - the worker container was cleaned up
+        if (response.status === 410) {
+          const errorText = await response.text().catch(() => 'Session expired');
+          const errorMessage = extractErrorMessage(errorText);
+          return err({
+            code: 'session_expired',
+            message: errorMessage.length > 0 ? errorMessage : 'Session has expired — the worker container was cleaned up.',
+          });
+        }
         // 502/503/504 and Cloudflare 520-530 are transient infrastructure errors
         if (isRetryableInfraStatus(response.status)) {
           return err({

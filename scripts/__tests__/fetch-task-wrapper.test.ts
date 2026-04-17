@@ -15,7 +15,11 @@ describe('debug-code-task fetch wrapper', () => {
     expect(content).not.toMatch(/`scripts\/fetch-task\.sh`/);
   });
 
-  it('provides a repo-level compatibility wrapper', () => {
+  // 30s timeout: spawnSync under the full vitest parallel test load (700+ suites,
+  // 14k+ tests) occasionally balloons from 40ms to 10s+ due to process-creation
+  // contention. Isolated runs are fine; full CI hit 10000ms timeouts. This margin
+  // is 750x typical runtime and absorbs the parallel-load spike.
+  it('provides a repo-level compatibility wrapper', { timeout: 30_000 }, () => {
     expect(fs.existsSync(REPO_WRAPPER_PATH)).toBe(true);
 
     const result = spawnSync(REPO_WRAPPER_PATH, [], {

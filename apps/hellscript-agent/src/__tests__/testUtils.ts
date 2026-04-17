@@ -4,11 +4,13 @@ import * as jose from 'jose';
 import { buildServer } from '../server.js';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { FakeHellscriptRepository } from './fakeHellscriptRepository.js';
-import { FakeIntentInterpreter } from './fakeIntentInterpreter.js';
-import { FakeDraftGenerator } from './fakeDraftGenerator.js';
 import { FakeWritingConfigRepository } from './fakeWritingConfigRepository.js';
-import { resetServices, setServices } from '../services.js';
-import pino from 'pino';
+import { FakeUserServiceClient, FakeLlmGenerateClient } from './fakeUserServiceClient.js';
+import { resetServices, setServices, type LlmAdapters } from '../services.js';
+import { GeminiIntentInterpreter } from '../infra/llm/geminiIntentInterpreter.js';
+import { GeminiDraftGenerator } from '../infra/llm/geminiDraftGenerator.js';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import pino from 'pino'; // @allow-pino-import -- test infrastructure only
 
 export const issuer = 'https://test-issuer.example.com/';
 export const audience = 'test-audience';
@@ -73,8 +75,8 @@ export interface TestContext {
   app: FastifyInstance;
   hellscriptRepository: FakeHellscriptRepository;
   writingConfigRepository: FakeWritingConfigRepository;
-  intentInterpreter: FakeIntentInterpreter;
-  draftGenerator: FakeDraftGenerator;
+  userServiceClient: FakeUserServiceClient;
+  llmClient: FakeLlmGenerateClient;
 }
 
 export function setupTestContext(): TestContext {
@@ -82,8 +84,8 @@ export function setupTestContext(): TestContext {
     app: null as unknown as FastifyInstance,
     hellscriptRepository: null as unknown as FakeHellscriptRepository,
     writingConfigRepository: null as unknown as FakeWritingConfigRepository,
-    intentInterpreter: null as unknown as FakeIntentInterpreter,
-    draftGenerator: null as unknown as FakeDraftGenerator,
+    userServiceClient: null as unknown as FakeUserServiceClient,
+    llmClient: null as unknown as FakeLlmGenerateClient,
   };
 
   beforeAll(async () => {
@@ -98,13 +100,16 @@ export function setupTestContext(): TestContext {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
     context.hellscriptRepository = new FakeHellscriptRepository();
     context.writingConfigRepository = new FakeWritingConfigRepository();
-    context.intentInterpreter = new FakeIntentInterpreter();
-    context.draftGenerator = new FakeDraftGenerator();
+    context.llmClient = new FakeLlmGenerateClient();
+    context.userServiceClient = new FakeUserServiceClient(context.llmClient);
     setServices({
       hellscriptRepository: context.hellscriptRepository,
       writingConfigRepository: context.writingConfigRepository,
-      intentInterpreter: context.intentInterpreter,
-      draftGenerator: context.draftGenerator,
+      userServiceClient: context.userServiceClient,
+      createLlmAdapters: (llmClient: LlmGenerateClient): LlmAdapters => ({
+        interpreter: new GeminiIntentInterpreter(llmClient),
+        draftGenerator: new GeminiDraftGenerator(llmClient),
+      }),
       logger,
     });
     clearJwksCache();

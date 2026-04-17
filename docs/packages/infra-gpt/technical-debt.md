@@ -22,7 +22,7 @@
 - Add `AbortController` timeout to image URL fetch (currently no timeout — can hang indefinitely)
 - Add streaming support for long-running requests
 - Make `maxTokens` configurable via `GptConfig` (some GPT models support 128k output tokens)
-- Add injectable `auditSink` / `usageSink` to match the API surface of `infra-gemini`
+- Add injectable `usageSink` to match the API surface of `infra-gemini`
 - Extract `createRequestContext` / `trackUsage` boilerplate into `@intexuraos/llm-client-base`
 
 ---

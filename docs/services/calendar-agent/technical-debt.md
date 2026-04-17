@@ -97,7 +97,7 @@ Added `POST /internal/calendar/preview` endpoint for synchronous preview generat
 
 **Status:** Complete
 
-Switched default LLM from generic Gemini to Gemini 2.5 Flash for better speed and accuracy. Required models now include Gemini 2.5 Flash and Gemini 2.5 Pro (GLM-4.7 models removed in v3.3.0). The service fetches pricing for all required models at startup via `INTEXURAOS_APP_SETTINGS_SERVICE_URL`.
+Switched default LLM from generic Gemini to Gemini 2.5 Flash for better speed and accuracy. Required models now include Gemini 2.5 Flash and Gemini 2.5 Pro (GLM-4.7 models removed in v3.3.0). The service fetches pricing for all required models at startup via `INTEXURAOS_LLM_USAGE_SERVICE_URL`.
 
 ### Default Model Selector with Platform Gemini Fallback
 

@@ -3107,4 +3107,45 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(afterCounts.get('done')).toBe(0);
     });
   });
+
+  describe('setImportant', () => {
+    it('marks a group as important', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const task = makeTask({ userId: 'user-1', linearIssueId: 'INT-100', status: 'planned', agentType: 'planning' });
+      await repo.updateAfterCreate(task);
+      const result = await repo.setImportant('user-1', 'INT-100', true);
+      expect(result.ok).toBe(true);
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-100').get();
+      expect(doc.data()?.['isImportant']).toBe(true);
+    });
+
+    it('unmarks a group as important', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const task = makeTask({ userId: 'user-1', linearIssueId: 'INT-100', status: 'planned', agentType: 'planning' });
+      await repo.updateAfterCreate(task);
+      await repo.setImportant('user-1', 'INT-100', true);
+      const result = await repo.setImportant('user-1', 'INT-100', false);
+      expect(result.ok).toBe(true);
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-100').get();
+      expect(doc.data()?.['isImportant']).toBeUndefined();
+    });
+
+    it('returns NOT_FOUND for non-existent group', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const result = await repo.setImportant('user-1', 'nonexistent', true);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+  });
 });

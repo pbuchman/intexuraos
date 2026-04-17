@@ -1,0 +1,388 @@
+diff --git a/workers/orchestrator/src/services/__tests__/completion-verifier.test.ts b/workers/orchestrator/src/services/__tests__/completion-verifier.test.ts
+index 43ec133f0..77759c335 100644
+--- a/workers/orchestrator/src/services/__tests__/completion-verifier.test.ts
++++ b/workers/orchestrator/src/services/__tests__/completion-verifier.test.ts
+@@ -55,8 +55,20 @@ function createVerifier(
+ 
+ const generateMock = vi.fn();
+ 
++function transcriptWithMeaningfulLines(label: string): string {
++  return [
++    '[orchestrator] starting',
++    `[claude] ${label} line 1`,
++    `[claude] ${label} line 2`,
++    `[claude] ${label} line 3`,
++    `[claude] ${label} line 4`,
++    `[claude] ${label} line 5`,
++  ].join('\n');
++}
++
+ beforeEach(() => {
+   vi.clearAllMocks();
++  generateMock.mockReset();
+   createLlmClientMock.mockReturnValue({ generate: generateMock });
+ });
+ 
+@@ -780,7 +792,7 @@ describe('OrchestratorCompletionVerifier', () => {
+         attempt: 1,
+         maxAttempts: 5,
+         agentType: 'planning',
+-        rawLogs: 'some logs',
++        rawLogs: transcriptWithMeaningfulLines('planning-1'),
+       });
+       expect(result.passed).toBe(true);
+       expect(result.verifierFailure).toBe(false);
+@@ -828,7 +840,7 @@ describe('OrchestratorCompletionVerifier', () => {
+         attempt: 1,
+         maxAttempts: 5,
+         agentType: 'planning',
+-        rawLogs: 'logs',
++        rawLogs: transcriptWithMeaningfulLines('planning-2'),
+       });
+       expect(result.passed).toBe(true);
+       expect(result.agentData?.agentType).toBe('planning');
+@@ -870,7 +882,7 @@ describe('OrchestratorCompletionVerifier', () => {
+         attempt: 1,
+         maxAttempts: 5,
+         agentType: 'execution',
+-        rawLogs: 'exec logs',
++        rawLogs: transcriptWithMeaningfulLines('exec'),
+       });
+       expect(result.passed).toBe(true);
+       expect(result.agentData).toEqual({
+@@ -918,7 +930,7 @@ describe('OrchestratorCompletionVerifier', () => {
+         attempt: 1,
+         maxAttempts: 5,
+         agentType: 'pull_request',
+-        rawLogs: 'pr logs',
++        rawLogs: transcriptWithMeaningfulLines('pr'),
+       });
+       expect(result.passed).toBe(true);
+       expect(result.agentData).toEqual({
+@@ -959,7 +971,7 @@ describe('OrchestratorCompletionVerifier', () => {
+         attempt: 1,
+         maxAttempts: 5,
+         agentType: 'review',
+-        rawLogs: 'review logs',
++        rawLogs: transcriptWithMeaningfulLines('review'),
+       });
+       expect(result.passed).toBe(true);
+       expect(result.agentData).toEqual({
+@@ -996,7 +1008,7 @@ describe('OrchestratorCompletionVerifier', () => {
+         attempt: 1,
+         maxAttempts: 5,
+         agentType: 'review',
+-        rawLogs: 'review logs',
++        rawLogs: transcriptWithMeaningfulLines('review'),
+       });
+       expect(result.passed).toBe(true);
+       expect(result.agentData).toEqual({
+@@ -1036,7 +1048,7 @@ describe('OrchestratorCompletionVerifier', () => {
+         attempt: 1,
+         maxAttempts: 5,
+         agentType: 'remediation',
+-        rawLogs: 'remediation logs',
++        rawLogs: transcriptWithMeaningfulLines('remediation'),
+       });
+       expect(result.passed).toBe(true);
+       expect(result.agentData).toEqual({
+@@ -1070,7 +1082,7 @@ describe('OrchestratorCompletionVerifier', () => {
+         attempt: 1,
+         maxAttempts: 5,
+         agentType: 'planning',
+-        rawLogs: 'logs',
++        rawLogs: transcriptWithMeaningfulLines('fail'),
+       });
+       expect(result.passed).toBe(false);
+       expect(result.verifierFailure).toBe(true);
+@@ -1099,7 +1111,7 @@ describe('OrchestratorCompletionVerifier', () => {
+         attempt: 1,
+         maxAttempts: 5,
+         agentType: 'execution',
+-        rawLogs: 'logs',
++        rawLogs: transcriptWithMeaningfulLines('parse'),
+       });
+       expect(result.passed).toBe(false);
+       expect(result.verifierFailure).toBe(true);
+@@ -1127,7 +1139,7 @@ describe('OrchestratorCompletionVerifier', () => {
+         attempt: 1,
+         maxAttempts: 5,
+         agentType: 'pull_request',
+-        rawLogs: 'logs',
++        rawLogs: transcriptWithMeaningfulLines('zod'),
+       });
+       expect(result.passed).toBe(false);
+       expect(result.verifierFailure).toBe(false);
+@@ -1186,52 +1198,38 @@ describe('OrchestratorCompletionVerifier', () => {
+       expect(logged).not.toContain('second line');
+     });
+ 
+-    it('logs full transcript when <=2 non-empty lines', async () => {
+-      generateMock.mockResolvedValueOnce({
+-        ok: true,
+-        value: {
+-          content: validPlanningResponse,
+-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+-        },
+-      });
++    it('short-circuits via the transcript guard for single-line rawLogs', async () => {
+       const verifier = createVerifier();
+-      await verifier.verify({
++      const result = await verifier.verify({
+         taskId: 'task-short',
+         attempt: 1,
+         maxAttempts: 5,
+         agentType: 'planning',
+         rawLogs: 'only one line',
+       });
++      expect(result.missingFields).toEqual(['transcript_too_short']);
+       const infoCall = loggerInfo.mock.calls.find(
+         (c: unknown[]) => typeof c[1] === 'string' && c[1] === 'Gemini completion verifier request'
+-      ) as [Record<string, unknown>, string] | undefined;
+-      expect(infoCall).toBeDefined();
+-      const logged = infoCall?.[0]?.['transcript'] as string;
+-      expect(logged).toBe('only one line');
++      );
++      expect(infoCall).toBeUndefined();
++      expect(generateMock).not.toHaveBeenCalled();
+     });
+ 
+-    it('handles whitespace-only rawLogs with empty fallback', async () => {
+-      generateMock.mockResolvedValueOnce({
+-        ok: true,
+-        value: {
+-          content: validPlanningResponse,
+-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+-        },
+-      });
++    it('short-circuits via the transcript guard for whitespace-only rawLogs', async () => {
+       const verifier = createVerifier();
+-      await verifier.verify({
++      const result = await verifier.verify({
+         taskId: 'task-empty',
+         attempt: 1,
+         maxAttempts: 5,
+         agentType: 'planning',
+         rawLogs: '   \n  \n   ',
+       });
++      expect(result.missingFields).toEqual(['transcript_too_short']);
+       const infoCall = loggerInfo.mock.calls.find(
+         (c: unknown[]) => typeof c[1] === 'string' && c[1] === 'Gemini completion verifier request'
+-      ) as [Record<string, unknown>, string] | undefined;
+-      expect(infoCall).toBeDefined();
+-      const logged = infoCall?.[0]?.['transcript'] as string;
+-      expect(logged).toBe('');
++      );
++      expect(infoCall).toBeUndefined();
++      expect(generateMock).not.toHaveBeenCalled();
+     });
+   });
+ 
+@@ -1261,7 +1259,7 @@ describe('OrchestratorCompletionVerifier', () => {
+         attempt: 1,
+         maxAttempts: 5,
+         agentType: 'planning',
+-        rawLogs: 'logs',
++        rawLogs: transcriptWithMeaningfulLines('wrapped'),
+       });
+       expect(result.passed).toBe(true);
+       expect(result.agentData?.agentType).toBe('planning');
+@@ -1379,7 +1377,7 @@ describe('verify — fatal exit code pre-check', () => {
+       attempt: 1,
+       maxAttempts: 5,
+       agentType: 'planning',
+-      rawLogs: 'output\n[entrypoint] Claude attempt finished with exit code: 0\n',
++      rawLogs: `${transcriptWithMeaningfulLines('exit-0')}\n[entrypoint] Claude attempt finished with exit code: 0\n`,
+     });
+     expect(result.passed).toBe(true);
+     expect(generateMock).toHaveBeenCalledOnce();
+@@ -1408,7 +1406,117 @@ describe('verify — fatal exit code pre-check', () => {
+       attempt: 1,
+       maxAttempts: 5,
+       agentType: 'execution',
+-      rawLogs: 'output\n[entrypoint] Claude attempt finished with exit code: 1\n',
++      rawLogs: `${transcriptWithMeaningfulLines('exit-1')}\n[entrypoint] Claude attempt finished with exit code: 1\n`,
++    });
++    expect(result.passed).toBe(true);
++    expect(generateMock).toHaveBeenCalledOnce();
++  });
++});
++
++// ---------------------------------------------------------------------------
++// verify — short transcript guard
++// ---------------------------------------------------------------------------
++
++describe('verify — short transcript guard', () => {
++  const validPlanningResponse = JSON.stringify({
++    outcome: 'planned',
++    superpowers_writing_plans: 'used',
++    linear_url: 'https://linear.app/pbuchman/issue/INT-100',
++    is_complex: '0',
++    has_plan_doc: '0',
++    subtask_urls: '',
++    pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
++    summary: 'Planned.',
++    unclear_clarification: '',
++  });
++
++  it('returns transcript_too_short and skips Gemini when only infrastructure lines are present', async () => {
++    const verifier = createVerifier();
++    const result = await verifier.verify({
++      taskId: 'task-empty-transcript',
++      attempt: 1,
++      maxAttempts: 5,
++      agentType: 'execution',
++      rawLogs: [
++        '[orchestrator] doing things',
++        '[hook] hook ran',
++        '[entrypoint] starting',
++        '[system] task_started',
++      ].join('\n'),
++    });
++    expect(result.passed).toBe(false);
++    expect(result.missingFields).toEqual(['transcript_too_short']);
++    expect(result.verifierFailure).toBe(false);
++    expect(result.agentData).toBeUndefined();
++    expect(result.trace).toEqual({ transcript: expect.any(String), prompt: '', response: '' });
++    expect(generateMock).not.toHaveBeenCalled();
++    expect(loggerWarn).toHaveBeenCalledWith(
++      expect.objectContaining({
++        taskId: 'task-empty-transcript',
++        attempt: 1,
++        agentType: 'execution',
++        meaningfulLines: 0,
++      }),
++      'Completion verifier: transcript too short, refusing to call LLM'
++    );
++  });
++
++  it('rejects when meaningful line count is one below the threshold (4 lines)', async () => {
++    const verifier = createVerifier();
++    const result = await verifier.verify({
++      taskId: 'task-boundary-low',
++      attempt: 2,
++      maxAttempts: 5,
++      agentType: 'execution',
++      rawLogs: [
++        '[orchestrator] starting',
++        '[claude] line 1',
++        '[hook] hook ran',
++        '[claude] line 2',
++        '[entrypoint] starting',
++        '[claude] line 3',
++        '[system] noise',
++        '[claude] line 4',
++      ].join('\n'),
++    });
++    expect(result.passed).toBe(false);
++    expect(result.missingFields).toEqual(['transcript_too_short']);
++    expect(result.verifierFailure).toBe(false);
++    expect(generateMock).not.toHaveBeenCalled();
++    expect(loggerWarn).toHaveBeenCalledWith(
++      expect.objectContaining({
++        taskId: 'task-boundary-low',
++        meaningfulLines: 4,
++      }),
++      'Completion verifier: transcript too short, refusing to call LLM'
++    );
++  });
++
++  it('passes the guard and calls Gemini when meaningful line count equals the threshold (5 lines)', async () => {
++    generateMock.mockResolvedValueOnce({
++      ok: true,
++      value: {
++        content: validPlanningResponse,
++        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
++      },
++    });
++    const verifier = createVerifier();
++    const result = await verifier.verify({
++      taskId: 'task-boundary-ok',
++      attempt: 1,
++      maxAttempts: 5,
++      agentType: 'planning',
++      rawLogs: [
++        '[orchestrator] starting',
++        '[claude] line 1',
++        '[hook] hook ran',
++        '[claude] line 2',
++        '[entrypoint] starting',
++        '[claude] line 3',
++        '[system] noise',
++        '[claude] line 4',
++        '[claude] line 5',
++      ].join('\n'),
+     });
+     expect(result.passed).toBe(true);
+     expect(generateMock).toHaveBeenCalledOnce();
+diff --git a/workers/orchestrator/src/services/completion-verifier.ts b/workers/orchestrator/src/services/completion-verifier.ts
+index 433f123ea..ad10d2018 100644
+--- a/workers/orchestrator/src/services/completion-verifier.ts
++++ b/workers/orchestrator/src/services/completion-verifier.ts
+@@ -198,6 +198,25 @@ const VERIFIER_PRICING: Partial<Record<LLMModel, ModelPricing>> = {
+ const FATAL_EXIT_CODE_PATTERN =
+   /\[entrypoint\] (?:Claude|Codex) attempt finished with exit code: (137|139)/;
+ 
++const MIN_MEANINGFUL_TRANSCRIPT_LINES = 5;
++
++const INFRASTRUCTURE_LINE_PREFIXES = ['[orchestrator]', '[hook]', '[entrypoint]', '[system]'];
++
++function countMeaningfulTranscriptLines(transcript: string): number {
++  let count = 0;
++  for (const line of transcript.split('\n')) {
++    const trimmed = line.trim();
++    if (trimmed === '') {
++      continue;
++    }
++    if (INFRASTRUCTURE_LINE_PREFIXES.some((prefix) => trimmed.startsWith(prefix))) {
++      continue;
++    }
++    count += 1;
++  }
++  return count;
++}
++
+ export function detectFatalExitCode(rawLogs: string): number | undefined {
+   // Only search the last 5 lines to avoid false positives from Claude's
+   // stream-json output containing test fixtures or code snippets with the pattern.
+@@ -495,6 +514,25 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
+       };
+     }
+ 
++    const meaningfulLines = countMeaningfulTranscriptLines(transcript);
++    if (meaningfulLines < MIN_MEANINGFUL_TRANSCRIPT_LINES) {
++      this.logger.warn(
++        {
++          taskId: input.taskId,
++          attempt: input.attempt,
++          agentType: input.agentType,
++          meaningfulLines,
++        },
++        'Completion verifier: transcript too short, refusing to call LLM'
++      );
++      return {
++        passed: false,
++        missingFields: ['transcript_too_short'],
++        verifierFailure: false,
++        trace: { transcript, prompt: '', response: '' },
++      };
++    }
++
+     const { schema, prompt } = selectSchemaAndPrompt(input.agentType, transcript);
+ 
+     this.logger.info(
+@@ -507,11 +545,11 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
+         promptChars: prompt.length,
+         transcript: ((): string => {
+           const tLines = transcript.split('\n').filter((l) => l.trim() !== '');
++          /* v8 ignore start -- auth-guard: transcript guard guarantees tLines.length >= MIN_MEANINGFUL_TRANSCRIPT_LINES, so noUncheckedIndexedAccess fallbacks are unreachable @preserve */
+           const first = tLines[0] ?? '';
+           const last = tLines[tLines.length - 1] ?? '';
+-          return tLines.length <= 2
+-            ? tLines.join('\n')
+-            : `${first}\n  ... (${String(tLines.length - 2)} lines omitted) ...\n${last}`;
++          /* v8 ignore stop @preserve */
++          return `${first}\n  ... (${String(tLines.length - 2)} lines omitted) ...\n${last}`;
+         })(),
+       },
+       'Gemini completion verifier request'

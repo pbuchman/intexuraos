@@ -15,13 +15,9 @@
  *   apiKey: process.env.OPENROUTER_API_KEY,
  *   model: 'anthropic/claude-sonnet-4.6',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 3.0,
- *     outputPricePerMillion: 15.0,
- *     useProviderCost: true,
- *   },
  *   timeoutMs: 840000,
  *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  *
  * // Research with web search (append :online to model ID)
@@ -36,9 +32,7 @@
  * ```
  */
 
-import { randomUUID } from 'node:crypto';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import {
   LlmProviders,
   type LLMClient,
@@ -60,11 +54,11 @@ import { normalizeUsage } from './costCalculator.js';
 export type OpenRouterClient = Pick<LLMClient, 'research'> & {
   /**
    * Generates text completion without web search.
-   * Optionally accepts generation options (e.g., response format).
+   * Accepts generation options (e.g., response format, promptType).
    */
   generate: (
     prompt: string,
-    options?: GenerateOptions
+    options: GenerateOptions
   ) => Promise<Result<GenerateResult, OpenRouterError>>;
 
   /**
@@ -100,27 +94,6 @@ async function fetchWithTimeout(
   }
 }
 
-function createRequestContext(
-  method: string,
-  model: string,
-  prompt: string,
-  userId: string,
-  researchId?: string
-): { requestId: string; startTime: Date; auditContext: AuditContext } {
-  const requestId = randomUUID();
-  const startTime = new Date();
-  const auditContext = createAuditContext({
-    provider: LlmProviders.OpenRouter,
-    model,
-    method,
-    prompt,
-    startedAt: startTime,
-    userId,
-    ...(researchId !== undefined && { researchId }),
-  });
-  return { requestId, startTime, auditContext };
-}
-
 class OpenRouterApiError extends Error {
   constructor(
     public readonly status: number,
@@ -145,23 +118,21 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     apiKey,
     model,
     userId,
-    researchId,
-    pricing,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     logger,
     usageSink,
+    ownerType,
   } = config;
 
-  const usageLogger = createUsageLogger({
-    logger,
-    ...(usageSink !== undefined && { sink: usageSink }),
-  });
+  const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
   function trackUsage(
     callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
-    errorMessage?: string
+    errorMessage?: string,
+    providerReportedUsd?: number | null,
+    promptType?: string
   ): void {
     void usageLogger.log({
       userId,
@@ -171,28 +142,36 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
+      ...(providerReportedUsd !== undefined &&
+        providerReportedUsd !== null && { providerReportedUsd }),
+      ...(ownerType !== undefined && { ownerType }),
+      ...(promptType !== undefined && { promptType }),
     });
   }
 
-  function extractUsage(usage: OpenRouterUsage | undefined): NormalizedUsage {
+  function extractUsage(usage?: OpenRouterUsage): {
+    normalized: NormalizedUsage;
+    providerReportedUsd: number | null;
+  } {
     /* v8 ignore start -- upstream: cannot verify usage is present in all API responses @preserve */
     if (usage === undefined) {
-      return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 };
+      return {
+        normalized: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
+        providerReportedUsd: null,
+      };
     }
     /* v8 ignore stop @preserve */
-    // OpenRouter doesn't provide per-request cost in the response like Perplexity does
-    return normalizeUsage(
+    const providerReportedUsd = typeof usage.cost === 'number' ? usage.cost : null;
+    const normalized = normalizeUsage(
       usage.prompt_tokens,
       usage.completion_tokens,
-      undefined, // No provider cost in response
-      pricing
+      providerReportedUsd ?? undefined
     );
+    return { normalized, providerReportedUsd };
   }
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, OpenRouterError>> {
-      const { auditContext } = createRequestContext('research', model, prompt, userId, researchId);
-
       try {
         // Build the model ID - research uses :online suffix for web search
         const searchModel = model.endsWith(':online') ? model : `${model}:online`;
@@ -232,7 +211,6 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           const errorText = await response.text();
           const apiError = new OpenRouterApiError(response.status, errorText);
           const errorMsg = getErrorMessage(apiError);
-          await auditContext.error({ error: errorMsg });
           const emptyUsage: NormalizedUsage = {
             inputTokens: 0,
             outputTokens: 0,
@@ -245,7 +223,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
 
         const data = (await response.json()) as OpenRouterResponse;
         const content = data.choices[0]?.message.content ?? '';
-        const usage = extractUsage(data.usage);
+        const { normalized, providerReportedUsd } = extractUsage(data.usage);
 
         // Extract sources from annotations (OpenRouter returns web search citations as annotations)
         const sources: string[] = [];
@@ -267,18 +245,11 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           }
         }
 
-        await auditContext.success({
-          response: content,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          providerCost: usage.costUsd,
-        });
-        trackUsage('research', usage, true);
+        trackUsage('research', normalized, true, undefined, providerReportedUsd);
 
-        return ok({ content, sources, usage });
+        return ok({ content, sources, usage: normalized });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
@@ -292,10 +263,8 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
 
     async generate(
       prompt: string,
-      options?: GenerateOptions
+      options: GenerateOptions
     ): Promise<Result<GenerateResult, OpenRouterError>> {
-      const { auditContext } = createRequestContext('generate', model, prompt, userId, researchId);
-
       try {
         const requestBody = {
           model, // No :online suffix for synthesis
@@ -306,7 +275,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             },
           ],
           temperature: 0.2,
-          ...(options?.responseFormat !== undefined && {
+          ...(options.responseFormat !== undefined && {
             response_format: options.responseFormat,
           }),
         };
@@ -330,14 +299,13 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           const errorText = await response.text();
           const apiError = new OpenRouterApiError(response.status, errorText);
           const errorMsg = getErrorMessage(apiError);
-          await auditContext.error({ error: errorMsg });
           const emptyUsage: NormalizedUsage = {
             inputTokens: 0,
             outputTokens: 0,
             totalTokens: 0,
             costUsd: 0,
           };
-          trackUsage('generate', emptyUsage, false, errorMsg);
+          trackUsage('generate', emptyUsage, false, errorMsg, undefined, options.promptType);
           return err(mapOpenRouterError(apiError));
         }
 
@@ -353,27 +321,27 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           /* v8 ignore stop @preserve */
         }
         const content = firstChoice.message.content;
-        const usage = extractUsage(data.usage);
+        const { normalized, providerReportedUsd } = extractUsage(data.usage);
 
-        await auditContext.success({
-          response: content,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          providerCost: usage.costUsd,
-        });
-        trackUsage('generate', usage, true);
+        trackUsage(
+          'generate',
+          normalized,
+          true,
+          undefined,
+          providerReportedUsd,
+          options.promptType
+        );
 
-        return ok({ content, usage });
+        return ok({ content, usage: normalized });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('generate', emptyUsage, false, errorMsg);
+        trackUsage('generate', emptyUsage, false, errorMsg, undefined, options.promptType);
         return err(mapOpenRouterError(error));
       }
     },

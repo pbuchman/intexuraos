@@ -183,7 +183,7 @@ common-core (leaf)
   <- infra-firestore
   <- infra-claude, infra-gemini, infra-gpt
   <- infra-notion, infra-perplexity, infra-sentry, infra-whatsapp
-  <- llm-utils, llm-prompts, llm-pricing, llm-factory, llm-audit, llm-contract
+  <- llm-utils, llm-prompts, llm-pricing, llm-factory, llm-contract
   <- internal-clients
   <- all apps (19) and workers (3)
 ```

@@ -1,5 +1,5 @@
 /**
- * Curated allowlist of 14 frontier models from 10 providers.
+ * Curated allowlist of 15 frontier models from 10 providers.
  *
  * This is a hardcoded list instead of fetching the full OpenRouter catalog
  * to avoid overwhelming users and ensure quality. Each entry includes
@@ -10,7 +10,6 @@
  * GET /research/openrouter/models endpoint.
  */
 
-import type { ModelPricing } from '@intexuraos/llm-contract';
 import { toModelPricing } from './costCalculator.js';
 import type { OpenRouterModelInfo } from './types.js';
 
@@ -33,7 +32,7 @@ export interface AllowedOpenRouterModel {
 }
 
 /**
- * Curated allowlist of 14 frontier models from 10 providers.
+ * Curated allowlist of 15 frontier models from 10 providers.
  * Fallback pricing is used when live pricing is unavailable.
  */
 export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
@@ -123,6 +122,14 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     promptPerToken: '0.0000003',
     completionPerToken: '0.0000025',
   },
+  {
+    id: 'google/gemini-3-flash-preview',
+    name: 'Gemini 3 Flash Preview',
+    provider: 'Google',
+    contextLength: 1_000_000,
+    promptPerToken: '0.0000003',
+    completionPerToken: '0.0000025',
+  },
   // OpenAI
   {
     id: 'openai/gpt-5.4',
@@ -165,18 +172,6 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
  */
 export function isAllowedModel(modelId: string): boolean {
   return OPENROUTER_ALLOWED_MODELS.some((m) => m.id === modelId);
-}
-
-/**
- * Get fallback pricing for an allowlisted model.
- * Returns undefined if the model is not in the allowlist.
- */
-export function getAllowlistPricing(rawModelId: string): ModelPricing | undefined {
-  const model = OPENROUTER_ALLOWED_MODELS.find((m) => m.id === rawModelId);
-  if (!model) {
-    return undefined;
-  }
-  return toModelPricing(model.promptPerToken, model.completionPerToken);
 }
 
 /**

@@ -57,7 +57,6 @@ const SERVICES = [
   { name: 'web-agent', port: 8127 },
   { name: 'user-service', port: 8110 },
   { name: 'research-agent', port: 8116 },
-  { name: 'data-insights-agent', port: 8119 },
   { name: 'image-service', port: 8120 },
 ];
 

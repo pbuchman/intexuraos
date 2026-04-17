@@ -41,7 +41,6 @@ import { createAutoArchiveMergedTasksUseCase } from '../../../domain/usecases/au
 import { createNoOpMetricsClient, type MetricsClient } from '../../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../../infra/firestore/workerSettingsRepository.js';
 import type { TaskDispatcherService, DispatchResult } from '../../../domain/services/taskDispatcher.js';
-import type { RateLimitService } from '../../../domain/services/rateLimitService.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { createFirestoreTurnMetricsRepository } from '../../../infra/repositories/firestoreTurnMetricsRepository.js';
 
@@ -129,18 +128,6 @@ describe('GET /code/github-pr-events', () => {
       logger,
     });
 
-    const rateLimitService: RateLimitService = {
-      async checkLimits() {
-        return ok(undefined);
-      },
-      async recordTaskStart() {
-        return;
-      },
-      async recordTaskComplete() {
-        return;
-      },
-    };
-
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -171,7 +158,6 @@ describe('GET /code/github-pr-events', () => {
       logLineRepo,
       actionsAgentClient,
       linearAgentClient,
-      rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
@@ -207,7 +193,7 @@ describe('GET /code/github-pr-events', () => {
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
-      toolCallingClient: undefined,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
@@ -236,7 +222,6 @@ describe('GET /code/github-pr-events', () => {
       actionsAgentClient: typeof actionsAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: ReturnType<typeof createWhatsAppNotifier>;
-      rateLimitService: RateLimitService;
       linearIssueService: ReturnType<typeof createLinearIssueService>;
       statusMirrorService: ReturnType<typeof createStatusMirrorService>;
       metricsClient: MetricsClient;
@@ -254,7 +239,7 @@ describe('GET /code/github-pr-events', () => {
       gitHubPRClient: import('../../../domain/ports/gitHubPRClient.js').GitHubPRClient;
       webhookRules: import('../../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
-      toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+      resolveToolCallingClient: (userId: string) => Promise<import('@intexuraos/common-core').Result<import('@intexuraos/llm-contract').ToolCallingClient, import('../../../domain/usecases/githubAgent.js').GitHubAgentError>>;
       eventDecisionRepo: import('../../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
       dispatchRetryRepo: import('../../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
@@ -306,6 +291,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR in repo A',
       body: 'Body',
       state: 'open',
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
@@ -328,6 +314,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR in repo B',
       body: 'Body',
       state: 'closed',
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-02T00:00:00Z'),
@@ -400,6 +387,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'Test PR',
       body: 'Test body',
       state: 'open',
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
@@ -448,6 +436,7 @@ describe('GET /code/github-pr-events', () => {
       title: null,
       body: null,
       state: null,
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-02-01T00:00:00Z'),
@@ -534,6 +523,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 5',
       body: null,
       state: 'open',
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
@@ -556,6 +546,7 @@ describe('GET /code/github-pr-events', () => {
       title: null,
       body: null,
       state: null,
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-02T00:00:00Z'),
@@ -610,6 +601,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 7',
       body: 'PR description',
       state: 'open',
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
@@ -633,6 +625,7 @@ describe('GET /code/github-pr-events', () => {
       title: null,
       body: 'Original comment text',
       state: null,
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-02T00:00:00Z'),
@@ -656,6 +649,7 @@ describe('GET /code/github-pr-events', () => {
       title: null,
       body: 'Updated comment text',
       state: null,
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-03T00:00:00Z'),
@@ -679,6 +673,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'Push to feature-branch',
       body: null,
       state: null,
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-04T00:00:00Z'),
@@ -732,6 +727,7 @@ describe('GET /code/github-pr-events', () => {
       title: null,
       body: 'Original review',
       state: null,
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
@@ -755,6 +751,7 @@ describe('GET /code/github-pr-events', () => {
       title: null,
       body: 'Updated review',
       state: null,
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-02T00:00:00Z'),
@@ -797,6 +794,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 10',
       body: '## Summary\nPR description table',
       state: 'open',
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
@@ -820,6 +818,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 10',
       body: '## Summary\nPR description table',
       state: 'open',
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-02T00:00:00Z'),
@@ -843,6 +842,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 10',
       body: '## Summary\nPR description table',
       state: 'open',
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-03T00:00:00Z'),
@@ -866,6 +866,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 10',
       body: '## Summary\nPR description table',
       state: 'open',
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-04T00:00:00Z'),
@@ -913,6 +914,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 11',
       body: 'Version 1 of description',
       state: 'open',
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
@@ -936,6 +938,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 11',
       body: 'Version 2 of description',
       state: 'open',
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-02T00:00:00Z'),
@@ -979,6 +982,7 @@ describe('GET /code/github-pr-events', () => {
       title: 'PR 12',
       body: 'Single event body',
       state: 'open',
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
@@ -1042,6 +1046,7 @@ describe('GET /code/github-pr-events', () => {
       title: null,
       body: 'Comment with null payload',
       state: null,
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
@@ -1080,6 +1085,7 @@ describe('GET /code/github-pr-events', () => {
       title: null,
       body: 'Comment with non-object comment field',
       state: null,
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
@@ -1118,6 +1124,7 @@ describe('GET /code/github-pr-events', () => {
       title: null,
       body: 'Review with non-numeric id',
       state: null,
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),
@@ -1160,6 +1167,7 @@ describe('GET /code/github-pr-events', () => {
       title: null,
       body: null,
       state: null,
+      isDraft: null,
       baseBranch: null,
       mergedAt: null,
       createdAt: new Date('2024-01-01T00:00:00Z'),

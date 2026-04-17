@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type ModelPricing, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -9,13 +10,15 @@ const mockLogger: Logger = {
   debug: vi.fn(),
 };
 
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
+
 const mockResponsesCreate = vi.fn();
 const mockChatCompletionsCreate = vi.fn();
 const mockImagesGenerate = vi.fn();
 
 class MockAPIError extends Error {
   status: number;
-  code: string | undefined;
+  code: string | undefined; // @allow-undefined-type -- property on mock class, cannot use ?: here
   constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
@@ -34,13 +37,6 @@ vi.mock('openai', () => {
   return { default: MockOpenAI };
 });
 
-vi.mock('@intexuraos/llm-audit', () => ({
-  createAuditContext: vi.fn().mockReturnValue({
-    success: vi.fn().mockResolvedValue(undefined),
-    error: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-
 const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@intexuraos/llm-pricing', () => ({
@@ -51,22 +47,8 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 }));
 
 const { createGptClient } = await import('../client.js');
-const { createAuditContext } = await import('@intexuraos/llm-audit');
 
 const TEST_MODEL = 'gpt-4o';
-
-const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing => ({
-  inputPricePerMillion: 2.5,
-  outputPricePerMillion: 10.0,
-  cacheReadMultiplier: 0.5,
-  webSearchCostPerCall: 0.03,
-  imagePricing: {
-    '1024x1024': 0.04,
-    '1536x1024': 0.08,
-    '1024x1536': 0.08,
-  },
-  ...overrides,
-});
 
 describe('createGptClient', () => {
   beforeEach(() => {
@@ -74,7 +56,7 @@ describe('createGptClient', () => {
   });
 
   describe('research', () => {
-    it('includes userId and researchId in audit context', async () => {
+    it('returns research result with content and usage', async () => {
       mockResponsesCreate.mockResolvedValue({
         output_text: 'Research findings about AI.',
         output: [],
@@ -85,64 +67,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        researchId: 'research-123',
-        pricing: createTestPricing(),
         logger: mockLogger,
-      });
-
-      await client.research('Tell me about AI');
-
-      expect(vi.mocked(createAuditContext).mock.calls[0]?.[0]).toEqual(
-        expect.objectContaining({
-          provider: LlmProviders.OpenAI,
-          model: TEST_MODEL,
-          method: 'research',
-          prompt: 'Tell me about AI',
-          userId: 'test-user',
-          researchId: 'research-123',
-        })
-      );
-    });
-
-    it('excludes researchId from audit context when undefined', async () => {
-      mockResponsesCreate.mockResolvedValue({
-        output_text: 'Research findings about AI.',
-        output: [],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      });
-
-      const client = createGptClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        pricing: createTestPricing(),
-        logger: mockLogger,
-      });
-
-      await client.research('Tell me about AI');
-
-      const auditArgs = vi.mocked(createAuditContext).mock.calls[0]?.[0] as unknown as Record<
-        string,
-        unknown
-      >;
-      expect(auditArgs).not.toHaveProperty('researchId');
-      expect(auditArgs?.['userId']).toBe('test-user');
-    });
-
-    it('returns research result with content and usage from pricing', async () => {
-      mockResponsesCreate.mockResolvedValue({
-        output_text: 'Research findings about AI.',
-        output: [],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      });
-
-      const pricing = createTestPricing();
-      const client = createGptClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        pricing,
-        logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Tell me about AI');
 
@@ -154,8 +80,7 @@ describe('createGptClient', () => {
           outputTokens: 50,
           totalTokens: 150,
         });
-        // Cost calculated from pricing: (100/1M * 2.5) + (50/1M * 10)
-        expect(result.value.usage.costUsd).toBeCloseTo(0.00075, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -175,8 +100,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -203,8 +128,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -214,32 +139,30 @@ describe('createGptClient', () => {
       }
     });
 
-    it('counts web search calls and adds cost', async () => {
+    it('counts web search calls', async () => {
       mockResponsesCreate.mockResolvedValue({
         output_text: 'Content',
         output: [{ type: 'web_search_call' }, { type: 'web_search_call' }],
         usage: { input_tokens: 100, output_tokens: 50 },
       });
 
-      const pricing = createTestPricing({ webSearchCostPerCall: 0.03 });
       const client = createGptClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.usage.webSearchCalls).toBe(2);
-        // Cost: tokens + 2 web search calls = 0.00075 + 0.06 = 0.06075
-        expect(result.value.usage.costUsd).toBeCloseTo(0.06075, 5);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
-    it('handles cached tokens with multiplier', async () => {
+    it('handles cached tokens', async () => {
       mockResponsesCreate.mockResolvedValue({
         output_text: 'Content',
         output: [],
@@ -250,22 +173,19 @@ describe('createGptClient', () => {
         },
       });
 
-      const pricing = createTestPricing({ cacheReadMultiplier: 0.5 });
       const client = createGptClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.usage.cacheTokens).toBe(50);
-        // Effective input: 100 - 50*(1-0.5) = 75 tokens charged at full price
-        // Cost: (75/1M * 2.5) + (50/1M * 10) = 0.0001875 + 0.0005 = 0.0006875
-        expect(result.value.usage.costUsd).toBeCloseTo(0.000688, 5);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -280,8 +200,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.research('Test prompt');
 
@@ -303,8 +223,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -321,8 +241,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -341,8 +261,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -359,8 +279,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.research('Test prompt');
 
@@ -374,21 +294,20 @@ describe('createGptClient', () => {
   });
 
   describe('generate', () => {
-    it('returns generate result with content and usage from pricing', async () => {
+    it('returns generate result with content and usage', async () => {
       mockChatCompletionsCreate.mockResolvedValue({
         choices: [{ message: { content: 'Generated text.' } }],
         usage: { prompt_tokens: 50, completion_tokens: 100 },
       });
 
-      const pricing = createTestPricing();
       const client = createGptClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -398,8 +317,7 @@ describe('createGptClient', () => {
           outputTokens: 100,
           totalTokens: 150,
         });
-        // Cost: (50/1M * 2.5) + (100/1M * 10) = 0.000125 + 0.001 = 0.001125
-        expect(result.value.usage.costUsd).toBeCloseTo(0.001125, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -413,10 +331,10 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      await client.generate('Write something');
+      await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -436,10 +354,10 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -454,10 +372,10 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -467,21 +385,18 @@ describe('createGptClient', () => {
   });
 
   describe('generateImage', () => {
-    it('returns image result with cost from pricing', async () => {
+    it('returns image result with zero cost', async () => {
       const imageB64 = Buffer.from('fake-image-data').toString('base64');
       mockImagesGenerate.mockResolvedValue({
         data: [{ b64_json: imageB64 }],
       });
 
-      const pricing = createTestPricing({
-        imagePricing: { '1024x1024': 0.04, '1536x1024': 0.08, '1024x1536': 0.08 },
-      });
       const client = createGptClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -490,61 +405,51 @@ describe('createGptClient', () => {
       if (result.ok) {
         expect(result.value.model).toBe(LlmModels.GPTImage1);
         expect(result.value.imageData).toBeInstanceOf(Buffer);
-        expect(result.value.usage.costUsd).toBe(0.04);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
-    it('uses specified image size for cost calculation', async () => {
+    it('uses specified image size', async () => {
       const imageB64 = Buffer.from('fake-image-data').toString('base64');
       mockImagesGenerate.mockResolvedValue({
         data: [{ b64_json: imageB64 }],
       });
 
-      const pricing = createTestPricing({
-        imagePricing: { '1024x1024': 0.04, '1536x1024': 0.08, '1024x1536': 0.08 },
-      });
       const client = createGptClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat', { size: '1536x1024' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage.costUsd).toBe(0.08);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
-    it('uses separate imagePricing when provided', async () => {
+    it('returns image with zero cost when no imagePricing', async () => {
       const imageB64 = Buffer.from('fake-image-data').toString('base64');
       mockImagesGenerate.mockResolvedValue({
         data: [{ b64_json: imageB64 }],
       });
 
-      const pricing = createTestPricing();
-      const imagePricing: ModelPricing = {
-        inputPricePerMillion: 0,
-        outputPricePerMillion: 0,
-        imagePricing: { '1024x1024': 0.02, '1536x1024': 0.04, '1024x1536': 0.04 },
-      };
       const client = createGptClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
-        imagePricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage.costUsd).toBe(0.02);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -557,8 +462,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -580,8 +485,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       await client.generateImage('A cat');
@@ -609,8 +514,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -631,8 +536,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -655,10 +560,10 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test');
+      const result = await client.generate('Test', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -682,8 +587,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -708,8 +613,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -737,8 +642,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -764,8 +669,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -790,8 +695,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -810,8 +715,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -829,10 +734,10 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test prompt');
+      const result = await client.generate('Test prompt', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -848,8 +753,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -870,8 +775,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -892,8 +797,8 @@ describe('createGptClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -904,5 +809,44 @@ describe('createGptClient', () => {
         expect(result.error.message).toContain('No image data');
       }
     });
+  });
+
+  it('passes ownerType to usage logger when provided', async () => {
+    mockChatCompletionsCreate.mockResolvedValue({
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 5, completion_tokens: 5 },
+    });
+
+    const client = createGptClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+      ownerType: 'user',
+    });
+    await client.generate('hello', { promptType: 'test-prompt' });
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'user' }));
+  });
+
+  it('passes promptType to usage logger', async () => {
+    mockChatCompletionsCreate.mockResolvedValue({
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 5, completion_tokens: 5 },
+    });
+
+    const client = createGptClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+    await client.generate('hello', { promptType: 'test-prompt' });
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ promptType: 'test-prompt' })
+    );
   });
 });

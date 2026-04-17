@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { useAuth } from '@/context';
-import { deleteLlmKey, getLlmKeys, setLlmKey, testLlmKey, updateDefaultModel } from '@/services/llmKeysApi';
+import { deleteLlmKey, getLlmKeys, setLlmKey, testLlmKey, updateLlmPreferences } from '@/services/llmKeysApi';
 import type { LlmKeysResponse, LlmProvider, LlmTestResult } from '@/services/llmKeysApi.types';
 
 interface UseLlmKeysResult {
   keys: LlmKeysResponse | null;
   defaultModel: string | null;
+  fallbackModel: string | null;
   loading: boolean;
   refreshing: boolean;
   error: string | null;
@@ -15,6 +16,7 @@ interface UseLlmKeysResult {
   deleteKey: (provider: LlmProvider) => Promise<void>;
   testKey: (provider: LlmProvider) => Promise<LlmTestResult>;
   setDefaultModel: (model: string) => Promise<void>;
+  setFallbackModel: (model: string | null) => Promise<void>;
   refresh: (showLoading?: boolean) => Promise<void>;
 }
 
@@ -142,7 +144,7 @@ export function useLlmKeys(): UseLlmKeysResult {
 
       try {
         const token = await getAccessToken();
-        await updateDefaultModel(token, userId, model);
+        await updateLlmPreferences(token, userId, model, keys?.fallbackModel);
       } catch (err) {
         // Revert on failure
         setKeys((prev) => {
@@ -154,10 +156,47 @@ export function useLlmKeys(): UseLlmKeysResult {
         setSavingDefaultModel(false);
       }
     },
-    [user?.sub, getAccessToken, keys?.defaultModel]
+    [user?.sub, getAccessToken, keys?.defaultModel, keys?.fallbackModel]
+  );
+
+  const setFallbackModel = useCallback(
+    async (model: string | null): Promise<void> => {
+      const userId = user?.sub;
+      if (userId === undefined) return;
+
+      const currentDefault = keys?.defaultModel;
+      if (currentDefault === null || currentDefault === undefined) return;
+
+      const previousFallback = keys?.fallbackModel ?? null;
+
+      setSavingDefaultModel(true);
+      setError(null);
+
+      // Optimistic update
+      setKeys((prev) => {
+        if (prev === null) return prev;
+        return { ...prev, fallbackModel: model };
+      });
+
+      try {
+        const token = await getAccessToken();
+        await updateLlmPreferences(token, userId, currentDefault, model);
+      } catch (err) {
+        // Revert on failure
+        setKeys((prev) => {
+          if (prev === null) return prev;
+          return { ...prev, fallbackModel: previousFallback };
+        });
+        setError(getErrorMessage(err, 'Failed to save fallback model'));
+      } finally {
+        setSavingDefaultModel(false);
+      }
+    },
+    [user?.sub, getAccessToken, keys?.defaultModel, keys?.fallbackModel]
   );
 
   const defaultModel = keys?.defaultModel ?? null;
+  const fallbackModel = keys?.fallbackModel ?? null;
 
-  return { keys, defaultModel, loading, refreshing, error, savingDefaultModel, setKey, deleteKey, testKey, setDefaultModel, refresh };
+  return { keys, defaultModel, fallbackModel, loading, refreshing, error, savingDefaultModel, setKey, deleteKey, testKey, setDefaultModel, setFallbackModel, refresh };
 }

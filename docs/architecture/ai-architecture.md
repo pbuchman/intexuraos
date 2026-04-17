@@ -87,7 +87,7 @@ graph TB
 
 | Task Type            | Primary Model         | Fallback Model      | Rationale                       |
 | -------------------- | --------------------- | ------------------- | ------------------------------- |
-| Research Synthesis   | Claude Opus 4.5       | GPT-5.2             | Nuanced reasoning, long context |
+| Research Synthesis   | Claude Opus 4.6       | GPT-5.4             | Nuanced reasoning, long context |
 | Quick Classification | Gemini 2.5 Flash      | GLM-5               | Fast, cost-effective            |
 | Deep Research        | O4 Mini Deep Research | Sonar Deep Research | Agentic web search              |
 | Fact Verification    | Perplexity Sonar      | Sonar Pro           | Real-time web grounding         |
@@ -101,10 +101,10 @@ Models capable of complex reasoning, web search, and multi-step analysis.
 | --------------------- | ------------- | ------------------------------------------------ |
 | Gemini 2.5 Pro        | Google        | Long context (1M tokens), grounded search        |
 | Gemini 2.5 Flash      | Google        | Fast, cost-effective, good reasoning             |
-| GPT-5.2               | OpenAI        | Latest OpenAI flagship, strong reasoning         |
+| GPT-5.4               | OpenAI        | Latest OpenAI flagship, strong reasoning         |
 | O4 Mini Deep Research | OpenAI        | Agentic research with tool use                   |
-| Claude Opus 4.5       | Anthropic     | Best reasoning, nuanced analysis                 |
-| Claude Sonnet 4.5     | Anthropic     | Balanced performance/cost                        |
+| Claude Opus 4.6       | Anthropic     | Best reasoning, nuanced analysis                 |
+| Claude Sonnet 4.6     | Anthropic     | Balanced performance/cost                        |
 | Sonar                 | Perplexity    | Real-time web search                             |
 | Sonar Pro             | Perplexity    | Enhanced web search with more sources            |
 | Sonar Deep Research   | Perplexity    | Multi-step agentic research                      |
@@ -121,7 +121,7 @@ Optimized for quick, low-cost operations like classification and extraction.
 
 ### Image Models (2)
 
-Text-to-image generation for cover images and visualizations.
+Text-to-image generation for cover images.
 
 | Model                  | Provider | Capabilities                            |
 | ---------------------- | -------- | --------------------------------------- |
@@ -155,7 +155,7 @@ sequenceDiagram
     participant CI as Context Inferrer
     participant G as Gemini
     participant C as Claude
-    participant GPT as GPT-5.2
+    participant GPT as GPT-5.4
     participant S as Sonar
     participant Z as GLM
     participant SY as Synthesizer
@@ -253,13 +253,12 @@ graph TB
         TA[Todos Agent]
         CA[Calendar Agent]
         LA[Linear Agent]
-        DIA[Data Insights Agent]
         IS[Image Service]
     end
 
     subgraph "Research Council"
-        CLAUDE[Claude Opus 4.5]
-        GPT[GPT-5.2]
+        CLAUDE[Claude Opus 4.6]
+        GPT[GPT-5.4]
         GEM2[Gemini 2.5 Pro]
         SONAR[Perplexity Sonar]
         O4[O4 Mini Deep Research]
@@ -283,7 +282,6 @@ graph TB
     AA --> TA
     AA --> CA
     AA --> LA
-    AA --> DIA
     AA --> IS
 
     RA --> CLAUDE
@@ -371,19 +369,6 @@ graph TB
 - Functional requirements section
 - Technical details section
 
-### Data Insights Agent
-
-**Purpose**: AI-powered data analysis
-
-**AI Models**: Gemini (multiple services)
-
-**Capabilities**:
-
-- **Title Generation**: Descriptive names for datasets
-- **Data Analysis**: Trend detection, anomaly identification
-- **Chart Definition**: Suggest appropriate visualizations
-- **Data Transform**: Clean and reshape data
-
 ### Image Service
 
 **Purpose**: Generate images from text prompts
@@ -410,7 +395,7 @@ import { createLlmClient } from '@intexuraos/llm-factory';
 
 const client = createLlmClient({
   provider: 'anthropic',
-  model: 'claude-opus-4-5-20251101',
+  model: 'claude-opus-4-6',
   apiKey: userApiKey,
 });
 
@@ -432,15 +417,7 @@ const result = await client.generate({
 
 ### Usage Tracking
 
-All LLM calls are tracked through the `llm-audit` package:
-
-- Token usage (input/output)
-- Cost calculation
-- Model selection
-- Response latency
-- Error rates
-
-Published to Pub/Sub for aggregation in `app-settings-service`.
+LLM usage (token counts, cost) is tracked through the `llm-pricing` package which forwards events to `llm-usage-service` via HTTP (`HttpInternalAuthUsageSink` / `HttpWebhookUsageSink`).
 
 ---
 
@@ -511,7 +488,7 @@ const cost = pricingContext.calculateCost({
 
 | Tier     | Use Case                   | Cost/1M Tokens | Example Models            |
 | -------- | -------------------------- | -------------- | ------------------------- |
-| Premium  | Deep research, synthesis   | $15-75         | Claude Opus, GPT-5.2      |
+| Premium  | Deep research, synthesis   | $15-75         | Claude Opus, GPT-5.4      |
 | Standard | General queries            | $3-10          | Claude Sonnet, Gemini Pro |
 | Economy  | Classification, extraction | $0.08-1        | Gemini Flash, Haiku       |
 
@@ -641,7 +618,6 @@ const validationResult = await llmValidator.validateKey({
 | `@intexuraos/llm-pricing`      | Cost calculation                     |
 | `@intexuraos/llm-prompts`      | Prompt builders, schemas, parsers    |
 | `@intexuraos/llm-utils`        | Redaction and parse error utilities  |
-| `@intexuraos/llm-audit`        | Usage tracking                       |
 | `@intexuraos/infra-gemini`     | Google AI adapter                    |
 | `@intexuraos/infra-gpt`        | OpenAI adapter                       |
 | `@intexuraos/infra-claude`     | Anthropic adapter                    |

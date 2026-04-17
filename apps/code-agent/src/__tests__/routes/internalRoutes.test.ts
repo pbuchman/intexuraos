@@ -20,11 +20,17 @@ import { setupTestServices } from '../helpers/mockServices.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 
 const processExecutionMemoryBacklogMock = vi.fn();
+const sweepErroredApplicationsMock = vi.fn();
+const pruneStaleMemoriesMock = vi.fn();
 
 vi.mock('../../domain/usecases/processExecutionMemoryBacklog.js', (): {
   processExecutionMemoryBacklog: (input: unknown) => unknown;
+  sweepErroredApplications: (input: unknown) => unknown;
+  pruneStaleMemories: (deps: unknown, options: unknown) => unknown;
 } => ({
   processExecutionMemoryBacklog: (input: unknown): unknown => processExecutionMemoryBacklogMock(input),
+  sweepErroredApplications: (input: unknown): unknown => sweepErroredApplicationsMock(input),
+  pruneStaleMemories: (deps: unknown, options: unknown): unknown => pruneStaleMemoriesMock(deps, options),
 }));
 
 
@@ -374,8 +380,6 @@ describe('POST /internal/execution-memory/process', () => {
   it('returns 500 with the default limit when optional execution-memory clients are unavailable', async () => {
     const services = getServices();
     const {
-      executionMemoryEvaluatorClient: _evaluatorClient,
-      executionMemoryDistillerClient: _distillerClient,
       executionMemoryEmbeddingClient: _embeddingClient,
       ...servicesWithoutOptionalClients
     } = services;
@@ -396,9 +400,8 @@ describe('POST /internal/execution-memory/process', () => {
       limit: 10,
     }));
     const input = processExecutionMemoryBacklogMock.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(input).not.toHaveProperty('evaluatorClient');
-    expect(input).not.toHaveProperty('distillerClient');
     expect(input).not.toHaveProperty('embeddingClient');
+    expect(input).toHaveProperty('userServiceClient');
   });
 
   it('returns 200 with empty results when body is missing (no JSON payload)', async () => {
@@ -567,5 +570,224 @@ describe('POST /internal/archive-stale-groups', () => {
     expect(body.success).toBe(false);
     expect(body.error.code).toBe('INTERNAL_ERROR');
     expect(body.error.message).toBe('Firestore connection lost');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sweep errored execution memory post-run tasks (INT-1352)
+// ---------------------------------------------------------------------------
+
+describe('POST /internal/execution-memory/sweep-errored', () => {
+  let app: Awaited<ReturnType<typeof buildServer>>;
+
+  beforeEach(async () => {
+    nock('http://actions-agent').persist().patch(/\/internal\/actions\/.*\/status/).reply(200, { success: true });
+    nock('http://linear-agent:8086').persist().post(/\/.*/).reply(200, { success: true });
+
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] = 'test-orchestrator-secret';
+    process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
+
+    setupTestServices();
+    app = await buildServer();
+  });
+
+  afterEach(() => {
+    resetServices();
+    resetFirestore();
+    nock.cleanAll();
+    sweepErroredApplicationsMock.mockReset();
+  });
+
+  it('returns 401 when no auth header is provided', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/sweep-errored',
+    });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('returns sweep stats when authenticated', async () => {
+    sweepErroredApplicationsMock.mockResolvedValue(ok({ requeued: 3, skipped: 1 }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/sweep-errored',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { success: boolean; data: { requeued: number; skipped: number } };
+    expect(body.success).toBe(true);
+    expect(body.data).toEqual({ requeued: 3, skipped: 1 });
+  });
+
+  it('returns 200 with zeros when feature flag is disabled', async () => {
+    process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'false';
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/sweep-errored',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { success: boolean; data: { requeued: number; skipped: number } };
+    expect(body.data).toEqual({ requeued: 0, skipped: 0 });
+    expect(sweepErroredApplicationsMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 500 when sweep fails', async () => {
+    sweepErroredApplicationsMock.mockResolvedValue(err({ code: 'internal_error', message: 'DB error' }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/sweep-errored',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Prune stale execution memories (INT-1352)
+// ---------------------------------------------------------------------------
+
+describe('POST /internal/execution-memory/prune-stale', () => {
+  let app: Awaited<ReturnType<typeof buildServer>>;
+
+  beforeEach(async () => {
+    nock('http://actions-agent').persist().patch(/\/internal\/actions\/.*\/status/).reply(200, { success: true });
+    nock('http://linear-agent:8086').persist().post(/\/.*/).reply(200, { success: true });
+
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] = 'test-orchestrator-secret';
+    process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
+
+    setupTestServices();
+    app = await buildServer();
+  });
+
+  afterEach(() => {
+    resetServices();
+    resetFirestore();
+    nock.cleanAll();
+    pruneStaleMemoriesMock.mockReset();
+  });
+
+  it('returns 401 when no auth header is provided', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/prune-stale',
+    });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('returns prune stats when authenticated', async () => {
+    const services = getServices();
+    setServices({ ...services, executionMemoryRepo: {} as never });
+    pruneStaleMemoriesMock.mockResolvedValue(ok({ archived: 5, skipped: 2 }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/prune-stale',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: { maxAgeDays: 30 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { success: boolean; data: { archived: number; skipped: number } };
+    expect(body.success).toBe(true);
+    expect(body.data).toEqual({ archived: 5, skipped: 2 });
+  });
+
+  it('returns 200 with zeros when feature flag is disabled', async () => {
+    process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'false';
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/prune-stale',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { success: boolean; data: { archived: number; skipped: number } };
+    expect(body.data).toEqual({ archived: 0, skipped: 0 });
+    expect(pruneStaleMemoriesMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 200 with zeros when executionMemoryRepo is undefined', async () => {
+    const services = getServices();
+    const { executionMemoryRepo: _ignored, ...servicesWithoutRepo } = services;
+    setServices(servicesWithoutRepo as typeof services);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/prune-stale',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { success: boolean; data: { archived: number; skipped: number } };
+    expect(body.data).toEqual({ archived: 0, skipped: 0 });
+    expect(pruneStaleMemoriesMock).not.toHaveBeenCalled();
+  });
+
+  it('passes maxAgeDays and dryRun options from body', async () => {
+    const services = getServices();
+    setServices({ ...services, executionMemoryRepo: {} as never });
+    pruneStaleMemoriesMock.mockResolvedValue(ok({ archived: 0, skipped: 0 }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/prune-stale',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+      payload: { maxAgeDays: 60, dryRun: true },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(pruneStaleMemoriesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ logger: expect.anything() }),
+      { maxAgeDays: 60, dryRun: true },
+    );
+  });
+
+  it('returns 500 when prune fails', async () => {
+    const services = getServices();
+    setServices({ ...services, executionMemoryRepo: {} as never });
+    pruneStaleMemoriesMock.mockResolvedValue(err({ code: 'internal_error', message: 'Prune failed' }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/prune-stale',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('sends empty options when body is null', async () => {
+    const services = getServices();
+    setServices({ ...services, executionMemoryRepo: {} as never });
+    pruneStaleMemoriesMock.mockResolvedValue(ok({ archived: 0, skipped: 0 }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/execution-memory/prune-stale',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(pruneStaleMemoriesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ logger: expect.anything() }),
+      {},
+    );
   });
 });

@@ -38,6 +38,7 @@ describe('ConfirmSubmitModal', () => {
         isOpen
         taskTitle="Implement feature"
         workerType="codex"
+        taskMode="planning"
         onConfirm={vi.fn().mockResolvedValue(undefined)}
         onCancel={vi.fn()}
       />
@@ -54,6 +55,7 @@ describe('ConfirmSubmitModal', () => {
         isOpen
         taskTitle="Implement feature"
         workerType="codex"
+        taskMode="execution"
         onConfirm={onConfirm}
         onCancel={vi.fn()}
       />
@@ -62,5 +64,48 @@ describe('ConfirmSubmitModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /submit task/i }));
 
     expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('displays task mode in confirmation text', () => {
+    render(
+      <ConfirmSubmitModal
+        isOpen
+        taskTitle="Test task"
+        workerType="auto"
+        taskMode="execution"
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
+      />
+    );
+    expect(screen.getByText('Execution')).toBeInTheDocument();
+    expect(screen.getByText(/mode\?/)).toBeInTheDocument();
+  });
+
+  it('displays Planning mode label', () => {
+    render(
+      <ConfirmSubmitModal
+        isOpen
+        taskTitle="Design feature"
+        workerType="auto"
+        taskMode="planning"
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
+      />
+    );
+    expect(screen.getByText('Planning')).toBeInTheDocument();
+  });
+
+  it('returns null when not open', () => {
+    const { container } = render(
+      <ConfirmSubmitModal
+        isOpen={false}
+        taskTitle="Test task"
+        workerType="auto"
+        taskMode="execution"
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
+      />
+    );
+    expect(container.firstChild).toBeNull();
   });
 });

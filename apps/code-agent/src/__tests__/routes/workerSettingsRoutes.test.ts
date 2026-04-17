@@ -126,17 +126,6 @@ describe('Worker Settings Routes', () => {
       }),
       actionsAgentClient,
       linearAgentClient,
-      rateLimitService: {
-        async checkLimits() {
-          return ok(undefined);
-        },
-        async recordTaskStart() {
-          return;
-        },
-        async recordTaskComplete() {
-          return;
-        },
-      },
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
@@ -171,7 +160,7 @@ describe('Worker Settings Routes', () => {
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
-      toolCallingClient: undefined,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,

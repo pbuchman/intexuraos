@@ -40,6 +40,16 @@ export interface TaskGroupSummaryRepository {
     labels: { id: string; name: string }[],
     sourceTimestamp: string,
   ): Promise<Result<void, GroupSummaryError>>;
+
+  /**
+   * Toggle the isImportant flag on a group summary.
+   * Returns NOT_FOUND if no summary exists for the given (userId, groupKey).
+   */
+  setImportant(
+    userId: string,
+    groupKey: string,
+    important: boolean,
+  ): Promise<Result<void, GroupSummaryError>>;
 }
 
 export interface ListGroupSummariesInput {

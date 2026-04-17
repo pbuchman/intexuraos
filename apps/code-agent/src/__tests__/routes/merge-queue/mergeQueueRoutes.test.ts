@@ -41,7 +41,6 @@ import { createAutoArchiveMergedTasksUseCase } from '../../../domain/usecases/au
 import { createNoOpMetricsClient, type MetricsClient } from '../../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../../infra/firestore/workerSettingsRepository.js';
 import type { TaskDispatcherService, DispatchResult } from '../../../domain/services/taskDispatcher.js';
-import type { RateLimitService } from '../../../domain/services/rateLimitService.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from '../../../infra/firestore/gitHubPRSummariesRepository.js';
@@ -128,18 +127,6 @@ describe('Merge queue JWT routes', () => {
       logger,
     });
 
-    const rateLimitService: RateLimitService = {
-      async checkLimits() {
-        return ok(undefined);
-      },
-      async recordTaskStart() {
-        return;
-      },
-      async recordTaskComplete() {
-        return;
-      },
-    };
-
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -190,7 +177,6 @@ describe('Merge queue JWT routes', () => {
       logLineRepo,
       actionsAgentClient,
       linearAgentClient,
-      rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
@@ -219,7 +205,7 @@ describe('Merge queue JWT routes', () => {
       gitHubPRClient: mockGitHubPRClient,
       webhookRules: {} as never,
       dispatchService: {} as never,
-      toolCallingClient: undefined,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
@@ -240,7 +226,6 @@ describe('Merge queue JWT routes', () => {
       actionsAgentClient: typeof actionsAgentClient;
       linearAgentClient: LinearAgentClient;
       whatsappNotifier: ReturnType<typeof createWhatsAppNotifier>;
-      rateLimitService: RateLimitService;
       linearIssueService: ReturnType<typeof createLinearIssueService>;
       statusMirrorService: ReturnType<typeof createStatusMirrorService>;
       metricsClient: MetricsClient;
@@ -258,7 +243,7 @@ describe('Merge queue JWT routes', () => {
       gitHubPRClient: import('../../../domain/ports/gitHubPRClient.js').GitHubPRClient;
       webhookRules: import('../../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
-      toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+      resolveToolCallingClient: (userId: string) => Promise<import('@intexuraos/common-core').Result<import('@intexuraos/llm-contract').ToolCallingClient, import('../../../domain/usecases/githubAgent.js').GitHubAgentError>>;
       eventDecisionRepo: import('../../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
       dispatchRetryRepo: import('../../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;

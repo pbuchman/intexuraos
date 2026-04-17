@@ -34,7 +34,7 @@ describe('executionPrompt', () => {
       },
     });
 
-    expect(prompt).toContain('- Score: Infinity');
+    expect(prompt).toContain('| Score: Infinity');
   });
 
   it('includes execution memory section when context has matched memories', () => {
@@ -60,10 +60,10 @@ describe('executionPrompt', () => {
       },
     });
 
-    expect(prompt).toContain('### Execution Memory');
+    expect(prompt).toContain('### Execution Memory Context');
     expect(prompt).toContain('mem-exec-1');
-    expect(prompt).toContain('execution_memory_ids_used');
-    expect(prompt).toContain('Memory Acknowledgment (MANDATORY)');
+    expect(prompt).toContain('memory_ids_used');
+    expect(prompt).toContain('MANDATORY: Acknowledge Execution Memories NOW');
   });
 
   it('does not include memory section when context is undefined', () => {
@@ -72,7 +72,7 @@ describe('executionPrompt', () => {
       linearIssueLabels: [],
     });
 
-    expect(prompt).not.toContain('### Execution Memory');
+    expect(prompt).not.toContain('### Execution Memory Context');
   });
 });
 
@@ -104,6 +104,12 @@ describe('buildSystemPrompt (review agent)', () => {
     expect(needsRemIdx).toBeGreaterThan(ghActionsIdx);
     expect(summaryIdx).toBeGreaterThan(needsRemIdx);
   });
+
+  it('needs_remediation definition excludes operational/manual verification steps', () => {
+    const prompt = buildSystemPrompt(baseParams);
+    expect(prompt).toContain('post-merge activities');
+    expect(prompt).toContain('do NOT count as code remediation');
+  });
 });
 
 describe('planningPrompt', () => {
@@ -130,7 +136,7 @@ describe('planningPrompt', () => {
       },
     });
 
-    expect(prompt).toContain('### Execution Memory');
+    expect(prompt).toContain('### Execution Memory Context');
     expect(prompt).toContain('mem-1');
     expect(prompt).toContain('Decompose by service boundary');
   });
@@ -141,7 +147,7 @@ describe('planningPrompt', () => {
       linearIssueLabels: [],
     });
 
-    expect(prompt).not.toContain('### Execution Memory');
+    expect(prompt).not.toContain('### Execution Memory Context');
   });
 });
 
@@ -170,7 +176,7 @@ describe('reviewPrompt', () => {
       },
     });
 
-    expect(prompt).toContain('### Execution Memory');
+    expect(prompt).toContain('### Execution Memory Context');
     expect(prompt).toContain('mem-2');
     expect(prompt).toContain('Always validate error responses');
   });
@@ -182,7 +188,7 @@ describe('reviewPrompt', () => {
       agentType: 'review',
     });
 
-    expect(prompt).not.toContain('### Execution Memory');
+    expect(prompt).not.toContain('### Execution Memory Context');
   });
 });
 
@@ -222,12 +228,12 @@ describe('buildExecutionMemorySection acknowledgment and reporting', () => {
       executionMemoryContext: memoryContext,
     });
 
-    expect(prompt).toContain('MANDATORY');
-    expect(prompt).toContain('Immediately after reading the Linear issue');
-    expect(prompt).toContain('bullet point');
-    expect(prompt).toContain('execution_memory_ids_used');
-    expect(prompt).toContain('execution_memory_ids_rejected');
-    expect(prompt).toContain('execution_memory_usage_summary');
+    expect(prompt).toContain('MANDATORY: Acknowledge Execution Memories NOW');
+    expect(prompt).toContain('IMMEDIATELY after reading the Linear issue');
+    expect(prompt).toContain('machine-validated');
+    expect(prompt).toContain('memory_ids_used');
+    expect(prompt).toContain('memory_ids_rejected');
+    expect(prompt).toContain('memory_usage_summary');
   });
 
   it('includes memory usage reporting instructions when memories are matched', () => {
@@ -237,21 +243,25 @@ describe('buildExecutionMemorySection acknowledgment and reporting', () => {
       executionMemoryContext: memoryContext,
     });
 
-    expect(prompt).toContain('Memory Usage Reporting');
-    expect(prompt).toContain('execution_memory_ids_used');
-    expect(prompt).toContain('execution_memory_ids_rejected');
-    expect(prompt).toContain('execution_memory_usage_summary');
+    expect(prompt).toContain('MANDATORY: Report Memory Usage in Final Output');
+    expect(prompt).toContain('memory_ids_used');
+    expect(prompt).toContain('memory_ids_rejected');
+    expect(prompt).toContain('memory_usage_summary');
   });
 
-  it('does not include acknowledgment or reporting when no memories matched', () => {
+  it('does not include acknowledgment or reporting instructions when no memories matched', () => {
     const prompt = planningPrompt.build({
       taskId: 'task-no-mem',
       linearIssueLabels: [],
     });
 
-    expect(prompt).not.toContain('Memory Acknowledgment');
-    expect(prompt).not.toContain('Memory Usage Reporting');
-    expect(prompt).not.toContain('execution_memory_ids_used');
+    expect(prompt).not.toContain('MANDATORY: Acknowledge Execution Memories NOW');
+    expect(prompt).not.toContain('MANDATORY: Report Memory Usage in Final Output');
+    // The final-block template still lists memory_ids_used with a "none" fallback so workers
+    // always report these fields — even when no memories are injected.
+    expect(prompt).toContain(
+      'memory_ids_used: <comma-separated injected IDs you applied, or "none">'
+    );
   });
 });
 
@@ -280,7 +290,7 @@ describe('remediationPrompt', () => {
       },
     });
 
-    expect(prompt).toContain('### Execution Memory');
+    expect(prompt).toContain('### Execution Memory Context');
     expect(prompt).toContain('mem-rem-1');
     expect(prompt).toContain('Remediation pattern');
   });
@@ -292,7 +302,7 @@ describe('remediationPrompt', () => {
       agentType: 'remediation',
     });
 
-    expect(prompt).not.toContain('### Execution Memory');
+    expect(prompt).not.toContain('### Execution Memory Context');
   });
 });
 
@@ -321,7 +331,7 @@ describe('pullRequestPrompt', () => {
       },
     });
 
-    expect(prompt).toContain('### Execution Memory');
+    expect(prompt).toContain('### Execution Memory Context');
     expect(prompt).toContain('mem-pr-1');
     expect(prompt).toContain('PR feedback pattern');
   });
@@ -333,17 +343,34 @@ describe('pullRequestPrompt', () => {
       agentType: 'pull_request',
     });
 
-    expect(prompt).not.toContain('### Execution Memory');
+    expect(prompt).not.toContain('### Execution Memory Context');
+  });
+});
+
+describe('askAgentPrompt', () => {
+  it('instructs ask-agent that resumed sessions carry prior turns without naming a specific CLI flag', () => {
+    const result = buildSystemPrompt({
+      taskId: 'task_test',
+      linearIssueLabels: [],
+      workerType: 'opus',
+      taskUrl: 'https://intexuraos.cloud/#/code-tasks/task_test',
+      agentType: 'ask_agent',
+    });
+
+    expect(result).toContain('Session Continuity');
+    expect(result).not.toContain('--continue');
+    expect(result).not.toContain('--resume');
+    expect(result).toMatch(/prior (conversation|turns|context)/i);
   });
 });
 
 describe('prompt versions', () => {
-  it('reviewPrompt version is 9.1.0', () => {
-    expect(reviewPrompt.version).toBe('9.1.0');
+  it('reviewPrompt version is 10.0.0', () => {
+    expect(reviewPrompt.version).toBe('10.0.0');
   });
 
-  it('pullRequestPrompt version is 4.2.0', () => {
-    expect(pullRequestPrompt.version).toBe('4.2.0');
+  it('pullRequestPrompt version is 5.0.0', () => {
+    expect(pullRequestPrompt.version).toBe('5.0.0');
   });
 });
 

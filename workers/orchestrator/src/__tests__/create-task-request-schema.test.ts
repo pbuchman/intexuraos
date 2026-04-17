@@ -77,3 +77,22 @@ describe('CreateTaskRequestSchema', () => {
     expect(result.success).toBe(true);
   });
 });
+
+describe('CreateTaskRequestSchema — retriedFrom', () => {
+  it('accepts retriedFrom and preserves it through parse', () => {
+    const result = CreateTaskRequestSchema.safeParse({
+      taskId: 't1',
+      workerType: 'auto',
+      prompt: 'p',
+      webhookUrl: 'https://example.com/hook',
+      webhookSecret: 'sec',
+      linearIssueLabels: [],
+      hasChildren: false,
+      retriedFrom: 'task_original_abc',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.retriedFrom).toBe('task_original_abc');
+    }
+  });
+});

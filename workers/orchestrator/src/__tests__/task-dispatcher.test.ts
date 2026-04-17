@@ -208,6 +208,8 @@ describe('TaskDispatcher', () => {
     streamLogs: vi.fn(async () => undefined),
     waitForCompletion: vi.fn(async () => 0),
     getResourceUsage: vi.fn(async () => ({ cpuPercent: 0, memoryUsedMB: 0, memoryLimitMB: 0 })),
+    copyOut: vi.fn(async () => undefined),
+    statsSnapshot: vi.fn(async () => ({ cpuTotalUsage: 0, memoryUsage: 0, pidsCurrent: 0 })),
     listWorkers: vi.fn(async () => []),
     cleanupTaskSession: vi.fn(async () => undefined),
     isResumeAvailable: vi.fn(async () => true),
@@ -263,6 +265,7 @@ describe('TaskDispatcher', () => {
       LINEAR_API_KEY: 'test-linear-key',
       SENTRY_AUTH_TOKEN: 'test-sentry-token',
       MINIMAX_API_KEY: 'test-minimax-key',
+      MIMO_API_KEY: 'test-mimo-key',
       DASHSCOPE_API_KEY: 'test-dashscope-key',
       OPENROUTER_API_KEY: 'test-openrouter-key',
     }),
@@ -307,8 +310,13 @@ describe('TaskDispatcher', () => {
   type VerifierMockResult = CompletionVerifierVerdict;
   const dummyTrace = { transcript: '', prompt: '', response: '' };
 
+  // Activity timeout set to 6 hours so it never fires in tests that don't test it explicitly
+  // (must exceed TASK_TIMEOUT_KILL_MS = 5h so tests that advance to kill time don't trip it).
+  const disabledActivityTimeout = { timeoutMs: 6 * 60 * 60 * 1000, maxRestarts: 3 };
+
   const singleAttemptCompletionControl = {
     maxAttempts: 1,
+    activityTimeout: disabledActivityTimeout,
     verifier: {
       verify: vi.fn(
         async (_input: unknown): Promise<VerifierMockResult> => ({
@@ -325,6 +333,9 @@ describe('TaskDispatcher', () => {
             has_plan_doc: '0',
             subtask_urls: '',
             pr_url: '',
+            memory_ids_used: '',
+            memory_ids_rejected: '',
+            memory_usage_summary: '',
             summary: 'Task completed',
             unclear_clarification: '',
           },
@@ -359,6 +370,7 @@ describe('TaskDispatcher', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
   describe('submitTask', () => {
@@ -715,7 +727,8 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
     });
 
-    it('should log warning at 1h 55m', async () => {
+    it('should keep task running and log warning at 4h 55m', async () => {
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
       const request: CreateTaskRequest = {
         taskId: 'timeout-test',
         workerType: 'auto',
@@ -729,13 +742,20 @@ describe('TaskDispatcher', () => {
       await timeoutDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
 
-      // Advance to 2h 55m (175 minutes)
-      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+      // Advance to 4h 55m (295 minutes) — the warning threshold
+      await vi.advanceTimersByTimeAsync(295 * 60 * 1000);
 
+      // Task should still be running (not killed yet)
       expect(timeoutDispatcher.getRunningCount()).toBe(1);
+
+      // Warning should have been logged at the 4h 55m mark
+      expect(warnSpy).toHaveBeenCalledWith(
+        { taskId: 'timeout-test' },
+        'Task approaching 5-hour timeout'
+      );
     });
 
-    it('should kill container at 3h timeout', async () => {
+    it('should kill container at 5h timeout', async () => {
       const request: CreateTaskRequest = {
         taskId: 'timeout-kill-test',
         workerType: 'auto',
@@ -750,8 +770,8 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
       vi.clearAllMocks();
 
-      // Advance to 3h (180 minutes)
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000);
+      // Advance to 5h (300 minutes)
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000);
 
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalled();
     });
@@ -771,12 +791,12 @@ describe('TaskDispatcher', () => {
       await timeoutDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
 
-      // Advance to 2h 55m (175 minutes) - warning timeout
-      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+      // Advance to 4h 55m (295 minutes) - warning timeout
+      await vi.advanceTimersByTimeAsync(295 * 60 * 1000);
 
       expect(warnSpy).toHaveBeenCalledWith(
         { taskId: 'warning-test' },
-        'Task approaching 3-hour timeout'
+        'Task approaching 5-hour timeout'
       );
     });
 
@@ -795,8 +815,8 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
       vi.clearAllMocks();
 
-      // Advance past 3h timeout
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      // Advance past 5h timeout
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
 
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('kill-webhook-test');
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
@@ -821,8 +841,8 @@ describe('TaskDispatcher', () => {
       await timeoutDispatcher.submitTask(request);
       await vi.advanceTimersByTimeAsync(0);
 
-      // Advance past 3h timeout
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      // Advance past 5h timeout
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
 
       const task = await timeoutDispatcher.getTask('interrupted-test');
       expect(task?.status).toBe('interrupted');
@@ -853,8 +873,8 @@ describe('TaskDispatcher', () => {
       // Clear mocks to see what gets called
       vi.clearAllMocks();
 
-      // Advance past 3h timeout - should NOT send interruption webhook since task is already completed
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      // Advance past 5h timeout - should NOT send interruption webhook since task is already completed
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
 
       // Task should still be completed (not interrupted)
       const finalTask = await timeoutDispatcher.getTask('race-test');
@@ -1177,6 +1197,56 @@ describe('TaskDispatcher', () => {
       const task = await dispatcher.getTask('test-task-execution-memory-context');
       expect(task?.executionMemoryContext).toEqual(request.executionMemoryContext);
     });
+
+    it('passes executionMemoryContext into completion verification when present', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        executionFinalAssistantLog()
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'task-verify-memory-context',
+        workerType: 'auto',
+        prompt: 'Use execution memory during completion verification',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        agentType: 'execution',
+        executionMemoryContext: {
+          applicationId: 'app-123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Route logging and verification',
+          matchedMemories: [
+            {
+              memoryId: 'mem-1',
+              title: 'Verify route serialization',
+              memoryType: 'verification_pattern',
+              score: 0.91,
+              appliesWhen: 'Route schema changes',
+              action: 'Add app.inject coverage',
+              avoid: 'Do not skip serialization',
+              verification: 'Check task detail response shape',
+            },
+          ],
+        },
+      };
+
+      await dispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(singleAttemptCompletionControl.verifier.verify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-verify-memory-context',
+          executionMemoryContext: request.executionMemoryContext,
+        })
+      );
+
+      vi.useRealTimers();
+    });
   });
 
   describe('Error handling edge cases', () => {
@@ -1324,8 +1394,8 @@ describe('TaskDispatcher', () => {
       task.status = 'completed';
       await statePersistence.save(state);
 
-      // Advance past 3h timeout
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      // Advance past 5h timeout
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
 
       // Task should still be completed (not interrupted)
       const finalTask = await dispatcher.getTask('no-timeout-kill-test');
@@ -1530,8 +1600,8 @@ describe('TaskDispatcher', () => {
 
       vi.clearAllMocks();
 
-      // Advance past the 3h kill timeout
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      // Advance past the 5h kill timeout
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
 
       // Task should still be completed (not interrupted)
       const finalTask = await timeoutDispatcher.getTask('status-change-test');
@@ -1700,6 +1770,9 @@ describe('TaskDispatcher', () => {
           agentType: 'remediation',
           outcome: 'implemented',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/999',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           requires_re_review: '1',
           summary: 'Remediation completed',
         },
@@ -1947,6 +2020,9 @@ describe('TaskDispatcher', () => {
           is_complex: '0',
           subtask_urls: '',
           pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Task completed',
           unclear_clarification: '',
           has_plan_doc: '0',
@@ -1994,6 +2070,9 @@ describe('TaskDispatcher', () => {
           is_complex: '0',
           subtask_urls: '',
           pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Task completed',
           unclear_clarification: '',
           has_plan_doc: '0',
@@ -2053,6 +2132,9 @@ describe('TaskDispatcher', () => {
           is_complex: '0',
           subtask_urls: '',
           pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Task completed',
           unclear_clarification: '',
           has_plan_doc: '0',
@@ -2097,6 +2179,9 @@ describe('TaskDispatcher', () => {
           is_complex: '0',
           subtask_urls: '',
           pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Task completed',
           unclear_clarification: '',
           has_plan_doc: '0',
@@ -2176,6 +2261,45 @@ describe('TaskDispatcher', () => {
         trace: dummyTrace,
       });
       expect(result).toEqual(gitResult);
+    });
+
+    it('buildResultFromVerification carries shared memory reporting for remediation tasks', () => {
+      const internal = agentDispatcher as unknown as {
+        buildResultFromVerification: (
+          task: Task,
+          gitResult: TaskResult | undefined, // @allow-undefined-type -- function parameter type in as-cast block cannot use ?: syntax
+          verification: CompletionVerifierVerdict
+        ) => TaskResult;
+      };
+      const fakeTask = { taskId: 'remediation-memory', linearIssueLabels: [] } as unknown as Task;
+      const gitResult: TaskResult = { branch: 'task/remediation-memory' };
+      const result = internal.buildResultFromVerification(fakeTask, gitResult, {
+        agentData: {
+          agentType: 'remediation',
+          outcome: 'implemented',
+          gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
+          memory_ids_used: 'mem_142',
+          memory_ids_rejected: 'mem_188',
+          memory_usage_summary: 'Used remediation memory to keep the fix scoped.',
+          requires_re_review: '1',
+          summary: 'Done.',
+        },
+        passed: true,
+        missingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+
+      expect(result).toMatchObject({
+        branch: 'task/remediation-memory',
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/123',
+        execution_outcome_label: 'implemented',
+        execution_memory_ids_used: 'mem_142',
+        execution_memory_ids_rejected: 'mem_188',
+        execution_memory_usage_summary: 'Used remediation memory to keep the fix scoped.',
+        requires_re_review: '1',
+        summary: 'Done.',
+      });
     });
 
     it('finalizeTask skips lifecycle event when finalStatus is not completed/failed/interrupted', async () => {
@@ -2830,6 +2954,7 @@ describe('TaskDispatcher', () => {
         mockIsolationConfig,
         {
           maxAttempts: 2,
+          activityTimeout: disabledActivityTimeout,
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: false }),
@@ -2869,6 +2994,9 @@ describe('TaskDispatcher', () => {
       const resumeTask = resumeStateSnapshot.tasks['resume-success-task'];
       if (!resumeTask) throw new Error('Task not found');
       delete resumeTask.hasChildren;
+      // Simulate that the runtime session was captured during the first attempt
+      // so the resume guard (which now applies to all runtimes) allows the retry.
+      resumeTask.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
       await resumeState.save(resumeStateSnapshot);
 
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
@@ -2903,7 +3031,7 @@ describe('TaskDispatcher', () => {
       vi.useRealTimers();
     });
 
-    it('fails immediately when verifier reports Gemini failure', async () => {
+    it('fails immediately when verifier reports all-models failure', async () => {
       vi.useFakeTimers();
       const verifierFailureState = createStatePersistence();
       const verify = vi.fn().mockResolvedValue({
@@ -2924,6 +3052,7 @@ describe('TaskDispatcher', () => {
         mockIsolationConfig,
         {
           maxAttempts: 3,
+          activityTimeout: disabledActivityTimeout,
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: true }),
@@ -2962,12 +3091,12 @@ describe('TaskDispatcher', () => {
 
       const task = await verifierFailureDispatcher.getTask('verifier-failure-task');
       expect(task?.status).toBe('failed');
-      // attemptCount is 2 because verifier retries Gemini once (attempt + 1)
+      // attemptCount is 2 because verifier retries once (attempt + 1)
       expect(task?.attemptCount).toBe(2);
       expect(task?.verificationHistory?.[0]?.verifierFailure).toBe(true);
-      // Gemini retry also recorded
+      // Verifier retry also recorded
       expect(task?.verificationHistory?.[1]?.verifierFailure).toBe(true);
-      // createWorker called once (only task worker, not the Gemini retry)
+      // createWorker called once (only task worker, not the verifier retry)
       expect(mockIsolationProvider.createWorker).toHaveBeenCalledTimes(1);
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -2978,7 +3107,7 @@ describe('TaskDispatcher', () => {
             }),
             error: expect.objectContaining({
               code: 'TASK_COMPLETION_VERIFIER_FAILED',
-              message: expect.stringContaining('Gemini verifier unavailable'),
+              message: expect.stringContaining('Completion verifier unavailable'),
             }),
           }),
         })
@@ -3026,6 +3155,7 @@ describe('TaskDispatcher', () => {
         localIsolation,
         {
           maxAttempts: 2,
+          activityTimeout: disabledActivityTimeout,
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: false }),
@@ -3139,7 +3269,7 @@ describe('TaskDispatcher', () => {
       vi.useFakeTimers();
       const preserveState = createStatePersistence();
       const localDestroyWorker = vi.fn(async () => undefined);
-      const localPreserveWorker = vi.fn(async () => undefined);
+      const localPreserveWorker = vi.fn(async () => true);
       const localIsolationProvider: IsolationProvider = {
         ...mockIsolationProvider,
         destroyWorker: localDestroyWorker,
@@ -3168,6 +3298,7 @@ describe('TaskDispatcher', () => {
         localIsolation,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           preserveWorkerContainers: true,
           verifier: {
             verify,
@@ -3197,15 +3328,271 @@ describe('TaskDispatcher', () => {
       expect(localPreserveWorker).toHaveBeenCalledWith('preserve-failed-container-task');
       expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
         'preserve-failed-container-task',
-        expect.stringContaining('Preserving worker container for debugging')
+        expect.stringContaining('Preserved worker container for debugging')
       );
       vi.useRealTimers();
+    });
+
+    it('preserves worker container on TASK_EXIT_CODE_OVERRIDE when preserveWorkerContainers is enabled', async () => {
+      vi.useFakeTimers();
+      try {
+        const preserveState = createStatePersistence();
+        const localDestroyWorker = vi.fn(async () => undefined);
+        const localPreserveWorker = vi.fn(async () => true);
+        const localCleanupSession = vi.fn(async () => undefined);
+        const localIsolationProvider: IsolationProvider = {
+          ...mockIsolationProvider,
+          destroyWorker: localDestroyWorker,
+          preserveWorker: localPreserveWorker,
+          cleanupTaskSession: localCleanupSession,
+          isWorkerRunning: vi.fn(async () => false),
+        };
+        const localIsolation: IsolationConfig = {
+          ...mockIsolationConfig,
+          provider: localIsolationProvider,
+        };
+        const verify = vi.fn().mockResolvedValue({
+          passed: true,
+          missingFields: [],
+          verifierFailure: false,
+          trace: dummyTrace,
+          agentData: {
+            agentType: 'execution' as const,
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'not used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: '',
+            memory_ids_used: '',
+            memory_ids_rejected: '',
+            memory_usage_summary: '',
+            summary: 'Execution completed',
+          },
+        });
+
+        const preserveDispatcher = new TaskDispatcher(
+          mockConfig,
+          preserveState,
+          mockWorktreeManager,
+          mockLogForwarder,
+          mockWebhookClient,
+          mockGitHubTokenService,
+          mockLogger,
+          localIsolation,
+          {
+            maxAttempts: 1,
+            activityTimeout: disabledActivityTimeout,
+            preserveWorkerContainers: true,
+            verifier: {
+              verify,
+              describe: (): { enabled: boolean } => ({ enabled: true }),
+              extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+            },
+          }
+        );
+
+        const request: CreateTaskRequest = {
+          taskId: 'preserve-exit-override',
+          workerType: 'auto',
+          prompt: 'Pass verifier but exit nonzero',
+          webhookUrl: 'https://example.com/webhook',
+          webhookSecret: 'secret',
+          linearIssueLabels: [],
+          hasChildren: false,
+          agentType: 'execution',
+        };
+
+        await preserveDispatcher.submitTask(request);
+        await vi.advanceTimersByTimeAsync(0);
+
+        const internalExitCodes = preserveDispatcher as unknown as {
+          taskExitCodes: Map<string, number>;
+        };
+        internalExitCodes.taskExitCodes.set('preserve-exit-override', 1);
+
+        await vi.advanceTimersByTimeAsync(30 * 1000);
+
+        const task = await preserveDispatcher.getTask('preserve-exit-override');
+        expect(task?.status).toBe('failed');
+        expect(localPreserveWorker).toHaveBeenCalledWith('preserve-exit-override');
+        expect(localDestroyWorker).not.toHaveBeenCalled();
+        expect(localCleanupSession).not.toHaveBeenCalled();
+        expect(mockWebhookClient.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            payload: expect.objectContaining({
+              status: 'failed',
+              error: expect.objectContaining({ code: 'TASK_EXIT_CODE_OVERRIDE' }),
+            }),
+          })
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('preserves worker container on TASK_FATAL_EXIT_CODE when preserveWorkerContainers is enabled', async () => {
+      vi.useFakeTimers();
+      try {
+        const preserveState = createStatePersistence();
+        const localDestroyWorker = vi.fn(async () => undefined);
+        const localPreserveWorker = vi.fn(async () => true);
+        const localCleanupSession = vi.fn(async () => undefined);
+        const localIsolationProvider: IsolationProvider = {
+          ...mockIsolationProvider,
+          destroyWorker: localDestroyWorker,
+          preserveWorker: localPreserveWorker,
+          cleanupTaskSession: localCleanupSession,
+          isWorkerRunning: vi.fn(async () => false),
+        };
+        const localIsolation: IsolationConfig = {
+          ...mockIsolationConfig,
+          provider: localIsolationProvider,
+        };
+        const verify = vi.fn().mockResolvedValue({
+          passed: false,
+          missingFields: ['fatal_exit_code_137'],
+          verifierFailure: false,
+          trace: dummyTrace,
+        });
+
+        const preserveDispatcher = new TaskDispatcher(
+          mockConfig,
+          preserveState,
+          mockWorktreeManager,
+          mockLogForwarder,
+          mockWebhookClient,
+          mockGitHubTokenService,
+          mockLogger,
+          localIsolation,
+          {
+            maxAttempts: 3,
+            activityTimeout: disabledActivityTimeout,
+            preserveWorkerContainers: true,
+            verifier: {
+              verify,
+              describe: (): { enabled: boolean } => ({ enabled: true }),
+              extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+            },
+          }
+        );
+
+        const request: CreateTaskRequest = {
+          taskId: 'preserve-fatal-exit',
+          workerType: 'auto',
+          prompt: 'Crash with SIGKILL',
+          webhookUrl: 'https://example.com/webhook',
+          webhookSecret: 'secret',
+          linearIssueLabels: [],
+          hasChildren: false,
+          agentType: 'execution',
+        };
+
+        await preserveDispatcher.submitTask(request);
+        await vi.advanceTimersByTimeAsync(0);
+
+        await vi.advanceTimersByTimeAsync(30 * 1000);
+
+        const task = await preserveDispatcher.getTask('preserve-fatal-exit');
+        expect(task?.status).toBe('failed');
+        expect(localPreserveWorker).toHaveBeenCalledWith('preserve-fatal-exit');
+        expect(localDestroyWorker).not.toHaveBeenCalled();
+        expect(localCleanupSession).not.toHaveBeenCalled();
+        expect(mockWebhookClient.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            payload: expect.objectContaining({
+              status: 'failed',
+              error: expect.objectContaining({
+                code: 'TASK_FATAL_EXIT_CODE',
+                message: expect.stringContaining('fatal_exit_code_137'),
+              }),
+            }),
+          })
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('falls back to teardownAttempt and logs failure when preserveWorker returns false', async () => {
+      const preserveState = createStatePersistence();
+      const localDestroyWorker = vi.fn(async () => undefined);
+      const localPreserveWorker = vi.fn(async () => false);
+      const localCleanupSession = vi.fn(async () => undefined);
+      const localIsolationProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        destroyWorker: localDestroyWorker,
+        preserveWorker: localPreserveWorker,
+        cleanupTaskSession: localCleanupSession,
+      };
+      const localIsolation: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: localIsolationProvider,
+      };
+
+      const preserveDispatcher = new TaskDispatcher(
+        mockConfig,
+        preserveState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        localIsolation,
+        {
+          maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
+          preserveWorkerContainers: true,
+          verifier: {
+            verify: vi.fn().mockResolvedValue({
+              passed: true,
+              missingFields: [],
+              verifierFailure: false,
+              trace: dummyTrace,
+            }),
+            describe: (): { enabled: boolean } => ({ enabled: true }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+          },
+        }
+      );
+
+      const taskId = 'preserve-fallback-teardown';
+      await preserveDispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'Preservation will be reported as failed',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+      await flushAsync();
+
+      const task = await preserveDispatcher.getTask(taskId);
+      if (task === null) {
+        throw new Error('Task not found');
+      }
+
+      const preserveInternal = preserveDispatcher as unknown as {
+        finalizeTask: (
+          taskArg: Record<string, unknown>,
+          finalStatus: 'failed',
+          payload: { result?: unknown; error?: unknown }
+        ) => Promise<void>;
+      };
+      await preserveInternal.finalizeTask(task as unknown as Record<string, unknown>, 'failed', {});
+
+      expect(localPreserveWorker).toHaveBeenCalledWith(taskId);
+      expect(localDestroyWorker).toHaveBeenCalledWith(taskId);
+      expect(localCleanupSession).toHaveBeenCalledWith(taskId);
+      expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
+        taskId,
+        expect.stringContaining('Failed to preserve worker container (no tracked worker)')
+      );
     });
 
     it('preserves container when interrupted finalization is invoked with preserve flag', async () => {
       const preserveState = createStatePersistence();
       const localDestroyWorker = vi.fn(async () => undefined);
-      const localPreserveWorker = vi.fn(async () => undefined);
+      const localPreserveWorker = vi.fn(async () => true);
       const localIsolationProvider: IsolationProvider = {
         ...mockIsolationProvider,
         destroyWorker: localDestroyWorker,
@@ -3227,6 +3614,7 @@ describe('TaskDispatcher', () => {
         localIsolation,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           preserveWorkerContainers: true,
           verifier: {
             verify: vi.fn().mockResolvedValue({
@@ -3275,7 +3663,7 @@ describe('TaskDispatcher', () => {
       expect(localPreserveWorker).toHaveBeenCalledWith(taskId);
       expect(mockLogForwarder.appendChunk).toHaveBeenCalledWith(
         taskId,
-        expect.stringContaining('Preserving worker container for debugging')
+        expect.stringContaining('Preserved worker container for debugging')
       );
     });
 
@@ -3286,7 +3674,7 @@ describe('TaskDispatcher', () => {
     } {
       const state = createStatePersistence();
       const destroyWorker = vi.fn(async () => undefined);
-      const preserveWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => true);
       const cleanupTaskSession = vi.fn(async () => undefined);
       const isolationProvider: IsolationProvider = {
         ...mockIsolationProvider,
@@ -3310,6 +3698,7 @@ describe('TaskDispatcher', () => {
         isolation,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           preserveWorkerContainers: true,
           verifier: {
             verify: vi.fn().mockResolvedValue({
@@ -3444,7 +3833,7 @@ describe('TaskDispatcher', () => {
     it('destroys existing preserved pull_request container for same PR before preserving new one', async () => {
       const state = createStatePersistence();
       const destroyWorker = vi.fn(async () => undefined);
-      const preserveWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => true);
       const oldTaskId = 'pr-old-task';
       const newTaskId = 'pr-new-task';
       const prNumber = 100;
@@ -3498,6 +3887,7 @@ describe('TaskDispatcher', () => {
         isolation,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           preserveWorkerContainers: true,
           verifier: {
             verify: vi.fn().mockResolvedValue({
@@ -3552,7 +3942,7 @@ describe('TaskDispatcher', () => {
     it('does not destroy preserved pull_request container for different PR', async () => {
       const state = createStatePersistence();
       const destroyWorker = vi.fn(async () => undefined);
-      const preserveWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => true);
       const oldTaskId = 'pr-different-old-task';
       const newTaskId = 'pr-different-new-task';
 
@@ -3605,6 +3995,7 @@ describe('TaskDispatcher', () => {
         isolation,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           preserveWorkerContainers: true,
           verifier: {
             verify: vi.fn().mockResolvedValue({
@@ -3660,7 +4051,7 @@ describe('TaskDispatcher', () => {
     it('skips destroyWorker loop when listPreservedWorkers returns empty array', async () => {
       const state = createStatePersistence();
       const destroyWorker = vi.fn(async () => undefined);
-      const preserveWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => true);
       const listPreservedWorkers = vi.fn(async () => []);
 
       const isolationProvider: IsolationProvider = {
@@ -3686,6 +4077,7 @@ describe('TaskDispatcher', () => {
         isolation,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           preserveWorkerContainers: true,
           verifier: {
             verify: vi.fn().mockResolvedValue({
@@ -3742,7 +4134,7 @@ describe('TaskDispatcher', () => {
     it('skips listPreservedWorkers check when provider does not implement it', async () => {
       const state = createStatePersistence();
       const destroyWorker = vi.fn(async () => undefined);
-      const preserveWorker = vi.fn(async () => undefined);
+      const preserveWorker = vi.fn(async () => true);
 
       // Intentionally omit listPreservedWorkers to exercise optional chaining
       const isolationProvider: IsolationProvider = {
@@ -3767,6 +4159,7 @@ describe('TaskDispatcher', () => {
         isolation,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           preserveWorkerContainers: true,
           verifier: {
             verify: vi.fn().mockResolvedValue({
@@ -3840,6 +4233,7 @@ describe('TaskDispatcher', () => {
         mockIsolationConfig,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: false }),
@@ -3964,6 +4358,7 @@ describe('TaskDispatcher', () => {
           localIsolation,
           {
             maxAttempts: 3,
+            activityTimeout: disabledActivityTimeout,
             verifier: {
               verify,
               describe: (): { enabled: boolean } => ({ enabled: false }),
@@ -4345,6 +4740,7 @@ describe('TaskDispatcher', () => {
         mockIsolationConfig,
         {
           maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
           verifier: {
             verify: vi.fn().mockResolvedValue({
               passed: true,
@@ -4427,7 +4823,7 @@ describe('TaskDispatcher', () => {
       const initJson = JSON.stringify({
         type: 'system',
         subtype: 'init',
-        model: 'claude-sonnet-4-5-20250929',
+        model: 'claude-sonnet-4-6',
         tools: ['Task', 'Bash', 'Glob'],
         mcp_servers: [
           { name: 'linear', status: 'connected' },
@@ -4442,7 +4838,7 @@ describe('TaskDispatcher', () => {
       onLog(initJson + '\n');
 
       const formatted = findFormattedChunk('[claude] Session init');
-      expect(formatted).toContain('model=claude-sonnet-4-5-20250929');
+      expect(formatted).toContain('model=claude-sonnet-4-6');
       expect(formatted).toContain('tools=3');
       expect(formatted).toContain('mcp=[linear:ok, sentry:fail]');
       expect(formatted).toContain('mode=bypassPermissions');
@@ -4454,7 +4850,7 @@ describe('TaskDispatcher', () => {
       const initJson = JSON.stringify({
         type: 'system',
         subtype: 'init',
-        model: 'claude-sonnet-4-5-20250929',
+        model: 'claude-sonnet-4-6',
         tools: [],
         permissionMode: 'plan',
         version: '2.0.0',
@@ -4985,6 +5381,9 @@ describe('TaskDispatcher', () => {
           has_plan_doc: '0',
           subtask_urls: '',
           pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
           summary: 'Planned',
           unclear_clarification: '',
         },
@@ -5337,6 +5736,9 @@ describe('TaskDispatcher', () => {
       const task = state.tasks['active-goal-resume-test'];
       if (!task) throw new Error('Task not found');
       task.status = 'completed';
+      // Simulate that the runtime session was captured during the first run
+      // so the resume guard allows the resume.
+      task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
       await statePersistence.save(state);
 
       vi.mocked(mockIsolationProvider.createWorker).mockClear();
@@ -5408,6 +5810,10 @@ describe('TaskDispatcher', () => {
         if (!task) throw new Error('Task not found');
         task.status = 'completed';
         task.completedAt = new Date().toISOString();
+        // Simulate that the runtime session was captured so the resume guard
+        // allows the resume to reach the worker startup that the test wants
+        // to observe failing asynchronously.
+        task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
         await localStatePersistence.save(state);
         const internal = localDispatcher as unknown as {
           clearTaskTimers: (taskId: string) => void;
@@ -5687,6 +6093,8 @@ describe('TaskDispatcher', () => {
       const task = state.tasks['resumed-pending-msg-test'];
       if (!task) throw new Error('Task not found');
       task.resumedAfterSuccess = true;
+      // Simulate captured runtime session so the resume guard allows the retry.
+      task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
       await resumedStatePersistence.save(state);
 
       const internal = resumedDispatcher as unknown as {
@@ -6680,6 +7088,7 @@ describe('TaskDispatcher', () => {
         mockIsolationConfig,
         {
           maxAttempts: 2,
+          activityTimeout: disabledActivityTimeout,
           verifier: {
             verify,
             describe: (): { enabled: boolean } => ({ enabled: false }),
@@ -6741,6 +7150,9 @@ describe('TaskDispatcher', () => {
       verificationHistory: [],
       linearIssueLabels: [],
       hasChildren: false,
+      // Simulate a captured runtime session so the resume guard allows adoption
+      // to call startWorkerAttempt with continueSession: true.
+      runtimeSessionId: 'aaaaaaaa-0000-4000-a000-000000000000',
       ...overrides,
     });
 
@@ -6889,6 +7301,8 @@ describe('TaskDispatcher', () => {
       linearIssueLabels: [],
       hasChildren: false,
       resumedAfterSuccess: true,
+      // Simulate captured runtime session so the resume guard allows recovery.
+      runtimeSessionId: 'aaaaaaaa-0000-4000-a000-000000000000',
       pendingResumeStart: {
         prompt: '[RESUME PRE-FLIGHT]\nUser follow-up message',
         acceptedAt: new Date().toISOString(),
@@ -7100,6 +7514,33 @@ describe('TaskDispatcher', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
+        expect(String(result.error)).toContain('persisted runtime session');
+      }
+      expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+    });
+
+    it('rejects claude resume when runtimeSessionId is missing', async () => {
+      const task = createCodexTask({
+        taskId: 'claude-runtime-task',
+        runtime: 'claude',
+        worktreePath: '/tmp/worktrees/claude-runtime-task',
+      });
+
+      const result = await (
+        dispatcher as unknown as {
+          startWorkerAttempt: (
+            task: Task,
+            params: { prompt: string; continueSession: boolean; injectActiveGoal?: boolean }
+          ) => Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }>;
+        }
+      ).startWorkerAttempt(task, {
+        prompt: 'Resume Claude work',
+        continueSession: true,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(String(result.error)).toContain('claude');
         expect(String(result.error)).toContain('persisted runtime session');
       }
       expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
@@ -7406,7 +7847,7 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(timeoutDispatcher.getRunningCount()).toBe(1);
 
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
       expect(timeoutDispatcher.getRunningCount()).toBe(0);
 
       vi.useRealTimers();
@@ -7532,7 +7973,7 @@ describe('TaskDispatcher', () => {
       (killGuardDispatcher as unknown as { runningCount: number }).runningCount = 0;
 
       // Advance past kill timeout — guard should prevent going to -1
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
       expect(killGuardDispatcher.getRunningCount()).toBe(0);
 
       vi.useRealTimers();
@@ -7952,6 +8393,26 @@ describe('TaskDispatcher', () => {
   });
 
   describe('sendMessage', () => {
+    const createDispatchMetadataResponse = (overrides: Record<string, unknown> = {}): Response =>
+      new Response(
+        JSON.stringify({
+          taskId: 'recovered-task',
+          prompt: 'Original prompt',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          agentType: 'execution',
+          workerType: 'auto',
+          linearIssueId: 'INT-1134',
+          webhookSecret: 'secret-from-code-agent',
+          prNumber: 42,
+          webhookUrl: 'https://example.com/internal/webhooks/task-complete',
+          continuationPrBranch: null,
+          trackingCommentId: null,
+          ...overrides,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+
     it('queues message for running task', async () => {
       const request: CreateTaskRequest = {
         taskId: 'msg-running-task',
@@ -7976,13 +8437,206 @@ describe('TaskDispatcher', () => {
       }
     });
 
-    it('returns not_found for nonexistent task', async () => {
+    it('recreates a missing execution task from dispatch metadata and resumes it', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            taskId: 'nonexistent',
+            prompt: 'Original prompt',
+            repository: 'pbuchman/intexuraos',
+            baseBranch: 'development',
+            agentType: 'execution',
+            workerType: 'auto',
+            linearIssueId: 'INT-1134',
+            webhookSecret: 'secret-from-code-agent',
+            prNumber: 42,
+            webhookUrl: 'https://example.com/internal/webhooks/task-complete',
+            continuationPrBranch: 'task_existing_pr_branch',
+            trackingCommentId: 'comment-123',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      );
+
+      const result = await dispatcher.sendMessage('nonexistent', 'Hello');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'resumed' });
+      }
+
+      expect(mockWorktreeManager.createWorktree).toHaveBeenCalledWith(
+        'nonexistent',
+        'development',
+        'task_existing_pr_branch'
+      );
+
+      const recoveredTask = await dispatcher.getTask('nonexistent');
+      expect(recoveredTask).not.toBeNull();
+      expect(recoveredTask?.status).toBe('running');
+      expect(recoveredTask?.linearIssueLabels).toEqual([]);
+      expect(recoveredTask?.trackingCommentId).toBe('comment-123');
+      expect(recoveredTask?.continuationPrBranch).toBe('task_existing_pr_branch');
+      expect(recoveredTask?.pendingResumeStart?.prompt).toContain('Hello');
+      expect(recoveredTask?.pendingResumeStart?.prompt).toContain('RESUME PRE-FLIGHT');
+    });
+
+    it('returns not_found when dispatch metadata is unavailable for a missing task', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: false }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        })
+      );
+
       const result = await dispatcher.sendMessage('nonexistent', 'Hello');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.type).toBe('not_found');
       }
+    });
+
+    it('returns not_found when recovered dispatch metadata has no webhook secret', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        createDispatchMetadataResponse({
+          taskId: 'missing-webhook-secret-task',
+          webhookSecret: null,
+        })
+      );
+
+      const result = await dispatcher.sendMessage('missing-webhook-secret-task', 'Hello');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('not_found');
+      }
+      expect(mockWorktreeManager.createWorktree).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['planning', true],
+      ['pull_request', true],
+      ['ask_agent', false],
+    ] as const)(
+      'recreates a missing %s task from dispatch metadata with the expected resume prompt',
+      async (agentType, expectsResumePreamble) => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+          createDispatchMetadataResponse({
+            taskId: `${agentType}-task`,
+            agentType,
+            continuationPrBranch: 'task_existing_pr_branch',
+          })
+        );
+
+        const result = await dispatcher.sendMessage(`${agentType}-task`, 'Hello');
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value).toEqual({ action: 'resumed' });
+        }
+
+        expect(mockWorktreeManager.createWorktree).toHaveBeenCalledWith(
+          `${agentType}-task`,
+          'development',
+          'task_existing_pr_branch'
+        );
+
+        const recoveredTask = await dispatcher.getTask(`${agentType}-task`);
+        expect(recoveredTask?.agentType).toBe(agentType);
+        expect(recoveredTask?.continuationPrBranch).toBe('task_existing_pr_branch');
+        expect(recoveredTask?.pendingResumeStart?.prompt).toContain('Hello');
+
+        if (expectsResumePreamble) {
+          expect(recoveredTask?.pendingResumeStart?.prompt).toContain('RESUME PRE-FLIGHT');
+        } else {
+          expect(recoveredTask?.pendingResumeStart?.prompt).toBe('Hello');
+        }
+      }
+    );
+
+    it('truncates long recovered user messages in the prompt log entry', async () => {
+      const longMessage = 'a'.repeat(250);
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        createDispatchMetadataResponse({
+          taskId: 'long-message-task',
+        })
+      );
+
+      const result = await dispatcher.sendMessage('long-message-task', longMessage);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'resumed' });
+      }
+
+      const promptLogCall = vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.find(
+          (call) =>
+            call[0] === 'long-message-task' &&
+            typeof call[1] === 'string' &&
+            call[1].includes('[prompt]')
+        );
+
+      expect(promptLogCall).toBeDefined();
+      expect(promptLogCall?.[1]).toContain(`${longMessage.slice(0, 200)}…`);
+    });
+
+    it('rejects fallback recreation for review tasks recovered from dispatch metadata', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        createDispatchMetadataResponse({
+          taskId: 'review-task',
+          agentType: 'review',
+        })
+      );
+
+      const result = await dispatcher.sendMessage('review-task', 'Hello');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('invalid_agent_type');
+      }
+    });
+
+    it('marks a recovered task as failed when resume guard rejects missing runtimeSessionId', async () => {
+      // NOTE: Dispatch-metadata recovery does not currently propagate
+      // runtimeSessionId — DispatchMetadataSchema in dispatch-metadata-client.ts
+      // doesn't include it and tryRecoverMissingTask doesn't set it. So every
+      // recovered task hits the universal resume guard at
+      // task-dispatcher.ts:2071 (widened by 95eb9a64c) and is failed via
+      // failAcceptedResume with RESUME_ATTEMPT_FAILED. See INT-1334 for the
+      // follow-up that restores end-to-end recovery by carrying session ids
+      // through the metadata contract.
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        createDispatchMetadataResponse({
+          taskId: 'failing-fallback-task',
+        })
+      );
+
+      const result = await dispatcher.sendMessage('failing-fallback-task', 'Hello');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'resumed' });
+      }
+
+      await flushAsync();
+
+      const failedTask = await dispatcher.getTask('failing-fallback-task');
+      expect(failedTask?.status).toBe('failed');
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'failing-fallback-task',
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'RESUME_ATTEMPT_FAILED',
+            }),
+          }),
+        })
+      );
     });
 
     it('returns invalid_status for cancelled task', async () => {
@@ -8215,6 +8869,9 @@ describe('TaskDispatcher', () => {
       const task = state.tasks['msg-ask-agent-resume'];
       if (!task) throw new Error('Task not found');
       task.status = 'completed';
+      // Simulate captured runtime session so the resume guard allows resume
+      // into startWorkerAttempt, which is what this test observes.
+      task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
       await statePersistence.save(state);
 
       const result = await dispatcher.sendMessage(
@@ -8406,6 +9063,93 @@ describe('TaskDispatcher', () => {
       expect(promptEntry).toContain('\u2026'); // ellipsis = truncation occurred
       expect(promptEntry).not.toContain('B'.repeat(250)); // full message not present
     });
+
+    it('returns session_expired when worktree exists but container is gone', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'msg-session-expired-task',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await dispatcher.submitTask(request);
+      await flushAsync();
+
+      // Set task to completed state (resumable)
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-session-expired-task'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await statePersistence.save(state);
+
+      // Worktree exists (so resume should be possible)
+      vi.mocked(mockWorktreeManager.worktreeExists).mockResolvedValueOnce(true);
+
+      // But container session is gone (should reject resume)
+      const isResumeAvailableMock = mockIsolationProvider.isResumeAvailable;
+      /* v8 ignore next -- ts-type: non-null assertion for mock defined at line 213 @preserve */
+      if (!isResumeAvailableMock) throw new Error('isResumeAvailable mock not defined');
+      vi.mocked(isResumeAvailableMock).mockResolvedValueOnce(false);
+
+      const result = await dispatcher.sendMessage('msg-session-expired-task', 'Follow-up');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.type).toBe('session_expired');
+        expect(result.error.message).toContain('session');
+      }
+    });
+
+    it('allows resume when provider does not implement isResumeAvailable (fail-open)', async () => {
+      // Create a dispatcher with an isolation provider that doesn't have isResumeAvailable
+      // Use omit to properly exclude the property for exactOptionalPropertyTypes compatibility
+      const { isResumeAvailable: _, ...providerWithoutResume } = mockIsolationProvider;
+      const isolationWithoutResume: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: providerWithoutResume as IsolationProvider,
+      };
+      const failOpenDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        isolationWithoutResume,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'msg-fail-open-resume',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      await failOpenDispatcher.submitTask(request);
+      await flushAsync();
+
+      const state = await statePersistence.load();
+      const task = state.tasks['msg-fail-open-resume'];
+      if (!task) throw new Error('Task not found');
+      task.status = 'completed';
+      await statePersistence.save(state);
+
+      vi.mocked(mockWorktreeManager.worktreeExists).mockResolvedValueOnce(true);
+
+      const result = await failOpenDispatcher.sendMessage('msg-fail-open-resume', 'Follow-up');
+
+      // Should succeed (fail-open behavior when isResumeAvailable is not implemented)
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'resumed' });
+      }
+    });
   });
 
   describe('resumeTaskWithUserMessage pendingResumeStart guard', () => {
@@ -8456,7 +9200,7 @@ describe('TaskDispatcher', () => {
   });
 
   describe('scheduleTimeoutWarning and scheduleTimeoutKill callbacks', () => {
-    it('scheduleTimeoutWarning logs warning for running task at 2h55m', async () => {
+    it('scheduleTimeoutWarning logs warning for running task at 4h55m', async () => {
       vi.useFakeTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
       const warnState = createStatePersistence();
@@ -8486,11 +9230,11 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       const warnSpy = vi.spyOn(mockLogger, 'warn');
-      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(295 * 60 * 1000);
 
       expect(warnSpy).toHaveBeenCalledWith(
         { taskId: 'warn-timer-test' },
-        'Task approaching 3-hour timeout'
+        'Task approaching 5-hour timeout'
       );
 
       vi.useRealTimers();
@@ -8531,7 +9275,7 @@ describe('TaskDispatcher', () => {
       vi.spyOn(errorDispatcher, 'getTask').mockRejectedValue(new Error('DB error'));
       const errorSpy = vi.spyOn(mockLogger, 'error');
 
-      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(295 * 60 * 1000);
 
       expect(errorSpy).toHaveBeenCalledWith(
         { taskId: 'warn-error-test', error: expect.any(Error) },
@@ -8576,7 +9320,7 @@ describe('TaskDispatcher', () => {
       );
       const errorSpy = vi.spyOn(mockLogger, 'error');
 
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
 
       expect(errorSpy).toHaveBeenCalledWith(
         { taskId: 'kill-error-test', error: expect.any(Error) },
@@ -8618,7 +9362,7 @@ describe('TaskDispatcher', () => {
 
       vi.mocked(mockLogForwarder.flushAndStop).mockRejectedValueOnce(new Error('flush failed'));
 
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         { taskId: 'kill-flush-fail-test', error: expect.any(Error) },
@@ -8662,11 +9406,11 @@ describe('TaskDispatcher', () => {
       vi.spyOn(nullTaskDispatcher, 'getTask').mockResolvedValue(null);
       const warnSpy = vi.spyOn(mockLogger, 'warn');
 
-      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(295 * 60 * 1000);
 
       expect(warnSpy).not.toHaveBeenCalledWith(
         expect.objectContaining({ taskId: 'warn-null-task-test' }),
-        'Task approaching 3-hour timeout'
+        'Task approaching 5-hour timeout'
       );
 
       vi.useRealTimers();
@@ -8711,11 +9455,11 @@ describe('TaskDispatcher', () => {
 
       const warnSpy = vi.spyOn(mockLogger, 'warn');
 
-      await vi.advanceTimersByTimeAsync(175 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(295 * 60 * 1000);
 
       expect(warnSpy).not.toHaveBeenCalledWith(
         expect.objectContaining({ taskId: 'warn-completed-task-test' }),
-        'Task approaching 3-hour timeout'
+        'Task approaching 5-hour timeout'
       );
 
       vi.useRealTimers();
@@ -8764,7 +9508,7 @@ describe('TaskDispatcher', () => {
       (earlyReturnDispatcher as unknown as { runningCount: number }).runningCount = 0;
 
       // Advance past kill timeout — early return (task not running) prevents the decrement
-      await vi.advanceTimersByTimeAsync(180 * 60 * 1000 + 1000);
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
 
       // runningCount stays at 0 (not -1) because the early return at `task?.status !== 'running'`
       // fires before reaching the `if (this.runningCount > 0) this.runningCount--` guard
@@ -8858,6 +9602,877 @@ describe('TaskDispatcher', () => {
       expect(() => {
         internal.clearTaskTimers('nonexistent-task');
       }).not.toThrow();
+    });
+  });
+
+  describe('inactivity timeout restart', () => {
+    // Defensive: every test in this block uses vi.useFakeTimers(). If a test
+    // fails mid-flight, its trailing vi.useRealTimers() is skipped and fake
+    // timer state leaks into subsequent tests in the file. This local
+    // afterEach guarantees the timer lifecycle resets even on failure.
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('triggers restart after 10 minutes of no output', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const inactivityState = createStatePersistence();
+      const inactivityDispatcher = new TaskDispatcher(
+        mockConfig,
+        inactivityState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'inactivity-restart-test',
+        workerType: 'auto',
+        prompt: 'Test inactivity restart',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await inactivityDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Seed runtimeSessionId so the universal resume guard at
+      // task-dispatcher.ts:2071 accepts the inactivity-restart call with
+      // continueSession: true. Production equivalent: entrypoint.sh captures
+      // the session id on first run.
+      {
+        const state = await inactivityState.load();
+        const task = state.tasks['inactivity-restart-test'];
+        if (!task) throw new Error('Task not found');
+        task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
+        await inactivityState.save(state);
+      }
+
+      // Advance 10 minutes — inactivity timeout fires
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0); // flush microtasks
+
+      // Verify destroyWorker was called (initial create + restart destroy)
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('inactivity-restart-test');
+
+      // Verify a new worker was created with continueSession: true
+      const createWorkerCalls = vi.mocked(mockIsolationProvider.createWorker).mock.calls;
+      const lastCall = createWorkerCalls.at(-1);
+      expect(lastCall?.[0]?.continueSession).toBe(true);
+      expect(lastCall?.[0]?.prompt).toContain('previous session became unresponsive');
+
+      // Verify task is still running
+      const task = await inactivityDispatcher.getTask('inactivity-restart-test');
+      expect(task?.status).toBe('running');
+      expect(task?.inactivityRestartCount).toBe(1);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    async function triggerInactivityRestart(taskId: string): Promise<TaskDispatcher> {
+      const state = createStatePersistence();
+      const dispatcher = new TaskDispatcher(
+        mockConfig,
+        state,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+      await dispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'p',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      const loaded = await state.load();
+      const task = loaded.tasks[taskId];
+      if (!task) throw new Error('Task not found');
+      task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
+      await state.save(loaded);
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+      return dispatcher;
+    }
+
+    it('captures /tmp evidence and stats snapshot before destroying worker on inactivity', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      vi.mocked(mockIsolationProvider.copyOut).mockClear();
+      vi.mocked(mockIsolationProvider.statsSnapshot).mockClear();
+      vi.mocked(mockIsolationProvider.destroyWorker).mockClear();
+
+      await triggerInactivityRestart('evidence-capture-test');
+
+      expect(mockIsolationProvider.copyOut).toHaveBeenCalledWith(
+        'evidence-capture-test',
+        '/tmp',
+        expect.stringContaining('evidence-capture-test')
+      );
+      expect(mockIsolationProvider.statsSnapshot).toHaveBeenCalledWith('evidence-capture-test');
+
+      const copyOutOrder = vi.mocked(mockIsolationProvider.copyOut).mock.invocationCallOrder[0];
+      const statsOrder = vi.mocked(mockIsolationProvider.statsSnapshot).mock.invocationCallOrder[0];
+      const destroyCalls = vi.mocked(mockIsolationProvider.destroyWorker).mock.calls;
+      const destroyOrders = vi.mocked(mockIsolationProvider.destroyWorker).mock.invocationCallOrder;
+      const destroyIdx = destroyCalls.findIndex((c) => c[0] === 'evidence-capture-test');
+      expect(destroyIdx).toBeGreaterThanOrEqual(0);
+      const destroyOrder = destroyOrders[destroyIdx];
+      expect(copyOutOrder).toBeDefined();
+      expect(statsOrder).toBeDefined();
+      expect(destroyOrder).toBeDefined();
+      if (copyOutOrder !== undefined && destroyOrder !== undefined) {
+        expect(copyOutOrder).toBeLessThan(destroyOrder);
+      }
+      if (statsOrder !== undefined && destroyOrder !== undefined) {
+        expect(statsOrder).toBeLessThan(destroyOrder);
+      }
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('proceeds with inactivity restart even when copyOut rejects', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      vi.mocked(mockIsolationProvider.copyOut).mockRejectedValueOnce(new Error('docker busy'));
+
+      const dispatcher = await triggerInactivityRestart('copyout-fail-test');
+
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('copyout-fail-test');
+      const task = await dispatcher.getTask('copyout-fail-test');
+      expect(task?.inactivityRestartCount).toBe(1);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('proceeds with inactivity restart even when statsSnapshot rejects', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      vi.mocked(mockIsolationProvider.statsSnapshot).mockRejectedValueOnce(
+        new Error('stats unavailable')
+      );
+
+      const dispatcher = await triggerInactivityRestart('stats-fail-test');
+
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('stats-fail-test');
+      const task = await dispatcher.getTask('stats-fail-test');
+      expect(task?.inactivityRestartCount).toBe(1);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('logs stats: null warn and proceeds when statsSnapshot returns null', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      vi.mocked(mockIsolationProvider.statsSnapshot).mockResolvedValueOnce(null);
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
+
+      await triggerInactivityRestart('stats-null-test');
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'stats-null-test', stats: null }),
+        'Container stats at inactivity kill'
+      );
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('stats-null-test');
+
+      warnSpy.mockRestore();
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('does not restart when worker produces output', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const noRestartState = createStatePersistence();
+      const noRestartDispatcher = new TaskDispatcher(
+        mockConfig,
+        noRestartState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'no-restart-test',
+        workerType: 'auto',
+        prompt: 'Test no restart',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await noRestartDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Simulate output every 5 minutes to keep the timeout from firing
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      expect(onLog).toBeDefined();
+
+      // Advance 5 minutes and produce output
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      onLog?.('some output\n');
+
+      // Advance another 5 minutes and produce output
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      onLog?.('more output\n');
+
+      // Advance another 5 minutes — 15 min total, but only 5 min since last output
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+      // destroyWorker should only have been called once (for initial image pull verification, not for restart)
+      // Task should still be running without restart
+      const task = await noRestartDispatcher.getTask('no-restart-test');
+      expect(task?.status).toBe('running');
+      expect(task?.inactivityRestartCount).toBeUndefined();
+      expect(mockIsolationProvider.destroyWorker).not.toHaveBeenCalledWith('no-restart-test');
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('fails task after max consecutive restarts exceeded', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const maxRestartState = createStatePersistence();
+      const maxRestartDispatcher = new TaskDispatcher(
+        mockConfig,
+        maxRestartState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'max-restart-test',
+        workerType: 'auto',
+        prompt: 'Test max restarts',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await maxRestartDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Seed runtimeSessionId so the universal resume guard at
+      // task-dispatcher.ts:2071 accepts the inactivity-restart call with
+      // continueSession: true. Production equivalent: entrypoint.sh captures
+      // the session id on first run.
+      {
+        const state = await maxRestartState.load();
+        const task = state.tasks['max-restart-test'];
+        if (!task) throw new Error('Task not found');
+        task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
+        await maxRestartState.save(state);
+      }
+
+      // Advance through 3 restart cycles (10 min each)
+      for (let i = 0; i < 3; i++) {
+        await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+        await vi.advanceTimersByTimeAsync(0);
+      }
+
+      // After 3 restarts, the 4th timeout triggers max exceeded
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const task = await maxRestartDispatcher.getTask('max-restart-test');
+      expect(task?.status).toBe('failed');
+
+      // Verify webhook was sent with TASK_INACTIVITY_TIMEOUT error
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'max-restart-test',
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_INACTIVITY_TIMEOUT',
+            }),
+          }),
+        })
+      );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('does not increment attemptCount on inactivity restart', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const attemptState = createStatePersistence();
+      const attemptDispatcher = new TaskDispatcher(
+        mockConfig,
+        attemptState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 5,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'attempt-count-test',
+        workerType: 'auto',
+        prompt: 'Test attempt count',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await attemptDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Seed runtimeSessionId so the universal resume guard at
+      // task-dispatcher.ts:2071 accepts the inactivity-restart call with
+      // continueSession: true. Production equivalent: entrypoint.sh captures
+      // the session id on first run.
+      {
+        const state = await attemptState.load();
+        const task = state.tasks['attempt-count-test'];
+        if (!task) throw new Error('Task not found');
+        task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
+        await attemptState.save(state);
+      }
+
+      const beforeTask = await attemptDispatcher.getTask('attempt-count-test');
+      expect(beforeTask?.attemptCount).toBe(1);
+
+      // Trigger inactivity restart
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // attemptCount should NOT be incremented
+      const afterTask = await attemptDispatcher.getTask('attempt-count-test');
+      expect(afterTask?.attemptCount).toBe(1);
+      expect(afterTask?.inactivityRestartCount).toBe(1);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('resets consecutive restart counter when output resumes after restart', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const resetState = createStatePersistence();
+      const resetDispatcher = new TaskDispatcher(
+        mockConfig,
+        resetState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 2 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'reset-counter-test',
+        workerType: 'auto',
+        prompt: 'Test counter reset',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await resetDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Seed runtimeSessionId so the universal resume guard at
+      // task-dispatcher.ts:2071 accepts the inactivity-restart call with
+      // continueSession: true. Production equivalent: entrypoint.sh captures
+      // the session id on first run.
+      {
+        const state = await resetState.load();
+        const task = state.tasks['reset-counter-test'];
+        if (!task) throw new Error('Task not found');
+        task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
+        await resetState.save(state);
+      }
+
+      // First inactivity restart (restart 1/2)
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      let task = await resetDispatcher.getTask('reset-counter-test');
+      expect(task?.status).toBe('running');
+      expect(task?.inactivityRestartCount).toBe(1);
+
+      // Simulate output from the restarted worker — this resets the consecutive counter
+      const createWorkerCalls = vi.mocked(mockIsolationProvider.createWorker).mock.calls;
+      const lastOnLog = createWorkerCalls.at(-1)?.[0]?.onLog;
+      expect(lastOnLog).toBeDefined();
+      lastOnLog?.('output after restart\n');
+
+      // Second inactivity restart (restart 1/2 again because counter was reset)
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      task = await resetDispatcher.getTask('reset-counter-test');
+      expect(task?.status).toBe('running');
+      expect(task?.inactivityRestartCount).toBe(2);
+
+      // Third inactivity restart (restart 2/2, should still succeed)
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      task = await resetDispatcher.getTask('reset-counter-test');
+      expect(task?.status).toBe('running');
+      expect(task?.inactivityRestartCount).toBe(3);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('skips restart when completion is already in progress', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const completionState = createStatePersistence();
+      const completionDispatcher = new TaskDispatcher(
+        mockConfig,
+        completionState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'completion-guard-test',
+        workerType: 'auto',
+        prompt: 'Test completion guard',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await completionDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Simulate completion in progress
+      const internal = completionDispatcher as unknown as {
+        completionInProgress: Set<string>;
+      };
+      internal.completionInProgress.add('completion-guard-test');
+
+      vi.mocked(mockIsolationProvider.destroyWorker).mockClear();
+
+      // Advance 10 minutes — inactivity timeout fires but should be skipped
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // destroyWorker should NOT have been called for inactivity restart
+      expect(mockIsolationProvider.destroyWorker).not.toHaveBeenCalled();
+
+      const task = await completionDispatcher.getTask('completion-guard-test');
+      expect(task?.status).toBe('running');
+      expect(task?.inactivityRestartCount).toBeUndefined();
+
+      internal.completionInProgress.delete('completion-guard-test');
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('handles inactivity restart error gracefully', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const errorState = createStatePersistence();
+      const errorDispatcher = new TaskDispatcher(
+        mockConfig,
+        errorState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'restart-error-test',
+        workerType: 'auto',
+        prompt: 'Test restart error',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await errorDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Make getTask reject to trigger error handling in handler
+      vi.spyOn(errorDispatcher, 'getTask').mockRejectedValue(new Error('DB error'));
+      const errorSpy = vi.spyOn(mockLogger, 'error');
+
+      // Advance 10 minutes — inactivity timeout fires but getTask fails
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Error should be logged (caught by the .catch in the constructor callback)
+      expect(errorSpy).toHaveBeenCalledWith(
+        { taskId: 'restart-error-test', error: expect.any(Error) },
+        'Error in inactivity restart handler'
+      );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('logs restart prompt in task logs', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const logState = createStatePersistence();
+      const logDispatcher = new TaskDispatcher(
+        mockConfig,
+        logState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'log-test',
+        workerType: 'auto',
+        prompt: 'Test logging',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await logDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
+
+      // Advance 10 minutes
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Verify system log about inactivity
+      const appendCalls = vi.mocked(mockLogForwarder.appendChunk).mock.calls;
+      const systemLog = appendCalls.find(
+        (call) =>
+          call[0] === 'log-test' &&
+          typeof call[1] === 'string' &&
+          call[1].includes('[system]') &&
+          call[1].includes('Inactivity timeout')
+      );
+      expect(systemLog).toBeDefined();
+
+      // Verify prompt log
+      const promptLog = appendCalls.find(
+        (call) =>
+          call[0] === 'log-test' &&
+          typeof call[1] === 'string' &&
+          call[1].includes('[prompt]') &&
+          call[1].includes('previous session became unresponsive')
+      );
+      expect(promptLog).toBeDefined();
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('fails task when worker restart fails', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const restartFailState = createStatePersistence();
+      const restartFailDispatcher = new TaskDispatcher(
+        mockConfig,
+        restartFailState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'restart-fail-test',
+        workerType: 'auto',
+        prompt: 'Test restart failure',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await restartFailDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Seed runtimeSessionId so the universal resume guard at
+      // task-dispatcher.ts:2071 accepts the inactivity-restart call with
+      // continueSession: true, letting the mocked createWorker rejection
+      // below actually fire (this test's purpose).
+      {
+        const state = await restartFailState.load();
+        const task = state.tasks['restart-fail-test'];
+        if (!task) throw new Error('Task not found');
+        task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
+        await restartFailState.save(state);
+      }
+
+      // Make createWorker reject on the next call (the restart attempt)
+      vi.mocked(mockIsolationProvider.createWorker).mockRejectedValueOnce(
+        new Error('Container creation failed')
+      );
+
+      // Advance 10 minutes — inactivity timeout fires, restart fails
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const task = await restartFailDispatcher.getTask('restart-fail-test');
+      expect(task?.status).toBe('failed');
+
+      // Verify webhook sent with TASK_INACTIVITY_RESTART_FAILED error
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            taskId: 'restart-fail-test',
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_INACTIVITY_RESTART_FAILED',
+            }),
+          }),
+        })
+      );
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('completion monitor does not verify while inactivity restart is in progress', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const raceState = createStatePersistence();
+      const raceVerify = vi.fn(async () => ({
+        passed: true,
+        missingFields: [] as string[],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'planning' as const,
+          outcome: 'planned' as const,
+          superpowers_writing_plans: 'used' as const,
+          linear_url: '',
+          is_complex: '0' as const,
+          has_plan_doc: '0' as const,
+          subtask_urls: '',
+          pr_url: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
+          summary: 'Task completed',
+          unclear_clarification: '',
+        },
+      }));
+      const raceDispatcher = new TaskDispatcher(
+        mockConfig,
+        raceState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: {
+            verify: raceVerify,
+            describe: (): { enabled: boolean; provider: string; model: string } => ({
+              enabled: true,
+              provider: 'gemini',
+              model: 'gemini-2.5-flash',
+            }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+          },
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'race-restart-verify',
+        workerType: 'auto',
+        prompt: 'Test race guard',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await raceDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Simulate "inactivity restart in progress" by seeding the flag directly.
+      // Production sets it synchronously at the top of handleInactivityRestart,
+      // before any await — guaranteeing the monitor tick sees it during the
+      // destroyWorker/startWorkerAttempt window.
+      const internal = raceDispatcher as unknown as {
+        inactivityRestartInProgress: Set<string>;
+      };
+      internal.inactivityRestartInProgress.add('race-restart-verify');
+
+      // Container is gone during the restart window
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+
+      // Advance multiple monitor intervals — the monitor must not call verify
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(raceVerify).not.toHaveBeenCalled();
+
+      internal.inactivityRestartInProgress.delete('race-restart-verify');
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('passes the worker exitCode to the completion verifier as lastExitCode', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const exitCodeVerify = vi.fn(async () => ({
+        passed: false,
+        missingFields: ['fatal_exit_code_137'],
+        verifierFailure: false,
+        trace: dummyTrace,
+      }));
+      const exitCodeState = createStatePersistence();
+      const exitCodeDispatcher = new TaskDispatcher(
+        mockConfig,
+        exitCodeState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: disabledActivityTimeout,
+          verifier: {
+            verify: exitCodeVerify,
+            describe: (): { enabled: boolean; provider: string; model: string } => ({
+              enabled: true,
+              provider: 'gemini',
+              model: 'gemini-2.5-flash',
+            }),
+            extractResumeSummary: vi.fn().mockResolvedValue(undefined),
+          },
+        }
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'exitcode-137-passthrough',
+        workerType: 'auto',
+        prompt: 'Test exit code propagation',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await exitCodeDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onComplete).toBeDefined();
+
+      onComplete?.(137);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(exitCodeVerify).toHaveBeenCalledWith(expect.objectContaining({ lastExitCode: 137 }));
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
     });
   });
 

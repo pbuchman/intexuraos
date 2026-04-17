@@ -18,17 +18,14 @@
  *   apiKey: process.env.OPENAI_API_KEY,
  *   model: 'gpt-4.1',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 2.50,
- *     outputPricePerMillion: 10.00,
- *   }
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  *
  * // Research with web search
  * const research = await client.research('Latest TypeScript features');
  * if (research.ok) {
  *   console.log(research.data.content);
- *   console.log('Cost:', research.data.usage.costUsd);
  * }
  *
  * // Image generation
@@ -39,10 +36,8 @@
  * ```
  */
 
-import { randomUUID } from 'node:crypto';
 import OpenAI from 'openai';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import {
   LlmModels,
   LlmProviders,
@@ -55,9 +50,15 @@ import {
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import type { GptConfig, GptError, ResearchResult } from './types.js';
-import { normalizeUsage, calculateImageCost } from './costCalculator.js';
+import { normalizeUsage } from './costCalculator.js';
 
-export type GptClient = LLMClient;
+export interface GenerateOptions {
+  promptType: string;
+}
+
+export type GptClient = Omit<LLMClient, 'generate'> & {
+  generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, GptError>>;
+};
 
 const MAX_TOKENS = 8192;
 const IMAGE_MODEL = LlmModels.GPTImage1;
@@ -66,11 +67,11 @@ const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
 /**
  * Creates a configured OpenAI GPT client.
  *
- * The client implements {@link LLMClient} with automatic cost calculation,
- * usage logging, and audit tracking. Supports text generation, research,
- * and image generation.
+ * The client implements {@link LLMClient} with usage logging and audit
+ * tracking. Supports text generation, research, and image generation.
+ * Cost calculation is handled server-side by llm-usage-service.
  *
- * @param config - Client configuration including API key, model, user ID, and pricing
+ * @param config - Client configuration including API key, model, user ID
  * @returns A configured {@link GptClient} instance
  *
  * @example
@@ -79,47 +80,22 @@ const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
  *   apiKey: process.env.OPENAI_API_KEY,
  *   model: 'gpt-4.1',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 2.50,
- *     outputPricePerMillion: 10.00,
- *   },
- *   imagePricing: {
- *     inputPricePerMillion: 0,
- *     outputPricePerMillion: 0,
- *     imagePricing: { '1024x1024': 0.040 }
- *   }
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  * ```
  */
 export function createGptClient(config: GptConfig): GptClient {
   const client = new OpenAI({ apiKey: config.apiKey });
-  const { model, userId, researchId, pricing, imagePricing, logger } = config;
-  const usageLogger = createUsageLogger({ logger });
-
-  function createRequestContext(
-    method: string,
-    model: string,
-    prompt: string
-  ): { requestId: string; startTime: Date; auditContext: AuditContext } {
-    const requestId = randomUUID();
-    const startTime = new Date();
-    const auditContext = createAuditContext({
-      provider: LlmProviders.OpenAI,
-      model,
-      method,
-      prompt,
-      startedAt: startTime,
-      userId,
-      ...(researchId !== undefined && { researchId }),
-    });
-    return { requestId, startTime, auditContext };
-  }
+  const { model, userId, logger, usageSink, ownerType } = config;
+  const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
   function trackUsage(
     callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
-    errorMessage?: string
+    errorMessage?: string,
+    promptType?: string
   ): void {
     void usageLogger.log({
       userId,
@@ -129,6 +105,8 @@ export function createGptClient(config: GptConfig): GptClient {
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
+      ...(ownerType !== undefined && { ownerType }),
+      ...(promptType !== undefined && { promptType }),
     });
   }
 
@@ -138,7 +116,7 @@ export function createGptClient(config: GptConfig): GptClient {
     inputTokens: number;
     outputTokens: number;
     cachedTokens: number;
-    reasoningTokens: number | undefined;
+    reasoningTokens: number | undefined; // @allow-undefined-type -- function return type, not object property
   } {
     if (usage === undefined) {
       return { inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: undefined };
@@ -164,8 +142,6 @@ export function createGptClient(config: GptConfig): GptClient {
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GptError>> {
-      const { auditContext } = createRequestContext('research', model, prompt);
-
       try {
         const response = await client.responses.create({
           model,
@@ -184,25 +160,14 @@ export function createGptClient(config: GptConfig): GptClient {
           usageDetails.outputTokens,
           usageDetails.cachedTokens,
           webSearchCalls,
-          usageDetails.reasoningTokens,
-          pricing
+          usageDetails.reasoningTokens
         );
 
-        const successParams: Parameters<typeof auditContext.success>[0] = {
-          response: content,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-        };
-        if (usage.webSearchCalls !== undefined) {
-          successParams.webSearchCalls = usage.webSearchCalls;
-        }
-        await auditContext.success(successParams);
         trackUsage('research', usage, true);
 
         return ok({ content, sources, usage });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
@@ -214,9 +179,10 @@ export function createGptClient(config: GptConfig): GptClient {
       }
     },
 
-    async generate(prompt: string): Promise<Result<GenerateResult, GptError>> {
-      const { auditContext } = createRequestContext('generate', model, prompt);
-
+    async generate(
+      prompt: string,
+      options: GenerateOptions
+    ): Promise<Result<GenerateResult, GptError>> {
       try {
         const response = await client.chat.completions.create({
           model,
@@ -231,28 +197,21 @@ export function createGptClient(config: GptConfig): GptClient {
           usageDetails.outputTokens,
           usageDetails.cachedTokens,
           0,
-          usageDetails.reasoningTokens,
-          pricing
+          usageDetails.reasoningTokens
         );
 
-        await auditContext.success({
-          response: text,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-        });
-        trackUsage('generate', usage, true);
+        trackUsage('generate', usage, true, undefined, options.promptType);
 
         return ok({ content: text, usage });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('generate', emptyUsage, false, errorMsg);
+        trackUsage('generate', emptyUsage, false, errorMsg, options.promptType);
         return err(mapGptError(error));
       }
     },
@@ -261,8 +220,6 @@ export function createGptClient(config: GptConfig): GptClient {
       prompt: string,
       options?: ImageGenerateOptions
     ): Promise<Result<ImageGenerationResult, GptError>> {
-      const { auditContext } = createRequestContext('generateImage', IMAGE_MODEL, prompt);
-
       try {
         const size: ImageSize = options?.size ?? DEFAULT_IMAGE_SIZE;
         // gpt-image-1 returns base64 data in response.data[0].b64_json by default
@@ -279,7 +236,6 @@ export function createGptClient(config: GptConfig): GptClient {
 
         if (b64Data === undefined) {
           const errorMsg = 'No image data in response';
-          await auditContext.error({ error: errorMsg });
           return err({ code: 'API_ERROR', message: errorMsg });
         }
 
@@ -295,26 +251,18 @@ export function createGptClient(config: GptConfig): GptClient {
           imageBuffer = Buffer.from(arrayBuffer);
         }
 
-        const pricingConfig = imagePricing ?? pricing;
-        const imageCost = calculateImageCost(size, pricingConfig);
-
         const usage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
           totalTokens: 0,
-          costUsd: imageCost,
+          costUsd: 0,
         };
 
-        await auditContext.success({
-          response: '[image-generated]',
-          imageCostUsd: imageCost,
-        });
         trackUsage('image_generation', usage, true);
 
         return ok({ imageData: imageBuffer, model: IMAGE_MODEL, usage });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,

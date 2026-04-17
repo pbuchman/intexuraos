@@ -16,6 +16,7 @@ export type {
   LLMErrorCode,
   LLMError,
   LLMClient,
+  OwnerType,
 } from './types.js';
 
 export {
@@ -31,6 +32,9 @@ export {
   getOpenRouterRawId,
   LlmModels,
   LlmProviders,
+  isDefaultEligibleModel,
+  DEFAULT_OPENROUTER_MODELS,
+  DEFAULT_MODEL_DISPLAY_NAMES,
 } from './supportedModels.js';
 
 export type {
@@ -41,17 +45,19 @@ export type {
   ValidationModel,
   FastModel,
   GenericModel,
+  DefaultEligibleModel,
+  DefaultOpenRouterModel,
   // Individual model types
   Gemini25Pro,
   Gemini25Flash,
   Gemini20Flash,
   Gemini25FlashImage,
   O4MiniDeepResearch,
-  GPT52,
+  GPT54,
   GPT4oMini,
   GPTImage1,
-  ClaudeOpus45,
-  ClaudeSonnet45,
+  ClaudeOpus46,
+  ClaudeSonnet46,
   ClaudeHaiku35,
   Sonar,
   SonarPro,
@@ -65,7 +71,7 @@ export type {
   OpenRouter,
 } from './supportedModels.js';
 
-export type { ImageSize, ModelPricing, ProviderPricing, CostCalculator } from './pricing.js';
+export type { ImageSize, ModelPricing, ProviderPricing } from './pricing.js';
 
 export type {
   ToolCallingMessage,

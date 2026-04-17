@@ -233,6 +233,11 @@ const MemoExecutionMemoryCard = memo(function ExecutionMemoryCard({ task }: { ta
     return null;
   }
 
+  // Calculate stats for banner
+  const topCandidates = context?.topCandidates ?? [];
+  const injectedCount = topCandidates.filter((c) => c.passedThreshold).length;
+  const belowThresholdCount = topCandidates.filter((c) => !c.passedThreshold).length;
+
   return (
     <Card className="mb-6">
       <div className="mb-3 flex items-center justify-between">
@@ -250,63 +255,85 @@ const MemoExecutionMemoryCard = memo(function ExecutionMemoryCard({ task }: { ta
         </div>
       ) : null}
 
-      {context?.matchedMemories !== undefined && context.matchedMemories.length > 0 ? (
-        <div className="mb-4 space-y-3">
-          {context.matchedMemories.map((memory) => (
-            <div
-              key={memory.memoryId}
-              className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/60"
-            >
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <h4 className="font-medium text-slate-900 dark:text-slate-100">{memory.title}</h4>
-                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-200">
-                  {memory.memoryType}
-                </span>
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  {memory.score.toFixed(2)}
-                </span>
-              </div>
-              <div className="text-sm text-slate-600 dark:text-slate-300"><MarkdownContent content={memory.appliesWhen} /></div>
-              <div className="mt-1 text-sm text-slate-700 dark:text-slate-200"><MarkdownContent content={memory.action} /></div>
-              <div className="mt-1 text-sm text-slate-500 dark:text-slate-400"><MarkdownContent content={memory.avoid} /></div>
-              <div className="mt-1 text-sm text-slate-500 dark:text-slate-400"><MarkdownContent content={memory.verification} /></div>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      {context?.topCandidates !== undefined && context.topCandidates.length > 0 ? (
-        <div className="mb-4">
-          <h4 className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-300">
-            Top Candidates
-          </h4>
-          <div className="space-y-1.5">
-            {context.topCandidates.map((candidate) => (
-              <div
-                key={candidate.memoryId}
-                className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs ${
-                  candidate.passedThreshold
-                    ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/30'
-                    : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/40'
-                }`}
-              >
-                <span className={`font-mono font-medium ${
-                  candidate.passedThreshold
-                    ? 'text-emerald-700 dark:text-emerald-300'
-                    : 'text-slate-500 dark:text-slate-400'
-                }`}>
-                  {candidate.rerankScore.toFixed(3)}
-                </span>
-                <span className="truncate text-slate-700 dark:text-slate-200">{candidate.title}</span>
-                <span className="ml-auto flex shrink-0 gap-1.5 text-slate-400 dark:text-slate-500">
-                  <span title="Vector score">V:{candidate.vectorScore.toFixed(2)}</span>
-                  <span title="Component overlap">C:{candidate.componentOverlap.toFixed(2)}</span>
-                  <span title="Effectiveness">E:{candidate.effectiveness.toFixed(2)}</span>
-                </span>
-              </div>
-            ))}
+      {topCandidates.length > 0 ? (
+        <>
+          {/* Summary stats banner */}
+          <div className="mb-4 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            {context?.totalSearchResults !== undefined ? (
+              <>
+                {String(context.totalSearchResults)} memories searched{' · '}
+                <span className="text-emerald-600 dark:text-emerald-400">{String(injectedCount)} injected</span>
+                {' · '}
+                <span className="text-slate-500 dark:text-slate-400">{String(belowThresholdCount)} below threshold</span>
+              </>
+            ) : (
+              <>
+                {String(topCandidates.length)} candidates shown
+              </>
+            )}
           </div>
-        </div>
+
+          {/* Unified candidate list */}
+          <div className="mb-4 space-y-3">
+            {topCandidates.map((candidate) => {
+              // For injected candidates, look up full detail from matchedMemories
+              const matchedMemory = context?.matchedMemories?.find((m) => m.memoryId === candidate.memoryId);
+
+              return (
+                <div
+                  key={candidate.memoryId}
+                  className={`rounded-lg border p-3 ${
+                    candidate.passedThreshold
+                      ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/30'
+                      : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/40'
+                  }`}
+                >
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <h4 className="font-medium text-slate-900 dark:text-slate-100">{candidate.title}</h4>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      candidate.passedThreshold
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'
+                        : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                    }`}>
+                      {candidate.passedThreshold ? 'Injected' : 'Candidate'}
+                    </span>
+                    <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                      {candidate.memoryType}
+                    </span>
+                  </div>
+
+                  {/* Score breakdown for all candidates */}
+                  <div className="mb-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <span className="font-mono font-medium text-emerald-700 dark:text-emerald-300">
+                      {candidate.rerankScore.toFixed(3)}
+                    </span>
+                    <span title="Vector score">V:{candidate.vectorScore.toFixed(2)}</span>
+                    <span title="Component overlap">C:{candidate.componentOverlap.toFixed(2)}</span>
+                    <span title="Effectiveness">E:{candidate.effectiveness.toFixed(2)}</span>
+                  </div>
+
+                  {/* Full detail for injected candidates only */}
+                  {candidate.passedThreshold && matchedMemory !== undefined ? (
+                    <>
+                      <div className="text-sm text-slate-600 dark:text-slate-300">
+                        <MarkdownContent content={matchedMemory.appliesWhen} />
+                      </div>
+                      <div className="mt-1 text-sm text-slate-700 dark:text-slate-200">
+                        <MarkdownContent content={matchedMemory.action} />
+                      </div>
+                      <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                        <MarkdownContent content={matchedMemory.avoid} />
+                      </div>
+                      <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                        <MarkdownContent content={matchedMemory.verification} />
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </>
       ) : null}
 
       {postRun !== undefined ? (

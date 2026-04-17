@@ -26,6 +26,7 @@ interface ToolBlock {
   headerIdx: number;
   bodyStart: number;
   bodyEnd: number;
+  groupTag?: string;
 }
 
 const TAG_STYLES: Record<string, TagStyle> = {
@@ -42,6 +43,7 @@ const TAG_STYLES: Record<string, TagStyle> = {
   init:         { text: 'text-cyan-600 dark:text-cyan-300' },
   system:       { text: 'text-slate-500 dark:text-slate-500' },
   orchestrator: { text: 'text-slate-500 dark:text-slate-500' },
+  entrypoint:   { text: 'text-slate-500 dark:text-slate-500' },
   cmd:          { text: 'text-amber-700 dark:text-yellow-300' },
   msg:          { text: 'text-blue-700 dark:text-blue-300' },
   codex:        { text: 'text-cyan-600 dark:text-cyan-300' },
@@ -129,7 +131,7 @@ export function CodeTaskLogViewer({
   const [copied, setCopied] = useState(false);
   const [compactMode, setCompactMode] = useState(true);
   const [blockOverrides, setBlockOverrides] = useState<Set<number>>(() => new Set());
-  const [claudeFilter, setClaudeFilter] = useState(false);
+  const [workerFilter, setWorkerFilter] = useState(false);
   const followRef = useRef(true);
   const prevLogCountRef = useRef(0);
   const isAutoScrollingRef = useRef(false);
@@ -148,20 +150,35 @@ export function CodeTaskLogViewer({
       current = null;
     };
 
+    let currentGroupTag: string | null = null;
+
     for (let index = 0; index < logs.length; index++) {
       const line = logs[index];
       if (line === undefined) continue;
       const tag = extractTag(line.text);
 
-      if (tag === 'tool' || tag === 'cmd') {
+      if (tag === 'orchestrator' || tag === 'entrypoint') {
+        if (currentGroupTag === tag && current !== null) {
+          // Same consecutive tag — extend group body
+          current.bodyEnd = index + 1;
+        } else {
+          // New group or different tag
+          finalizeBlock(index);
+          current = { headerIdx: index, bodyStart: index + 1, bodyEnd: index + 1, groupTag: tag };
+          currentGroupTag = tag;
+        }
+      } else if (tag === 'tool' || tag === 'cmd') {
         finalizeBlock(index);
         current = { headerIdx: index, bodyStart: index + 1, bodyEnd: index + 1 };
+        currentGroupTag = null;
       } else if (tag !== null) {
         finalizeBlock(index);
+        currentGroupTag = null;
       } else if (current !== null && isBodyLine(line.text)) {
         current.bodyEnd = index + 1;
       } else {
         finalizeBlock(index);
+        currentGroupTag = null;
       }
     }
     if (current !== null && current.bodyEnd > current.bodyStart) {
@@ -252,8 +269,8 @@ export function CodeTaskLogViewer({
     setBlockOverrides(new Set());
   }, []);
 
-  const toggleClaudeFilter = useCallback((): void => {
-    setClaudeFilter((prev) => !prev);
+  const toggleWorkerFilter = useCallback((): void => {
+    setWorkerFilter((prev) => !prev);
   }, []);
 
   const toggleBlock = useCallback((headerIdx: number): void => {
@@ -305,15 +322,15 @@ export function CodeTaskLogViewer({
               </button>
               <button
                 type="button"
-                onClick={toggleClaudeFilter}
-                aria-pressed={claudeFilter}
+                onClick={toggleWorkerFilter}
+                aria-pressed={workerFilter}
                 className={`rounded-md px-2 py-1 text-xs transition-colors ${
-                  claudeFilter
+                  workerFilter
                     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                     : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
                 }`}
               >
-                Claude
+                Worker
               </button>
               <button
                 type="button"
@@ -358,9 +375,9 @@ export function CodeTaskLogViewer({
               if (block !== undefined && index > block.headerIdx) {
                 return null;
               }
-              if (claudeFilter) {
+              if (workerFilter) {
                 const tag = extractTag(line.text);
-                if (tag !== 'claude') return null;
+                if (tag !== 'claude' && tag !== 'msg' && tag !== 'codex') return null;
               }
 
               const collapsible = block !== undefined && countVisualLines(logs, block.bodyStart, block.bodyEnd) >= 4;
@@ -389,7 +406,7 @@ export function CodeTaskLogViewer({
                     ) : (
                       <span className="w-4 shrink-0" />
                     )}
-                    <pre className={`min-w-0 ${claudeFilter ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'} ${getLogLineClass(line.text)}`}>
+                    <pre className={`min-w-0 ${workerFilter ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'} ${getLogLineClass(line.text)}`}>
                       {renderLogContent(line.text)}
                     </pre>
                   </div>

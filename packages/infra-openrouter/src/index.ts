@@ -10,13 +10,17 @@ export {
   OPENROUTER_ALLOWED_MODELS,
   OPENROUTER_VALIDATION_MODEL,
   isAllowedModel,
-  getAllowlistPricing,
   allowlistModelIds,
   buildModelInfo,
   type AllowedOpenRouterModel,
   type CatalogEntry,
 } from './allowlist.js';
-export { calculateTextCost, normalizeUsage, toModelPricing } from './costCalculator.js';
+export {
+  DEFAULT_OPENROUTER_ALLOWED_MODELS,
+  isDefaultAllowedModel,
+  type DefaultAllowedOpenRouterModel,
+} from './defaultAllowlist.js';
+export { normalizeUsage, toModelPricing } from './costCalculator.js';
 export type {
   GenerateOptions,
   OpenRouterConfig,

@@ -5,7 +5,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
 import type { ResearchContext, SynthesisContext } from '@intexuraos/llm-prompts';
-import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockGenerate = vi.fn();
 
@@ -20,11 +21,6 @@ vi.mock('@intexuraos/infra-gemini', () => ({
 const { ContextInferenceAdapter } = await import('../../../infra/llm/ContextInferenceAdapter.js');
 
 const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
-
-const testPricing: ModelPricing = {
-  inputPricePerMillion: 0.1,
-  outputPricePerMillion: 0.4,
-};
 
 const validResearchContext: ResearchContext = {
   language: 'en',
@@ -87,16 +83,18 @@ function createMockLogger(): Logger & {
 describe('ContextInferenceAdapter', () => {
   let adapter: InstanceType<typeof ContextInferenceAdapter>;
   let mockLogger: ReturnType<typeof createMockLogger>;
+  let fakeUsageSink: FakeUsageSink;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockLogger = createMockLogger();
+    fakeUsageSink = new FakeUsageSink();
     adapter = new ContextInferenceAdapter(
       'test-key',
       LlmModels.Gemini20Flash,
       'test-user',
-      testPricing,
-      mockLogger
+      mockLogger,
+      fakeUsageSink
     );
   });
 
@@ -108,8 +106,8 @@ describe('ContextInferenceAdapter', () => {
         'test-key',
         LlmModels.Gemini20Flash,
         'test-user',
-        testPricing,
         testLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -118,8 +116,8 @@ describe('ContextInferenceAdapter', () => {
         model: LlmModels.Gemini20Flash,
         userId: 'test-user',
         researchId: 'research-123',
-        pricing: testPricing,
         logger: testLogger,
+        usageSink: fakeUsageSink,
       });
     });
   });
@@ -139,7 +137,10 @@ describe('ContextInferenceAdapter', () => {
         expect(result.value.context.language).toBe('en');
         expect(result.value.usage.costUsd).toBe(mockUsage.costUsd);
       }
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Test query'));
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('Test query'),
+        expect.objectContaining({ promptType: 'research-context-inference' })
+      );
     });
 
     it('passes options to prompt builder', async () => {
@@ -153,7 +154,10 @@ describe('ContextInferenceAdapter', () => {
         defaultCountryOrRegion: 'UK',
       });
 
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('2024-06-15'));
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('2024-06-15'),
+        expect.objectContaining({ promptType: 'research-context-inference' })
+      );
     });
 
     it('returns error when generate fails', async () => {
@@ -480,7 +484,10 @@ describe('ContextInferenceAdapter', () => {
         additionalSources: [{ content: 'External data', label: 'Source A' }],
       });
 
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External data'));
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('External data'),
+        expect.objectContaining({ promptType: 'research-synthesis-context-inference' })
+      );
     });
   });
 

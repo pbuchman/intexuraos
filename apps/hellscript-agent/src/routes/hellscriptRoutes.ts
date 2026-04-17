@@ -74,12 +74,21 @@ export const hellscriptRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
       }
 
       const services = getServices();
+
+      const llmClientResult = await services.userServiceClient.getLlmClient(user.userId);
+      if (!llmClientResult.ok) {
+        request.log.error({ err: llmClientResult.error }, 'Failed to resolve LLM client for user');
+        return await reply.fail('INTERNAL_ERROR', 'Failed to initialize LLM client. Please try again.');
+      }
+
+      const { interpreter, draftGenerator } = services.createLlmAdapters(llmClientResult.value);
+
       const result = await imposeOnBuffer(
         {
           repository: services.hellscriptRepository,
           writingConfigRepository: services.writingConfigRepository,
-          interpreter: services.intentInterpreter,
-          draftGenerator: services.draftGenerator,
+          interpreter,
+          draftGenerator,
           logger: request.log,
         },
         {

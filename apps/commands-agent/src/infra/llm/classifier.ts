@@ -16,7 +16,7 @@ export function createGeminiClassifier(client: LlmGenerateClient, logger: Logger
     async classify(text: string, options?: ClassifyOptions): Promise<ClassificationResult> {
       const prompt = commandClassifierPrompt.build({ message: text });
 
-      const result = await client.generate(prompt);
+      const result = await client.generate(prompt, { promptType: 'command-classification' });
 
       if (!result.ok) {
         throw new Error(`Classification failed: ${result.error.message}`);

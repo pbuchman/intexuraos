@@ -6,7 +6,6 @@
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type { EncryptedValue } from '../encryption.js';
 import { FieldValue, getFirestore } from '@intexuraos/infra-firestore';
-import type { LLMModel } from '@intexuraos/llm-contract';
 import type {
   LlmPreferences,
   LlmProvider,
@@ -260,9 +259,9 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
     }
   }
 
-  // Note: Deletes the entire `llmPreferences` field. This assumes `llmPreferences`
-  // only contains `defaultModel`. If additional preference fields are added in the
-  // future, switch to targeted deletion: `'llmPreferences.defaultModel': FieldValue.delete()`.
+  // Note: Deletes the entire `llmPreferences` field, clearing both `defaultModel`
+  // and `fallbackModel` (and any future preference fields). Used when a provider's
+  // API key is deleted and the default model belongs to that provider.
   async clearLlmPreferences(userId: string): Promise<Result<void, SettingsError>> {
     try {
       const db = getFirestore();
@@ -282,7 +281,8 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
 
   async updateLlmPreferences(
     userId: string,
-    defaultModel: LLMModel
+    defaultModel: string,
+    fallbackModel?: string | null
   ): Promise<Result<void, SettingsError>> {
     try {
       const db = getFirestore();
@@ -291,17 +291,27 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
 
       if (!doc.exists) {
         const now = new Date().toISOString();
+        const preferences: Record<string, unknown> = { defaultModel };
+        if (fallbackModel !== undefined && fallbackModel !== null) {
+          preferences['fallbackModel'] = fallbackModel;
+        }
         await docRef.set({
           userId,
-          llmPreferences: { defaultModel },
+          llmPreferences: preferences,
           createdAt: now,
           updatedAt: now,
         });
       } else {
-        await docRef.update({
+        const updates: Record<string, unknown> = {
           'llmPreferences.defaultModel': defaultModel,
           updatedAt: new Date().toISOString(),
-        });
+        };
+        if (fallbackModel === null) {
+          updates['llmPreferences.fallbackModel'] = FieldValue.delete();
+        } else if (fallbackModel !== undefined) {
+          updates['llmPreferences.fallbackModel'] = fallbackModel;
+        }
+        await docRef.update(updates);
       }
 
       return ok(undefined);

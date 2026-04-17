@@ -652,6 +652,7 @@ describe('GitHubPRHttpClient', () => {
           user: { login: 'alice' },
           base: { ref: 'development' },
           head: { ref: 'feature/alice', sha: 'abc123' },
+          created_at: '2026-01-01T00:00:00Z',
         });
 
       const result = await client.getPullRequestDetails('test-token', 'owner', 'repo', 42);
@@ -669,6 +670,7 @@ describe('GitHubPRHttpClient', () => {
           mergeable: false,
           mergeableState: 'dirty',
           headSha: 'abc123',
+          createdAt: '2026-01-01T00:00:00Z',
         });
       }
     });
@@ -686,6 +688,7 @@ describe('GitHubPRHttpClient', () => {
           user: { login: 'alice' },
           base: { ref: 'development' },
           head: { ref: 'feature/alice', sha: 'def456' },
+          created_at: '2026-01-01T00:00:00Z',
         });
 
       const result = await client.getPullRequestDetails('test-token', 'owner', 'repo', 42);
@@ -709,6 +712,7 @@ describe('GitHubPRHttpClient', () => {
           user: { login: 'alice' },
           base: { ref: 'development' },
           head: { ref: 'feature/alice', sha: 'ghi789' },
+          created_at: '2026-01-01T00:00:00Z',
         });
 
       const result = await client.getPullRequestDetails('test-token', 'owner', 'repo', 42);
@@ -732,6 +736,7 @@ describe('GitHubPRHttpClient', () => {
           user: { login: 'alice' },
           base: { ref: 'development' },
           head: { ref: 'feature/alice', sha: 'abc123' },
+          created_at: '2026-01-01T00:00:00Z',
         });
 
       const result = await client.getPullRequestDetails('test-token', 'owner', 'repo', 42);
@@ -789,12 +794,13 @@ describe('GitHubPRHttpClient', () => {
 
     it('returns API_ERROR when PR details are missing required fields', async () => {
       const cases = [
-        [{ title: 'Fix conflict', state: 'open', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice', sha: 'abc' } }, 'number'],
-        [{ number: 42, state: 'open', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice', sha: 'abc' } }, 'title'],
-        [{ number: 42, title: 'Fix conflict', state: 'open', user: {}, base: { ref: 'development' }, head: { ref: 'feature/alice', sha: 'abc' } }, 'user.login'],
-        [{ number: 42, title: 'Fix conflict', state: 'open', user: { login: 'alice' }, base: {}, head: { ref: 'feature/alice', sha: 'abc' } }, 'base.ref'],
-        [{ number: 42, title: 'Fix conflict', state: 'open', user: { login: 'alice' }, base: { ref: 'development' }, head: {} }, 'head.ref'],
-        [{ number: 42, title: 'Fix conflict', state: 'open', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice' } }, 'head.sha'],
+        [{ title: 'Fix conflict', state: 'open', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice', sha: 'abc' }, created_at: '2026-01-01T00:00:00Z' }, 'number'],
+        [{ number: 42, state: 'open', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice', sha: 'abc' }, created_at: '2026-01-01T00:00:00Z' }, 'title'],
+        [{ number: 42, title: 'Fix conflict', state: 'open', user: {}, base: { ref: 'development' }, head: { ref: 'feature/alice', sha: 'abc' }, created_at: '2026-01-01T00:00:00Z' }, 'user.login'],
+        [{ number: 42, title: 'Fix conflict', state: 'open', user: { login: 'alice' }, base: {}, head: { ref: 'feature/alice', sha: 'abc' }, created_at: '2026-01-01T00:00:00Z' }, 'base.ref'],
+        [{ number: 42, title: 'Fix conflict', state: 'open', user: { login: 'alice' }, base: { ref: 'development' }, head: {}, created_at: '2026-01-01T00:00:00Z' }, 'head.ref'],
+        [{ number: 42, title: 'Fix conflict', state: 'open', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice' }, created_at: '2026-01-01T00:00:00Z' }, 'head.sha'],
+        [{ number: 42, title: 'Fix conflict', state: 'open', user: { login: 'alice' }, base: { ref: 'development' }, head: { ref: 'feature/alice', sha: 'abc' } }, 'created_at'],
       ] as const;
 
       for (const [payload, expectedField] of cases) {

@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 import { useAuth, useSyncQueue, useTheme } from '@/context';
 import { signOutFirebase } from '@/services/firebase';
 import { usePWA } from '@/context/pwa-context';
-import { useWorkersStatus } from '@/hooks';
-import { ChevronDown, LogOut, Moon, Sun, User, RefreshCw, RotateCcw, Server } from 'lucide-react';
+import { useWorkersStatus, usePruneCandidateStatus } from '@/hooks';
+import { ChevronDown, LogOut, Moon, Sun, User, RefreshCw, RotateCcw, Server, Trash2 } from 'lucide-react';
 import { VersionInfoModal } from './VersionInfoModal.js';
 import type { WorkerStatus } from '@/types';
 
@@ -76,6 +76,7 @@ export function Header(): React.JSX.Element {
   const { pendingCount, isSyncing, isOnline, authFailed } = useSyncQueue();
   const { isInstalled } = usePWA();
   const { status: workersStatus, refreshStatus: refreshWorkersStatus, refreshing: isWorkersRefreshing } = useWorkersStatus();
+  const { pendingCount: prunePendingCount, loading: pruneLoading, error: pruneError } = usePruneCandidateStatus();
   const { resolvedTheme, toggleTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isWorkersOpen, setIsWorkersOpen] = useState(false);
@@ -269,6 +270,22 @@ export function Header(): React.JSX.Element {
           </div>
         )}
 
+        {/* Linear Cleanup Status - desktop only */}
+        {isAuthenticated && !isInstalled && !pruneLoading && pruneError === null && (
+          <Link
+            to="/linear/prune-candidates"
+            className="relative hidden items-center gap-1 rounded-lg p-2 text-sm transition-colors hover:bg-slate-100 md:flex dark:hover:bg-slate-700"
+            title={prunePendingCount > 0
+              ? `${String(prunePendingCount)} issues to clean up`
+              : 'No issues to clean up'}
+          >
+            <Trash2 className="h-4 w-4 text-slate-500" />
+            <span
+              className={`h-2 w-2 rounded-full ${prunePendingCount > 0 ? 'bg-red-500' : 'bg-green-500'}`}
+            />
+          </Link>
+        )}
+
         {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
@@ -429,6 +446,25 @@ export function Header(): React.JSX.Element {
                       )}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Linear Cleanup status menu item — shown in PWA mode or on mobile */}
+              {isAuthenticated && !pruneLoading && pruneError === null && (
+                <div className={isInstalled ? '' : 'md:hidden'}>
+                  <Link
+                    to="/linear/prune-candidates"
+                    onClick={(): void => {
+                      setIsMenuOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700"
+                  >
+                    <Trash2 className="h-4 w-4 text-slate-500" />
+                    <span>Linear Cleanup</span>
+                    <span
+                      className={`ml-auto h-2 w-2 rounded-full ${prunePendingCount > 0 ? 'bg-red-500' : 'bg-green-500'}`}
+                    />
+                  </Link>
                 </div>
               )}
 

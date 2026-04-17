@@ -10,7 +10,9 @@ export {
   type LlmClientConfig,
   type ToolCallingClientConfig,
   type LlmGenerateClient,
+  type GenerateOptions,
   type GenerateResult,
   type LLMError,
   isSupportedProvider,
 } from './llmClientFactory.js';
+export { createOpenRouterGenerateClient } from './openRouterGenerateClient.js';

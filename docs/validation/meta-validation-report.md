@@ -70,7 +70,6 @@ These are all facets of the same issue. The combined picture is a partially-impl
 | actions-agent       | Lists `GET /actions`, `GET /actions/:id`, `PATCH /actions/:actionId` (3 public routes)        | Lists `GET /actions`, `PATCH /actions/:actionId`, `DELETE /actions/:actionId`, `POST /actions/batch`, `POST /actions/:actionId/execute`, `GET /actions/:actionId/preview`, `POST /actions/:actionId/resolve-duplicate` (7 public routes) | Route-auth found 4 more public endpoints not in HTTP contracts                                                                                                 |
 | code-agent          | Lists specific `/code/submit`, `/code/tasks`, etc.                                            | Lists generic `/code/tasks`, `/code/tasks/:taskId`, `/code/tasks/:taskId/events`, `/code/tasks/:taskId/pr-events`, `/code/tasks/:taskId/pr-summaries`                                                                                    | Path variants differ (e.g., HTTP contracts has `/code/submit`, route-auth has no such path; route-auth has `/code/tasks/:taskId/events` not in HTTP contracts) |
 | linear-agent        | Lists `GET /linear/issues`, `GET /linear/issues/:identifier`, `POST /linear/connection`, etc. | Lists `GET /linear/issues`, `POST /linear/issues`, `GET /linear/issues/:identifier`, `PATCH /linear/issues/:identifier`, `GET /linear/cycles`, `GET /linear/projects`, `POST /linear/webhooks`                                           | Route-auth lists `POST /linear/issues`, `PATCH /linear/issues/:identifier`, `GET /linear/cycles`, `GET /linear/projects` not found in HTTP contracts           |
-| data-insights-agent | Lists 20+ public and internal endpoints                                                       | Route-auth only lists `POST /internal/visualizations/compute` and `POST /internal/snapshots/refresh`                                                                                                                                     | Route-auth has major coverage gap for data-insights-agent public routes                                                                                        |
 | research-agent      | Lists public routes (`/internal/research/draft`, etc.)                                        | Lists `GET /research`, `POST /research`, `GET /research/:researchId`, `POST /internal/research/process`                                                                                                                                  | HTTP contracts lists no public routes for research-agent; route-auth lists 3 public ones + different internal paths                                            |
 | user-service        | Lists `POST /auth/device/start`, `POST /auth/device/poll`, etc.                               | Lists `GET /auth/login`, `GET /auth/logout`, `GET /auth/callback`, etc.                                                                                                                                                                  | Substantially different path inventory                                                                                                                         |
 
@@ -137,7 +136,6 @@ Specific cross-impact:
 
 - Services with the most endpoints (code-agent: 27 endpoints, research-agent: 4 endpoints) roughly match their reply.fail counts (code-agent: 98, research-agent: 86). The high research-agent count relative to its endpoint count reflects complex internal logic per endpoint.
 - Services with zero `reply.fail()` calls: api-docs-hub (0 endpoints needing error handling), web frontend (0 service endpoints). Both correct.
-- `data-insights-agent` has 21 endpoints but 60 `reply.fail()` calls — consistent with complex branching.
 
 **Assessment:** The error contract report is comprehensive and consistent with endpoint coverage. No alignment gaps detected.
 
@@ -159,7 +157,6 @@ Specific cross-impact:
 
 **Issue:** The route-auth report focuses heavily on public routes but has sparse coverage of internal endpoints. For example:
 
-- `data-insights-agent` route-auth only lists 2 internal endpoints but HTTP contracts lists 7 (5 public + 2 internal)
 - `bookmarks-agent` route-auth lists all internal endpoints with proper auth — consistent with http-contracts
 - `research-agent` route-auth lists public endpoints that HTTP contracts does NOT list as existing (suggesting route-auth may have accessed a different code state)
 
@@ -232,7 +229,6 @@ Cross-checking:
 | calendar-agent               | PASS                     | PASS                  | MEDIUM (llm-factory scope)            | PASS                                | N/A      | LOW (optional LLM keys)           | PASS                     | OK           | MEDIUM (redundant status)    | PASS                         | **MEDIUM**    |
 | chat-agent                   | PASS                     | N/A                   | N/A (text-embedding unregistered)     | PASS                                | N/A      | PASS                              | PASS                     | OK           | PASS                         | PASS                         | **LOW**       |
 | commands-agent               | PASS                     | PASS                  | MEDIUM (GLM-4.7-Flash missing)        | PASS                                | N/A      | PASS                              | PASS                     | OK           | PASS                         | PASS                         | **LOW**       |
-| data-insights-agent          | PASS                     | PASS                  | MEDIUM (dynamic model mis-documented) | PASS                                | N/A      | PASS                              | PASS (limited audit)     | OK           | PASS                         | PASS                         | **LOW**       |
 | todos-agent                  | PASS                     | LOW (env var prefix)  | MEDIUM (Via commands-agent wrong)     | PASS                                | N/A      | PASS                              | PASS                     | OK           | PASS                         | PASS                         | **LOW**       |
 | app-settings-service         | PASS                     | N/A                   | N/A                                   | PASS                                | N/A      | PASS                              | MEDIUM (path convention) | OK           | PASS                         | PASS                         | **LOW**       |
 | notion-service               | PASS                     | N/A                   | N/A                                   | PASS                                | N/A      | PASS                              | LOW (webhook stub)       | OK           | PASS                         | PASS                         | **LOW**       |
@@ -279,7 +275,7 @@ Cross-checking:
 
 ### Gap 1: No Validator Checked LLM Cost Tracking End-to-End
 
-The AI models report notes that `gpt-4.1` and `text-embedding-3-small` are not in the central pricing contract (`llm-contract`). The firestore report notes `llm_usage_stats` is owned by `llm-pricing` (a package). No validator checked whether the services using out-of-contract models (`image-service`, `chat-agent`) have cost tracking wired up. If these models are used without going through `llm-pricing`, usage costs may be untracked.
+The AI models report notes that `gpt-4.1` and `text-embedding-3-small` are not in the central pricing contract (`llm-contract`). No validator checked whether the services using out-of-contract models (`image-service`, `chat-agent`) have cost tracking wired up through `llm-pricing`. If these models are used without going through `llm-pricing`, usage costs may be untracked. Note: `llm_usage_stats` and `llm-audit` were removed as part of INT-1342.
 
 ### Gap 2: No Validator Checked Scheduler Job → Endpoint Alignment
 
@@ -291,7 +287,7 @@ The pub/sub report thoroughly documents DLQ configuration (all 14 module-managed
 
 ### Gap 4: Firestore Security — No Validator for Cross-Service Access Patterns at Runtime
 
-The firestore report confirms no static cross-service Firestore access. But no validator checked whether the llm-audit package (which writes to `llm_api_logs`) is properly initialized only within services that use it, or whether all services that depend on `llm-audit` (via their infra-\* dependencies) could inadvertently write logs to collections they shouldn't own.
+The firestore report confirms no static cross-service Firestore access. No validator checked whether services writing to shared collections (e.g., via `llm-pricing`) do so only within their declared scope. Note: `llm-audit` and `llm_api_logs` were removed as part of INT-1342.
 
 ### Gap 5: No Validator for OpenAPI Specification Accuracy
 
@@ -342,7 +338,7 @@ Unified, prioritized, deduplicated across all 10 reports:
 | MA-14 | ai-models                                        | Add `gpt-4.1` and `text-embedding-3-small` to `llm-contract/src/supportedModels.ts` or document exclusion rationale                                           | ai-models              |
 | MA-15 | ai-models                                        | Fix model count in overview.md (says "17 models", should be 16 per contract or 18 actual) and index.md                                                        | ai-models              |
 | MA-16 | ai-models                                        | Fix `o4-mini` in test fixtures → should be `o4-mini-deep-research`; fix `gemini-2.0-flash-exp` → `gemini-2.0-flash`                                           | ai-models              |
-| MA-17 | docs (6 services)                                | Regenerate technical.md Pub/Sub topic names for actions-agent, bookmarks-agent, commands-agent, data-insights-agent, research-agent, whatsapp-service         | pubsub                 |
+| MA-17 | docs (5 services)                                | Regenerate technical.md Pub/Sub topic names for actions-agent, bookmarks-agent, commands-agent, research-agent, whatsapp-service                              | pubsub                 |
 | MA-18 | todos-agent                                      | Consider renaming `INTEXURAOS_TODOS_PROCESSING_TOPIC` → `INTEXURAOS_PUBSUB_TODOS_PROCESSING_TOPIC` for naming consistency                                     | pubsub, env-vars       |
 | MA-19 | bookmarks-agent                                  | Add `_TOPIC` suffix to `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH` and `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE` env var names                                           | pubsub                 |
 | MA-20 | firestore                                        | Remove stale index entries `dataSource` and `compositeFeeds` from `firestore.indexes.json`                                                                    | firestore              |

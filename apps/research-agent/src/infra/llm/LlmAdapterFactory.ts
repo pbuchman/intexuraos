@@ -6,10 +6,10 @@
 import type { Logger } from '@intexuraos/common-core';
 import {
   getProviderForModel,
-  type ModelPricing,
   type ResearchModel,
   type FastModel,
 } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import type {
   LlmResearchProvider,
   LlmSynthesisProvider,
@@ -31,23 +31,23 @@ export function createResearchProvider(
   model: ResearchModel,
   apiKey: string,
   userId: string,
-  pricing: ModelPricing,
   logger: Logger,
-  researchId: string | undefined
+  usageSink: UsageSink,
+  researchId: string | undefined // @allow-undefined-type -- positional arg kept for call-site compat
 ): LlmResearchProvider {
   const provider = getProviderForModel(model);
 
   switch (provider) {
     case 'google':
-      return new GeminiAdapter(apiKey, model, userId, pricing, logger, researchId);
+      return new GeminiAdapter(apiKey, model, userId, logger, usageSink, researchId);
     case 'anthropic':
-      return new ClaudeAdapter(apiKey, model, userId, pricing, logger, researchId);
+      return new ClaudeAdapter(apiKey, model, userId, logger, usageSink, researchId);
     case 'openai':
-      return new GptAdapter(apiKey, model, userId, pricing, logger, researchId);
+      return new GptAdapter(apiKey, model, userId, logger, usageSink, researchId);
     case 'perplexity':
-      return new PerplexityAdapter(apiKey, model, userId, pricing, logger, researchId);
+      return new PerplexityAdapter(apiKey, model, userId, logger, usageSink, researchId);
     case 'openrouter':
-      return new OpenRouterAdapter(apiKey, model, userId, pricing, logger, researchId);
+      return new OpenRouterAdapter(apiKey, model, userId, logger, usageSink, researchId);
   }
 }
 
@@ -55,23 +55,23 @@ export function createSynthesizer(
   model: ResearchModel,
   apiKey: string,
   userId: string,
-  pricing: ModelPricing,
   logger: Logger,
-  researchId: string | undefined
+  usageSink: UsageSink,
+  researchId: string | undefined // @allow-undefined-type -- positional arg kept for call-site compat
 ): LlmSynthesisProvider {
   const provider = getProviderForModel(model);
 
   switch (provider) {
     case 'google':
-      return new GeminiAdapter(apiKey, model, userId, pricing, logger, researchId);
+      return new GeminiAdapter(apiKey, model, userId, logger, usageSink, researchId);
     case 'anthropic':
       throw new Error('Anthropic does not support synthesis');
     case 'openai':
-      return new GptAdapter(apiKey, model, userId, pricing, logger, researchId);
+      return new GptAdapter(apiKey, model, userId, logger, usageSink, researchId);
     case 'perplexity':
       throw new Error('Perplexity does not support synthesis');
     case 'openrouter':
-      return new OpenRouterAdapter(apiKey, model, userId, pricing, logger, researchId);
+      return new OpenRouterAdapter(apiKey, model, userId, logger, usageSink, researchId);
   }
 }
 
@@ -79,32 +79,32 @@ export function createTitleGenerator(
   model: FastModel,
   apiKey: string,
   userId: string,
-  pricing: ModelPricing,
   logger: Logger,
-  researchId: string | undefined
+  usageSink: UsageSink,
+  researchId: string | undefined // @allow-undefined-type -- positional arg kept for call-site compat
 ): TitleGenerator {
-  return new GeminiAdapter(apiKey, model, userId, pricing, logger, researchId);
+  return new GeminiAdapter(apiKey, model, userId, logger, usageSink, researchId);
 }
 
 export function createContextInferrer(
   model: FastModel,
   apiKey: string,
   userId: string,
-  pricing: ModelPricing,
   logger: Logger,
-  researchId: string | undefined
+  usageSink: UsageSink,
+  researchId: string | undefined // @allow-undefined-type -- positional arg kept for call-site compat
 ): ContextInferenceProvider {
-  return new ContextInferenceAdapter(apiKey, model, userId, pricing, logger, researchId);
+  return new ContextInferenceAdapter(apiKey, model, userId, logger, usageSink, researchId);
 }
 
 export function createInputValidator(
   model: FastModel,
   apiKey: string,
   userId: string,
-  pricing: ModelPricing,
-  logger: Logger
+  logger: Logger,
+  usageSink: UsageSink
 ): InputValidationProvider {
-  return new InputValidationAdapter(apiKey, model, userId, pricing, logger);
+  return new InputValidationAdapter(apiKey, model, userId, logger, usageSink);
 }
 
 export type { InputValidationProvider };

@@ -17,13 +17,8 @@
  *   apiKey: process.env.ANTHROPIC_API_KEY,
  *   model: 'claude-sonnet-4-5',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 3.00,
- *     outputPricePerMillion: 15.00,
- *     cacheReadMultiplier: 0.1,
- *     cacheWriteMultiplier: 1.25,
- *     webSearchCostPerCall: 0.0035,
- *   }
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  *
  * // Research with web search
@@ -31,7 +26,6 @@
  * if (research.ok) {
  *   console.log(research.data.content);
  *   console.log('Sources:', research.data.sources);
- *   console.log('Cost:', research.data.usage.costUsd);
  * }
  *
  * // Simple generation
@@ -44,10 +38,8 @@
  * ```
  */
 
-import { randomUUID } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import {
   LlmProviders,
   type LLMClient,
@@ -58,18 +50,23 @@ import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import type { ClaudeConfig, ClaudeError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
-export type ClaudeClient = LLMClient;
+export interface GenerateOptions {
+  promptType: string;
+}
+
+export type ClaudeClient = Omit<LLMClient, 'generate'> & {
+  generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, ClaudeError>>;
+};
 
 const MAX_TOKENS = 8192;
 
 /**
  * Creates a configured Anthropic Claude client.
  *
- * The client implements {@link LLMClient} with automatic cost calculation,
- * usage logging, and audit tracking. All costs are calculated from the
- * provided `pricing` configuration.
+ * The client implements {@link LLMClient} with usage logging and audit
+ * tracking. Cost calculation is handled server-side by llm-usage-service.
  *
- * @param config - Client configuration including API key, model, user ID, and pricing
+ * @param config - Client configuration including API key, model, user ID
  * @returns A configured {@link ClaudeClient} instance
  *
  * @example
@@ -78,45 +75,22 @@ const MAX_TOKENS = 8192;
  *   apiKey: process.env.ANTHROPIC_API_KEY,
  *   model: 'claude-sonnet-4-5',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 3.00,
- *     outputPricePerMillion: 15.00,
- *     cacheReadMultiplier: 0.1,
- *     cacheWriteMultiplier: 1.25,
- *     webSearchCostPerCall: 0.0035,
- *   }
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  * ```
  */
 export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   const client = new Anthropic({ apiKey: config.apiKey });
-  const { model, userId, researchId, pricing, logger } = config;
-  const usageLogger = createUsageLogger({ logger });
-
-  function createRequestContext(
-    method: string,
-    model: string,
-    prompt: string
-  ): { requestId: string; startTime: Date; auditContext: AuditContext } {
-    const requestId = randomUUID();
-    const startTime = new Date();
-    const auditContext = createAuditContext({
-      provider: LlmProviders.Anthropic,
-      model,
-      method,
-      prompt,
-      startedAt: startTime,
-      userId,
-      ...(researchId !== undefined && { researchId }),
-    });
-    return { requestId, startTime, auditContext };
-  }
+  const { model, userId, logger, usageSink, ownerType } = config;
+  const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
   function trackUsage(
     callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
-    errorMessage?: string
+    errorMessage?: string,
+    promptType?: string
   ): void {
     void usageLogger.log({
       userId,
@@ -126,6 +100,8 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
+      ...(ownerType !== undefined && { ownerType }),
+      ...(promptType !== undefined && { promptType }),
     });
   }
 
@@ -147,8 +123,6 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, ClaudeError>> {
-      const { auditContext } = createRequestContext('research', model, prompt);
-
       try {
         const response = await client.messages.create({
           model,
@@ -169,25 +143,14 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           usageDetails.outputTokens,
           usageDetails.cacheReadTokens,
           usageDetails.cacheCreationTokens,
-          webSearchCalls,
-          pricing
+          webSearchCalls
         );
 
-        const successParams: Parameters<typeof auditContext.success>[0] = {
-          response: content,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-        };
-        if (usage.webSearchCalls !== undefined) {
-          successParams.webSearchCalls = usage.webSearchCalls;
-        }
-        await auditContext.success(successParams);
         trackUsage('research', usage, true);
 
         return ok({ content, sources, usage });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
@@ -199,9 +162,10 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       }
     },
 
-    async generate(prompt: string): Promise<Result<GenerateResult, ClaudeError>> {
-      const { auditContext } = createRequestContext('generate', model, prompt);
-
+    async generate(
+      prompt: string,
+      options: GenerateOptions
+    ): Promise<Result<GenerateResult, ClaudeError>> {
       try {
         const response = await client.messages.create({
           model,
@@ -219,28 +183,21 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           usageDetails.outputTokens,
           usageDetails.cacheReadTokens,
           usageDetails.cacheCreationTokens,
-          0,
-          pricing
+          0
         );
 
-        await auditContext.success({
-          response: text,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-        });
-        trackUsage('generate', usage, true);
+        trackUsage('generate', usage, true, undefined, options.promptType);
 
         return ok({ content: text, usage });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('generate', emptyUsage, false, errorMsg);
+        trackUsage('generate', emptyUsage, false, errorMsg, options.promptType);
         return err(mapClaudeError(error));
       }
     },

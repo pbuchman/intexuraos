@@ -88,9 +88,21 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
   // Guard: do not show merge button while any task is actively processing
   const hasActiveTask = tasks.some((t) => ACTIVE_STATUSES.has(t.status));
 
+  // Identify the task that owns the group's representative PR. A single Linear
+  // issue can have sibling PRs (e.g. plan PR merged, execution PR still open);
+  // the merge step and PR badge must scope terminal state to one PR, otherwise
+  // a merged plan PR poisons the open execution PR's gate.
+  const prOwnerTask = tasks.find(
+    (t) => t.status !== 'archived' && t.result?.prUrl !== undefined,
+  );
+  const isMerged = prOwnerTask?.prMergedAt !== undefined;
+  const isClosed = prOwnerTask?.prClosedAt !== undefined;
+  const isPrClosedOrMerged = isMerged || isClosed;
+
   // Merge-ready logic: if execution step is completed, PR exists, and ready-to-merge label present
   if (
     !hasActiveTask &&
+    !isPrClosedOrMerged &&
     executionEntry?.step.state === 'completed' &&
     executionEntry.task.result?.prUrl !== undefined &&
     hasMergeReadyLabel(executionEntry.task.linearIssue?.labels)
@@ -102,6 +114,30 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     });
   }
 
+  // Alt-unlock: latest non-archived remediation explicitly said "no re-review needed".
+  // Defense in depth against label-propagation races (see 2026-04-05-fix-stale-merge-action.md
+  // and the remediation-complete label restoration in webhookRoutes.ts). When the
+  // label hasn't propagated back through the Linear cache yet, the terminal remediation's
+  // requiresReReview=false still tells us the group is merge-ready.
+  if (
+    !hasActiveTask &&
+    !isPrClosedOrMerged &&
+    executionEntry?.step.state === 'completed' &&
+    executionEntry.task.result?.prUrl !== undefined &&
+    !steps.some((s) => s.agentType === 'merge')
+  ) {
+    const latestRemediation = tasks.find(
+      (t) => t.agentType === 'remediation' && t.status !== 'archived',
+    );
+    if (latestRemediation?.requiresReReview === false) {
+      steps.push({
+        agentType: 'merge',
+        state: 'actionable',
+        label: 'Merge',
+      });
+    }
+  }
+
   // Merge-ready fallback for review tasks: if the review step completed with
   // needs_remediation === '0' AND the ready-to-merge label is still present.
   // The label check is essential: handlePrClose removes ready-to-merge when
@@ -111,6 +147,7 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
   const reviewEntry = stepMap.get('review');
   if (
     !hasActiveTask &&
+    !isPrClosedOrMerged &&
     reviewEntry?.step.state === 'completed' &&
     reviewEntry.task.prNumber !== undefined &&
     reviewEntry.task.result?.needs_remediation === REMEDIATION_NOT_NEEDED &&
@@ -125,41 +162,35 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     });
   }
 
-  // PR step -- extract from first non-archived task that has a prUrl
+  // PR step -- derive from prOwnerTask (same task used for terminal-state detection above)
   let pr: PipelineState['pr'] = null;
-  for (const task of tasks) {
-    if (task.status === 'archived') continue;
-    const prUrl = task.result?.prUrl;
-    if (prUrl !== undefined) {
-      const match = PR_URL_REGEX.exec(prUrl);
-      if (match?.[1] !== undefined) {
-        // Derive PR status from task data
-        const hasMergeStep = steps.some((s) => s.agentType === 'merge' && s.state === 'actionable');
-        const isMerged = tasks.some((t) => t.prMergedAt !== undefined);
-        const isClosed = tasks.some((t) => t.prClosedAt !== undefined);
+  const ownerPrUrl = prOwnerTask?.result?.prUrl;
+  if (ownerPrUrl !== undefined) {
+    const match = PR_URL_REGEX.exec(ownerPrUrl);
+    if (match?.[1] !== undefined) {
+      const hasMergeStep = steps.some((s) => s.agentType === 'merge' && s.state === 'actionable');
 
-        let status: 'open' | 'merged' | 'closed' | 'mergeable';
-        if (isMerged) {
-          status = 'merged';
-        } else if (isClosed) {
-          status = 'closed';
-        } else if (hasMergeStep) {
-          status = 'mergeable';
-        } else {
-          status = 'open';
-        }
-
-        pr = { url: prUrl, number: match[1], status };
-        break;
+      let status: 'open' | 'merged' | 'closed' | 'mergeable';
+      if (isMerged) {
+        status = 'merged';
+      } else if (isClosed) {
+        status = 'closed';
+      } else if (hasMergeStep) {
+        status = 'mergeable';
+      } else {
+        status = 'open';
       }
+
+      pr = { url: ownerPrUrl, number: match[1], status };
     }
   }
 
-  // failedAttempts: count of tasks with status === 'failed'
-  const failedAttempts = tasks.filter((t) => t.status === 'failed').length;
-
-  // archivedCount: count of tasks with status === 'archived'
-  const archivedCount = tasks.filter((t) => t.status === 'archived').length;
+  let failedAttempts = 0;
+  let archivedCount = 0;
+  for (const t of tasks) {
+    if (t.status === 'failed') failedAttempts++;
+    else if (t.status === 'archived') archivedCount++;
+  }
 
   return { steps, pr, failedAttempts, archivedCount };
 }

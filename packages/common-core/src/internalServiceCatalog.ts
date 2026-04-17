@@ -70,13 +70,6 @@ export const INTERNAL_API_SERVICE_CATALOG: InternalApiServiceCatalogEntry[] = [
     openApiUrlEnvVar: 'INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL',
   },
   {
-    key: 'data-insights-agent',
-    name: 'Data Insights Agent',
-    apiDocsName: 'Data Insights Agent API',
-    baseUrlEnvVar: 'INTEXURAOS_DATA_INSIGHTS_AGENT_URL',
-    openApiUrlEnvVar: 'INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL',
-  },
-  {
     key: 'image-service',
     name: 'Image Service',
     apiDocsName: 'Image Service API',

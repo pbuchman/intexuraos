@@ -475,6 +475,78 @@ describe('FirestoreUserSettingsRepository', () => {
         expect(result.error.message).toContain('Update failed');
       }
     });
+
+    it('creates new settings with fallbackModel when user does not exist', async () => {
+      const result = await repo.updateLlmPreferences('new-user-fb', LlmModels.Gemini25Flash, 'or:google/gemma-4-31b-it:free');
+
+      expect(result.ok).toBe(true);
+
+      const stored = await repo.getSettings('new-user-fb');
+      expect(stored.ok).toBe(true);
+      if (stored.ok && stored.value !== null) {
+        expect(stored.value.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
+        expect(stored.value.llmPreferences?.fallbackModel).toBe('or:google/gemma-4-31b-it:free');
+      }
+    });
+
+    it('does not set fallbackModel when creating new settings without it', async () => {
+      const result = await repo.updateLlmPreferences('new-user-nofb', LlmModels.Gemini25Flash);
+
+      expect(result.ok).toBe(true);
+
+      const stored = await repo.getSettings('new-user-nofb');
+      expect(stored.ok).toBe(true);
+      if (stored.ok && stored.value !== null) {
+        expect(stored.value.llmPreferences?.fallbackModel).toBeUndefined();
+      }
+    });
+
+    it('updates fallbackModel on existing document', async () => {
+      await repo.saveSettings(createTestSettings());
+
+      const result = await repo.updateLlmPreferences('user-123', LlmModels.Gemini25Flash, 'or:google/gemma-4-31b-it:free');
+
+      expect(result.ok).toBe(true);
+
+      const stored = await repo.getSettings('user-123');
+      expect(stored.ok).toBe(true);
+      if (stored.ok && stored.value !== null) {
+        expect(stored.value.llmPreferences?.fallbackModel).toBe('or:google/gemma-4-31b-it:free');
+      }
+    });
+
+    it('clears fallbackModel when null is passed on existing document', async () => {
+      await repo.saveSettings(createTestSettings({
+        llmPreferences: { defaultModel: LlmModels.Gemini25Flash, fallbackModel: 'or:google/gemma-4-31b-it:free' },
+      }));
+
+      const result = await repo.updateLlmPreferences('user-123', LlmModels.Gemini25Flash, null);
+
+      expect(result.ok).toBe(true);
+
+      const stored = await repo.getSettings('user-123');
+      expect(stored.ok).toBe(true);
+      if (stored.ok && stored.value !== null) {
+        expect(stored.value.llmPreferences?.fallbackModel).toBeUndefined();
+      }
+    });
+
+    it('leaves fallbackModel unchanged when undefined is passed on existing document', async () => {
+      await repo.saveSettings(createTestSettings({
+        llmPreferences: { defaultModel: LlmModels.GPT4oMini, fallbackModel: 'or:google/gemma-4-31b-it:free' },
+      }));
+
+      const result = await repo.updateLlmPreferences('user-123', LlmModels.Gemini25Flash, undefined);
+
+      expect(result.ok).toBe(true);
+
+      const stored = await repo.getSettings('user-123');
+      expect(stored.ok).toBe(true);
+      if (stored.ok && stored.value !== null) {
+        expect(stored.value.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
+        expect(stored.value.llmPreferences?.fallbackModel).toBe('or:google/gemma-4-31b-it:free');
+      }
+    });
   });
 
   describe('getSettings with llmPreferences', () => {

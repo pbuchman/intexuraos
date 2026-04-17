@@ -353,7 +353,7 @@ function VoiceSection(): React.JSX.Element {
           ))}
         </div>
 
-        <div className="mt-12 grid gap-4 md:grid-cols-2">
+        <div className="mt-12">
           <div className="flex items-start gap-4 rounded-xl border border-neutral-100 bg-white p-6">
             <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-50 text-cyan-600">
               <MessageSquare className="h-5 w-5" />
@@ -362,17 +362,6 @@ function VoiceSection(): React.JSX.Element {
               <p className="text-sm font-semibold text-cyan-700">Chat Agent</p>
               <p className="mt-1 text-sm text-neutral-600">
                 Your guide to the platform. Ask how anything works — the agent answers from up-to-date documentation with source citations. Guest access works without an account.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-start gap-4 rounded-xl border border-neutral-100 bg-white p-6">
-            <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-50 text-cyan-600">
-              <Zap className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-cyan-700">Data Insights</p>
-              <p className="mt-1 text-sm text-neutral-600">
-                Upload data files or combine them with captured mobile notifications. The AI discovers patterns and recommends chart types — no formulas, no spreadsheet gymnastics.
               </p>
             </div>
           </div>
@@ -563,7 +552,7 @@ function IntegrationsSection(): React.JSX.Element {
     { name: 'Linear', description: 'Project tracking with real-time board sync', icon: CheckCircle2 },
     { name: 'Notion', description: 'Export research reports as structured pages', icon: MessageSquare },
     { name: 'GitHub', description: 'PRs, code reviews, and feedback loops', icon: GitPullRequest },
-    { name: 'Android', description: 'Notification capture for data insights', icon: Bell },
+    { name: 'Android', description: 'Notification capture and mobile alerts', icon: Bell },
   ];
 
   return (

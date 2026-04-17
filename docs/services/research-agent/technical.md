@@ -307,7 +307,6 @@ sequenceDiagram
 | ---------------------------- | ---------------------------------------------------- |
 | `researches`                 | LLM research queries, responses, synthesized results |
 | `research_export_settings`   | Notion target page configuration per user            |
-| `llm_api_logs`               | LLM API call audit logs with token usage and cost    |
 
 ## Configuration
 
@@ -320,7 +319,7 @@ sequenceDiagram
 | `INTEXURAOS_USER_SERVICE_URL`              | Base URL of user-service                            | Yes      |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`           | Shared secret for X-Internal-Auth header            | Yes      |
 | `INTEXURAOS_WEB_APP_URL`                   | Base URL of web app (used in share links)           | Yes      |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL`      | Base URL of app-settings-service for pricing fetch  | Yes      |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`         | Base URL of llm-usage-service for pricing fetch     | Yes      |
 | `INTEXURAOS_NOTION_SERVICE_URL`            | Base URL of notion-service                          | Yes      |
 | `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`         | Public CDN base URL for generated images            | Yes      |
 | `INTEXURAOS_IMAGE_SERVICE_URL`             | Base URL of image-service                           | Yes      |
@@ -338,8 +337,8 @@ Research Agent loads pricing at startup for all models it uses. Models are split
 
 **Research models** (dispatched per user selection):
 - `Gemini25Pro`, `Gemini25Flash`
-- `ClaudeOpus45`, `ClaudeSonnet45`
-- `O4MiniDeepResearch`, `GPT52`
+- `ClaudeOpus46`, `ClaudeSonnet46`
+- `O4MiniDeepResearch`, `GPT54`
 - `Sonar`, `SonarPro`, `SonarDeepResearch`
 
 **OpenRouter models** (14 curated models via allowlist):

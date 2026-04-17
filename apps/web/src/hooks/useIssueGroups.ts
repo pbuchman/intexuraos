@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { useAuth } from '@/context';
-import { listIssueGroups as listIssueGroupsApi } from '@/services/issueGroupsApi';
+import { listIssueGroups as listIssueGroupsApi, setGroupImportant } from '@/services/issueGroupsApi';
 import type { GroupStatus, IssueGroup, ListIssueGroupsResponse, SortOption } from '@/types/issueGroups';
 import type { ActioningType } from '@/types/issueGroups';
 
@@ -53,7 +53,7 @@ export function mergeGroups(prev: IssueGroup[], incoming: IssueGroup[]): IssueGr
   const merged = incoming.map((g) => {
     const key = g.linearIssueId ?? g.latestTask.id;
     const existing = prevMap.get(key);
-    if (existing?.aggregateStatus === g.aggregateStatus && existing.latestTask.updatedAt === g.latestTask.updatedAt) {
+    if (existing?.aggregateStatus === g.aggregateStatus && existing.latestTask.updatedAt === g.latestTask.updatedAt && existing.isImportant === g.isImportant) {
       return existing;
     }
     changed = true;
@@ -82,6 +82,7 @@ export interface UseIssueGroupsResult {
   hasMore: boolean;
   loadMore: () => Promise<void>;
   refresh: (showLoading?: boolean) => Promise<void>;
+  toggleImportant: (groupKey: string) => void;
 }
 
 export function useIssueGroups(options: {
@@ -108,6 +109,8 @@ export function useIssueGroups(options: {
   const isInitialLoadRef = useRef(true);
   const isInitialMountRef = useRef(true);
   const loadedGroupCountRef = useRef(0);
+  const groupsRef = useRef(groups);
+  groupsRef.current = groups;
 
   const refresh = useCallback(
     async (showLoading?: boolean, silent?: boolean): Promise<void> => {
@@ -267,6 +270,41 @@ export function useIssueGroups(options: {
     }
   }, [hasMore, loading, loadingMore, getAccessToken, options.groupStatus, options.sortBy, nextCursor]);
 
+  const toggleImportant = useCallback(
+    (groupKey: string): void => {
+      // Capture the target value BEFORE the optimistic setGroups runs.
+      // Reading groupsRef.current after an await would see the post-commit
+      // state and flip newImportant to the wrong value.
+      const currentGroup = groupsRef.current.find(
+        (g) => (g.linearIssueId ?? `standalone_${g.latestTask.id}`) === groupKey,
+      );
+      const newImportant = currentGroup?.isImportant !== true;
+
+      // Optimistic update: apply target value immediately.
+      setGroups((prev) =>
+        prev.map((g): IssueGroup => {
+          const key = g.linearIssueId ?? `standalone_${g.latestTask.id}`;
+          if (key !== groupKey) return g;
+          if (newImportant) return { ...g, isImportant: true };
+          const { isImportant: _, ...rest } = g;
+          return rest;
+        }),
+      );
+
+      // Fire-and-forget API call
+      void (async (): Promise<void> => {
+        try {
+          const token = await getAccessToken();
+          await setGroupImportant(token, groupKey, newImportant);
+        } catch (_err) {
+          // Revert on error by refreshing
+          void refresh(false);
+        }
+      })();
+    },
+    [getAccessToken, refresh],
+  );
+
   return {
     groups,
     counts,
@@ -278,6 +316,7 @@ export function useIssueGroups(options: {
     hasMore,
     loadMore,
     refresh,
+    toggleImportant,
   };
 }
 

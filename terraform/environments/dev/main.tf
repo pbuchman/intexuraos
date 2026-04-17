@@ -171,13 +171,6 @@ locals {
       min_scale = 0
       max_scale = 1
     }
-    data_insights_agent = {
-      name      = "intexuraos-data-insights-agent"
-      app_path  = "apps/data-insights-agent"
-      port      = 8080
-      min_scale = 0
-      max_scale = 1
-    }
     image_service = {
       name      = "intexuraos-image-service"
       app_path  = "apps/image-service"
@@ -262,6 +255,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    llm_usage_service = {
+      name      = "intexuraos-llm-usage-service"
+      app_path  = "apps/llm-usage-service"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
   }
 
   common_labels = {
@@ -286,7 +286,6 @@ locals {
     INTEXURAOS_RESEARCH_AGENT_URL               = "https://${local.services.research_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_COMMANDS_AGENT_URL               = "https://${local.services.commands_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_ACTIONS_AGENT_URL                = "https://${local.services.actions_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_DATA_INSIGHTS_AGENT_URL          = "https://${local.services.data_insights_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_IMAGE_SERVICE_URL                = "https://${local.services.image_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_NOTES_AGENT_URL                  = "https://${local.services.notes_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_TODOS_AGENT_URL                  = "https://${local.services.todos_agent.name}-${local.cloud_run_url_suffix}"
@@ -300,6 +299,7 @@ locals {
     INTEXURAOS_API_DOCS_HUB_URL                 = "https://${local.services.api_docs_hub.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_CRON_AGENT_URL                   = "https://${local.services.cron_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_HELLSCRIPT_AGENT_URL             = "https://${local.services.hellscript_agent.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_LLM_USAGE_SERVICE_URL            = "https://${local.services.llm_usage_service.name}-${local.cloud_run_url_suffix}"
   }
 }
 
@@ -512,6 +512,7 @@ module "secret_manager" {
     # LLM API keys
     "INTEXURAOS_OPENAI_APP_API_KEY"     = "OpenAI API key for chat-agent"
     "INTEXURAOS_MINIMAX_APP_API_KEY"    = "MiniMax API key for orchestrator worker containers"
+    "INTEXURAOS_MIMO_APP_API_KEY"       = "MiMo Pro API key for orchestrator worker containers"
     "INTEXURAOS_GEMINI_APP_API_KEY"     = "Gemini API key for orchestrator completion verifier"
     "INTEXURAOS_DASHSCOPE_APP_API_KEY"  = "Dashscope API key for orchestrator glm and qwen worker containers"
     "INTEXURAOS_OPENROUTER_APP_API_KEY" = "OpenRouter API key for agent compliance validator"
@@ -1027,7 +1028,6 @@ module "api_docs_hub" {
     INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL               = "${module.research_agent.service_url}/openapi.json"
     INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL               = "${module.commands_agent.service_url}/openapi.json"
     INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL                = "${module.actions_agent.service_url}/openapi.json"
-    INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL          = "${module.data_insights_agent.service_url}/openapi.json"
     INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL                = "${module.image_service.service_url}/openapi.json"
     INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL         = "${module.app_settings_service.service_url}/openapi.json"
     INTEXURAOS_NOTES_AGENT_OPENAPI_URL                  = "${module.notes_agent.service_url}/openapi.json"
@@ -1053,7 +1053,6 @@ module "api_docs_hub" {
     module.research_agent,
     module.commands_agent,
     module.actions_agent,
-    module.data_insights_agent,
     module.image_service,
     module.notes_agent,
     module.todos_agent,
@@ -1062,6 +1061,7 @@ module "api_docs_hub" {
     module.chat_agent,
     module.cron_agent,
     module.hellscript_agent,
+    module.llm_usage_service,
   ]
 }
 
@@ -1157,33 +1157,6 @@ module "actions_agent" {
     INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC = "intexuraos-calendar-preview-${var.environment}"
     INTEXURAOS_WEB_APP_URL                   = "https://${var.web_app_domain}"
   })
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
-# Data Insights Agent - Analytics aggregation from other services
-module "data_insights_agent" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.data_insights_agent.name
-  service_account = module.iam.service_accounts["data_insights_agent"]
-  port            = local.services.data_insights_agent.port
-  min_scale       = local.services.data_insights_agent.min_scale
-  max_scale       = local.services.data_insights_agent.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/data-insights-agent:latest"
-
-  secrets = local.common_service_secrets
-
-  env_vars = local.common_service_env_vars
 
   depends_on = [
     module.artifact_registry,
@@ -1722,6 +1695,33 @@ module "hellscript_agent" {
   ]
 }
 
+module "llm_usage_service" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.llm_usage_service.name
+  service_account = module.iam.service_accounts["llm_usage_service"]
+  port            = local.services.llm_usage_service.port
+  min_scale       = local.services.llm_usage_service.min_scale
+  max_scale       = local.services.llm_usage_service.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/llm-usage-service:latest"
+
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_ORCHESTRATOR_SECRET = module.secret_manager.secret_ids["INTEXURAOS_ORCHESTRATOR_SECRET"]
+  })
+  env_vars = local.common_service_env_vars
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
 # -----------------------------------------------------------------------------
 # Cloud Scheduler - Cron Agent Tick (Every Minute)
 # -----------------------------------------------------------------------------
@@ -1782,7 +1782,6 @@ module "cloud_build" {
   github_connection_name = var.github_connection_name
 
   artifact_registry_url   = module.artifact_registry.repository_url
-  static_assets_bucket    = module.static_assets.bucket_name
   web_app_bucket          = module.web_app.bucket_name
   functions_source_bucket = google_storage_bucket.cloud_functions_source.name
 
@@ -2109,6 +2108,82 @@ resource "google_cloud_scheduler_job" "execution_memory_process" {
   http_target {
     http_method = "POST"
     uri         = "${module.code_agent.service_url}/internal/execution-memory/process"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - Execution Memory Sweep Errored (INT-1352)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_scheduler_job" "execution_memory_sweep_errored" {
+  name        = "intexuraos-execution-memory-sweep-errored-${var.environment}"
+  description = "Sweep permanently errored execution memory post-run tasks and requeue for retry"
+  schedule    = "0 */6 * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/execution-memory/sweep-errored"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - Execution Memory Prune Stale (INT-1352)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_scheduler_job" "execution_memory_prune_stale" {
+  name        = "intexuraos-execution-memory-prune-stale-${var.environment}"
+  description = "Archive aged zero-application execution memories to reduce corpus noise"
+  schedule    = "0 3 * * 0"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/execution-memory/prune-stale"
+
+    body = base64encode("{\"maxAgeDays\":30}")
+
+    headers = {
+      "Content-Type" = "application/json"
+    }
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
@@ -2671,11 +2746,6 @@ output "commands_agent_url" {
 output "actions_agent_url" {
   description = "Actions Agent Service URL"
   value       = module.actions_agent.service_url
-}
-
-output "data_insights_agent_url" {
-  description = "Data Insights Agent URL"
-  value       = module.data_insights_agent.service_url
 }
 
 output "image_service_url" {

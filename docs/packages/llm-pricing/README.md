@@ -47,7 +47,7 @@ const context = createPricingContext(allPricing);
 // Validate only models this service uses
 const context = createPricingContext(allPricing, [
   'gemini-2.5-flash',
-  'claude-sonnet-4-5-20250929',
+  'claude-sonnet-4-6',
 ]);
 ```
 
@@ -79,7 +79,7 @@ const usageLogger = createUsageLogger({ logger });
 await usageLogger.log({
   userId: 'user-123',
   provider: 'anthropic',
-  model: 'claude-sonnet-4-5-20250929',
+  model: 'claude-sonnet-4-6',
   callType: 'research',
   usage: {
     inputTokens: 1000,
@@ -99,18 +99,16 @@ type CallType =
   | 'research'              // Web search enhanced generation
   | 'generate'             // Simple text generation
   | 'image_generation'     // Image creation
-  | 'visualization_insights' // Chart data analysis
-  | 'visualization_vegalite' // Vega-Lite chart generation
   | 'tool_calling';         // Function calling agent loops
 ```
 
 #### Usage Sinks
 
-| Sink                     | Destination                   | Use Case                            |
-| ------------------------ | ----------------------------- | ----------------------------------- |
-| `FirestoreUsageSink`     | Firestore `llm_usage_stats`   | Default for all production services |
-| `StructuredLogUsageSink` | Pino logger (structured JSON) | Services without Firestore access   |
-| `NoopUsageSink`          | /dev/null                     | Tests, disabled logging             |
+| Sink                          | Destination                           | Use Case                                       |
+| ----------------------------- | ------------------------------------- | ---------------------------------------------- |
+| `HttpInternalAuthUsageSink`   | `llm-usage-service` via HTTP          | Default for all in-cluster production services |
+| `HttpWebhookUsageSink`        | `code-agent` webhook (HMAC-signed)    | Orchestrator → code-agent → llm-usage-service  |
+| `NoopUsageSink`               | /dev/null                             | Tests, disabled logging                        |
 
 All sinks implement `UsageSink`:
 
@@ -126,17 +124,7 @@ Checks `INTEXURAOS_LOG_LLM_USAGE`. Defaults to `true`.
 
 ### Firestore Structure
 
-```
-llm_usage_stats/{model}/
-  by_call_type/{callType}/
-    by_period/
-      total/              (all-time aggregate)
-        by_user/{userId}
-      YYYY-MM/            (monthly aggregate)
-        by_user/{userId}
-      YYYY-MM-DD/         (daily aggregate)
-        by_user/{userId}
-```
+Usage statistics collection has been removed as part of INT-1342 (llm-audit and user_usage cleanup).
 
 Each period document accumulates `totalCalls`, `successfulCalls`, `failedCalls`, `inputTokens`, `outputTokens`, `totalTokens`, `costUsd` via Firestore `FieldValue.increment`.
 

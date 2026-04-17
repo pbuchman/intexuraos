@@ -74,7 +74,7 @@ describe('LlmCallPublisher', () => {
     const models = [
       LlmModels.Gemini25Pro,
       LlmModels.O4MiniDeepResearch,
-      LlmModels.ClaudeOpus45,
+      LlmModels.ClaudeOpus46,
     ] as const;
 
     for (const model of models) {

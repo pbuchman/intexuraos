@@ -2,7 +2,8 @@ import type { Logger } from '@intexuraos/common-core';
 import type { ScheduleRepository } from './domain/ports/schedule-repository.js';
 import type { ExecutionRepository } from './domain/ports/execution-repository.js';
 import type { ToolRegistry } from './domain/ports/tool-registry.js';
-import type { ToolCallingClient, LLMClient } from '@intexuraos/llm-contract';
+import type { ToolCallingClient } from '@intexuraos/llm-contract';
+import type { GeminiClient } from '@intexuraos/infra-gemini';
 
 export interface ServiceContainer {
   logger: Logger;
@@ -10,7 +11,7 @@ export interface ServiceContainer {
   executionRepo: ExecutionRepository;
   toolRegistry: ToolRegistry;
   toolCallingClient: ToolCallingClient;
-  geminiClient: LLMClient;
+  geminiClient: GeminiClient;
   internalAuthToken: string;
 }
 

@@ -23,11 +23,11 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test question?',
     status: 'processing',
-    selectedModels: [LlmModels.ClaudeSonnet45, LlmModels.Gemini25Pro],
+    selectedModels: [LlmModels.ClaudeSonnet46, LlmModels.Gemini25Pro],
     llmResults: [
       {
         provider: LlmProviders.Anthropic,
-        model: LlmModels.ClaudeSonnet45,
+        model: LlmModels.ClaudeSonnet46,
         status: 'completed',
         result: 'Test result from Claude',
         inputTokens: 100,
@@ -44,7 +44,7 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
         costUsd: 0.008,
       },
     ],
-    synthesisModel: LlmModels.ClaudeSonnet45,
+    synthesisModel: LlmModels.ClaudeSonnet46,
     startedAt: '2024-01-01T00:00:00Z',
     ...overrides,
   };
@@ -118,9 +118,6 @@ describe('handleAllCompleted', () => {
             })
           ),
         }),
-        pricingContext: {
-          getPricing: () => ({ inputPricePerMillion: 0.1, outputPricePerMillion: 0.2 }),
-        },
       } as unknown as AllCompletedHandlerParams['services'],
       userServiceClient: {
         reportLlmSuccess: vi.fn().mockResolvedValue(ok(undefined)),
@@ -200,11 +197,11 @@ describe('handleAllCompleted', () => {
 
     expect(mockResearchRepo.update).toHaveBeenCalledWith('research-123', {
       status: 'failed',
-      synthesisError: `API key required for synthesis with ${LlmModels.ClaudeSonnet45}`,
+      synthesisError: `API key required for synthesis with ${LlmModels.ClaudeSonnet46}`,
       completedAt: '2024-01-01T12:00:00.000Z',
     });
     expect(mockLogger.error).toHaveBeenCalledWith(
-      { researchId: 'research-123', model: LlmModels.ClaudeSonnet45 },
+      { researchId: 'research-123', model: LlmModels.ClaudeSonnet46 },
       '[3.5.2] API key missing for synthesis model'
     );
   });
@@ -265,9 +262,6 @@ describe('handleAllCompleted', () => {
           })
         ),
       }),
-      pricingContext: {
-        getPricing: () => ({ inputPricePerMillion: 0.1, outputPricePerMillion: 0.2 }),
-      },
     } as unknown as AllCompletedHandlerParams['services'];
 
     await handleAllCompleted(mockParams);
@@ -353,9 +347,6 @@ describe('handleAllCompleted', () => {
           })
         ),
       }),
-      pricingContext: {
-        getPricing: () => ({ inputPricePerMillion: 0.1, outputPricePerMillion: 0.2 }),
-      },
     } as unknown as AllCompletedHandlerParams['services'];
 
     await handleAllCompleted(mockParams);

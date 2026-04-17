@@ -84,7 +84,7 @@ describe('LinearIssueDataSchema', () => {
       });
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0].path[0]).toBe('priority');
+        expect(result.error.issues[0]?.path[0]).toBe('priority');
       }
     });
 
@@ -100,7 +100,7 @@ describe('LinearIssueDataSchema', () => {
       });
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0].path[0]).toBe('priority');
+        expect(result.error.issues[0]?.path[0]).toBe('priority');
       }
     });
 
@@ -395,7 +395,7 @@ describe('LinearIssueTitleSchema', () => {
       });
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0].path[0]).toBe('title');
+        expect(result.error.issues[0]?.path[0]).toBe('title');
       }
     });
 
@@ -406,7 +406,7 @@ describe('LinearIssueTitleSchema', () => {
       });
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0].path[0]).toBe('title');
+        expect(result.error.issues[0]?.path[0]).toBe('title');
       }
     });
 
@@ -441,7 +441,7 @@ describe('LinearIssueTitleSchema', () => {
       });
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0].path[0]).toBe('issueType');
+        expect(result.error.issues[0]?.path[0]).toBe('issueType');
       }
     });
 

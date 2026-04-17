@@ -7,16 +7,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { generateContextLabels } from '../../../../domain/research/services/contextLabels.js';
 import { LlmModels } from '@intexuraos/llm-contract';
-import type { ModelPricing } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 
 describe('generateContextLabels', () => {
-  const mockPricing: ModelPricing = {
-    inputPricePerMillion: 0.075,
-    outputPricePerMillion: 0.3,
-  };
-
   const mockLogger: Logger = {
     info: vi.fn(),
     warn: vi.fn(),
@@ -38,7 +32,6 @@ describe('generateContextLabels', () => {
       () => {
         throw new Error('Should not be called');
       },
-      mockPricing,
       mockLogger
     );
 
@@ -71,7 +64,6 @@ describe('generateContextLabels', () => {
       'user-123',
       undefined,
       () => mockGenerator,
-      mockPricing,
       mockLogger
     );
 
@@ -97,7 +89,6 @@ describe('generateContextLabels', () => {
       'user-123',
       undefined,
       () => mockGenerator,
-      mockPricing,
       mockLogger
     );
 
@@ -123,7 +114,6 @@ describe('generateContextLabels', () => {
       'user-123',
       undefined,
       () => mockGenerator,
-      mockPricing,
       mockLogger
     );
 
@@ -138,7 +128,6 @@ describe('generateContextLabels', () => {
     let capturedModel: unknown;
     let capturedApiKey: unknown;
     let capturedUserId: unknown;
-    let capturedPricing: unknown;
     let capturedLogger: unknown;
     let capturedResearchId: unknown;
 
@@ -152,23 +141,20 @@ describe('generateContextLabels', () => {
       'test-api-key',
       'test-user-id',
       'research-456',
-      (model, apiKey, userId, pricing, logger, researchId) => {
+      (model, apiKey, userId, logger, researchId) => {
         capturedModel = model;
         capturedApiKey = apiKey;
         capturedUserId = userId;
-        capturedPricing = pricing;
         capturedLogger = logger;
         capturedResearchId = researchId;
         return mockGenerator;
       },
-      mockPricing,
       mockLogger
     );
 
     expect(capturedModel).toBe(LlmModels.Gemini25Flash);
     expect(capturedApiKey).toBe('test-api-key');
     expect(capturedUserId).toBe('test-user-id');
-    expect(capturedPricing).toBe(mockPricing);
     expect(capturedLogger).toBe(mockLogger);
     expect(capturedResearchId).toBe('research-456');
   });
@@ -190,7 +176,7 @@ describe('generateContextLabels', () => {
       },
     };
 
-    await generateContextLabels(contexts, 'api-key', 'user', undefined, () => mockGenerator, mockPricing, mockLogger);
+    await generateContextLabels(contexts, 'api-key', 'user', undefined, () => mockGenerator, mockLogger);
 
     expect(callOrder).toEqual([1, 2, 3]);
   });

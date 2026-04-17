@@ -13,14 +13,14 @@ describe('createGeneratePromptUseCase', () => {
   let fakeUserClient: FakeUserServiceClient;
   let fakeGenerator: FakePromptGenerator;
   let createPromptGeneratorSpy: ReturnType<
-    typeof vi.fn<(provider: Google | OpenAI, apiKey: string, userId: string, logger: Logger) => PromptGenerator>
+    typeof vi.fn<(provider: Google | OpenAI, model: string, apiKey: string, userId: string, logger: Logger) => PromptGenerator>
   >;
 
   beforeEach(() => {
     fakeUserClient = new FakeUserServiceClient();
     fakeGenerator = new FakePromptGenerator();
     createPromptGeneratorSpy = vi.fn<
-      (provider: Google | OpenAI, apiKey: string, userId: string, logger: Logger) => PromptGenerator
+      (provider: Google | OpenAI, model: string, apiKey: string, userId: string, logger: Logger) => PromptGenerator
     >(() => fakeGenerator);
     vi.clearAllMocks();
   });
@@ -57,6 +57,7 @@ describe('createGeneratePromptUseCase', () => {
     });
     expect(createPromptGeneratorSpy).toHaveBeenCalledWith(
       LlmProviders.OpenAI,
+      'gpt-4.1',
       'sk-test-key',
       'user-1',
       fakeLogger

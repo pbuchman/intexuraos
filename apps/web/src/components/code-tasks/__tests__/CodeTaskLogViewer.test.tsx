@@ -159,7 +159,7 @@ describe('CodeTaskLogViewer integration', () => {
     expect(copyButton).toBeDefined();
   });
 
-  it('claude filter button has aria-pressed attribute', () => {
+  it('worker filter button has aria-pressed attribute', () => {
     const props = makeProps({
       logs: [makeLog(1, '[claude] Some claude output with https://example.com/filter')],
     });
@@ -167,12 +167,12 @@ describe('CodeTaskLogViewer integration', () => {
     render(<CodeTaskLogViewer {...props} />);
 
     const buttons = screen.getAllByRole('button');
-    const claudeButton = buttons.find((b) => b.textContent?.trim() === 'Claude');
-    expect(claudeButton).toBeDefined();
-    expect(claudeButton).toHaveAttribute('aria-pressed', 'false');
+    const workerButton = buttons.find((b) => b.textContent?.trim() === 'Worker');
+    expect(workerButton).toBeDefined();
+    expect(workerButton).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('when claude filter is active, only claude-tagged lines (with links) are shown', async () => {
+  it('when worker filter is active, lines tagged [claude] are shown', async () => {
     const claudeUrl = 'https://example.com/claude-line';
     const otherUrl = 'https://example.com/other-line';
     const logs: LogLine[] = [
@@ -186,15 +186,67 @@ describe('CodeTaskLogViewer integration', () => {
     expect(screen.getByRole('link', { name: claudeUrl })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: otherUrl })).toBeInTheDocument();
 
-    // Activate the Claude filter
+    // Activate the Worker filter
     const buttons = screen.getAllByRole('button');
-    const claudeButton = buttons.find((b) => b.textContent?.trim() === 'Claude');
-    if (claudeButton === undefined) throw new Error('Claude filter button not found');
-    await userEvent.click(claudeButton);
+    const workerButton = buttons.find((b) => b.textContent?.trim() === 'Worker');
+    if (workerButton === undefined) throw new Error('Worker filter button not found');
+    await userEvent.click(workerButton);
 
     // Only the claude-tagged line should remain visible
     expect(screen.getByRole('link', { name: claudeUrl })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: otherUrl })).not.toBeInTheDocument();
+  });
+
+  it('when worker filter is active, lines tagged [msg] are also shown', async () => {
+    const msgUrl = 'https://example.com/msg-line';
+    const toolUrl = 'https://example.com/tool-line';
+    const logs: LogLine[] = [
+      makeLog(1, `[msg] Message output: ${msgUrl}`),
+      makeLog(2, `[tool] Tool output: ${toolUrl}`),
+    ];
+
+    render(<CodeTaskLogViewer {...makeProps({ logs })} />);
+
+    // Both links visible before filter
+    expect(screen.getByRole('link', { name: msgUrl })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: toolUrl })).toBeInTheDocument();
+
+    // Activate the Worker filter
+    const buttons = screen.getAllByRole('button');
+    const workerButton = buttons.find((b) => b.textContent?.trim() === 'Worker');
+    if (workerButton === undefined) throw new Error('Worker filter button not found');
+    await userEvent.click(workerButton);
+
+    // After filter: msg line (worker-tagged) remains visible
+    expect(screen.getByRole('link', { name: msgUrl })).toBeInTheDocument();
+    // After filter: tool line (non-worker-tagged) is hidden
+    expect(screen.queryByRole('link', { name: toolUrl })).not.toBeInTheDocument();
+  });
+
+  it('when worker filter is active, lines tagged [codex] are also shown', async () => {
+    const codexUrl = 'https://example.com/codex-line';
+    const toolUrl = 'https://example.com/tool-line';
+    const logs: LogLine[] = [
+      makeLog(1, `[codex] Codex output: ${codexUrl}`),
+      makeLog(2, `[tool] Tool output: ${toolUrl}`),
+    ];
+
+    render(<CodeTaskLogViewer {...makeProps({ logs })} />);
+
+    // Both links visible before filter
+    expect(screen.getByRole('link', { name: codexUrl })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: toolUrl })).toBeInTheDocument();
+
+    // Activate the Worker filter
+    const buttons = screen.getAllByRole('button');
+    const workerButton = buttons.find((b) => b.textContent?.trim() === 'Worker');
+    if (workerButton === undefined) throw new Error('Worker filter button not found');
+    await userEvent.click(workerButton);
+
+    // After filter: codex line (worker-tagged) remains visible
+    expect(screen.getByRole('link', { name: codexUrl })).toBeInTheDocument();
+    // After filter: tool line (non-worker-tagged) is hidden
+    expect(screen.queryByRole('link', { name: toolUrl })).not.toBeInTheDocument();
   });
 
   it('collapsible blocks still work correctly when log lines contain URLs', async () => {
@@ -220,5 +272,100 @@ describe('CodeTaskLogViewer integration', () => {
 
     // After expanding, the body line with the URL should be visible
     expect(screen.getByRole('link', { name: url })).toBeInTheDocument();
+  });
+});
+
+describe('CodeTaskLogViewer orchestrator/entrypoint collapsible groups', () => {
+  it('collapses consecutive orchestrator lines into a single block', () => {
+    const logs: LogLine[] = [
+      makeLog(1, '[orchestrator] Task started: id=task_123'),
+      makeLog(2, '[orchestrator] Worker config: type=opus'),
+      makeLog(3, '[orchestrator] Container config: worktree=/repo'),
+      makeLog(4, '[orchestrator] Creating new container'),
+      makeLog(5, '[orchestrator] Worker attempt completed'),
+    ];
+
+    render(<CodeTaskLogViewer {...makeProps({ logs })} />);
+
+    // Default compactMode=true, 4+ body lines -> collapsed
+    const hiddenLabels = screen.queryAllByText(/\d+ lines hidden/i);
+    expect(hiddenLabels.length).toBeGreaterThan(0);
+  });
+
+  it('collapses consecutive entrypoint lines into a single block', () => {
+    const logs: LogLine[] = [
+      makeLog(1, '[entrypoint] Code worker starting'),
+      makeLog(2, '[entrypoint] Task ID: task_123'),
+      makeLog(3, '[entrypoint] Running as user: claude'),
+      makeLog(4, '[entrypoint] Git repo verified: /repo'),
+      makeLog(5, '[entrypoint] GCP auth successful'),
+    ];
+
+    render(<CodeTaskLogViewer {...makeProps({ logs })} />);
+
+    const hiddenLabels = screen.queryAllByText(/\d+ lines hidden/i);
+    expect(hiddenLabels.length).toBeGreaterThan(0);
+  });
+
+  it('expands a collapsed orchestrator group when the chevron is clicked', async () => {
+    const logs: LogLine[] = [
+      makeLog(1, '[orchestrator] Task started'),
+      makeLog(2, '[orchestrator] Worker config'),
+      makeLog(3, '[orchestrator] Container config'),
+      makeLog(4, '[orchestrator] Creating container'),
+      makeLog(5, '[orchestrator] Attempt completed'),
+    ];
+
+    render(<CodeTaskLogViewer {...makeProps({ logs })} />);
+
+    // Initially collapsed
+    expect(screen.queryAllByText(/\d+ lines hidden/i).length).toBeGreaterThan(0);
+
+    // Expand
+    const expandButton = screen.getByRole('button', { name: /expand tool output/i });
+    await userEvent.click(expandButton);
+
+    // Body lines should now be visible
+    expect(screen.getByText(/Worker config/)).toBeInTheDocument();
+    expect(screen.getByText(/Container config/)).toBeInTheDocument();
+  });
+
+  it('does not group different consecutive tags together', () => {
+    const logs: LogLine[] = [
+      makeLog(1, '[orchestrator] Task started'),
+      makeLog(2, '[orchestrator] Worker config'),
+      makeLog(3, '[orchestrator] Container config'),
+      makeLog(4, '[orchestrator] Creating container'),
+      makeLog(5, '[orchestrator] Attempt started'),
+      makeLog(6, '[entrypoint] Code worker starting'),
+      makeLog(7, '[entrypoint] Task ID: task_123'),
+      makeLog(8, '[entrypoint] Running as user: claude'),
+      makeLog(9, '[entrypoint] Git repo verified'),
+      makeLog(10, '[entrypoint] GCP auth successful'),
+    ];
+
+    render(<CodeTaskLogViewer {...makeProps({ logs })} />);
+
+    // Two separate collapsible groups
+    const hiddenLabels = screen.queryAllByText(/\d+ lines hidden/i);
+    expect(hiddenLabels.length).toBe(2);
+  });
+
+  it('breaks orchestrator group when a different tag appears mid-sequence', () => {
+    const logs: LogLine[] = [
+      makeLog(1, '[orchestrator] Task started'),
+      makeLog(2, '[orchestrator] Worker config'),
+      makeLog(3, '[claude] Hello, I will help'),
+      makeLog(4, '[orchestrator] Attempt completed'),
+      makeLog(5, '[orchestrator] Running verification'),
+    ];
+
+    render(<CodeTaskLogViewer {...makeProps({ logs })} />);
+
+    // First group: 2 orchestrator lines (1 header + 1 body) -> < 4 visual lines -> not collapsible
+    // Second group: 2 orchestrator lines -> also not collapsible
+    // No collapsible blocks expected
+    const hiddenLabels = screen.queryAllByText(/\d+ lines hidden/i);
+    expect(hiddenLabels.length).toBe(0);
   });
 });

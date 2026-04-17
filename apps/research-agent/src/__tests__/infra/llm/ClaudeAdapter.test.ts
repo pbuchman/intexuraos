@@ -3,8 +3,9 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockResearch = vi.fn();
 
@@ -18,11 +19,6 @@ vi.mock('@intexuraos/infra-claude', () => ({
 
 const { ClaudeAdapter } = await import('../../../infra/llm/ClaudeAdapter.js');
 
-const testPricing: ModelPricing = {
-  inputPricePerMillion: 5.0,
-  outputPricePerMillion: 25.0,
-};
-
 const mockLogger: Logger = {
   info: vi.fn(),
   error: vi.fn(),
@@ -32,10 +28,18 @@ const mockLogger: Logger = {
 
 describe('ClaudeAdapter', () => {
   let adapter: InstanceType<typeof ClaudeAdapter>;
+  let fakeUsageSink: FakeUsageSink;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new ClaudeAdapter('test-key', LlmModels.ClaudeOpus45, 'test-user-id', testPricing, mockLogger);
+    fakeUsageSink = new FakeUsageSink();
+    adapter = new ClaudeAdapter(
+      'test-key',
+      LlmModels.ClaudeOpus46,
+      'test-user-id',
+      mockLogger,
+      fakeUsageSink
+    );
   });
 
   describe('constructor', () => {
@@ -43,20 +47,20 @@ describe('ClaudeAdapter', () => {
       mockCreateClaudeClient.mockClear();
       new ClaudeAdapter(
         'test-key',
-        LlmModels.ClaudeOpus45,
+        LlmModels.ClaudeOpus46,
         'test-user-id',
-        testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
       expect(mockCreateClaudeClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        model: LlmModels.ClaudeOpus45,
+        model: LlmModels.ClaudeOpus46,
         userId: 'test-user-id',
         researchId: 'research-123',
-        pricing: testPricing,
         logger: mockLogger,
+        usageSink: fakeUsageSink,
       });
     });
   });

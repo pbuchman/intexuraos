@@ -5,8 +5,9 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
-import type { AuditSink } from '@intexuraos/llm-audit';
 import type { UsageSink } from '@intexuraos/llm-pricing';
+
+import type { OwnerType } from '@intexuraos/llm-contract';
 
 export type {
   LLMError as GeminiError,
@@ -15,14 +16,10 @@ export type {
   ImageGenerationResult,
   ImageGenerateOptions,
   SynthesisInput,
-  ModelPricing,
 } from '@intexuraos/llm-contract';
 
 /**
  * Configuration for creating a Gemini client.
- *
- * Extends {@link LLMConfig} with Google-specific pricing configuration.
- * Supports both text generation and image generation with separate pricing.
  *
  * @example
  * ```ts
@@ -32,12 +29,8 @@ export type {
  *   apiKey: process.env.GOOGLE_API_KEY,
  *   model: 'gemini-2.5-flash',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 0.075,
- *     outputPricePerMillion: 0.30,
- *     groundingCostPerRequest: 0.002,
- *   },
- *   logger: pinoLogger, // Optional pino logger for structured logging
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  * ```
  */
@@ -50,14 +43,10 @@ export interface GeminiConfig {
   userId: string;
   /** Optional research ID for correlating audit logs to a research run */
   researchId?: string;
-  /** Cost configuration per million tokens for text operations */
-  pricing: import('@intexuraos/llm-contract').ModelPricing;
-  /** Optional separate pricing for image generation (Gemini 2.5 Flash) */
-  imagePricing?: import('@intexuraos/llm-contract').ModelPricing;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
-  /** Optional audit sink override (defaults to Firestore audit sink) */
-  auditSink?: AuditSink;
-  /** Optional usage sink override (defaults to Firestore usage sink) */
-  usageSink?: UsageSink;
+  /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
+  usageSink: UsageSink;
+  /** Owner scope of the call. When omitted, the usage sink defaults to 'system'. */
+  ownerType?: OwnerType;
 }

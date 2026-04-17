@@ -1875,7 +1875,32 @@ describe('createReviewTask', () => {
   });
 
   describe('re-review context injection', () => {
-    it('includes re-review context when lastReviewedCommitSha is present', async () => {
+    it('focuses on the review request when reviewComment is present', async () => {
+      const gitHubPRSummaryRepo = createFakeGitHubPRSummaryRepo('abc1234');
+      const deps = createFakeDeps({ gitHubPRSummaryRepo });
+
+      await createReviewTask(deps, {
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        senderLogin: 'dev-user',
+        reviewTypes: ['code_quality'],
+        reviewComment: '@review architecture',
+        eventId: 'evt-rereview-0',
+      });
+
+      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
+      expect(createCall).toBeDefined();
+      if (createCall !== undefined) {
+        expect(createCall[0].prompt).toContain('Triggered by review request comment');
+        expect(createCall[0].prompt).toContain('@review architecture');
+        expect(createCall[0].prompt).toContain('Focus on the user\'s specific request');
+        expect(createCall[0].prompt).toContain('The prior review commit SHA (abc1234) and commit range (abc1234..HEAD) are helpful context only.');
+        expect(createCall[0].prompt).not.toContain('Your review MUST focus on changes since commit abc1234.');
+        expect(createCall[0].prompt).not.toMatch(/Focus your review on NEW code, CHANGED code, and whether\s+prior findings were correctly addressed\./);
+      }
+    });
+
+    it('treats the full PR as scope when no reviewComment is present', async () => {
       const gitHubPRSummaryRepo = createFakeGitHubPRSummaryRepo('abc1234');
       const deps = createFakeDeps({ gitHubPRSummaryRepo });
 
@@ -1891,9 +1916,12 @@ describe('createReviewTask', () => {
       expect(createCall).toBeDefined();
       if (createCall !== undefined) {
         expect(createCall[0].prompt).toContain('## Re-review Context');
-        expect(createCall[0].prompt).toContain('abc1234');
+        expect(createCall[0].prompt).toContain('full PR scope');
+        expect(createCall[0].prompt).toContain('The PR was previously reviewed up to commit abc1234.');
         expect(createCall[0].prompt).toContain('abc1234..HEAD');
         expect(createCall[0].prompt).toContain('Do NOT re-flag findings from the previous review');
+        expect(createCall[0].prompt).not.toContain('Your review MUST focus on changes since commit abc1234.');
+        expect(createCall[0].prompt).not.toMatch(/Focus your review on NEW code, CHANGED code, and whether\s+prior findings were correctly addressed\./);
       }
     });
 

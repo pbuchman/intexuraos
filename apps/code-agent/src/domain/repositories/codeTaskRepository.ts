@@ -49,6 +49,10 @@ export interface CreateTaskInput {
   reviewTypes?: string[];
   executionMemoryContext?: CodeTask['executionMemoryContext'];
   executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
+
+  // Auto-retry metadata (INT-1375)
+  failedWorkerLocation?: string;
+  autoRetryAttempt?: number;
 }
 
 export interface UpdateTaskInput {
@@ -79,6 +83,10 @@ export interface UpdateTaskInput {
   prClosedAt?: Date;  // When PR was closed without merge (INT-1316)
   executionMemoryContext?: CodeTask['executionMemoryContext'];
   executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
+
+  // PR URL validation (INT-1361)
+  prUrlValidationFailed?: boolean;
+  prUrlValidationErrors?: string[];
 
   // Remediation task metadata
   requiresReReview?: boolean;
@@ -209,9 +217,11 @@ export interface CodeTaskRepository {
 
   /**
    * Find the newest execution-eligible task for a PR.
-   * Excludes review, remediation, and merge-conflict follow-up tasks — only
-   * returns planning, execution, or canonical pull_request tasks. Used to route
+   * Excludes review, remediation, planning, and merge-conflict follow-up tasks —
+   * only returns execution or canonical pull_request tasks. Used to route
    * generic PR comments to existing tasks.
+   * Planning tasks are excluded because they run with a planning system prompt
+   * and cannot handle PR comment work (plan PRs should create new pull_request tasks).
    * Treats tasks with missing agentType as execution-eligible (backward compatibility).
    */
   findLatestExecutionTaskByPR(
@@ -310,6 +320,12 @@ export interface CodeTaskRepository {
    * List execution tasks waiting for scheduler-backed execution-memory post-run processing.
    */
   listPendingExecutionMemoryPostRun(limit: number): Promise<Result<CodeTask[], RepositoryError>>;
+
+  /**
+   * List tasks with executionMemoryPostRun.status === 'error'.
+   * Used by the sweep job to find tasks stuck in permanent error state.
+   */
+  listErroredExecutionMemoryPostRun(): Promise<Result<CodeTask[], RepositoryError>>;
 
   /**
    * List all non-archived tasks for a user.

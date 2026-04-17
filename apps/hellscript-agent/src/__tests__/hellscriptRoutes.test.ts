@@ -16,7 +16,7 @@ describe('hellscriptRoutes', () => {
     });
 
     it('creates a new buffer and appends thought', async () => {
-      ctx.intentInterpreter.setNextIntent({
+      ctx.llmClient.enqueueIntentJson({
         kind: 'append_thought',
         payload: { text: 'My thought' },
       });
@@ -47,7 +47,7 @@ describe('hellscriptRoutes', () => {
       expect(createResult.ok).toBe(true);
       if (!createResult.ok) return;
 
-      ctx.intentInterpreter.setNextIntent({
+      ctx.llmClient.enqueueIntentJson({
         kind: 'append_thought',
         payload: { text: 'New thought' },
       });
@@ -72,7 +72,7 @@ describe('hellscriptRoutes', () => {
     });
 
     it('returns 404 when buffer not found', async () => {
-      ctx.intentInterpreter.setNextIntent({
+      ctx.llmClient.enqueueIntentJson({
         kind: 'append_thought',
         payload: { text: 'thought' },
       });
@@ -117,11 +117,13 @@ describe('hellscriptRoutes', () => {
     });
 
     it('returns 500 with draft failure message when draft generation fails', async () => {
-      ctx.intentInterpreter.setNextIntent({
+      // First call: intent interpretation returns update_draft
+      ctx.llmClient.enqueueIntentJson({
         kind: 'update_draft',
         payload: { text: 'write it', category: 'general' },
       });
-      ctx.draftGenerator.simulateError(new Error('LLM failed'));
+      // Second call: draft generation fails
+      ctx.llmClient.enqueueError({ code: 'API_ERROR', message: 'LLM failed' });
 
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
@@ -141,11 +143,13 @@ describe('hellscriptRoutes', () => {
     });
 
     it('passes explicit category to use case when provided', async () => {
-      ctx.intentInterpreter.setNextIntent({
+      // First call: intent interpretation
+      ctx.llmClient.enqueueIntentJson({
         kind: 'update_draft',
         payload: { text: 'write a post', category: null },
       });
-      ctx.draftGenerator.setNextMarkdown('# Post');
+      // Second call: draft generation
+      ctx.llmClient.enqueueDraftContent('# Post');
 
       const token = await createToken({ sub: 'test-user-123' });
       const response = await ctx.app.inject({
@@ -164,7 +168,7 @@ describe('hellscriptRoutes', () => {
     });
 
     it('ignores invalid category in request body', async () => {
-      ctx.intentInterpreter.setNextIntent({
+      ctx.llmClient.enqueueIntentJson({
         kind: 'update_draft',
         payload: { text: 'write something', category: null },
       });
@@ -182,6 +186,29 @@ describe('hellscriptRoutes', () => {
 
       // Fastify schema validation rejects invalid enum value with 400
       expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 500 when LLM client resolution fails', async () => {
+      ctx.userServiceClient.simulateGetLlmClientError({
+        code: 'NO_API_KEY',
+        message: 'No API key configured',
+      });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/hellscript/impose',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        payload: { utterance: 'write something' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = response.json();
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('Failed to initialize LLM client. Please try again.');
     });
   });
 

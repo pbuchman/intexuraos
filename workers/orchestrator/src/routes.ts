@@ -164,6 +164,14 @@ export function registerRoutes(
         continuationPrBranch: parsed.continuationPrBranch,
       }),
       ...(parsed.prNumber !== undefined && { prNumber: parsed.prNumber }),
+      ...(parsed.executionMemoryContext !== undefined && {
+        executionMemoryContext: parsed.executionMemoryContext,
+      }),
+      ...(parsed.trackingCommentId !== undefined && {
+        trackingCommentId: parsed.trackingCommentId,
+      }),
+      ...(parsed.reviewTypes !== undefined && { reviewTypes: parsed.reviewTypes }),
+      ...(parsed.retriedFrom !== undefined && { retriedFrom: parsed.retriedFrom }),
     };
 
     logger.info(
@@ -264,6 +272,10 @@ export function registerRoutes(
         }
         if (error.type === 'invalid_status') {
           reply.status(409).send({ error: error.message });
+          return;
+        }
+        if (error.type === 'session_expired') {
+          reply.status(410).send({ error: error.message });
           return;
         }
         reply.status(500).send({ error: error.message });

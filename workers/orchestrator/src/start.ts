@@ -39,10 +39,19 @@ import { WORKER_TYPES } from './services/isolation/types.js';
 import { ensureRepository } from './services/repo-manager.js';
 import type { OrchestratorConfig } from './types/config.js';
 import type { CompletionControlConfig, IsolationConfig } from './services/task-dispatcher.js';
-import { LlmModels } from '@intexuraos/llm-contract';
-import { OrchestratorCompletionVerifier } from './services/completion-verifier.js';
+import {
+  OrchestratorCompletionVerifier,
+  getVerifierTaskId,
+} from './services/completion-verifier.js';
 import { TurnMetricsCollector } from './services/turn-metrics-collector.js';
-import { OrchestratorAgentComplianceValidator } from './services/agent-compliance-validator.js';
+import {
+  OrchestratorAgentComplianceValidator,
+  getValidatorTaskId,
+} from './services/agent-compliance-validator.js';
+import {
+  parseValidationModels,
+  buildValidationClients,
+} from './services/validation-model-clients.js';
 
 const DEFAULT_PORT = 8199;
 const DEFAULT_CAPACITY = 2;
@@ -306,6 +315,7 @@ function logWorkerAuthStartupStatus(
 async function validateWorkerApiKeys(
   workerAuthRegistry: WorkerAuthRegistry,
   minimaxKey: string,
+  mimoKey: string,
   dashscopeKey: string,
   openRouterKey: string,
   logger: pino.Logger
@@ -344,6 +354,9 @@ async function validateWorkerApiKeys(
   await Promise.all([
     minimaxKey !== ''
       ? validateThirdPartyApiKey('minimax', minimaxKey, suffix, logger)
+      : Promise.resolve(),
+    mimoKey !== ''
+      ? validateThirdPartyApiKey('mimo-pro', mimoKey, suffix, logger)
       : Promise.resolve(),
     dashscopeKey !== ''
       ? validateThirdPartyApiKey('qwen', dashscopeKey, suffix, logger)
@@ -437,6 +450,7 @@ async function bootstrap(): Promise<void> {
   const codeAgentUrl = getRequiredEnv('INTEXURAOS_CODE_AGENT_URL');
   const internalAuthToken = getRequiredEnv('INTEXURAOS_INTERNAL_AUTH_TOKEN');
   const orchestratorSecret = getRequiredEnv('INTEXURAOS_ORCHESTRATOR_SECRET');
+  const usageWebhookUrl = getRequiredEnv('INTEXURAOS_USAGE_WEBHOOK_URL');
   const githubAppId = getRequiredEnv('INTEXURAOS_GITHUB_APP_ID');
   const githubInstallationId = getRequiredEnv('INTEXURAOS_GITHUB_INSTALLATION_ID');
   const projectId = getRequiredEnv('INTEXURAOS_PROJECT_ID');
@@ -487,7 +501,6 @@ async function bootstrap(): Promise<void> {
   };
 
   const logFilePath = join(logsDir, 'orchestrator.log');
-  const llmAuditLogPath = join(logsDir, 'llm-audit.log');
   const logLevel = process.env['LOG_LEVEL'] ?? 'info';
 
   // Create logger — pretty stdout + JSON file for debugging
@@ -676,6 +689,7 @@ async function bootstrap(): Promise<void> {
     LINEAR_API_KEY: getRequiredEnv('INTEXURAOS_LINEAR_API_KEY'),
     SENTRY_AUTH_TOKEN: getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN'),
     MINIMAX_API_KEY: getRequiredEnv('INTEXURAOS_MINIMAX_APP_API_KEY'),
+    MIMO_API_KEY: getRequiredEnv('INTEXURAOS_MIMO_APP_API_KEY'),
     DASHSCOPE_API_KEY: getRequiredEnv('INTEXURAOS_DASHSCOPE_APP_API_KEY'),
     OPENROUTER_API_KEY: process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '',
   };
@@ -701,6 +715,7 @@ async function bootstrap(): Promise<void> {
   void validateWorkerApiKeys(
     workerAuthRegistry,
     secrets.MINIMAX_API_KEY,
+    secrets.MIMO_API_KEY,
     secrets.DASHSCOPE_API_KEY,
     secrets.OPENROUTER_API_KEY,
     logger
@@ -717,12 +732,49 @@ async function bootstrap(): Promise<void> {
     process.exit(1);
   }
 
-  // Hard gate: completion verification is always enabled and Gemini-only.
-  const geminiVerifierKey = getRequiredEnv('INTEXURAOS_GEMINI_APP_API_KEY');
+  // Parse ordered validation model list (shared by completion verifier + compliance validator).
+  const validationModelsRaw = getOptionalEnv(
+    'INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS',
+    'or:google/gemma-4-31b-it:free,or:google/gemma-4-31b-it,gemini-2.5-flash'
+  );
+  const validationModels = parseValidationModels(validationModelsRaw);
+  const geminiApiKey = getRequiredEnv('INTEXURAOS_GEMINI_APP_API_KEY');
+  const openRouterApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
+
+  const sharedValidationConfig = {
+    models: validationModels,
+    openRouterApiKey,
+    geminiApiKey,
+    usageWebhookUrl,
+    orchestratorSecret: config.orchestratorSecret,
+    internalAuthToken: config.internalAuthToken,
+    logger,
+  };
+
+  // Build separate client sets so each usage sink correlates events to the correct task context.
+  const validationClients = buildValidationClients({
+    ...sharedValidationConfig,
+    getCorrelationTaskId: getVerifierTaskId,
+  });
+  const validatorClients = buildValidationClients({
+    ...sharedValidationConfig,
+    getCorrelationTaskId: getValidatorTaskId,
+  });
+
+  const primaryEntry = validationClients[0];
+  if (primaryEntry === undefined) {
+    process.stderr.write(
+      '\n\u274C PRECONDITION FAILED: INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS produced no clients\n\n'
+    );
+    process.exit(1);
+  }
+
+  const primaryModelName = primaryEntry.modelName;
   const completionVerifier = new OrchestratorCompletionVerifier(logger, {
-    model: LlmModels.Gemini25Flash,
-    geminiApiKey: geminiVerifierKey,
-    auditLogPath: llmAuditLogPath,
+    primaryClient: primaryEntry.client,
+    fallbackClients: validationClients.slice(1).map((e) => e.client),
+    primaryModelName,
+    fallbackModelNames: validationClients.slice(1).map((e) => e.modelName),
   });
 
   const completionControl: CompletionControlConfig = {
@@ -737,6 +789,7 @@ async function bootstrap(): Promise<void> {
       preserveWorkerContainers,
       workerImage,
       verifier: completionVerifier.describe(),
+      validationModels: validationModels.map((m) => m.modelId),
     },
     'Completion verification configuration'
   );
@@ -752,30 +805,25 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
-  const openRouterApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
-  const complianceValidatorModel =
-    process.env['INTEXURAOS_COMPLIANCE_MODEL'] ?? 'xiaomi/mimo-v2-pro';
-
   logger.info(
     {
-      complianceValidatorModel,
+      validationModels: validationModels.map((m) => m.modelId),
       hasOpenRouterApiKey: openRouterApiKey.length > 0,
     },
     'Agent compliance validator configuration'
   );
 
-  const agentComplianceValidator =
-    openRouterApiKey !== ''
-      ? new OrchestratorAgentComplianceValidator(logger, {
-          openRouterApiKey,
-          model: complianceValidatorModel,
-          pricing: {
-            inputPricePerMillion: 1.0,
-            outputPricePerMillion: 3.0,
-          },
-          auditLogPath: llmAuditLogPath,
-        })
-      : undefined;
+  // validatorClients is guaranteed non-empty: process.exit(1) above aborts if validationClients
+  // (built from the same models list) is empty, so we can always create the validator.
+  const agentComplianceValidator = new OrchestratorAgentComplianceValidator(logger, {
+    clients: validatorClients.map((e) => e.client),
+    primaryModelName,
+    modelNames: validatorClients.map((e) => e.modelName),
+    codeAgentUrl: config.codeAgentUrl,
+    usageWebhookUrl,
+    orchestratorSecret: config.orchestratorSecret,
+    internalAuthToken: config.internalAuthToken,
+  });
 
   const dispatcher = new TaskDispatcher(
     config,

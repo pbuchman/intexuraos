@@ -342,6 +342,25 @@ export function createFakeTaskGroupSummaryRepository(): FakeTaskGroupSummaryRepo
       return ok(undefined);
     },
 
+    async setImportant(
+      userId: string,
+      groupKey: string,
+      important: boolean,
+    ): Promise<Result<void, GroupSummaryError>> {
+      const key = summaryKey(userId, groupKey);
+      const current = summaries.get(key);
+      if (current === undefined) {
+        return err({ code: 'NOT_FOUND', message: `No group summary found for ${userId}/${groupKey}` });
+      }
+      if (important) {
+        summaries.set(key, { ...current, isImportant: true, updatedAt: now() });
+      } else {
+        const { isImportant: _, ...rest } = current;
+        summaries.set(key, { ...rest, updatedAt: now() } as TaskGroupSummary);
+      }
+      return ok(undefined);
+    },
+
     getSummary(userId: string, groupKey: string): TaskGroupSummary | undefined {
       return summaries.get(summaryKey(userId, groupKey));
     },

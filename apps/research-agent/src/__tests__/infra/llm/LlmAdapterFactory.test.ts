@@ -3,17 +3,17 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { TEST_PRICING } from '@intexuraos/llm-pricing';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
 import { LlmModels, type ResearchModel } from '@intexuraos/llm-contract';
 
-const testPricing = TEST_PRICING;
 const mockLogger: Logger = {
   info: vi.fn(),
   error: vi.fn(),
   warn: vi.fn(),
   debug: vi.fn(),
 };
+const fakeUsageSink = new FakeUsageSink();
 
 vi.mock('../../../infra/llm/GeminiAdapter.js', () => ({
   GeminiAdapter: class MockGeminiAdapter {
@@ -26,8 +26,8 @@ vi.mock('../../../infra/llm/GeminiAdapter.js', () => ({
       apiKey: string,
       model: string,
       userId: string,
-      _pricing: unknown,
       _logger: Logger,
+      _usageSink: unknown,
       researchId?: string
     ) {
       this.apiKey = apiKey;
@@ -50,8 +50,8 @@ vi.mock('../../../infra/llm/ClaudeAdapter.js', () => ({
       apiKey: string,
       model: string,
       userId: string,
-      _pricing: unknown,
       _logger: Logger,
+      _usageSink: unknown,
       researchId?: string
     ) {
       this.apiKey = apiKey;
@@ -74,8 +74,8 @@ vi.mock('../../../infra/llm/GptAdapter.js', () => ({
       apiKey: string,
       model: string,
       userId: string,
-      _pricing: unknown,
       _logger: Logger,
+      _usageSink: unknown,
       researchId?: string
     ) {
       this.apiKey = apiKey;
@@ -98,8 +98,8 @@ vi.mock('../../../infra/llm/PerplexityAdapter.js', () => ({
       apiKey: string,
       model: string,
       userId: string,
-      _pricing: unknown,
       _logger: Logger,
+      _usageSink: unknown,
       researchId?: string
     ) {
       this.apiKey = apiKey;
@@ -122,8 +122,8 @@ vi.mock('../../../infra/llm/OpenRouterAdapter.js', () => ({
       apiKey: string,
       model: string,
       userId: string,
-      _pricing: unknown,
       _logger: Logger,
+      _usageSink: unknown,
       researchId?: string
     ) {
       this.apiKey = apiKey;
@@ -145,8 +145,8 @@ describe('LlmAdapterFactory', () => {
         LlmModels.Gemini25Pro,
         'google-key',
         'test-user-id',
-        testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -157,16 +157,16 @@ describe('LlmAdapterFactory', () => {
 
     it('creates ClaudeAdapter for claude model', () => {
       const provider = createResearchProvider(
-        LlmModels.ClaudeOpus45,
+        LlmModels.ClaudeOpus46,
         'anthropic-key',
         'test-user-id',
-        testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('anthropic-key');
-      expect((provider as unknown as { model: string }).model).toBe(LlmModels.ClaudeOpus45);
+      expect((provider as unknown as { model: string }).model).toBe(LlmModels.ClaudeOpus46);
       expect((provider as unknown as { researchId?: string }).researchId).toBe('research-123');
     });
 
@@ -175,8 +175,8 @@ describe('LlmAdapterFactory', () => {
         LlmModels.O4MiniDeepResearch,
         'openai-key',
         'test-user-id',
-        testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -190,8 +190,8 @@ describe('LlmAdapterFactory', () => {
         LlmModels.SonarPro,
         'perplexity-key',
         'test-user-id',
-        testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -206,8 +206,8 @@ describe('LlmAdapterFactory', () => {
         openRouterModel as ResearchModel,
         'openrouter-key',
         'test-user-id',
-        testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -223,8 +223,8 @@ describe('LlmAdapterFactory', () => {
         LlmModels.Gemini25Pro,
         'google-key',
         'test-user-id',
-        testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -235,11 +235,11 @@ describe('LlmAdapterFactory', () => {
     it('throws error for claude model (synthesis not supported)', () => {
       expect(() =>
         createSynthesizer(
-          LlmModels.ClaudeOpus45,
+          LlmModels.ClaudeOpus46,
           'anthropic-key',
           'test-user-id',
-          testPricing,
           mockLogger,
+          fakeUsageSink,
           'research-123'
         )
       ).toThrow('Anthropic does not support synthesis');
@@ -250,8 +250,8 @@ describe('LlmAdapterFactory', () => {
         LlmModels.O4MiniDeepResearch,
         'openai-key',
         'test-user-id',
-        testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -267,8 +267,8 @@ describe('LlmAdapterFactory', () => {
           LlmModels.SonarPro,
           'perplexity-key',
           'test-user-id',
-          testPricing,
           mockLogger,
+          fakeUsageSink,
           'research-123'
         )
       ).toThrow('Perplexity does not support synthesis');
@@ -280,8 +280,8 @@ describe('LlmAdapterFactory', () => {
         openRouterModel as ResearchModel,
         'openrouter-key',
         'test-user-id',
-        testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -296,8 +296,8 @@ describe('LlmAdapterFactory', () => {
         LlmModels.Gemini20Flash,
         'google-key',
         'test-user-id',
-        testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 

@@ -14,22 +14,11 @@ import {
 import { ok } from '@intexuraos/common-core';
 
 const {
-  mockCreatePricingContext,
-  mockFetchAllPricing,
   mockCreateUserServiceClient,
   mockCreateLlmClient,
   mockGuestRateLimiter,
 } = vi.hoisted(() => {
-  const mockPricingContext = {
-    getPricing: vi.fn().mockReturnValue({
-      inputPricePerMillion: 0,
-      outputPricePerMillion: 0,
-    }),
-  };
-
   return {
-    mockCreatePricingContext: vi.fn().mockReturnValue(mockPricingContext),
-    mockFetchAllPricing: vi.fn().mockResolvedValue({ ok: true, value: { models: [] } }),
     mockCreateUserServiceClient: vi.fn().mockReturnValue({
       getLlmClient: vi.fn().mockResolvedValue({ ok: true, value: { generate: vi.fn() } }),
       getApiKeys: vi.fn().mockResolvedValue({ ok: true, value: {} }),
@@ -44,8 +33,9 @@ const {
 });
 
 vi.mock('@intexuraos/llm-pricing', () => ({
-  fetchAllPricing: mockFetchAllPricing,
-  createPricingContext: mockCreatePricingContext,
+  HttpInternalAuthUsageSink: vi.fn().mockImplementation(function FakeSink() {
+    return { log: vi.fn().mockResolvedValue(undefined) };
+  }),
 }));
 
 vi.mock('@intexuraos/internal-clients', () => ({
@@ -82,11 +72,9 @@ describe('chat-agent services', () => {
     process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test-project';
     process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://localhost:8080';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-token';
-    process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] = 'http://localhost:8081';
+    process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://localhost:8081';
     process.env['INTEXURAOS_GEMINI_APP_API_KEY'] = 'test-gemini-key';
     process.env['INTEXURAOS_DASHSCOPE_APP_API_KEY'] = 'test-dashscope-key';
-    mockCreatePricingContext.mockClear();
-    mockFetchAllPricing.mockClear();
     mockCreateUserServiceClient.mockClear();
     mockCreateLlmClient.mockClear();
   });
@@ -98,7 +86,7 @@ describe('chat-agent services', () => {
     delete process.env['INTEXURAOS_GCP_PROJECT_ID'];
     delete process.env['INTEXURAOS_USER_SERVICE_URL'];
     delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
-    delete process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'];
+    delete process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
     delete process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
     delete process.env['INTEXURAOS_DASHSCOPE_APP_API_KEY'];
   });
@@ -198,8 +186,8 @@ describe('chat-agent services', () => {
   });
 
   describe('initializeServices', () => {
-    it('uses the Gemini platform key for guest access and user-service fallbacks', async () => {
-      await initializeServices();
+    it('uses the Gemini platform key for guest access and user-service fallbacks', () => {
+      initializeServices();
 
       expect(mockCreateLlmClient).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -214,10 +202,10 @@ describe('chat-agent services', () => {
       );
     });
 
-    it('fails fast when the Gemini guest key is missing', async () => {
+    it('fails fast when the Gemini guest key is missing', () => {
       delete process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
 
-      await expect(initializeServices()).rejects.toThrow(
+      expect(() => initializeServices()).toThrow(
         'INTEXURAOS_GEMINI_APP_API_KEY environment variable is required for guest access'
       );
     });

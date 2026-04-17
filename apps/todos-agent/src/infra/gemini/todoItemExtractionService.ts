@@ -76,7 +76,7 @@ export function createTodoItemExtractionService(
         'Sending LLM generation request'
       );
 
-      const result = await llmClient.generate(prompt);
+      const result = await llmClient.generate(prompt, { promptType: 'todo-item-extraction' });
 
       if (!result.ok) {
         const llmError = result.error;
@@ -100,13 +100,13 @@ export function createTodoItemExtractionService(
       logger.info(
         {
           userId,
-          responseLength: result.value.content.length,
+          responseLength: result.value.content.length, // @allow-result-access -- ok checked at line 81
         },
         'LLM generation successful'
       );
 
       // Strip markdown code blocks if present (LLMs often wrap JSON in ```json ... ```)
-      let cleaned = result.value.content.trim();
+      let cleaned = result.value.content.trim(); // @allow-result-access -- ok checked at line 81
       const codeBlockRegex = /^```(?:json)?\s*\n([\s\S]*?)\n```$/;
       const codeBlockMatch = codeBlockRegex.exec(cleaned);
       const wasWrappedInMarkdown = codeBlockMatch !== null;
@@ -173,7 +173,7 @@ export function createTodoItemExtractionService(
             parseError: getErrorMessage(error),
             rawResponsePreview: cleaned.slice(0, 1000),
             wasWrappedInMarkdown,
-            originalLength: result.value.content.length,
+            originalLength: result.value.content.length, // @allow-result-access -- ok checked at line 81
             cleanedLength: cleaned.length,
           },
         });

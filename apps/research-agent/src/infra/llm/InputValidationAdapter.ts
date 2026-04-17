@@ -4,7 +4,7 @@
  */
 
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
   buildImprovementRepairPrompt,
   buildValidationRepairPrompt,
@@ -50,10 +50,10 @@ export class InputValidationAdapter implements InputValidationProvider {
     apiKey: string,
     model: string,
     userId: string,
-    pricing: ModelPricing,
-    logger: Logger
+    logger: Logger,
+    usageSink: UsageSink
   ) {
-    this.client = createGeminiClient({ apiKey, model, userId, pricing, logger });
+    this.client = createGeminiClient({ apiKey, model, userId, logger, usageSink });
     this.model = model;
     this.logger = logger;
   }
@@ -61,7 +61,7 @@ export class InputValidationAdapter implements InputValidationProvider {
   async validateInput(prompt: string): Promise<Result<ValidationResult, LlmError>> {
     this.logger.info({ model: this.model, promptLength: prompt.length }, 'Input validation started');
     const builtPrompt = inputQualityPrompt.build({ prompt });
-    const result = await this.client.generate(builtPrompt);
+    const result = await this.client.generate(builtPrompt, { promptType: 'research-input-validation' });
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -99,7 +99,7 @@ export class InputValidationAdapter implements InputValidationProvider {
   async improveInput(prompt: string): Promise<Result<ImprovementResult, LlmError>> {
     this.logger.info({ model: this.model, promptLength: prompt.length }, 'Input improvement started');
     const builtPrompt = inputImprovementPrompt.build({ prompt });
-    const result = await this.client.generate(builtPrompt);
+    const result = await this.client.generate(builtPrompt, { promptType: 'research-input-improvement' });
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -117,7 +117,7 @@ export class InputValidationAdapter implements InputValidationProvider {
       return await this.attemptImprovementRepair(prompt, result.value.content, validationError, result.value.usage);
     }
 
-    const { usage } = result.value;
+    const { usage } = result.value; // @allow-result-access -- result.ok narrowed at line 104 earlier in function
     this.logger.info({ model: this.model, usage }, 'Input improvement completed');
     return {
       ok: true,
@@ -150,7 +150,7 @@ export class InputValidationAdapter implements InputValidationProvider {
     );
 
     const repairPrompt = buildValidationRepairPrompt(originalPrompt, invalidResponse, errorMessage);
-    const result = await this.client.generate(repairPrompt);
+    const result = await this.client.generate(repairPrompt, { promptType: 'research-input-validation-repair' });
 
     if (!result.ok) {
       return {
@@ -185,7 +185,7 @@ export class InputValidationAdapter implements InputValidationProvider {
     }
 
     this.logger.info({ model: this.model, repaired: true }, 'Validation repair succeeded');
-    const { usage } = result.value;
+    const { usage } = result.value; // @allow-result-access -- result.ok narrowed at line 155 earlier in function
     return {
       ok: true,
       value: {
@@ -218,7 +218,7 @@ export class InputValidationAdapter implements InputValidationProvider {
     );
 
     const repairPrompt = buildImprovementRepairPrompt(originalPrompt, invalidResponse, errorMessage);
-    const result = await this.client.generate(repairPrompt);
+    const result = await this.client.generate(repairPrompt, { promptType: 'research-input-improvement-repair' });
 
     if (!result.ok) {
       return {
@@ -239,7 +239,7 @@ export class InputValidationAdapter implements InputValidationProvider {
         this.logger,
         createLlmParseError({
           errorMessage: validationError,
-          llmResponse: result.value.content,
+          llmResponse: result.value.content, // @allow-result-access -- result.ok narrowed at line 223 earlier in function
           expectedSchema: '<plain text, single sentence, no JSON, no markdown, no explanations>',
           operation: 'improveInput-repair',
         })
@@ -255,7 +255,7 @@ export class InputValidationAdapter implements InputValidationProvider {
     }
 
     this.logger.info({ model: this.model, repaired: true }, 'Improvement repair succeeded');
-    const { usage } = result.value;
+    const { usage } = result.value; // @allow-result-access -- result.ok narrowed at line 223 earlier in function
     return {
       ok: true,
       value: {

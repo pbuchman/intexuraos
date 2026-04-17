@@ -63,15 +63,14 @@ echo ""
 echo "[2/4] TypeCheck (tests)..."
 # Create temporary tsconfig in project root for workspace-specific test checking
 TEMP_TSCONFIG="$PROJECT_ROOT/.tsconfig.tests-workspace.json"
+trap 'rm -f "$TEMP_TSCONFIG"' EXIT
 
-# Check if tests are in nested __tests__ directories (packages pattern) or src/__tests__ (apps/workers pattern)
-if fd -q "\.test\.ts$" "$SERVICE_DIR/src/"; then
-  # Use fd to find all test directories for packages with nested tests
-  TEST_INCLUDE=$(fd -t d "__tests__" "$SERVICE_DIR/src/" | while read -r dir; do echo "\"$dir/**/*.ts\""; done | tr '\n' ',' | sed 's/,$//')
-  if [ -z "$TEST_INCLUDE" ]; then
-    TEST_INCLUDE="\"$SERVICE_DIR/src/__tests__/**/*.ts\""
-  fi
-else
+# Build include globs from any __tests__ directories without depending on external tools like fd
+TEST_INCLUDE=$(find "$SERVICE_DIR/src" -type d -name "__tests__" -print | sort | while read -r dir; do
+  printf "\"%s/**/*.ts\"," "$dir"
+done)
+TEST_INCLUDE="${TEST_INCLUDE%,}"
+if [ -z "$TEST_INCLUDE" ]; then
   TEST_INCLUDE="\"$SERVICE_DIR/src/__tests__/**/*.ts\""
 fi
 
@@ -91,7 +90,6 @@ cat > "$TEMP_TSCONFIG" << EOF
 }
 EOF
 npx tsc --project "$TEMP_TSCONFIG"
-rm -f "$TEMP_TSCONFIG"
 
 echo ""
 echo "[3/4] Lint..."

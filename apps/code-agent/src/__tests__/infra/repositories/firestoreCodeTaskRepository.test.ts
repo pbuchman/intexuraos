@@ -2951,6 +2951,65 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value).not.toBeNull();
       expect(result.value?.id).toBe('task-nonreview-older');
     });
+
+    it('should skip newer planning task in favor of older execution task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create older pull_request task (execution-eligible)
+      await repo.create(createTaskInput({
+        id: 'task-pr-older',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'pull_request',
+        prompt: 'PR implementation task',
+        sanitizedPrompt: 'pr implementation task',
+      }));
+
+      // Create newer planning task (should be skipped, not mask the older task)
+      await repo.create(createTaskInput({
+        id: 'task-planning-newer',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'planning',
+        prompt: 'Planning task',
+        sanitizedPrompt: 'planning task',
+      }));
+
+      const result = await repo.findLatestExecutionTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // Should return the older pull_request task, not be masked by the newer planning task
+      expect(result.value).not.toBeNull();
+      expect(result.value?.id).toBe('task-pr-older');
+    });
+
+    it('should skip planning tasks and return null when only planning tasks exist', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({
+        id: 'task-planning-1',
+        repository: 'test/repo',
+        prNumber: 456,
+        agentType: 'planning',
+        prompt: 'Plan something',
+        sanitizedPrompt: 'plan something',
+      }));
+
+      const result = await repo.findLatestExecutionTaskByPR('test/repo', 456);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toBeNull();
+    });
   });
 
   describe('findOriginTaskByPR', () => {
@@ -3484,7 +3543,7 @@ describe('firestoreCodeTaskRepository', () => {
   });
 
   describe('findLatestExecutionTaskByPR 50-doc exhaustion warning', () => {
-    it('logs warning when 50 docs are scanned without finding a non-review task', async () => {
+    it('logs warning when 50 docs are scanned without finding an execution-eligible task', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -3510,7 +3569,7 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value).toBeNull();
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ repository: 'test/repo', prNumber: 789, docsScanned: 50 }),
-        'findLatestExecutionTaskByPR exhausted 50-doc window without finding a non-review task',
+        'findLatestExecutionTaskByPR exhausted 50-doc window without finding an execution-eligible task',
       );
     });
   });

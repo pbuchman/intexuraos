@@ -84,14 +84,14 @@ function buildExecutionMemorySection(
     return '';
   }
 
+  const memoryCount = executionMemoryContext.matchedMemories.length;
+
   const renderedMemories = executionMemoryContext.matchedMemories
     .map((memory, index) => {
       const score = Number.isFinite(memory.score) ? memory.score.toFixed(2) : String(memory.score);
       return [
-        `#### Memory ${String(index + 1)}: ${memory.memoryId}`,
-        `- Title: ${memory.title}`,
-        `- Type: ${memory.memoryType}`,
-        `- Score: ${score}`,
+        `#### [${String(index + 1)}] ${memory.memoryId} — "${memory.title}"`,
+        `- Type: ${memory.memoryType} | Score: ${score}`,
         `- Applies when: ${memory.appliesWhen}`,
         `- Action: ${memory.action}`,
         `- Avoid: ${memory.avoid}`,
@@ -102,10 +102,9 @@ function buildExecutionMemorySection(
 
   return `
 
-### Execution Memory
-Retrieved application: ${executionMemoryContext.applicationId}
-Retrieval version: ${executionMemoryContext.retrievalVersion}
-Query summary: ${executionMemoryContext.querySummary}
+### Execution Memory Context
+
+You are receiving execution memories — lessons learned from previous code tasks. These memories were retrieved because they are semantically relevant to YOUR current task. The system uses your feedback on these memories to improve future task quality. Your acknowledgment and usage reporting are machine-validated and REQUIRED.
 
 - Memories are advisory, not authoritative.
 - Trust the current repository state and current Linear issue/comments over memory.
@@ -114,26 +113,38 @@ Query summary: ${executionMemoryContext.querySummary}
 
 ${renderedMemories}
 
-#### Memory Acknowledgment (MANDATORY)
-Immediately after reading the Linear issue, you MUST print a confirmation of all execution memories you received. List each memory as a bullet point with its ID and title:
+#### MANDATORY: Acknowledge Execution Memories NOW
+
+You MUST print the following block IMMEDIATELY after reading the Linear issue, BEFORE any other work. This is machine-validated — the completion verifier will REJECT your output if this is missing.
 
 📋 **Execution Memories Received:**
-- [mem-id-1] Title of memory 1
-- [mem-id-2] Title of memory 2
+I have received and reviewed ${String(memoryCount)} execution memories for this task:
+- [{index}] {memoryId} — "{title}" — APPLICABLE / NOT APPLICABLE because {one-sentence reason}
 
-This step is non-negotiable. You must explicitly acknowledge every memory before proceeding with any implementation or analysis work. Carefully consider each memory and determine whether it applies to the current task.
+Example:
+📋 **Execution Memories Received:**
+I have received and reviewed 3 execution memories for this task:
+- [1] mem_abc123 — "Always add index tests for Firestore migrations" — APPLICABLE because this task involves a Firestore migration
+- [2] mem_def456 — "Shift cost calculation client-side" — NOT APPLICABLE because this task is unrelated to pricing
+- [3] mem_ghi789 — "Safe execution guard for scheduled tasks" — APPLICABLE because the implementation involves a scheduled job
 
-#### Memory Usage Reporting
-After completing your work, include in your final summary which memories you applied and which you did not:
-- **execution_memory_ids_used**: comma-separated memory IDs you applied (e.g. "mem-abc,mem-def")
-- **execution_memory_ids_rejected**: comma-separated memory IDs you found irrelevant or inapplicable
-- **execution_memory_usage_summary**: one sentence describing how memories influenced your work, or "No memories applied" if none were relevant`;
+You must account for EVERY memory listed above. Skipping even one will cause verification failure.
+
+#### MANDATORY: Report Memory Usage in Final Output
+
+Your final completion block MUST include these three fields. They are machine-validated — omitting them or leaving them empty will cause verification failure and task re-launch.
+
+- **memory_ids_used**: Comma-separated IDs of memories you APPLIED (e.g., "mem_abc123,mem_ghi789"). Use the full memory ID exactly as shown above.
+- **memory_ids_rejected**: Comma-separated IDs of memories you found NOT APPLICABLE (e.g., "mem_def456"). Every injected memory must appear in either used or rejected.
+- **memory_usage_summary**: One sentence describing how the applicable memories influenced your work. If no memories applied, write "No memories were applicable to this task — all ${String(memoryCount)} were rejected as irrelevant."
+
+The union of memory_ids_used and memory_ids_rejected MUST equal the full set of injected memories. Unaccounted memories will fail validation.`;
 }
 
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '6.0.0',
+  version: '7.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
@@ -297,6 +308,9 @@ PLANNING_AGENT_FINAL:
 - Plan PR: <full GitHub PR URL — MANDATORY for ALL planned outcomes, including SIMPLE tasks>
 - Parallel breakdown proof: <required when Complex task=1; must show service boundaries and contracts between subissues — empty otherwise>
 - Clarification message: <REQUIRED for unclear outcomes; MUST be empty for successfully planned outcomes>
+- memory_ids_used: <comma-separated injected IDs you applied, or "none">
+- memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">
+- memory_usage_summary: <one-sentence description of how memories influenced the plan, or "none" if no memories were injected>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was the task, what was decided (simple/plan-doc/complex), what artifacts were produced (plan doc, subtasks, PR), why unclear (if applicable). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
@@ -309,7 +323,7 @@ Note: For complex planned outcomes, you MUST include explicit proof of the paral
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '9.0.0',
+  version: '9.1.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -466,7 +480,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const remediationPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-remediation',
   description: 'Remediation agent system prompt for addressing review findings on an existing PR',
-  version: '3.2.0',
+  version: '4.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const continuationPrNumber = params.continuationPrNumber;
@@ -554,6 +568,9 @@ REMEDIATION_AGENT_FINAL:
 - Outcome: <implemented|already_completed>
 - PR: <full GitHub PR URL>
 - requires_re_review: <0|1>
+- memory_ids_used: <comma-separated injected IDs you applied, or "none">
+- memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">
+- memory_usage_summary: <one-sentence description of how memories influenced remediation, or "none" if no memories were injected>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what review findings were addressed, what was skipped and why, what was pushed. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
@@ -564,7 +581,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '4.2.0',
+  version: '5.0.0',
   build(params: SystemPromptParams): string {
     const {
       taskId,
@@ -688,6 +705,9 @@ PULL_REQUEST_AGENT_FINAL:
 - Tracking comment ID: <numeric ID from initial POST response>
 - Tracking comment: updated
 - Total PR comments posted: 1
+- memory_ids_used: <comma-separated injected IDs you applied, or "none">
+- memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">
+- memory_usage_summary: <one-sentence description of how memories influenced the PR work, or "none" if no memories were injected>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what PR feedback was addressed, what changes were made, what is the outcome. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
@@ -782,6 +802,9 @@ PULL_REQUEST_AGENT_FINAL:
 - Tracking comment ID: <numeric ID from initial POST response>
 - Tracking comment: updated
 - Total PR comments posted: 1
+- memory_ids_used: <comma-separated injected IDs you applied, or "none">
+- memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">
+- memory_usage_summary: <one-sentence description of how memories influenced the PR work, or "none" if no memories were injected>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what PR feedback was addressed, what changes were made, what is the outcome. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
@@ -855,7 +878,7 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '9.1.0',
+  version: '10.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
@@ -1146,7 +1169,10 @@ REVIEW_AGENT_FINAL:
 - review_types: <comma-separated list of review types performed>
 - requirements_tracker_updated: <yes|no — whether the requirements tracker comment was created/updated>
 - gh_actions_status: <all passed|N failed|pending|not yet triggered — GitHub Actions check result>
-- needs_remediation: <0|1 — 1 if any finding requires code changes that bring value to the codebase, 0 if clean or all findings are informational/cosmetic only>
+- needs_remediation: <0|1 — 1 if any finding requires code changes that bring value to the codebase, 0 if clean or all findings are informational/cosmetic only. Operational/manual verification steps (deploying migrations, running commands in environments, manual testing in dev/prod, applying infrastructure changes) are post-merge activities — they do NOT count as code remediation and must NOT set this to 1 on their own>
+- memory_ids_used: <comma-separated injected IDs you applied, or "none">
+- memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">
+- memory_usage_summary: <one-sentence description of how memories influenced the review, or "none" if no memories were injected>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was reviewed, key findings, overall quality assessment, remediation needed. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
@@ -1158,7 +1184,7 @@ After this block, stop. Do not append any other checklist or schema payload.`
 export const askAgentPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-ask-agent',
   description: 'Ask Agent system prompt for interactive code assistance',
-  version: '1.1.0',
+  version: '1.2.0',
   build(params: SystemPromptParams): string {
     // Intentionally omits linearIssueId/linearIssueTitle — ask_agent is an
     // interactive assistant session that doesn't operate on a specific issue.
@@ -1195,8 +1221,9 @@ watching your session. You MUST complete your work autonomously.
 - Deliver complete, actionable answers in every response
 
 ### Session Continuity
-If this session was started with --continue, you have context from previous turns.
-Review any prior conversation context before responding.
+If this is a resumed session, prior conversation turns from earlier in the
+conversation will be present in your context. Read them before responding so
+your answers build on what was already discussed.
 
 ### Worker Type
 Worker type: \`${workerType ?? WORKER_TYPE_FALLBACK}\``;

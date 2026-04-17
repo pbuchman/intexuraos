@@ -110,6 +110,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async listPendingExecutionMemoryPostRun(): ReturnType<CodeTaskRepository['listPendingExecutionMemoryPostRun']> {
       return ok([]);
     },
+    async listErroredExecutionMemoryPostRun(): ReturnType<CodeTaskRepository['listErroredExecutionMemoryPostRun']> {
+      return ok([]);
+    },
     async countQueued(): ReturnType<CodeTaskRepository['countQueued']> {
       return ok(0);
     },
@@ -186,6 +189,12 @@ function createMockWhatsAppNotifier(): WhatsAppNotifier {
     async notifyCIFailure(): ReturnType<WhatsAppNotifier['notifyCIFailure']> {
       return ok(undefined);
     },
+    async notifyTaskAutoRetried(): ReturnType<WhatsAppNotifier['notifyTaskAutoRetried']> {
+      return ok(undefined);
+    },
+    async notifyTaskAutoRetryExhausted(): ReturnType<WhatsAppNotifier['notifyTaskAutoRetryExhausted']> {
+      return ok(undefined);
+    },
   };
 }
 
@@ -224,6 +233,7 @@ function createMockGitHubPRClient(): GitHubPRClient {
         mergeable: true,
         mergeableState: 'clean',
         headSha: 'sha123',
+        createdAt: '2026-01-01T00:00:00Z',
       });
     },
     async getIssueComment(): ReturnType<GitHubPRClient['getIssueComment']> {

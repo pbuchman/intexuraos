@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LlmProviders, LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
+import { LlmProviders, LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -9,10 +10,18 @@ const mockLogger: Logger = {
   debug: vi.fn(),
 };
 
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
+
 const mockGeminiGenerate = vi.fn();
 
 class MockGeminiClient {
   generate = mockGeminiGenerate;
+}
+
+const mockOrGenerate = vi.fn();
+
+class MockOpenRouterGenerateClient {
+  generate = mockOrGenerate;
 }
 
 vi.mock('@intexuraos/infra-gemini', () => ({
@@ -20,15 +29,12 @@ vi.mock('@intexuraos/infra-gemini', () => ({
   createGeminiToolCallingClient: vi.fn(() => ({ run: vi.fn() })),
 }));
 
+vi.mock('../openRouterGenerateClient.js', () => ({
+  createOpenRouterGenerateClient: vi.fn(() => new MockOpenRouterGenerateClient()),
+}));
+
 const { createLlmClient, createToolCallingClient, isSupportedProvider } =
   await import('../llmClientFactory.js');
-
-const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing => ({
-  inputPricePerMillion: 0.6,
-  outputPricePerMillion: 2.2,
-  webSearchCostPerCall: 0.005,
-  ...overrides,
-});
 
 describe('llmClientFactory', () => {
   beforeEach(() => {
@@ -41,8 +47,8 @@ describe('llmClientFactory', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini25Flash,
         userId: 'user-123',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       expect(client.generate).toBeDefined();
@@ -54,8 +60,8 @@ describe('llmClientFactory', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini25Pro,
         userId: 'user-123',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       expect(client.generate).toBeDefined();
@@ -67,8 +73,8 @@ describe('llmClientFactory', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini25Flash,
         userId: 'user-123',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       expect(client).toBeInstanceOf(MockGeminiClient);
     });
@@ -80,8 +86,8 @@ describe('llmClientFactory', () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           model: 'gemini-2.5-flash-exp-unsupported' as any,
           userId: 'user-123',
-          pricing: createTestPricing(),
           logger: mockLogger,
+          usageSink: mockUsageSink,
         })
       ).toThrow('Unsupported LLM model');
     });
@@ -95,10 +101,36 @@ describe('llmClientFactory', () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           model: 'claude-opus' as any,
           userId: 'user-123',
-          pricing: createTestPricing(),
           logger: mockLogger,
+          usageSink: mockUsageSink,
         })
       ).toThrow('Unsupported LLM model');
+    });
+
+    it('throws for valid non-Google model passed to createLlmClient', () => {
+      expect(() =>
+        createLlmClient({
+          apiKey: 'test-key',
+          model: LlmModels.ClaudeHaiku35,
+          userId: 'user-123',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        })
+      ).toThrow('Unsupported LLM provider: anthropic');
+    });
+
+    it('creates OpenRouter client for or: prefixed models', () => {
+      const client = createLlmClient({
+        apiKey: 'test-key',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        model: 'or:google/gemma-4-31b-it:free' as any,
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      expect(client.generate).toBeDefined();
+      expect(client).toBeInstanceOf(MockOpenRouterGenerateClient);
     });
   });
 
@@ -108,8 +140,8 @@ describe('llmClientFactory', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini25Flash,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       expect(client.run).toBeDefined();
@@ -122,8 +154,8 @@ describe('llmClientFactory', () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           model: 'nonexistent-model' as any,
           userId: 'test-user',
-          pricing: createTestPricing(),
           logger: mockLogger,
+          usageSink: mockUsageSink,
         })
       ).toThrow('Unsupported LLM model');
     });
@@ -133,12 +165,97 @@ describe('llmClientFactory', () => {
         createToolCallingClient({
           apiKey: 'test-key',
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          model: LlmModels.ClaudeOpus45 as any,
+          model: LlmModels.ClaudeOpus46 as any,
           userId: 'test-user',
-          pricing: createTestPricing(),
           logger: mockLogger,
+          usageSink: mockUsageSink,
         })
       ).toThrow('Tool calling not supported for provider: anthropic');
+    });
+  });
+
+  describe('LlmClientConfig.ownerType propagation', () => {
+    it('forwards ownerType to createOpenRouterGenerateClient when passed', async () => {
+      const { createOpenRouterGenerateClient } = await import('../openRouterGenerateClient.js');
+
+      createLlmClient({
+        apiKey: 'test-key',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        model: 'or:google/gemma-4-31b-it:free' as any,
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+        ownerType: 'user',
+      });
+
+      expect(vi.mocked(createOpenRouterGenerateClient)).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerType: 'user' })
+      );
+    });
+
+    it('forwards ownerType to createGeminiClient when passed', async () => {
+      const { createGeminiClient } = await import('@intexuraos/infra-gemini');
+
+      createLlmClient({
+        apiKey: 'test-key',
+        model: LlmModels.Gemini25Flash,
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+        ownerType: 'user',
+      });
+
+      expect(vi.mocked(createGeminiClient)).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerType: 'user' })
+      );
+    });
+
+    it('omits ownerType from config when not provided', async () => {
+      const { createGeminiClient } = await import('@intexuraos/infra-gemini');
+
+      createLlmClient({
+        apiKey: 'test-key',
+        model: LlmModels.Gemini25Flash,
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const callArg = vi.mocked(createGeminiClient).mock.calls[0]?.[0] as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(callArg?.['ownerType']).toBeUndefined();
+    });
+  });
+
+  describe('LlmGenerateClient.generate with options', () => {
+    it('should accept promptType in generate options', async () => {
+      const client = createLlmClient({
+        apiKey: 'test-key',
+        model: LlmModels.Gemini25Flash,
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      // Mock the generate to return success
+      mockGeminiGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: 'test response',
+          usage: {
+            inputTokens: 10,
+            outputTokens: 5,
+            totalTokens: 15,
+            costUsd: 0.001,
+          },
+        },
+      });
+
+      // Should accept options with promptType
+      const result = await client.generate('test prompt', { promptType: 'linear-issue-title' });
+      expect(result.ok).toBe(true);
     });
   });
 
@@ -147,8 +264,12 @@ describe('llmClientFactory', () => {
       expect(isSupportedProvider(LlmProviders.Google)).toBe(true);
     });
 
-    it('returns false for Zai provider (no longer supported)', () => {
-      expect(isSupportedProvider('zai')).toBe(false);
+    it('returns true for OpenRouter provider', () => {
+      expect(isSupportedProvider(LlmProviders.OpenRouter)).toBe(true);
+    });
+
+    it('returns false for an unknown provider', () => {
+      expect(isSupportedProvider('unknown-provider')).toBe(false);
     });
 
     it('returns false for Anthropic provider', () => {
@@ -171,8 +292,8 @@ describe('llmClientFactory', () => {
     it('type narrows correctly for supported providers', () => {
       const provider = LlmProviders.Google as string;
       if (isSupportedProvider(provider)) {
-        // TypeScript should know provider is 'google' here
-        expect(provider === LlmProviders.Google).toBe(true);
+        // TypeScript should know provider is 'google' or 'openrouter' here
+        expect(provider === LlmProviders.Google || provider === LlmProviders.OpenRouter).toBe(true);
       }
     });
   });

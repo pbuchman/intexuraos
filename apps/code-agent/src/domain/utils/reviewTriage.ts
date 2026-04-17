@@ -12,6 +12,7 @@ const REVIEW_WORKER_TYPE_ALIASES: Record<string, WorkerType> = {
   opus: 'opus',
   sonnet: 'sonnet',
   minimax: 'minimax',
+  'mimo-pro': 'mimo-pro',
   glm: 'glm',
   qwen: 'qwen',
   kimi: 'kimi',

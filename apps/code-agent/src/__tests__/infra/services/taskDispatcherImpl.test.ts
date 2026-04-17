@@ -236,6 +236,46 @@ describe('taskDispatcherImpl', () => {
         expect(result.error.message).toContain('Bad Request');
       }
     });
+
+    it('returns session_expired for HTTP 410 Gone', async () => {
+      const service = createTaskDispatcherService(deps);
+
+      nock(WORKER_URL)
+        .post('/tasks/task-410/message')
+        .reply(410, { error: 'Session has expired — the worker container was cleaned up.' });
+
+      const result = await service.sendMessageToWorker(
+        'task-410',
+        'test message',
+        workerCredentials
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('session_expired');
+        expect(result.error.message).toContain('Session has expired');
+      }
+    });
+
+    it('returns session_expired with default message when HTTP 410 has empty body', async () => {
+      const service = createTaskDispatcherService(deps);
+
+      nock(WORKER_URL)
+        .post('/tasks/task-410-empty/message')
+        .reply(410, '');
+
+      const result = await service.sendMessageToWorker(
+        'task-410-empty',
+        'test message',
+        workerCredentials
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('session_expired');
+        expect(result.error.message).toBe('Session has expired — the worker container was cleaned up.');
+      }
+    });
   });
 
   describe('dispatch includes reviewTypes when provided', () => {
@@ -288,6 +328,163 @@ describe('taskDispatcherImpl', () => {
       expect(result.ok).toBe(true);
       expect(capturedBody).toBeDefined();
       expect(capturedBody?.['reviewTypes']).toEqual(['code_quality', 'security']);
+    });
+  });
+
+  describe('failedWorkerLocation filtering', () => {
+    const WORKER_B_URL = 'https://worker-b.example.com';
+
+    const baseDispatchRequest = {
+      prompt: 'Do something',
+      systemPromptHash: 'hash-abc',
+      repository: 'test/repo',
+      baseBranch: 'main',
+      workerType: 'opus' as const,
+      webhookUrl: 'https://example.com/webhook',
+      webhookSecret: 'secret',
+      linearIssueLabels: [],
+      hasChildren: false,
+    };
+
+    it('excludes the failed worker when alternatives exist', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'worker-a': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+        },
+        'worker-b': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+        },
+      });
+
+      const service = createTaskDispatcherService(deps);
+
+      // Only intercept worker-b — if dispatcher hits worker-a the request will be unmatched
+      nock(WORKER_B_URL)
+        .post('/tasks')
+        .reply(200, { status: 'accepted' });
+
+      const result = await service.dispatch({
+        ...baseDispatchRequest,
+        taskId: 'task-exclude-failed',
+        failedWorkerLocation: 'worker-a',
+        workerCredentials: {
+          workers: [
+            {
+              name: 'worker-a',
+              url: WORKER_URL,
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+            },
+            {
+              name: 'worker-b',
+              url: WORKER_B_URL,
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+            },
+          ],
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerLocation).toBe('worker-b');
+      }
+    });
+
+    it('falls back to failed worker when it is the only healthy option', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'worker-a': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+        },
+      });
+
+      const service = createTaskDispatcherService(deps);
+
+      nock(WORKER_URL)
+        .post('/tasks')
+        .reply(200, { status: 'accepted' });
+
+      const result = await service.dispatch({
+        ...baseDispatchRequest,
+        taskId: 'task-fallback-failed',
+        failedWorkerLocation: 'worker-a',
+        workerCredentials: {
+          workers: [
+            {
+              name: 'worker-a',
+              url: WORKER_URL,
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+            },
+          ],
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerLocation).toBe('worker-a');
+      }
+    });
+
+    it('dispatches normally when failedWorkerLocation is undefined', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'worker-a': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+        },
+      });
+
+      const service = createTaskDispatcherService(deps);
+
+      nock(WORKER_URL)
+        .post('/tasks')
+        .reply(200, { status: 'accepted' });
+
+      const result = await service.dispatch({
+        ...baseDispatchRequest,
+        taskId: 'task-no-failed-location',
+        workerCredentials: {
+          workers: [
+            {
+              name: 'worker-a',
+              url: WORKER_URL,
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+            },
+          ],
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerLocation).toBe('worker-a');
+      }
     });
   });
 
