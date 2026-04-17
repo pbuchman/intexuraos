@@ -3,7 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { FieldValue } from '@google-cloud/firestore';
+import { FieldValue, Timestamp } from '@google-cloud/firestore';
 import { createFakeFirestore, type FakeFirestore } from '../testing/firestoreFake.js';
 
 describe('FakeFirestore', () => {
@@ -219,6 +219,33 @@ describe('FakeFirestore', () => {
         const snapshot = await docRef.get();
         expect(snapshot.data()?.['options']).toEqual({ app: ['gmail', 'slack'] });
       });
+
+      it('preserves Timestamp field values passed to update() instead of deleting them', async () => {
+        const docRef = db.collection('test').doc('doc1');
+        await docRef.set({ name: 'alpha' });
+
+        const heartbeat = Timestamp.fromDate(new Date('2026-04-17T18:00:00Z'));
+        await docRef.update({ lastHeartbeat: heartbeat });
+
+        const snap = await docRef.get();
+        const data = snap.data();
+        expect(data?.['lastHeartbeat']).toBeDefined();
+        expect((data?.['lastHeartbeat'] as Timestamp).toMillis()).toBe(heartbeat.toMillis());
+      });
+
+      it('preserves arbitrary objects with isEqual method in update() (not treated as delete sentinels)', async () => {
+        const docRef = db.collection('test').doc('doc2');
+        await docRef.set({ name: 'alpha' });
+
+        // Any plain object with an `isEqual` method must NOT be treated as a delete sentinel;
+        // only real Firestore FieldValue.delete() sentinels should be removed.
+        const shaped = { isEqual: (): boolean => false, value: 42 };
+        await docRef.update({ custom: shaped });
+
+        const snap = await docRef.get();
+        const data = snap.data();
+        expect(data?.['custom']).toBe(shaped);
+      });
     });
 
     describe('delete', () => {
@@ -338,6 +365,42 @@ describe('FakeFirestore', () => {
           .get();
         expect(snapshot.size).toBe(1);
         expect(snapshot.docs[0]?.data()?.['name']).toBe('Charlie');
+      });
+
+      it('compares Timestamp field values correctly using < operator', async () => {
+        const collection = db.collection('tasks');
+
+        const older = Timestamp.fromDate(new Date('2026-04-17T17:00:00Z'));
+        const newer = Timestamp.fromDate(new Date('2026-04-17T18:00:00Z'));
+        const threshold = Timestamp.fromDate(new Date('2026-04-17T17:30:00Z'));
+
+        await collection.doc('a').set({ heartbeat: older });
+        await collection.doc('b').set({ heartbeat: newer });
+
+        const snapshot = await collection.where('heartbeat', '<', threshold).get();
+        const ids = snapshot.docs.map((doc) => doc.id);
+
+        expect(ids).toEqual(['a']);
+      });
+
+      it('compares Timestamp field values correctly using >= operator', async () => {
+        // Note: Date objects already coerce via valueOf() so <,>= work natively.
+        // Timestamp does NOT have valueOf(), so without getTimestampValue
+        // normalization the cast `(ts as number)` yields NaN, and NaN >= NaN
+        // is always false — this test would fail against the unfixed fake.
+        const collection = db.collection('tasks');
+
+        const older = Timestamp.fromDate(new Date('2026-04-17T17:00:00Z'));
+        const newer = Timestamp.fromDate(new Date('2026-04-17T18:00:00Z'));
+        const threshold = Timestamp.fromDate(new Date('2026-04-17T17:30:00Z'));
+
+        await collection.doc('a').set({ at: older });
+        await collection.doc('b').set({ at: newer });
+
+        const snapshot = await collection.where('at', '>=', threshold).get();
+        const ids = snapshot.docs.map((doc) => doc.id);
+
+        expect(ids).toEqual(['b']);
       });
     });
 
