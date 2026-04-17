@@ -5,7 +5,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import type { FastifyInstance } from 'fastify';
 import nock from 'nock';
 import { buildServer } from '../server.js';
-import { resetServices, type ServiceContainer, setServices } from '../services.js';
+import { resetServices } from '../services.js';
+import { setMockServices } from './helpers/mockServices.js';
 import {
   FakeNotificationFiltersRepository,
   FakeNotificationRepository,
@@ -58,21 +59,11 @@ describe('Connect Routes', () => {
     fakeSignatureRepo = new FakeSignatureConnectionRepository();
     fakeNotificationRepo = new FakeNotificationRepository();
 
-    const noop = <T>(name: string): T =>
-      new Proxy({} as object, {
-        get(_t, prop) {
-          return () => { throw new Error(`stub: ${name}.${String(prop)} not configured`); };
-        },
-      }) as T;
-    const services: ServiceContainer = {
+    setMockServices({
       signatureConnectionRepository: fakeSignatureRepo,
       notificationRepository: fakeNotificationRepo,
       notificationFiltersRepository: new FakeNotificationFiltersRepository(),
-      digestRepository: noop('digestRepository'),
-      groupStateRepository: noop('groupStateRepository'),
-      digestLockRepository: noop('digestLockRepository'),
-    };
-    setServices(services);
+    });
 
     app = await buildServer();
   });
@@ -159,21 +150,11 @@ describe('Status Routes', () => {
     fakeSignatureRepo = new FakeSignatureConnectionRepository();
     fakeNotificationRepo = new FakeNotificationRepository();
 
-    const noop = <T>(name: string): T =>
-      new Proxy({} as object, {
-        get(_t, prop) {
-          return () => { throw new Error(`stub: ${name}.${String(prop)} not configured`); };
-        },
-      }) as T;
-    const services: ServiceContainer = {
+    setMockServices({
       signatureConnectionRepository: fakeSignatureRepo,
       notificationRepository: fakeNotificationRepo,
       notificationFiltersRepository: new FakeNotificationFiltersRepository(),
-      digestRepository: noop('digestRepository'),
-      groupStateRepository: noop('groupStateRepository'),
-      digestLockRepository: noop('digestLockRepository'),
-    };
-    setServices(services);
+    });
 
     app = await buildServer();
   });
@@ -238,21 +219,11 @@ describe('Webhook Routes', () => {
     fakeSignatureRepo = new FakeSignatureConnectionRepository();
     fakeNotificationRepo = new FakeNotificationRepository();
 
-    const noop = <T>(name: string): T =>
-      new Proxy({} as object, {
-        get(_t, prop) {
-          return () => { throw new Error(`stub: ${name}.${String(prop)} not configured`); };
-        },
-      }) as T;
-    const services: ServiceContainer = {
+    setMockServices({
       signatureConnectionRepository: fakeSignatureRepo,
       notificationRepository: fakeNotificationRepo,
       notificationFiltersRepository: new FakeNotificationFiltersRepository(),
-      digestRepository: noop('digestRepository'),
-      groupStateRepository: noop('groupStateRepository'),
-      digestLockRepository: noop('digestLockRepository'),
-    };
-    setServices(services);
+    });
 
     app = await buildServer();
   });
@@ -544,21 +515,11 @@ describe('Notification Routes', () => {
     fakeSignatureRepo = new FakeSignatureConnectionRepository();
     fakeNotificationRepo = new FakeNotificationRepository();
 
-    const noop = <T>(name: string): T =>
-      new Proxy({} as object, {
-        get(_t, prop) {
-          return () => { throw new Error(`stub: ${name}.${String(prop)} not configured`); };
-        },
-      }) as T;
-    const services: ServiceContainer = {
+    setMockServices({
       signatureConnectionRepository: fakeSignatureRepo,
       notificationRepository: fakeNotificationRepo,
       notificationFiltersRepository: new FakeNotificationFiltersRepository(),
-      digestRepository: noop('digestRepository'),
-      groupStateRepository: noop('groupStateRepository'),
-      digestLockRepository: noop('digestLockRepository'),
-    };
-    setServices(services);
+    });
 
     app = await buildServer();
   });

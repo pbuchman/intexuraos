@@ -10,8 +10,7 @@ import {
   persistenceFailed,
 } from './digestErrors.js';
 import type { DailySummary, GroupState } from '../schemas/digestSchemas.js';
-import type { PersistedDailySummary, RepositoryError } from '../repositories/digestRepositories.js';
-import type { PaginatedNotifications, RepositoryError as NotifRepositoryError } from '../notifications/index.js';
+import type { DigestLockHolder } from '../repositories/digestRepositories.js';
 
 export interface RunDigestForGroupDeps {
   readonly llmClient: LlmGenerateClient;
@@ -23,7 +22,7 @@ export interface RunDigestForGroupInput {
   readonly userId: string;
   readonly groupKey: string;
   readonly date: string; // YYYY-MM-DD (CET interpretation)
-  readonly holder: 'cron' | 'backfill' | 'manual';
+  readonly holder: DigestLockHolder;
 }
 
 export interface RunDigestForGroupResult {
@@ -52,24 +51,25 @@ export async function runDigestForGroup(
   if (!lock.value.acquired) return err(lockHeld(lock.value.heldBy ?? 'unknown'));
 
   try {
-    const previousState = await loadPreviousState(services, input);
+    const [previousState, lastSummaries, messages] = await Promise.all([
+      services.groupStateRepository.getByDate({
+        userId: input.userId, groupKey: input.groupKey, date: previousDate(input.date),
+      }),
+      services.digestRepository.findRecentByGroup({
+        userId: input.userId, groupKey: input.groupKey, limit: PREVIOUS_SUMMARIES_WINDOW,
+      }),
+      services.notificationRepository.findByUserIdPaginated(input.userId, {
+        limit: 1000,
+        filter: { title: input.groupKey, app: ['com.whatsapp'] },
+      }),
+    ]);
     if (!previousState.ok) return err(persistenceFailed(previousState.error.message));
-
-    const lastSummaries = await loadLastSummaries(services, input);
     if (!lastSummaries.ok) return err(persistenceFailed(lastSummaries.error.message));
-
-    const messages = await loadDayMessages(services, input);
     if (!messages.ok) return err(persistenceFailed(messages.error.message));
 
     const rawNotifications = messages.value.notifications as unknown as RawNotification[];
     const filtered = filterAndDedupeNotifications(rawNotifications);
     deps.logger.info({ ...input, raw: rawNotifications.length, filtered: filtered.length }, 'runDigestForGroup: input prepared');
-
-    const existing = await services.digestRepository.findByDate({
-      userId: input.userId, groupKey: input.groupKey, date: input.date,
-    });
-    if (!existing.ok) return err(persistenceFailed(existing.error.message));
-    const regenerated = existing.value !== null;
 
     const aggregation = await aggregateDigest(
       { llmClient: deps.llmClient, logger: deps.logger },
@@ -103,44 +103,11 @@ export async function runDigestForGroup(
       state: aggregation.value.stateUpdate,
       generation: persistSummary.value.generation,
       modelId: deps.modelId,
-      regenerated,
+      regenerated: persistSummary.value.generation > 1,
     });
   } finally {
     await services.digestLockRepository.release({ userId: input.userId, groupKey: input.groupKey });
   }
-}
-
-async function loadPreviousState(
-  services: ReturnType<typeof getServices>,
-  input: RunDigestForGroupInput,
-): Promise<Result<GroupState | null, { message: string }>> {
-  const prior = previousDate(input.date);
-  const r = await services.groupStateRepository.getByDate({
-    userId: input.userId, groupKey: input.groupKey, date: prior,
-  });
-  if (!r.ok) return err({ message: r.error.message });
-  return ok(r.value);
-}
-
-async function loadLastSummaries(
-  services: ReturnType<typeof getServices>,
-  input: RunDigestForGroupInput,
-): Promise<Result<readonly PersistedDailySummary[], RepositoryError>> {
-  return await services.digestRepository.findRecentByGroup({
-    userId: input.userId, groupKey: input.groupKey, limit: PREVIOUS_SUMMARIES_WINDOW,
-  });
-}
-
-async function loadDayMessages(
-  services: ReturnType<typeof getServices>,
-  input: RunDigestForGroupInput,
-): Promise<Result<PaginatedNotifications, NotifRepositoryError>> {
-  // The notification repo already filters by app/title; we narrow further here by date.
-  // Using ISO date conversion via Europe/Warsaw timezone.
-  return await services.notificationRepository.findByUserIdPaginated(input.userId, {
-    limit: 1000,
-    filter: { title: input.groupKey, app: ['com.whatsapp'] },
-  });
 }
 
 function previousDate(date: string): string {

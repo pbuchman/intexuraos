@@ -9,6 +9,8 @@ export interface RepositoryError {
   readonly message: string;
 }
 
+export type DigestLockHolder = 'cron' | 'backfill' | 'manual';
+
 /** Doc shape stored in `notification_daily_digests`. Augments DailySummary with server fields. */
 export interface PersistedDailySummary {
   readonly summary: DailySummary;
@@ -81,7 +83,7 @@ export interface DigestLockRepository {
   acquire(input: {
     readonly userId: string;
     readonly groupKey: string;
-    readonly holder: 'cron' | 'backfill' | 'manual';
+    readonly holder: DigestLockHolder;
     readonly currentDate: string;
   }): Promise<Result<{ readonly acquired: boolean; readonly heldBy?: string }, RepositoryError>>;
 

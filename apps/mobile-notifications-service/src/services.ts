@@ -1,7 +1,3 @@
-/**
- * Service wiring for mobile-notifications-service.
- * Provides dependency injection for domain adapters.
- */
 import type {
   NotificationRepository,
   SignatureConnectionRepository,
@@ -19,9 +15,6 @@ import { FirestoreDigestRepository } from './infra/firestore/firestoreDigestRepo
 import { FirestoreGroupStateRepository } from './infra/firestore/firestoreGroupStateRepository.js';
 import { FirestoreDigestLockRepository } from './infra/firestore/firestoreDigestLockRepository.js';
 
-/**
- * Service container holding all adapter instances.
- */
 export interface ServiceContainer {
   signatureConnectionRepository: SignatureConnectionRepository;
   notificationRepository: NotificationRepository;
@@ -33,9 +26,6 @@ export interface ServiceContainer {
 
 let container: ServiceContainer | null = null;
 
-/**
- * Get or create the service container.
- */
 export function getServices(): ServiceContainer {
   container ??= {
     signatureConnectionRepository: new FirestoreSignatureConnectionRepository(),
@@ -48,16 +38,10 @@ export function getServices(): ServiceContainer {
   return container;
 }
 
-/**
- * Set a custom service container (for testing).
- */
 export function setServices(services: ServiceContainer): void {
   container = services;
 }
 
-/**
- * Reset the service container (for testing).
- */
 export function resetServices(): void {
   container = null;
 }

@@ -4,7 +4,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../server.js';
-import { resetServices, type ServiceContainer, setServices } from '../services.js';
+import { resetServices } from '../services.js';
+import { setMockServices } from './helpers/mockServices.js';
 import {
   FakeNotificationFiltersRepository,
   FakeNotificationRepository,
@@ -54,21 +55,11 @@ describe('Filter Routes', () => {
 
     fakeFiltersRepo = new FakeNotificationFiltersRepository();
 
-    const noop = <T>(name: string): T =>
-      new Proxy({} as object, {
-        get(_t, prop) {
-          return () => { throw new Error(`stub: ${name}.${String(prop)} not configured`); };
-        },
-      }) as T;
-    const services: ServiceContainer = {
+    setMockServices({
       signatureConnectionRepository: new FakeSignatureConnectionRepository(),
       notificationRepository: new FakeNotificationRepository(),
       notificationFiltersRepository: fakeFiltersRepo,
-      digestRepository: noop('digestRepository'),
-      groupStateRepository: noop('groupStateRepository'),
-      digestLockRepository: noop('digestLockRepository'),
-    };
-    setServices(services);
+    });
 
     app = await buildServer();
   });
