@@ -31,7 +31,7 @@ beforeEach(() => {
   clearJwksCache();
   process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
   process.env['INTEXURAOS_DIGEST_LLM_MODEL'] = 'or:google/gemini-3-flash-preview';
-  process.env['INTEXURAOS_OPENROUTER_API_KEY'] = 'test-key';
+  process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'test-key';
 });
 afterEach(() => {
   resetServices();
@@ -198,6 +198,30 @@ describe('GET /notifications/digests', () => {
     expect(body.data.items).toHaveLength(1);
     await app.close();
   });
+
+  it('passes cursor when provided', async () => {
+    let capturedCursor: string | undefined;
+    setMockServices({
+      digestRepository: {
+        findInRange: async (input) => {
+          capturedCursor = input.cursor;
+          return { ok: true, value: { items: [] } };
+        },
+        save: async () => ({ ok: true, value: EXAMPLE_PERSISTED }),
+        findByDate: async () => ({ ok: true, value: null }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+      },
+    });
+    const token = await createToken({ sub: 'u' });
+    const app = await buildServer();
+    await app.inject({
+      method: 'GET',
+      url: '/notifications/digests?groupKey=g&fromDate=2026-04-01&toDate=2026-04-15&cursor=tok123',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(capturedCursor).toBe('tok123');
+    await app.close();
+  });
 });
 
 describe('GET /notifications/digests/:groupKey/:date', () => {
@@ -358,6 +382,258 @@ describe('GET /notifications/digests/backfill/:runId', () => {
     const body = res.json<{ success: boolean; data: { runId: string } }>();
     expect(body.success).toBe(true);
     expect(body.data.runId).toBe('bf_001');
+    await app.close();
+  });
+
+  it('returns 500 when repository fails', async () => {
+    setMockServices({
+      backfillRunRepository: {
+        create: async () => ({ ok: true, value: undefined }),
+        update: async () => ({ ok: true, value: undefined }),
+        findById: async () => ({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'DB error' } }),
+      },
+    });
+    const token = await createToken({ sub: 'u' });
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/notifications/digests/backfill/bf_001',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(500);
+    await app.close();
+  });
+});
+
+describe('GET /notifications/digests (error path)', () => {
+  it('returns 500 when repository fails', async () => {
+    setMockServices({
+      digestRepository: {
+        findInRange: async () => ({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'DB error' } }),
+        save: async () => ({ ok: true, value: EXAMPLE_PERSISTED }),
+        findByDate: async () => ({ ok: true, value: null }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+      },
+    });
+    const token = await createToken({ sub: 'u' });
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/notifications/digests?groupKey=g&fromDate=2026-04-01&toDate=2026-04-15',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(500);
+    await app.close();
+  });
+});
+
+describe('GET /notifications/digests/:groupKey/:date (error path)', () => {
+  it('returns 500 when repository fails', async () => {
+    setMockServices({
+      digestRepository: {
+        findByDate: async () => ({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'DB error' } }),
+        save: async () => ({ ok: true, value: EXAMPLE_PERSISTED }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+    });
+    const token = await createToken({ sub: 'u' });
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/notifications/digests/g/2026-04-15',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(500);
+    await app.close();
+  });
+});
+
+describe('GET /notifications/digests/:groupKey/:date/state (error path)', () => {
+  it('returns 500 when repository fails', async () => {
+    setMockServices({
+      groupStateRepository: {
+        getByDate: async () => ({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'DB error' } }),
+        getLatest: async () => ({ ok: true, value: null }),
+        save: async () => ({ ok: true, value: undefined }),
+      },
+    });
+    const token = await createToken({ sub: 'u' });
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/notifications/digests/g/2026-04-15/state',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(500);
+    await app.close();
+  });
+});
+
+describe('POST /internal/notifications/digest/run-yesterday (dispatch failure path)', () => {
+  it('returns dispatched=0 when runDigestForGroup fails', async () => {
+    setMockServices({
+      digestLockRepository: {
+        acquire: async () => ({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'lock error' } }),
+        release: async () => ({ ok: true, value: undefined }),
+      },
+      notificationRepository: {
+        findByUserIdPaginated: async () => ({ ok: true, value: { notifications: [] } }),
+        save: async () => ({ ok: true, value: NULL_NOTIFICATION }),
+        findById: async () => ({ ok: true, value: null }),
+        existsByNotificationIdAndUserId: async () => ({ ok: true, value: false }),
+        delete: async () => ({ ok: true, value: undefined }),
+      },
+      digestRepository: {
+        save: async () => ({ ok: true, value: EXAMPLE_PERSISTED }),
+        findByDate: async () => ({ ok: true, value: null }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: {
+        getByDate: async () => ({ ok: true, value: null }),
+        getLatest: async () => ({ ok: true, value: null }),
+        save: async () => ({ ok: true, value: undefined }),
+      },
+    });
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/internal/notifications/digest/run-yesterday',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ success: boolean; data: { dispatched: number } }>();
+    expect(body.success).toBe(true);
+    expect(body.data.dispatched).toBe(0);
+    await app.close();
+  });
+});
+
+describe('POST /internal/notifications/digest/run (error paths)', () => {
+  it('returns 500 when runDigestForGroup fails with non-lock-held error', async () => {
+    setMockServices({
+      digestLockRepository: {
+        acquire: async () => ({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'DB error' } }),
+        release: async () => ({ ok: true, value: undefined }),
+      },
+      notificationRepository: {
+        findByUserIdPaginated: async () => ({ ok: true, value: { notifications: [] } }),
+        save: async () => ({ ok: true, value: NULL_NOTIFICATION }),
+        findById: async () => ({ ok: true, value: null }),
+        existsByNotificationIdAndUserId: async () => ({ ok: true, value: false }),
+        delete: async () => ({ ok: true, value: undefined }),
+      },
+      digestRepository: {
+        save: async () => ({ ok: true, value: EXAMPLE_PERSISTED }),
+        findByDate: async () => ({ ok: true, value: null }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: {
+        getByDate: async () => ({ ok: true, value: null }),
+        getLatest: async () => ({ ok: true, value: null }),
+        save: async () => ({ ok: true, value: undefined }),
+      },
+    });
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/internal/notifications/digest/run',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      payload: { userId: 'u', groupKey: 'g', date: '2026-04-15' },
+    });
+    expect(res.statusCode).toBe(500);
+    await app.close();
+  });
+
+  it('returns lockSkipped=true when lock is held', async () => {
+    setMockServices({
+      digestLockRepository: {
+        acquire: async () => ({ ok: true, value: { acquired: false, heldBy: 'cron' } }),
+        release: async () => ({ ok: true, value: undefined }),
+      },
+      notificationRepository: {
+        findByUserIdPaginated: async () => ({ ok: true, value: { notifications: [] } }),
+        save: async () => ({ ok: true, value: NULL_NOTIFICATION }),
+        findById: async () => ({ ok: true, value: null }),
+        existsByNotificationIdAndUserId: async () => ({ ok: true, value: false }),
+        delete: async () => ({ ok: true, value: undefined }),
+      },
+      digestRepository: {
+        save: async () => ({ ok: true, value: EXAMPLE_PERSISTED }),
+        findByDate: async () => ({ ok: true, value: null }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: {
+        getByDate: async () => ({ ok: true, value: null }),
+        getLatest: async () => ({ ok: true, value: null }),
+        save: async () => ({ ok: true, value: undefined }),
+      },
+    });
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/internal/notifications/digest/run',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      payload: { userId: 'u', groupKey: 'g', date: '2026-04-15' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ success: boolean; data: { lockSkipped: boolean } }>();
+    expect(body.data.lockSkipped).toBe(true);
+    await app.close();
+  });
+
+  it('uses backfill holder and returns 200 when chainNext provided', async () => {
+    vi.mock('@intexuraos/llm-factory', async (): Promise<typeof import('@intexuraos/llm-factory')> => {
+      const actual = await vi.importActual<typeof import('@intexuraos/llm-factory')>('@intexuraos/llm-factory');
+      return {
+        ...actual,
+        createLlmClient: () => ({
+          generate: async (): Promise<{ ok: true; value: { content: string; usage: { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number } } }> =>
+            ({ ok: true, value: { content: JSON.stringify(COLD_START_EXAMPLE), usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 } } }),
+        }),
+      } as typeof import('@intexuraos/llm-factory');
+    });
+    setMockServices({
+      digestLockRepository: {
+        acquire: async () => ({ ok: true, value: { acquired: true } }),
+        release: async () => ({ ok: true, value: undefined }),
+      },
+      notificationRepository: {
+        findByUserIdPaginated: async () => ({ ok: true, value: { notifications: [] } }),
+        save: async () => ({ ok: true, value: NULL_NOTIFICATION }),
+        findById: async () => ({ ok: true, value: null }),
+        existsByNotificationIdAndUserId: async () => ({ ok: true, value: false }),
+        delete: async () => ({ ok: true, value: undefined }),
+      },
+      digestRepository: {
+        save: async () => ({ ok: true, value: EXAMPLE_PERSISTED }),
+        findByDate: async () => ({ ok: true, value: null }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: {
+        getByDate: async () => ({ ok: true, value: null }),
+        getLatest: async () => ({ ok: true, value: null }),
+        save: async () => ({ ok: true, value: undefined }),
+      },
+      backfillRunRepository: {
+        create: async () => ({ ok: true, value: undefined }),
+        update: async () => ({ ok: true, value: undefined }),
+        findById: async () => ({ ok: true, value: null }),
+      },
+    });
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/internal/notifications/digest/run',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      payload: { userId: 'u', groupKey: 'g', date: '2026-04-15', chainNext: { runId: 'bf_1', remainingDates: [], fromDate: '2026-04-15', toDate: '2026-04-15' } },
+    });
+    expect(res.statusCode).toBe(200);
     await app.close();
   });
 });

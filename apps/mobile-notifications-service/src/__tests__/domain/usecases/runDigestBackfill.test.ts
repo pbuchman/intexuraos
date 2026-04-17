@@ -87,4 +87,31 @@ describe('startDigestBackfill', () => {
     if (result.ok) return;
     expect(result.error.message).toContain('network error');
   });
+
+  it('creates run with null currentDate when fromDate > toDate (empty range)', async () => {
+    let createdRun: unknown;
+    setMockServices({
+      backfillRunRepository: {
+        create: async (run) => { createdRun = run; return { ok: true, value: undefined }; },
+        update: async () => ({ ok: true, value: undefined }),
+        findById: async () => ({ ok: true, value: null }),
+      },
+    });
+    const posted: string[] = [];
+    const httpPost = async (path: string): Promise<Result<unknown, { message: string }>> => {
+      posted.push(path);
+      return { ok: true, value: {} };
+    };
+
+    const result = await startDigestBackfill(
+      { logger, httpPost },
+      { userId: 'u', groupKey: 'g', fromDate: '2026-04-15', toDate: '2026-04-14' },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.queuedDates).toHaveLength(0);
+    expect(posted).toHaveLength(0); // no httpPost when no dates
+    expect((createdRun as { currentDate: null }).currentDate).toBeNull();
+  });
 });
