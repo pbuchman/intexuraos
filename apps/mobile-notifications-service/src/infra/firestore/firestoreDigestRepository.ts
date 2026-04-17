@@ -152,7 +152,9 @@ export class FirestoreDigestRepository implements DigestRepository {
       const result: { items: readonly PersistedDailySummary[]; nextCursor?: string } = { items };
       if (snap.docs.length > input.limit) {
         const lastDate = items[items.length - 1]?.summary.date;
+        /* v8 ignore start -- ts-type: items.length === limit > 0 when snap.docs.length > limit, so lastDate is always defined @preserve */
         if (lastDate !== undefined) result.nextCursor = lastDate;
+        /* v8 ignore stop @preserve */
       }
       return ok(result);
     } catch (error) {

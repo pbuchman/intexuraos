@@ -41,6 +41,16 @@ describe('FirestoreDigestRepository', () => {
     expect(result.value).toBeNull();
   });
 
+  it('findByDate returns persisted summary when present', async () => {
+    const repo = new FirestoreDigestRepository();
+    await repo.save({ userId: 'u', groupKey: 'g', summary: EXAMPLE_SUMMARY, modelId: 'm' });
+    const result = await repo.findByDate({ userId: 'u', groupKey: 'g', date: EXAMPLE_SUMMARY.date });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).not.toBeNull();
+    expect(result.value?.generation).toBe(1);
+  });
+
   it('findRecentByGroup returns docs ordered by date desc', async () => {
     const repo = new FirestoreDigestRepository();
     for (const d of ['2026-04-08', '2026-04-09', '2026-04-10']) {
@@ -106,6 +116,7 @@ describe('FirestoreDigestRepository', () => {
     expect(first.ok).toBe(true);
     if (!first.ok) return;
     const cursor = first.value.nextCursor;
+    if (cursor === undefined) throw new Error('Expected nextCursor to be defined');
     const second = await repo.findInRange({ userId: 'u', groupKey: 'g', fromDate: '2026-04-08', toDate: '2026-04-12', limit: 2, cursor });
     expect(second.ok).toBe(true);
     if (!second.ok) return;
