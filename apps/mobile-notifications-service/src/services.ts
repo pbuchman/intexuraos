@@ -14,6 +14,7 @@ import { FirestoreNotificationFiltersRepository } from './infra/firestore/notifi
 import { FirestoreDigestRepository } from './infra/firestore/firestoreDigestRepository.js';
 import { FirestoreGroupStateRepository } from './infra/firestore/firestoreGroupStateRepository.js';
 import { FirestoreDigestLockRepository } from './infra/firestore/firestoreDigestLockRepository.js';
+import { FirestoreBackfillRunRepository } from './infra/firestore/firestoreBackfillRunRepository.js';
 
 export interface ServiceContainer {
   signatureConnectionRepository: SignatureConnectionRepository;
@@ -22,6 +23,7 @@ export interface ServiceContainer {
   digestRepository: DigestRepository;
   groupStateRepository: GroupStateRepository;
   digestLockRepository: DigestLockRepository;
+  backfillRunRepository: FirestoreBackfillRunRepository;
 }
 
 let container: ServiceContainer | null = null;
@@ -34,6 +36,7 @@ export function getServices(): ServiceContainer {
     digestRepository: new FirestoreDigestRepository(),
     groupStateRepository: new FirestoreGroupStateRepository(),
     digestLockRepository: new FirestoreDigestLockRepository(),
+    backfillRunRepository: new FirestoreBackfillRunRepository(),
   };
   return container;
 }
