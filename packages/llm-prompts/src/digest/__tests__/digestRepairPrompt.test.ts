@@ -6,7 +6,7 @@ describe('buildDigestRepairPrompt', () => {
     const repair = buildDigestRepairPrompt(
       'ORIGINAL_PROMPT_BODY',
       '{"dailySummary": "broken"}',
-      'Expected object, got string at dailySummary',
+      'Expected object, got string at dailySummary'
     );
     expect(repair).toContain('ORIGINAL_PROMPT_BODY');
     expect(repair).toContain('{"dailySummary": "broken"}');

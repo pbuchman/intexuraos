@@ -3,7 +3,7 @@ export const DIGEST_REPAIR_PROMPT_VERSION = '1.0.0';
 export function buildDigestRepairPrompt(
   originalPrompt: string,
   invalidResponse: string,
-  errorMessage: string,
+  errorMessage: string
 ): string {
   return `Jesteś asystentem naprawy JSON. Twoim zadaniem jest naprawić nieprawidłową odpowiedź AggregationOutput tak, by spełniała schemat Zod.
 

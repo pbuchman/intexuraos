@@ -962,6 +962,12 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
+      '@intexuraos/llm-factory':
+        specifier: workspace:*
+        version: link:../../packages/llm-factory
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../../packages/llm-prompts
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
