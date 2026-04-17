@@ -17,19 +17,19 @@ import { resolveOpenRouterModelName } from '@/utils/openRouterModelNames';
 // --- Types & Constants (re-exported from shared module) ---
 
 import {
-  PROVIDERS,
-  PROVIDER_ACTIVE_CLASSES,
-  PROVIDER_DOT_CLASSES,
-  INACTIVE_SEGMENT_CLASS,
   GROUP_BY_MAP,
   GROUP_BY_OPTIONS,
-  SORT_OPTIONS,
-  PRESET_OPTIONS,
   DEFAULT_GROUP_BY,
   DEFAULT_SORT,
   type GroupByMode,
   type SortState,
 } from '@/components/llm-usage/filterConstants';
+import {
+  TimeRangePicker,
+  ProviderFilters,
+  GroupBySelector,
+  SortSelector,
+} from '@/components/llm-usage/filterSections';
 
 const STORAGE_KEY_TIME_RANGE = 'llm-usage-time-range';
 const STORAGE_KEY_FILTERS = 'llm-usage-filters';
@@ -107,163 +107,6 @@ function PageHeader({ displayedCount, totalMatched, loading }: PageHeaderProps):
       <p className="text-sm text-slate-500 dark:text-slate-400">
         {loading ? 'Loading...' : countText}
       </p>
-    </div>
-  );
-}
-
-// --- TimeRangePicker ---
-
-interface TimeRangePickerProps {
-  timeRange: TimeRangeState;
-  onChange: (tr: TimeRangeState) => void;
-}
-
-function TimeRangePicker({ timeRange, onChange }: TimeRangePickerProps): React.JSX.Element {
-  return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      {PRESET_OPTIONS.map((opt) => (
-        <button
-          key={opt.key}
-          onClick={(): void => { onChange({ ...timeRange, preset: opt.key }); }}
-          className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-            timeRange.preset === opt.key
-              ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-400'
-              : INACTIVE_SEGMENT_CLASS
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
-      {timeRange.preset === 'custom' ? (
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={timeRange.customFrom?.split('T')[0] ?? ''}
-            onChange={(e): void => {
-              const val = e.target.value;
-              if (val !== '') {
-                onChange({ ...timeRange, customFrom: new Date(val).toISOString() });
-              } else {
-                const { customFrom: _, ...rest } = timeRange;
-                onChange(rest);
-              }
-            }}
-            className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
-          />
-          <span className="text-sm text-slate-400">to</span>
-          <input
-            type="date"
-            value={timeRange.customTo?.split('T')[0] ?? ''}
-            onChange={(e): void => {
-              const val = e.target.value;
-              if (val !== '') {
-                onChange({ ...timeRange, customTo: new Date(val + 'T23:59:59.999Z').toISOString() });
-              } else {
-                const { customTo: _, ...rest } = timeRange;
-                onChange(rest);
-              }
-            }}
-            className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
-          />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-// --- ProviderFilters ---
-
-interface ProviderFiltersProps {
-  activeProviders: string[];
-  onToggle: (provider: string) => void;
-  locked: boolean;
-}
-
-function ProviderFilters({ activeProviders, onToggle, locked }: ProviderFiltersProps): React.JSX.Element {
-  return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Provider:</span>
-      {locked ? (
-        <span className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700 dark:border-rose-400 dark:bg-rose-900/30 dark:text-rose-400">
-          <span className="inline-block h-2 w-2 rounded-full bg-rose-500" />
-          openrouter (locked by group-by)
-        </span>
-      ) : (
-        PROVIDERS.map((provider) => {
-          const isActive = activeProviders.includes(provider);
-          return (
-            <button
-              key={provider}
-              onClick={(): void => { onToggle(provider); }}
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-                isActive ? (PROVIDER_ACTIVE_CLASSES[provider] ?? INACTIVE_SEGMENT_CLASS) : INACTIVE_SEGMENT_CLASS
-              }`}
-            >
-              <span className={`inline-block h-2 w-2 rounded-full ${PROVIDER_DOT_CLASSES[provider] ?? 'bg-slate-400'}`} />
-              {provider}
-            </button>
-          );
-        })
-      )}
-    </div>
-  );
-}
-
-// --- GroupBySelector ---
-
-interface GroupBySelectorProps {
-  groupBy: GroupByMode;
-  onChange: (mode: GroupByMode) => void;
-}
-
-function GroupBySelector({ groupBy, onChange }: GroupBySelectorProps): React.JSX.Element {
-  return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Group by:</span>
-      {GROUP_BY_OPTIONS.map((opt) => (
-        <button
-          key={opt.key}
-          onClick={(): void => { onChange(opt.key); }}
-          className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-            groupBy === opt.key
-              ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-400'
-              : INACTIVE_SEGMENT_CLASS
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// --- SortSelector ---
-
-interface SortSelectorProps {
-  sortBy: SortState;
-  onChange: (sort: SortState) => void;
-}
-
-function SortSelector({ sortBy, onChange }: SortSelectorProps): React.JSX.Element {
-  return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Sort:</span>
-      {SORT_OPTIONS.map((opt) => {
-        const isActive = sortBy.field === opt.field && sortBy.direction === opt.direction;
-        return (
-          <button
-            key={`${opt.field}-${opt.direction}`}
-            onClick={(): void => { onChange({ field: opt.field, direction: opt.direction }); }}
-            className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-              isActive
-                ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-400'
-                : INACTIVE_SEGMENT_CLASS
-            }`}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
     </div>
   );
 }
@@ -548,12 +391,12 @@ export function LlmUsagePage(): React.JSX.Element {
   return (
     <Layout>
       <PageHeader displayedCount={displayedCount} totalMatched={totalMatched} loading={isLoading} />
-      <TimeRangePicker timeRange={timeRange} onChange={handleTimeRangeChange} />
-      <ProviderFilters activeProviders={activeProviders} onToggle={handleToggleProvider} locked={groupBy === 'openrouter-model'} />
-      <GroupBySelector groupBy={groupBy} onChange={handleGroupByChange} />
+      <div className="mb-4"><TimeRangePicker timeRange={timeRange} onChange={handleTimeRangeChange} /></div>
+      <div className="mb-4"><ProviderFilters activeProviders={activeProviders} onToggle={handleToggleProvider} locked={groupBy === 'openrouter-model'} /></div>
+      <div className="mb-4"><GroupBySelector groupBy={groupBy} onChange={handleGroupByChange} /></div>
       {isRawMode ? (
         <>
-          <SortSelector sortBy={sortBy} onChange={handleSortChange} />
+          <div className="mb-4"><SortSelector sortBy={sortBy} onChange={handleSortChange} /></div>
           <RawEventsList
             events={eventsResult.events}
             loading={eventsResult.loading}
