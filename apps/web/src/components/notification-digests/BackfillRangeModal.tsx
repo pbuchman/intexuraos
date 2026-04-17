@@ -1,10 +1,6 @@
-/**
- * Modal for starting a backfill run. Two date inputs (from, to) with
- * validation: fromDate <= toDate <= today.
- */
-
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CalendarRange } from 'lucide-react';
+import { daysAgoIso, todayIso } from '@/utils/digestDates';
 
 interface BackfillRangeModalProps {
   readonly isOpen: boolean;
@@ -12,14 +8,6 @@ interface BackfillRangeModalProps {
   readonly onCancel: () => void;
   readonly busy: boolean;
   readonly error: string | null;
-}
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function daysAgoIso(n: number): string {
-  return new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 export function BackfillRangeModal({
@@ -40,6 +28,15 @@ export function BackfillRangeModal({
     return null;
   }, [fromDate, toDate, today]);
 
+  useEffect(() => {
+    if (!isOpen || busy) return;
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return (): void => { window.removeEventListener('keydown', onKeyDown); };
+  }, [isOpen, busy, onCancel]);
+
   if (!isOpen) return null;
 
   return (
@@ -47,8 +44,12 @@ export function BackfillRangeModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
+      onClick={(): void => { if (!busy) onCancel(); }}
     >
-      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+      <div
+        className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-800"
+        onClick={(e): void => { e.stopPropagation(); }}
+      >
         <div className="mb-3 flex items-start gap-3">
           <CalendarRange className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-500" />
           <div>

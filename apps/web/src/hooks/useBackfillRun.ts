@@ -1,8 +1,3 @@
-/**
- * Hook: poll a backfill run's status. Polls every 2s while status is
- * 'running' or 'queued'; stops once 'completed' or 'failed'.
- */
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/context';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
@@ -43,9 +38,8 @@ export function useBackfillRun(runId: string | undefined): UseBackfillRunResult 
     try {
       const token = await getAccessToken();
       const next = await getBackfillRun(token, runId);
-      if (isMountedRef.current) {
-        setRun(next);
-      }
+      if (!isMountedRef.current) return;
+      setRun((prev) => (prev !== null && JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
     } catch (err: unknown) {
       if (isMountedRef.current) {
         setError(getErrorMessage(err, 'Nie udało się pobrać stanu backfillu'));
@@ -55,20 +49,18 @@ export function useBackfillRun(runId: string | undefined): UseBackfillRunResult 
     }
   }, [getAccessToken, runId]);
 
-  // Initial load
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  // Poll while non-terminal
+  const status = run?.status;
   useEffect(() => {
-    if (run === null) return;
-    if (isTerminal(run.status)) return;
+    if (status === undefined || isTerminal(status)) return;
     const id = setInterval(() => {
       void refresh();
     }, BACKFILL_POLL_INTERVAL_MS);
     return (): void => { clearInterval(id); };
-  }, [run, refresh]);
+  }, [status, refresh]);
 
   return { run, loading, error, refresh };
 }

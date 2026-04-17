@@ -1,11 +1,5 @@
-/**
- * Action button row at the bottom of the detail page:
- *  - Regenerate (delegates to DigestHeader button — this component
- *    exposes an additional "Copy as Markdown" action for the full digest).
- */
-
 import { useCallback, useState } from 'react';
-import { Check, Copy, RotateCcw } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
 import type { DailySummary } from '@/types/notificationDigests';
 
 function buildMarkdown(summary: DailySummary): string {
@@ -42,34 +36,24 @@ function buildMarkdown(summary: DailySummary): string {
 
 interface DigestActionsProps {
   readonly summary: DailySummary;
-  readonly onRequestRegenerate: () => void;
-  readonly regenerating: boolean;
 }
 
-export function DigestActions({
-  summary,
-  onRequestRegenerate,
-  regenerating,
-}: DigestActionsProps): React.JSX.Element {
+export function DigestActions({ summary }: DigestActionsProps): React.JSX.Element {
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
+
   const copy = useCallback((): void => {
+    setCopyError(null);
     void navigator.clipboard.writeText(buildMarkdown(summary)).then(() => {
       setCopied(true);
       setTimeout(() => { setCopied(false); }, 2000);
-    }).catch(() => { /* clipboard unavailable */ });
+    }).catch(() => {
+      setCopyError('Schowek niedostępny');
+    });
   }, [summary]);
 
   return (
     <div className="mt-4 flex flex-wrap items-center gap-3">
-      <button
-        type="button"
-        onClick={onRequestRegenerate}
-        disabled={regenerating}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 px-3 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-900/20"
-      >
-        <RotateCcw className={`h-4 w-4 ${regenerating ? 'animate-spin' : ''}`} />
-        {regenerating ? 'Generowanie…' : 'Wygeneruj ponownie'}
-      </button>
       <button
         type="button"
         onClick={copy}
@@ -78,6 +62,9 @@ export function DigestActions({
         {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
         {copied ? 'Skopiowano' : 'Kopiuj jako Markdown'}
       </button>
+      {copyError !== null ? (
+        <span className="text-xs text-red-600 dark:text-red-400">{copyError}</span>
+      ) : null}
     </div>
   );
 }

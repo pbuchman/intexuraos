@@ -1,9 +1,4 @@
-/**
- * Confirmation modal shown before regenerating a digest. Warns the user
- * that the current summary will be overwritten and the generation number
- * incremented.
- */
-
+import { useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 interface RegenerateConfirmModalProps {
@@ -23,14 +18,27 @@ export function RegenerateConfirmModal({
   onCancel,
   busy,
 }: RegenerateConfirmModalProps): React.JSX.Element | null {
+  useEffect(() => {
+    if (!isOpen || busy) return;
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return (): void => { window.removeEventListener('keydown', onKeyDown); };
+  }, [isOpen, busy, onCancel]);
+
   if (!isOpen) return null;
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
+      onClick={(): void => { if (!busy) onCancel(); }}
     >
-      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+      <div
+        className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-800"
+        onClick={(e): void => { e.stopPropagation(); }}
+      >
         <div className="mb-3 flex items-start gap-3">
           <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-500" />
           <div>

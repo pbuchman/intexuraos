@@ -1,16 +1,8 @@
-/**
- * Hook: list daily digests for a single group over a date range.
- *
- * Loads one page from mobile-notifications-service /notifications/digests.
- * Filter/sort state is persisted in localStorage so the list page stays
- * in sync across reloads. Mirrors the localStorage pattern from
- * CodeTasksPage / useIssueGroups.
- */
-
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/context';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { listDigests } from '@/services/notificationDigestsApi';
+import { daysAgoIso, todayIso } from '@/utils/digestDates';
 import type { PersistedDailySummary } from '@/types/notificationDigests';
 
 export type DigestStatusFilter = 'all' | 'regenerated' | 'single-generation';
@@ -19,7 +11,6 @@ export type DigestSortOption = 'date-desc' | 'date-asc' | 'message-count-desc';
 export const DIGEST_LIST_FILTER_STORAGE_KEY = 'notification-digests-filter';
 export const DIGEST_LIST_SORT_STORAGE_KEY = 'notification-digests-sort';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_RANGE_DAYS = 30;
 
 export interface UseDigestListOptions {
@@ -61,14 +52,6 @@ export function loadDigestSortFromStorage(): DigestSortOption {
   return isDigestSortOption(stored) ? stored : 'date-desc';
 }
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * DAY_MS).toISOString().slice(0, 10);
-}
-
 function applyFilter(
   items: readonly PersistedDailySummary[],
   filter: DigestStatusFilter,
@@ -90,8 +73,8 @@ function applySort(
 
 export function useDigestList(options: UseDigestListOptions): UseDigestListResult {
   const { getAccessToken } = useAuth();
-  const fromDate = options.fromDate ?? daysAgo(DEFAULT_RANGE_DAYS);
-  const toDate = options.toDate ?? today();
+  const fromDate = options.fromDate ?? daysAgoIso(DEFAULT_RANGE_DAYS);
+  const toDate = options.toDate ?? todayIso();
   const [raw, setRaw] = useState<readonly PersistedDailySummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +113,10 @@ export function useDigestList(options: UseDigestListOptions): UseDigestListResul
     localStorage.setItem(DIGEST_LIST_SORT_STORAGE_KEY, next);
   }, []);
 
-  const items = applySort(applyFilter(raw, filter), sort);
+  const items = useMemo(
+    () => applySort(applyFilter(raw, filter), sort),
+    [raw, filter, sort],
+  );
 
   return { items, loading, error, filter, sort, fromDate, toDate, setFilter, setSort, refresh };
 }
