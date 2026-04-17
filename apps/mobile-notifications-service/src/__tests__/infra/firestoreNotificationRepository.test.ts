@@ -386,6 +386,49 @@ describe('FirestoreNotificationRepository', () => {
       const texts = result.value.notifications.map((n) => n.text).sort();
       expect(texts).toEqual(['t2']);
     });
+
+    // Migration 096 deploys the composite Firestore index (app + userId +
+    // receivedAt + timestamp) required by digest backfill. FakeFirestore does
+    // not surface missing-index errors, so this test cannot validate index
+    // presence directly. Instead it pins the combined-filter query shape that
+    // exercises the index in production, ensuring the call site keeps using
+    // the field combination that migration 096 covers.
+    it('filters by app + title + postTimeSec range simultaneously (migration 096 index)', async () => {
+      const mk = (
+        app: string,
+        title: string,
+        text: string,
+        timestampMs: number,
+        notifId: string
+      ): CreateNotificationInput => ({
+        userId: 'user-combo',
+        source: 'android',
+        device: 'dev',
+        app,
+        title,
+        text,
+        timestamp: timestampMs,
+        postTime: String(Math.floor(timestampMs / 1000)),
+        notificationId: notifId,
+      });
+      await repository.save(mk('com.whatsapp', 'Grupa Wedkarska', 'A', 200_000, 'c1'));
+      await repository.save(mk('com.whatsapp', 'Other Group', 'B', 200_000, 'c2'));
+      await repository.save(mk('com.telegram', 'Grupa Wedkarska', 'C', 200_000, 'c3'));
+      await repository.save(mk('com.whatsapp', 'Grupa Wedkarska', 'D', 500_000, 'c4'));
+
+      const result = await repository.findByUserIdPaginated('user-combo', {
+        limit: 10,
+        filter: {
+          app: ['com.whatsapp'],
+          title: 'wedkarska',
+          postTimeSecFrom: 150,
+          postTimeSecTo: 250,
+        },
+      });
+      if (!result.ok) throw new Error(`unexpected: ${result.error.message}`);
+      expect(result.value.notifications).toHaveLength(1);
+      expect(result.value.notifications[0]?.text).toBe('A');
+    });
   });
 
   describe('existsByNotificationIdAndUserId', () => {
