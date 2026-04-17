@@ -725,6 +725,56 @@ describe('POST /notifications/digests/backfill', () => {
     await app.close();
   });
 
+  it('returns 500 when kick-off POST returns non-200', async () => {
+    const fetchMock = vi.fn(async (): Promise<Response> => new Response('err', { status: 503, headers: { 'content-type': 'text/plain' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    setMockServices({
+      backfillRunRepository: {
+        create: async () => ({ ok: true, value: undefined }),
+        findById: async () => ({ ok: true, value: null }),
+        markDayComplete: async () => ({ ok: true, value: undefined }),
+        markDayFailed: async () => ({ ok: true, value: undefined }),
+        markRunCompleted: async () => ({ ok: true, value: undefined }),
+      },
+    });
+    const token = await createToken({ sub: 'u' });
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/notifications/digests/backfill',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { groupKey: 'g', fromDate: '2026-04-01', toDate: '2026-04-03' },
+    });
+    expect(res.statusCode).toBe(500);
+    await app.close();
+    vi.unstubAllGlobals();
+  });
+
+  it('returns 500 when kick-off POST throws', async () => {
+    const fetchMock = vi.fn(async (): Promise<Response> => { throw new Error('network down'); });
+    vi.stubGlobal('fetch', fetchMock);
+    setMockServices({
+      backfillRunRepository: {
+        create: async () => ({ ok: true, value: undefined }),
+        findById: async () => ({ ok: true, value: null }),
+        markDayComplete: async () => ({ ok: true, value: undefined }),
+        markDayFailed: async () => ({ ok: true, value: undefined }),
+        markRunCompleted: async () => ({ ok: true, value: undefined }),
+      },
+    });
+    const token = await createToken({ sub: 'u' });
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/notifications/digests/backfill',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { groupKey: 'g', fromDate: '2026-04-01', toDate: '2026-04-03' },
+    });
+    expect(res.statusCode).toBe(500);
+    await app.close();
+    vi.unstubAllGlobals();
+  });
+
   it('rejects when toDate before fromDate', async () => {
     setMockServices({});
     const token = await createToken({ sub: 'u' });
