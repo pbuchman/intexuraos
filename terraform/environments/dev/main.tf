@@ -992,7 +992,9 @@ module "mobile_notifications_service" {
 
   secrets = local.common_service_secrets
 
-  env_vars = local.common_service_env_vars
+  env_vars = merge(local.common_service_env_vars, {
+    INTEXURAOS_DIGEST_LLM_MODEL = "or:google/gemini-3-flash-preview"
+  })
 
   depends_on = [
     module.artifact_registry,
