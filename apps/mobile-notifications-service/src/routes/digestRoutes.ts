@@ -9,6 +9,7 @@ import { runDigestForGroup, type RunDigestForGroupResult } from '../domain/useca
 import type { DigestError } from '../domain/usecases/digestErrors.js';
 import { yesterdayCet } from '../domain/usecases/yesterdayCet.js';
 import { DIGEST_SUBSCRIPTIONS } from '../domain/digestSubscriptions.js';
+import { startDigestBackfill } from '../domain/usecases/runDigestBackfill.js';
 import { runRequestSchema, runResponseSchema } from './digestSchemas.js';
 
 const logger = createAppLogger({ name: 'digestRoutes' });
@@ -390,6 +391,121 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // @allow-raw-send -- reply.fail only supports 5xx; 404 needs typed body via reply.status(404).send()
       if (result.value === null) return await reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Digest not found' } });
       return await reply.ok(result.value);
+    },
+  );
+
+  interface UserRunBody {
+    groupKey: string;
+    date: string;
+  }
+
+  fastify.post<{ Body: UserRunBody }>(
+    '/notifications/digests/run',
+    {
+      schema: {
+        operationId: 'userRunDigest',
+        summary: 'Regenerate digest for the authenticated user, group and date',
+        tags: ['mobile-notifications'],
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: 'object',
+          required: ['groupKey', 'date'],
+          properties: {
+            groupKey: { type: 'string', minLength: 1 },
+            date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      logIncomingRequest(req);
+      const user = await requireAuth(req, reply);
+      if (user === null) return;
+      const { groupKey, date } = req.body;
+      const llmClient = buildLlmClient(user.userId);
+      const modelId = getDigestModel();
+      const result = await runDigestForGroup(
+        { llmClient, logger, modelId },
+        { userId: user.userId, groupKey, date, holder: 'manual' },
+      );
+      if (!result.ok) {
+        if (result.error.code === 'lock-held') {
+          return await reply.ok({ summaryDocId: '', generation: 0, messageCount: 0, modelId, regenerated: false, lockSkipped: true });
+        }
+        return await reply.fail('INTERNAL_ERROR', JSON.stringify(result.error));
+      }
+      return await reply.ok({
+        summaryDocId: `${user.userId}_${groupKey}_${date}`,
+        generation: result.value.generation,
+        messageCount: result.value.summary.messageCount,
+        modelId: result.value.modelId,
+        regenerated: result.value.regenerated,
+      });
+    },
+  );
+
+  interface UserBackfillBody {
+    groupKey: string;
+    fromDate: string;
+    toDate: string;
+  }
+
+  fastify.post<{ Body: UserBackfillBody }>(
+    '/notifications/digests/backfill',
+    {
+      schema: {
+        operationId: 'userStartBackfill',
+        summary: 'Start a digest backfill run for a date range',
+        tags: ['mobile-notifications'],
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: 'object',
+          required: ['groupKey', 'fromDate', 'toDate'],
+          properties: {
+            groupKey: { type: 'string', minLength: 1 },
+            fromDate: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+            toDate: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      logIncomingRequest(req);
+      const user = await requireAuth(req, reply);
+      if (user === null) return;
+      const { groupKey, fromDate, toDate } = req.body;
+      if (fromDate > toDate) {
+        return await reply.fail('INVALID_REQUEST', 'fromDate must be on or before toDate');
+      }
+
+      const base = getSelfBaseUrl();
+      /* v8 ignore start -- ts-type: REQUIRED_ENV guarantees INTEXURAOS_INTERNAL_AUTH_TOKEN is defined at boot; the '' fallback is unreachable in any booted test @preserve */
+      const token = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
+      /* v8 ignore stop @preserve */
+
+      const result = await startDigestBackfill(
+        {
+          logger,
+          backfillRunRepository: getServices().backfillRunRepository,
+          httpPost: async (path, body) => {
+            try {
+              const res = await fetch(`${base}${path}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-internal-auth': token },
+                body: JSON.stringify(body),
+                signal: AbortSignal.timeout(CHAIN_POST_TIMEOUT_MS),
+              });
+              if (!res.ok) return err({ message: `kick-off POST returned ${String(res.status)}` });
+              return ok(undefined);
+            } catch (kickErr) {
+              return err({ message: getErrorMessage(kickErr, 'kick-off POST failed') });
+            }
+          },
+        },
+        { userId: user.userId, groupKey, fromDate, toDate },
+      );
+      if (!result.ok) return await reply.fail('INTERNAL_ERROR', result.error.message);
+      return await reply.ok({ runId: result.value.runId, queuedDates: result.value.queuedDates });
     },
   );
 
