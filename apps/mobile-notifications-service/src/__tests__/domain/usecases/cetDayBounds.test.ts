@@ -22,4 +22,9 @@ describe('cetDayBounds', () => {
     expect(Number.isInteger(bounds.fromSec)).toBe(true);
     expect(bounds.toSec - bounds.fromSec).toBe(24 * 60 * 60);
   });
+
+  it('throws on malformed date string', () => {
+    expect(() => cetDayBounds('not-a-date')).toThrow(/invalid date/);
+    expect(() => cetDayBounds('2026-04')).toThrow(/invalid date/);
+  });
 });
