@@ -286,6 +286,7 @@ describe('buildSynthesisPrompt', () => {
         safety: {
           high_stakes: true,
           required_disclaimers: ['Consult a medical professional'],
+          user_exclusions: [],
         },
       });
       const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
@@ -404,7 +405,7 @@ describe('buildSynthesisPrompt', () => {
     it('includes high stakes without disclaimers in synthesis', () => {
       const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
       const ctx = createTestSynthesisContext({
-        safety: { high_stakes: true, required_disclaimers: [] },
+        safety: { high_stakes: true, required_disclaimers: [], user_exclusions: [] },
       });
       const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
 
@@ -440,7 +441,7 @@ describe('buildSynthesisPrompt', () => {
     it('skips safety section when no safety concerns', () => {
       const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
       const ctx = createTestSynthesisContext({
-        safety: { high_stakes: false, required_disclaimers: [] },
+        safety: { high_stakes: false, required_disclaimers: [], user_exclusions: [] },
       });
       const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
 
@@ -450,7 +451,7 @@ describe('buildSynthesisPrompt', () => {
     it('shows disclaimer without high stakes when disclaimers present', () => {
       const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
       const ctx = createTestSynthesisContext({
-        safety: { high_stakes: false, required_disclaimers: ['Disclaimer 1'] },
+        safety: { high_stakes: false, required_disclaimers: ['Disclaimer 1'], user_exclusions: [] },
       });
       const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
 
@@ -689,6 +690,7 @@ describe('buildSynthesisPrompt', () => {
           safety: {
             high_stakes: true,
             required_disclaimers: ['Consult a professional', 'Verify independently'],
+            user_exclusions: [],
           },
         });
         const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
