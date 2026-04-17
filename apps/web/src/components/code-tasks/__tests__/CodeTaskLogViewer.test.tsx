@@ -172,7 +172,7 @@ describe('CodeTaskLogViewer integration', () => {
     expect(workerButton).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('when worker filter is active, only claude- and msg-tagged lines are shown', async () => {
+  it('when worker filter is active, lines tagged [claude] are shown', async () => {
     const claudeUrl = 'https://example.com/claude-line';
     const otherUrl = 'https://example.com/other-line';
     const logs: LogLine[] = [
@@ -219,6 +219,32 @@ describe('CodeTaskLogViewer integration', () => {
 
     // After filter: msg line (worker-tagged) remains visible
     expect(screen.getByRole('link', { name: msgUrl })).toBeInTheDocument();
+    // After filter: tool line (non-worker-tagged) is hidden
+    expect(screen.queryByRole('link', { name: toolUrl })).not.toBeInTheDocument();
+  });
+
+  it('when worker filter is active, lines tagged [codex] are also shown', async () => {
+    const codexUrl = 'https://example.com/codex-line';
+    const toolUrl = 'https://example.com/tool-line';
+    const logs: LogLine[] = [
+      makeLog(1, `[codex] Codex output: ${codexUrl}`),
+      makeLog(2, `[tool] Tool output: ${toolUrl}`),
+    ];
+
+    render(<CodeTaskLogViewer {...makeProps({ logs })} />);
+
+    // Both links visible before filter
+    expect(screen.getByRole('link', { name: codexUrl })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: toolUrl })).toBeInTheDocument();
+
+    // Activate the Worker filter
+    const buttons = screen.getAllByRole('button');
+    const workerButton = buttons.find((b) => b.textContent?.trim() === 'Worker');
+    if (workerButton === undefined) throw new Error('Worker filter button not found');
+    await userEvent.click(workerButton);
+
+    // After filter: codex line (worker-tagged) remains visible
+    expect(screen.getByRole('link', { name: codexUrl })).toBeInTheDocument();
     // After filter: tool line (non-worker-tagged) is hidden
     expect(screen.queryByRole('link', { name: toolUrl })).not.toBeInTheDocument();
   });
