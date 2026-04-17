@@ -15,3 +15,4 @@ export * from './synthesis/index.js';
 export * from './approvals/index.js';
 export * from './calendar/index.js';
 export * from './shared/index.js';
+export * from './digest/index.js';
