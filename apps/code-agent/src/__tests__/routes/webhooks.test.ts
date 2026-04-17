@@ -31,7 +31,7 @@ import { buildServer } from '../../server.js';
 
 import { getServices, resetServices, setServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
-import type { Firestore } from '@google-cloud/firestore';
+import { Timestamp, type Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { Logger } from 'pino';
 import { err, ok } from '@intexuraos/common-core';
@@ -10342,7 +10342,66 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     return { gitHubPRClient };
   }
 
-  it('flags task with prUrlValidationFailed when PR title does not match Linear issue ID', async () => {
+  it('fails task with EXECUTION_AGENT_PR_URL_VALIDATION_FAILED when PR title is wrong AND PR predates dispatch', async () => {
+    const dispatchedAt = new Date('2026-04-15T00:00:00Z');
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't-prval-gate', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    // Inject dispatchedAt directly into the FakeFirestore store. The Fake's
+    // DocumentReference.update treats objects with `isEqual` (including Timestamp) as
+    // FieldValue.delete sentinels, so we cannot use codeTaskRepo.update for Timestamps.
+    const docRef = fakeFirestore.collection('code_tasks').doc(task.id) as unknown as { _store: Map<string, Map<string, Record<string, unknown>>>; _collectionName: string; id: string };
+    const existingDoc = docRef._store.get(docRef._collectionName)?.get(docRef.id);
+    if (existingDoc !== undefined) {
+      existingDoc['dispatchedAt'] = Timestamp.fromDate(dispatchedAt);
+    }
+
+    const lac = getServices().linearAgentClient;
+    vi.mocked(lac.validateIssue).mockReset();
+    vi.mocked(lac.validateIssue).mockResolvedValue(ok({ id: 'uuid', identifier: 'INT-123', title: 'T', url: 'u', labels: [], childCount: 0, parentId: null }));
+    vi.mocked(lac.addComment).mockReset();
+    vi.mocked(lac.addComment).mockResolvedValue(ok({ commentId: 'c1' }));
+    vi.mocked(lac.updateIssueState).mockReset();
+    vi.mocked(lac.updateIssueState).mockResolvedValue(ok(undefined));
+    vi.mocked(lac.updateIssueMetadata).mockReset();
+    vi.mocked(lac.updateIssueMetadata).mockResolvedValue(ok({ droppedLabels: [] }));
+
+    const { gitHubPRClient } = installPRValidationServices();
+    vi.mocked(gitHubPRClient.getPullRequestDetails).mockResolvedValue(ok({
+      number: 970,
+      title: 'Some unrelated PR',
+      body: null,
+      state: 'open',
+      authorLogin: 'test-user',
+      baseBranch: 'development',
+      headBranch: 'feature/unrelated',
+      mergeable: null,
+      mergeableState: null,
+      headSha: 'abc123',
+      createdAt: '2026-03-01T00:00:00Z',
+    }));
+
+    const payload = { taskId: task.id, status: 'completed' as const, result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/970', execution_outcome_label: 'implemented' as const, execution_linear_issue_url: 'https://linear.app/pbuchman/issue/INT-123' } };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({ method: 'POST', url: '/internal/webhooks/task-complete', headers: { 'x-internal-auth': 'test-internal-token', 'x-request-timestamp': timestamp, 'x-request-signature': signature }, payload });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.status).toBe('failed');
+    expect(g.value.error?.code).toBe('EXECUTION_AGENT_PR_URL_VALIDATION_FAILED');
+    expect(g.value.error?.message).toContain('does not contain expected Linear issue ID');
+    expect(g.value.error?.message).toContain('before task was dispatched');
+    expect(g.value.prUrlValidationFailed).toBe(true);
+    expect(g.value.prUrlValidationErrors).toBeDefined();
+    expect(g.value.prUrlValidationErrors?.length).toBe(2);
+  });
+
+  it('fails task with EXECUTION_AGENT_PR_URL_VALIDATION_FAILED when PR title does not match Linear issue ID', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
       repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't-prval-1', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
@@ -10383,13 +10442,14 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     const g = await codeTaskRepo.findById(task.id);
     expect(g.ok).toBe(true);
     if (!g.ok) throw new Error('Failed');
-    expect(g.value.status).toBe('implemented');
+    expect(g.value.status).toBe('failed');
+    expect(g.value.error?.code).toBe('EXECUTION_AGENT_PR_URL_VALIDATION_FAILED');
     expect(g.value.prUrlValidationFailed).toBe(true);
     expect(g.value.prUrlValidationErrors).toBeDefined();
     expect(g.value.prUrlValidationErrors?.[0]).toContain('does not contain expected Linear issue ID');
   });
 
-  it('flags task with prUrlValidationFailed when PR does not exist (NOT_FOUND)', async () => {
+  it('fails task with EXECUTION_AGENT_PR_URL_VALIDATION_FAILED when PR does not exist (NOT_FOUND)', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
       repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't-prval-2', linearIssueId: 'INT-123', webhookSecret: 'test-webhook-secret', agentType: 'execution',
@@ -10419,7 +10479,8 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     const g = await codeTaskRepo.findById(task.id);
     expect(g.ok).toBe(true);
     if (!g.ok) throw new Error('Failed');
-    expect(g.value.status).toBe('implemented');
+    expect(g.value.status).toBe('failed');
+    expect(g.value.error?.code).toBe('EXECUTION_AGENT_PR_URL_VALIDATION_FAILED');
     expect(g.value.prUrlValidationFailed).toBe(true);
     expect(g.value.prUrlValidationErrors?.[0]).toContain('does not exist');
   });

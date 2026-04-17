@@ -758,7 +758,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const enforceExecutionOutcome = async (
         executionResult: NonNullable<typeof result>
-      ): Promise<{ ok: true; prUrlValidationFailed?: boolean; prUrlValidationErrors?: string[] } | { ok: false; message: string; code: string }> => {
+      ): Promise<{ ok: true } | { ok: false; message: string; code: string; prUrlValidationErrors?: string[] }> => {
         if (task.linearIssueId === undefined) {
           return {
             ok: false,
@@ -892,8 +892,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         // PR URL validation (INT-1361): verify PR exists, title matches, and recency
-        let prUrlValidationFailed: boolean | undefined; // @allow-undefined-type -- local variable, not interface property
-        let prUrlValidationErrors: string[] | undefined; // @allow-undefined-type -- local variable, not interface property
         const prNumberFromUrl = /\/pull\/(\d+)/.exec(executionResult.prUrl);
         /* v8 ignore start -- ts-type: prUrl always returns a match for /pull/N after enforcement check at line 658; parseOwnerRepo cannot return null for valid task.repository @preserve */
         if (prNumberFromUrl?.[1] !== undefined) {
@@ -916,8 +914,12 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 logger,
               });
               if (validationResult.failed) {
-                prUrlValidationFailed = true;
-                prUrlValidationErrors = validationResult.errors;
+                return {
+                  ok: false,
+                  code: 'EXECUTION_AGENT_PR_URL_VALIDATION_FAILED',
+                  message: validationResult.errors.join('; '),
+                  prUrlValidationErrors: validationResult.errors,
+                };
               }
             } else {
               logger.warn({ taskId, userId: task.userId }, 'PR URL validation skipped: no GitHub token available');
@@ -966,11 +968,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           };
         }
 
-        return {
-          ok: true,
-          ...(prUrlValidationFailed === true && { prUrlValidationFailed }),
-          ...(prUrlValidationErrors !== undefined && { prUrlValidationErrors }),
-        };
+        return { ok: true };
       };
 
       const enforcePullRequestOutcome = async (
@@ -1115,10 +1113,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       };
 
       // Step 3: Update task based on status
-      // PR URL validation fields (INT-1361) — hoisted so they survive across agent-type blocks
-      let executionPrUrlValidationFailed: boolean | undefined; // @allow-undefined-type -- hoisted mutable variable
-      let executionPrUrlValidationErrors: string[] | undefined; // @allow-undefined-type -- hoisted mutable variable
-
       if (status === 'completed') {
         // Trace which agent type is being handled for debugging
         request.log.info({ taskId, agentType: task.agentType }, 'Processing completed task');
@@ -1173,6 +1167,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 code: executionEnforcement.code,
                 message: executionEnforcement.message,
               },
+              ...(executionEnforcement.prUrlValidationErrors !== undefined && {
+                prUrlValidationFailed: true,
+                prUrlValidationErrors: executionEnforcement.prUrlValidationErrors,
+              }),
               callbackReceived: true,
             });
             if (!failResult.ok) {
@@ -1189,10 +1187,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
             return await reply.send({ received: true });
           }
-
-          // Capture PR URL validation fields for the shared task update (INT-1361)
-          executionPrUrlValidationFailed = executionEnforcement.prUrlValidationFailed;
-          executionPrUrlValidationErrors = executionEnforcement.prUrlValidationErrors;
         }
 
         if (task.agentType === 'pull_request') {
@@ -1485,10 +1479,6 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           ...(executionMemoryPostRun !== undefined && { executionMemoryPostRun }),
           ...(remediationRequiresReReview !== undefined && {
               requiresReReview: remediationRequiresReReview,
-            }),
-          ...(executionPrUrlValidationFailed === true && executionPrUrlValidationErrors !== undefined && {
-              prUrlValidationFailed: true,
-              prUrlValidationErrors: executionPrUrlValidationErrors,
             }),
           callbackReceived: true,
         });
