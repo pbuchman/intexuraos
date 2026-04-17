@@ -260,7 +260,9 @@ describe('buildExecutionMemorySection acknowledgment and reporting', () => {
     expect(prompt).not.toContain('MANDATORY: Report Memory Usage in Final Output');
     // The final-block template still lists memory_ids_used with a "none" fallback so workers
     // always report these fields — even when no memories are injected.
-    expect(prompt).toContain('memory_ids_used: <comma-separated injected IDs you applied, or "none">');
+    expect(prompt).toContain(
+      'memory_ids_used: <comma-separated injected IDs you applied, or "none">'
+    );
   });
 });
 
