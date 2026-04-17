@@ -8,5 +8,12 @@ import githubPREventsRoute from './github-pre-events.js';
 import githubPRSummariesRoute from './github-pr-summaries.js';
 import githubEventLogRoute from './github-event-log.js';
 import issueGroupRoutes from './issueGroupRoutes.js';
+import updateTaskStatusRoute from './updateTaskStatusRoute.js';
 
-export { githubPREventsRoute, githubPRSummariesRoute, githubEventLogRoute, issueGroupRoutes };
+export {
+  githubPREventsRoute,
+  githubPRSummariesRoute,
+  githubEventLogRoute,
+  issueGroupRoutes,
+  updateTaskStatusRoute,
+};

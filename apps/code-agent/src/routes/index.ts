@@ -4,7 +4,7 @@ import { codeRoutes } from './codeRoutes.js';
 import { webhookRoutes } from './webhookRoutes.js';
 import { workerSettingsRoutes } from './workerSettingsRoutes.js';
 import { webhooksRoutes } from './webhooks/index.js';
-import { githubEventLogRoute, githubPREventsRoute, githubPRSummariesRoute, issueGroupRoutes } from './code/index.js';
+import { githubEventLogRoute, githubPREventsRoute, githubPRSummariesRoute, issueGroupRoutes, updateTaskStatusRoute } from './code/index.js';
 import { internalRoutes } from './internalRoutes.js';
 import { internalUsageWebhookRoute } from './internalUsageWebhookRoute.js';
 import { mergeQueueRoutes, mergeQueueTickRoute } from './merge-queue/index.js';
@@ -24,6 +24,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RoutesDeps): Pr
   await app.register(internalRoutes);
   await app.register(internalUsageWebhookRoute);
   await app.register(issueGroupRoutes, deps);
+  await app.register(updateTaskStatusRoute);
   await app.register(mergeQueueRoutes, deps);
   await app.register(mergeQueueTickRoute);
 }
