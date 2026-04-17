@@ -31,7 +31,8 @@ describe('TimeRangePicker', () => {
     render(
       <TimeRangePicker timeRange={{ preset: 'custom' }} onChange={vi.fn()} />,
     );
-    expect(screen.getAllByDisplayValue('').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByLabelText('Custom start date')).toBeInTheDocument();
+    expect(screen.getByLabelText('Custom end date')).toBeInTheDocument();
   });
 });
 
