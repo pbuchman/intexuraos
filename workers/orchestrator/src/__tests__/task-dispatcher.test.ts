@@ -11,6 +11,7 @@ import type { StatePersistence } from '../services/state-persistence.js';
 import type { WorktreeManager } from '../services/worktree-manager.js';
 import type { LogForwarder } from '../services/log-forwarder.js';
 import type { WebhookClient } from '../services/webhook-client.js';
+import type { StatusUpdateClient } from '../services/status-update-client.js';
 import type { GitHubTokenService } from '../github/token-service.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { CreateTaskRequest } from '../types/api.js';
@@ -294,6 +295,11 @@ describe('TaskDispatcher', () => {
     getPendingCount: vi.fn(async () => 0),
   } as unknown as WebhookClient;
 
+  // Mock StatusUpdateClient
+  const mockStatusUpdateClient = {
+    commit: vi.fn(async () => ({ ok: true as const })),
+  } as unknown as StatusUpdateClient;
+
   // Mock GitHubTokenService
   const mockGitHubTokenService = {
     getToken: vi.fn(async () => ({ token: 'test-token', expiresAt: '2025-01-26T00:00:00Z' })),
@@ -361,6 +367,7 @@ describe('TaskDispatcher', () => {
       mockWorktreeManager,
       mockLogForwarder,
       mockWebhookClient,
+      mockStatusUpdateClient,
       mockGitHubTokenService,
       mockLogger,
       mockIsolationConfig,
@@ -715,6 +722,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -902,6 +910,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -1009,6 +1018,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -1267,6 +1277,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -1312,6 +1323,7 @@ describe('TaskDispatcher', () => {
         cleanupWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         failingIsolationConfig,
@@ -1421,6 +1433,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -1484,6 +1497,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -1572,6 +1586,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -1679,6 +1694,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -2568,6 +2584,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -2722,6 +2739,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -2893,6 +2911,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -2949,6 +2968,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -3047,6 +3067,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -3150,6 +3171,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         localIsolation,
@@ -3231,6 +3253,7 @@ describe('TaskDispatcher', () => {
         localWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         localIsolation,
@@ -3293,6 +3316,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         localIsolation,
@@ -3375,6 +3399,7 @@ describe('TaskDispatcher', () => {
           mockWorktreeManager,
           mockLogForwarder,
           mockWebhookClient,
+          mockStatusUpdateClient,
           mockGitHubTokenService,
           mockLogger,
           localIsolation,
@@ -3460,6 +3485,7 @@ describe('TaskDispatcher', () => {
           mockWorktreeManager,
           mockLogForwarder,
           mockWebhookClient,
+          mockStatusUpdateClient,
           mockGitHubTokenService,
           mockLogger,
           localIsolation,
@@ -3534,6 +3560,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         localIsolation,
@@ -3609,6 +3636,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         localIsolation,
@@ -3693,6 +3721,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         isolation,
@@ -3882,6 +3911,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         isolation,
@@ -3990,6 +4020,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         isolation,
@@ -4072,6 +4103,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         isolation,
@@ -4154,6 +4186,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         isolation,
@@ -4228,6 +4261,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -4353,6 +4387,7 @@ describe('TaskDispatcher', () => {
           mockWorktreeManager,
           mockLogForwarder,
           mockWebhookClient,
+          mockStatusUpdateClient,
           mockGitHubTokenService,
           mockLogger,
           localIsolation,
@@ -4431,6 +4466,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -4503,6 +4539,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         unavailableIsolationConfig,
@@ -4563,6 +4600,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         unavailableIsolationConfig,
@@ -4617,6 +4655,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         { ...mockIsolationConfig, workerAuthRegistry: refreshableRegistry },
@@ -4654,6 +4693,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         { ...mockIsolationConfig, workerAuthRegistry: unavailableRegistry },
@@ -4735,6 +4775,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         drainLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -5038,6 +5079,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -5178,6 +5220,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -5225,6 +5268,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -5286,6 +5330,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -5359,6 +5404,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -5415,6 +5461,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -5453,6 +5500,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -5491,6 +5539,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -5526,6 +5575,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -5787,6 +5837,7 @@ describe('TaskDispatcher', () => {
           mockWorktreeManager,
           mockLogForwarder,
           mockWebhookClient,
+          mockStatusUpdateClient,
           mockGitHubTokenService,
           mockLogger,
           localIsolation,
@@ -5897,6 +5948,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -6854,6 +6906,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -7010,6 +7063,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -7083,6 +7137,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -7702,6 +7757,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         localIsolation,
@@ -7746,6 +7802,7 @@ describe('TaskDispatcher', () => {
         cleanupWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -7775,6 +7832,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -7827,6 +7885,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -7863,6 +7922,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -7949,6 +8009,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -7989,6 +8050,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -8056,6 +8118,7 @@ describe('TaskDispatcher', () => {
         localWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -9116,6 +9179,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         isolationWithoutResume,
@@ -9210,6 +9274,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -9251,6 +9316,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -9296,6 +9362,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -9341,6 +9408,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -9383,6 +9451,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -9427,6 +9496,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -9476,6 +9546,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -9529,6 +9600,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -9624,6 +9696,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -9689,6 +9762,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -9816,6 +9890,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -9876,6 +9951,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -9951,6 +10027,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -10012,6 +10089,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -10091,6 +10169,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -10148,6 +10227,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -10199,6 +10279,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -10262,6 +10343,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -10357,6 +10439,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -10428,6 +10511,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -10554,6 +10638,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -10639,6 +10724,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         mockIsolationConfig,
@@ -10679,6 +10765,265 @@ describe('TaskDispatcher', () => {
     });
   });
 
+  describe('finalizeTask status commit via StatusUpdateClient', () => {
+    // Build a minimal in-flight task record so we can drive finalizeTask directly
+    // (bypassing the dispatch pipeline). finalizeTask expects `startedAt` to be set.
+    const buildInflightTask = (taskId: string): Task =>
+      ({
+        taskId,
+        workerType: 'auto',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/internal/webhooks/task-complete',
+        webhookSecret: 'secret',
+        status: 'running',
+        worktreePath: '/tmp/worktrees/status-commit',
+        baseBranch: 'development',
+        linearIssueLabels: [],
+        hasChildren: false,
+        repository: 'pbuchman/intexuraos',
+        containerId: 'container-status-commit',
+        startedAt: new Date(Date.now() - 1000).toISOString(),
+      }) as unknown as Task;
+
+    it('calls statusUpdateClient.commit before webhookClient.send with the expected payload', async () => {
+      const callOrder: string[] = [];
+      const commitSpy = vi.fn(async (_input: Record<string, unknown>) => {
+        callOrder.push('commit');
+        return { ok: true as const };
+      });
+      const sendSpy = vi.fn(async (_input: Record<string, unknown>) => {
+        callOrder.push('send');
+        return { ok: true, value: undefined };
+      });
+      const localStatusUpdate = {
+        commit: commitSpy,
+      } as unknown as StatusUpdateClient;
+      const localWebhook = {
+        send: sendSpy,
+        retryPending: vi.fn(async () => undefined),
+        getPendingCount: vi.fn(async () => 0),
+      } as unknown as WebhookClient;
+
+      const localDispatcher = new TaskDispatcher(
+        mockConfig,
+        createStatePersistence(),
+        mockWorktreeManager,
+        mockLogForwarder,
+        localWebhook,
+        localStatusUpdate,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const task = buildInflightTask('status-commit-ok');
+      const internal = localDispatcher as unknown as {
+        finalizeTask: (
+          task: Task,
+          status: string,
+          payload: Record<string, unknown>,
+          keepLogOpen?: boolean
+        ) => Promise<void>;
+      };
+      await internal.finalizeTask(task, 'completed', {
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+          branch: 'feat/status-commit',
+          summary: 'Work done',
+        },
+      });
+
+      // Order: commit runs before the terminal task-complete webhook.
+      // (A task_completed lifecycle "task-event" send may also fire earlier
+      // via fire-and-forget; the terminal send is guaranteed after commit.)
+      const commitIdx = callOrder.indexOf('commit');
+      const lastSendIdx = callOrder.lastIndexOf('send');
+      expect(commitIdx).toBeGreaterThanOrEqual(0);
+      expect(lastSendIdx).toBeGreaterThan(commitIdx);
+
+      expect(commitSpy).toHaveBeenCalledTimes(1);
+      const commitArg = commitSpy.mock.calls[0]?.[0] as
+        | {
+            taskId: string;
+            status: string;
+            completedAt: Date;
+            error?: { code: string; message: string };
+            result?: { prUrl?: string; branch?: string; summary?: string };
+          }
+        | undefined;
+      expect(commitArg).toBeDefined();
+      if (commitArg === undefined) throw new Error('commit not called');
+      expect(commitArg.taskId).toBe('status-commit-ok');
+      expect(commitArg.status).toBe('completed');
+      expect(commitArg.completedAt).toBeInstanceOf(Date);
+      expect(commitArg.error).toBeUndefined();
+      expect(commitArg.result).toEqual({
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/42',
+        branch: 'feat/status-commit',
+        summary: 'Work done',
+      });
+
+      // Webhook still fired (demoted to side-effects).
+      const terminalCall = sendSpy.mock.calls.find((c) => {
+        const url = (c[0] as { url?: string } | undefined)?.url;
+        return url === task.webhookUrl;
+      });
+      expect(terminalCall).toBeDefined();
+    });
+
+    it('logs ERROR with STATUS_UPDATE_COMMIT_FAILED tag and continues when commit fails', async () => {
+      const commitSpy = vi.fn(async (_input: Record<string, unknown>) => ({
+        ok: false as const,
+        error: { type: '5xx' as const, status: 503, message: 'svc unavailable' },
+      }));
+      const sendSpy = vi.fn(async (_input: Record<string, unknown>) => ({
+        ok: true,
+        value: undefined,
+      }));
+      const localStatusUpdate = {
+        commit: commitSpy,
+      } as unknown as StatusUpdateClient;
+      const localWebhook = {
+        send: sendSpy,
+        retryPending: vi.fn(async () => undefined),
+        getPendingCount: vi.fn(async () => 0),
+      } as unknown as WebhookClient;
+      const errorSpy = vi.fn();
+      const localLogger: Logger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: errorSpy,
+        debug: vi.fn(),
+      };
+      const appendedLogs: string[] = [];
+
+      const localState = createStatePersistence();
+      const localDispatcher = new TaskDispatcher(
+        mockConfig,
+        localState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        localWebhook,
+        localStatusUpdate,
+        mockGitHubTokenService,
+        localLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      // Spy on appendOrchestratorTaskLog (private) to capture the audit line.
+      const internal = localDispatcher as unknown as {
+        finalizeTask: (
+          task: Task,
+          status: string,
+          payload: Record<string, unknown>,
+          keepLogOpen?: boolean
+        ) => Promise<void>;
+        appendOrchestratorTaskLog: (taskId: string, msg: string) => void;
+        saveTask: (t: Task) => Promise<void>;
+      };
+      const origAppend = internal.appendOrchestratorTaskLog.bind(internal);
+      internal.appendOrchestratorTaskLog = (taskId: string, msg: string): void => {
+        appendedLogs.push(msg);
+        origAppend(taskId, msg);
+      };
+
+      const task = buildInflightTask('status-commit-fail');
+      // Seed the state with the task so saveTask can update it in place.
+      await localState.modify((s) => {
+        s.tasks[task.taskId] = task;
+      });
+
+      await internal.finalizeTask(task, 'failed', {
+        error: { code: 'exec_failed', message: 'boom' },
+      });
+
+      // logger.error was called with tag: 'STATUS_UPDATE_COMMIT_FAILED'
+      const taggedErrorCall = errorSpy.mock.calls.find((c) => {
+        const obj = c[0] as Record<string, unknown> | undefined;
+        return obj?.['tag'] === 'STATUS_UPDATE_COMMIT_FAILED';
+      });
+      expect(taggedErrorCall).toBeDefined();
+
+      // appendOrchestratorTaskLog called with STATUS_UPDATE_COMMIT_FAILED marker.
+      const markerLog = appendedLogs.find((m) => m.includes('STATUS_UPDATE_COMMIT_FAILED'));
+      expect(markerLog).toBeDefined();
+
+      // Webhook still fired (finalize continues — zombie watchdog is recovery).
+      expect(sendSpy).toHaveBeenCalled();
+
+      // Task state was still saved locally — task.status is the terminal one.
+      const saved = await localState.load();
+      expect(saved.tasks['status-commit-fail']?.status).toBe('failed');
+    });
+
+    it('propagates only prUrl/branch/summary from payload.result to commit (minimal schema invariant)', async () => {
+      const commitSpy = vi.fn(async (_input: Record<string, unknown>) => ({ ok: true as const }));
+      const localStatusUpdate = {
+        commit: commitSpy,
+      } as unknown as StatusUpdateClient;
+      const localWebhook = {
+        send: vi.fn(async () => ({ ok: true, value: undefined })),
+        retryPending: vi.fn(async () => undefined),
+        getPendingCount: vi.fn(async () => 0),
+      } as unknown as WebhookClient;
+
+      const localDispatcher = new TaskDispatcher(
+        mockConfig,
+        createStatePersistence(),
+        mockWorktreeManager,
+        mockLogForwarder,
+        localWebhook,
+        localStatusUpdate,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const task = buildInflightTask('status-commit-whitelist');
+      const internal = localDispatcher as unknown as {
+        finalizeTask: (
+          task: Task,
+          status: string,
+          payload: Record<string, unknown>,
+          keepLogOpen?: boolean
+        ) => Promise<void>;
+      };
+      await internal.finalizeTask(task, 'completed', {
+        // Cast through unknown — this shape intentionally includes fields
+        // (commits, ciFailed) that must NOT leak into the commit call.
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/99',
+          branch: 'feat/whitelist',
+          summary: 'Only three make it through',
+          commits: 5,
+          ciFailed: true,
+          commitDetails: [{ sha: 'abc', message: 'm' }],
+        } as unknown as TaskResult,
+      });
+
+      expect(commitSpy).toHaveBeenCalledTimes(1);
+      const commitArg = commitSpy.mock.calls[0]?.[0] as
+        | { result?: Record<string, unknown> }
+        | undefined;
+      expect(commitArg?.result).toBeDefined();
+      expect(commitArg?.result).toEqual({
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/99',
+        branch: 'feat/whitelist',
+        summary: 'Only three make it through',
+      });
+      // Explicitly confirm excluded fields did not leak.
+      expect(Object.keys(commitArg?.result ?? {})).toEqual(
+        expect.arrayContaining(['prUrl', 'branch', 'summary'])
+      );
+      expect(commitArg?.result).not.toHaveProperty('commits');
+      expect(commitArg?.result).not.toHaveProperty('ciFailed');
+      expect(commitArg?.result).not.toHaveProperty('commitDetails');
+    });
+  });
+
   describe('Docker health gate', () => {
     let statePersistence: StatePersistence;
     let healthDispatcher: TaskDispatcher;
@@ -10700,6 +11045,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         unhealthyIsolation,
@@ -10790,6 +11136,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         hangingIsolation,
@@ -10845,6 +11192,7 @@ describe('TaskDispatcher', () => {
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
+        mockStatusUpdateClient,
         mockGitHubTokenService,
         mockLogger,
         hangingPullIsolation,

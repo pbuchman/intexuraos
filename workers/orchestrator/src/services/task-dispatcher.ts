@@ -9,13 +9,14 @@ import {
 } from '@intexuraos/common-core';
 import type { OrchestratorConfig } from '../types/config.js';
 import { withTimeout } from '../with-timeout.js';
-import type { Task, TaskStatus, TaskResult, TaskError } from '../types/task.js';
+import type { Task, TaskResult, TaskError } from '../types/task.js';
 import type { CreateTaskRequest } from '../types/api.js';
 import type { SendMessageResult, SendMessageError } from '../types/schemas.js';
 import type { StatePersistence } from './state-persistence.js';
 import type { WorktreeManager } from './worktree-manager.js';
 import type { LogForwarder } from './log-forwarder.js';
 import type { WebhookClient } from './webhook-client.js';
+import type { StatusUpdateClient } from './status-update-client.js';
 import type { GitHubTokenService } from '../github/token-service.js';
 import type { IsolationProvider, WorkerConfig, WorkerHandle } from './isolation/types.js';
 import { WORKER_TYPES } from './isolation/types.js';
@@ -195,6 +196,7 @@ export class TaskDispatcher {
     private readonly worktreeManager: WorktreeManager,
     private readonly logForwarder: LogForwarder,
     private readonly webhookClient: WebhookClient,
+    private readonly statusUpdateClient: StatusUpdateClient,
     _githubTokenService: GitHubTokenService,
     private readonly logger: Logger,
     private readonly isolation: IsolationConfig,
@@ -2381,7 +2383,7 @@ export class TaskDispatcher {
 
   private async finalizeTask(
     task: Task,
-    statusParam: TaskStatus,
+    statusParam: 'completed' | 'failed' | 'interrupted' | 'cancelled',
     payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean },
     keepLogForwarderOpen = false
   ): Promise<void> {
@@ -2528,6 +2530,53 @@ export class TaskDispatcher {
             'Failed to send task lifecycle event (best-effort)'
           );
         });
+    }
+
+    // Commit terminal status to code-agent's Firestore BEFORE firing the
+    // legacy task-complete webhook. Code-agent's Firestore is the single
+    // source of truth for status; the webhook is demoted to side-effects
+    // (Linear labels, WhatsApp, etc.). On commit failure, log + continue —
+    // the zombie watchdog (Task 6) is the recovery path. Do NOT block
+    // finalize: Docker teardown and local state cleanup already ran.
+    const statusCommitResult = await this.statusUpdateClient.commit({
+      taskId: task.taskId,
+      status: finalStatus,
+      // Defensive fallback mirrors the line ~2505 guard: task.completedAt is
+      // set above at line 2465, but test mocks or future refactors could
+      // bypass that assignment. Avoids RangeError inside .toISOString().
+      /* v8 ignore start -- ts-type: defensive fallback for optional Task.completedAt; production path at line 2465 always sets it before reaching here, mirrors the runtime guard at line ~2505 @preserve */
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard: completedAt set above but test mocks may bypass assignment
+      completedAt: task.completedAt !== undefined ? new Date(task.completedAt) : new Date(),
+      /* v8 ignore stop @preserve */
+      ...(payload.error !== undefined && {
+        error: { code: payload.error.code, message: payload.error.message },
+      }),
+      ...(payload.result !== undefined && {
+        result: {
+          ...(payload.result.prUrl !== undefined && { prUrl: payload.result.prUrl }),
+          ...(payload.result.branch !== undefined && { branch: payload.result.branch }),
+          ...(payload.result.summary !== undefined && { summary: payload.result.summary }),
+        },
+      }),
+    });
+    if (!statusCommitResult.ok) {
+      this.logger.error(
+        {
+          taskId: task.taskId,
+          tag: 'STATUS_UPDATE_COMMIT_FAILED',
+          errorType: statusCommitResult.error.type,
+          errorMessage: statusCommitResult.error.message,
+          agentType: task.agentType,
+          prNumber: task.prNumber,
+          repository: task.repository,
+          finalStatus,
+        },
+        'Failed to commit terminal status via /internal/code-tasks/:id/status; zombie watchdog will recover'
+      );
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `STATUS_UPDATE_COMMIT_FAILED: type=${statusCommitResult.error.type} — zombie watchdog will recover`
+      );
     }
 
     await this.webhookClient.send({

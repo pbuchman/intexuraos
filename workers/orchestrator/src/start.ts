@@ -21,6 +21,7 @@ import { StatePersistence } from './services/state-persistence.js';
 import { TaskDispatcher } from './services/task-dispatcher.js';
 import { GitHubTokenService } from './github/token-service.js';
 import { WebhookClient } from './services/webhook-client.js';
+import { StatusUpdateClient } from './services/status-update-client.js';
 import { WorktreeManager } from './services/worktree-manager.js';
 import { LogForwarder } from './services/log-forwarder.js';
 import { createHeartbeatManager } from './heartbeat.js';
@@ -549,6 +550,13 @@ async function bootstrap(): Promise<void> {
 
   const webhookClient = new WebhookClient(statePersistence, logger, config.internalAuthToken);
 
+  const statusUpdateClient = new StatusUpdateClient({
+    codeAgentUrl: config.codeAgentUrl,
+    orchestratorSecret: config.orchestratorSecret,
+    internalAuthToken: config.internalAuthToken,
+    logger,
+  });
+
   const worktreeManager = new WorktreeManager(
     {
       repositoryPath: repoPath,
@@ -831,6 +839,7 @@ async function bootstrap(): Promise<void> {
     worktreeManager,
     logForwarder,
     webhookClient,
+    statusUpdateClient,
     tokenService,
     logger,
     isolationConfig,
