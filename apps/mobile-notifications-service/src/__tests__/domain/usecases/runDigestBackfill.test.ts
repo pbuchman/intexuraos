@@ -1,22 +1,24 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { startDigestBackfill, listDates } from '../../../domain/usecases/runDigestBackfill.js';
-import { setMockServices } from '../../helpers/mockServices.js';
-import { resetServices } from '../../../services.js';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { Result } from '@intexuraos/common-core';
+import type {
+  BackfillRun,
+  BackfillRunRepository,
+} from '../../../domain/repositories/digestRepositories.js';
 
 const logger = createAppLogger({ name: 'test' });
 
-beforeEach(() => {
-  setMockServices({
-    backfillRunRepository: {
-      create: async () => ({ ok: true, value: undefined }),
-      update: async () => ({ ok: true, value: undefined }),
-      findById: async () => ({ ok: true, value: null }),
-    },
-  });
-});
-afterEach(() => resetServices());
+function fakeBackfillRepo(overrides: Partial<BackfillRunRepository> = {}): BackfillRunRepository {
+  return {
+    create: async () => ({ ok: true, value: undefined }),
+    findById: async () => ({ ok: true, value: null }),
+    markDayComplete: async () => ({ ok: true, value: undefined }),
+    markDayFailed: async () => ({ ok: true, value: undefined }),
+    markRunCompleted: async () => ({ ok: true, value: undefined }),
+    ...overrides,
+  };
+}
 
 describe('listDates', () => {
   it('returns single date when from equals to', () => {
@@ -41,7 +43,7 @@ describe('startDigestBackfill', () => {
     };
 
     const result = await startDigestBackfill(
-      { logger, httpPost },
+      { logger, httpPost, backfillRunRepository: fakeBackfillRepo() },
       { userId: 'u', groupKey: 'g', fromDate: '2026-04-13', toDate: '2026-04-15' },
     );
 
@@ -53,19 +55,15 @@ describe('startDigestBackfill', () => {
   });
 
   it('returns error when backfillRunRepository.create fails', async () => {
-    setMockServices({
-      backfillRunRepository: {
-        create: async () => ({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'DB down' } }),
-        update: async () => ({ ok: true, value: undefined }),
-        findById: async () => ({ ok: true, value: null }),
-      },
+    const backfillRunRepository = fakeBackfillRepo({
+      create: async () => ({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'DB down' } }),
     });
 
     const httpPost = async (_path: string, _body: unknown): Promise<Result<unknown, { message: string }>> =>
       ({ ok: true, value: {} });
 
     const result = await startDigestBackfill(
-      { logger, httpPost },
+      { logger, httpPost, backfillRunRepository },
       { userId: 'u', groupKey: 'g', fromDate: '2026-04-15', toDate: '2026-04-15' },
     );
 
@@ -79,7 +77,7 @@ describe('startDigestBackfill', () => {
       ({ ok: false, error: { message: 'network error' } });
 
     const result = await startDigestBackfill(
-      { logger, httpPost },
+      { logger, httpPost, backfillRunRepository: fakeBackfillRepo() },
       { userId: 'u', groupKey: 'g', fromDate: '2026-04-15', toDate: '2026-04-15' },
     );
 
@@ -89,13 +87,9 @@ describe('startDigestBackfill', () => {
   });
 
   it('creates run with null currentDate when fromDate > toDate (empty range)', async () => {
-    let createdRun: unknown;
-    setMockServices({
-      backfillRunRepository: {
-        create: async (run) => { createdRun = run; return { ok: true, value: undefined }; },
-        update: async () => ({ ok: true, value: undefined }),
-        findById: async () => ({ ok: true, value: null }),
-      },
+    let createdRun: BackfillRun | undefined;
+    const backfillRunRepository = fakeBackfillRepo({
+      create: async (run) => { createdRun = run; return { ok: true, value: undefined }; },
     });
     const posted: string[] = [];
     const httpPost = async (path: string): Promise<Result<unknown, { message: string }>> => {
@@ -104,14 +98,14 @@ describe('startDigestBackfill', () => {
     };
 
     const result = await startDigestBackfill(
-      { logger, httpPost },
+      { logger, httpPost, backfillRunRepository },
       { userId: 'u', groupKey: 'g', fromDate: '2026-04-15', toDate: '2026-04-14' },
     );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.queuedDates).toHaveLength(0);
-    expect(posted).toHaveLength(0); // no httpPost when no dates
-    expect((createdRun as { currentDate: null }).currentDate).toBeNull();
+    expect(posted).toHaveLength(0);
+    expect(createdRun?.currentDate).toBeNull();
   });
 });

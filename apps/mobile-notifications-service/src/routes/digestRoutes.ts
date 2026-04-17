@@ -2,8 +2,11 @@ import type { FastifyPluginCallback } from 'fastify';
 import { logIncomingRequest, validateInternalAuth, requireAuth } from '@intexuraos/common-http';
 import { createLlmClient, type LlmClientConfig } from '@intexuraos/llm-factory';
 import { createAppLogger } from '@intexuraos/infra-sentry';
+import { ok, err, getErrorMessage, type Result } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
-import { runDigestForGroup } from '../domain/usecases/runDigestForGroup.js';
+import type { BackfillRunRepository } from '../domain/repositories/digestRepositories.js';
+import { runDigestForGroup, type RunDigestForGroupResult } from '../domain/usecases/runDigestForGroup.js';
+import type { DigestError } from '../domain/usecases/digestErrors.js';
 import { yesterdayCet } from '../domain/usecases/yesterdayCet.js';
 import { DIGEST_SUBSCRIPTIONS } from '../domain/digestSubscriptions.js';
 import { runRequestSchema, runResponseSchema } from './digestSchemas.js';
@@ -40,15 +43,104 @@ export function getSelfBaseUrl(): string {
   /* v8 ignore stop @preserve */
 }
 
-export async function chainPost(base: string, token: string, runId: string, userId: string, groupKey: string, date: string, remainingDates: readonly string[]): Promise<void> {
+export interface ChainPostOptions {
+  readonly base: string;
+  readonly token: string;
+  readonly runId: string;
+  readonly userId: string;
+  readonly groupKey: string;
+  readonly date: string;
+  readonly remainingDates: readonly string[];
+  readonly fromDate: string;
+  readonly toDate: string;
+}
+
+const CHAIN_POST_TIMEOUT_MS = 30_000;
+
+export async function chainPost(options: ChainPostOptions): Promise<Result<void, { message: string }>> {
   try {
-    await fetch(`${base}/internal/notifications/digest/run`, {
+    const res = await fetch(`${options.base}/internal/notifications/digest/run`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-internal-auth': token },
-      body: JSON.stringify({ userId, groupKey, date, chainNext: { runId, remainingDates, fromDate: date, toDate: date } }),
+      headers: { 'Content-Type': 'application/json', 'x-internal-auth': options.token },
+      body: JSON.stringify({
+        userId: options.userId,
+        groupKey: options.groupKey,
+        date: options.date,
+        chainNext: {
+          runId: options.runId,
+          remainingDates: options.remainingDates,
+          fromDate: options.fromDate,
+          toDate: options.toDate,
+        },
+      }),
+      signal: AbortSignal.timeout(CHAIN_POST_TIMEOUT_MS),
     });
+    if (!res.ok) {
+      return err({ message: `chain POST returned ${String(res.status)}` });
+    }
+    return ok(undefined);
   } catch (chainErr) {
-    logger.error({ chainErr, runId, date }, 'chain: failed to POST next date');
+    return err({ message: getErrorMessage(chainErr, 'chain POST failed') });
+  }
+}
+
+export interface AdvanceChainInput {
+  readonly chainNext: ChainNext;
+  readonly date: string;
+  readonly userId: string;
+  readonly groupKey: string;
+  readonly digestResult: Result<RunDigestForGroupResult, DigestError>;
+  readonly repo: BackfillRunRepository;
+}
+
+const NEXT_DAY_DELAY_MS = 1000;
+
+export async function advanceChain(input: AdvanceChainInput): Promise<void> {
+  const { chainNext, date, userId, groupKey, digestResult, repo } = input;
+  const { runId, remainingDates, fromDate, toDate } = chainNext;
+
+  if (!digestResult.ok) {
+    await repo.markDayFailed({
+      runId,
+      failure: { date, error: JSON.stringify(digestResult.error) },
+      markRunFailed: true,
+    });
+    return;
+  }
+
+  const next = remainingDates[0];
+  await repo.markDayComplete({ runId, completedDate: date, nextCurrentDate: next ?? null });
+
+  if (next === undefined) {
+    await repo.markRunCompleted(runId);
+    return;
+  }
+
+  const base = getSelfBaseUrl();
+  /* v8 ignore start -- ts-type: REQUIRED_ENV guarantees INTEXURAOS_INTERNAL_AUTH_TOKEN is defined at boot; the '' fallback is unreachable in any booted test @preserve */
+  const token = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
+  /* v8 ignore stop @preserve */
+  setTimeout((): void => {
+    void postNextAndHandleFailure({
+      base, token, runId, userId, groupKey,
+      date: next,
+      remainingDates: remainingDates.slice(1),
+      fromDate, toDate,
+    }, repo);
+  }, NEXT_DAY_DELAY_MS);
+}
+
+export async function postNextAndHandleFailure(
+  options: ChainPostOptions,
+  repo: BackfillRunRepository,
+): Promise<void> {
+  const posted = await chainPost(options);
+  if (!posted.ok) {
+    await repo.markDayFailed({
+      runId: options.runId,
+      failure: { date: options.date, error: posted.error.message },
+      markRunFailed: true,
+    });
   }
 }
 
@@ -104,37 +196,16 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         { userId, groupKey, date, holder },
       );
 
-      /* v8 ignore start -- upstream: chainNext block cannot be synchronously observed; it is downstream of a void setTimeout call and all void repository.update side-effects complete after test assertions return @preserve */
       if (chainNext !== undefined) {
-        const { runId, remainingDates } = chainNext;
-        if (result.ok) {
-          void getServices().backfillRunRepository.update(runId, {
-            completedDates: [],
-            currentDate: remainingDates[0] ?? null,
-          });
-          if (remainingDates.length > 0) {
-            const next = remainingDates[0];
-            if (next !== undefined) {
-              const base = getSelfBaseUrl();
-              const token = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
-              setTimeout(() => {
-                void chainPost(base, token, runId, userId, groupKey, next, remainingDates.slice(1));
-              }, 1000);
-            }
-          } else {
-            void getServices().backfillRunRepository.update(runId, {
-              status: 'completed',
-              completedAt: new Date().toISOString(),
-            });
-          }
-        } else {
-          void getServices().backfillRunRepository.update(runId, {
-            status: 'failed',
-            failedDates: [{ date, error: JSON.stringify(result.error) }],
-          });
-        }
+        await advanceChain({
+          chainNext,
+          date,
+          userId,
+          groupKey,
+          digestResult: result,
+          repo: getServices().backfillRunRepository,
+        });
       }
-      /* v8 ignore stop @preserve */
 
       if (!result.ok) {
         if (result.error.code === 'lock-held') {

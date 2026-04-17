@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { FirestoreBackfillRunRepository, type BackfillRun } from '../../../infra/firestore/firestoreBackfillRunRepository.js';
+import { FirestoreBackfillRunRepository } from '../../../infra/firestore/firestoreBackfillRunRepository.js';
+import type { BackfillRun } from '../../../domain/repositories/digestRepositories.js';
 import { resetFirestoreFake, useFirestoreFake } from './helpers/firestoreFake.js';
 import type { FakeFirestore } from '@intexuraos/infra-firestore';
 
@@ -49,25 +50,70 @@ describe('FirestoreBackfillRunRepository', () => {
     expect(result.value).toBeNull();
   });
 
-  it('update changes status and updatedAt', async () => {
+  it('markDayComplete appends to completedDates and moves currentDate', async () => {
     const repo = new FirestoreBackfillRunRepository();
-    const run = makeRun('bf_002');
-    await repo.create(run);
+    await repo.create(makeRun('bf_002'));
 
-    const updated = await repo.update('bf_002', { status: 'running', currentDate: '2026-04-02' });
-    expect(updated.ok).toBe(true);
+    const r1 = await repo.markDayComplete({ runId: 'bf_002', completedDate: '2026-04-01', nextCurrentDate: '2026-04-02' });
+    expect(r1.ok).toBe(true);
+    const r2 = await repo.markDayComplete({ runId: 'bf_002', completedDate: '2026-04-02', nextCurrentDate: '2026-04-03' });
+    expect(r2.ok).toBe(true);
 
     const found = await repo.findById('bf_002');
-    expect(found.ok).toBe(true);
-    if (!found.ok) return;
-    expect(found.value?.status).toBe('running');
-    expect(found.value?.currentDate).toBe('2026-04-02');
+    if (!found.ok || found.value === null) throw new Error('unexpected');
+    expect(found.value.completedDates).toEqual(['2026-04-01', '2026-04-02']);
+    expect(found.value.currentDate).toBe('2026-04-03');
+  });
+
+  it('markDayFailed appends to failedDates and optionally sets status=failed', async () => {
+    const repo = new FirestoreBackfillRunRepository();
+    await repo.create(makeRun('bf_003'));
+
+    const r = await repo.markDayFailed({
+      runId: 'bf_003',
+      failure: { date: '2026-04-01', error: 'boom' },
+      markRunFailed: true,
+    });
+    expect(r.ok).toBe(true);
+
+    const found = await repo.findById('bf_003');
+    if (!found.ok || found.value === null) throw new Error('unexpected');
+    expect(found.value.failedDates).toEqual([{ date: '2026-04-01', error: 'boom' }]);
+    expect(found.value.status).toBe('failed');
+  });
+
+  it('markDayFailed with markRunFailed=false preserves status', async () => {
+    const repo = new FirestoreBackfillRunRepository();
+    await repo.create(makeRun('bf_004'));
+
+    await repo.markDayFailed({
+      runId: 'bf_004',
+      failure: { date: '2026-04-01', error: 'transient' },
+      markRunFailed: false,
+    });
+
+    const found = await repo.findById('bf_004');
+    if (!found.ok || found.value === null) throw new Error('unexpected');
+    expect(found.value.status).toBe('queued');
+  });
+
+  it('markRunCompleted sets status=completed and completedAt', async () => {
+    const repo = new FirestoreBackfillRunRepository();
+    await repo.create(makeRun('bf_005'));
+
+    const r = await repo.markRunCompleted('bf_005');
+    expect(r.ok).toBe(true);
+
+    const found = await repo.findById('bf_005');
+    if (!found.ok || found.value === null) throw new Error('unexpected');
+    expect(found.value.status).toBe('completed');
+    expect(found.value.completedAt).toBeDefined();
   });
 
   it('create returns error on Firestore failure', async () => {
     const repo = new FirestoreBackfillRunRepository();
     fake.configure({ errorToThrow: new Error('DB error') });
-    const result = await repo.create(makeRun('bf_003'));
+    const result = await repo.create(makeRun('bf_006'));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('INTERNAL_ERROR');
@@ -76,16 +122,38 @@ describe('FirestoreBackfillRunRepository', () => {
   it('findById returns error on Firestore failure', async () => {
     const repo = new FirestoreBackfillRunRepository();
     fake.configure({ errorToThrow: new Error('DB error') });
-    const result = await repo.findById('bf_004');
+    const result = await repo.findById('bf_007');
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('INTERNAL_ERROR');
   });
 
-  it('update returns error on Firestore failure', async () => {
+  it('markDayComplete returns error on Firestore failure', async () => {
     const repo = new FirestoreBackfillRunRepository();
     fake.configure({ errorToThrow: new Error('DB error') });
-    const result = await repo.update('bf_005', { status: 'completed' });
+    const result = await repo.markDayComplete({ runId: 'bf_008', completedDate: '2026-04-01', nextCurrentDate: null });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('markDayFailed returns error on Firestore failure', async () => {
+    const repo = new FirestoreBackfillRunRepository();
+    fake.configure({ errorToThrow: new Error('DB error') });
+    const result = await repo.markDayFailed({
+      runId: 'bf_009',
+      failure: { date: '2026-04-01', error: 'x' },
+      markRunFailed: false,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('markRunCompleted returns error on Firestore failure', async () => {
+    const repo = new FirestoreBackfillRunRepository();
+    fake.configure({ errorToThrow: new Error('DB error') });
+    const result = await repo.markRunCompleted('bf_010');
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('INTERNAL_ERROR');

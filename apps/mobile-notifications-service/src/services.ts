@@ -4,6 +4,7 @@ import type {
 } from './domain/notifications/index.js';
 import type { NotificationFiltersRepository } from './domain/filters/index.js';
 import type {
+  BackfillRunRepository,
   DigestRepository,
   GroupStateRepository,
   DigestLockRepository,
@@ -23,7 +24,7 @@ export interface ServiceContainer {
   digestRepository: DigestRepository;
   groupStateRepository: GroupStateRepository;
   digestLockRepository: DigestLockRepository;
-  backfillRunRepository: FirestoreBackfillRunRepository;
+  backfillRunRepository: BackfillRunRepository;
 }
 
 let container: ServiceContainer | null = null;

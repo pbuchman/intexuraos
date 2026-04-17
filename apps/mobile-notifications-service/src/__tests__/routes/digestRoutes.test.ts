@@ -341,8 +341,10 @@ describe('GET /notifications/digests/backfill/:runId', () => {
     setMockServices({
       backfillRunRepository: {
         create: async () => ({ ok: true, value: undefined }),
-        update: async () => ({ ok: true, value: undefined }),
         findById: async () => ({ ok: true, value: null }),
+        markDayComplete: async () => ({ ok: true, value: undefined }),
+        markDayFailed: async () => ({ ok: true, value: undefined }),
+        markRunCompleted: async () => ({ ok: true, value: undefined }),
       },
     });
     const token = await createToken({ sub: 'u' });
@@ -367,8 +369,10 @@ describe('GET /notifications/digests/backfill/:runId', () => {
     setMockServices({
       backfillRunRepository: {
         create: async () => ({ ok: true, value: undefined }),
-        update: async () => ({ ok: true, value: undefined }),
         findById: async () => ({ ok: true, value: mockRun }),
+        markDayComplete: async () => ({ ok: true, value: undefined }),
+        markDayFailed: async () => ({ ok: true, value: undefined }),
+        markRunCompleted: async () => ({ ok: true, value: undefined }),
       },
     });
     const token = await createToken({ sub: 'u' });
@@ -389,8 +393,10 @@ describe('GET /notifications/digests/backfill/:runId', () => {
     setMockServices({
       backfillRunRepository: {
         create: async () => ({ ok: true, value: undefined }),
-        update: async () => ({ ok: true, value: undefined }),
         findById: async () => ({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'DB error' } }),
+        markDayComplete: async () => ({ ok: true, value: undefined }),
+        markDayFailed: async () => ({ ok: true, value: undefined }),
+        markRunCompleted: async () => ({ ok: true, value: undefined }),
       },
     });
     const token = await createToken({ sub: 'u' });
@@ -622,8 +628,10 @@ describe('POST /internal/notifications/digest/run (error paths)', () => {
       },
       backfillRunRepository: {
         create: async () => ({ ok: true, value: undefined }),
-        update: async () => ({ ok: true, value: undefined }),
         findById: async () => ({ ok: true, value: null }),
+        markDayComplete: async () => ({ ok: true, value: undefined }),
+        markDayFailed: async () => ({ ok: true, value: undefined }),
+        markRunCompleted: async () => ({ ok: true, value: undefined }),
       },
     });
     const app = await buildServer();

@@ -1,31 +1,16 @@
 import { ok, err, getErrorMessage, type Result } from '@intexuraos/common-core';
-import { getFirestore } from '@intexuraos/infra-firestore';
+import { FieldValue, getFirestore } from '@intexuraos/infra-firestore';
+import type {
+  BackfillFailure,
+  BackfillRun,
+  BackfillRunRepository,
+  RepositoryError,
+} from '../../domain/repositories/digestRepositories.js';
 
 const COLLECTION = 'notification_digest_backfill_runs';
 
-export interface BackfillRun {
-  readonly runId: string;
-  readonly userId: string;
-  readonly groupKey: string;
-  readonly fromDate: string;
-  readonly toDate: string;
-  readonly status: 'queued' | 'running' | 'completed' | 'failed';
-  readonly totalDates: number;
-  readonly completedDates: readonly string[];
-  readonly failedDates: readonly { readonly date: string; readonly error: string }[];
-  readonly currentDate: string | null;
-  readonly startedAt: string;
-  readonly updatedAt: string;
-  readonly completedAt?: string;
-}
-
-export interface BackfillRunRepositoryError {
-  readonly code: 'INTERNAL_ERROR';
-  readonly message: string;
-}
-
-export class FirestoreBackfillRunRepository {
-  async create(run: BackfillRun): Promise<Result<void, BackfillRunRepositoryError>> {
+export class FirestoreBackfillRunRepository implements BackfillRunRepository {
+  async create(run: BackfillRun): Promise<Result<void, RepositoryError>> {
     try {
       const db = getFirestore();
       await db.collection(COLLECTION).doc(run.runId).set(run);
@@ -35,17 +20,7 @@ export class FirestoreBackfillRunRepository {
     }
   }
 
-  async update(runId: string, partial: Partial<BackfillRun>): Promise<Result<void, BackfillRunRepositoryError>> {
-    try {
-      const db = getFirestore();
-      await db.collection(COLLECTION).doc(runId).update({ ...partial, updatedAt: new Date().toISOString() });
-      return ok(undefined);
-    } catch (error) {
-      return err({ code: 'INTERNAL_ERROR', message: getErrorMessage(error, 'update failed') });
-    }
-  }
-
-  async findById(runId: string): Promise<Result<BackfillRun | null, BackfillRunRepositoryError>> {
+  async findById(runId: string): Promise<Result<BackfillRun | null, RepositoryError>> {
     try {
       const db = getFirestore();
       const snap = await db.collection(COLLECTION).doc(runId).get();
@@ -53,6 +28,58 @@ export class FirestoreBackfillRunRepository {
       return ok(snap.data() as BackfillRun);
     } catch (error) {
       return err({ code: 'INTERNAL_ERROR', message: getErrorMessage(error, 'findById failed') });
+    }
+  }
+
+  async markDayComplete(input: {
+    runId: string;
+    completedDate: string;
+    nextCurrentDate: string | null;
+  }): Promise<Result<void, RepositoryError>> {
+    try {
+      const db = getFirestore();
+      await db.collection(COLLECTION).doc(input.runId).update({
+        completedDates: FieldValue.arrayUnion(input.completedDate),
+        currentDate: input.nextCurrentDate,
+        updatedAt: new Date().toISOString(),
+      });
+      return ok(undefined);
+    } catch (error) {
+      return err({ code: 'INTERNAL_ERROR', message: getErrorMessage(error, 'markDayComplete failed') });
+    }
+  }
+
+  async markDayFailed(input: {
+    runId: string;
+    failure: BackfillFailure;
+    markRunFailed: boolean;
+  }): Promise<Result<void, RepositoryError>> {
+    try {
+      const db = getFirestore();
+      const patch: Record<string, unknown> = {
+        failedDates: FieldValue.arrayUnion(input.failure),
+        updatedAt: new Date().toISOString(),
+      };
+      if (input.markRunFailed) patch['status'] = 'failed';
+      await db.collection(COLLECTION).doc(input.runId).update(patch);
+      return ok(undefined);
+    } catch (error) {
+      return err({ code: 'INTERNAL_ERROR', message: getErrorMessage(error, 'markDayFailed failed') });
+    }
+  }
+
+  async markRunCompleted(runId: string): Promise<Result<void, RepositoryError>> {
+    try {
+      const db = getFirestore();
+      const now = new Date().toISOString();
+      await db.collection(COLLECTION).doc(runId).update({
+        status: 'completed',
+        completedAt: now,
+        updatedAt: now,
+      });
+      return ok(undefined);
+    } catch (error) {
+      return err({ code: 'INTERNAL_ERROR', message: getErrorMessage(error, 'markRunCompleted failed') });
     }
   }
 }
