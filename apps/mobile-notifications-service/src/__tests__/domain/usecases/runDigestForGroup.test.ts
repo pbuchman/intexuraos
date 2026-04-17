@@ -4,10 +4,17 @@ import { COLD_START_EXAMPLE } from '@intexuraos/llm-prompts';
 import { setMockServices } from '../../helpers/mockServices.js';
 import { resetServices } from '../../../services.js';
 import { FakeLlmClient } from '../../helpers/fakeLlmClient.js';
+import type { NotificationRepository } from '../../../domain/notifications/index.js';
+import type { DailySummary } from '../../../domain/schemas/digestSchemas.js';
+import type { GenerateOptions, GenerateResult, LLMError } from '@intexuraos/llm-factory';
+import type { Result } from '@intexuraos/common-core';
 
 const noopLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
 
-function fakeNotificationRepo(messages: ReadonlyArray<{ sender: string; text: string; postTime: string; title: string; app: string }>) {
+// COLD_START_EXAMPLE uses readonly tuple literals; cast to mutable types for use in fakes
+const EXAMPLE_SUMMARY = COLD_START_EXAMPLE.dailySummary as unknown as DailySummary;
+
+function fakeNotificationRepo(messages: readonly { sender: string; text: string; postTime: string; title: string; app: string }[]): NotificationRepository {
   // Minimal in-memory fake matching the existing NotificationRepository interface (subset used here)
   return {
     findByUserIdPaginated: async () => ({
@@ -20,7 +27,7 @@ function fakeNotificationRepo(messages: ReadonlyArray<{ sender: string; text: st
         })),
       },
     }),
-    save: async () => ({ ok: true as const, value: { id: 'x' } }),
+    save: async () => ({ ok: true as const, value: { id: 'x', userId: 'u', source: 's', device: 'd', app: 'a', title: 't', text: '', timestamp: 0, postTime: '', notificationId: 'n', receivedAt: '' } }),
     findById: async () => ({ ok: true as const, value: null }),
     existsByNotificationIdAndUserId: async () => ({ ok: true as const, value: false }),
     delete: async () => ({ ok: true as const, value: undefined }),
@@ -38,7 +45,7 @@ describe('runDigestForGroup', () => {
         release: async () => ({ ok: true as const, value: undefined }),
       },
       notificationRepository: fakeNotificationRepo([]),
-      digestRepository: { save: async () => ({ ok: true as const, value: { summary: COLD_START_EXAMPLE.dailySummary, generation: 1, generatedAt: '', modelId: '' } }), findByDate: async () => ({ ok: true, value: null }), findRecentByGroup: async () => ({ ok: true, value: [] }), findInRange: async () => ({ ok: true, value: { items: [] } }) },
+      digestRepository: { save: async () => ({ ok: true as const, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }), findByDate: async () => ({ ok: true, value: null }), findRecentByGroup: async () => ({ ok: true, value: [] }), findInRange: async () => ({ ok: true, value: { items: [] } }) },
       groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
     });
     const result = await runDigestForGroup(
@@ -63,7 +70,7 @@ describe('runDigestForGroup', () => {
       },
       notificationRepository: fakeNotificationRepo([]),
       digestRepository: {
-        save: async () => { savedSummary = true; return { ok: true, value: { summary: COLD_START_EXAMPLE.dailySummary, generation: 1, generatedAt: '', modelId: '' } }; },
+        save: async () => { savedSummary = true; return { ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }; },
         findByDate: async () => ({ ok: true, value: null }),
         findRecentByGroup: async () => ({ ok: true, value: [] }),
         findInRange: async () => ({ ok: true, value: { items: [] } }),
@@ -95,7 +102,7 @@ describe('runDigestForGroup', () => {
     const llm = new FakeLlmClient([{ type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) }]);
     // Wrap llm.generate to capture the date as it appears in the prompt
     const originalGenerate = llm.generate.bind(llm);
-    llm.generate = async (prompt, options) => {
+    llm.generate = async (prompt: string, options?: GenerateOptions): Promise<Result<GenerateResult, LLMError>> => {
       const match = /^date: (\d{4}-\d{2}-\d{2})/m.exec(prompt);
       capturedPromptDate = match?.[1] ?? null;
       return originalGenerate(prompt, options);
@@ -103,7 +110,7 @@ describe('runDigestForGroup', () => {
     setMockServices({
       digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
       notificationRepository: fakeNotificationRepo([]),
-      digestRepository: { save: async () => ({ ok: true, value: { summary: COLD_START_EXAMPLE.dailySummary, generation: 1, generatedAt: '', modelId: '' } }), findByDate: async () => ({ ok: true, value: null }), findRecentByGroup: async () => ({ ok: true, value: [] }), findInRange: async () => ({ ok: true, value: { items: [] } }) },
+      digestRepository: { save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }), findByDate: async () => ({ ok: true, value: null }), findRecentByGroup: async () => ({ ok: true, value: [] }), findInRange: async () => ({ ok: true, value: { items: [] } }) },
       groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
     });
     await runDigestForGroup(

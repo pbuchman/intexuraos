@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FirestoreGroupStateRepository } from '../../../infra/firestore/firestoreGroupStateRepository.js';
-import { COLD_START_EXAMPLE } from '@intexuraos/llm-prompts';
+import { COLD_START_EXAMPLE as COLD_START } from '@intexuraos/llm-prompts';
 import { resetFirestoreFake, useFirestoreFake } from './helpers/firestoreFake.js';
+import type { GroupState } from '../../../domain/schemas/digestSchemas.js';
+
+// COLD_START uses readonly tuple literals; cast to mutable GroupState for repository tests
+const EXAMPLE_STATE = COLD_START.stateUpdate as unknown as GroupState;
 
 describe('FirestoreGroupStateRepository', () => {
   beforeEach(() => useFirestoreFake());
@@ -9,8 +13,8 @@ describe('FirestoreGroupStateRepository', () => {
 
   it('save then getByDate roundtrips a snapshot', async () => {
     const repo = new FirestoreGroupStateRepository();
-    await repo.save({ state: COLD_START_EXAMPLE.stateUpdate, date: '2026-04-08' });
-    const result = await repo.getByDate({ userId: COLD_START_EXAMPLE.stateUpdate.userId, groupKey: COLD_START_EXAMPLE.stateUpdate.groupKey, date: '2026-04-08' });
+    await repo.save({ state: EXAMPLE_STATE, date: '2026-04-08' });
+    const result = await repo.getByDate({ userId: EXAMPLE_STATE.userId, groupKey: EXAMPLE_STATE.groupKey, date: '2026-04-08' });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).not.toBeNull();
@@ -26,10 +30,10 @@ describe('FirestoreGroupStateRepository', () => {
 
   it('getLatest returns the snapshot with the highest date', async () => {
     const repo = new FirestoreGroupStateRepository();
-    const userId = COLD_START_EXAMPLE.stateUpdate.userId;
-    const groupKey = COLD_START_EXAMPLE.stateUpdate.groupKey;
+    const userId = EXAMPLE_STATE.userId;
+    const groupKey = EXAMPLE_STATE.groupKey;
     for (const d of ['2026-04-08', '2026-04-09', '2026-04-10']) {
-      await repo.save({ state: { ...COLD_START_EXAMPLE.stateUpdate, recentSummaryDates: [d] }, date: d });
+      await repo.save({ state: { ...EXAMPLE_STATE, recentSummaryDates: [d] }, date: d });
     }
     const result = await repo.getLatest({ userId, groupKey });
     expect(result.ok).toBe(true);
@@ -40,7 +44,7 @@ describe('FirestoreGroupStateRepository', () => {
   it('save trims recentSummaryDates to the last 30', async () => {
     const repo = new FirestoreGroupStateRepository();
     const dates = Array.from({ length: 35 }, (_, i) => `2026-03-${String(i + 1).padStart(2, '0')}`);
-    const stateWithLong = { ...COLD_START_EXAMPLE.stateUpdate, recentSummaryDates: dates };
+    const stateWithLong = { ...EXAMPLE_STATE, recentSummaryDates: dates };
     await repo.save({ state: stateWithLong, date: '2026-04-08' });
     const result = await repo.getByDate({ userId: stateWithLong.userId, groupKey: stateWithLong.groupKey, date: '2026-04-08' });
     expect(result.ok).toBe(true);

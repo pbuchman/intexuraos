@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FirestoreDigestRepository } from '../../../infra/firestore/firestoreDigestRepository.js';
-import { COLD_START_EXAMPLE } from '@intexuraos/llm-prompts';
+import { COLD_START_EXAMPLE as COLD_START } from '@intexuraos/llm-prompts';
 import { resetFirestoreFake, useFirestoreFake } from './helpers/firestoreFake.js';
+import type { DailySummary } from '../../../domain/schemas/digestSchemas.js';
+
+// COLD_START uses readonly tuple literals; cast to mutable DailySummary for repository tests
+const EXAMPLE_SUMMARY = COLD_START.dailySummary as unknown as DailySummary;
 
 describe('FirestoreDigestRepository', () => {
   beforeEach(() => useFirestoreFake());
@@ -10,7 +14,7 @@ describe('FirestoreDigestRepository', () => {
   it('saves a new summary with generation = 1', async () => {
     const repo = new FirestoreDigestRepository();
     const result = await repo.save({
-      userId: 'u', groupKey: 'g', summary: COLD_START_EXAMPLE.dailySummary, modelId: 'or:google/gemini-3-flash-preview',
+      userId: 'u', groupKey: 'g', summary: EXAMPLE_SUMMARY, modelId: 'or:google/gemini-3-flash-preview',
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -20,8 +24,8 @@ describe('FirestoreDigestRepository', () => {
 
   it('increments generation when saving over an existing date', async () => {
     const repo = new FirestoreDigestRepository();
-    await repo.save({ userId: 'u', groupKey: 'g', summary: COLD_START_EXAMPLE.dailySummary, modelId: 'm' });
-    const second = await repo.save({ userId: 'u', groupKey: 'g', summary: COLD_START_EXAMPLE.dailySummary, modelId: 'm' });
+    await repo.save({ userId: 'u', groupKey: 'g', summary: EXAMPLE_SUMMARY, modelId: 'm' });
+    const second = await repo.save({ userId: 'u', groupKey: 'g', summary: EXAMPLE_SUMMARY, modelId: 'm' });
     expect(second.ok).toBe(true);
     if (!second.ok) return;
     expect(second.value.generation).toBe(2);
@@ -40,7 +44,7 @@ describe('FirestoreDigestRepository', () => {
     for (const d of ['2026-04-08', '2026-04-09', '2026-04-10']) {
       await repo.save({
         userId: 'u', groupKey: 'g',
-        summary: { ...COLD_START_EXAMPLE.dailySummary, date: d },
+        summary: { ...EXAMPLE_SUMMARY, date: d },
         modelId: 'm',
       });
     }
@@ -55,7 +59,7 @@ describe('FirestoreDigestRepository', () => {
     for (const d of ['2026-04-08', '2026-04-09', '2026-04-10', '2026-04-11', '2026-04-12']) {
       await repo.save({
         userId: 'u', groupKey: 'g',
-        summary: { ...COLD_START_EXAMPLE.dailySummary, date: d },
+        summary: { ...EXAMPLE_SUMMARY, date: d },
         modelId: 'm',
       });
     }

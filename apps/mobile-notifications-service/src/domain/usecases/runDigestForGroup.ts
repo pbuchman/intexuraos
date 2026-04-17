@@ -10,6 +10,8 @@ import {
   persistenceFailed,
 } from './digestErrors.js';
 import type { DailySummary, GroupState } from '../schemas/digestSchemas.js';
+import type { PersistedDailySummary, RepositoryError } from '../repositories/digestRepositories.js';
+import type { PaginatedNotifications, RepositoryError as NotifRepositoryError } from '../notifications/index.js';
 
 export interface RunDigestForGroupDeps {
   readonly llmClient: LlmGenerateClient;
@@ -120,16 +122,22 @@ async function loadPreviousState(
   return ok(r.value);
 }
 
-async function loadLastSummaries(services: ReturnType<typeof getServices>, input: RunDigestForGroupInput) {
-  return services.digestRepository.findRecentByGroup({
+async function loadLastSummaries(
+  services: ReturnType<typeof getServices>,
+  input: RunDigestForGroupInput,
+): Promise<Result<readonly PersistedDailySummary[], RepositoryError>> {
+  return await services.digestRepository.findRecentByGroup({
     userId: input.userId, groupKey: input.groupKey, limit: PREVIOUS_SUMMARIES_WINDOW,
   });
 }
 
-async function loadDayMessages(services: ReturnType<typeof getServices>, input: RunDigestForGroupInput) {
+async function loadDayMessages(
+  services: ReturnType<typeof getServices>,
+  input: RunDigestForGroupInput,
+): Promise<Result<PaginatedNotifications, NotifRepositoryError>> {
   // The notification repo already filters by app/title; we narrow further here by date.
   // Using ISO date conversion via Europe/Warsaw timezone.
-  return services.notificationRepository.findByUserIdPaginated(input.userId, {
+  return await services.notificationRepository.findByUserIdPaginated(input.userId, {
     limit: 1000,
     filter: { title: input.groupKey, app: ['com.whatsapp'] },
   });

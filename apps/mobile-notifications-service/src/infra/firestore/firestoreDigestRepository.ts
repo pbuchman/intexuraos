@@ -39,7 +39,7 @@ export class FirestoreDigestRepository implements DigestRepository {
 
       const persisted = await db.runTransaction(async (tx) => {
         const existing = await tx.get(ref);
-        const generation = existing.exists ? ((existing.data() as DigestDoc).generation ?? 0) + 1 : 1;
+        const generation = existing.exists ? (existing.data() as DigestDoc).generation + 1 : 1;
         const doc: DigestDoc = {
           userId: input.userId,
           groupKey: input.groupKey,
