@@ -27,6 +27,7 @@ import {
   Menu,
   MessageCircle,
   MessageSquare,
+  Newspaper,
   PenTool,
   Plus,
   Server,
@@ -772,6 +773,20 @@ export function Sidebar(): React.JSX.Element {
                 >
                   <Bell className="h-4 w-4 shrink-0" />
                   <span>All</span>
+                </NavLink>
+                <NavLink
+                  to="/notifications/digests"
+                  end
+                  className={({ isActive }): string =>
+                    `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
+                    }`
+                  }
+                >
+                  <Newspaper className="h-4 w-4 shrink-0" />
+                  <span>Digests</span>
                 </NavLink>
                 {savedFilters.map((filter) => {
                   const isFilterActive =
