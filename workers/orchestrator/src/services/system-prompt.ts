@@ -480,7 +480,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const remediationPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-remediation',
   description: 'Remediation agent system prompt for addressing review findings on an existing PR',
-  version: '3.3.0',
+  version: '4.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const continuationPrNumber = params.continuationPrNumber;
@@ -568,6 +568,9 @@ REMEDIATION_AGENT_FINAL:
 - Outcome: <implemented|already_completed>
 - PR: <full GitHub PR URL>
 - requires_re_review: <0|1>
+- memory_ids_used: <comma-separated injected IDs you applied, or "none">
+- memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">
+- memory_usage_summary: <one-sentence description of how memories influenced remediation, or "none" if no memories were injected>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what review findings were addressed, what was skipped and why, what was pushed. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
