@@ -34,4 +34,23 @@ describe('aggregateDigest', () => {
     expect(llmClient.calls).toHaveLength(1);
     expect(llmClient.calls[0]?.options?.promptType).toBe('whatsapp-digest-aggregate');
   });
+
+  it('repairs the response when the first call returns invalid JSON', async () => {
+    const llmClient = new FakeLlmClient([
+      { type: 'content', value: '{"dailySummary": "this is not an object"}' },
+      { type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) },
+    ]);
+
+    const result = await aggregateDigest(
+      { llmClient, logger: noopLogger },
+      {
+        userId: 'u', groupKey: 'g', date: '2026-04-15',
+        previousState: null, last3Summaries: [], todaysMessages: [],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(llmClient.calls).toHaveLength(2);
+    expect(llmClient.calls[1]?.options?.promptType).toBe('whatsapp-digest-repair');
+  });
 });
