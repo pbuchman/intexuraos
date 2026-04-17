@@ -1062,10 +1062,11 @@ export class DockerProvider implements IsolationProvider {
     }
     /* v8 ignore stop @preserve */
     const container = this.docker.getContainer(worker.containerId);
-    const tarStream = await container.getArchive({ path: srcPath });
-    await fs.promises.mkdir(destPath, { recursive: true });
-    // Save the raw tar archive (no extraction) to keep `tar` package out of deps.
-    // Evidence is recoverable via `tar -xf <file>` when a human investigates.
+    const [tarStream] = await Promise.all([
+      container.getArchive({ path: srcPath }),
+      fs.promises.mkdir(destPath, { recursive: true }),
+    ]);
+    // Raw tar archive (no extraction) — keeps `tar` package out of production deps.
     const tarPath = path.join(destPath, `${path.basename(srcPath)}.tar`);
     await pipeline(tarStream, fs.createWriteStream(tarPath));
   }

@@ -229,13 +229,10 @@ const MIN_MEANINGFUL_TRANSCRIPT_LINES = 5;
 
 const INFRASTRUCTURE_LINE_PREFIXES = ['[orchestrator]', '[hook]', '[entrypoint]', '[system]'];
 
-export function countMeaningfulTranscriptLines(transcript: string): number {
+export function countMeaningfulTranscriptLines(nonEmptyLines: readonly string[]): number {
   let count = 0;
-  for (const line of transcript.split('\n')) {
+  for (const line of nonEmptyLines) {
     const trimmed = line.trim();
-    if (trimmed === '') {
-      continue;
-    }
     if (INFRASTRUCTURE_LINE_PREFIXES.some((prefix) => trimmed.startsWith(prefix))) {
       continue;
     }
@@ -631,7 +628,8 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       };
     }
 
-    const meaningfulLines = countMeaningfulTranscriptLines(transcript);
+    const tLines = transcript.split('\n').filter((l) => l.trim() !== '');
+    const meaningfulLines = countMeaningfulTranscriptLines(tLines);
     if (meaningfulLines < MIN_MEANINGFUL_TRANSCRIPT_LINES) {
       this.logger.warn(
         {
@@ -661,7 +659,6 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
         model: this.primaryModelName,
         promptChars: prompt.length,
         transcript: ((): string => {
-          const tLines = transcript.split('\n').filter((l) => l.trim() !== '');
           /* v8 ignore start -- ts-type: nullish coalescing on array access required by noUncheckedIndexedAccess; transcript guard guarantees tLines.length >= MIN_MEANINGFUL_TRANSCRIPT_LINES @preserve */
           const first = tLines[0] ?? '';
           const last = tLines[tLines.length - 1] ?? '';

@@ -9425,17 +9425,11 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
     });
 
-    it('captures /tmp evidence and stats snapshot before destroying worker on inactivity', async () => {
-      vi.useFakeTimers();
-      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
-      vi.mocked(mockIsolationProvider.copyOut).mockClear();
-      vi.mocked(mockIsolationProvider.statsSnapshot).mockClear();
-      vi.mocked(mockIsolationProvider.destroyWorker).mockClear();
-
-      const evidenceState = createStatePersistence();
-      const evidenceDispatcher = new TaskDispatcher(
+    async function triggerInactivityRestart(taskId: string): Promise<TaskDispatcher> {
+      const state = createStatePersistence();
+      const dispatcher = new TaskDispatcher(
         mockConfig,
-        evidenceState,
+        state,
         mockWorktreeManager,
         mockLogForwarder,
         mockWebhookClient,
@@ -9448,9 +9442,8 @@ describe('TaskDispatcher', () => {
           verifier: singleAttemptCompletionControl.verifier,
         }
       );
-
-      await evidenceDispatcher.submitTask({
-        taskId: 'evidence-capture-test',
+      await dispatcher.submitTask({
+        taskId,
         workerType: 'auto',
         prompt: 'p',
         webhookUrl: 'https://example.com/webhook',
@@ -9459,16 +9452,24 @@ describe('TaskDispatcher', () => {
         hasChildren: false,
       });
       await vi.advanceTimersByTimeAsync(0);
-      {
-        const state = await evidenceState.load();
-        const task = state.tasks['evidence-capture-test'];
-        if (!task) throw new Error('Task not found');
-        task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
-        await evidenceState.save(state);
-      }
-
+      const loaded = await state.load();
+      const task = loaded.tasks[taskId];
+      if (!task) throw new Error('Task not found');
+      task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
+      await state.save(loaded);
       await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
       await vi.advanceTimersByTimeAsync(0);
+      return dispatcher;
+    }
+
+    it('captures /tmp evidence and stats snapshot before destroying worker on inactivity', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      vi.mocked(mockIsolationProvider.copyOut).mockClear();
+      vi.mocked(mockIsolationProvider.statsSnapshot).mockClear();
+      vi.mocked(mockIsolationProvider.destroyWorker).mockClear();
+
+      await triggerInactivityRestart('evidence-capture-test');
 
       expect(mockIsolationProvider.copyOut).toHaveBeenCalledWith(
         'evidence-capture-test',
@@ -9503,46 +9504,10 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
       vi.mocked(mockIsolationProvider.copyOut).mockRejectedValueOnce(new Error('docker busy'));
 
-      const copyFailState = createStatePersistence();
-      const copyFailDispatcher = new TaskDispatcher(
-        mockConfig,
-        copyFailState,
-        mockWorktreeManager,
-        mockLogForwarder,
-        mockWebhookClient,
-        mockGitHubTokenService,
-        mockLogger,
-        mockIsolationConfig,
-        {
-          maxAttempts: 1,
-          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
-          verifier: singleAttemptCompletionControl.verifier,
-        }
-      );
-
-      await copyFailDispatcher.submitTask({
-        taskId: 'copyout-fail-test',
-        workerType: 'auto',
-        prompt: 'p',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'secret',
-        linearIssueLabels: [],
-        hasChildren: false,
-      });
-      await vi.advanceTimersByTimeAsync(0);
-      {
-        const state = await copyFailState.load();
-        const task = state.tasks['copyout-fail-test'];
-        if (!task) throw new Error('Task not found');
-        task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
-        await copyFailState.save(state);
-      }
-
-      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
-      await vi.advanceTimersByTimeAsync(0);
+      const dispatcher = await triggerInactivityRestart('copyout-fail-test');
 
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('copyout-fail-test');
-      const task = await copyFailDispatcher.getTask('copyout-fail-test');
+      const task = await dispatcher.getTask('copyout-fail-test');
       expect(task?.inactivityRestartCount).toBe(1);
 
       vi.useRealTimers();
@@ -9556,46 +9521,10 @@ describe('TaskDispatcher', () => {
         new Error('stats unavailable')
       );
 
-      const statsFailState = createStatePersistence();
-      const statsFailDispatcher = new TaskDispatcher(
-        mockConfig,
-        statsFailState,
-        mockWorktreeManager,
-        mockLogForwarder,
-        mockWebhookClient,
-        mockGitHubTokenService,
-        mockLogger,
-        mockIsolationConfig,
-        {
-          maxAttempts: 1,
-          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
-          verifier: singleAttemptCompletionControl.verifier,
-        }
-      );
-
-      await statsFailDispatcher.submitTask({
-        taskId: 'stats-fail-test',
-        workerType: 'auto',
-        prompt: 'p',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'secret',
-        linearIssueLabels: [],
-        hasChildren: false,
-      });
-      await vi.advanceTimersByTimeAsync(0);
-      {
-        const state = await statsFailState.load();
-        const task = state.tasks['stats-fail-test'];
-        if (!task) throw new Error('Task not found');
-        task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
-        await statsFailState.save(state);
-      }
-
-      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
-      await vi.advanceTimersByTimeAsync(0);
+      const dispatcher = await triggerInactivityRestart('stats-fail-test');
 
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('stats-fail-test');
-      const task = await statsFailDispatcher.getTask('stats-fail-test');
+      const task = await dispatcher.getTask('stats-fail-test');
       expect(task?.inactivityRestartCount).toBe(1);
 
       vi.useRealTimers();
@@ -9608,43 +9537,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.statsSnapshot).mockResolvedValueOnce(null);
       const warnSpy = vi.spyOn(mockLogger, 'warn');
 
-      const statsNullState = createStatePersistence();
-      const statsNullDispatcher = new TaskDispatcher(
-        mockConfig,
-        statsNullState,
-        mockWorktreeManager,
-        mockLogForwarder,
-        mockWebhookClient,
-        mockGitHubTokenService,
-        mockLogger,
-        mockIsolationConfig,
-        {
-          maxAttempts: 1,
-          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
-          verifier: singleAttemptCompletionControl.verifier,
-        }
-      );
-
-      await statsNullDispatcher.submitTask({
-        taskId: 'stats-null-test',
-        workerType: 'auto',
-        prompt: 'p',
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: 'secret',
-        linearIssueLabels: [],
-        hasChildren: false,
-      });
-      await vi.advanceTimersByTimeAsync(0);
-      {
-        const state = await statsNullState.load();
-        const task = state.tasks['stats-null-test'];
-        if (!task) throw new Error('Task not found');
-        task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
-        await statsNullState.save(state);
-      }
-
-      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
-      await vi.advanceTimersByTimeAsync(0);
+      await triggerInactivityRestart('stats-null-test');
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.objectContaining({ taskId: 'stats-null-test', stats: null }),
