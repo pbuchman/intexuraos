@@ -53,4 +53,44 @@ describe('aggregateDigest', () => {
     expect(llmClient.calls).toHaveLength(2);
     expect(llmClient.calls[1]?.options?.promptType).toBe('whatsapp-digest-repair');
   });
+
+  it('returns repair-exhausted when LLM never produces valid JSON', async () => {
+    const llmClient = new FakeLlmClient([
+      { type: 'content', value: 'not json 1' },
+      { type: 'content', value: 'not json 2' },
+      { type: 'content', value: 'not json 3' },
+      { type: 'content', value: 'not json 4' },
+    ]);
+
+    const result = await aggregateDigest(
+      { llmClient, logger: noopLogger },
+      {
+        userId: 'u', groupKey: 'g', date: '2026-04-15',
+        previousState: null, last3Summaries: [], todaysMessages: [],
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('repair-exhausted');
+    expect(llmClient.calls).toHaveLength(4); // 1 initial + 3 repairs
+  });
+
+  it('returns llm-call-failed when the LLM call errors', async () => {
+    const llmClient = new FakeLlmClient([
+      { type: 'error', value: 'upstream 502' },
+    ]);
+
+    const result = await aggregateDigest(
+      { llmClient, logger: noopLogger },
+      {
+        userId: 'u', groupKey: 'g', date: '2026-04-15',
+        previousState: null, last3Summaries: [], todaysMessages: [],
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('llm-call-failed');
+  });
 });
