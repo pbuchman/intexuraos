@@ -58,10 +58,19 @@ describe('Connect Routes', () => {
     fakeSignatureRepo = new FakeSignatureConnectionRepository();
     fakeNotificationRepo = new FakeNotificationRepository();
 
+    const noop = <T>(name: string): T =>
+      new Proxy({} as object, {
+        get(_t, prop) {
+          return () => { throw new Error(`stub: ${name}.${String(prop)} not configured`); };
+        },
+      }) as T;
     const services: ServiceContainer = {
       signatureConnectionRepository: fakeSignatureRepo,
       notificationRepository: fakeNotificationRepo,
       notificationFiltersRepository: new FakeNotificationFiltersRepository(),
+      digestRepository: noop('digestRepository'),
+      groupStateRepository: noop('groupStateRepository'),
+      digestLockRepository: noop('digestLockRepository'),
     };
     setServices(services);
 
@@ -150,10 +159,19 @@ describe('Status Routes', () => {
     fakeSignatureRepo = new FakeSignatureConnectionRepository();
     fakeNotificationRepo = new FakeNotificationRepository();
 
+    const noop = <T>(name: string): T =>
+      new Proxy({} as object, {
+        get(_t, prop) {
+          return () => { throw new Error(`stub: ${name}.${String(prop)} not configured`); };
+        },
+      }) as T;
     const services: ServiceContainer = {
       signatureConnectionRepository: fakeSignatureRepo,
       notificationRepository: fakeNotificationRepo,
       notificationFiltersRepository: new FakeNotificationFiltersRepository(),
+      digestRepository: noop('digestRepository'),
+      groupStateRepository: noop('groupStateRepository'),
+      digestLockRepository: noop('digestLockRepository'),
     };
     setServices(services);
 
@@ -220,10 +238,19 @@ describe('Webhook Routes', () => {
     fakeSignatureRepo = new FakeSignatureConnectionRepository();
     fakeNotificationRepo = new FakeNotificationRepository();
 
+    const noop = <T>(name: string): T =>
+      new Proxy({} as object, {
+        get(_t, prop) {
+          return () => { throw new Error(`stub: ${name}.${String(prop)} not configured`); };
+        },
+      }) as T;
     const services: ServiceContainer = {
       signatureConnectionRepository: fakeSignatureRepo,
       notificationRepository: fakeNotificationRepo,
       notificationFiltersRepository: new FakeNotificationFiltersRepository(),
+      digestRepository: noop('digestRepository'),
+      groupStateRepository: noop('groupStateRepository'),
+      digestLockRepository: noop('digestLockRepository'),
     };
     setServices(services);
 
@@ -517,10 +544,19 @@ describe('Notification Routes', () => {
     fakeSignatureRepo = new FakeSignatureConnectionRepository();
     fakeNotificationRepo = new FakeNotificationRepository();
 
+    const noop = <T>(name: string): T =>
+      new Proxy({} as object, {
+        get(_t, prop) {
+          return () => { throw new Error(`stub: ${name}.${String(prop)} not configured`); };
+        },
+      }) as T;
     const services: ServiceContainer = {
       signatureConnectionRepository: fakeSignatureRepo,
       notificationRepository: fakeNotificationRepo,
       notificationFiltersRepository: new FakeNotificationFiltersRepository(),
+      digestRepository: noop('digestRepository'),
+      groupStateRepository: noop('groupStateRepository'),
+      digestLockRepository: noop('digestLockRepository'),
     };
     setServices(services);
 
