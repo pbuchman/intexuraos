@@ -16,6 +16,10 @@ import {
   type DigestError,
 } from './digestErrors.js';
 
+export const PROMPT_TYPE_AGGREGATE = 'whatsapp-digest-aggregate';
+export const PROMPT_TYPE_REPAIR = 'whatsapp-digest-repair';
+export const MAX_REPAIR_ATTEMPTS = 3;
+
 export interface AggregateDigestDeps {
   readonly llmClient: LlmGenerateClient;
   readonly logger: Logger;
@@ -23,53 +27,59 @@ export interface AggregateDigestDeps {
 
 export type AggregateDigestInput = DigestPromptInput;
 
-const PROMPT_TYPE_AGGREGATE = 'whatsapp-digest-aggregate';
-const PROMPT_TYPE_REPAIR = 'whatsapp-digest-repair';
-const MAX_REPAIR_ATTEMPTS = 3;
-
 export async function aggregateDigest(
   deps: AggregateDigestDeps,
   input: AggregateDigestInput,
 ): Promise<Result<AggregationOutput, DigestError>> {
   const initialPrompt = buildDigestPrompt(input);
-  let prompt = initialPrompt;
-  let promptType = PROMPT_TYPE_AGGREGATE;
-  let lastResponseContent = '';
-  let lastErrorMessage = '';
 
-  for (let attempt = 0; attempt <= MAX_REPAIR_ATTEMPTS; attempt += 1) {
-    const response = await deps.llmClient.generate(prompt, { promptType });
-    if (!response.ok) {
-      return err(llmCallFailed(response.error.message));
-    }
-    lastResponseContent = response.value.content;
+  const initial = await callAndParse(deps, initialPrompt, PROMPT_TYPE_AGGREGATE);
+  if (initial.kind === 'ok') return ok(initial.value);
+  if (initial.kind === 'llm-error') return err(llmCallFailed(initial.message));
 
-    const parsed = tryParseAndValidate(lastResponseContent);
-    if (parsed.ok) return ok(parsed.value);
-    lastErrorMessage = parsed.error;
+  let lastResponseContent = initial.responseContent;
+  let lastErrorMessage = initial.errorMessage;
 
+  for (let attempt = 1; attempt <= MAX_REPAIR_ATTEMPTS; attempt += 1) {
     deps.logger.warn(
       { attempt, errorMessage: lastErrorMessage },
       'aggregateDigest: invalid response, will repair',
     );
-
-    prompt = buildDigestRepairPrompt(initialPrompt, lastResponseContent, lastErrorMessage);
-    promptType = PROMPT_TYPE_REPAIR;
+    const repairPrompt = buildDigestRepairPrompt(initialPrompt, lastResponseContent, lastErrorMessage);
+    const repaired = await callAndParse(deps, repairPrompt, PROMPT_TYPE_REPAIR);
+    if (repaired.kind === 'ok') return ok(repaired.value);
+    if (repaired.kind === 'llm-error') return err(llmCallFailed(repaired.message));
+    lastResponseContent = repaired.responseContent;
+    lastErrorMessage = repaired.errorMessage;
   }
 
   return err(repairExhausted(MAX_REPAIR_ATTEMPTS, lastResponseContent));
 }
 
-function tryParseAndValidate(content: string): { ok: true; value: AggregationOutput } | { ok: false; error: string } {
+type CallResult =
+  | { readonly kind: 'ok'; readonly value: AggregationOutput }
+  | { readonly kind: 'llm-error'; readonly message: string }
+  | { readonly kind: 'invalid'; readonly responseContent: string; readonly errorMessage: string };
+
+async function callAndParse(
+  deps: AggregateDigestDeps,
+  prompt: string,
+  promptType: string,
+): Promise<CallResult> {
+  const response = await deps.llmClient.generate(prompt, { promptType });
+  if (!response.ok) {
+    return { kind: 'llm-error', message: response.error.message };
+  }
+  const content = response.value.content;
   let parsed: unknown;
   try {
     parsed = JSON.parse(content);
   } catch (e) {
-    return { ok: false, error: `JSON.parse failed: ${getErrorMessage(e)}` };
+    return { kind: 'invalid', responseContent: content, errorMessage: `JSON.parse failed: ${getErrorMessage(e)}` };
   }
   const validation = AggregationOutputSchema.safeParse(parsed);
   if (!validation.success) {
-    return { ok: false, error: validation.error.message };
+    return { kind: 'invalid', responseContent: content, errorMessage: validation.error.message };
   }
-  return { ok: true, value: validation.data };
+  return { kind: 'ok', value: validation.data };
 }

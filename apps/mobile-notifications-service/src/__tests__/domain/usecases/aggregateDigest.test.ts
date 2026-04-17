@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { aggregateDigest } from '../../../domain/usecases/aggregateDigest.js';
+import {
+  aggregateDigest,
+  PROMPT_TYPE_AGGREGATE,
+  PROMPT_TYPE_REPAIR,
+} from '../../../domain/usecases/aggregateDigest.js';
 import { FakeLlmClient } from '../../helpers/fakeLlmClient.js';
 import { COLD_START_EXAMPLE } from '@intexuraos/llm-prompts';
 
@@ -32,7 +36,7 @@ describe('aggregateDigest', () => {
     if (!result.ok) return;
     expect(result.value.dailySummary.date).toBe('2026-04-08');
     expect(llmClient.calls).toHaveLength(1);
-    expect(llmClient.calls[0]?.options?.promptType).toBe('whatsapp-digest-aggregate');
+    expect(llmClient.calls[0]?.options?.promptType).toBe(PROMPT_TYPE_AGGREGATE);
   });
 
   it('repairs the response when the first call returns invalid JSON', async () => {
@@ -51,7 +55,8 @@ describe('aggregateDigest', () => {
 
     expect(result.ok).toBe(true);
     expect(llmClient.calls).toHaveLength(2);
-    expect(llmClient.calls[1]?.options?.promptType).toBe('whatsapp-digest-repair');
+    expect(llmClient.calls[0]?.options?.promptType).toBe(PROMPT_TYPE_AGGREGATE);
+    expect(llmClient.calls[1]?.options?.promptType).toBe(PROMPT_TYPE_REPAIR);
   });
 
   it('returns repair-exhausted when LLM never produces valid JSON', async () => {
@@ -76,7 +81,7 @@ describe('aggregateDigest', () => {
     expect(llmClient.calls).toHaveLength(4); // 1 initial + 3 repairs
   });
 
-  it('returns llm-call-failed when the LLM call errors', async () => {
+  it('returns llm-call-failed when the LLM call errors on the initial attempt', async () => {
     const llmClient = new FakeLlmClient([
       { type: 'error', value: 'upstream 502' },
     ]);
@@ -92,6 +97,27 @@ describe('aggregateDigest', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('llm-call-failed');
+  });
+
+  it('returns llm-call-failed when the LLM call errors during the repair loop', async () => {
+    const llmClient = new FakeLlmClient([
+      { type: 'content', value: 'not json' },
+      { type: 'error', value: 'upstream 502 during repair' },
+    ]);
+
+    const result = await aggregateDigest(
+      { llmClient, logger: noopLogger },
+      {
+        userId: 'u', groupKey: 'g', date: '2026-04-15',
+        previousState: null, last3Summaries: [], todaysMessages: [],
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('llm-call-failed');
+    if (result.error.code !== 'llm-call-failed') return;
+    expect(result.error.message).toContain('upstream 502 during repair');
   });
 
   it('handles cold-start input (null state, empty summaries) without error', async () => {
