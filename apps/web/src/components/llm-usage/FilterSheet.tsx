@@ -55,26 +55,58 @@ export function FilterSheet(props: FilterSheetProps): React.JSX.Element | null {
   } = props;
 
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useBodyScrollLock(isOpen);
 
   useEffect(() => {
     if (!isOpen) return;
-    const handleEsc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const root = dialogRef.current;
+      if (root === null) return;
+      const focusables = root.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (first === undefined || last === undefined) return;
+      const active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || active === root) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
-    window.addEventListener('keydown', handleEsc);
-    return (): void => { window.removeEventListener('keydown', handleEsc); };
+    window.addEventListener('keydown', handleKeyDown);
+    return (): void => { window.removeEventListener('keydown', handleKeyDown); };
   }, [isOpen, onClose]);
 
   useEffect(() => {
-    if (isOpen) closeButtonRef.current?.focus();
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    closeButtonRef.current?.focus();
+    return (): void => {
+      previouslyFocused?.focus();
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-50 sm:hidden"
       role="dialog"
       aria-modal="true"

@@ -6,6 +6,7 @@ import {
   SORT_OPTIONS,
   DEFAULT_GROUP_BY,
   DEFAULT_SORT,
+  DEFAULT_TIME_RANGE,
   type GroupByMode,
   type SortState,
 } from './filterConstants.js';
@@ -29,8 +30,6 @@ export interface ActiveFiltersResult {
   chips: SummaryChip[];
 }
 
-const DEFAULT_TIME_PRESET = 'last7days';
-
 function formatDateShort(iso: string | undefined): string {
   if (iso === undefined || iso === '') return '?';
   const d = new Date(iso);
@@ -46,7 +45,7 @@ export function computeActiveFilters({ timeRange, filters, groupBy, sortBy }: In
   const timeLabel = isCustom
     ? `${formatDateShort(timeRange.customFrom)} \u2013 ${formatDateShort(timeRange.customTo)}`
     : (PRESET_OPTIONS.find((p) => p.key === timeRange.preset)?.label ?? timeRange.preset);
-  const timeIsDefault = timeRange.preset === DEFAULT_TIME_PRESET;
+  const timeIsDefault = timeRange.preset === DEFAULT_TIME_RANGE.preset;
   chips.push({ key: 'timeRange', label: timeLabel, tone: timeIsDefault ? 'neutral' : 'active' });
   if (!timeIsDefault) count += 1;
 

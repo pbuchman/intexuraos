@@ -5,7 +5,7 @@
  */
 
 import type { UsageEventSortField } from '@/types/llmUsage';
-import type { TimeRangePreset } from '@/utils/llmUsageTimeRange';
+import type { TimeRangePreset, TimeRangeState } from '@/utils/llmUsageTimeRange';
 
 export type GroupByMode =
   | 'none'
@@ -82,3 +82,4 @@ export const PRESET_OPTIONS: { key: TimeRangePreset; label: string }[] = [
 
 export const DEFAULT_GROUP_BY: GroupByMode = 'none';
 export const DEFAULT_SORT: SortState = { field: 'occurredAt', direction: 'desc' };
+export const DEFAULT_TIME_RANGE: TimeRangeState = { preset: 'last7days' };

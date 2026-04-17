@@ -85,7 +85,7 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
       {/* Mobile variant: sticky one-row affordance */}
       <div
         data-variant="mobile"
-        className="sticky top-0 z-10 -mx-4 mb-3 flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2 sm:hidden dark:border-slate-700 dark:bg-slate-900"
+        className="sticky top-16 z-40 -mx-4 mb-3 flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2 sm:hidden dark:border-slate-700 dark:bg-slate-900"
       >
         <button
           type="button"
