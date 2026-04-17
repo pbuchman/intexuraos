@@ -1,25 +1,5 @@
-/**
- * Cell-per-day grid for a backfill run. Each cell is color-coded by status:
- *   - gray: pending
- *   - blue (pulsing): currently running
- *   - green: completed
- *   - red: failed (tooltip shows the error)
- */
-
+import { enumerateDates } from '@/utils/digestDates';
 import type { BackfillFailure, BackfillRun } from '@/types/notificationDigests';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function enumerateDates(from: string, to: string): readonly string[] {
-  const out: string[] = [];
-  const fromMs = new Date(`${from}T00:00:00Z`).getTime();
-  const toMs = new Date(`${to}T00:00:00Z`).getTime();
-  if (Number.isNaN(fromMs) || Number.isNaN(toMs) || fromMs > toMs) return out;
-  for (let t = fromMs; t <= toMs; t += DAY_MS) {
-    out.push(new Date(t).toISOString().slice(0, 10));
-  }
-  return out;
-}
 
 type CellStatus = 'pending' | 'running' | 'completed' | 'failed';
 

@@ -1,18 +1,8 @@
-/**
- * List page for WhatsApp group daily digests.
- *
- * Layout: filter chips → heatmap → row list. Mirrors CodeTasksPage's
- * colored-dot filter chips, localStorage persistence, and row density.
- * Start-backfill button opens a modal; on success navigates to the
- * backfill progress page.
- */
-
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarRange, Filter } from 'lucide-react';
 import { Button, Layout } from '@/components';
 import { useAuth } from '@/context';
-import { useApiClient } from '@/hooks';
 import {
   BackfillRangeModal,
   DigestHeatmap,
@@ -59,7 +49,6 @@ const SORT_OPTIONS: { key: DigestSortOption; label: string }[] = [
 ];
 
 export function NotificationDigestsPage(): React.JSX.Element {
-  const { isAuthenticated } = useApiClient();
   const { getAccessToken } = useAuth();
   const navigate = useNavigate();
 
@@ -92,10 +81,6 @@ export function NotificationDigestsPage(): React.JSX.Element {
     () => items.filter((d) => d.generation > 1).length,
     [items],
   );
-
-  if (!isAuthenticated) {
-    return <Layout><div /></Layout>;
-  }
 
   return (
     <Layout>

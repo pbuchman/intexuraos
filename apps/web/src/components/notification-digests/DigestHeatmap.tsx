@@ -1,9 +1,5 @@
-/**
- * 30-day heatmap: each cell is a date, colored by message count (log scale).
- * Click a cell with data to navigate to that date's digest.
- */
-
 import { Link } from 'react-router-dom';
+import { enumerateDates } from '@/utils/digestDates';
 import type { PersistedDailySummary } from '@/types/notificationDigests';
 
 interface DigestHeatmapProps {
@@ -11,17 +7,6 @@ interface DigestHeatmapProps {
   readonly groupKey: string;
   readonly fromDate: string;
   readonly toDate: string;
-}
-
-function enumerateDates(from: string, to: string): readonly string[] {
-  const out: string[] = [];
-  const fromMs = new Date(`${from}T00:00:00Z`).getTime();
-  const toMs = new Date(`${to}T00:00:00Z`).getTime();
-  if (Number.isNaN(fromMs) || Number.isNaN(toMs) || fromMs > toMs) return out;
-  for (let t = fromMs; t <= toMs; t += 24 * 60 * 60 * 1000) {
-    out.push(new Date(t).toISOString().slice(0, 10));
-  }
-  return out;
 }
 
 function intensityClass(count: number | undefined, maxCount: number): string {

@@ -1,8 +1,3 @@
-/**
- * Detail page for a single digest at (groupKey, date).
- * Composes atomic components from components/notification-digests/.
- */
-
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
@@ -111,11 +106,7 @@ export function NotificationDigestViewPage(): React.JSX.Element {
 
       {state !== null ? <DigestState state={state} /> : null}
 
-      <DigestActions
-        summary={digest.summary}
-        regenerating={regenerating}
-        onRequestRegenerate={(): void => { setConfirmOpen(true); }}
-      />
+      <DigestActions summary={digest.summary} />
 
       <RegenerateConfirmModal
         isOpen={confirmOpen}
