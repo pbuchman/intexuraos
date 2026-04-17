@@ -289,6 +289,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       async reconcile() { return EMPTY_RECONCILE_RESULT; },
     },
     mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
+    prTriagePublisher: { publishPRTriage: async () => ok(undefined) },
   };
 
   setServices(container);

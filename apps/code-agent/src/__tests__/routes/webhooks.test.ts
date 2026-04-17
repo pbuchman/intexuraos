@@ -371,6 +371,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      prTriagePublisher: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -406,6 +407,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
+      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
     });
 
     app = await buildServer();
@@ -7454,6 +7456,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      prTriagePublisher: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -7489,6 +7492,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
+      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
     });
 
     app = await buildServer();
@@ -7817,6 +7821,7 @@ describe('POST /internal/logs', () => {
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      prTriagePublisher: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -7852,6 +7857,7 @@ describe('POST /internal/logs', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
+      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
     });
 
     app = await buildServer();
@@ -8692,6 +8698,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      prTriagePublisher: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -8727,6 +8734,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
+      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
     });
 
     app = await buildServer();
@@ -9556,6 +9564,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      prTriagePublisher: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -9591,6 +9600,7 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
+      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
     });
 
     app = await buildServer();
@@ -11355,6 +11365,7 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
       taskEnqueueService: {} as never,
       mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue({ processed: 0 }) },
       mergeQueueWatchRepo: { create: vi.fn(), findById: vi.fn(), findActiveByUserAndBranch: vi.fn(), findAllActive: vi.fn(), findByUserAndRepo: vi.fn(), update: vi.fn(), appendMergedPr: vi.fn() },
+      prTriagePublisher: {} as never,
     } as {
       firestore: Firestore; logger: Logger; codeTaskRepo: CodeTaskRepository; logChunkRepo: LogChunkRepository; logLineRepo: LogLineRepository;
       taskDispatcher: TaskDispatcherService; workerSettingsRepo: WorkerSettingsRepository; actionsAgentClient: ActionsAgentClient;
@@ -11381,6 +11392,7 @@ describe('POST /internal/turn-metrics - branch coverage', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
+      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
     });
     app = await buildServer();
   });
@@ -11546,6 +11558,7 @@ describe('POST /internal/webhooks/task-complete - failure triage (INT-1375)', ()
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      prTriagePublisher: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -11581,6 +11594,7 @@ describe('POST /internal/webhooks/task-complete - failure triage (INT-1375)', ()
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
+      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
     });
 
     app = await buildServer();
