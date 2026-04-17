@@ -10,6 +10,11 @@
  *
  * Keeping both variants in the DOM (vs. JS viewport detection) avoids
  * layout flashes during SSR/hydration and makes automated testing easier.
+ *
+ * Stacking contract (INT-1405): the mobile sticky row uses `z-30`, which
+ * sits intentionally below the mobile sidebar drawer/overlay (`z-40`) so
+ * that opening the menu fully occludes the FilterBar. The top header/
+ * hamburger remain at `z-50` and still visually pin above the sticky bar.
  */
 
 import { useState } from 'react';
@@ -85,7 +90,7 @@ export function FilterBar(props: FilterBarProps): React.JSX.Element {
       {/* Mobile variant: sticky one-row affordance */}
       <div
         data-variant="mobile"
-        className="sticky top-16 z-40 -mx-4 mb-3 flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2 sm:hidden dark:border-slate-700 dark:bg-slate-900"
+        className="sticky top-16 z-30 -mx-4 mb-3 flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2 sm:hidden dark:border-slate-700 dark:bg-slate-900"
       >
         <button
           type="button"
