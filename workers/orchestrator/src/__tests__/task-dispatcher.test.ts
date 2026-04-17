@@ -208,6 +208,8 @@ describe('TaskDispatcher', () => {
     streamLogs: vi.fn(async () => undefined),
     waitForCompletion: vi.fn(async () => 0),
     getResourceUsage: vi.fn(async () => ({ cpuPercent: 0, memoryUsedMB: 0, memoryLimitMB: 0 })),
+    copyOut: vi.fn(async () => undefined),
+    statsSnapshot: vi.fn(async () => ({ cpuTotalUsage: 0, memoryUsage: 0, pidsCurrent: 0 })),
     listWorkers: vi.fn(async () => []),
     cleanupTaskSession: vi.fn(async () => undefined),
     isResumeAvailable: vi.fn(async () => true),
@@ -9675,6 +9677,131 @@ describe('TaskDispatcher', () => {
       expect(task?.status).toBe('running');
       expect(task?.inactivityRestartCount).toBe(1);
 
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    async function triggerInactivityRestart(taskId: string): Promise<TaskDispatcher> {
+      const state = createStatePersistence();
+      const dispatcher = new TaskDispatcher(
+        mockConfig,
+        state,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        {
+          maxAttempts: 1,
+          activityTimeout: { timeoutMs: 10 * 60 * 1000, maxRestarts: 3 },
+          verifier: singleAttemptCompletionControl.verifier,
+        }
+      );
+      await dispatcher.submitTask({
+        taskId,
+        workerType: 'auto',
+        prompt: 'p',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      const loaded = await state.load();
+      const task = loaded.tasks[taskId];
+      if (!task) throw new Error('Task not found');
+      task.runtimeSessionId = 'aaaaaaaa-0000-4000-a000-000000000000';
+      await state.save(loaded);
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(0);
+      return dispatcher;
+    }
+
+    it('captures /tmp evidence and stats snapshot before destroying worker on inactivity', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      vi.mocked(mockIsolationProvider.copyOut).mockClear();
+      vi.mocked(mockIsolationProvider.statsSnapshot).mockClear();
+      vi.mocked(mockIsolationProvider.destroyWorker).mockClear();
+
+      await triggerInactivityRestart('evidence-capture-test');
+
+      expect(mockIsolationProvider.copyOut).toHaveBeenCalledWith(
+        'evidence-capture-test',
+        '/tmp',
+        expect.stringContaining('evidence-capture-test')
+      );
+      expect(mockIsolationProvider.statsSnapshot).toHaveBeenCalledWith('evidence-capture-test');
+
+      const copyOutOrder = vi.mocked(mockIsolationProvider.copyOut).mock.invocationCallOrder[0];
+      const statsOrder = vi.mocked(mockIsolationProvider.statsSnapshot).mock.invocationCallOrder[0];
+      const destroyCalls = vi.mocked(mockIsolationProvider.destroyWorker).mock.calls;
+      const destroyOrders = vi.mocked(mockIsolationProvider.destroyWorker).mock.invocationCallOrder;
+      const destroyIdx = destroyCalls.findIndex((c) => c[0] === 'evidence-capture-test');
+      expect(destroyIdx).toBeGreaterThanOrEqual(0);
+      const destroyOrder = destroyOrders[destroyIdx];
+      expect(copyOutOrder).toBeDefined();
+      expect(statsOrder).toBeDefined();
+      expect(destroyOrder).toBeDefined();
+      if (copyOutOrder !== undefined && destroyOrder !== undefined) {
+        expect(copyOutOrder).toBeLessThan(destroyOrder);
+      }
+      if (statsOrder !== undefined && destroyOrder !== undefined) {
+        expect(statsOrder).toBeLessThan(destroyOrder);
+      }
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('proceeds with inactivity restart even when copyOut rejects', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      vi.mocked(mockIsolationProvider.copyOut).mockRejectedValueOnce(new Error('docker busy'));
+
+      const dispatcher = await triggerInactivityRestart('copyout-fail-test');
+
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('copyout-fail-test');
+      const task = await dispatcher.getTask('copyout-fail-test');
+      expect(task?.inactivityRestartCount).toBe(1);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('proceeds with inactivity restart even when statsSnapshot rejects', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      vi.mocked(mockIsolationProvider.statsSnapshot).mockRejectedValueOnce(
+        new Error('stats unavailable')
+      );
+
+      const dispatcher = await triggerInactivityRestart('stats-fail-test');
+
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('stats-fail-test');
+      const task = await dispatcher.getTask('stats-fail-test');
+      expect(task?.inactivityRestartCount).toBe(1);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('logs stats: null warn and proceeds when statsSnapshot returns null', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      vi.mocked(mockIsolationProvider.statsSnapshot).mockResolvedValueOnce(null);
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
+
+      await triggerInactivityRestart('stats-null-test');
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'stats-null-test', stats: null }),
+        'Container stats at inactivity kill'
+      );
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('stats-null-test');
+
+      warnSpy.mockRestore();
       vi.useRealTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
     });

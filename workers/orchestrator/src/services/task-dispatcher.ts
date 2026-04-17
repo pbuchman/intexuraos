@@ -1135,6 +1135,26 @@ export class TaskDispatcher {
       'Inactivity restart triggered'
     );
 
+    const evidenceDir = `/var/log/orchestrator/inactivity-evidence/${taskId}/`;
+    const [copyResult, statsResult] = await Promise.allSettled([
+      this.isolation.provider.copyOut(taskId, '/tmp', evidenceDir),
+      this.isolation.provider.statsSnapshot(taskId),
+    ]);
+    if (copyResult.status === 'rejected') {
+      this.logger.warn(
+        { taskId, error: getErrorMessage(copyResult.reason) },
+        'Failed to copy /tmp evidence before inactivity kill'
+      );
+    }
+    if (statsResult.status === 'fulfilled') {
+      this.logger.warn({ taskId, stats: statsResult.value }, 'Container stats at inactivity kill');
+    } else {
+      this.logger.warn(
+        { taskId, error: getErrorMessage(statsResult.reason) },
+        'Failed to capture container stats before inactivity kill'
+      );
+    }
+
     try {
       await this.isolation.provider.destroyWorker(taskId);
     } catch (destroyError) {
