@@ -1,0 +1,37 @@
+import { describe, expect, it, vi } from 'vitest';
+import { aggregateDigest } from '../../../domain/usecases/aggregateDigest.js';
+import { FakeLlmClient } from '../../helpers/fakeLlmClient.js';
+import { COLD_START_EXAMPLE } from '@intexuraos/llm-prompts';
+
+const noopLogger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+};
+
+describe('aggregateDigest', () => {
+  it('returns a parsed AggregationOutput on a valid first-attempt LLM response', async () => {
+    const llmClient = new FakeLlmClient([
+      { type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) },
+    ]);
+
+    const result = await aggregateDigest(
+      { llmClient, logger: noopLogger },
+      {
+        userId: 'google-oauth2|test',
+        groupKey: 'grupa-wedkarska-skool',
+        date: '2026-04-15',
+        previousState: null,
+        last3Summaries: [],
+        todaysMessages: [],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.dailySummary.date).toBe('2026-04-08');
+    expect(llmClient.calls).toHaveLength(1);
+    expect(llmClient.calls[0]?.options?.promptType).toBe('whatsapp-digest-aggregate');
+  });
+});
