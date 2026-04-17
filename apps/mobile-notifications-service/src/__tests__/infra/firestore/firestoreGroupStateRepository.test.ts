@@ -3,12 +3,14 @@ import { FirestoreGroupStateRepository } from '../../../infra/firestore/firestor
 import { COLD_START_EXAMPLE as COLD_START } from '@intexuraos/llm-prompts';
 import { resetFirestoreFake, useFirestoreFake } from './helpers/firestoreFake.js';
 import type { GroupState } from '../../../domain/schemas/digestSchemas.js';
+import type { FakeFirestore } from '@intexuraos/infra-firestore';
 
 // COLD_START uses readonly tuple literals; cast to mutable GroupState for repository tests
 const EXAMPLE_STATE = COLD_START.stateUpdate as unknown as GroupState;
 
 describe('FirestoreGroupStateRepository', () => {
-  beforeEach(() => useFirestoreFake());
+  let fake: FakeFirestore;
+  beforeEach(() => { fake = useFirestoreFake(); });
   afterEach(() => resetFirestoreFake());
 
   it('save then getByDate roundtrips a snapshot', async () => {
@@ -51,5 +53,40 @@ describe('FirestoreGroupStateRepository', () => {
     if (!result.ok || result.value === null) return;
     expect(result.value.recentSummaryDates.length).toBe(30);
     expect(result.value.recentSummaryDates[0]).toBe('2026-03-06'); // oldest after trim
+  });
+
+  it('getLatest returns null when no snapshots exist', async () => {
+    const repo = new FirestoreGroupStateRepository();
+    const result = await repo.getLatest({ userId: 'u', groupKey: 'g' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toBeNull();
+  });
+
+  it('getByDate returns error on Firestore failure', async () => {
+    const repo = new FirestoreGroupStateRepository();
+    fake.configure({ errorToThrow: new Error('DB error') });
+    const result = await repo.getByDate({ userId: 'u', groupKey: 'g', date: '2026-04-15' });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('getLatest returns error on Firestore failure', async () => {
+    const repo = new FirestoreGroupStateRepository();
+    fake.configure({ errorToThrow: new Error('DB error') });
+    const result = await repo.getLatest({ userId: 'u', groupKey: 'g' });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('save returns error on Firestore failure', async () => {
+    const repo = new FirestoreGroupStateRepository();
+    fake.configure({ errorToThrow: new Error('DB error') });
+    const result = await repo.save({ state: EXAMPLE_STATE, date: '2026-04-08' });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INTERNAL_ERROR');
   });
 });

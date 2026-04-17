@@ -51,8 +51,9 @@ export class FirestoreGroupStateRepository implements GroupStateRepository {
         .get();
       if (snap.empty) return ok(null);
       const doc = snap.docs[0];
-      /* v8 ignore next -- ts-type: snap.empty=false guarantees length>=1 but noUncheckedIndexedAccess @preserve */
+      /* v8 ignore start -- ts-type: snap.empty=false guarantees length>=1 but noUncheckedIndexedAccess @preserve */
       if (doc === undefined) return ok(null);
+      /* v8 ignore stop @preserve */
       return ok((doc.data() as StateDoc).state);
     } catch (error) {
       return err({ code: 'INTERNAL_ERROR', message: getErrorMessage(error, 'getLatest failed') });
