@@ -119,4 +119,217 @@ describe('runDigestForGroup', () => {
     );
     expect(capturedPromptDate).toBe('2026-04-15');
   });
+
+  it('returns persistence-failed when lock acquire returns err', async () => {
+    const llm = new FakeLlmClient([]);
+    setMockServices({
+      digestLockRepository: {
+        acquire: async () => ({ ok: false as const, error: { code: 'INTERNAL_ERROR' as const, message: 'Firestore unavailable' } }),
+        release: async () => ({ ok: true as const, value: undefined }),
+      },
+      notificationRepository: fakeNotificationRepo([]),
+      digestRepository: { save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }), findByDate: async () => ({ ok: true, value: null }), findRecentByGroup: async () => ({ ok: true, value: [] }), findInRange: async () => ({ ok: true, value: { items: [] } }) },
+      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
+    });
+    const result = await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', date: '2026-04-15', holder: 'cron' },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('persistence-failed');
+  });
+
+  it('returns lock-held with unknown heldBy when heldBy is absent', async () => {
+    const llm = new FakeLlmClient([]);
+    setMockServices({
+      digestLockRepository: {
+        acquire: async () => ({ ok: true as const, value: { acquired: false } }), // no heldBy
+        release: async () => ({ ok: true as const, value: undefined }),
+      },
+      notificationRepository: fakeNotificationRepo([]),
+      digestRepository: { save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }), findByDate: async () => ({ ok: true, value: null }), findRecentByGroup: async () => ({ ok: true, value: [] }), findInRange: async () => ({ ok: true, value: { items: [] } }) },
+      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
+    });
+    const result = await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', date: '2026-04-15', holder: 'cron' },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('lock-held');
+  });
+
+  it('returns persistence-failed when loadPreviousState fails', async () => {
+    const llm = new FakeLlmClient([]);
+    setMockServices({
+      digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
+      notificationRepository: fakeNotificationRepo([]),
+      digestRepository: { save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }), findByDate: async () => ({ ok: true, value: null }), findRecentByGroup: async () => ({ ok: true, value: [] }), findInRange: async () => ({ ok: true, value: { items: [] } }) },
+      groupStateRepository: {
+        getByDate: async () => ({ ok: false as const, error: { code: 'INTERNAL_ERROR' as const, message: 'DB error' } }),
+        getLatest: async () => ({ ok: true, value: null }),
+        save: async () => ({ ok: true, value: undefined }),
+      },
+    });
+    const result = await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', date: '2026-04-15', holder: 'cron' },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('persistence-failed');
+  });
+
+  it('returns persistence-failed when loadLastSummaries fails', async () => {
+    const llm = new FakeLlmClient([]);
+    setMockServices({
+      digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
+      notificationRepository: fakeNotificationRepo([]),
+      digestRepository: {
+        save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }),
+        findByDate: async () => ({ ok: true, value: null }),
+        findRecentByGroup: async () => ({ ok: false as const, error: { code: 'INTERNAL_ERROR' as const, message: 'DB error' } }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
+    });
+    const result = await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', date: '2026-04-15', holder: 'cron' },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('persistence-failed');
+  });
+
+  it('returns persistence-failed when loadDayMessages fails', async () => {
+    const llm = new FakeLlmClient([]);
+    setMockServices({
+      digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
+      notificationRepository: {
+        ...fakeNotificationRepo([]),
+        findByUserIdPaginated: async () => ({ ok: false as const, error: { code: 'INTERNAL_ERROR' as const, message: 'DB error' } }),
+      },
+      digestRepository: { save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }), findByDate: async () => ({ ok: true, value: null }), findRecentByGroup: async () => ({ ok: true, value: [] }), findInRange: async () => ({ ok: true, value: { items: [] } }) },
+      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
+    });
+    const result = await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', date: '2026-04-15', holder: 'cron' },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('persistence-failed');
+  });
+
+  it('returns persistence-failed when findByDate check fails', async () => {
+    const llm = new FakeLlmClient([]);
+    setMockServices({
+      digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
+      notificationRepository: fakeNotificationRepo([]),
+      digestRepository: {
+        save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }),
+        findByDate: async () => ({ ok: false as const, error: { code: 'INTERNAL_ERROR' as const, message: 'DB error' } }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
+    });
+    const result = await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', date: '2026-04-15', holder: 'cron' },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('persistence-failed');
+  });
+
+  it('returns aggregation error when LLM fails', async () => {
+    const llm = new FakeLlmClient([{ type: 'error', value: 'LLM unavailable' }]);
+    setMockServices({
+      digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
+      notificationRepository: fakeNotificationRepo([]),
+      digestRepository: { save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }), findByDate: async () => ({ ok: true, value: null }), findRecentByGroup: async () => ({ ok: true, value: [] }), findInRange: async () => ({ ok: true, value: { items: [] } }) },
+      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
+    });
+    const result = await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', date: '2026-04-15', holder: 'cron' },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('llm-call-failed');
+  });
+
+  it('returns persistence-failed when digest save fails', async () => {
+    const llm = new FakeLlmClient([{ type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) }]);
+    setMockServices({
+      digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
+      notificationRepository: fakeNotificationRepo([]),
+      digestRepository: {
+        save: async () => ({ ok: false as const, error: { code: 'INTERNAL_ERROR' as const, message: 'write failed' } }),
+        findByDate: async () => ({ ok: true, value: null }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
+    });
+    const result = await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', date: '2026-04-15', holder: 'cron' },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('persistence-failed');
+  });
+
+  it('returns persistence-failed when group state save fails', async () => {
+    const llm = new FakeLlmClient([{ type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) }]);
+    setMockServices({
+      digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
+      notificationRepository: fakeNotificationRepo([]),
+      digestRepository: {
+        save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }),
+        findByDate: async () => ({ ok: true, value: null }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: {
+        getByDate: async () => ({ ok: true, value: null }),
+        getLatest: async () => ({ ok: true, value: null }),
+        save: async () => ({ ok: false as const, error: { code: 'INTERNAL_ERROR' as const, message: 'write failed' } }),
+      },
+    });
+    const result = await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', date: '2026-04-15', holder: 'cron' },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('persistence-failed');
+  });
+
+  it('regenerated is true when digest already exists for the date', async () => {
+    const llm = new FakeLlmClient([{ type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) }]);
+    setMockServices({
+      digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
+      notificationRepository: fakeNotificationRepo([]),
+      digestRepository: {
+        save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 2, generatedAt: '', modelId: '' } }),
+        findByDate: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
+    });
+    const result = await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', date: '2026-04-15', holder: 'cron' },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.regenerated).toBe(true);
+    expect(result.value.generation).toBe(2);
+  });
 });
