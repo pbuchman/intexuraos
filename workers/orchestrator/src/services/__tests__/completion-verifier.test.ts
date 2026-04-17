@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
 import type { ExecutionMemoryPromptContext } from '../../types/execution-memory.js';
+import { reviewPrompt } from '../system-prompt.js';
 
 const {
   OrchestratorCompletionVerifier,
@@ -1383,6 +1384,33 @@ describe('OrchestratorCompletionVerifier', () => {
 
       expect(result.passed).toBe(false);
       expect(result.missingFields).toContain('memory_acknowledgment');
+    });
+
+    it('verifier acknowledgment format matches the current system prompt template', () => {
+      const rendered = reviewPrompt.build({
+        taskId: 'task-test',
+        linearIssueId: 'INT-1',
+        linearIssueTitle: 'Test',
+        linearIssueLabels: [],
+        taskUrl: 'https://intexuraos.cloud/#/code-tasks/task-test',
+        workerType: 'auto',
+        modelName: 'claude-4',
+        executionMemoryContext: {
+          applicationId: 'app',
+          retrievalVersion: 'v',
+          querySummary: 'q',
+          matchedMemories: [
+            { memoryId: 'mem_xyz', title: 'T', memoryType: 'pitfall_pattern', score: 0.9,
+              appliesWhen: 'x', action: 'x', avoid: 'x', verification: 'x' },
+          ],
+        },
+      });
+
+      // Prompt instructs the agent to emit "- [1] mem_xyz — …"
+      expect(rendered).toMatch(/- \[\{index\}\] \{memoryId\}/);
+      // Verifier regex accepts that shape for a concrete memoryId.
+      const ackLine = '- [1] mem_xyz — "T" — APPLICABLE because reason';
+      expect(/^\s*-\s*\[\d+\]\s+mem_xyz\b/m.test(ackLine)).toBe(true);
     });
   });
 
