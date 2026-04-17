@@ -114,6 +114,7 @@ describe('POST /webhooks/github', () => {
         processedAt: new Date(),
         payload: {},
       })),
+      findById: (): Promise<ReturnType<typeof ok<GitHubPREvent | null>>> => Promise.resolve(ok(null)),
       findByPullRequest: (): Promise<ReturnType<typeof ok<GitHubPREvent[]>>> => Promise.resolve(ok([])),
       findByRepository: (): Promise<ReturnType<typeof ok<GitHubPREvent[]>>> => Promise.resolve(ok([])),
       findAll: (): Promise<ReturnType<typeof ok<GitHubPREvent[]>>> => Promise.resolve(ok([])),
