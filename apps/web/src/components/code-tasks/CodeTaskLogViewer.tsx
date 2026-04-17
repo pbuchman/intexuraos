@@ -377,7 +377,7 @@ export function CodeTaskLogViewer({
               }
               if (workerFilter) {
                 const tag = extractTag(line.text);
-                if (tag !== 'claude' && tag !== 'msg') return null;
+                if (tag !== 'claude' && tag !== 'msg' && tag !== 'codex') return null;
               }
 
               const collapsible = block !== undefined && countVisualLines(logs, block.bodyStart, block.bodyEnd) >= 4;
