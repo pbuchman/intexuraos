@@ -92,3 +92,49 @@ export interface DigestLockRepository {
     readonly groupKey: string;
   }): Promise<Result<void, RepositoryError>>;
 }
+
+export type BackfillStatus = 'queued' | 'running' | 'completed' | 'failed';
+
+export interface BackfillFailure {
+  readonly date: string;
+  readonly error: string;
+}
+
+export interface BackfillRun {
+  readonly runId: string;
+  readonly userId: string;
+  readonly groupKey: string;
+  readonly fromDate: string;
+  readonly toDate: string;
+  readonly status: BackfillStatus;
+  readonly totalDates: number;
+  readonly completedDates: readonly string[];
+  readonly failedDates: readonly BackfillFailure[];
+  readonly currentDate: string | null;
+  readonly startedAt: string;
+  readonly updatedAt: string;
+  readonly completedAt?: string;
+}
+
+export interface BackfillRunRepository {
+  create(run: BackfillRun): Promise<Result<void, RepositoryError>>;
+
+  findById(runId: string): Promise<Result<BackfillRun | null, RepositoryError>>;
+
+  /** Mark a day as successfully processed: append to completedDates and move currentDate forward. Atomic. */
+  markDayComplete(input: {
+    readonly runId: string;
+    readonly completedDate: string;
+    readonly nextCurrentDate: string | null;
+  }): Promise<Result<void, RepositoryError>>;
+
+  /** Mark a day as failed: append to failedDates and optionally set run status to 'failed'. Atomic. */
+  markDayFailed(input: {
+    readonly runId: string;
+    readonly failure: BackfillFailure;
+    readonly markRunFailed: boolean;
+  }): Promise<Result<void, RepositoryError>>;
+
+  /** Terminal-success update: set status='completed' and completedAt. */
+  markRunCompleted(runId: string): Promise<Result<void, RepositoryError>>;
+}

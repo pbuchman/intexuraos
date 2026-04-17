@@ -1,9 +1,10 @@
 import type { Logger, Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
-import { getServices } from '../../services.js';
+import type { BackfillRunRepository } from '../repositories/digestRepositories.js';
 
 export interface RunDigestBackfillDeps {
   readonly logger: Logger;
+  readonly backfillRunRepository: BackfillRunRepository;
   readonly httpPost: (path: string, body: unknown) => Promise<Result<unknown, { message: string }>>;
 }
 
@@ -31,10 +32,9 @@ export async function startDigestBackfill(
 ): Promise<Result<{ runId: string; queuedDates: readonly string[] }, { message: string }>> {
   const dates = listDates(input.fromDate, input.toDate);
   const runId = `bf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-  const services = getServices();
   const now = new Date().toISOString();
 
-  const created = await services.backfillRunRepository.create({
+  const created = await deps.backfillRunRepository.create({
     runId,
     userId: input.userId,
     groupKey: input.groupKey,
