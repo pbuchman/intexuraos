@@ -5,8 +5,8 @@ import { Card, Layout } from '@/components';
 import {
   DigestActions,
   DigestHeader,
+  DigestHighlight,
   DigestModeratorPosts,
-  DigestNarrative,
   DigestState,
   DigestThreads,
   RegenerateConfirmModal,
@@ -100,7 +100,7 @@ export function NotificationDigestViewPage(): React.JSX.Element {
         </Card>
       ) : null}
 
-      <DigestNarrative narrative={digest.summary.narrative} />
+      <DigestHighlight headline={digest.summary.headline} bullets={digest.summary.bullets} />
       <DigestThreads threads={digest.summary.threads} />
       <DigestModeratorPosts posts={digest.summary.moderatorPosts} />
 
