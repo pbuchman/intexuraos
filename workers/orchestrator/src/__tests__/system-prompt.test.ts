@@ -255,7 +255,6 @@ describe('buildExecutionMemorySection acknowledgment and reporting', () => {
       linearIssueLabels: [],
     });
 
-    // The memory acknowledgment / reporting instructions only appear when memories are injected.
     expect(prompt).not.toContain('MANDATORY: Acknowledge Execution Memories NOW');
     expect(prompt).not.toContain('MANDATORY: Report Memory Usage in Final Output');
     // The final-block template still lists memory_ids_used with a "none" fallback so workers

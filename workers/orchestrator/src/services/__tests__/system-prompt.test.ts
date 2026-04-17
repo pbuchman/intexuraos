@@ -1376,21 +1376,32 @@ describe('system-prompt', () => {
       expect(block).toContain('memory_usage_summary:');
     });
 
-    it('lists memory fields in every PULL_REQUEST_AGENT_FINAL occurrence in the source file', async () => {
-      const { readFile } = await import('node:fs/promises');
-      const { fileURLToPath } = await import('node:url');
-      const currentUrl = import.meta.url;
-      const currentDir = fileURLToPath(new URL('.', currentUrl));
-      const src = await readFile(`${currentDir}../system-prompt.ts`, 'utf8');
-      const occurrences = src.split('PULL_REQUEST_AGENT_FINAL:').length - 1;
-      expect(occurrences).toBeGreaterThanOrEqual(2);
-      const blocks = src.split('PULL_REQUEST_AGENT_FINAL:').slice(1);
-      for (const tail of blocks) {
-        const block = tail.slice(0, tail.indexOf('```'));
-        expect(block).toContain('memory_ids_used:');
-        expect(block).toContain('memory_ids_rejected:');
-        expect(block).toContain('memory_usage_summary:');
-      }
+    it('lists memory fields in PULL_REQUEST_AGENT_FINAL (default block)', () => {
+      const prompt = pullRequestPrompt.build({
+        taskId: 't1',
+        linearIssueLabels: [],
+        workerType: 'auto',
+        executionMemoryContext: memoryContext,
+      });
+      const block = extractFinalBlock(prompt, 'PULL_REQUEST_AGENT_FINAL:');
+      expect(block).toContain('memory_ids_used:');
+      expect(block).toContain('memory_ids_rejected:');
+      expect(block).toContain('memory_usage_summary:');
+    });
+
+    it('lists memory fields in PULL_REQUEST_AGENT_FINAL (PR review overlay override)', () => {
+      // prReviewOverlayPrompt appends a second completion-block override used when
+      // PR Review Mode activates — it must also list the memory fields.
+      const overlay = prReviewOverlayPrompt.build({
+        taskId: 't1',
+        linearIssueLabels: [],
+        workerType: 'auto',
+        executionMemoryContext: memoryContext,
+      });
+      const block = extractFinalBlock(overlay, 'PULL_REQUEST_AGENT_FINAL:');
+      expect(block).toContain('memory_ids_used:');
+      expect(block).toContain('memory_ids_rejected:');
+      expect(block).toContain('memory_usage_summary:');
     });
 
     it('lists memory fields in REVIEW_AGENT_FINAL', () => {
