@@ -15,6 +15,13 @@ import type {
 } from '../../domain/repositories/gitHubPREventRepository.js';
 import { getFirestore } from '@intexuraos/infra-firestore';
 
+/** Minimal structural shape used by mapDocToEvent — avoids importing @google-cloud/firestore types directly. */
+interface FirestoreDocSnapshot {
+  id: string;
+  exists: boolean;
+  data(): Record<string, unknown> | undefined;
+}
+
 /**
  * Convert Firestore Timestamp or Date to JavaScript Date.
  * Handles both real Firestore Timestamp objects and plain Date objects from fake Firestore.
@@ -50,6 +57,28 @@ export function readIsDraft(data: Record<string, unknown>): boolean | null {
 }
 
 const COLLECTION_NAME = 'github-pr-events';
+
+function mapDocToEvent(
+  doc: FirestoreDocSnapshot
+): GitHubPREvent {
+  const data = doc.data() as Omit<GitHubPREvent, 'id'> & {
+    createdAt: unknown;
+    processedAt: unknown;
+    mergedAt: unknown;
+  };
+  return {
+    ...data,
+    id: doc.id,
+    ...(data.auditEventId !== undefined && { auditEventId: data.auditEventId }),
+    deliveryId: readDeliveryId(data as Record<string, unknown>),
+    prAuthorLogin: ((data as Record<string, unknown>)['prAuthorLogin'] as string | undefined) ?? null,
+    baseBranch: data.baseBranch ?? null,
+    isDraft: readIsDraft(data as Record<string, unknown>),
+    createdAt: toDate(data.createdAt),
+    processedAt: toDate(data.processedAt),
+    mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
+  };
+}
 
 export function createFirestoreGitHubPREventsRepository(deps: {
   logger: Logger;
@@ -151,6 +180,22 @@ export function createFirestoreGitHubPREventsRepository(deps: {
       }
     },
 
+    async findById(
+      eventId: string
+    ): Promise<Result<GitHubPREvent | null, RepositoryError>> {
+      try {
+        const snap = await collection.doc(eventId).get();
+        if (!snap.exists) return ok(null);
+        return ok(mapDocToEvent(snap));
+      } catch (error) {
+        logger.error({ error, eventId }, 'Failed to find GitHub PR event by id');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
+
     async findByPullRequest(
       repository: string,
       pullRequestNumber: number
@@ -164,25 +209,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
 
         const snapshot = await query.get();
 
-        const events: GitHubPREvent[] = snapshot.docs.map((doc) => {
-          const data = doc.data() as Omit<GitHubPREvent, 'id'> & {
-            createdAt: unknown;
-            processedAt: unknown;
-            mergedAt: unknown;
-          };
-          return {
-            ...data,
-            id: doc.id,
-            ...(data.auditEventId !== undefined && { auditEventId: data.auditEventId }),
-            deliveryId: readDeliveryId(data as Record<string, unknown>),
-            prAuthorLogin: ((data as Record<string, unknown>)['prAuthorLogin'] as string | undefined) ?? null,
-            baseBranch: data.baseBranch ?? null,
-            isDraft: readIsDraft(data as Record<string, unknown>),
-            createdAt: toDate(data.createdAt),
-            processedAt: toDate(data.processedAt),
-            mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
-          };
-        });
+        const events: GitHubPREvent[] = snapshot.docs.map(mapDocToEvent);
 
         return ok(events);
       } catch (error) {
@@ -209,25 +236,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
 
         const snapshot = await query.get();
 
-        const events: GitHubPREvent[] = snapshot.docs.map((doc) => {
-          const data = doc.data() as Omit<GitHubPREvent, 'id'> & {
-            createdAt: unknown;
-            processedAt: unknown;
-            mergedAt: unknown;
-          };
-          return {
-            ...data,
-            id: doc.id,
-            ...(data.auditEventId !== undefined && { auditEventId: data.auditEventId }),
-            deliveryId: readDeliveryId(data as Record<string, unknown>),
-            prAuthorLogin: ((data as Record<string, unknown>)['prAuthorLogin'] as string | undefined) ?? null,
-            baseBranch: data.baseBranch ?? null,
-            isDraft: readIsDraft(data as Record<string, unknown>),
-            createdAt: toDate(data.createdAt),
-            processedAt: toDate(data.processedAt),
-            mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
-          };
-        });
+        const events: GitHubPREvent[] = snapshot.docs.map(mapDocToEvent);
 
         return ok(events);
       } catch (error) {
@@ -259,29 +268,13 @@ export function createFirestoreGitHubPREventsRepository(deps: {
 
         const events: GitHubPREvent[] = [];
         for (const doc of snapshot.docs) {
-          const data = doc.data() as Omit<GitHubPREvent, 'id'> & {
-            createdAt: unknown;
-            processedAt: unknown;
-            mergedAt: unknown;
-          };
-
-          const payload = data.payload as Record<string, unknown> | undefined;
+          const data = doc.data() as Record<string, unknown>;
+          const payload = data['payload'] as Record<string, unknown> | undefined;
           const comment = payload?.['comment'] as Record<string, unknown> | undefined;
           const commentReviewId = comment?.['pull_request_review_id'];
 
           if (commentReviewId === reviewId) {
-            events.push({
-              ...data,
-              id: doc.id,
-              ...(data.auditEventId !== undefined && { auditEventId: data.auditEventId }),
-              deliveryId: readDeliveryId(data as Record<string, unknown>),
-              prAuthorLogin: ((data as Record<string, unknown>)['prAuthorLogin'] as string | undefined) ?? null,
-              baseBranch: data.baseBranch ?? null,
-              isDraft: readIsDraft(data as Record<string, unknown>),
-              createdAt: toDate(data.createdAt),
-              processedAt: toDate(data.processedAt),
-              mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
-            });
+            events.push(mapDocToEvent(doc));
           }
         }
 
@@ -304,25 +297,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
 
         const snapshot = await query.get();
 
-        const events: GitHubPREvent[] = snapshot.docs.map((doc) => {
-          const data = doc.data() as Omit<GitHubPREvent, 'id'> & {
-            createdAt: unknown;
-            processedAt: unknown;
-            mergedAt: unknown;
-          };
-          return {
-            ...data,
-            id: doc.id,
-            ...(data.auditEventId !== undefined && { auditEventId: data.auditEventId }),
-            deliveryId: readDeliveryId(data as Record<string, unknown>),
-            prAuthorLogin: ((data as Record<string, unknown>)['prAuthorLogin'] as string | undefined) ?? null,
-            baseBranch: data.baseBranch ?? null,
-            isDraft: readIsDraft(data as Record<string, unknown>),
-            createdAt: toDate(data.createdAt),
-            processedAt: toDate(data.processedAt),
-            mergedAt: data.mergedAt !== null ? toDate(data.mergedAt) : null,
-          };
-        });
+        const events: GitHubPREvent[] = snapshot.docs.map(mapDocToEvent);
 
         return ok(events);
       } catch (error) {

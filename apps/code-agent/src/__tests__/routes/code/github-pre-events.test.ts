@@ -212,6 +212,7 @@ describe('GET /code/github-pr-events', () => {
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      prTriagePublisher: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -247,6 +248,7 @@ describe('GET /code/github-pr-events', () => {
       taskEnqueueService: import('../../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
+      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
     });
 
     server = await buildServer();

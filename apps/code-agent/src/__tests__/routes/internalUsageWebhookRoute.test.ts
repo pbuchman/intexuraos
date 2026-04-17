@@ -155,6 +155,7 @@ describe('POST /internal/webhooks/usage-events', () => {
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      prTriagePublisher: {} as never,
     } as ServiceContainer);
 
     app = await buildServer();
@@ -489,6 +490,7 @@ describe('POST /internal/webhooks/usage-events', () => {
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      prTriagePublisher: {} as never,
     } as ServiceContainer);
 
     // Need a new app instance since services changed

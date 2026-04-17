@@ -24,6 +24,7 @@ const REQUIRED_ENV = [
  * Optional env vars - used but not strictly required (for E2E or conditional features):
  * - E2E_MODE, E2E_TEST_USER_ID: E2E testing mode flags
  * - INTEXURAOS_WHATSAPP_SERVICE_URL, INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC: WhatsApp integration
+ * - INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC: PR triage Pub/Sub topic
  * - INTEXURAOS_LINEAR_AGENT_URL, INTEXURAOS_ACTIONS_AGENT_URL: Service integrations
  * - INTEXURAOS_SERVICE_URL: Worker configuration
  * - INTEXURAOS_WEB_URL: Web app URL for generating task links (defaults to https://intexuraos.cloud)
@@ -35,6 +36,7 @@ const REQUIRED_ENV = [
 const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_WHATSAPP_SERVICE_URL',
   'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
+  'INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC',
   'INTEXURAOS_LINEAR_AGENT_URL',
   'INTEXURAOS_ACTIONS_AGENT_URL',
   'INTEXURAOS_AUTH_AUDIENCE',
@@ -71,6 +73,7 @@ async function main(): Promise<void> {
     firestoreProjectId: config.firestoreProjectId,
     whatsappServiceUrl: config.whatsappServiceUrl,
     whatsappSendTopic: config.whatsappSendTopic,
+    prTriageTopic: config.prTriageTopic,
     linearAgentUrl: config.linearAgentUrl,
     actionsAgentUrl: config.actionsAgentUrl,
     webhookVerifySecret: config.webhookVerifySecret,

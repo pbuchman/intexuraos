@@ -163,6 +163,7 @@ describe('OpenAPI contract', () => {
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      prTriagePublisher: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -198,6 +199,7 @@ describe('OpenAPI contract', () => {
       taskEnqueueService: import('../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
+      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
     });
 
     app = await buildServer();

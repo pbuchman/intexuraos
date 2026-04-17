@@ -17,6 +17,12 @@ export interface GitHubPREventRepository {
   save(input: CreateGitHubPREventInput): Promise<Result<GitHubPREvent, RepositoryError>>;
 
   /**
+   * Find an event by its Firestore document ID.
+   * Returns ok(null) when the document does not exist (not an error).
+   */
+  findById(eventId: string): Promise<Result<GitHubPREvent | null, RepositoryError>>;
+
+  /**
    * Find all events for a specific pull request.
    * Returns empty array if no events found.
    */

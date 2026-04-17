@@ -1490,6 +1490,7 @@ module "code_agent" {
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_SERVICE_URL                = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC     = "intexuraos-pr-triage-${var.environment}"
     INTEXURAOS_EXECUTION_MEMORY_ENABLED   = "true"
     INTEXURAOS_QUEUE_MAX_SIZE             = "50"
     INTEXURAOS_QUEUE_TTL_MINUTES          = "1440"

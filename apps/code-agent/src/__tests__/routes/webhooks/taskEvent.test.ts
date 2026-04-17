@@ -143,6 +143,7 @@ describe('POST /internal/webhooks/task-event', () => {
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      prTriagePublisher: {} as never,
     } as ServiceContainer);
 
     app = await buildServer();
