@@ -1,0 +1,70 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { FirestoreDigestRepository } from '../../../infra/firestore/firestoreDigestRepository.js';
+import { COLD_START_EXAMPLE } from '@intexuraos/llm-prompts';
+import { resetFirestoreFake, useFirestoreFake } from './helpers/firestoreFake.js';
+
+describe('FirestoreDigestRepository', () => {
+  beforeEach(() => useFirestoreFake());
+  afterEach(() => resetFirestoreFake());
+
+  it('saves a new summary with generation = 1', async () => {
+    const repo = new FirestoreDigestRepository();
+    const result = await repo.save({
+      userId: 'u', groupKey: 'g', summary: COLD_START_EXAMPLE.dailySummary, modelId: 'or:google/gemini-3-flash-preview',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.generation).toBe(1);
+    expect(result.value.modelId).toBe('or:google/gemini-3-flash-preview');
+  });
+
+  it('increments generation when saving over an existing date', async () => {
+    const repo = new FirestoreDigestRepository();
+    await repo.save({ userId: 'u', groupKey: 'g', summary: COLD_START_EXAMPLE.dailySummary, modelId: 'm' });
+    const second = await repo.save({ userId: 'u', groupKey: 'g', summary: COLD_START_EXAMPLE.dailySummary, modelId: 'm' });
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.value.generation).toBe(2);
+  });
+
+  it('findByDate returns null when missing', async () => {
+    const repo = new FirestoreDigestRepository();
+    const result = await repo.findByDate({ userId: 'u', groupKey: 'g', date: '2026-04-15' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toBeNull();
+  });
+
+  it('findRecentByGroup returns docs ordered by date desc', async () => {
+    const repo = new FirestoreDigestRepository();
+    for (const d of ['2026-04-08', '2026-04-09', '2026-04-10']) {
+      await repo.save({
+        userId: 'u', groupKey: 'g',
+        summary: { ...COLD_START_EXAMPLE.dailySummary, date: d },
+        modelId: 'm',
+      });
+    }
+    const result = await repo.findRecentByGroup({ userId: 'u', groupKey: 'g', limit: 2 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.map((p) => p.summary.date)).toEqual(['2026-04-10', '2026-04-09']);
+  });
+
+  it('findInRange respects fromDate, toDate, and limit', async () => {
+    const repo = new FirestoreDigestRepository();
+    for (const d of ['2026-04-08', '2026-04-09', '2026-04-10', '2026-04-11', '2026-04-12']) {
+      await repo.save({
+        userId: 'u', groupKey: 'g',
+        summary: { ...COLD_START_EXAMPLE.dailySummary, date: d },
+        modelId: 'm',
+      });
+    }
+    const result = await repo.findInRange({
+      userId: 'u', groupKey: 'g',
+      fromDate: '2026-04-09', toDate: '2026-04-11', limit: 5,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.items.map((p) => p.summary.date).sort()).toEqual(['2026-04-09', '2026-04-10', '2026-04-11']);
+  });
+});
