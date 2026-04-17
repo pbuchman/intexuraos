@@ -8,81 +8,24 @@ import { Loader2 } from 'lucide-react';
 import { Layout } from '@/components';
 import { useLlmUsageEvents } from '@/hooks/useLlmUsageEvents';
 import { useLlmUsageQuery, EMPTY_TOTALS } from '@/hooks/useLlmUsageQuery';
-import { resolveTimeRange, type TimeRangeState, type TimeRangePreset } from '@/utils/llmUsageTimeRange';
+import { resolveTimeRange, type TimeRangeState } from '@/utils/llmUsageTimeRange';
 import { loadFromStorage, saveToStorage } from '@/utils/llmUsageStorage';
 import { formatRelative, formatDateTime } from '@/utils/dateFormat';
-import type { UsageEvent, UsageEventFilters, UsageEventSortField, UsageQueryRow, AggregateMetrics } from '@/types/llmUsage';
+import type { UsageEvent, UsageEventFilters, UsageQueryRow, AggregateMetrics } from '@/types/llmUsage';
 import { resolveOpenRouterModelName } from '@/utils/openRouterModelNames';
 
-// --- Types ---
+// --- Types & Constants (re-exported from shared module) ---
 
-type GroupByMode = 'none' | 'day' | 'component' | 'service' | 'model' | 'openrouter-model' | 'promptType';
-
-interface SortState {
-  field: UsageEventSortField;
-  direction: 'asc' | 'desc';
-}
-
-// --- Constants ---
-
-const PROVIDERS = ['anthropic', 'openai', 'google', 'perplexity', 'openrouter'] as const;
-
-const PROVIDER_ACTIVE_CLASSES: Record<string, string> = {
-  anthropic: 'border-orange-500 bg-orange-50 text-orange-700 dark:border-orange-400 dark:bg-orange-900/30 dark:text-orange-400',
-  openai: 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:border-emerald-400 dark:bg-emerald-900/30 dark:text-emerald-400',
-  google: 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-400',
-  perplexity: 'border-purple-500 bg-purple-50 text-purple-700 dark:border-purple-400 dark:bg-purple-900/30 dark:text-purple-400',
-  openrouter: 'border-rose-500 bg-rose-50 text-rose-700 dark:border-rose-400 dark:bg-rose-900/30 dark:text-rose-400',
-};
-
-const INACTIVE_SEGMENT_CLASS =
-  'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500';
-
-const PROVIDER_DOT_CLASSES: Record<string, string> = {
-  anthropic: 'bg-orange-500',
-  openai: 'bg-emerald-500',
-  google: 'bg-blue-500',
-  perplexity: 'bg-purple-500',
-  openrouter: 'bg-rose-500',
-};
-
-const GROUP_BY_MAP: Record<GroupByMode, string[]> = {
-  none: [],
-  day: ['day'],
-  component: ['source.component'],
-  service: ['source.service'],
-  model: ['request.model'],
-  'openrouter-model': ['request.provider', 'request.model'],
-  promptType: ['request.promptType'],
-};
-
-const GROUP_BY_OPTIONS: { key: GroupByMode; label: string }[] = [
-  { key: 'none', label: 'None' },
-  { key: 'day', label: 'Day' },
-  { key: 'component', label: 'Component' },
-  { key: 'service', label: 'Service' },
-  { key: 'model', label: 'Model' },
-  { key: 'openrouter-model', label: 'OpenRouter Model' },
-  { key: 'promptType', label: 'Prompt Type' },
-];
-
-// "Most expensive" / "Most tokens" sorts are intentionally omitted:
-// the composite index `(occurredAt, cost.billedUsd, __name__)` treats the
-// secondary field as a tiebreaker, and `occurredAt` is effectively unique
-// per event — so the displayed order would be identical to "Newest first".
-// A correct ranking requires aggregate-backed queries; tracked as a follow-up.
-const SORT_OPTIONS: { field: UsageEventSortField; direction: 'asc' | 'desc'; label: string }[] = [
-  { field: 'occurredAt', direction: 'desc', label: 'Newest first' },
-  { field: 'occurredAt', direction: 'asc', label: 'Oldest first' },
-];
-
-const PRESET_OPTIONS: { key: TimeRangePreset; label: string }[] = [
-  { key: 'today', label: 'Today' },
-  { key: 'yesterday', label: 'Yesterday' },
-  { key: 'last7days', label: 'Last 7d' },
-  { key: 'last30days', label: 'Last 30d' },
-  { key: 'custom', label: 'Custom' },
-];
+import {
+  GROUP_BY_MAP,
+  GROUP_BY_OPTIONS,
+  DEFAULT_GROUP_BY,
+  DEFAULT_SORT,
+  DEFAULT_TIME_RANGE,
+  type GroupByMode,
+  type SortState,
+} from '@/components/llm-usage/filterConstants.js';
+import { FilterBar } from '@/components/llm-usage/FilterBar.js';
 
 const STORAGE_KEY_TIME_RANGE = 'llm-usage-time-range';
 const STORAGE_KEY_FILTERS = 'llm-usage-filters';
@@ -123,10 +66,7 @@ function isGroupByMode(v: unknown): v is GroupByMode {
 
 // --- Defaults ---
 
-const DEFAULT_TIME_RANGE: TimeRangeState = { preset: 'last7days' };
 const DEFAULT_FILTERS: UsageEventFilters = {};
-const DEFAULT_SORT: SortState = { field: 'occurredAt', direction: 'desc' };
-const DEFAULT_GROUP_BY: GroupByMode = 'none';
 
 // --- Formatting helpers ---
 
@@ -162,163 +102,6 @@ function PageHeader({ displayedCount, totalMatched, loading }: PageHeaderProps):
       <p className="text-sm text-slate-500 dark:text-slate-400">
         {loading ? 'Loading...' : countText}
       </p>
-    </div>
-  );
-}
-
-// --- TimeRangePicker ---
-
-interface TimeRangePickerProps {
-  timeRange: TimeRangeState;
-  onChange: (tr: TimeRangeState) => void;
-}
-
-function TimeRangePicker({ timeRange, onChange }: TimeRangePickerProps): React.JSX.Element {
-  return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      {PRESET_OPTIONS.map((opt) => (
-        <button
-          key={opt.key}
-          onClick={(): void => { onChange({ ...timeRange, preset: opt.key }); }}
-          className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-            timeRange.preset === opt.key
-              ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-400'
-              : INACTIVE_SEGMENT_CLASS
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
-      {timeRange.preset === 'custom' ? (
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={timeRange.customFrom?.split('T')[0] ?? ''}
-            onChange={(e): void => {
-              const val = e.target.value;
-              if (val !== '') {
-                onChange({ ...timeRange, customFrom: new Date(val).toISOString() });
-              } else {
-                const { customFrom: _, ...rest } = timeRange;
-                onChange(rest);
-              }
-            }}
-            className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
-          />
-          <span className="text-sm text-slate-400">to</span>
-          <input
-            type="date"
-            value={timeRange.customTo?.split('T')[0] ?? ''}
-            onChange={(e): void => {
-              const val = e.target.value;
-              if (val !== '') {
-                onChange({ ...timeRange, customTo: new Date(val + 'T23:59:59.999Z').toISOString() });
-              } else {
-                const { customTo: _, ...rest } = timeRange;
-                onChange(rest);
-              }
-            }}
-            className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
-          />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-// --- ProviderFilters ---
-
-interface ProviderFiltersProps {
-  activeProviders: string[];
-  onToggle: (provider: string) => void;
-  locked: boolean;
-}
-
-function ProviderFilters({ activeProviders, onToggle, locked }: ProviderFiltersProps): React.JSX.Element {
-  return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Provider:</span>
-      {locked ? (
-        <span className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700 dark:border-rose-400 dark:bg-rose-900/30 dark:text-rose-400">
-          <span className="inline-block h-2 w-2 rounded-full bg-rose-500" />
-          openrouter (locked by group-by)
-        </span>
-      ) : (
-        PROVIDERS.map((provider) => {
-          const isActive = activeProviders.includes(provider);
-          return (
-            <button
-              key={provider}
-              onClick={(): void => { onToggle(provider); }}
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-                isActive ? (PROVIDER_ACTIVE_CLASSES[provider] ?? INACTIVE_SEGMENT_CLASS) : INACTIVE_SEGMENT_CLASS
-              }`}
-            >
-              <span className={`inline-block h-2 w-2 rounded-full ${PROVIDER_DOT_CLASSES[provider] ?? 'bg-slate-400'}`} />
-              {provider}
-            </button>
-          );
-        })
-      )}
-    </div>
-  );
-}
-
-// --- GroupBySelector ---
-
-interface GroupBySelectorProps {
-  groupBy: GroupByMode;
-  onChange: (mode: GroupByMode) => void;
-}
-
-function GroupBySelector({ groupBy, onChange }: GroupBySelectorProps): React.JSX.Element {
-  return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Group by:</span>
-      {GROUP_BY_OPTIONS.map((opt) => (
-        <button
-          key={opt.key}
-          onClick={(): void => { onChange(opt.key); }}
-          className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-            groupBy === opt.key
-              ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-400'
-              : INACTIVE_SEGMENT_CLASS
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// --- SortSelector ---
-
-interface SortSelectorProps {
-  sortBy: SortState;
-  onChange: (sort: SortState) => void;
-}
-
-function SortSelector({ sortBy, onChange }: SortSelectorProps): React.JSX.Element {
-  return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Sort:</span>
-      {SORT_OPTIONS.map((opt) => {
-        const isActive = sortBy.field === opt.field && sortBy.direction === opt.direction;
-        return (
-          <button
-            key={`${opt.field}-${opt.direction}`}
-            onClick={(): void => { onChange({ field: opt.field, direction: opt.direction }); }}
-            className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-              isActive
-                ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-400'
-                : INACTIVE_SEGMENT_CLASS
-            }`}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
     </div>
   );
 }
@@ -603,21 +386,27 @@ export function LlmUsagePage(): React.JSX.Element {
   return (
     <Layout>
       <PageHeader displayedCount={displayedCount} totalMatched={totalMatched} loading={isLoading} />
-      <TimeRangePicker timeRange={timeRange} onChange={handleTimeRangeChange} />
-      <ProviderFilters activeProviders={activeProviders} onToggle={handleToggleProvider} locked={groupBy === 'openrouter-model'} />
-      <GroupBySelector groupBy={groupBy} onChange={handleGroupByChange} />
+      <FilterBar
+        timeRange={timeRange}
+        onTimeRangeChange={handleTimeRangeChange}
+        activeProviders={activeProviders}
+        onToggleProvider={handleToggleProvider}
+        providersLocked={groupBy === 'openrouter-model'}
+        groupBy={groupBy}
+        onGroupByChange={handleGroupByChange}
+        sortBy={sortBy}
+        onSortChange={handleSortChange}
+        showSort={isRawMode}
+      />
       {isRawMode ? (
-        <>
-          <SortSelector sortBy={sortBy} onChange={handleSortChange} />
-          <RawEventsList
-            events={eventsResult.events}
-            loading={eventsResult.loading}
-            loadingMore={eventsResult.loadingMore}
-            hasMore={eventsResult.hasMore}
-            error={eventsResult.error}
-            onLoadMore={(): void => { void eventsResult.loadMore(); }}
-          />
-        </>
+        <RawEventsList
+          events={eventsResult.events}
+          loading={eventsResult.loading}
+          loadingMore={eventsResult.loadingMore}
+          hasMore={eventsResult.hasMore}
+          error={eventsResult.error}
+          onLoadMore={(): void => { void eventsResult.loadMore(); }}
+        />
       ) : (
         <AggregateTable
           rows={queryResult.rows}
