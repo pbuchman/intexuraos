@@ -1,7 +1,8 @@
 import type { FastifyPluginCallback } from 'fastify';
-import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, validateInternalAuth, requireAuth } from '@intexuraos/common-http';
 import { createLlmClient, type LlmClientConfig } from '@intexuraos/llm-factory';
 import { createAppLogger } from '@intexuraos/infra-sentry';
+import { getServices } from '../services.js';
 import { runDigestForGroup } from '../domain/usecases/runDigestForGroup.js';
 import { yesterdayCet } from '../domain/usecases/yesterdayCet.js';
 import { DIGEST_SUBSCRIPTIONS } from '../domain/digestSubscriptions.js';
@@ -130,6 +131,123 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       );
       const dispatched = results.reduce((a, b) => a + b, 0);
       return await reply.ok({ dispatched, date });
+    },
+  );
+
+  // User-facing routes (Auth0 JWT required)
+
+  interface DigestsQuerystring {
+    groupKey: string;
+    fromDate: string;
+    toDate: string;
+    limit?: number;
+    cursor?: string;
+  }
+
+  fastify.get<{ Querystring: DigestsQuerystring }>(
+    '/notifications/digests',
+    {
+      schema: {
+        operationId: 'listDigests',
+        summary: 'List daily digests for authenticated user',
+        tags: ['mobile-notifications'],
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: 'object',
+          required: ['groupKey', 'fromDate', 'toDate'],
+          properties: {
+            groupKey: { type: 'string' },
+            fromDate: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+            toDate: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+            limit: { type: 'integer', minimum: 1, maximum: 100, default: 30 },
+            cursor: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      logIncomingRequest(req);
+      const user = await requireAuth(req, reply);
+      if (user === null) return;
+      const { groupKey, fromDate, toDate, limit = 30, cursor } = req.query;
+      const result = await getServices().digestRepository.findInRange({
+        userId: user.userId,
+        groupKey,
+        fromDate,
+        toDate,
+        limit,
+        cursor,
+      });
+      if (!result.ok) return await reply.fail('INTERNAL_ERROR', result.error.message);
+      return await reply.ok({
+        items: result.value.items,
+        nextCursor: result.value.nextCursor,
+      });
+    },
+  );
+
+  interface DigestParams {
+    groupKey: string;
+    date: string;
+  }
+
+  fastify.get<{ Params: DigestParams }>(
+    '/notifications/digests/:groupKey/:date',
+    {
+      schema: {
+        operationId: 'getDigestByDate',
+        summary: 'Get digest for a specific group and date',
+        tags: ['mobile-notifications'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          required: ['groupKey', 'date'],
+          properties: {
+            groupKey: { type: 'string' },
+            date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      logIncomingRequest(req);
+      const user = await requireAuth(req, reply);
+      if (user === null) return;
+      const { groupKey, date } = req.params;
+      const result = await getServices().digestRepository.findByDate({ userId: user.userId, groupKey, date });
+      if (!result.ok) return await reply.fail('INTERNAL_ERROR', result.error.message);
+      if (result.value === null) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Digest not found' } }); // @allow-raw-send -- 404 with typed body, reply.fail only supports 5xx
+      return await reply.ok(result.value);
+    },
+  );
+
+  fastify.get<{ Params: DigestParams }>(
+    '/notifications/digests/:groupKey/:date/state',
+    {
+      schema: {
+        operationId: 'getDigestState',
+        summary: 'Get group state snapshot for a specific date',
+        tags: ['mobile-notifications'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          required: ['groupKey', 'date'],
+          properties: {
+            groupKey: { type: 'string' },
+            date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      logIncomingRequest(req);
+      const user = await requireAuth(req, reply);
+      if (user === null) return;
+      const { groupKey, date } = req.params;
+      const result = await getServices().groupStateRepository.getByDate({ userId: user.userId, groupKey, date });
+      if (!result.ok) return await reply.fail('INTERNAL_ERROR', result.error.message);
+      if (result.value === null) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'State not found' } }); // @allow-raw-send -- 404 with typed body, reply.fail only supports 5xx
+      return await reply.ok(result.value);
     },
   );
 
