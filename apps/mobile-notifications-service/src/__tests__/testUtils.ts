@@ -111,10 +111,19 @@ export function setupTestContext(): TestContext {
     context.notificationRepo = new FakeNotificationRepository();
     context.filtersRepo = new FakeNotificationFiltersRepository();
 
+    const noop = <T>(name: string): T =>
+      new Proxy({} as object, {
+        get(_t, prop) {
+          return () => { throw new Error(`testUtils stub: ${name}.${String(prop)} not configured`); };
+        },
+      }) as T;
     setServices({
       signatureConnectionRepository: context.signatureRepo,
       notificationRepository: context.notificationRepo,
       notificationFiltersRepository: context.filtersRepo,
+      digestRepository: noop('digestRepository'),
+      groupStateRepository: noop('groupStateRepository'),
+      digestLockRepository: noop('digestLockRepository'),
     });
 
     clearJwksCache();

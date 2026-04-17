@@ -54,10 +54,19 @@ describe('Filter Routes', () => {
 
     fakeFiltersRepo = new FakeNotificationFiltersRepository();
 
+    const noop = <T>(name: string): T =>
+      new Proxy({} as object, {
+        get(_t, prop) {
+          return () => { throw new Error(`stub: ${name}.${String(prop)} not configured`); };
+        },
+      }) as T;
     const services: ServiceContainer = {
       signatureConnectionRepository: new FakeSignatureConnectionRepository(),
       notificationRepository: new FakeNotificationRepository(),
       notificationFiltersRepository: fakeFiltersRepo,
+      digestRepository: noop('digestRepository'),
+      groupStateRepository: noop('groupStateRepository'),
+      digestLockRepository: noop('digestLockRepository'),
     };
     setServices(services);
 
