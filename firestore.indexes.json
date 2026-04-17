@@ -1596,6 +1596,28 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "mobile_notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "app",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "receivedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [
