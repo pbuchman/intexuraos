@@ -5,7 +5,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import type { FastifyInstance } from 'fastify';
 import nock from 'nock';
 import { buildServer } from '../server.js';
-import { resetServices, type ServiceContainer, setServices } from '../services.js';
+import { resetServices } from '../services.js';
+import { setMockServices } from './helpers/mockServices.js';
 import {
   FakeNotificationFiltersRepository,
   FakeNotificationRepository,
@@ -58,12 +59,11 @@ describe('Connect Routes', () => {
     fakeSignatureRepo = new FakeSignatureConnectionRepository();
     fakeNotificationRepo = new FakeNotificationRepository();
 
-    const services: ServiceContainer = {
+    setMockServices({
       signatureConnectionRepository: fakeSignatureRepo,
       notificationRepository: fakeNotificationRepo,
       notificationFiltersRepository: new FakeNotificationFiltersRepository(),
-    };
-    setServices(services);
+    });
 
     app = await buildServer();
   });
@@ -150,12 +150,11 @@ describe('Status Routes', () => {
     fakeSignatureRepo = new FakeSignatureConnectionRepository();
     fakeNotificationRepo = new FakeNotificationRepository();
 
-    const services: ServiceContainer = {
+    setMockServices({
       signatureConnectionRepository: fakeSignatureRepo,
       notificationRepository: fakeNotificationRepo,
       notificationFiltersRepository: new FakeNotificationFiltersRepository(),
-    };
-    setServices(services);
+    });
 
     app = await buildServer();
   });
@@ -220,12 +219,11 @@ describe('Webhook Routes', () => {
     fakeSignatureRepo = new FakeSignatureConnectionRepository();
     fakeNotificationRepo = new FakeNotificationRepository();
 
-    const services: ServiceContainer = {
+    setMockServices({
       signatureConnectionRepository: fakeSignatureRepo,
       notificationRepository: fakeNotificationRepo,
       notificationFiltersRepository: new FakeNotificationFiltersRepository(),
-    };
-    setServices(services);
+    });
 
     app = await buildServer();
   });
@@ -517,12 +515,11 @@ describe('Notification Routes', () => {
     fakeSignatureRepo = new FakeSignatureConnectionRepository();
     fakeNotificationRepo = new FakeNotificationRepository();
 
-    const services: ServiceContainer = {
+    setMockServices({
       signatureConnectionRepository: fakeSignatureRepo,
       notificationRepository: fakeNotificationRepo,
       notificationFiltersRepository: new FakeNotificationFiltersRepository(),
-    };
-    setServices(services);
+    });
 
     app = await buildServer();
   });
