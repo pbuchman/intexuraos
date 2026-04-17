@@ -1,7 +1,7 @@
 export { DigestRow } from './DigestRow.js';
 export { DigestHeatmap } from './DigestHeatmap.js';
 export { DigestHeader } from './DigestHeader.js';
-export { DigestNarrative } from './DigestNarrative.js';
+export { DigestHighlight } from './DigestHighlight.js';
 export { DigestThreads } from './DigestThreads.js';
 export { DigestModeratorPosts } from './DigestModeratorPosts.js';
 export { DigestState } from './DigestState.js';

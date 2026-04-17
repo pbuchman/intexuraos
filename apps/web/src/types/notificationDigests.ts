@@ -30,7 +30,8 @@ export interface DailySummary {
   readonly date: string;
   readonly groupKey: string;
   readonly messageCount: number;
-  readonly narrative: string;
+  readonly headline: string;
+  readonly bullets: readonly string[];
   readonly threads: readonly DigestThread[];
   readonly moderatorPosts: readonly DigestModeratorPost[];
   readonly openQuestions: readonly string[];
