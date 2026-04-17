@@ -40,7 +40,7 @@ export function DigestRow({ digest }: DigestRowProps): React.JSX.Element {
             {formatDateLabel(summary.date)}
           </p>
           <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-            {summary.narrative !== '' ? summary.narrative.slice(0, 140) : 'Brak wiadomości tego dnia'}
+            {summary.headline !== '' ? summary.headline : 'Brak wiadomości tego dnia'}
           </p>
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
