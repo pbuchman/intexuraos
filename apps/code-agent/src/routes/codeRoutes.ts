@@ -3401,12 +3401,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to POST /internal/code/detect-zombies',
       });
 
-      // Validate internal auth
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for zombie detection');
+      const authResult = authenticateInternalScheduler(request);
+      if (!authResult.authenticated) {
+        request.log.warn('Internal auth failed for zombie detection');
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
+      request.log.info({ strategy: authResult.strategy }, 'Authenticated for zombie detection');
 
       const { detectZombieTasks } = getServices();
 
