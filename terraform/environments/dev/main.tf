@@ -990,14 +990,63 @@ module "mobile_notifications_service" {
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/mobile-notifications-service:latest"
 
-  secrets = local.common_service_secrets
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_OPENROUTER_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENROUTER_APP_API_KEY"]
+  })
 
-  env_vars = local.common_service_env_vars
+  env_vars = merge(local.common_service_env_vars, {
+    INTEXURAOS_DIGEST_LLM_MODEL = "or:google/gemini-3-flash-preview"
+  })
 
   depends_on = [
     module.artifact_registry,
     module.iam,
     module.secret_manager,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - WhatsApp Digest Yesterday (Daily at 01:00 UTC)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_run_service_iam_member" "scheduler_invokes_mobile_notifications_service" {
+  project  = var.project_id
+  location = var.region
+  service  = local.services.mobile_notifications_service.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
+
+  depends_on = [module.mobile_notifications_service]
+}
+
+resource "google_cloud_scheduler_job" "mobile_notifications_digest_yesterday" {
+  name        = "mobile-notifications-digest-yesterday-${var.environment}"
+  description = "Daily WhatsApp digest aggregation at 02:00 CET / 03:00 CEST"
+  schedule    = "0 1 * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.mobile_notifications_service.service_url}/internal/notifications/digest/run-yesterday"
+    body        = base64encode("{}")
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.mobile_notifications_service.service_url
+    }
+  }
+
+  retry_config {
+    retry_count          = 3
+    min_backoff_duration = "30s"
+    max_backoff_duration = "300s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_mobile_notifications_service,
+    module.mobile_notifications_service,
   ]
 }
 

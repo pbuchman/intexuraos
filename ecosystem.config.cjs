@@ -162,6 +162,11 @@ const SERVICE_ENV_MAPPINGS = {
   'llm-usage-service': {
     INTEXURAOS_ORCHESTRATOR_SECRET: process.env.INTEXURAOS_ORCHESTRATOR_SECRET,
   },
+  'mobile-notifications-service': {
+    INTEXURAOS_DIGEST_LLM_MODEL:
+      process.env.INTEXURAOS_DIGEST_LLM_MODEL ?? 'or:google/gemini-3-flash-preview',
+    INTEXURAOS_OPENROUTER_APP_API_KEY: process.env.INTEXURAOS_OPENROUTER_APP_API_KEY,
+  },
 };
 
 const path = require('path');

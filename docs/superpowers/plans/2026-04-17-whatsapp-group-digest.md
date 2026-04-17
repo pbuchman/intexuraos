@@ -43,18 +43,17 @@ These rules come from `apps/.claude/CLAUDE.md` and apply to every task in this p
 1. **TDD only.** Write failing test → verify fails → write minimum code to pass → verify passes → commit. No exceptions.
 2. **Coverage 100% per file.** Use `/* v8 ignore <category> -- <BLOCKER reason> @preserve */` only when a code path is genuinely unreachable by a test (e.g. `noUncheckedIndexedAccess` array narrowing). Reason must name the testing BLOCKER, not describe the code.
 3. **TypeScript strict.** Always use `arr[0] ?? fallback`, explicit `=== true`, `String()` for template numbers, narrow `Result` with `if (!result.ok) return result;` first.
-4. **No `git worktree` commands.** Each phase runs on its own feature branch off `development`.
-5. **Branch per phase:** `feature/digest-phase-1`, `feature/digest-phase-2`, `feature/digest-phase-3`, `feature/digest-phase-4`. Open PR after the final task of each phase.
-6. **PR title:** `[INT-1382] phase N: <short description>`.
-7. **PR body for phases 1-3:** must contain `Refs INT-1382` (NOT `Fixes`).
-8. **PR body for phase 4:** must contain `Closes INT-1382`.
-9. **Commit format:** `<type>(<scope>): <imperative>` matching the codebase's style (e.g. `feat(mobile-notifications): add digest aggregation use case`).
-10. **Run `pnpm run ci:tracked` before opening each PR.** Capture output to `/tmp/ci-output-<phase>.txt` if anything fails; analyze with `rg "error|FAIL" -C3`.
-11. **Use `gh` CLI, not raw `git` commands**, for status/diff/log/PR/branch operations.
-12. **Service-container pattern:** `getServices()`, `setServices(fakes)` in `beforeEach`, `resetServices()` in `afterEach`. Adapter pattern.
-13. **`logIncomingRequest()` on every route.**
-14. **Use the `llm-factory` `openRouterGenerateClient`** for all digest LLM calls. Pass `promptType: 'whatsapp-digest-aggregate'` for usage-event tracking.
-15. **All free text in Polish; enums, dates, group keys in English.**
+4. **No `git worktree` commands.**
+5. **Branching (AMENDED 2026-04-17):** Phase 1 already shipped on its own branch (`feature/whatsapp-digest-phase-1`, merged in PR #1856). Phases 2-4 run consecutively on a **single** feature branch `feature/whatsapp-digest-phases-2-4` off `development`. Do NOT branch per phase. Do NOT open a PR between phases.
+6. **Per-phase simplify gate (AMENDED 2026-04-17):** At the end of each phase (2, 3, 4) — AFTER all task commits in that phase land but BEFORE moving to the next phase — run the `simplify` skill over the phase's diff, apply findings, and commit the simplifications as a single `refactor(<scope>): simplify phase-N per /simplify review` commit. This gate replaces the old per-phase PR.
+7. **Single PR at the end (AMENDED 2026-04-17):** Open exactly one PR after Phase 4 + Phase-4-simplify lands. Title: `[INT-1382] phases 2-4: repositories, routes/cron/backfill, web UI`. Body must contain `Closes INT-1382`.
+8. **Commit format:** `<type>(<scope>): <imperative>` matching the codebase's style (e.g. `feat(mobile-notifications): add digest aggregation use case`).
+9. **Run `pnpm run ci:tracked` before opening the final PR.** Capture output to `/tmp/ci-output-phases-2-4.txt` if anything fails; analyze with `rg "error|FAIL" -C3`.
+10. **Use `gh` CLI, not raw `git` commands**, for status/diff/log/PR/branch operations.
+11. **Service-container pattern:** `getServices()`, `setServices(fakes)` in `beforeEach`, `resetServices()` in `afterEach`. Adapter pattern.
+12. **`logIncomingRequest()` on every route.**
+13. **Use the `llm-factory` `openRouterGenerateClient`** for all digest LLM calls. Pass `promptType: 'whatsapp-digest-aggregate'` for usage-event tracking.
+14. **All free text in Polish; enums, dates, group keys in English.**
 
 ---
 
@@ -1325,7 +1324,7 @@ EOF
 
 # Phase 2: Repositories + Composed Run + Lock
 
-**Branch:** `feature/digest-phase-2` (off `development` AFTER Phase 1 is merged). PR title: `[INT-1382] phase 2: digest repositories + composed runDigestForGroup + advisory lock`.
+**Branch (AMENDED 2026-04-17):** `feature/whatsapp-digest-phases-2-4` (single branch off `development` for Phases 2-4; do NOT open a PR at end of phase — continue to the simplify gate and then Phase 3). Original plan said `feature/digest-phase-2` with per-phase PR; superseded by the amended Standing Constraints.
 
 ### Task 2.1: Define repository ports
 
@@ -2398,47 +2397,33 @@ git add apps/mobile-notifications-service/src/domain/usecases/runDigestForGroup.
 git commit -m "feat(mobile-notifications): add runDigestForGroup composed use case"
 ```
 
-### Task 2.9: Verify Phase 2 ci:tracked + open PR
+### Task 2.9: Phase 2 simplify gate (AMENDED 2026-04-17 — NO PR)
 
-- [ ] **Step 1: Run**
+- [ ] **Step 1: Run the full CI sweep locally**
 
 ```bash
 pnpm run ci:tracked 2>&1 | tee /tmp/ci-tracked-phase-2.txt
 ```
 
-Resolve any failures.
+Resolve any failures before moving on.
 
-- [ ] **Step 2: Push + open PR**
+- [ ] **Step 2: Run the `simplify` skill over the Phase 2 diff**
+
+Scope: commits added in Phase 2 on `feature/whatsapp-digest-phases-2-4` (i.e. everything since branching off `development`). Apply any findings the skill would auto-apply; commit them as:
 
 ```bash
-git push -u origin feature/digest-phase-2
-gh pr create --title "[INT-1382] phase 2: digest repositories + composed runDigestForGroup + advisory lock" \
-  --body "$(cat <<'EOF'
-## Summary
-- Adds `DigestRepository` (per-date docs with `generation` increment via Firestore transaction).
-- Adds `GroupStateRepository` with per-date snapshots and 30-day `recentSummaryDates` trim on save.
-- Adds `DigestLockRepository` advisory lock with 5-min TTL.
-- Adds composed `runDigestForGroup` use case wiring messages → filter → aggregate → persist.
-- Updates `firestore-collections.json` description for `notification_group_states`; registers `notification_digest_locks`.
-- Adds `setMockServices()` helper.
-
-## Scope
-Phase 2 of 4 — see `docs/superpowers/plans/2026-04-17-whatsapp-group-digest.md`.
-
-## Test plan
-- [x] `pnpm run ci:tracked` green
-- [x] All new repos covered 100%
-
-Refs INT-1382
-EOF
-)" --base development
+git commit -am "refactor(mobile-notifications): simplify phase-2 per /simplify review"
 ```
+
+If `simplify` surfaces no findings, record that in the commit body of the next commit (or skip the commit — no empty commits).
+
+- [ ] **Step 3: Do NOT open a PR.** Move to Phase 3 on the same branch.
 
 ---
 
 # Phase 3: HTTP Routes + Cron + Backfill Chain
 
-**Branch:** `feature/digest-phase-3` (off `development` AFTER Phase 2 is merged). PR title: `[INT-1382] phase 3: digest HTTP endpoints + Cloud Scheduler + backfill chain`.
+**Branch (AMENDED 2026-04-17):** Same `feature/whatsapp-digest-phases-2-4` branch as Phase 2. No new branch, no intermediate PR. End of phase = run `simplify` and commit; then move to Phase 4.
 
 ### Task 3.1: Create digestSubscriptions const + yesterdayCet helper
 
@@ -3073,45 +3058,29 @@ Required composite indexes (apply via gcloud or Firebase console):
 
 - [ ] **Step 2: Commit**
 
-### Task 3.10: Phase 3 ci:tracked + open PR
+### Task 3.10: Phase 3 simplify gate (AMENDED 2026-04-17 — NO PR)
 
-- [ ] **Step 1: Run**
+- [ ] **Step 1: Run full CI sweep locally**
 
 ```bash
 pnpm run ci:tracked 2>&1 | tee /tmp/ci-tracked-phase-3.txt
 ```
 
-- [ ] **Step 2: Push + open PR**
+Resolve any failures before moving on.
+
+- [ ] **Step 2: Run the `simplify` skill over the Phase 3 diff** (commits added in Phase 3 only — NOT Phase 2 commits, which were already reviewed). Apply findings and commit as:
 
 ```bash
-git push -u origin feature/digest-phase-3
-gh pr create --title "[INT-1382] phase 3: digest HTTP endpoints + Cloud Scheduler + backfill chain" \
-  --body "$(cat <<'EOF'
-## Summary
-- 9 endpoints: internal /run, /run-yesterday (cron entry), user POST /run, /backfill, /backfill/:id/resume, GET /digests, /digests/:groupKey/:date, /digests/:groupKey/:date/state, /digests/backfill/:runId.
-- Backfill is HTTP-chain (no in-memory worker): each day's completion POSTs the next day with 1s delay. Survives Cloud Run scale-to-zero.
-- CET-yesterday helper using IANA Europe/Warsaw (DST-aware).
-- Cloud Scheduler `0 1 * * *` UTC.
-- Env var `INTEXURAOS_DIGEST_LLM_MODEL` wired in 3 places.
-
-## Scope
-Phase 3 of 4 — see `docs/superpowers/plans/2026-04-17-whatsapp-group-digest.md`.
-
-## Test plan
-- [x] `pnpm run ci:tracked` green
-- [x] All 9 endpoints have route tests via `app.inject`
-- [x] Backfill chain test verifies day N completion triggers day N+1 POST
-
-Refs INT-1382
-EOF
-)" --base development
+git commit -am "refactor(mobile-notifications): simplify phase-3 per /simplify review"
 ```
+
+- [ ] **Step 3: Do NOT open a PR.** Move to Phase 4 on the same branch.
 
 ---
 
 # Phase 4: Web UI mirroring Code Tasks
 
-**Branch:** `feature/digest-phase-4` (off `development` AFTER Phase 3 is merged). PR title: `[INT-1382] phase 4: digest web UI`. PR body uses `Closes INT-1382`.
+**Branch (AMENDED 2026-04-17):** Same `feature/whatsapp-digest-phases-2-4` branch as Phases 2 & 3. After the Phase 4 simplify commit, open the one-and-only PR for Phases 2-4. PR title: `[INT-1382] phases 2-4: repositories, routes/cron/backfill, web UI`. Body contains `Closes INT-1382`.
 
 **Implementer note (subagent will be Opus):** before writing any UI, read these reference files in full to lock in the visual conventions:
 - `apps/web/src/pages/CodeTasksPage.tsx`
@@ -3276,26 +3245,49 @@ pnpm dev:web   # or whatever launches the dev web app
 
 Then in a browser: log in, navigate to `/#/notifications/digests`. Use the credentials from `~/.claude/CLAUDE.md` (kontakt+intexuraostest@pbuchman.com).
 
-- [ ] **Step 4: Push + open PR with `Closes INT-1382`**
+- [ ] **Step 4: Phase 4 simplify gate**
+
+Run the `simplify` skill over the Phase 4 diff (web-UI commits only, NOT Phase 2/3). Apply findings and commit:
 
 ```bash
-git push -u origin feature/digest-phase-4
-gh pr create --title "[INT-1382] phase 4: digest web UI" \
+git commit -am "refactor(web): simplify phase-4 digest UI per /simplify review"
+```
+
+- [ ] **Step 5: Push + open the SINGLE PR for Phases 2-4 (AMENDED 2026-04-17)**
+
+```bash
+git push -u origin feature/whatsapp-digest-phases-2-4
+gh pr create --title "[INT-1382] phases 2-4: repositories, routes/cron/backfill, web UI" \
   --body "$(cat <<'EOF'
 ## Summary
-- New pages: list, detail, backfill console.
-- 30-day calendar heatmap on the list page.
-- Detail decomposed: Header / Narrative / Threads / ModeratorPosts / State / Actions.
-- Reading typography for Polish prose (max-w-prose, leading-relaxed, lang="pl").
-- Modal-driven Regenerate + Backfill flows.
-- Live polling for backfill progress (cell-per-day grid).
-- All components mirror the Code Tasks pattern (filter chips with colored dots, localStorage persistence, lucide icons, dark-mode pairs).
+Completes INT-1382 WhatsApp Group Digest feature (Phase 1 shipped separately in #1856).
+
+**Phase 2 — Repositories + composed run + lock**
+- `DigestRepository` (per-date docs, `generation` increment via Firestore transaction).
+- `GroupStateRepository` with per-date snapshots + 30-day `recentSummaryDates` trim.
+- `DigestLockRepository` advisory lock, 5-min TTL.
+- Composed `runDigestForGroup` use case wiring messages → filter → aggregate → persist.
+
+**Phase 3 — HTTP + cron + backfill chain**
+- 9 endpoints (internal /run, /run-yesterday cron entry, user POST /run + /backfill, resume, list, detail, state, backfill status).
+- Backfill is HTTP-chain (day N completion POSTs day N+1); survives Cloud Run scale-to-zero.
+- CET-yesterday DST-aware helper, Cloud Scheduler `0 1 * * *` UTC.
+- `INTEXURAOS_DIGEST_LLM_MODEL` wired in 3 locations.
+
+**Phase 4 — Web UI**
+- Pages: list, detail, backfill console; 30-day calendar heatmap; modal-driven regenerate + backfill.
+- Mirrors Code Tasks patterns (filter chips with colored dots, localStorage persistence, lucide icons, dark-mode pairs).
+- Reading typography for Polish prose.
+
+Each phase was followed by a `/simplify` commit before moving on — see commit log.
 
 ## Scope
-Phase 4 of 4 — see `docs/superpowers/plans/2026-04-17-whatsapp-group-digest.md`.
+Phases 2-4 of 4 — see `docs/superpowers/plans/2026-04-17-whatsapp-group-digest.md`.
 
 ## Test plan
 - [x] `pnpm run ci:tracked` green
+- [x] All new repos, use cases, routes covered (100% where enforced; web app per CLAUDE.md exception)
+- [x] Backfill chain test verifies day N completion triggers day N+1 POST
 - [x] Manual smoke test: list, detail, backfill flows in dev
 
 Closes INT-1382
@@ -3325,7 +3317,7 @@ EOF
 | Regeneration UX with confirmation                             | Tasks 4.5, 4.7             |
 | Hard-coded subscription with migration comment                | Task 3.1                   |
 | CET-yesterday DST-aware                                       | Task 3.1                   |
-| `Refs INT-1382` for phases 1-3, `Closes INT-1382` for phase 4 | Tasks 1.13, 2.9, 3.10, 4.8 |
+| Single PR for phases 2-4 with `Closes INT-1382` (amended)     | Task 4.8                   |
 
 No placeholders detected on rescan: all code blocks are concrete; all commands are exact; type names match across phases (`AggregationOutput`, `DigestError`, `runDigestForGroup`, `RunDigestForGroupResult`, etc.).
 
