@@ -23,6 +23,7 @@ export interface Config {
   firestoreProjectId: string;
   whatsappServiceUrl: string;
   whatsappSendTopic: string;
+  prTriageTopic: string;
   linearAgentUrl: string;
   actionsAgentUrl: string;
   webhookVerifySecret: string;
@@ -52,6 +53,7 @@ export function loadConfig(): Config {
   const firestoreProjectId = process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '';
   const whatsappServiceUrl = process.env['INTEXURAOS_WHATSAPP_SERVICE_URL'] ?? '';
   const whatsappSendTopic = process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'] ?? '';
+  const prTriageTopic = process.env['INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC'] ?? '';
   const linearAgentUrl = process.env['INTEXURAOS_LINEAR_AGENT_URL'] ?? '';
   const actionsAgentUrl = process.env['INTEXURAOS_ACTIONS_AGENT_URL'] ?? '';
   const webhookVerifySecret = process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] ?? '';
@@ -76,6 +78,7 @@ export function loadConfig(): Config {
     firestoreProjectId,
     whatsappServiceUrl,
     whatsappSendTopic,
+    prTriageTopic,
     linearAgentUrl,
     actionsAgentUrl,
     webhookVerifySecret,
