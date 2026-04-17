@@ -144,7 +144,7 @@ The union of memory_ids_used and memory_ids_rejected MUST equal the full set of 
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '6.1.0',
+  version: '7.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
@@ -308,6 +308,9 @@ PLANNING_AGENT_FINAL:
 - Plan PR: <full GitHub PR URL — MANDATORY for ALL planned outcomes, including SIMPLE tasks>
 - Parallel breakdown proof: <required when Complex task=1; must show service boundaries and contracts between subissues — empty otherwise>
 - Clarification message: <REQUIRED for unclear outcomes; MUST be empty for successfully planned outcomes>
+- memory_ids_used: <comma-separated injected IDs you applied, or "none">
+- memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">
+- memory_usage_summary: <one-sentence description of how memories influenced the plan, or "none" if no memories were injected>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was the task, what was decided (simple/plan-doc/complex), what artifacts were produced (plan doc, subtasks, PR), why unclear (if applicable). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
@@ -477,7 +480,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const remediationPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-remediation',
   description: 'Remediation agent system prompt for addressing review findings on an existing PR',
-  version: '3.3.0',
+  version: '4.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const continuationPrNumber = params.continuationPrNumber;
@@ -565,6 +568,9 @@ REMEDIATION_AGENT_FINAL:
 - Outcome: <implemented|already_completed>
 - PR: <full GitHub PR URL>
 - requires_re_review: <0|1>
+- memory_ids_used: <comma-separated injected IDs you applied, or "none">
+- memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">
+- memory_usage_summary: <one-sentence description of how memories influenced remediation, or "none" if no memories were injected>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what review findings were addressed, what was skipped and why, what was pushed. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
@@ -575,7 +581,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '4.3.0',
+  version: '5.0.0',
   build(params: SystemPromptParams): string {
     const {
       taskId,
@@ -699,6 +705,9 @@ PULL_REQUEST_AGENT_FINAL:
 - Tracking comment ID: <numeric ID from initial POST response>
 - Tracking comment: updated
 - Total PR comments posted: 1
+- memory_ids_used: <comma-separated injected IDs you applied, or "none">
+- memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">
+- memory_usage_summary: <one-sentence description of how memories influenced the PR work, or "none" if no memories were injected>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what PR feedback was addressed, what changes were made, what is the outcome. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
@@ -793,6 +802,9 @@ PULL_REQUEST_AGENT_FINAL:
 - Tracking comment ID: <numeric ID from initial POST response>
 - Tracking comment: updated
 - Total PR comments posted: 1
+- memory_ids_used: <comma-separated injected IDs you applied, or "none">
+- memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">
+- memory_usage_summary: <one-sentence description of how memories influenced the PR work, or "none" if no memories were injected>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what PR feedback was addressed, what changes were made, what is the outcome. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
@@ -866,7 +878,7 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '9.2.1',
+  version: '10.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
@@ -1158,6 +1170,9 @@ REVIEW_AGENT_FINAL:
 - requirements_tracker_updated: <yes|no — whether the requirements tracker comment was created/updated>
 - gh_actions_status: <all passed|N failed|pending|not yet triggered — GitHub Actions check result>
 - needs_remediation: <0|1 — 1 if any finding requires code changes that bring value to the codebase, 0 if clean or all findings are informational/cosmetic only. Operational/manual verification steps (deploying migrations, running commands in environments, manual testing in dev/prod, applying infrastructure changes) are post-merge activities — they do NOT count as code remediation and must NOT set this to 1 on their own>
+- memory_ids_used: <comma-separated injected IDs you applied, or "none">
+- memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">
+- memory_usage_summary: <one-sentence description of how memories influenced the review, or "none" if no memories were injected>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was reviewed, key findings, overall quality assessment, remediation needed. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 

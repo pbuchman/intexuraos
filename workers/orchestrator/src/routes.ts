@@ -164,6 +164,14 @@ export function registerRoutes(
         continuationPrBranch: parsed.continuationPrBranch,
       }),
       ...(parsed.prNumber !== undefined && { prNumber: parsed.prNumber }),
+      ...(parsed.executionMemoryContext !== undefined && {
+        executionMemoryContext: parsed.executionMemoryContext,
+      }),
+      ...(parsed.trackingCommentId !== undefined && {
+        trackingCommentId: parsed.trackingCommentId,
+      }),
+      ...(parsed.reviewTypes !== undefined && { reviewTypes: parsed.reviewTypes }),
+      ...(parsed.retriedFrom !== undefined && { retriedFrom: parsed.retriedFrom }),
     };
 
     logger.info(
