@@ -14,7 +14,8 @@ export const COLD_START_EXAMPLE = {
     date: '2026-04-08',
     groupKey: 'grupa-wedkarska-skool',
     messageCount: 83,
-    headline: 'Michał zapowiedział nagranie nowego filmu w sobotę, a Henryk dołączył jako nowicjusz z problemami dostępowymi.',
+    headline:
+      'Michał zapowiedział nagranie nowego filmu w sobotę, a Henryk dołączył jako nowicjusz z problemami dostępowymi.',
     bullets: [
       'Grzegorz dwukrotnie podbił pytanie o stary film; Michał zapowiedział nagranie nowego w sobotę i publikację na platformie.',
       'Henryk Kerber (76 l.) został powitany; Robert wyjaśnił mu mechanikę punktów i poziomów na Skool.',
@@ -140,7 +141,8 @@ export const WITH_CONTEXT_EXAMPLE = {
     date: '2026-04-11',
     groupKey: 'grupa-wedkarska-skool',
     messageCount: 76,
-    headline: 'Ożywiona dyskusja o fermentowanych zanętach w chłodnej wodzie i poszukiwanie darmowych map głębokości.',
+    headline:
+      'Ożywiona dyskusja o fermentowanych zanętach w chłodnej wodzie i poszukiwanie darmowych map głębokości.',
     bullets: [
       'Grzegorz szukał darmowej aplikacji z mapami głębokości; ADAM12 polecił płatną Fish Deeper, Mateusz zaznaczył, że dany staw nie jest zeskanowany.',
       'Hubert zakwestionował sens fermentu w połowie kwietnia; Mateusz sprostował, że fermentacja zachodzi też w niższych temperaturach, a dyfuzja zapachów jest wolniejsza.',
