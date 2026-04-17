@@ -10,16 +10,46 @@ import { runRequestSchema, runResponseSchema } from './digestSchemas.js';
 
 const logger = createAppLogger({ name: 'digestRoutes' });
 
+interface ChainNext {
+  runId: string;
+  remainingDates: readonly string[];
+  fromDate: string;
+  toDate: string;
+}
+
 interface RunBody {
   userId: string;
   groupKey: string;
   date: string;
+  chainNext?: ChainNext;
 }
 
 function getDigestModel(): string {
   const m = process.env['INTEXURAOS_DIGEST_LLM_MODEL'];
   if (m === undefined || m === '') throw new Error('INTEXURAOS_DIGEST_LLM_MODEL not set');
   return m;
+}
+
+function getSelfBaseUrl(): string {
+  const fromEnv = process.env['INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL'];
+  if (fromEnv !== undefined && fromEnv !== '') return fromEnv;
+  return 'http://localhost:8080';
+}
+
+function buildChainPost() {
+  const base = getSelfBaseUrl();
+  const token = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
+  return async (runId: string, userId: string, groupKey: string, date: string, remainingDates: readonly string[]): Promise<void> => {
+    try {
+      await fetch(`${base}/internal/notifications/digest/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-internal-auth': token },
+        body: JSON.stringify({ userId, groupKey, date, chainNext: { runId, remainingDates, fromDate: date, toDate: date } }),
+      });
+    } catch (chainErr) {
+      logger.error({ chainErr, runId, date }, 'chain: failed to POST next date');
+    }
+  };
 }
 
 function buildLlmClient(userId: string) {
@@ -30,7 +60,7 @@ function buildLlmClient(userId: string) {
     model: model as LlmClientConfig['model'],
     userId,
     logger,
-    usageSink: { record: async () => undefined },
+    usageSink: { log: async () => undefined },
     ownerType: 'system',
   };
   return createLlmClient(config);
@@ -63,18 +93,48 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (!authResult.valid) {
         return await reply.fail('UNAUTHORIZED', 'missing or invalid internal auth');
       }
-      const { userId, groupKey, date } = req.body;
+      const { userId, groupKey, date, chainNext } = req.body;
       const llmClient = buildLlmClient(userId);
       const modelId = getDigestModel();
+      const holder = chainNext !== undefined ? 'backfill' : 'manual';
       const result = await runDigestForGroup(
         { llmClient, logger, modelId },
-        { userId, groupKey, date, holder: 'manual' },
+        { userId, groupKey, date, holder },
       );
+
+      if (chainNext !== undefined) {
+        const { runId, remainingDates } = chainNext;
+        if (result.ok) {
+          void getServices().backfillRunRepository.update(runId, {
+            completedDates: [],
+            currentDate: remainingDates[0] ?? null,
+          });
+          if (remainingDates.length > 0) {
+            const next = remainingDates[0];
+            if (next !== undefined) {
+              setTimeout(() => {
+                void buildChainPost()(runId, userId, groupKey, next, remainingDates.slice(1));
+              }, 1000);
+            }
+          } else {
+            void getServices().backfillRunRepository.update(runId, {
+              status: 'completed',
+              completedAt: new Date().toISOString(),
+            });
+          }
+        } else {
+          void getServices().backfillRunRepository.update(runId, {
+            status: 'failed',
+            failedDates: [{ date, error: JSON.stringify(result.error) }],
+          });
+        }
+      }
+
       if (!result.ok) {
         if (result.error.code === 'lock-held') {
           return await reply.ok({ summaryDocId: '', generation: 0, messageCount: 0, modelId, regenerated: false, lockSkipped: true });
         }
-        return await reply.fail('DIGEST_FAILED', JSON.stringify(result.error));
+        return await reply.fail('INTERNAL_ERROR', JSON.stringify(result.error));
       }
       return await reply.ok({
         summaryDocId: `${userId}_${groupKey}_${date}`,
@@ -126,15 +186,48 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             { llmClient: llm, logger, modelId: getDigestModel() },
             { userId: sub.userId, groupKey: sub.groupKey, date, holder: 'cron' },
           );
-          return r.ok ? 1 : 0;
+          return r.ok ? 1 as const : 0 as const;
         }),
       );
-      const dispatched = results.reduce((a, b) => a + b, 0);
+      const dispatched: number = results.reduce<number>((a, b) => a + b, 0);
       return await reply.ok({ dispatched, date });
     },
   );
 
   // User-facing routes (Auth0 JWT required)
+
+  interface BackfillRunParams {
+    runId: string;
+  }
+
+  fastify.get<{ Params: BackfillRunParams }>(
+    '/notifications/digests/backfill/:runId',
+    {
+      schema: {
+        operationId: 'getBackfillRun',
+        summary: 'Get backfill run status',
+        tags: ['mobile-notifications'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          required: ['runId'],
+          properties: {
+            runId: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      logIncomingRequest(req);
+      const user = await requireAuth(req, reply);
+      if (user === null) return;
+      const { runId } = req.params;
+      const result = await getServices().backfillRunRepository.findById(runId);
+      if (!result.ok) return await reply.fail('INTERNAL_ERROR', result.error.message);
+      if (result.value === null) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Backfill run not found' } }); // @allow-raw-send -- 404 with typed body, reply.fail only supports 5xx
+      return await reply.ok(result.value);
+    },
+  );
 
   interface DigestsQuerystring {
     groupKey: string;
@@ -176,7 +269,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         fromDate,
         toDate,
         limit,
-        cursor,
+        ...(cursor !== undefined ? { cursor } : {}),
       });
       if (!result.ok) return await reply.fail('INTERNAL_ERROR', result.error.message);
       return await reply.ok({
