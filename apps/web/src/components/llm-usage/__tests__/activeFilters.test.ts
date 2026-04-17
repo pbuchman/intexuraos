@@ -53,6 +53,17 @@ describe('computeActiveFilters', () => {
     expect(r.chips.some((c) => c.key === 'sort' && c.label === 'Oldest first')).toBe(true);
   });
 
+  it('labels time chip "Custom" when custom preset has no dates yet', () => {
+    const r = computeActiveFilters({
+      timeRange: { preset: 'custom' },
+      filters: {},
+      groupBy: 'none',
+      sortBy: { field: 'occurredAt', direction: 'desc' },
+    });
+    expect(r.chips[0]?.label).toBe('Custom');
+    expect(r.chips[0]?.tone).toBe('active');
+  });
+
   it('uses Custom label with explicit dates when preset is custom', () => {
     const r = computeActiveFilters({
       timeRange: {
