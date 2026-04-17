@@ -31,8 +31,7 @@ Wymagania:
 6. Nie zmieniaj treści zgodnej ze schematem; popraw tylko błędne pola.
 7. Brakujące wymagane pola wypełnij sensownymi pustymi wartościami: tablice -> [], opcjonalne stringi -> pomiń.
 
-Schema docelowa: { dailySummary: DailySummary, stateUpdate: GroupState } (definicje w packages/llm-prompts/src/digest/digestPrompt.ts oraz w packages/mobile-notifications-service domain/schemas).
+Schema docelowa: { dailySummary: DailySummary, stateUpdate: GroupState }. Pełna struktura jest opisana w pierwotnym promptcie powyżej.
 
 Zwróć poprawiony JSON:`;
 }
-// Prompt version: 1.0.0

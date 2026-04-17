@@ -1,17 +1,9 @@
 /**
  * Few-shot examples for the WhatsApp digest prompt.
  *
- * Source: GPT-5 outputs from the 7-day Polish fishing-group experiment
- * (see INT-1382 — published at intexuraos.cloud/share/claude/kronika-wedkarska-llm-experiment.html).
- * Conversion: prose -> structured AggregationOutput JSON to match the current Zod schema.
- *
- * messageCount values on activityOutliers were estimated from the source experiment
- * (the published page does not expose per-sender counts).
- *
- * NOTE: shape MUST match `AggregationOutputSchema` from
- * `apps/mobile-notifications-service/src/domain/schemas/digestSchemas.ts`.
- * We do NOT import the type here to keep this package free of app dependencies;
- * the `aggregateDigest` use case validates examples against the Zod schema.
+ * Shape MUST match `AggregationOutputSchema`. The type is not imported here
+ * to keep this package free of app dependencies; the `aggregateDigest` use case
+ * validates examples against the Zod schema at runtime.
  */
 
 /**

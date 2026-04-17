@@ -2,12 +2,15 @@ import { COLD_START_EXAMPLE, WITH_CONTEXT_EXAMPLE } from './examples.js';
 
 export const DIGEST_PROMPT_VERSION = '1.0.0';
 
+const COLD_START_JSON = JSON.stringify(COLD_START_EXAMPLE, null, 2);
+const WITH_CONTEXT_JSON = JSON.stringify(WITH_CONTEXT_EXAMPLE, null, 2);
+
 export interface DigestPromptInput {
   readonly userId: string;
   readonly groupKey: string;
-  readonly date: string; // YYYY-MM-DD
-  readonly previousState: unknown; // GroupState or null on cold start
-  readonly last3Summaries: readonly unknown[]; // DailySummary[]
+  readonly date: string;
+  readonly previousState: unknown;
+  readonly last3Summaries: readonly unknown[];
   readonly todaysMessages: readonly {
     readonly sender: string;
     readonly text: string;
@@ -40,10 +43,10 @@ Wymagania:
 - Wynik MUSI być prawidłowym JSON-em (bez bloków markdown, bez komentarzy, bez końcowych przecinków).
 
 Przykład 1 (cold start, pusty stan):
-${JSON.stringify(COLD_START_EXAMPLE, null, 2)}
+${COLD_START_JSON}
 
 Przykład 2 (stan + 3-dniowe okno):
-${JSON.stringify(WITH_CONTEXT_EXAMPLE, null, 2)}
+${WITH_CONTEXT_JSON}
 
 Dane wejściowe dla bieżącego uruchomienia:
 
@@ -62,4 +65,3 @@ ${messagesText}
 
 Zwróć wyłącznie obiekt JSON AggregationOutput.`;
 }
-// Prompt version: 1.0.0
