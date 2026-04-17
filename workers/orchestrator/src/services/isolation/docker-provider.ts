@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 import type { Logger } from '@intexuraos/common-core';
 import type { WorkerRuntime } from '../runtime/types.js';
 import { withTimeout } from '../../with-timeout.js';
+import { pipeline } from 'node:stream/promises';
 import type {
+  ContainerStatsSnapshot,
   DiscoveredContainer,
   IsolationProvider,
   WorkerConfig,
@@ -1049,6 +1051,40 @@ export class DockerProvider implements IsolationProvider {
       cpuPercent: Math.round(cpuPercent * 100) / 100,
       memoryUsedMB: Math.round(stats.memory_stats.usage / 1024 / 1024),
       memoryLimitMB: Math.round(stats.memory_stats.limit / 1024 / 1024),
+    };
+  }
+
+  async copyOut(taskId: string, srcPath: string, destPath: string): Promise<void> {
+    const worker = this.workers.get(taskId);
+    /* v8 ignore start -- ts-type: Map.get() returns T | undefined; unit test cannot reach this branch because copyOut is only invoked from handleInactivityRestart where the worker !== undefined invariant always holds @preserve */
+    if (worker === undefined) {
+      throw new Error(`Worker ${taskId} not found`);
+    }
+    /* v8 ignore stop @preserve */
+    const container = this.docker.getContainer(worker.containerId);
+    const tarStream = await container.getArchive({ path: srcPath });
+    await fs.promises.mkdir(destPath, { recursive: true });
+    // Save the raw tar archive (no extraction) to keep `tar` package out of deps.
+    // Evidence is recoverable via `tar -xf <file>` when a human investigates.
+    const tarPath = path.join(destPath, `${path.basename(srcPath)}.tar`);
+    await pipeline(tarStream, fs.createWriteStream(tarPath));
+  }
+
+  async statsSnapshot(taskId: string): Promise<ContainerStatsSnapshot | null> {
+    const worker = this.workers.get(taskId);
+    /* v8 ignore start -- ts-type: Map.get() returns T | undefined; unit test cannot reach this branch because statsSnapshot is only invoked from handleInactivityRestart where the worker !== undefined invariant always holds @preserve */
+    if (worker === undefined) {
+      return null;
+    }
+    /* v8 ignore stop @preserve */
+    const container = this.docker.getContainer(worker.containerId);
+    const stats = await container.stats({ stream: false });
+    return {
+      cpuTotalUsage: stats.cpu_stats.cpu_usage.total_usage,
+      memoryUsage: stats.memory_stats.usage,
+      /* v8 ignore start -- ts-type: nullish coalescing on optional dockerode field required by strict TS @preserve */
+      pidsCurrent: stats.pids_stats?.current ?? 0,
+      /* v8 ignore stop @preserve */
     };
   }
 

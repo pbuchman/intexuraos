@@ -36,6 +36,17 @@ const logger: Logger = {
 
 const generateMock = vi.fn();
 
+function transcriptWithMeaningfulLines(label: string): string {
+  return [
+    '[orchestrator] starting',
+    `[claude] ${label} line 1`,
+    `[claude] ${label} line 2`,
+    `[claude] ${label} line 3`,
+    `[claude] ${label} line 4`,
+    `[claude] ${label} line 5`,
+  ].join('\n');
+}
+
 function createVerifier(
   overrides: Partial<{
     primaryModelName: string;
@@ -58,6 +69,7 @@ function createVerifier(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  generateMock.mockReset();
 });
 
 // ---------------------------------------------------------------------------
@@ -816,7 +828,7 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 1,
         agentType: 'planning',
-        rawLogs: 'test logs',
+        rawLogs: transcriptWithMeaningfulLines('test'),
       });
 
       expect(result.passed).toBe(true);
@@ -851,7 +863,7 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 1,
         agentType: 'planning',
-        rawLogs: 'test logs',
+        rawLogs: transcriptWithMeaningfulLines('test'),
       });
 
       expect(result.passed).toBe(false);
@@ -894,7 +906,7 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 1,
         agentType: 'planning',
-        rawLogs: 'test logs',
+        rawLogs: transcriptWithMeaningfulLines('test'),
       });
 
       expect(result.passed).toBe(true);
@@ -943,7 +955,7 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 1,
         agentType: 'planning',
-        rawLogs: 'test logs',
+        rawLogs: transcriptWithMeaningfulLines('test'),
       });
 
       expect(result.passed).toBe(true);
@@ -986,7 +998,7 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'planning',
-        rawLogs: 'some logs',
+        rawLogs: transcriptWithMeaningfulLines('plan'),
       });
       expect(result.passed).toBe(true);
       expect(result.verifierFailure).toBe(false);
@@ -1037,7 +1049,7 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'planning',
-        rawLogs: 'logs',
+        rawLogs: transcriptWithMeaningfulLines('generic'),
       });
       expect(result.passed).toBe(true);
       expect(result.agentData?.agentType).toBe('planning');
@@ -1079,7 +1091,7 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'execution',
-        rawLogs: 'exec logs',
+        rawLogs: transcriptWithMeaningfulLines('exec'),
       });
       expect(result.passed).toBe(true);
       expect(result.agentData).toEqual({
@@ -1123,7 +1135,8 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'execution',
-        rawLogs: '[claude] Work started\n[claude] Finished without memory block\n',
+        rawLogs:
+          '[claude] Work started\n[claude] step 2\n[claude] step 3\n[claude] step 4\n[claude] Finished without memory block\n',
         executionMemoryContext: {
           applicationId: 'app-123',
           retrievalVersion: 'execution-memory-retrieval@1.0.0',
@@ -1189,6 +1202,8 @@ describe('OrchestratorCompletionVerifier', () => {
           '[claude] 📋 **Execution Memories Received:**',
           '[claude] - [mem_142] Route logging',
           '[claude] - [mem_155] Route coverage',
+          '[claude] started work',
+          '[claude] finished work',
         ].join('\n'),
         executionMemoryContext: {
           applicationId: 'app-123',
@@ -1242,7 +1257,8 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'execution',
-        rawLogs: '[claude] Finished without memory block\n',
+        rawLogs:
+          '[claude] step 1\n[claude] step 2\n[claude] step 3\n[claude] step 4\n[claude] Finished without memory block\n',
         executionMemoryContext: {
           applicationId: 'app-123',
           retrievalVersion: 'execution-memory-retrieval@1.0.0',
@@ -1280,7 +1296,7 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'pull_request',
-        rawLogs: 'pr logs',
+        rawLogs: transcriptWithMeaningfulLines('pr'),
       });
       expect(result.passed).toBe(true);
       expect(result.agentData).toEqual({
@@ -1324,7 +1340,7 @@ describe('OrchestratorCompletionVerifier', () => {
         maxAttempts: 5,
         agentType: 'pull_request',
         rawLogs:
-          '[claude] 📋 **Execution Memories Received:**\n[claude] - [mem_142] PR reply pattern\n',
+          '[claude] 📋 **Execution Memories Received:**\n[claude] - [mem_142] PR reply pattern\n[claude] step 1\n[claude] step 2\n[claude] done\n',
         executionMemoryContext: {
           applicationId: 'app-123',
           retrievalVersion: 'execution-memory-retrieval@1.0.0',
@@ -1380,7 +1396,7 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'review',
-        rawLogs: 'review logs',
+        rawLogs: transcriptWithMeaningfulLines('review'),
       });
       expect(result.passed).toBe(true);
       expect(result.agentData).toEqual({
@@ -1420,7 +1436,7 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'review',
-        rawLogs: 'review logs',
+        rawLogs: transcriptWithMeaningfulLines('review'),
       });
       expect(result.passed).toBe(true);
       expect(result.agentData).toEqual({
@@ -1463,7 +1479,7 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'remediation',
-        rawLogs: 'remediation logs',
+        rawLogs: transcriptWithMeaningfulLines('remediation'),
       });
       expect(result.passed).toBe(true);
       expect(result.agentData).toEqual({
@@ -1532,7 +1548,8 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'planning',
-        rawLogs: '[claude] Planning completed',
+        rawLogs:
+          '[claude] step 1\n[claude] step 2\n[claude] step 3\n[claude] step 4\n[claude] Planning completed',
         executionMemoryContext: makeMemoryContext(['mem_142']),
       });
       expect(result.passed).toBe(false);
@@ -1571,7 +1588,7 @@ describe('OrchestratorCompletionVerifier', () => {
         maxAttempts: 5,
         agentType: 'planning',
         rawLogs:
-          '[claude] 📋 **Execution Memories Received:**\n[claude] - [mem_142] Memory for planning\n',
+          '[claude] 📋 **Execution Memories Received:**\n[claude] - [mem_142] Memory for planning\n[claude] step 1\n[claude] step 2\n[claude] done\n',
         executionMemoryContext: makeMemoryContext(['mem_142']),
       });
       expect(result.passed).toBe(true);
@@ -1605,7 +1622,7 @@ describe('OrchestratorCompletionVerifier', () => {
         maxAttempts: 5,
         agentType: 'planning',
         rawLogs:
-          '[claude] 📋 **Execution Memories Received:**\n[claude] - [mem_142] Memory for planning\n',
+          '[claude] 📋 **Execution Memories Received:**\n[claude] - [mem_142] Memory for planning\n[claude] step 1\n[claude] step 2\n[claude] done\n',
         executionMemoryContext: makeMemoryContext(['mem_142']),
       });
       expect(result.passed).toBe(true);
@@ -1633,7 +1650,8 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'pull_request',
-        rawLogs: '[claude] PR work done',
+        rawLogs:
+          '[claude] step 1\n[claude] step 2\n[claude] step 3\n[claude] step 4\n[claude] PR work done',
         executionMemoryContext: makeMemoryContext(['mem_200']),
       });
       expect(result.passed).toBe(false);
@@ -1664,7 +1682,8 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'review',
-        rawLogs: '[claude] Review done',
+        rawLogs:
+          '[claude] step 1\n[claude] step 2\n[claude] step 3\n[claude] step 4\n[claude] Review done',
         executionMemoryContext: makeMemoryContext(['mem_300']),
       });
       expect(result.passed).toBe(false);
@@ -1694,7 +1713,8 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'remediation',
-        rawLogs: '[claude] Remediation done',
+        rawLogs:
+          '[claude] step 1\n[claude] step 2\n[claude] step 3\n[claude] step 4\n[claude] Remediation done',
         executionMemoryContext: makeMemoryContext(['mem_400']),
       });
       expect(result.passed).toBe(false);
@@ -1725,7 +1745,8 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'review',
-        rawLogs: '[claude] Review done',
+        rawLogs:
+          '[claude] step 1\n[claude] step 2\n[claude] step 3\n[claude] step 4\n[claude] Review done',
         executionMemoryContext: {
           applicationId: 'app-123',
           retrievalVersion: 'execution-memory-retrieval@1.0.0',
@@ -1759,7 +1780,8 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'review',
-        rawLogs: '[claude] Review done',
+        rawLogs:
+          '[claude] step 1\n[claude] step 2\n[claude] step 3\n[claude] step 4\n[claude] Review done',
       });
       expect(result.passed).toBe(true);
     });
@@ -1790,7 +1812,8 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'execution',
-        rawLogs: '[claude] Execution done',
+        rawLogs:
+          '[claude] step 1\n[claude] step 2\n[claude] step 3\n[claude] step 4\n[claude] Execution done',
         executionMemoryContext: makeMemoryContext(['mem_500']),
       });
       // Fails via validateMemoryReporting (memory_acknowledgment, memory_ids_unaccounted, memory_usage_summary),
@@ -1823,7 +1846,7 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'planning',
-        rawLogs: 'logs',
+        rawLogs: transcriptWithMeaningfulLines('generic'),
       });
       expect(result.passed).toBe(false);
       expect(result.verifierFailure).toBe(true);
@@ -1852,7 +1875,7 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'execution',
-        rawLogs: 'logs',
+        rawLogs: transcriptWithMeaningfulLines('generic'),
       });
       expect(result.passed).toBe(false);
       expect(result.verifierFailure).toBe(true);
@@ -1880,7 +1903,7 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'pull_request',
-        rawLogs: 'logs',
+        rawLogs: transcriptWithMeaningfulLines('generic'),
       });
       expect(result.passed).toBe(false);
       expect(result.verifierFailure).toBe(false);
@@ -1939,52 +1962,129 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(logged).not.toContain('second line');
     });
 
-    it('logs full transcript when <=2 non-empty lines', async () => {
-      generateMock.mockResolvedValueOnce({
-        ok: true,
-        value: {
-          content: validPlanningResponse,
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
-        },
-      });
+    it('short transcript short-circuits before logger.info (<=2 non-empty lines)', async () => {
       const verifier = createVerifier();
-      await verifier.verify({
+      const result = await verifier.verify({
         taskId: 'task-short',
         attempt: 1,
         maxAttempts: 5,
         agentType: 'planning',
         rawLogs: 'only one line',
       });
+      expect(result.passed).toBe(false);
+      expect(result.missingFields).toEqual(['transcript_too_short']);
       const infoCall = loggerInfo.mock.calls.find(
         (c: unknown[]) => typeof c[1] === 'string' && c[1] === 'Completion verifier request'
-      ) as [Record<string, unknown>, string] | undefined;
-      expect(infoCall).toBeDefined();
-      const logged = infoCall?.[0]?.['transcript'] as string;
-      expect(logged).toBe('only one line');
+      );
+      expect(infoCall).toBeUndefined();
     });
 
-    it('handles whitespace-only rawLogs with empty fallback', async () => {
-      generateMock.mockResolvedValueOnce({
-        ok: true,
-        value: {
-          content: validPlanningResponse,
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
-        },
-      });
+    it('whitespace-only rawLogs short-circuits before logger.info', async () => {
       const verifier = createVerifier();
-      await verifier.verify({
+      const result = await verifier.verify({
         taskId: 'task-empty',
         attempt: 1,
         maxAttempts: 5,
         agentType: 'planning',
         rawLogs: '   \n  \n   ',
       });
+      expect(result.passed).toBe(false);
+      expect(result.missingFields).toEqual(['transcript_too_short']);
       const infoCall = loggerInfo.mock.calls.find(
         (c: unknown[]) => typeof c[1] === 'string' && c[1] === 'Completion verifier request'
-      ) as [Record<string, unknown>, string] | undefined;
-      expect(infoCall).toBeDefined();
-      const logged = infoCall?.[0]?.['transcript'] as string;
-      expect(logged).toBe('');
+      );
+      expect(infoCall).toBeUndefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // verify — short transcript guard
+  // ---------------------------------------------------------------------------
+
+  describe('verify — short transcript guard', () => {
+    it('rejects pure infrastructure transcript without calling LLM', async () => {
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-guard-pure-infra',
+        attempt: 2,
+        maxAttempts: 5,
+        agentType: 'execution',
+        rawLogs: [
+          '[orchestrator] attempt 2 starting',
+          '[hook] pre-hook fired',
+          '[entrypoint] container ready',
+          '[system] Inactivity restart completed',
+          '[entrypoint] Claude attempt finished with exit code: 0',
+        ].join('\n'),
+      });
+      expect(result.passed).toBe(false);
+      expect(result.missingFields).toEqual(['transcript_too_short']);
+      expect(result.verifierFailure).toBe(false);
+      expect(generateMock).not.toHaveBeenCalled();
+      expect(loggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-guard-pure-infra',
+          attempt: 2,
+          agentType: 'execution',
+          meaningfulLines: 0,
+        }),
+        'Completion verifier: transcript too short, refusing to call LLM'
+      );
+    });
+
+    it('rejects transcript with 4 meaningful lines mixed with infra', async () => {
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-guard-four',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'planning',
+        rawLogs: [
+          '[orchestrator] starting',
+          '[claude] line 1',
+          '[claude] line 2',
+          '[system] heartbeat',
+          '[claude] line 3',
+          '[claude] line 4',
+        ].join('\n'),
+      });
+      expect(result.passed).toBe(false);
+      expect(result.missingFields).toEqual(['transcript_too_short']);
+      expect(generateMock).not.toHaveBeenCalled();
+      expect(loggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({ meaningfulLines: 4 }),
+        'Completion verifier: transcript too short, refusing to call LLM'
+      );
+    });
+
+    it('allows transcript with exactly 5 meaningful lines', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'planned',
+            superpowers_writing_plans: 'used',
+            linear_url: 'https://linear.app/pbuchman/issue/INT-100',
+            is_complex: '0',
+            has_plan_doc: '0',
+            subtask_urls: '',
+            pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
+            summary: 'Planned.',
+            unclear_clarification: '',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-guard-five',
+        attempt: 1,
+        maxAttempts: 5,
+        agentType: 'planning',
+        rawLogs: transcriptWithMeaningfulLines('guard-five'),
+      });
+      expect(result.passed).toBe(true);
+      expect(generateMock).toHaveBeenCalledOnce();
     });
   });
 
@@ -2014,7 +2114,7 @@ describe('OrchestratorCompletionVerifier', () => {
         attempt: 1,
         maxAttempts: 5,
         agentType: 'planning',
-        rawLogs: 'logs',
+        rawLogs: transcriptWithMeaningfulLines('generic'),
       });
       expect(result.passed).toBe(true);
       expect(result.agentData?.agentType).toBe('planning');
@@ -2132,7 +2232,8 @@ describe('verify — fatal exit code pre-check', () => {
       attempt: 1,
       maxAttempts: 5,
       agentType: 'planning',
-      rawLogs: 'output\n[entrypoint] Claude attempt finished with exit code: 0\n',
+      rawLogs:
+        '[claude] step 1\n[claude] step 2\n[claude] step 3\n[claude] step 4\noutput\n[entrypoint] Claude attempt finished with exit code: 0\n',
     });
     expect(result.passed).toBe(true);
     expect(generateMock).toHaveBeenCalledOnce();
@@ -2161,7 +2262,8 @@ describe('verify — fatal exit code pre-check', () => {
       attempt: 1,
       maxAttempts: 5,
       agentType: 'execution',
-      rawLogs: 'output\n[entrypoint] Claude attempt finished with exit code: 1\n',
+      rawLogs:
+        '[claude] step 1\n[claude] step 2\n[claude] step 3\n[claude] step 4\noutput\n[entrypoint] Claude attempt finished with exit code: 1\n',
     });
     expect(result.passed).toBe(true);
     expect(generateMock).toHaveBeenCalledOnce();

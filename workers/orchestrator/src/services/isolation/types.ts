@@ -148,6 +148,12 @@ export interface ResourceUsage {
   memoryLimitMB: number;
 }
 
+export interface ContainerStatsSnapshot {
+  cpuTotalUsage: number;
+  memoryUsage: number;
+  pidsCurrent: number;
+}
+
 export interface DiscoveredContainer {
   containerId: string;
   taskId: string;
@@ -197,6 +203,19 @@ export interface IsolationProvider {
    * Get current resource usage of worker container.
    */
   getResourceUsage(taskId: string): Promise<ResourceUsage>;
+
+  /**
+   * Copy a file or directory from the container filesystem to the host.
+   * Used to capture forensic evidence before destructive operations (e.g.
+   * inactivity-kill). Writes a tar archive to destPath.
+   */
+  copyOut(taskId: string, srcPath: string, destPath: string): Promise<void>;
+
+  /**
+   * Capture a one-shot docker stats snapshot of the container.
+   * Returns null when the container no longer exists.
+   */
+  statsSnapshot(taskId: string): Promise<ContainerStatsSnapshot | null>;
 
   /**
    * List all running worker containers.
