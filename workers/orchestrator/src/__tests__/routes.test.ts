@@ -464,6 +464,102 @@ describe('Routes', () => {
     });
   });
 
+  describe('POST /tasks — field propagation to dispatcher', () => {
+    it('forwards executionMemoryContext to dispatcher.submitTask', async () => {
+      const payload = {
+        taskId: 'emc-1',
+        workerType: 'auto',
+        prompt: 'p',
+        webhookUrl: 'https://example.com/hook',
+        webhookSecret: 'sec',
+        linearIssueLabels: [],
+        hasChildren: false,
+        executionMemoryContext: {
+          applicationId: 'app_1',
+          retrievalVersion: 'v1',
+          querySummary: 'q',
+          matchedMemories: [
+            {
+              memoryId: 'mem_1',
+              title: 't',
+              memoryType: 'implementation_pattern',
+              score: 0.5,
+              appliesWhen: 'a',
+              action: 'x',
+              avoid: 'y',
+              verification: 'z',
+            },
+          ],
+        },
+      };
+      const { headers, body } = createSignedRequest(payload);
+      const response = await app.inject({ method: 'POST', url: '/tasks', headers, body });
+      expect(response.statusCode).toBe(202);
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          executionMemoryContext: payload.executionMemoryContext,
+        })
+      );
+    });
+
+    it('forwards trackingCommentId to dispatcher.submitTask', async () => {
+      const payload = {
+        taskId: 'tc-1',
+        workerType: 'auto',
+        prompt: 'p',
+        webhookUrl: 'https://example.com/hook',
+        webhookSecret: 'sec',
+        linearIssueLabels: [],
+        hasChildren: false,
+        trackingCommentId: '1234567',
+      };
+      const { headers, body } = createSignedRequest(payload);
+      const response = await app.inject({ method: 'POST', url: '/tasks', headers, body });
+      expect(response.statusCode).toBe(202);
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({ trackingCommentId: '1234567' })
+      );
+    });
+
+    it('forwards reviewTypes to dispatcher.submitTask', async () => {
+      const payload = {
+        taskId: 'rt-1',
+        workerType: 'auto',
+        prompt: 'p',
+        webhookUrl: 'https://example.com/hook',
+        webhookSecret: 'sec',
+        linearIssueLabels: [],
+        hasChildren: false,
+        reviewTypes: ['code_quality', 'security'],
+      };
+      const { headers, body } = createSignedRequest(payload);
+      const response = await app.inject({ method: 'POST', url: '/tasks', headers, body });
+      expect(response.statusCode).toBe(202);
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({ reviewTypes: ['code_quality', 'security'] })
+      );
+    });
+
+    it('forwards retriedFrom to dispatcher.submitTask', async () => {
+      const payload = {
+        taskId: 'rf-1',
+        workerType: 'auto',
+        prompt: 'p',
+        webhookUrl: 'https://example.com/hook',
+        webhookSecret: 'sec',
+        linearIssueLabels: [],
+        hasChildren: false,
+        retriedFrom: 'task_original_abc',
+      };
+      const { headers, body } = createSignedRequest(payload);
+      const response = await app.inject({ method: 'POST', url: '/tasks', headers, body });
+      expect(response.statusCode).toBe(202);
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({ retriedFrom: 'task_original_abc' })
+      );
+    });
+  });
+
   describe('GET /tasks/:id', () => {
     it('should return task status', async () => {
       vi.mocked(dispatcher.getTask).mockResolvedValueOnce({
