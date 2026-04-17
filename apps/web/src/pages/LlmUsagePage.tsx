@@ -24,12 +24,7 @@ import {
   type GroupByMode,
   type SortState,
 } from '@/components/llm-usage/filterConstants';
-import {
-  TimeRangePicker,
-  ProviderFilters,
-  GroupBySelector,
-  SortSelector,
-} from '@/components/llm-usage/filterSections';
+import { FilterBar } from '@/components/llm-usage/FilterBar';
 
 const STORAGE_KEY_TIME_RANGE = 'llm-usage-time-range';
 const STORAGE_KEY_FILTERS = 'llm-usage-filters';
@@ -391,21 +386,27 @@ export function LlmUsagePage(): React.JSX.Element {
   return (
     <Layout>
       <PageHeader displayedCount={displayedCount} totalMatched={totalMatched} loading={isLoading} />
-      <div className="mb-4"><TimeRangePicker timeRange={timeRange} onChange={handleTimeRangeChange} /></div>
-      <div className="mb-4"><ProviderFilters activeProviders={activeProviders} onToggle={handleToggleProvider} locked={groupBy === 'openrouter-model'} /></div>
-      <div className="mb-4"><GroupBySelector groupBy={groupBy} onChange={handleGroupByChange} /></div>
+      <FilterBar
+        timeRange={timeRange}
+        onTimeRangeChange={handleTimeRangeChange}
+        activeProviders={activeProviders}
+        onToggleProvider={handleToggleProvider}
+        providersLocked={groupBy === 'openrouter-model'}
+        groupBy={groupBy}
+        onGroupByChange={handleGroupByChange}
+        sortBy={sortBy}
+        onSortChange={handleSortChange}
+        showSort={isRawMode}
+      />
       {isRawMode ? (
-        <>
-          <div className="mb-4"><SortSelector sortBy={sortBy} onChange={handleSortChange} /></div>
-          <RawEventsList
-            events={eventsResult.events}
-            loading={eventsResult.loading}
-            loadingMore={eventsResult.loadingMore}
-            hasMore={eventsResult.hasMore}
-            error={eventsResult.error}
-            onLoadMore={(): void => { void eventsResult.loadMore(); }}
-          />
-        </>
+        <RawEventsList
+          events={eventsResult.events}
+          loading={eventsResult.loading}
+          loadingMore={eventsResult.loadingMore}
+          hasMore={eventsResult.hasMore}
+          error={eventsResult.error}
+          onLoadMore={(): void => { void eventsResult.loadMore(); }}
+        />
       ) : (
         <AggregateTable
           rows={queryResult.rows}

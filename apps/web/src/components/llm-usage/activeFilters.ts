@@ -45,7 +45,7 @@ export function computeActiveFilters({ timeRange, filters, groupBy, sortBy }: In
   const isCustom = timeRange.preset === 'custom';
   const timeLabel = isCustom
     ? `${formatDateShort(timeRange.customFrom)} \u2013 ${formatDateShort(timeRange.customTo)}`
-    : (PRESET_OPTIONS.find((p) => p.key === timeRange.preset)?.label ?? String(timeRange.preset));
+    : (PRESET_OPTIONS.find((p) => p.key === timeRange.preset)?.label ?? timeRange.preset);
   const timeIsDefault = timeRange.preset === DEFAULT_TIME_PRESET;
   chips.push({ key: 'timeRange', label: timeLabel, tone: timeIsDefault ? 'neutral' : 'active' });
   if (!timeIsDefault) count += 1;
