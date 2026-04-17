@@ -381,6 +381,11 @@ async function handleNewTaskRetry(
   const updateResult = await codeTaskRepo.update(entry.taskId, {
     status: 'dispatched',
     dispatchedAt: new Date(),
+    // Seed lastHeartbeat at dispatch so findZombieTasks (which uses a Firestore
+    // inequality filter on lastHeartbeat) can sweep tasks that crash/fail
+    // before the worker ever sends its first real heartbeat. Without this,
+    // the field would be missing and the inequality filter would exclude the doc forever.
+    lastHeartbeat: new Date(),
     workerLocation: dispatchResult.value.workerLocation,
     cancelNonce,
     cancelNonceExpiresAt,

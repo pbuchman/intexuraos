@@ -1355,7 +1355,34 @@ describe('firestoreCodeTaskRepository', () => {
   });
 
   describe('findZombieTasks', () => {
-    it('finds stale tasks', async () => {
+    it('finds tasks whose lastHeartbeat is older than threshold even when updatedAt is recent', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // Simulate a running task with stale heartbeat but recently-touched updatedAt
+      // (e.g. PR merge webhook wrote prMergedAt, bumping updatedAt).
+      await repo.update(created.value.id, {
+        status: 'running',
+        dispatchedAt: new Date(Date.now() - 45 * 60 * 1000), // dispatched 45 min ago
+        lastHeartbeat: new Date(Date.now() - 40 * 60 * 1000), // 40 min ago
+        updatedAt: new Date(), // just now — unrelated write simulation
+      });
+
+      const staleThreshold = new Date(Date.now() - 30 * 60 * 1000);
+      const result = await repo.findZombieTasks(staleThreshold);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.map((t) => t.id)).toContain(created.value.id);
+    });
+
+    it('does NOT find tasks whose lastHeartbeat is recent', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -1367,14 +1394,15 @@ describe('firestoreCodeTaskRepository', () => {
 
       await repo.update(created.value.id, {
         status: 'running',
-        dispatchedAt: new Date(Date.now() - 10 * 60 * 1000), // 10 minutes ago
+        lastHeartbeat: new Date(), // fresh heartbeat
       });
 
-      // Just test the query works - actual filtering depends on Firestore
-      const staleThreshold = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes ago
+      const staleThreshold = new Date(Date.now() - 30 * 60 * 1000);
       const result = await repo.findZombieTasks(staleThreshold);
 
       expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.map((t) => t.id)).not.toContain(created.value.id);
     });
 
     it('returns empty array when no zombie tasks', async () => {
@@ -1390,6 +1418,33 @@ describe('firestoreCodeTaskRepository', () => {
       if (!result.ok) return;
 
       expect(result.value).toEqual([]);
+    });
+
+    it('finds dispatched tasks that never heartbeat once dispatchedAt exceeds threshold (via initial lastHeartbeat)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // Simulate a task dispatched 40 minutes ago with the initial heartbeat set at dispatch time
+      // (as drainTaskQueue does) but no subsequent real heartbeat from the worker.
+      const dispatchedMoment = new Date(Date.now() - 40 * 60 * 1000);
+      await repo.update(created.value.id, {
+        status: 'dispatched',
+        dispatchedAt: dispatchedMoment,
+        lastHeartbeat: dispatchedMoment, // initial heartbeat at dispatch; worker never sent real one
+      });
+
+      const staleThreshold = new Date(Date.now() - 30 * 60 * 1000);
+      const result = await repo.findZombieTasks(staleThreshold);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.map((t) => t.id)).toContain(created.value.id);
     });
   });
 

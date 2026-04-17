@@ -663,10 +663,13 @@ export const createFirestoreCodeTaskRepository = (deps: {
     findZombieTasks: async (staleThreshold: Date): Promise<Result<CodeTask[], RepositoryError>> => {
       try {
         const snapshot = await collection
-          // Note: 'queued' excluded — queued tasks don't heartbeat (no updatedAt changes),
-          // so they'd be false positives. Queue TTL expiry in drainTaskQueue handles them.
+          // Query on lastHeartbeat, not updatedAt. updatedAt is falsely refreshed by
+          // unrelated writes (PR merge webhooks, Linear event ingestion, etc.) so a
+          // silent-but-running task can appear fresh indefinitely. lastHeartbeat is
+          // written only by the heartbeat endpoint and is the true staleness signal.
+          // 'queued' excluded — queued tasks don't heartbeat, queue TTL in drainTaskQueue handles them.
           .where('status', 'in', DISPATCHED_OR_RUNNING_STATUSES)
-          .where('updatedAt', '<', Timestamp.fromDate(staleThreshold))
+          .where('lastHeartbeat', '<', Timestamp.fromDate(staleThreshold))
           .get();
 
          
