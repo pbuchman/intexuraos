@@ -1119,20 +1119,21 @@ export class TaskDispatcher {
     );
 
     const evidenceDir = `/var/log/orchestrator/inactivity-evidence/${taskId}/`;
-    try {
-      await this.isolation.provider.copyOut(taskId, '/tmp', evidenceDir);
-    } catch (evidenceError) {
+    const [copyResult, statsResult] = await Promise.allSettled([
+      this.isolation.provider.copyOut(taskId, '/tmp', evidenceDir),
+      this.isolation.provider.statsSnapshot(taskId),
+    ]);
+    if (copyResult.status === 'rejected') {
       this.logger.warn(
-        { taskId, error: getErrorMessage(evidenceError) },
+        { taskId, error: getErrorMessage(copyResult.reason) },
         'Failed to copy /tmp evidence before inactivity kill'
       );
     }
-    try {
-      const stats = await this.isolation.provider.statsSnapshot(taskId);
-      this.logger.warn({ taskId, stats }, 'Container stats at inactivity kill');
-    } catch (statsError) {
+    if (statsResult.status === 'fulfilled') {
+      this.logger.warn({ taskId, stats: statsResult.value }, 'Container stats at inactivity kill');
+    } else {
       this.logger.warn(
-        { taskId, error: getErrorMessage(statsError) },
+        { taskId, error: getErrorMessage(statsResult.reason) },
         'Failed to capture container stats before inactivity kill'
       );
     }
