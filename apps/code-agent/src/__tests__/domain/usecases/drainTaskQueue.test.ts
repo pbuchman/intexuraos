@@ -958,10 +958,12 @@ describe('drainTaskQueue', () => {
       expect(result.value).toEqual({ action: 'dispatched', taskId: 'task-123' });
     }
 
-    // Verify task updated with dispatched status, cancel nonce, and worker location
+    // Verify task updated with dispatched status, cancel nonce, worker location,
+    // and initial lastHeartbeat (so findZombieTasks can catch tasks that fail before the first real heartbeat).
     expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', {
       status: 'dispatched',
       dispatchedAt: expect.any(Date),
+      lastHeartbeat: expect.any(Date),
       workerLocation: 'home-mac',
       cancelNonce: 'abcd1234',
       cancelNonceExpiresAt: expect.any(String),
