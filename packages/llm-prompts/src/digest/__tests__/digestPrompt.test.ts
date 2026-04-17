@@ -8,9 +8,7 @@ describe('buildDigestPrompt', () => {
     date: '2026-04-15',
     previousState: null,
     last3Summaries: [],
-    todaysMessages: [
-      { sender: 'Test', text: 'Cześć', postTimeSec: 1776380400 },
-    ],
+    todaysMessages: [{ sender: 'Test', text: 'Cześć', postTimeSec: 1776380400 }],
   };
 
   it('returns a non-empty prompt with the date and group key', () => {

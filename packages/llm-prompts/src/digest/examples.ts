@@ -70,9 +70,7 @@ export const COLD_START_EXAMPLE = {
           'Michał wysyła testową wiadomość do Henryka, aby sprawdzić, czy widzi wpisy i pomóc w rozwiązaniu problemu z dostępem.',
       },
     ],
-    openQuestions: [
-      'Czy Henryk swobodnie korzysta już z platformy WhatsApp/Skool?',
-    ],
+    openQuestions: ['Czy Henryk swobodnie korzysta już z platformy WhatsApp/Skool?'],
     activityOutliers: [
       {
         sender: 'Henryk Kerber',
@@ -160,7 +158,14 @@ export const WITH_CONTEXT_EXAMPLE = {
       },
       {
         topic: 'fermented-baits-in-cold-water-suitability',
-        participants: ['Hubert Frąckowiak', 'Zuza', 'Mikołaj Eret', 'Kamilos', 'Ireneusz', 'Mateusz Cichal'],
+        participants: [
+          'Hubert Frąckowiak',
+          'Zuza',
+          'Mikołaj Eret',
+          'Kamilos',
+          'Ireneusz',
+          'Mateusz Cichal',
+        ],
         resolved: true,
         keyFacts: [
           'Hubert wyraził wątpliwość, czy ferment w połowie kwietnia jest naturalny i skuteczny.',
