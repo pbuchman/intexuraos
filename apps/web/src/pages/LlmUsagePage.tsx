@@ -21,6 +21,7 @@ import {
   GROUP_BY_OPTIONS,
   DEFAULT_GROUP_BY,
   DEFAULT_SORT,
+  DEFAULT_TIME_RANGE,
   type GroupByMode,
   type SortState,
 } from '@/components/llm-usage/filterConstants';
@@ -65,7 +66,6 @@ function isGroupByMode(v: unknown): v is GroupByMode {
 
 // --- Defaults ---
 
-const DEFAULT_TIME_RANGE: TimeRangeState = { preset: 'last7days' };
 const DEFAULT_FILTERS: UsageEventFilters = {};
 
 // --- Formatting helpers ---

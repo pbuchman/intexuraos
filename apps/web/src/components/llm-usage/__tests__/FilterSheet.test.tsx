@@ -60,4 +60,42 @@ describe('FilterSheet', () => {
     render(<FilterSheet {...baseProps} groupBy="day" isOpen />);
     expect(screen.getByText('Sort')).toBeInTheDocument();
   });
+
+  it('traps focus inside the dialog (Shift+Tab from first focuses last)', () => {
+    render(<FilterSheet {...baseProps} isOpen />);
+    const closeBtn = screen.getByRole('button', { name: /close filters/i });
+    closeBtn.focus();
+    expect(document.activeElement).toBe(closeBtn);
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    // Last focusable should now be focused (the "Done" button)
+    const doneBtn = screen.getByRole('button', { name: /^done$/i });
+    expect(document.activeElement).toBe(doneBtn);
+  });
+
+  it('restores focus to previously-focused element on close', () => {
+    const { rerender } = render(
+      <>
+        <button type="button">Opener</button>
+        <FilterSheet {...baseProps} isOpen={false} />
+      </>,
+    );
+    const opener = screen.getByRole('button', { name: 'Opener' });
+    opener.focus();
+    expect(document.activeElement).toBe(opener);
+    rerender(
+      <>
+        <button type="button">Opener</button>
+        <FilterSheet {...baseProps} isOpen />
+      </>,
+    );
+    // Now dialog is open; close button has focus.
+    expect(document.activeElement).not.toBe(opener);
+    rerender(
+      <>
+        <button type="button">Opener</button>
+        <FilterSheet {...baseProps} isOpen={false} />
+      </>,
+    );
+    expect(document.activeElement).toBe(opener);
+  });
 });
