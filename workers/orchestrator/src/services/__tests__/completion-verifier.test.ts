@@ -1363,7 +1363,9 @@ describe('OrchestratorCompletionVerifier', () => {
           '[claude] 📋 **Execution Memories Received:**',
           '[claude] - [1] mem_a — "A" — APPLICABLE because x',
           // mem_b missing on purpose
-          '[claude] work',
+          '[claude] work line 1',
+          '[claude] work line 2',
+          '[claude] work line 3',
           '[claude] done',
         ].join('\n'),
         executionMemoryContext: {
