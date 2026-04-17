@@ -107,6 +107,7 @@ describe('Automation log integration flows', () => {
         processedAt: new Date(),
         payload: input.payload ?? {},
       })),
+      findById: vi.fn().mockResolvedValue(ok(null)),
       findByPullRequest: vi.fn().mockResolvedValue(ok([])),
       findByRepository: vi.fn().mockResolvedValue(ok([])),
       findAll: vi.fn().mockResolvedValue(ok([])),
