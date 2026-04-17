@@ -249,7 +249,7 @@ describe('buildExecutionMemorySection acknowledgment and reporting', () => {
     expect(prompt).toContain('memory_usage_summary');
   });
 
-  it('does not include acknowledgment or reporting when no memories matched', () => {
+  it('does not include acknowledgment or reporting instructions when no memories matched', () => {
     const prompt = planningPrompt.build({
       taskId: 'task-no-mem',
       linearIssueLabels: [],
@@ -257,7 +257,11 @@ describe('buildExecutionMemorySection acknowledgment and reporting', () => {
 
     expect(prompt).not.toContain('MANDATORY: Acknowledge Execution Memories NOW');
     expect(prompt).not.toContain('MANDATORY: Report Memory Usage in Final Output');
-    expect(prompt).not.toContain('memory_ids_used');
+    // The final-block template still lists memory_ids_used with a "none" fallback so workers
+    // always report these fields — even when no memories are injected.
+    expect(prompt).toContain(
+      'memory_ids_used: <comma-separated injected IDs you applied, or "none">'
+    );
   });
 });
 
@@ -361,12 +365,12 @@ describe('askAgentPrompt', () => {
 });
 
 describe('prompt versions', () => {
-  it('reviewPrompt version is 9.2.1', () => {
-    expect(reviewPrompt.version).toBe('9.2.1');
+  it('reviewPrompt version is 10.0.0', () => {
+    expect(reviewPrompt.version).toBe('10.0.0');
   });
 
-  it('pullRequestPrompt version is 4.3.0', () => {
-    expect(pullRequestPrompt.version).toBe('4.3.0');
+  it('pullRequestPrompt version is 5.0.0', () => {
+    expect(pullRequestPrompt.version).toBe('5.0.0');
   });
 });
 
