@@ -187,6 +187,58 @@ describe('validateWebhookSignature', () => {
       // 15 minutes = 900 seconds, which should pass (timestampAge > fifteenMinutes fails)
       expect(result.ok).toBe(true);
     });
+
+    it('uses request.rawBody for HMAC when rawBody is attached, ignoring re-serialized body', () => {
+      const secret = 'shared-orch-secret';
+      // Simulate the bytes that the sender HMAC'd: a JSON string with key order and
+      // whitespace that JSON.stringify(request.body) would NOT reproduce.
+      const rawBody = '{"taskIds":["task_1","task_2"]}';
+      const timestamp = Math.floor(Date.now() / 1000);
+      const expected = crypto
+        .createHmac('sha256', secret)
+        .update(`${String(timestamp)}.${rawBody}`)
+        .digest('hex');
+
+      // Inject a body whose re-serialization would DIFFER (extra field injected).
+      const mutatedBody = { taskIds: ['task_1', 'task_2'], extraInjectedByAjv: true };
+
+      const request = {
+        headers: {
+          'x-request-timestamp': String(timestamp),
+          'x-request-signature': expected,
+        },
+        body: mutatedBody,
+        rawBody,
+      } as unknown as FastifyRequest;
+
+      const result = validateOrchestratorSignature(request, { orchestratorSecret: secret });
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('falls back to JSON.stringify(body) when rawBody is absent', () => {
+      const secret = 'shared-orch-secret';
+      const body = { taskIds: ['a'] };
+      const rawBody = JSON.stringify(body);
+      const timestamp = Math.floor(Date.now() / 1000);
+      const expected = crypto
+        .createHmac('sha256', secret)
+        .update(`${String(timestamp)}.${rawBody}`)
+        .digest('hex');
+
+      const request = {
+        headers: {
+          'x-request-timestamp': String(timestamp),
+          'x-request-signature': expected,
+        },
+        body,
+        // no rawBody
+      } as unknown as FastifyRequest;
+
+      const result = validateOrchestratorSignature(request, { orchestratorSecret: secret });
+
+      expect(result.ok).toBe(true);
+    });
   });
 
   describe('validateWebhookSignature', () => {

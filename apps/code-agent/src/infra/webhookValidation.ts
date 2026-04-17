@@ -77,7 +77,11 @@ export function validateOrchestratorSignature(
   }
 
   // Compute expected signature
-  const rawBody = JSON.stringify(request.body);
+  const attachedRaw = (request as unknown as { rawBody?: unknown }).rawBody;
+  const rawBody =
+    typeof attachedRaw === 'string'
+      ? attachedRaw
+      : JSON.stringify(request.body);
   /* v8 ignore start -- upstream: Fastify always produces non-empty header arrays — cannot simulate empty Array.isArray-true header @preserve */
   const timestampStr = Array.isArray(timestamp) ? timestamp[0] ?? '' : timestamp;
   /* v8 ignore stop @preserve */
