@@ -49,17 +49,17 @@ function generateOrchestratorSignature(
 
 function buildValidPayload(): Record<string, unknown> {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     events: [
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         eventId: 'evt-001',
         occurredAt: '2026-04-10T12:00:00Z',
         owner: { type: 'user', id: 'user-1' },
         source: { service: 'code-agent', component: 'orchestrator', client: 'cli', environment: 'dev' },
         request: { provider: LlmProviders.Anthropic, model: 'claude-sonnet-4-20250514', operation: 'generate', success: true, durationMs: 1500 },
         usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, cacheReadTokens: 0, cacheWriteTokens: 0, cachedTokens: 0, reasoningTokens: 0, thinkingTokens: 0, webSearchCalls: 0, groundingEnabled: false, imageCount: 0 },
-        cost: { billedUsd: 0.01, providerReportedUsd: null, calculatedUsd: 0.01, pricingSource: 'calculated' },
+        cost: { providerReportedUsd: null, pricingSource: 'pending' },
         correlation: { requestId: null, traceId: null, taskId: 'task_abc', researchId: null, attempt: null, sessionId: null },
         error: null,
       },
@@ -261,7 +261,7 @@ describe('POST /internal/webhooks/usage-events', () => {
   });
 
   it('returns 200 with empty events array', async () => {
-    const body = { schemaVersion: 1, events: [] };
+    const body = { schemaVersion: 2, events: [] };
     vi.mocked(mockUsageServiceClient.ingestEvents).mockResolvedValue(
       ok({ accepted: 0, duplicates: 0, rejected: [] })
     );
@@ -277,13 +277,68 @@ describe('POST /internal/webhooks/usage-events', () => {
     expect(parsed.data.accepted).toBe(0);
   });
 
+  it('returns 200 for the exact v2 payload produced by orchestrator buildUsageEvent', async () => {
+    const body = {
+      schemaVersion: 2,
+      events: [
+        {
+          schemaVersion: 2,
+          eventId: '11111111-1111-4111-8111-111111111111',
+          occurredAt: '2026-04-17T01:45:03.782Z',
+          owner: { type: 'system', id: 'orchestrator-validation' },
+          source: {
+            service: 'orchestrator',
+            component: 'completion-verifier',
+            client: 'completion-verifier',
+            environment: 'dev',
+          },
+          request: {
+            provider: LlmProviders.OpenRouter,
+            model: 'google/gemma-4-31b-it',
+            operation: 'generate',
+            success: true,
+            durationMs: 0,
+            promptType: 'completion-verification',
+          },
+          usage: {
+            inputTokens: 2780,
+            outputTokens: 93,
+            totalTokens: 2873,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            cachedTokens: 0,
+            reasoningTokens: 0,
+            thinkingTokens: 0,
+            webSearchCalls: 0,
+            groundingEnabled: false,
+            imageCount: 0,
+          },
+          cost: { providerReportedUsd: null, pricingSource: 'pending' },
+          correlation: {
+            requestId: null,
+            traceId: null,
+            taskId: 'task_537bbe88-76c8-41d2-bcc0-20ea06d506d3',
+            researchId: null,
+            attempt: null,
+            sessionId: null,
+          },
+          error: null,
+        },
+      ],
+    };
+    const response = await sendUsageEvents(body);
+
+    expect(response.statusCode).toBe(200);
+    expect(vi.mocked(mockUsageServiceClient.ingestEvents)).toHaveBeenCalledOnce();
+  });
+
   // -----------------------------------------------------------------------
   // Schema validation
   // -----------------------------------------------------------------------
 
   it('returns 400 when events contain malformed objects missing required fields', async () => {
     const body = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       events: [
         {
           // Missing all required fields — just an arbitrary object
@@ -335,14 +390,14 @@ describe('POST /internal/webhooks/usage-events', () => {
     expect(response.statusCode).toBe(400);
   });
 
-  it('returns 400 when cost billedUsd is negative', async () => {
+  it('returns 400 when cost.pricingSource is not in the v2 enum', async () => {
     const validPayload = buildValidPayload();
     const events = (validPayload as { events: Record<string, unknown>[] }).events;
     const firstEvent = events[0];
     if (firstEvent !== undefined) {
       (firstEvent as { cost: Record<string, unknown> }).cost = {
         ...(firstEvent as { cost: Record<string, unknown> }).cost,
-        billedUsd: -0.5,
+        pricingSource: 'calculated',
       };
     }
     const response = await sendUsageEvents(validPayload);
