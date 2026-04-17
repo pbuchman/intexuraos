@@ -1,5 +1,5 @@
 /**
- * Migration 20260417000000: Composite indexes for notification digest queries
+ * Migration 095: Composite indexes for notification digest queries
  *
  * Required by mobile-notifications-service for:
  * - findByDate: userId + groupKey + date
@@ -11,7 +11,7 @@
  */
 
 export const metadata = {
-  id: '20260417000000',
+  id: '095',
   name: 'notification-digest-indexes',
   description: 'Composite indexes for notification digest queries',
   createdAt: '2026-04-17',
@@ -39,3 +39,16 @@ export const indexes = [
     ],
   },
 ];
+
+export const collections = ['notification_daily_digests', 'notification_group_states'];
+
+export async function up(context) {
+  console.log('  Deploying notification digest composite indexes (2 indexes)...');
+  await context.deployIndexes();
+}
+
+export async function down() {
+  console.log(
+    '  Removing notification digest indexes requires manual deletion via Firebase console'
+  );
+}

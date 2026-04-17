@@ -7,7 +7,7 @@ export function yesterdayCet(now: Date = new Date()): string {
   }).format(now);
   // cetTodayString is YYYY-MM-DD already
   const [y, m, d] = cetTodayString.split('-').map((s) => parseInt(s, 10));
-  /* v8 ignore start -- ts-type: split('-') always returns 3 parts for valid en-CA date string @preserve */
+  /* v8 ignore start -- ts-type: noUncheckedIndexedAccess makes destructured array elements possibly undefined; split('-') always returns 3 parts for valid en-CA date string @preserve */
   if (y === undefined || m === undefined || d === undefined) throw new Error('unreachable');
   /* v8 ignore stop @preserve */
   const utcMidnight = Date.UTC(y, m - 1, d);

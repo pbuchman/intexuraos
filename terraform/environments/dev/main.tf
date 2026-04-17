@@ -990,7 +990,9 @@ module "mobile_notifications_service" {
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/mobile-notifications-service:latest"
 
-  secrets = local.common_service_secrets
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_OPENROUTER_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENROUTER_APP_API_KEY"]
+  })
 
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_DIGEST_LLM_MODEL = "or:google/gemini-3-flash-preview"
