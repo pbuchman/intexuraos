@@ -1,6 +1,6 @@
 import { COLD_START_EXAMPLE, WITH_CONTEXT_EXAMPLE } from './examples.js';
 
-export const DIGEST_PROMPT_VERSION = '1.0.0';
+export const DIGEST_PROMPT_VERSION = '2.0.0';
 
 const COLD_START_JSON = JSON.stringify(COLD_START_EXAMPLE, null, 2);
 const WITH_CONTEXT_JSON = JSON.stringify(WITH_CONTEXT_EXAMPLE, null, 2);
@@ -31,9 +31,15 @@ export function buildDigestPrompt(input: DigestPromptInput): string {
 
   return `Jesteś asystentem agregującym dzień rozmów z grupy WhatsApp wędkarskiej w schemat AggregationOutput (JSON).
 
-Wymagania:
+Format treści:
+- headline: JEDNO krótkie zdanie (do 200 znaków) po polsku, oddające najważniejsze tematy dnia. Nie stosuj szablonów typu "Dzień upłynął pod znakiem…".
+- bullets: 3 do 7 krótkich wypunktowań po polsku. Każde jest konkretnym faktem z dzisiejszych wiadomości (kto, co, decyzja, skutek). Nie dublują się z treścią threads, moderatorPosts czy openQuestions — są najbardziej istotnymi faktami dnia w stylu "nagłówków notatki".
+- Nie używaj pola narrative — pozostaw je puste lub pomiń.
+
+Zasady treści:
 - Cała narracja, opisy wątków, notatki, podsumowania moderatorskie i pytania otwarte muszą być po polsku.
 - Klucze enum, identyfikatory wątków (kebab-case), groupKey i daty (YYYY-MM-DD) – po angielsku.
+- NIE KOPIUJ dosłownie tekstu z previousState ani z last3Summaries. Te dane są wyłącznie kontekstem historycznym — opisują poprzednie dni, a nie dzisiejszy. Jeśli dzisiaj nie wydarzyło się nic w danym wątku, pomiń go.
 - Wynikiem jest JEDEN obiekt JSON o polach { dailySummary, stateUpdate } pasujący do schematu Zod.
 - recentSummaryDates: dopisz dzisiejszą datę, przytnij do ostatnich 30 dni.
 - identityLedger: zwiększaj liczniki dla nadawców widocznych dzisiaj; dodawaj nowych z role='newcomer'; pozostałych zachowaj bez zmian.
@@ -54,13 +60,13 @@ userId: ${input.userId}
 groupKey: ${input.groupKey}
 date: ${input.date}
 
-previousState (lub {} dla cold start):
+previousState (lub {} dla cold start) — KONTEKST TYLKO:
 ${stateJson}
 
-last3Summaries (chronologicznie, najstarsza pierwsza):
+last3Summaries (poprzednie dni; KONTEKST TYLKO, NIE KOPIUJ):
 ${summariesJson}
 
-todaysMessages (po dedup, posortowane rosnąco po czasie):
+todaysMessages (po dedup, posortowane rosnąco po czasie) — JEDYNE ŹRÓDŁO FAKTÓW:
 ${messagesText}
 
 Zwróć wyłącznie obiekt JSON AggregationOutput.`;

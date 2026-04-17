@@ -20,8 +20,8 @@ describe('buildDigestPrompt', () => {
 
   it('embeds both few-shot examples', () => {
     const prompt = buildDigestPrompt(baseInput);
-    expect(prompt).toContain('2026-04-08'); // cold-start example date
-    expect(prompt).toContain('2026-04-11'); // with-context example date
+    expect(prompt).toContain('2026-04-08');
+    expect(prompt).toContain('2026-04-11');
   });
 
   it('instructs the model to write Polish narratives', () => {
@@ -29,7 +29,19 @@ describe('buildDigestPrompt', () => {
     expect(prompt.toLowerCase()).toContain('po polsku');
   });
 
-  it('exposes a semver version constant', () => {
-    expect(DIGEST_PROMPT_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
+  it('instructs the model to output headline + bullets (hybrid format)', () => {
+    const prompt = buildDigestPrompt(baseInput);
+    expect(prompt).toMatch(/headline/i);
+    expect(prompt).toMatch(/bullets/i);
+    expect(prompt).toMatch(/3.{0,10}7/);
+  });
+
+  it('forbids copying from last3Summaries', () => {
+    const prompt = buildDigestPrompt(baseInput);
+    expect(prompt.toLowerCase()).toContain('nie kopiuj');
+  });
+
+  it('exposes semver version 2.x', () => {
+    expect(DIGEST_PROMPT_VERSION).toMatch(/^2\.\d+\.\d+$/);
   });
 });
