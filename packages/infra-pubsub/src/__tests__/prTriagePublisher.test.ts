@@ -20,10 +20,16 @@ vi.mock('@google-cloud/pubsub', () => {
   };
 });
 
-const stubLogger = (): Logger => ({
-  info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), trace: vi.fn(),
-  fatal: vi.fn(), child: vi.fn(() => stubLogger()),
-} as unknown as Logger);
+const stubLogger = (): Logger =>
+  ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    trace: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn(() => stubLogger()),
+  }) as unknown as Logger;
 
 describe('PRTriagePublisher', () => {
   beforeEach(() => {
@@ -51,9 +57,9 @@ describe('PRTriagePublisher', () => {
 
     expect(result.ok).toBe(true);
     expect(mockPublishMessage).toHaveBeenCalledTimes(1);
-    const data = JSON.parse(
-      Buffer.from(mockPublishMessage.mock.calls[0][0].data).toString('utf-8')
-    );
+    const firstCall = mockPublishMessage.mock.calls[0];
+    if (firstCall === undefined) throw new Error('expected publishMessage call');
+    const data = JSON.parse(Buffer.from(firstCall[0].data).toString('utf-8'));
     expect(data).toMatchObject({
       type: 'code.pr.triage.requested',
       eventId: 'evt-1',

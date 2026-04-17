@@ -8,11 +8,7 @@
  */
 import { type Result } from '@intexuraos/common-core';
 import { BasePubSubPublisher } from './basePublisher.js';
-import type {
-  PublishError,
-  PRTriageEvent,
-  PRTriagePublisherConfig,
-} from './types.js';
+import type { PublishError, PRTriageEvent, PRTriagePublisherConfig } from './types.js';
 
 export interface PRTriagePublisher {
   publishPRTriage(params: {
@@ -60,8 +56,6 @@ class PRTriagePublisherImpl extends BasePubSubPublisher implements PRTriagePubli
   }
 }
 
-export function createPRTriagePublisher(
-  config: PRTriagePublisherConfig
-): PRTriagePublisher {
+export function createPRTriagePublisher(config: PRTriagePublisherConfig): PRTriagePublisher {
   return new PRTriagePublisherImpl(config);
 }
