@@ -249,15 +249,18 @@ describe('buildExecutionMemorySection acknowledgment and reporting', () => {
     expect(prompt).toContain('memory_usage_summary');
   });
 
-  it('does not include acknowledgment or reporting when no memories matched', () => {
+  it('does not include acknowledgment or reporting instructions when no memories matched', () => {
     const prompt = planningPrompt.build({
       taskId: 'task-no-mem',
       linearIssueLabels: [],
     });
 
+    // The memory acknowledgment / reporting instructions only appear when memories are injected.
     expect(prompt).not.toContain('MANDATORY: Acknowledge Execution Memories NOW');
     expect(prompt).not.toContain('MANDATORY: Report Memory Usage in Final Output');
-    expect(prompt).not.toContain('memory_ids_used');
+    // The final-block template still lists memory_ids_used with a "none" fallback so workers
+    // always report these fields — even when no memories are injected.
+    expect(prompt).toContain('memory_ids_used: <comma-separated injected IDs you applied, or "none">');
   });
 });
 

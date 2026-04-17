@@ -1264,8 +1264,8 @@ describe('system-prompt', () => {
     }
   });
 
-  it('planning prompt version is 6.1.0', () => {
-    expect(planningPrompt.version).toBe('6.1.0');
+  it('planning prompt version is 7.0.0', () => {
+    expect(planningPrompt.version).toBe('7.0.0');
   });
 
   it('execution prompt version is 9.1.0', () => {
@@ -1318,6 +1318,93 @@ describe('system-prompt', () => {
     expect(executionResult).toContain('memory_ids_rejected');
     expect(executionResult).toContain('memory_usage_summary');
     expect(planningResult).not.toContain('### Execution Memory');
+  });
+
+  describe('memory fields in agent final blocks', () => {
+    const memoryContext = {
+      applicationId: 'app_1',
+      retrievalVersion: 'v1',
+      querySummary: 'q',
+      matchedMemories: [
+        {
+          memoryId: 'mem_abc',
+          title: 't',
+          memoryType: 'implementation_pattern' as const,
+          score: 0.5,
+          appliesWhen: 'a',
+          action: 'x',
+          avoid: 'y',
+          verification: 'z',
+        },
+      ],
+    };
+
+    const extractFinalBlock = (prompt: string, marker: string): string => {
+      // Find the fenced code block that begins with the marker (not the textual references).
+      const fenceMarker = '```\n' + marker;
+      const fenceStart = prompt.indexOf(fenceMarker);
+      expect(fenceStart).toBeGreaterThanOrEqual(0);
+      const blockStart = fenceStart + '```\n'.length;
+      const blockEnd = prompt.indexOf('```', blockStart);
+      expect(blockEnd).toBeGreaterThan(blockStart);
+      return prompt.slice(blockStart, blockEnd);
+    };
+
+    it('lists memory_ids_used/rejected/usage_summary in PLANNING_AGENT_FINAL', () => {
+      const prompt = planningPrompt.build({
+        taskId: 't1',
+        linearIssueLabels: [],
+        workerType: 'auto',
+        executionMemoryContext: memoryContext,
+      });
+      const block = extractFinalBlock(prompt, 'PLANNING_AGENT_FINAL:');
+      expect(block).toContain('memory_ids_used:');
+      expect(block).toContain('memory_ids_rejected:');
+      expect(block).toContain('memory_usage_summary:');
+    });
+
+    it('lists memory fields in REMEDIATION_AGENT_FINAL', () => {
+      const prompt = remediationPrompt.build({
+        taskId: 't1',
+        linearIssueLabels: [],
+        workerType: 'auto',
+        executionMemoryContext: memoryContext,
+      });
+      const block = extractFinalBlock(prompt, 'REMEDIATION_AGENT_FINAL:');
+      expect(block).toContain('memory_ids_used:');
+      expect(block).toContain('memory_ids_rejected:');
+      expect(block).toContain('memory_usage_summary:');
+    });
+
+    it('lists memory fields in every PULL_REQUEST_AGENT_FINAL occurrence in the source file', async () => {
+      const { readFile } = await import('node:fs/promises');
+      const { fileURLToPath } = await import('node:url');
+      const currentUrl = import.meta.url;
+      const currentDir = fileURLToPath(new URL('.', currentUrl));
+      const src = await readFile(`${currentDir}../system-prompt.ts`, 'utf8');
+      const occurrences = src.split('PULL_REQUEST_AGENT_FINAL:').length - 1;
+      expect(occurrences).toBeGreaterThanOrEqual(2);
+      const blocks = src.split('PULL_REQUEST_AGENT_FINAL:').slice(1);
+      for (const tail of blocks) {
+        const block = tail.slice(0, tail.indexOf('```'));
+        expect(block).toContain('memory_ids_used:');
+        expect(block).toContain('memory_ids_rejected:');
+        expect(block).toContain('memory_usage_summary:');
+      }
+    });
+
+    it('lists memory fields in REVIEW_AGENT_FINAL', () => {
+      const prompt = reviewPrompt.build({
+        taskId: 't1',
+        linearIssueLabels: [],
+        workerType: 'auto',
+        executionMemoryContext: memoryContext,
+      });
+      const block = extractFinalBlock(prompt, 'REVIEW_AGENT_FINAL:');
+      expect(block).toContain('memory_ids_used:');
+      expect(block).toContain('memory_ids_rejected:');
+      expect(block).toContain('memory_usage_summary:');
+    });
   });
 
   it('review agent prompt includes Linear section when linearIssueId is provided', () => {

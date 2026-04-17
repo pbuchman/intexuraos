@@ -144,7 +144,7 @@ The union of memory_ids_used and memory_ids_rejected MUST equal the full set of 
 export const planningPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-planning',
   description: 'Planning agent system prompt for autonomous code task planning',
-  version: '6.1.0',
+  version: '7.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     return `[SYSTEM CONTEXT]
@@ -308,6 +308,9 @@ PLANNING_AGENT_FINAL:
 - Plan PR: <full GitHub PR URL — MANDATORY for ALL planned outcomes, including SIMPLE tasks>
 - Parallel breakdown proof: <required when Complex task=1; must show service boundaries and contracts between subissues — empty otherwise>
 - Clarification message: <REQUIRED for unclear outcomes; MUST be empty for successfully planned outcomes>
+- memory_ids_used: <comma-separated injected IDs you applied, or "none">
+- memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">
+- memory_usage_summary: <one-sentence description of how memories influenced the plan, or "none" if no memories were injected>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was the task, what was decided (simple/plan-doc/complex), what artifacts were produced (plan doc, subtasks, PR), why unclear (if applicable). The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
