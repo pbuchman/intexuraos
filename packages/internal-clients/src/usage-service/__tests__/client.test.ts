@@ -74,6 +74,54 @@ const sampleIngestResponse = {
   rejected: [],
 };
 
+const sampleStoredEvent = {
+  schemaVersion: 2 as const,
+  eventId: 'evt_001',
+  occurredAt: '2026-04-10T00:00:00Z',
+  receivedAt: '2026-04-10T00:00:01Z',
+  ingress: 'internal' as const,
+  owner: { type: 'user' as const, id: 'u1' },
+  source: {
+    service: 'research',
+    component: 'agent',
+    client: 'web',
+    environment: 'dev' as const,
+  },
+  request: {
+    provider: LlmProviders.Anthropic,
+    model: 'claude-sonnet-4-20250514',
+    operation: 'research',
+    success: true,
+    durationMs: 1200,
+  },
+  usage: {
+    inputTokens: 100,
+    outputTokens: 50,
+    totalTokens: 150,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    cachedTokens: 0,
+    reasoningTokens: 0,
+    thinkingTokens: 0,
+    webSearchCalls: 0,
+    groundingEnabled: false,
+    imageCount: 0,
+  },
+  cost: {
+    providerReportedUsd: null,
+    pricingSource: 'pending' as const,
+  },
+  correlation: {
+    requestId: null,
+    traceId: null,
+    taskId: null,
+    researchId: null,
+    attempt: null,
+    sessionId: null,
+  },
+  error: null,
+};
+
 const sampleQueryRequest: UsageQueryRequest = {
   timeRange: {
     from: '2026-04-01T00:00:00Z',
@@ -385,55 +433,7 @@ describe('createUsageServiceClient', () => {
     };
 
     const sampleListResponse = {
-      events: [
-        {
-          schemaVersion: 2 as const,
-          eventId: 'evt_001',
-          occurredAt: '2026-04-10T00:00:00Z',
-          receivedAt: '2026-04-10T00:00:01Z',
-          ingress: 'internal' as const,
-          owner: { type: 'user' as const, id: 'u1' },
-          source: {
-            service: 'research',
-            component: 'agent',
-            client: 'web',
-            environment: 'dev' as const,
-          },
-          request: {
-            provider: LlmProviders.Anthropic,
-            model: 'claude-sonnet-4-20250514',
-            operation: 'research',
-            success: true,
-            durationMs: 1200,
-          },
-          usage: {
-            inputTokens: 100,
-            outputTokens: 50,
-            totalTokens: 150,
-            cacheReadTokens: 0,
-            cacheWriteTokens: 0,
-            cachedTokens: 0,
-            reasoningTokens: 0,
-            thinkingTokens: 0,
-            webSearchCalls: 0,
-            groundingEnabled: false,
-            imageCount: 0,
-          },
-          cost: {
-            providerReportedUsd: null,
-            pricingSource: 'pending' as const,
-          },
-          correlation: {
-            requestId: null,
-            traceId: null,
-            taskId: null,
-            researchId: null,
-            attempt: null,
-            sessionId: null,
-          },
-          error: null,
-        },
-      ],
+      events: [sampleStoredEvent],
       totalMatched: 1,
     };
 
@@ -492,55 +492,7 @@ describe('createUsageServiceClient', () => {
   });
 
   describe('getUsageEvent', () => {
-    const sampleGetResponse = {
-      event: {
-        schemaVersion: 2 as const,
-        eventId: 'evt_001',
-        occurredAt: '2026-04-10T00:00:00Z',
-        receivedAt: '2026-04-10T00:00:01Z',
-        ingress: 'internal' as const,
-        owner: { type: 'user' as const, id: 'u1' },
-        source: {
-          service: 'research',
-          component: 'agent',
-          client: 'web',
-          environment: 'dev' as const,
-        },
-        request: {
-          provider: LlmProviders.Anthropic,
-          model: 'claude-sonnet-4-20250514',
-          operation: 'research',
-          success: true,
-          durationMs: 1200,
-        },
-        usage: {
-          inputTokens: 100,
-          outputTokens: 50,
-          totalTokens: 150,
-          cacheReadTokens: 0,
-          cacheWriteTokens: 0,
-          cachedTokens: 0,
-          reasoningTokens: 0,
-          thinkingTokens: 0,
-          webSearchCalls: 0,
-          groundingEnabled: false,
-          imageCount: 0,
-        },
-        cost: {
-          providerReportedUsd: null,
-          pricingSource: 'pending' as const,
-        },
-        correlation: {
-          requestId: null,
-          traceId: null,
-          taskId: null,
-          researchId: null,
-          attempt: null,
-          sessionId: null,
-        },
-        error: null,
-      },
-    };
+    const sampleGetResponse = { event: sampleStoredEvent };
 
     it('sends GET to /llm-usage/events/:eventId with auth', async () => {
       const scope = nock(BASE_URL)
