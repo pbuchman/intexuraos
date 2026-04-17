@@ -289,3 +289,61 @@ describe('GET /notifications/digests/:groupKey/:date/state', () => {
     await app.close();
   });
 });
+
+describe('GET /notifications/digests/backfill/:runId', () => {
+  it('returns 401 without auth', async () => {
+    setMockServices({});
+    const app = await buildServer();
+    const res = await app.inject({ method: 'GET', url: '/notifications/digests/backfill/bf_001' });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('returns 404 when run not found', async () => {
+    setMockServices({
+      backfillRunRepository: {
+        create: async () => ({ ok: true, value: undefined }),
+        update: async () => ({ ok: true, value: undefined }),
+        findById: async () => ({ ok: true, value: null }),
+      },
+    });
+    const token = await createToken({ sub: 'u' });
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/notifications/digests/backfill/bf_001',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('returns run when found', async () => {
+    const mockRun = {
+      runId: 'bf_001', userId: 'u', groupKey: 'g',
+      fromDate: '2026-04-01', toDate: '2026-04-15',
+      status: 'completed' as const, totalDates: 15,
+      completedDates: [], failedDates: [], currentDate: null,
+      startedAt: '2026-04-15T00:00:00Z', updatedAt: '2026-04-15T01:00:00Z',
+    };
+    setMockServices({
+      backfillRunRepository: {
+        create: async () => ({ ok: true, value: undefined }),
+        update: async () => ({ ok: true, value: undefined }),
+        findById: async () => ({ ok: true, value: mockRun }),
+      },
+    });
+    const token = await createToken({ sub: 'u' });
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/notifications/digests/backfill/bf_001',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ success: boolean; data: { runId: string } }>();
+    expect(body.success).toBe(true);
+    expect(body.data.runId).toBe('bf_001');
+    await app.close();
+  });
+});
