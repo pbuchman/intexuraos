@@ -172,7 +172,7 @@ describe('CodeTaskLogViewer integration', () => {
     expect(workerButton).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('when worker filter is active, only claude- and msg-tagged lines are shown', async () => {
+  it('when worker filter is active, lines tagged [claude] are shown', async () => {
     const claudeUrl = 'https://example.com/claude-line';
     const otherUrl = 'https://example.com/other-line';
     const logs: LogLine[] = [
