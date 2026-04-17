@@ -223,6 +223,7 @@ describe('GET /code/issue-groups', () => {
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repoToUse, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: repoToUse, logger }),
       groupSummaryRepo: overrides.groupSummaryRepo ?? makeGroupSummaryRepo(),
+      prTriagePublisher: { publishPRTriage: async () => ok(undefined) } as never,
     };
   }
 
@@ -355,6 +356,7 @@ describe('GET /code/issue-groups', () => {
         reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT),
       },
       mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
+      prTriagePublisher: {} as never,
       groupSummaryRepo: makeGroupSummaryRepo({
         getUserGroupCounts: async () => ok(mockCounts),
         listGroupSummaries: async (input) => {
@@ -1144,6 +1146,7 @@ describe('GET /code/issue-groups', () => {
         reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT),
       },
       mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
+      prTriagePublisher: {} as never,
       groupSummaryRepo: makeGroupSummaryRepo({
         getUserGroupCounts: async () => err({ code: 'FIRESTORE_ERROR' as const, message: 'Database connection failed' }),
       }),
@@ -1253,6 +1256,7 @@ describe('GET /code/issue-groups', () => {
         reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT),
       },
       mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
+      prTriagePublisher: {} as never,
       groupSummaryRepo: makeGroupSummaryRepo({
         listGroupSummaries: async () => ok({ summaries: [makeSummary({ linearIssueId: 'INT-1600' })] }),
       }),
@@ -1458,6 +1462,7 @@ describe('GET /code/issue-groups', () => {
         mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
         archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+        prTriagePublisher: {} as never,
         groupSummaryRepo: makeGroupSummaryRepo({
           getUserGroupCounts: async () => ok(fakeCounts),
           listGroupSummaries: async () => ok({ summaries: [] }),
@@ -1556,6 +1561,7 @@ describe('GET /code/issue-groups', () => {
         mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
         archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+        prTriagePublisher: {} as never,
         groupSummaryRepo: makeGroupSummaryRepo({
           listGroupSummaries: async () => ok({ summaries: [fakeSummary] }),
         }),
@@ -1620,6 +1626,7 @@ describe('GET /code/issue-groups', () => {
         mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
         archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+        prTriagePublisher: {} as never,
         groupSummaryRepo: makeGroupSummaryRepo({
           getUserGroupCounts: async () => err({ code: 'FIRESTORE_ERROR' as const, message: 'Counts fetch failed' }),
         }),
@@ -2439,6 +2446,7 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repoToUse, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: repoToUse, logger }),
       groupSummaryRepo: overrides.groupSummaryRepo ?? makeGroupSummaryRepo(),
+      prTriagePublisher: { publishPRTriage: async () => ok(undefined) } as never,
     };
   }
 

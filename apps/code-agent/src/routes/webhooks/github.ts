@@ -633,18 +633,36 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         'GitHub PR event saved'
       );
 
-      const { unifiedEvaluator } = getServices();
+      const { prTriagePublisher } = getServices();
 
-      // INT-744: Unified evaluation — hard rules + optional LLM triage
-      void unifiedEvaluator.evaluate(savedEvent, logger).catch((evalErr: unknown) => {
-        logger.error({ evalErr }, 'Unhandled error in unified evaluator');
-        void ensureDecisionAfterEvaluationFailure({
-          auditEvent: auditResult.value,
-          pendingEntry: pendingLogEntryResult.value,
-          logger,
-          errorMessage: getErrorMessage(evalErr, 'unknown_evaluation_error'),
-        });
+      // Decouple triage from the webhook request lifetime: publish a PRTriageEvent
+      // to Pub/Sub, delivered as a push to /internal/code/pubsub/pr-triage. The
+      // push handler awaits unifiedEvaluator.evaluate(...) inside its own request,
+      // so Cloud Run's CPU throttling and revision rollovers cannot drop triage
+      // work mid-flight.
+      const publishResult = await prTriagePublisher.publishPRTriage({
+        eventId: savedEvent.id,
+        repository: parsedEvent.repository,
+        pullRequestNumber: parsedEvent.pullRequestNumber,
+        correlationId: savedEvent.id,
       });
+
+      if (!publishResult.ok) {
+        logger.error(
+          { error: publishResult.error, eventId: savedEvent.id }, // @allow-result-access -- narrowed by !publishResult.ok
+          'Failed to publish PR triage event — falling back to inline evaluator'
+        );
+        const { unifiedEvaluator } = getServices();
+        void unifiedEvaluator.evaluate(savedEvent, logger).catch((evalErr: unknown) => {
+          logger.error({ evalErr }, 'Unhandled error in unified evaluator (fallback path)');
+          void ensureDecisionAfterEvaluationFailure({
+            auditEvent: auditResult.value,
+            pendingEntry: pendingLogEntryResult.value,
+            logger,
+            errorMessage: getErrorMessage(evalErr, 'unknown_evaluation_error'),
+          });
+        });
+      }
 
       // Transition Linear issues on PR close (merge → QA + remove label; close → remove label only)
       if (parsedEvent.eventType === 'pull_request' && parsedEvent.action === 'closed') {

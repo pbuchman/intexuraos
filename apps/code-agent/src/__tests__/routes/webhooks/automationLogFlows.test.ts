@@ -257,6 +257,10 @@ describe('Automation log integration flows', () => {
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      // These integration tests wire a real unifiedEvaluator and exercise the full
+      // webhook → evaluator → automation-log path. The publish always fails here so
+      // the fallback path runs the evaluator inline, preserving the test intent.
+      prTriagePublisher: { publishPRTriage: vi.fn().mockResolvedValue({ ok: false, error: { code: 'PUBLISH_ERROR', message: 'no topic in test' } }) },
     };
 
     setServices(mockServices);

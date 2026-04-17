@@ -230,6 +230,7 @@ describe('codeRoutes', () => {
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      prTriagePublisher: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -265,6 +266,7 @@ describe('codeRoutes', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
+      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
     });
 
     // Set up worker settings for the test user

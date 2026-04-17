@@ -199,6 +199,7 @@ describe('POST /internal/code/group-summary/recompute', () => {
         appendMergedPr: vi.fn(),
       },
       groupSummaryRepo,
+      prTriagePublisher: {} as never,
     });
 
     server = await buildServer();
