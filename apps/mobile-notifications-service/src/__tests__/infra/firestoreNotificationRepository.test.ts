@@ -363,20 +363,20 @@ describe('FirestoreNotificationRepository', () => {
     });
 
     it('filters by postTimeSec range when postTimeSecFrom/postTimeSecTo are set', async () => {
-      const mk = (text: string, timestampMs: number, notifId: string): CreateNotificationInput => ({
+      const mk = (text: string, timestampSec: number, notifId: string): CreateNotificationInput => ({
         userId: 'user-range',
         source: 'android',
         device: 'dev',
         app: 'com.whatsapp',
         title: 'Grupa',
         text,
-        timestamp: timestampMs,
-        postTime: String(Math.floor(timestampMs / 1000)),
+        timestamp: timestampSec,
+        postTime: String(timestampSec),
         notificationId: notifId,
       });
-      await repository.save(mk('t1', 100_000, 'r1'));
-      await repository.save(mk('t2', 200_000, 'r2'));
-      await repository.save(mk('t3', 300_000, 'r3'));
+      await repository.save(mk('t1', 100, 'r1'));
+      await repository.save(mk('t2', 200, 'r2'));
+      await repository.save(mk('t3', 300, 'r3'));
 
       const result = await repository.findByUserIdPaginated('user-range', {
         limit: 10,
@@ -398,7 +398,7 @@ describe('FirestoreNotificationRepository', () => {
         app: string,
         title: string,
         text: string,
-        timestampMs: number,
+        timestampSec: number,
         notifId: string
       ): CreateNotificationInput => ({
         userId: 'user-combo',
@@ -407,14 +407,14 @@ describe('FirestoreNotificationRepository', () => {
         app,
         title,
         text,
-        timestamp: timestampMs,
-        postTime: String(Math.floor(timestampMs / 1000)),
+        timestamp: timestampSec,
+        postTime: String(timestampSec),
         notificationId: notifId,
       });
-      await repository.save(mk('com.whatsapp', 'Grupa Wedkarska', 'A', 200_000, 'c1'));
-      await repository.save(mk('com.whatsapp', 'Other Group', 'B', 200_000, 'c2'));
-      await repository.save(mk('com.telegram', 'Grupa Wedkarska', 'C', 200_000, 'c3'));
-      await repository.save(mk('com.whatsapp', 'Grupa Wedkarska', 'D', 500_000, 'c4'));
+      await repository.save(mk('com.whatsapp', 'Grupa Wedkarska', 'A', 200, 'c1'));
+      await repository.save(mk('com.whatsapp', 'Other Group', 'B', 200, 'c2'));
+      await repository.save(mk('com.telegram', 'Grupa Wedkarska', 'C', 200, 'c3'));
+      await repository.save(mk('com.whatsapp', 'Grupa Wedkarska', 'D', 500, 'c4'));
 
       const result = await repository.findByUserIdPaginated('user-combo', {
         limit: 10,
