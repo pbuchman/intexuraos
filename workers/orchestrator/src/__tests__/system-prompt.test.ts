@@ -368,8 +368,8 @@ describe('prompt versions', () => {
     expect(reviewPrompt.version).toBe('9.2.1');
   });
 
-  it('pullRequestPrompt version is 4.3.0', () => {
-    expect(pullRequestPrompt.version).toBe('4.3.0');
+  it('pullRequestPrompt version is 5.0.0', () => {
+    expect(pullRequestPrompt.version).toBe('5.0.0');
   });
 });
 
