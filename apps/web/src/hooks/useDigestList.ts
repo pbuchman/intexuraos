@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/context';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { listDigests } from '@/services/notificationDigestsApi';
-import { daysAgoIso, todayIso } from '@/utils/digestDates';
+import { currentMonthIso, firstDayOfMonth, lastDayOfMonth } from '@/utils/digestDates.js';
 import type { PersistedDailySummary } from '@/types/notificationDigests';
 
 export type DigestStatusFilter = 'all' | 'regenerated' | 'single-generation';
@@ -11,14 +11,10 @@ export type DigestSortOption = 'date-desc' | 'date-asc' | 'message-count-desc';
 export const DIGEST_LIST_FILTER_STORAGE_KEY = 'notification-digests-filter';
 export const DIGEST_LIST_SORT_STORAGE_KEY = 'notification-digests-sort';
 
-const DEFAULT_RANGE_DAYS = 30;
-
 export interface UseDigestListOptions {
   readonly groupKey: string;
-  /** Inclusive start date (YYYY-MM-DD). Defaults to 30 days ago. */
-  readonly fromDate?: string;
-  /** Inclusive end date (YYYY-MM-DD). Defaults to today (browser local). */
-  readonly toDate?: string;
+  /** `YYYY-MM`. Defaults to the current month. */
+  readonly month?: string;
 }
 
 export interface UseDigestListResult {
@@ -73,8 +69,9 @@ function applySort(
 
 export function useDigestList(options: UseDigestListOptions): UseDigestListResult {
   const { getAccessToken } = useAuth();
-  const fromDate = options.fromDate ?? daysAgoIso(DEFAULT_RANGE_DAYS);
-  const toDate = options.toDate ?? todayIso();
+  const month = options.month ?? currentMonthIso();
+  const fromDate = firstDayOfMonth(month);
+  const toDate = lastDayOfMonth(month);
   const [raw, setRaw] = useState<readonly PersistedDailySummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

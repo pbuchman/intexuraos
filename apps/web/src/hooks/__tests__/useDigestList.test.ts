@@ -40,7 +40,8 @@ import {
 function summary(date: string, generation: number, messageCount: number): PersistedDailySummary {
   return {
     summary: {
-      date, groupKey: 'g', messageCount, narrative: '',
+      date, groupKey: 'g', messageCount,
+      headline: '', bullets: [],
       threads: [], moderatorPosts: [], openQuestions: [], activityOutliers: [],
     },
     generation,
@@ -112,14 +113,34 @@ describe('useDigestList', () => {
     expect(result.current.items.map((i) => i.summary.messageCount)).toEqual([50, 30, 10]);
   });
 
-  it('uses explicit fromDate/toDate when provided', async () => {
-    mockListDigests.mockResolvedValue({ items: [] });
-    const { result } = renderHook(() => useDigestList({ groupKey: 'g', fromDate: '2026-01-01', toDate: '2026-01-10' }));
+  it('computes fromDate/toDate from month when provided', async () => {
+    const capture: { from?: string; to?: string } = {};
+    mockListDigests.mockImplementation((_token: unknown, opts: { fromDate?: string; toDate?: string }) => {
+      capture.from = opts.fromDate;
+      capture.to = opts.toDate;
+      return Promise.resolve({ items: [] });
+    });
+
+    const { result } = renderHook(() => useDigestList({ groupKey: 'g', month: '2026-04' }));
     await waitFor(() => { expect(result.current.loading).toBe(false); });
 
-    expect(result.current.fromDate).toBe('2026-01-01');
-    expect(result.current.toDate).toBe('2026-01-10');
-    expect(mockListDigests).toHaveBeenCalledWith('tok', { groupKey: 'g', fromDate: '2026-01-01', toDate: '2026-01-10' });
+    expect(capture.from).toBe('2026-04-01');
+    expect(capture.to).toBe('2026-04-30');
+  });
+
+  it('defaults to currentMonthIso when month is omitted', async () => {
+    const capture: { from?: string; to?: string } = {};
+    mockListDigests.mockImplementation((_token: unknown, opts: { fromDate?: string; toDate?: string }) => {
+      capture.from = opts.fromDate;
+      capture.to = opts.toDate;
+      return Promise.resolve({ items: [] });
+    });
+
+    const { result } = renderHook(() => useDigestList({ groupKey: 'g' }));
+    await waitFor(() => { expect(result.current.loading).toBe(false); });
+
+    expect(capture.from).toMatch(/^\d{4}-\d{2}-01$/);
+    expect(capture.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
 
