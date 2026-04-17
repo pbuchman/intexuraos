@@ -52,7 +52,7 @@ function buildChainPost() {
   };
 }
 
-function buildLlmClient(userId: string) {
+function buildLlmClient(userId: string): ReturnType<typeof createLlmClient> {
   const model = getDigestModel();
   const apiKey = process.env['INTEXURAOS_OPENROUTER_API_KEY'] ?? '';
   const config: LlmClientConfig = {
@@ -60,7 +60,7 @@ function buildLlmClient(userId: string) {
     model: model as LlmClientConfig['model'],
     userId,
     logger,
-    usageSink: { log: async () => undefined },
+    usageSink: { log: () => Promise.resolve() },
     ownerType: 'system',
   };
   return createLlmClient(config);
@@ -224,7 +224,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { runId } = req.params;
       const result = await getServices().backfillRunRepository.findById(runId);
       if (!result.ok) return await reply.fail('INTERNAL_ERROR', result.error.message);
-      if (result.value === null) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Backfill run not found' } }); // @allow-raw-send -- 404 with typed body, reply.fail only supports 5xx
+      if (result.value === null) return await reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Backfill run not found' } }); // @allow-raw-send -- 404 with typed body, reply.fail only supports 5xx
       return await reply.ok(result.value);
     },
   );
@@ -309,7 +309,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { groupKey, date } = req.params;
       const result = await getServices().digestRepository.findByDate({ userId: user.userId, groupKey, date });
       if (!result.ok) return await reply.fail('INTERNAL_ERROR', result.error.message);
-      if (result.value === null) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Digest not found' } }); // @allow-raw-send -- 404 with typed body, reply.fail only supports 5xx
+      if (result.value === null) return await reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Digest not found' } }); // @allow-raw-send -- 404 with typed body, reply.fail only supports 5xx
       return await reply.ok(result.value);
     },
   );
@@ -339,7 +339,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { groupKey, date } = req.params;
       const result = await getServices().groupStateRepository.getByDate({ userId: user.userId, groupKey, date });
       if (!result.ok) return await reply.fail('INTERNAL_ERROR', result.error.message);
-      if (result.value === null) return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'State not found' } }); // @allow-raw-send -- 404 with typed body, reply.fail only supports 5xx
+      if (result.value === null) return await reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'State not found' } }); // @allow-raw-send -- 404 with typed body, reply.fail only supports 5xx
       return await reply.ok(result.value);
     },
   );
