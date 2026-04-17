@@ -8,7 +8,7 @@ export type ExecutionMemoryType =
   | 'planning_decision'
   | 'review_finding';
 
-export type ExecutionMemoryStatus = 'active' | 'suppressed';
+export type ExecutionMemoryStatus = 'active' | 'suppressed' | 'archived';
 
 export type ExecutionMemoryEmbeddingModel = 'text-embedding-3-small';
 

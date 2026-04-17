@@ -6,11 +6,8 @@ import {
   FakeLlmSummarizer,
   FakeUserServiceClient,
 } from './fakes.js';
-import { FakePricingContext } from '@intexuraos/llm-pricing';
 
 describe('services', () => {
-  const mockPricingContext = new FakePricingContext();
-
   afterEach(() => {
     resetServices();
   });
@@ -22,7 +19,7 @@ describe('services', () => {
         cloudflareApiToken: 'test-api-token',
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
-        pricingContext: mockPricingContext,
+        llmUsageServiceUrl: 'http://localhost:8132',
       });
 
       const services = getServices();
@@ -53,7 +50,7 @@ describe('services', () => {
         cloudflareApiToken: 'test-api-token',
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
-        pricingContext: mockPricingContext,
+        llmUsageServiceUrl: 'http://localhost:8132',
       });
 
       expect(() => getServices()).not.toThrow();
@@ -90,7 +87,7 @@ describe('services', () => {
         cloudflareApiToken: 'test-api-token',
         userServiceUrl: 'http://localhost:8110',
         internalAuthToken: 'test-token',
-        pricingContext: mockPricingContext,
+        llmUsageServiceUrl: 'http://localhost:8132',
       });
       resetServices();
 

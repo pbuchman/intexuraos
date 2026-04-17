@@ -185,6 +185,7 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
     LINEAR_API_KEY: 'test-linear-key',
     SENTRY_AUTH_TOKEN: 'test-sentry-token',
     MINIMAX_API_KEY: 'test-minimax-key',
+    MIMO_API_KEY: 'test-mimo-key',
     DASHSCOPE_API_KEY: 'test-dashscope-key',
     OPENROUTER_API_KEY: 'test-openrouter-key',
   },
@@ -601,6 +602,50 @@ describe('DockerProvider', () => {
       expect(mocks.mockContainer.exec).toHaveBeenCalledTimes(4);
     });
 
+    it('passes CLAUDE_SESSION_ID env var to exec when claude runtime is resumed with a session id', async () => {
+      const initialConfig = createTestConfig({ continueSession: false });
+      await provider.createWorker(initialConfig);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      mocks.mockContainer.exec.mockClear();
+
+      await provider.createWorker(
+        createTestConfig({
+          continueSession: true,
+          runtimeSessionId: 'e0a48ae3-4f90-422e-ae42-5accb61ee3fc',
+          prompt: 'Follow-up message',
+          systemPrompt: 'Second attempt system prompt',
+        })
+      );
+
+      const execCalls = mocks.mockContainer.exec.mock.calls;
+      const runAttemptCall = execCalls.find(
+        (call) => (call[0]?.Cmd as string[] | undefined)?.join(' ') === '/entrypoint.sh run-attempt'
+      );
+      expect(runAttemptCall).toBeDefined();
+      const env = runAttemptCall?.[0]?.Env as string[];
+      expect(env).toContainEqual('CLAUDE_SESSION_ID=e0a48ae3-4f90-422e-ae42-5accb61ee3fc');
+      expect(env.some((e) => e.startsWith('CODEX_THREAD_ID='))).toBe(false);
+    });
+
+    it('omits CLAUDE_SESSION_ID when continueSession is false (fresh attempt)', async () => {
+      mocks.mockContainer.exec.mockClear();
+      await provider.createWorker(
+        createTestConfig({
+          continueSession: false,
+          runtimeSessionId: 'should-be-ignored-on-fresh-start',
+        })
+      );
+
+      const execCalls = mocks.mockContainer.exec.mock.calls;
+      const runAttemptCall = execCalls.find(
+        (call) => (call[0]?.Cmd as string[] | undefined)?.join(' ') === '/entrypoint.sh run-attempt'
+      );
+      expect(runAttemptCall).toBeDefined();
+      const env = (runAttemptCall ?? [])[0]?.Env as string[];
+      expect(env.some((e) => e.startsWith('CLAUDE_SESSION_ID='))).toBe(false);
+    });
+
     it('does not set CLAUDE_CODE_EXIT_AFTER_STOP_DELAY env var', async () => {
       const config = createTestConfig();
       await provider.createWorker(config);
@@ -794,16 +839,17 @@ describe('DockerProvider', () => {
     it('moves worker from active to preserved map', async () => {
       await provider.createWorker(createTestConfig({ taskId: 'task-1' }));
 
-      await provider.preserveWorker('task-1');
+      const preserved = await provider.preserveWorker('task-1');
 
+      expect(preserved).toBe(true);
       const workers = await provider.listWorkers();
       expect(workers).toHaveLength(0);
 
-      const preserved = await provider.listPreservedWorkers();
-      expect(preserved).toHaveLength(1);
-      expect(preserved[0]?.taskId).toBe('task-1');
-      expect(preserved[0]?.containerId).toBe('test-container-id');
-      expect(preserved[0]?.preservedAt).toBeDefined();
+      const preservedList = await provider.listPreservedWorkers();
+      expect(preservedList).toHaveLength(1);
+      expect(preservedList[0]?.taskId).toBe('task-1');
+      expect(preservedList[0]?.containerId).toBe('test-container-id');
+      expect(preservedList[0]?.preservedAt).toBeDefined();
     });
 
     it('frees concurrency slot so new workers can be created', async () => {
@@ -849,11 +895,16 @@ describe('DockerProvider', () => {
       expect(mocks.mockContainer.remove).not.toHaveBeenCalled();
     });
 
-    it('returns early for non-existent worker', async () => {
-      await provider.preserveWorker('non-existent');
+    it('returns false and warns for non-existent worker', async () => {
+      const preserved = await provider.preserveWorker('non-existent');
 
-      const preserved = await provider.listPreservedWorkers();
-      expect(preserved).toHaveLength(0);
+      expect(preserved).toBe(false);
+      const preservedList = await provider.listPreservedWorkers();
+      expect(preservedList).toHaveLength(0);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'non-existent' }),
+        expect.stringContaining('preserveWorker called for unknown worker')
+      );
     });
 
     it('logs secrets cleanup failure without throwing', async () => {
@@ -1381,7 +1432,7 @@ describe('DockerProvider', () => {
       const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
       expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://openrouter.ai/api');
       const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
-      expect(modelEntry).toBe('ANTHROPIC_MODEL=qwen/qwen3.6-plus:free');
+      expect(modelEntry).toBe('ANTHROPIC_MODEL=google/gemma-4-31b-it:free');
       const effortEntry = envArr.find((e: string) => e.startsWith('CLAUDE_CODE_EFFORT_LEVEL='));
       expect(effortEntry).toBe('CLAUDE_CODE_EFFORT_LEVEL=high');
       const betasEntry = envArr.find((e: string) =>
@@ -2824,6 +2875,7 @@ describe('DockerProvider', () => {
               LINEAR_API_KEY: 'test',
               SENTRY_AUTH_TOKEN: 'test',
               MINIMAX_API_KEY: 'test',
+              MIMO_API_KEY: 'test',
               DASHSCOPE_API_KEY: 'test',
               OPENROUTER_API_KEY: 'test',
             },
@@ -2902,6 +2954,7 @@ describe('DockerProvider', () => {
             LINEAR_API_KEY: 'test',
             SENTRY_AUTH_TOKEN: 'test',
             MINIMAX_API_KEY: 'test',
+            MIMO_API_KEY: 'test',
             DASHSCOPE_API_KEY: 'test',
             OPENROUTER_API_KEY: 'test',
           },

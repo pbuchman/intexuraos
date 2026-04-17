@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
-import { type ModelPricing, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -10,12 +11,7 @@ const mockLogger: Logger = {
   debug: vi.fn(),
 };
 
-vi.mock('@intexuraos/llm-audit', () => ({
-  createAuditContext: vi.fn().mockReturnValue({
-    success: vi.fn().mockResolvedValue(undefined),
-    error: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
 const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
 
@@ -27,17 +23,9 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 }));
 
 const { createPerplexityClient } = await import('../client.js');
-const { createAuditContext } = await import('@intexuraos/llm-audit');
 
 const API_BASE_URL = 'https://api.perplexity.ai';
 const TEST_MODEL = LlmModels.SonarPro;
-
-const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing => ({
-  inputPricePerMillion: 3.0,
-  outputPricePerMillion: 15.0,
-  useProviderCost: true,
-  ...overrides,
-});
 
 /**
  * Helper to create SSE stream response body for research() tests.
@@ -94,80 +82,7 @@ describe('createPerplexityClient', () => {
   });
 
   describe('research', () => {
-    it('includes userId and researchId in audit context', async () => {
-      nock(API_BASE_URL)
-        .post('/chat/completions', (body) => body.stream === true)
-        .reply(
-          200,
-          createSSEBody({
-            content: 'Research findings about AI.',
-            usage: {
-              prompt_tokens: 100,
-              completion_tokens: 50,
-              total_tokens: 150,
-            },
-          }),
-          { 'Content-Type': 'text/event-stream' }
-        );
-
-      const client = createPerplexityClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        researchId: 'research-123',
-        pricing: createTestPricing(),
-        logger: mockLogger,
-      });
-
-      await client.research('Tell me about AI');
-
-      expect(vi.mocked(createAuditContext).mock.calls[0]?.[0]).toEqual(
-        expect.objectContaining({
-          provider: LlmProviders.Perplexity,
-          model: TEST_MODEL,
-          method: 'research',
-          prompt: 'Tell me about AI',
-          userId: 'test-user',
-          researchId: 'research-123',
-        })
-      );
-    });
-
-    it('excludes researchId from audit context when undefined', async () => {
-      nock(API_BASE_URL)
-        .post('/chat/completions', (body) => body.stream === true)
-        .reply(
-          200,
-          createSSEBody({
-            content: 'Research findings about AI.',
-            usage: {
-              prompt_tokens: 100,
-              completion_tokens: 50,
-              total_tokens: 150,
-            },
-          }),
-          { 'Content-Type': 'text/event-stream' }
-        );
-
-      const client = createPerplexityClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        pricing: createTestPricing(),
-        logger: mockLogger,
-      });
-
-      await client.research('Tell me about AI');
-
-      const auditArgs = vi.mocked(createAuditContext).mock.calls[0]?.[0] as unknown as Record<
-        string,
-        unknown
-      >;
-      expect(auditArgs).not.toHaveProperty('researchId');
-      expect(auditArgs?.['userId']).toBe('test-user');
-    });
-
-    it('returns research result with content and usage from pricing (streaming)', async () => {
+    it('returns research result with content and usage (streaming)', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions', (body) => body.stream === true)
         .reply(
@@ -184,13 +99,12 @@ describe('createPerplexityClient', () => {
           { 'Content-Type': 'text/event-stream' }
         );
 
-      const pricing = createTestPricing({ useProviderCost: false });
       const client = createPerplexityClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Tell me about AI');
 
@@ -202,12 +116,11 @@ describe('createPerplexityClient', () => {
           outputTokens: 50,
           totalTokens: 150,
         });
-        // Cost from tokens: (100/1M * 3.0) + (50/1M * 15.0) = 0.0003 + 0.00075 = 0.00105
-        expect(result.value.usage.costUsd).toBeCloseTo(0.00105, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
-    it('uses provider cost when useProviderCost is true (streaming)', async () => {
+    it('returns costUsd 0 regardless of provider cost in response (streaming)', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions', (body) => body.stream === true)
         .reply(
@@ -225,19 +138,18 @@ describe('createPerplexityClient', () => {
           { 'Content-Type': 'text/event-stream' }
         );
 
-      const pricing = createTestPricing({ useProviderCost: true });
       const client = createPerplexityClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Tell me about AI');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage.costUsd).toBe(0.005);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -259,8 +171,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -289,8 +201,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -317,8 +229,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -345,8 +257,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.research('Test prompt');
 
@@ -368,8 +280,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -386,8 +298,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -404,8 +316,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -422,8 +334,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.research('Test prompt');
 
@@ -442,8 +354,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -470,8 +382,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -483,7 +395,7 @@ describe('createPerplexityClient', () => {
   });
 
   describe('generate', () => {
-    it('returns generate result with content and usage from pricing', async () => {
+    it('returns generate result with content and usage', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions')
         .reply(200, {
@@ -491,15 +403,14 @@ describe('createPerplexityClient', () => {
           usage: { prompt_tokens: 50, completion_tokens: 100, total_tokens: 150 },
         });
 
-      const pricing = createTestPricing({ useProviderCost: false });
       const client = createPerplexityClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -509,12 +420,11 @@ describe('createPerplexityClient', () => {
           outputTokens: 100,
           totalTokens: 150,
         });
-        // Cost: (50/1M * 3.0) + (100/1M * 15.0) = 0.00015 + 0.0015 = 0.00165
-        expect(result.value.usage.costUsd).toBeCloseTo(0.00165, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
-    it('uses provider cost for generate when useProviderCost is true', async () => {
+    it('returns costUsd 0 for generate regardless of provider cost', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions')
         .reply(200, {
@@ -527,19 +437,18 @@ describe('createPerplexityClient', () => {
           },
         });
 
-      const pricing = createTestPricing({ useProviderCost: true });
       const client = createPerplexityClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage.costUsd).toBe(0.003);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -555,10 +464,10 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      await client.generate('Write something');
+      await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -580,10 +489,10 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -603,10 +512,10 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -621,10 +530,10 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -639,10 +548,10 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -651,8 +560,8 @@ describe('createPerplexityClient', () => {
     });
   });
 
-  describe('fallback pricing behavior', () => {
-    it('uses token-based calculation when useProviderCost is false and no provider cost', async () => {
+  describe('costUsd always zero', () => {
+    it('returns costUsd 0 regardless of provider cost settings', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions', (body) => body.stream === true)
         .reply(
@@ -665,24 +574,22 @@ describe('createPerplexityClient', () => {
           { 'Content-Type': 'text/event-stream' }
         );
 
-      const pricing = createTestPricing({ useProviderCost: false });
       const client = createPerplexityClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        // (1000/1M * 3.0) + (500/1M * 15.0) = 0.003 + 0.0075 = 0.0105
-        expect(result.value.usage.costUsd).toBeCloseTo(0.0105, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
-    it('falls back to token calculation when useProviderCost is true but no cost in response', async () => {
+    it('returns costUsd 0 even when no provider cost in response', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions', (body) => body.stream === true)
         .reply(
@@ -695,20 +602,18 @@ describe('createPerplexityClient', () => {
           { 'Content-Type': 'text/event-stream' }
         );
 
-      const pricing = createTestPricing({ useProviderCost: true });
       const client = createPerplexityClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        // Falls back to token calculation: (100/1M * 3.0) + (50/1M * 15.0) = 0.00105
-        expect(result.value.usage.costUsd).toBeCloseTo(0.00105, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -729,8 +634,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -756,10 +661,10 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test prompt');
+      const result = await client.generate('Test prompt', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -789,8 +694,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -822,8 +727,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: 'unknown-model' as (typeof LlmModels)[keyof typeof LlmModels],
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -837,8 +742,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -857,10 +762,10 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test prompt');
+      const result = await client.generate('Test prompt', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -877,8 +782,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -895,8 +800,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -927,8 +832,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.research('Test prompt');
 
@@ -951,10 +856,10 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      await client.generate('Test prompt');
+      await client.generate('Test prompt', { promptType: 'test-prompt' });
 
       expect(capturedBody?.['stream']).toBeUndefined();
     });
@@ -968,8 +873,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -989,10 +894,10 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test prompt');
+      const result = await client.generate('Test prompt', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -1011,8 +916,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
         timeoutMs: 1000, // 1 second timeout
       });
       const result = await client.research('Test prompt');
@@ -1040,8 +945,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
         // timeoutMs not specified, should use DEFAULT_TIMEOUT_MS
       });
       const result = await client.research('Test prompt');
@@ -1066,8 +971,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
         timeoutMs: 100,
       });
 
@@ -1088,8 +993,8 @@ describe('createPerplexityClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
         timeoutMs: 50, // Shorter than delay
       });
       const result = await client.research('Test prompt');
@@ -1099,5 +1004,48 @@ describe('createPerplexityClient', () => {
         expect(result.error.code).toBe('TIMEOUT');
       }
     });
+  });
+
+  it('passes ownerType to usage logger when provided', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { content: 'ok' } }],
+        usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
+      });
+
+    const client = createPerplexityClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+      ownerType: 'user',
+    });
+    await client.generate('hello', { promptType: 'test-prompt' });
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'user' }));
+  });
+
+  it('passes promptType to usage logger', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { content: 'ok' } }],
+        usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
+      });
+
+    const client = createPerplexityClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+    await client.generate('hello', { promptType: 'test-prompt' });
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ promptType: 'test-prompt' })
+    );
   });
 });

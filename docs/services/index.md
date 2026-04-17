@@ -102,7 +102,6 @@ graph TB
     subgraph "Primary AI Agents"
         R[research-agent]
         C[commands-agent]
-        D[data-insights-agent]
         I[image-service]
         B[bookmarks-agent]
         CH[chat-agent]
@@ -113,7 +112,6 @@ graph TB
     R --> A
     R --> P
     C --> G
-    D --> G
     I --> O
     I --> G
     B --> G
@@ -135,12 +133,6 @@ graph TB
 | Service                                      | AI Models                 | Capability                      |
 | -------------------------------------------- | ------------------------- | ------------------------------- |
 | [commands-agent](commands-agent/features.md) | Gemini 2.5 Flash          | Natural language to action type |
-
-### Data Intelligence
-
-| Service                                                | AI Models        | Capability                                          |
-| ------------------------------------------------------ | ---------------- | --------------------------------------------------- |
-| [data-insights-agent](data-insights-agent/features.md) | Gemini 2.5 Flash | Schema inference, trend detection, chart generation |
 
 ### Image Generation
 
@@ -199,7 +191,6 @@ Services that directly invoke AI models for their core functionality.
 | ------------------------------------------------------ | ---------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [research-agent](research-agent/features.md)           | Multi-LLM research orchestration   | Gemini, Claude, GPT, Sonar                       | [features](research-agent/features.md) / [technical](research-agent/technical.md) / [tutorial](research-agent/tutorial.md) / [debt](research-agent/technical-debt.md) / [agent](research-agent/agent.md)                          |
 | [commands-agent](commands-agent/features.md)           | AI command classification          | Gemini 2.5 Flash                                 | [features](commands-agent/features.md) / [technical](commands-agent/technical.md) / [tutorial](commands-agent/tutorial.md) / [debt](commands-agent/technical-debt.md) / [agent](commands-agent/agent.md)                          |
-| [data-insights-agent](data-insights-agent/features.md) | AI-powered data analysis           | Gemini 2.5 Flash                                 | [features](data-insights-agent/features.md) / [technical](data-insights-agent/technical.md) / [tutorial](data-insights-agent/tutorial.md) / [debt](data-insights-agent/technical-debt.md) / [agent](data-insights-agent/agent.md) |
 | [image-service](image-service/features.md)             | AI image generation                | GPT Image 1, Gemini Flash Image                  | [features](image-service/features.md) / [technical](image-service/technical.md) / [tutorial](image-service/tutorial.md) / [debt](image-service/technical-debt.md) / [agent](image-service/agent.md)                               |
 | [bookmarks-agent](bookmarks-agent/features.md)         | Link management with AI summaries  | Via web-agent                                    | [features](bookmarks-agent/features.md) / [technical](bookmarks-agent/technical.md) / [tutorial](bookmarks-agent/tutorial.md) / [debt](bookmarks-agent/technical-debt.md) / [agent](bookmarks-agent/agent.md)                     |
 | [web-agent](web-agent/features.md)                     | Web scraping with AI               | Gemini 2.5 Flash                                 | [features](web-agent/features.md) / [technical](web-agent/technical.md) / [tutorial](web-agent/tutorial.md) / [debt](web-agent/technical-debt.md) / [agent](web-agent/agent.md)                                                   |
@@ -313,7 +304,6 @@ Shared libraries used across apps and workers.
 | [llm-factory](../packages/llm-factory/README.md)   | Unified factory for creating provider-specific LLM clients |
 | [llm-prompts](../packages/llm-prompts/README.md)   | Centralized prompt templates and Zod response schemas      |
 | [llm-pricing](../packages/llm-pricing/README.md)   | Runtime pricing lookups, usage logging to Firestore        |
-| [llm-audit](../packages/llm-audit/README.md)       | LLM request/response audit trail in Firestore              |
 | [llm-utils](../packages/llm-utils/README.md)       | Token redaction, LLM parse error handling, Zod formatting  |
 
 ### Service Clients
@@ -469,7 +459,6 @@ graph TD
 - **Manage tasks via voice**: [todos-agent](todos-agent/features.md) + [whatsapp-service](whatsapp-service/features.md)
 - **Save and summarize links**: [bookmarks-agent](bookmarks-agent/features.md)
 - **Generate images**: [image-service](image-service/features.md)
-- **Analyze data**: [data-insights-agent](data-insights-agent/features.md)
 - **Schedule events**: [calendar-agent](calendar-agent/features.md)
 - **Manage Linear issues**: [linear-agent](linear-agent/features.md)
 - **Turn thoughts into polished drafts**: [hellscript-agent](hellscript-agent/features.md)

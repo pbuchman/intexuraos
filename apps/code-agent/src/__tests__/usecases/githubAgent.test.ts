@@ -3,12 +3,12 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { ok, err } from '@intexuraos/common-core';
+import { ok, err, type Result } from '@intexuraos/common-core';
 import type { ToolCallingClient, ToolDefinition } from '@intexuraos/llm-contract';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
 import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
-import { evaluateEvent, evaluatePREvent, isGitHubAgentEvent, type GitHubAgentDeps } from '../../domain/usecases/githubAgent.js';
+import { evaluateEvent, evaluatePREvent, isGitHubAgentEvent, type GitHubAgentDeps, type GitHubAgentError } from '../../domain/usecases/githubAgent.js';
 import type { Logger } from '@intexuraos/common-core';
 
 function createFakeLogger(): Logger {
@@ -38,6 +38,7 @@ function createFakePREvent(overrides: Partial<GitHubPREvent> = {}): GitHubPREven
     title: 'feat: add new feature',
     body: 'This PR adds a new feature.',
     state: 'open',
+    isDraft: null,
     baseBranch: null,
     mergedAt: null,
     createdAt: new Date(),
@@ -73,6 +74,7 @@ function createFakeGitHubPRClient(): GitHubPRClient {
       mergeable: true,
       mergeableState: 'clean',
       headSha: 'sha123',
+      createdAt: '2026-01-01T00:00:00Z',
     })),
     getIssueComment: vi.fn().mockResolvedValue(ok({ body: '' })),
     updateIssueComment: vi.fn().mockResolvedValue(ok({ commentId: 1 })),
@@ -113,6 +115,21 @@ function createFakeToolCallingClient(options?: {
   };
 }
 
+function createFakeResolveToolCallingClient(options?: {
+  callTools?: boolean;
+  error?: boolean;
+  toolToCall?: string;
+  toolArgs?: Record<string, unknown>;
+  resolveError?: boolean;
+}): (userId: string) => Promise<Result<ToolCallingClient, GitHubAgentError>> {
+  return vi.fn().mockImplementation(async (_userId: string) => {
+    if (options?.resolveError === true) {
+      return err({ code: 'LLM_FAILED' as const, message: 'No API key available' });
+    }
+    return ok(createFakeToolCallingClient(options));
+  });
+}
+
 function createFakeUserServiceClient(): UserServiceClient {
   return {
     getApiKeys: vi.fn().mockResolvedValue(ok({})),
@@ -128,7 +145,7 @@ function createDeps(overrides: Partial<GitHubAgentDeps> = {}): GitHubAgentDeps {
   return {
     logger: createFakeLogger(),
     gitHubPRClient: createFakeGitHubPRClient(),
-    toolCallingClient: createFakeToolCallingClient(),
+    resolveToolCallingClient: createFakeResolveToolCallingClient(),
     userServiceClient: createFakeUserServiceClient(),
     allowedBots: new Set(['claude[bot]', 'chatgpt-codex-connector[bot]']),
     ...overrides,
@@ -184,7 +201,7 @@ describe('evaluateEvent', () => {
 
     it('returns error when LLM call fails', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({ error: true }),
+        resolveToolCallingClient: createFakeResolveToolCallingClient({ error: true }),
       });
       const event = createFakePREvent();
 
@@ -222,7 +239,7 @@ describe('evaluateEvent', () => {
 
     it('handles skip tool call', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({
           toolToCall: 'skip',
           toolArgs: { reason: 'Docs-only change' },
         }),
@@ -242,7 +259,7 @@ describe('evaluateEvent', () => {
 
     it('returns LLM_FAILED when skip is called with empty reason', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({
           toolToCall: 'skip',
           toolArgs: { reason: '' },
         }),
@@ -262,7 +279,7 @@ describe('evaluateEvent', () => {
       const logger = createFakeLogger();
       const deps = createDeps({
         logger,
-        toolCallingClient: createFakeToolCallingClient({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({
           toolToCall: 'request_review',
           toolArgs: { review_type: 'performance' },
         }),
@@ -283,7 +300,7 @@ describe('evaluateEvent', () => {
 
     it('returns LLM_FAILED when no tool is called for PR event', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({ callTools: false }),
+        resolveToolCallingClient: createFakeResolveToolCallingClient({ callTools: false }),
       });
       const event = createFakePREvent();
       const result = await evaluateEvent(deps, event);
@@ -309,7 +326,7 @@ describe('evaluateEvent', () => {
           });
         },
       };
-      const deps = createDeps({ toolCallingClient: toolClient });
+      const deps = createDeps({ resolveToolCallingClient: vi.fn().mockResolvedValue(ok(toolClient)) });
       const event = createFakePREvent();
 
       const result = await evaluateEvent(deps, event);
@@ -337,7 +354,7 @@ describe('evaluateEvent', () => {
           });
         },
       };
-      const deps = createDeps({ toolCallingClient: toolClient });
+      const deps = createDeps({ resolveToolCallingClient: vi.fn().mockResolvedValue(ok(toolClient)) });
       const event = createFakePREvent();
 
       const result = await evaluateEvent(deps, event);
@@ -394,6 +411,20 @@ describe('evaluateEvent', () => {
       }
     });
 
+    it('returns LLM_FAILED when resolveToolCallingClient fails for PR event', async () => {
+      const deps = createDeps({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({ resolveError: true }),
+      });
+      const event = createFakePREvent();
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+      }
+    });
+
     it('handles null action by rejecting as invalid', async () => {
       const deps = createDeps();
       const event = createFakePREvent({ action: null });
@@ -415,9 +446,19 @@ describe('evaluateEvent', () => {
       expect(result.ok).toBe(true);
     });
 
+    it('calls resolveToolCallingClient with resolved userId for PR events', async () => {
+      const resolveToolCallingClient = createFakeResolveToolCallingClient();
+      const deps = createDeps({ resolveToolCallingClient });
+      const event = createFakePREvent();
+
+      await evaluateEvent(deps, event);
+
+      expect(resolveToolCallingClient).toHaveBeenCalledWith('user-1');
+    });
+
     it('handles non-string review_type argument', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({
           toolToCall: 'request_review',
           toolArgs: { review_type: 42 },
         }),
@@ -489,7 +530,7 @@ describe('evaluateEvent', () => {
           });
         },
       };
-      const deps = createDeps({ toolCallingClient: toolClient });
+      const deps = createDeps({ resolveToolCallingClient: vi.fn().mockResolvedValue(ok(toolClient)) });
       const event = createFakePREvent();
 
       const result = await evaluateEvent(deps, event);
@@ -504,7 +545,7 @@ describe('evaluateEvent', () => {
       const logger = createFakeLogger();
       const deps = createDeps({
         logger,
-        toolCallingClient: createFakeToolCallingClient(),
+        resolveToolCallingClient: createFakeResolveToolCallingClient(),
       });
       const event = createFakePREvent();
 
@@ -534,7 +575,7 @@ describe('evaluateEvent', () => {
         },
       };
 
-      const deps = createDeps({ toolCallingClient: toolClient });
+      const deps = createDeps({ resolveToolCallingClient: vi.fn().mockResolvedValue(ok(toolClient)) });
       const event = createFakePREvent();
       const correction = 'Your previous attempt failed. You MUST call a tool.';
 
@@ -557,7 +598,7 @@ describe('evaluateEvent', () => {
       const deps: GitHubAgentDeps = {
         logger: createFakeLogger(),
         gitHubPRClient: prClient,
-        toolCallingClient: createFakeToolCallingClient({ callTools: false }),
+        resolveToolCallingClient: createFakeResolveToolCallingClient({ callTools: false }),
         userServiceClient: createFakeUserServiceClient(),
         allowedBots: new Set(['bot1']),
       };
@@ -587,7 +628,7 @@ describe('evaluateEvent', () => {
       const deps: GitHubAgentDeps = {
         logger: createFakeLogger(),
         gitHubPRClient: prClient,
-        toolCallingClient: createFakeToolCallingClient(),
+        resolveToolCallingClient: createFakeResolveToolCallingClient(),
         userServiceClient: createFakeUserServiceClient(),
         allowedBots: new Set(['bot1']),
       };
@@ -608,6 +649,83 @@ describe('evaluateEvent', () => {
   });
 
   describe('issue_comment events', () => {
+    it('resolves user and calls resolveToolCallingClient for comment events', async () => {
+      const resolveToolCallingClient = createFakeResolveToolCallingClient();
+      const deps = createDeps({ resolveToolCallingClient });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review please check this',
+      });
+
+      await evaluateEvent(deps, event);
+
+      expect(deps.userServiceClient.resolveGitHubUsername).toHaveBeenCalledWith('dev-user');
+      expect(resolveToolCallingClient).toHaveBeenCalledWith('user-1');
+    });
+
+    it('returns USER_NOT_FOUND when comment sender user resolution fails', async () => {
+      const deps = createDeps({
+        userServiceClient: {
+          ...createFakeUserServiceClient(),
+          resolveGitHubUsername: vi.fn().mockResolvedValue(
+            err({ code: 'NETWORK_ERROR' as const, message: 'Connection refused' })
+          ),
+        },
+      });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review check this',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('USER_NOT_FOUND');
+      }
+    });
+
+    it('returns USER_NOT_FOUND when comment sender has no linked account', async () => {
+      const deps = createDeps({
+        userServiceClient: {
+          ...createFakeUserServiceClient(),
+          resolveGitHubUsername: vi.fn().mockResolvedValue(ok(null)),
+        },
+      });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review check this',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('USER_NOT_FOUND');
+      }
+    });
+
+    it('returns LLM_FAILED when resolveToolCallingClient fails for comment', async () => {
+      const deps = createDeps({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({ resolveError: true }),
+      });
+      const event = createFakePREvent({
+        eventType: 'issue_comment',
+        action: 'created',
+        body: '@review check this',
+      });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('LLM_FAILED');
+      }
+    });
+
     it('evaluates @review comment and returns request_review triage with normalized worker type', async () => {
       const toolClient: ToolCallingClient = {
         async run(params): ReturnType<ToolCallingClient['run']> {
@@ -624,7 +742,7 @@ describe('evaluateEvent', () => {
           });
         },
       };
-      const deps = createDeps({ toolCallingClient: toolClient });
+      const deps = createDeps({ resolveToolCallingClient: vi.fn().mockResolvedValue(ok(toolClient)) });
       const event = createFakePREvent({
         eventType: 'issue_comment',
         action: 'created',
@@ -658,7 +776,7 @@ describe('evaluateEvent', () => {
           });
         },
       };
-      const deps = createDeps({ toolCallingClient: toolClient });
+      const deps = createDeps({ resolveToolCallingClient: vi.fn().mockResolvedValue(ok(toolClient)) });
       const event = createFakePREvent({
         eventType: 'issue_comment',
         action: 'created',
@@ -680,7 +798,7 @@ describe('evaluateEvent', () => {
 
     it('returns LLM_FAILED when @review comment does not call request_review', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({ callTools: false }),
+        resolveToolCallingClient: createFakeResolveToolCallingClient({ callTools: false }),
       });
       const event = createFakePREvent({
         eventType: 'issue_comment',
@@ -698,7 +816,7 @@ describe('evaluateEvent', () => {
 
     it('evaluates a comment and returns dispatch triage', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({
           toolToCall: 'dispatch_to_task',
           toolArgs: { message_template: 'pr_comment' },
         }),
@@ -722,7 +840,7 @@ describe('evaluateEvent', () => {
 
     it('evaluates a comment and returns skip triage', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({
           toolToCall: 'skip',
           toolArgs: { reason: 'Bot noise' },
         }),
@@ -746,7 +864,7 @@ describe('evaluateEvent', () => {
 
     it('dispatches as bot_review_edit for bot edits', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({
           toolToCall: 'dispatch_to_task',
           toolArgs: { message_template: 'bot_review_edit' },
         }),
@@ -771,7 +889,7 @@ describe('evaluateEvent', () => {
 
     it('returns error for LLM failure', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({ error: true }),
+        resolveToolCallingClient: createFakeResolveToolCallingClient({ error: true }),
       });
       const event = createFakePREvent({
         eventType: 'issue_comment',
@@ -789,7 +907,7 @@ describe('evaluateEvent', () => {
 
     it('returns LLM_FAILED when no tool is called', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({ callTools: false }),
+        resolveToolCallingClient: createFakeResolveToolCallingClient({ callTools: false }),
       });
       const event = createFakePREvent({
         eventType: 'issue_comment',
@@ -807,7 +925,7 @@ describe('evaluateEvent', () => {
 
     it('returns reasoning from LLM content for comment events', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({
           toolToCall: 'dispatch_to_task',
           toolArgs: { message_template: 'pr_comment' },
         }),
@@ -840,7 +958,7 @@ describe('evaluateEvent', () => {
 
     it('handles null title, body, and action fields in comment events', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({
           toolToCall: 'dispatch_to_task',
           toolArgs: { message_template: 'pr_comment' },
         }),
@@ -861,7 +979,7 @@ describe('evaluateEvent', () => {
       const logger = createFakeLogger();
       const deps = createDeps({
         logger,
-        toolCallingClient: createFakeToolCallingClient({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({
           toolToCall: 'dispatch_to_task',
           toolArgs: { message_template: 123 },
         }),
@@ -883,7 +1001,7 @@ describe('evaluateEvent', () => {
 
     it('handles non-string skip reason argument in comment context', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({
           toolToCall: 'skip',
           toolArgs: { reason: 42 },
         }),
@@ -909,7 +1027,7 @@ describe('evaluateEvent', () => {
       const logger = createFakeLogger();
       const deps = createDeps({
         logger,
-        toolCallingClient: createFakeToolCallingClient({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({
           toolToCall: 'dispatch_to_task',
           toolArgs: { message_template: 'unknown_template' },
         }),
@@ -936,7 +1054,7 @@ describe('evaluateEvent', () => {
       const logger = createFakeLogger();
       const deps = createDeps({
         logger,
-        toolCallingClient: createFakeToolCallingClient({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({
           toolToCall: 'request_review',
           toolArgs: { review_type: 'architecture', worker_type: 'invalid-worker' },
         }),
@@ -975,7 +1093,7 @@ describe('evaluateEvent', () => {
           });
         },
       };
-      const deps = createDeps({ logger, toolCallingClient: toolClient });
+      const deps = createDeps({ logger, resolveToolCallingClient: vi.fn().mockResolvedValue(ok(toolClient)) });
       const event = createFakePREvent({
         eventType: 'issue_comment',
         action: 'created',
@@ -1011,7 +1129,7 @@ describe('evaluateEvent', () => {
           });
         },
       };
-      const deps = createDeps({ logger, toolCallingClient: toolClient });
+      const deps = createDeps({ logger, resolveToolCallingClient: vi.fn().mockResolvedValue(ok(toolClient)) });
       const event = createFakePREvent({
         eventType: 'issue_comment',
         action: 'created',
@@ -1055,7 +1173,7 @@ describe('evaluateEvent', () => {
         },
       };
 
-      const deps = createDeps({ toolCallingClient: toolClient });
+      const deps = createDeps({ resolveToolCallingClient: vi.fn().mockResolvedValue(ok(toolClient)) });
       const event = createFakePREvent({
         eventType: 'issue_comment',
         action: 'created',
@@ -1090,7 +1208,7 @@ describe('evaluateEvent', () => {
           });
         },
       };
-      const deps = createDeps({ toolCallingClient: toolClient });
+      const deps = createDeps({ resolveToolCallingClient: vi.fn().mockResolvedValue(ok(toolClient)) });
       const event = createFakePREvent();
 
       await evaluateEvent(deps, event);
@@ -1117,7 +1235,7 @@ describe('evaluateEvent', () => {
           });
         },
       };
-      const deps = createDeps({ toolCallingClient: toolClient });
+      const deps = createDeps({ resolveToolCallingClient: vi.fn().mockResolvedValue(ok(toolClient)) });
       const event = createFakePREvent({
         eventType: 'issue_comment',
         action: 'created',
@@ -1132,7 +1250,7 @@ describe('evaluateEvent', () => {
 
     it('returns LLM_FAILED when no tool called after repair for PR event', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({ callTools: false }),
+        resolveToolCallingClient: createFakeResolveToolCallingClient({ callTools: false }),
       });
       const event = createFakePREvent();
 
@@ -1147,7 +1265,7 @@ describe('evaluateEvent', () => {
 
     it('returns LLM_FAILED when skip reason is empty for PR event', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({
           toolToCall: 'skip',
           toolArgs: { reason: '' },
         }),
@@ -1165,7 +1283,7 @@ describe('evaluateEvent', () => {
 
     it('returns LLM_FAILED when skip reason is empty for comment event', async () => {
       const deps = createDeps({
-        toolCallingClient: createFakeToolCallingClient({
+        resolveToolCallingClient: createFakeResolveToolCallingClient({
           toolToCall: 'skip',
           toolArgs: { reason: '' },
         }),
@@ -1202,7 +1320,7 @@ describe('evaluateEvent', () => {
           });
         },
       };
-      const deps = createDeps({ toolCallingClient: toolClient });
+      const deps = createDeps({ resolveToolCallingClient: vi.fn().mockResolvedValue(ok(toolClient)) });
       const event = createFakePREvent();
 
       await evaluateEvent(deps, event);
@@ -1230,7 +1348,7 @@ describe('evaluateEvent', () => {
           });
         },
       };
-      const deps = createDeps({ toolCallingClient: toolClient });
+      const deps = createDeps({ resolveToolCallingClient: vi.fn().mockResolvedValue(ok(toolClient)) });
       const event = createFakePREvent();
 
       await evaluateEvent(deps, event);
@@ -1289,7 +1407,7 @@ describe('evaluatePREvent (legacy)', () => {
 
   it('handles skip tool call', async () => {
     const deps = createDeps({
-      toolCallingClient: createFakeToolCallingClient({
+      resolveToolCallingClient: createFakeResolveToolCallingClient({
         toolToCall: 'skip',
         toolArgs: { reason: 'Docs-only change' },
       }),
@@ -1308,7 +1426,7 @@ describe('evaluatePREvent (legacy)', () => {
 
   it('handles non-string reason in skip tool', async () => {
     const deps = createDeps({
-      toolCallingClient: createFakeToolCallingClient({
+      resolveToolCallingClient: createFakeResolveToolCallingClient({
         toolToCall: 'skip',
         toolArgs: {},
       }),

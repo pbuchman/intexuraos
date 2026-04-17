@@ -3,6 +3,7 @@ import { ok, err, getErrorMessage, type Logger, type Result } from '@intexuraos/
 import { Timestamp } from '@google-cloud/firestore';
 import { z } from 'zod';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { CodeTask } from '../models/codeTask.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
@@ -15,14 +16,14 @@ import type { ExecutionMemoryEmbeddingClient } from './prepareExecutionMemoryCon
 const DISTILLATION_VERSION = 'execution-memory-distiller@2.1.0';
 const PLANNING_DISTILLATION_VERSION = 'planning-memory-distiller@1.1.0';
 const REVIEW_DISTILLATION_VERSION = 'review-memory-distiller@1.1.0';
-const EVALUATION_VERSION = 'execution-memory-evaluator@1.0.0';
+const EVALUATION_VERSION = 'execution-memory-evaluator@2.0.0';
 const MAX_LOG_LINES = 350;
 const MAX_EVALUATION_LOG_LINES = 200;
 
 const EvaluationSchema = z.object({
   summary: z.string().min(1),
   perMemory: z.array(z.object({
-    memoryId: z.string().min(1),
+    memoryIndex: z.number().int().min(1),
     outcome: z.enum(['positive', 'neutral', 'negative', 'unknown']),
     reason: z.string().min(1),
     confidence: z.number().min(0).max(1),
@@ -65,7 +66,10 @@ export interface ProcessExecutionMemoryBacklogDeps {
     ExecutionMemoryApplicationRepository,
     'findById' | 'update'
   >;
+  userServiceClient: Pick<UserServiceClient, 'getLlmClient'>;
+  /** @internal Resolved per-task by processOneTask from userServiceClient */
   evaluatorClient?: LlmGenerateClient | undefined;
+  /** @internal Resolved per-task by processOneTask from userServiceClient */
   distillerClient?: LlmGenerateClient | undefined;
   embeddingClient?: ExecutionMemoryEmbeddingClient | undefined;
   limit: number;
@@ -192,6 +196,23 @@ async function processOneTask(
   evaluationSummary?: string;
   skipReason?: 'infra_only' | 'insufficient_signal' | 'already_completed' | 'no_reusable_lesson' | 'planning_unclear';
 }> {
+  // Resolve user's LLM client for this task
+  let taskLlmClient: LlmGenerateClient | undefined;
+  const llmResult = await deps.userServiceClient.getLlmClient(task.userId);
+  if (llmResult.ok) {
+    taskLlmClient = llmResult.value;
+  } else {
+    deps.logger.warn({ userId: task.userId, taskId: task.id, error: llmResult.error }, 'Failed to resolve user LLM client for execution memory backlog');
+  }
+
+  const resolvedDeps: ProcessExecutionMemoryBacklogDeps = {
+    ...deps,
+    ...(taskLlmClient !== undefined && {
+      evaluatorClient: taskLlmClient,
+      distillerClient: taskLlmClient,
+    }),
+  };
+
   const logsResult = await deps.logLineRepo.listRecent(task.id, MAX_LOG_LINES);
   if (!logsResult.ok) {
     throw new Error(logsResult.error.message);
@@ -210,7 +231,7 @@ async function processOneTask(
     throw new Error(issueContextResult.error.message);
   }
 
-  const evaluationSummary = await evaluateApplication(task, logsResult.value, deps);
+  const evaluationSummary = await evaluateApplication(task, logsResult.value, resolvedDeps);
 
   const skipCheck = shouldSkipDistillation(task);
   if (skipCheck.skip) {
@@ -222,7 +243,7 @@ async function processOneTask(
     };
   }
 
-  const distillationResult = await distillTask(task, logsResult.value, turnMetricsResult.value, issueContextResult.value, deps);
+  const distillationResult = await distillTask(task, logsResult.value, turnMetricsResult.value, issueContextResult.value, resolvedDeps);
   if (distillationResult.decision === 'skip') {
     return {
       status: 'skipped',
@@ -425,12 +446,15 @@ async function evaluateApplication(
     `Worker self report used: ${evalCtx.selfReportUsed}`,
     `Worker self report rejected: ${evalCtx.selfReportRejected}`,
     `Worker self report summary: ${evalCtx.selfReportSummary}`,
-    `Matched memories: ${JSON.stringify(application.matchedMemories)}`,
+    `Matched memories:\n${application.matchedMemories.map(
+      (m: { memoryId: string; title: string; memoryType: string }, index: number) =>
+        `[${String(index + 1)}] ${m.title} (type: ${m.memoryType})`
+    ).join('\n')}`,
     `Recent logs:\n${logs.slice(0, MAX_EVALUATION_LOG_LINES).map((line) => line.text).join('\n')}`,
     EVALUATION_SCHEMA_BLOCK,
   ].join('\n\n');
 
-  const evaluationResult = await deps.evaluatorClient.generate(evaluationPrompt);
+  const evaluationResult = await deps.evaluatorClient.generate(evaluationPrompt, { promptType: 'execution-memory-evaluation' });
   if (!evaluationResult.ok) {
     throw new Error(evaluationResult.error.message);
   }
@@ -449,7 +473,7 @@ async function evaluateApplication(
       'Fix the JSON schema violation and return valid JSON matching the exact schema above.',
     ].join('\n');
 
-    const retryResult = await deps.evaluatorClient.generate(refinementPrompt);
+    const retryResult = await deps.evaluatorClient.generate(refinementPrompt, { promptType: 'execution-memory-evaluation-retry' });
     if (!retryResult.ok) {
       throw new Error(retryResult.error.message);
     }
@@ -457,21 +481,32 @@ async function evaluateApplication(
     parsed = EvaluationSchema.parse(parseJsonObject(retryResult.value.content));
   }
 
+  const indexToId = new Map(
+    application.matchedMemories.map(
+      (m: { memoryId: string }, index: number) => [index + 1, m.memoryId]
+    )
+  );
+
+  const resolvedPerMemory = parsed.perMemory.map((outcome) => ({
+    memoryId: indexToId.get(outcome.memoryIndex) ?? `unknown-index-${String(outcome.memoryIndex)}`,
+    outcome: outcome.outcome,
+    reason: outcome.reason,
+    confidence: outcome.confidence,
+  }));
+
   await deps.executionMemoryApplicationRepo.update(applicationId, {
     memoryIdsUsed,
     memoryIdsRejected,
     evaluationSummary: parsed.summary,
-    perMemoryOutcome: parsed.perMemory,
+    perMemoryOutcome: resolvedPerMemory,
     completedAt: new Date(),
   });
 
-  const knownMemoryIds = new Set(application.matchedMemories.map((m: { memoryId: string }) => m.memoryId));
-
-  for (const outcome of parsed.perMemory) {
-    if (!knownMemoryIds.has(outcome.memoryId)) {
+  for (const outcome of resolvedPerMemory) {
+    if (outcome.memoryId.startsWith('unknown-index-')) {
       deps.logger.warn(
-        { taskId: task.id, memoryId: outcome.memoryId },
-        'Evaluator returned outcome for unknown memory ID, skipping'
+        { taskId: task.id, memoryIndex: outcome.memoryId },
+        'Evaluator returned outcome for unknown memory index, skipping'
       );
       continue;
     }
@@ -555,7 +590,7 @@ const EVALUATION_SCHEMA_BLOCK = [
   '  "summary": "string (non-empty, overall assessment of how matched memories helped this task)",',
   '  "perMemory": [',
   '    {',
-  '      "memoryId": "string (exact ID from matched memories above)",',
+  '      "memoryIndex": 1,  // integer index from [N] above',
   '      "outcome": "positive" | "neutral" | "negative" | "unknown",',
   '      "reason": "string (why this outcome)",',
   '      "confidence": 0.0 to 1.0',
@@ -564,7 +599,7 @@ const EVALUATION_SCHEMA_BLOCK = [
   '}',
   '',
   'Example (memories helped):',
-  '{"summary":"The previous verification memory directly helped the fix.","perMemory":[{"memoryId":"mem-existing","outcome":"positive","reason":"The route coverage lesson was applied.","confidence":0.84}]}',
+  '{"summary":"The previous verification memory directly helped the fix.","perMemory":[{"memoryIndex":1,"outcome":"positive","reason":"The route coverage lesson was applied.","confidence":0.84}]}',
   '',
   'Example (no matched memories to evaluate):',
   '{"summary":"No matched memories were provided for this task.","perMemory":[]}',
@@ -715,7 +750,7 @@ async function distillTask(
 
   const prompt = buildDistillationPrompt(task, logs, turnMetrics, issueContext);
 
-  const result = await deps.distillerClient.generate(prompt);
+  const result = await deps.distillerClient.generate(prompt, { promptType: 'execution-memory-distillation' });
   if (!result.ok) {
     throw new Error(result.error.message);
   }
@@ -733,7 +768,7 @@ async function distillTask(
       'Fix the JSON schema violation and return valid JSON matching the exact schema above.',
     ].join('\n');
 
-    const retryResult = await deps.distillerClient.generate(refinementPrompt);
+    const retryResult = await deps.distillerClient.generate(refinementPrompt, { promptType: 'execution-memory-distillation-retry' });
     if (!retryResult.ok) {
       throw new Error(retryResult.error.message);
     }
@@ -870,6 +905,148 @@ function isInfraOnlyFailure(task: CodeTask): boolean {
     'retry_expired',
     'network_error',
   ].includes(code);
+}
+
+// ---------------------------------------------------------------------------
+// Step 5: Sweep errored applications
+// ---------------------------------------------------------------------------
+
+export interface SweepErroredApplicationsDeps {
+  logger: Logger;
+  codeTaskRepo: Pick<CodeTaskRepository, 'listErroredExecutionMemoryPostRun' | 'update'>;
+}
+
+export interface SweepErroredApplicationsResult {
+  requeued: number;
+  skipped: number;
+}
+
+const MAX_TOTAL_RETRIES = 6;
+const MIN_ERROR_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+export async function sweepErroredApplications(
+  deps: SweepErroredApplicationsDeps
+): Promise<Result<SweepErroredApplicationsResult, { code: 'internal_error'; message: string }>> {
+  const erroredResult = await deps.codeTaskRepo.listErroredExecutionMemoryPostRun();
+  if (!erroredResult.ok) {
+    return err({ code: 'internal_error', message: erroredResult.error.message });
+  }
+
+  let requeued = 0;
+  let skipped = 0;
+
+  for (const task of erroredResult.value) {
+    const attempts = task.executionMemoryPostRun?.attempts ?? 0;
+    const lastAttemptAt = task.executionMemoryPostRun?.lastAttemptAt;
+
+    // Skip if too many total retries
+    if (attempts >= MAX_TOTAL_RETRIES) {
+      deps.logger.info(
+        { taskId: task.id, attempts },
+        'Sweep: skipping task — max total retries exceeded'
+      );
+      skipped += 1;
+      continue;
+    }
+
+    // Skip if error is too recent (< 24 hours)
+    if (lastAttemptAt !== undefined) {
+      const errorAgeMs = Date.now() - lastAttemptAt.toMillis();
+      if (errorAgeMs < MIN_ERROR_AGE_MS) {
+        deps.logger.info(
+          { taskId: task.id, errorAgeMs },
+          'Sweep: skipping task — error too recent'
+        );
+        skipped += 1;
+        continue;
+      }
+    }
+
+    const updateResult = await deps.codeTaskRepo.update(task.id, {
+      executionMemoryPostRun: {
+        status: 'pending',
+        attempts,
+        lastAttemptAt: task.executionMemoryPostRun?.lastAttemptAt ?? Timestamp.now(),
+        generatedMemoryIds: task.executionMemoryPostRun?.generatedMemoryIds ?? [],
+      },
+    });
+
+    if (!updateResult.ok) {
+      deps.logger.warn(
+        { taskId: task.id, error: updateResult.error.message },
+        'Sweep: failed to requeue task'
+      );
+      skipped += 1;
+      continue;
+    }
+
+    deps.logger.info({ taskId: task.id }, 'Sweep: requeued errored task for retry');
+    requeued += 1;
+  }
+
+  return ok({ requeued, skipped });
+}
+
+// ---------------------------------------------------------------------------
+// Step 7: Prune stale unused memories
+// ---------------------------------------------------------------------------
+
+export interface PruneStaleMemoriesDeps {
+  logger: Logger;
+  executionMemoryRepo: Pick<ExecutionMemoryRepository, 'listStaleUnused' | 'update'>;
+}
+
+export interface PruneStaleMemoriesResult {
+  archived: number;
+  skipped: number;
+}
+
+const DEFAULT_MAX_AGE_DAYS = 30;
+
+export async function pruneStaleMemories(
+  deps: PruneStaleMemoriesDeps,
+  options: { maxAgeDays?: number; dryRun?: boolean }
+): Promise<Result<PruneStaleMemoriesResult, { code: 'internal_error'; message: string }>> {
+  const maxAgeDays = options.maxAgeDays ?? DEFAULT_MAX_AGE_DAYS;
+  const dryRun = options.dryRun ?? false;
+  const cutoffDate = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000);
+
+  const staleResult = await deps.executionMemoryRepo.listStaleUnused(cutoffDate);
+  if (!staleResult.ok) {
+    return err({ code: 'internal_error', message: staleResult.error.message });
+  }
+
+  let archived = 0;
+  let skipped = 0;
+
+  for (const memory of staleResult.value) {
+    if (dryRun) {
+      deps.logger.info(
+        { memoryId: memory.id, title: memory.title },
+        'Prune: would archive stale memory (dry run)'
+      );
+      archived += 1;
+      continue;
+    }
+
+    const updateResult = await deps.executionMemoryRepo.update(memory.id, {
+      status: 'archived',
+    });
+
+    if (!updateResult.ok) {
+      deps.logger.warn(
+        { memoryId: memory.id, error: updateResult.error.message },
+        'Prune: failed to archive memory'
+      );
+      skipped += 1;
+      continue;
+    }
+
+    deps.logger.info({ memoryId: memory.id }, 'Prune: archived stale memory');
+    archived += 1;
+  }
+
+  return ok({ archived, skipped });
 }
 
 export const __testables = {

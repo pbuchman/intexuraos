@@ -56,7 +56,7 @@ export function createChatClient(config: ChatClientConfig): LLMClient {
         fullPrompt += prompt;
 
         // Call the LLM client's generate method
-        const result = await llmClient.generate(fullPrompt);
+        const result = await llmClient.generate(fullPrompt, { promptType: 'chat-response' });
 
         if (!result.ok) {
           return result;

@@ -1,0 +1,93 @@
+import { describe, it, expect } from 'vitest';
+import { LlmProviders } from '@intexuraos/llm-contract';
+import { sha256Truncated, toDateString, computeAggregateId } from '../../../infra/firestore/aggregateKeyUtils.js';
+import { createTestEvent } from '../../helpers.js';
+
+describe('aggregateKeyUtils', () => {
+  describe('sha256Truncated', () => {
+    it('returns a 32-character hex string', () => {
+      const result = sha256Truncated('test-value');
+      expect(result).toHaveLength(32);
+      expect(result).toMatch(/^[0-9a-f]+$/);
+    });
+
+    it('returns deterministic output for the same input', () => {
+      const a = sha256Truncated('hello');
+      const b = sha256Truncated('hello');
+      expect(a).toBe(b);
+    });
+
+    it('returns different output for different input', () => {
+      const a = sha256Truncated('hello');
+      const b = sha256Truncated('world');
+      expect(a).not.toBe(b);
+    });
+  });
+
+  describe('toDateString', () => {
+    it('extracts YYYY-MM-DD from ISO timestamp', () => {
+      expect(toDateString('2026-04-10T12:30:00.000Z')).toBe('2026-04-10');
+    });
+  });
+
+  describe('computeAggregateId', () => {
+    it('produces a compound key with double-underscore separators', () => {
+      const event = createTestEvent({
+        occurredAt: '2026-04-10T15:00:00.000Z',
+        owner: { type: 'user', id: 'user_abc' },
+        source: { service: 'orchestrator', component: 'research', client: 'web', environment: 'dev' },
+        request: { provider: LlmProviders.Anthropic, model: 'claude-sonnet-4-20250514', operation: 'generate', success: true, durationMs: 100 },
+      });
+
+      const id = computeAggregateId(event);
+      const parts = id.split('__');
+
+      expect(parts).toHaveLength(11);
+      expect(parts[0]).toBe('2026-04-10');
+      expect(parts[1]).toBe('user');
+      expect(parts[2]).toBe(sha256Truncated('user_abc'));
+      expect(parts[3]).toBe('orchestrator');
+      expect(parts[4]).toBe('research');
+      expect(parts[5]).toBe(sha256Truncated('web'));
+      expect(parts[6]).toBe('dev');
+      expect(parts[7]).toBe(LlmProviders.Anthropic);
+      expect(parts[8]).toBe(sha256Truncated('claude-sonnet-4-20250514'));
+      expect(parts[9]).toBe('generate');
+      expect(parts[10]).toBe('true');
+    });
+
+    it('uses false for unsuccessful requests', () => {
+      const event = createTestEvent({
+        request: { provider: LlmProviders.OpenAI, model: 'gpt-4o', operation: 'generate', success: false, durationMs: 100 },
+      });
+      const id = computeAggregateId(event);
+      expect(id).toContain('__false');
+    });
+
+    describe('source.client slash safety', () => {
+      it('produces an id with no "/" even when source.client contains slashes', () => {
+        const event = createTestEvent({
+          source: { service: 'orchestrator', component: 'compliance', client: 'xiaomi/mimo-v2-pro', environment: 'dev' },
+        });
+        expect(computeAggregateId(event)).not.toMatch(/\//);
+      });
+
+      it('is deterministic for the same input', () => {
+        const event = createTestEvent({
+          source: { service: 'orchestrator', component: 'compliance', client: 'xiaomi/mimo-v2-pro', environment: 'dev' },
+        });
+        expect(computeAggregateId(event)).toBe(computeAggregateId(event));
+      });
+
+      it('differs when source.client differs (hash distinguishes clients)', () => {
+        const a = computeAggregateId(createTestEvent({
+          source: { service: 'orchestrator', component: 'compliance', client: 'client-a', environment: 'dev' },
+        }));
+        const b = computeAggregateId(createTestEvent({
+          source: { service: 'orchestrator', component: 'compliance', client: 'client-b', environment: 'dev' },
+        }));
+        expect(a).not.toBe(b);
+      });
+    });
+  });
+});

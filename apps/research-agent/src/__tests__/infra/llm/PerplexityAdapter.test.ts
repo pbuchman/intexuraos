@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockResearch = vi.fn();
 
@@ -14,12 +15,6 @@ vi.mock('@intexuraos/infra-perplexity', () => ({
 
 const { PerplexityAdapter } = await import('../../../infra/llm/PerplexityAdapter.js');
 
-const testPricing: ModelPricing = {
-  inputPricePerMillion: 3.0,
-  outputPricePerMillion: 15.0,
-  useProviderCost: true,
-};
-
 const mockLogger: Logger = {
   info: vi.fn(),
   error: vi.fn(),
@@ -29,10 +24,18 @@ const mockLogger: Logger = {
 
 describe('PerplexityAdapter', () => {
   let adapter: InstanceType<typeof PerplexityAdapter>;
+  let fakeUsageSink: FakeUsageSink;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new PerplexityAdapter('test-key', LlmModels.SonarPro, 'test-user-id', testPricing, mockLogger);
+    fakeUsageSink = new FakeUsageSink();
+    adapter = new PerplexityAdapter(
+      'test-key',
+      LlmModels.SonarPro,
+      'test-user-id',
+      mockLogger,
+      fakeUsageSink
+    );
   });
 
   describe('constructor', () => {
@@ -42,8 +45,8 @@ describe('PerplexityAdapter', () => {
         'test-key',
         LlmModels.SonarPro,
         'test-user-id',
-        testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -52,8 +55,8 @@ describe('PerplexityAdapter', () => {
         model: LlmModels.SonarPro,
         userId: 'test-user-id',
         researchId: 'research-123',
-        pricing: testPricing,
         logger: mockLogger,
+        usageSink: fakeUsageSink,
       });
     });
   });

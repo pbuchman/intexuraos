@@ -197,6 +197,20 @@ describe('sendTaskMessage', () => {
       expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
     });
 
+    it('should return invalid_agent_type for planning tasks', async () => {
+      const planningTask = createMockTask({ agentType: 'planning', status: 'running' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(planningTask));
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_agent_type');
+        expect(result.error.message).toContain('planning');
+      }
+      expect(mockTaskDispatcher.sendMessageToWorker).not.toHaveBeenCalled();
+    });
+
     it('should return task_not_found when task does not exist', async () => {
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(
         err({ code: 'NOT_FOUND', message: 'Task not found' })
@@ -586,6 +600,28 @@ describe('sendTaskMessage', () => {
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.objectContaining({ taskId }),
         expect.any(String)
+      );
+    });
+
+    it('should return session_expired when worker reports session expired', async () => {
+      const task = createMockTask({ status: 'running' });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(task));
+      mockLogLineRepo.storeBatch.mockResolvedValue(ok(undefined));
+      setupWorkerSettings();
+      mockTaskDispatcher.sendMessageToWorker.mockResolvedValue(
+        err({ code: 'session_expired', message: 'Session has expired — the worker container was cleaned up.' })
+      );
+
+      const result = await sendTaskMessage(createDeps(), { taskId, userId, message });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('session_expired');
+        expect(result.error.message).toBe('Session has expired — the worker container was cleaned up.');
+      }
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId }),
+        'Session expired — container cleaned up'
       );
     });
   });

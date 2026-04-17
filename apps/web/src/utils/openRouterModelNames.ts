@@ -1,0 +1,43 @@
+/**
+ * Static mapping of OpenRouter model IDs to human-readable names.
+ *
+ * Mirrors the curated allowlist in packages/infra-openrouter/src/allowlist.ts
+ * and the default allowlist in packages/infra-openrouter/src/defaultAllowlist.ts.
+ * When a model ID is not found in this mapping, the raw ID is returned as-is.
+ */
+
+const OPENROUTER_MODEL_NAMES: Record<string, string> = {
+  // Curated allowlist (allowlist.ts)
+  'qwen/qwen3.5-plus-02-15': 'Qwen 3.5 Plus',
+  'qwen/qwen3.5-flash-02-23': 'Qwen 3.5 Flash',
+  'minimax/minimax-m2.7': 'MiniMax M2.7',
+  'x-ai/grok-4.20-beta': 'Grok 4.20 Beta',
+  'x-ai/grok-4.1-fast': 'Grok 4.1 Fast',
+  'moonshotai/kimi-k2.5': 'Kimi K2.5',
+  'anthropic/claude-sonnet-4.6': 'Claude Sonnet 4.6',
+  'anthropic/claude-opus-4.6': 'Claude Opus 4.6',
+  'google/gemini-3.1-pro-preview': 'Gemini 3.1 Pro',
+  'google/gemini-2.5-flash': 'Gemini 2.5 Flash',
+  'google/gemini-3-flash-preview': 'Gemini 3 Flash Preview',
+  'openai/gpt-5.4': 'GPT-5.4',
+  'openai/gpt-5.4-mini': 'GPT-5.4 Mini',
+  'xiaomi/mimo-v2-pro': 'MiMo V2 Pro',
+  'z-ai/glm-5-turbo': 'GLM 5 Turbo',
+  // Default allowlist (defaultAllowlist.ts) — minimax/minimax-m2.7 shared above
+  'google/gemma-4-31b-it': 'Gemma 4 31B IT',
+  'qwen/qwen3.6-plus': 'Qwen 3.6 Plus',
+  'nvidia/nemotron-3-super-120b-a12b': 'Nemotron 3 Super 120B',
+};
+
+/**
+ * Resolve an OpenRouter model ID to its human-readable name.
+ * Strips known suffixes (:online, :free) before lookup — OpenRouter appends
+ * these for web-search mode and free-tier variants respectively.
+ * Returns the raw model ID if no friendly name is found.
+ */
+export function resolveOpenRouterModelName(modelId: string): string {
+  let baseId = modelId;
+  if (baseId.endsWith(':online')) baseId = baseId.slice(0, -7);
+  else if (baseId.endsWith(':free')) baseId = baseId.slice(0, -5);
+  return OPENROUTER_MODEL_NAMES[baseId] ?? modelId;
+}

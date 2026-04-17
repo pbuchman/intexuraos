@@ -24,6 +24,7 @@ import type { ApiKeyValidator } from './api-key-validator.js';
 import type { WorkerAuthProvider, WorkerAuthRegistry } from './worker-auth/index.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { stripDockerHeaders } from './log-formatter.js';
+import { ActivityTimeoutManager } from './activity-timeout-manager.js';
 import {
   type CompletionAgentType,
   type CompletionVerifier,
@@ -41,6 +42,7 @@ import type { ExecutionAgentData } from './completion-verifier.js';
 import { readSessionTranscript } from './transcript-reader.js';
 import { formatTranscript } from './transcript-formatter.js';
 import { extractPrNumber } from './deep-validator-helpers.js';
+import { fetchDispatchMetadata } from './dispatch-metadata-client.js';
 
 const execAsync = promisify(exec);
 
@@ -54,13 +56,71 @@ export function hasFatalExitCodeField(missingFields: string[]): string | undefin
   return missingFields.find((f) => f.startsWith(FATAL_EXIT_CODE_PREFIX));
 }
 
-const TASK_TIMEOUT_WARNING_MS = 175 * 60 * 1000; // 2h 55m
-const TASK_TIMEOUT_KILL_MS = 180 * 60 * 1000; // 3h
+const MEMORY_FIELDS = [
+  'memory_acknowledgment',
+  'memory_ids_used_invalid',
+  'memory_ids_rejected_invalid',
+  'memory_ids_overlap',
+  'memory_ids_unaccounted',
+  'memory_usage_summary',
+  'memory_ids_used',
+  'memory_ids_rejected',
+];
+
+export function buildMissingFieldsPrompt(
+  agentType: CompletionAgentType,
+  missingFields: string[],
+  rawLogs: string
+): string {
+  const transcript = getLast50Lines(rawLogs);
+  const hasMemoryFailures = missingFields.some((field) => MEMORY_FIELDS.includes(field));
+
+  const memoryGuidance = hasMemoryFailures
+    ? [
+        '',
+        'EXECUTION MEMORY REPORTING FAILURE:',
+        'You were injected with execution memories but did not properly report their usage.',
+        'You MUST include in your final output:',
+        '1. memory_ids_used: comma-separated IDs of memories you applied',
+        '2. memory_ids_rejected: comma-separated IDs of memories you found irrelevant',
+        '3. memory_usage_summary: one sentence about how memories influenced your work',
+        'Every injected memory must appear in either used or rejected. No ID may be missing.',
+        'If you did not use any memory, put all IDs in memory_ids_rejected.',
+      ]
+    : [];
+
+  return [
+    '[AUTO-CONTINUE ATTEMPT]',
+    'Your last response was missing required fields for the completion verifier.',
+    '',
+    `Missing fields: ${missingFields.join(', ')}`,
+    ...memoryGuidance,
+    '',
+    'Please ensure your final message includes all required information.',
+    `Agent type: ${agentType}`,
+    '',
+    'Last 50 lines of transcript for reference:',
+    transcript,
+    '',
+    'Constraints:',
+    '- Do not restart from scratch.',
+    '- Continue from current repository/worktree state.',
+  ].join('\n');
+}
+
+const TASK_TIMEOUT_WARNING_MS = 295 * 60 * 1000; // 4h 55m
+const TASK_TIMEOUT_KILL_MS = 300 * 60 * 1000; // 5h
 const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
 const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
 const IMAGE_PULL_TIMEOUT_MS = 900_000; // 15 minutes — image pulls are network-bound
 const CONTAINER_CREATE_TIMEOUT_MS = 120_000; // 2 minutes
 const ZOMBIE_CLEANUP_TIMEOUT_MS = 30_000; // 30s — generous limit for best-effort destroy
+const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes — no output triggers kill+restart
+const MAX_INACTIVITY_RESTARTS = 3; // max consecutive restarts before task is failed
+
+const INACTIVITY_RESTART_PROMPT = `Your previous session became unresponsive (no output for 10 minutes) and was terminated.
+Continue working on the task from where you left off. Review your progress so far and
+resume the next incomplete step.`;
 
 export interface DispatchError {
   type:
@@ -90,6 +150,7 @@ export interface IsolationConfig {
     LINEAR_API_KEY: string;
     SENTRY_AUTH_TOKEN: string;
     MINIMAX_API_KEY: string;
+    MIMO_API_KEY: string;
     DASHSCOPE_API_KEY: string;
     OPENROUTER_API_KEY: string;
   };
@@ -101,6 +162,11 @@ export interface CompletionControlConfig {
   maxAttempts: number;
   verifier: CompletionVerifier;
   preserveWorkerContainers?: boolean;
+  /** Override inactivity timeout settings. Defaults: 10 min timeout, 3 max restarts. */
+  activityTimeout?: {
+    timeoutMs: number;
+    maxRestarts: number;
+  };
 }
 
 export class TaskDispatcher {
@@ -111,11 +177,17 @@ export class TaskDispatcher {
   private readonly taskExitCodes = new Map<string, number>();
   private readonly attemptCompletionSignals = new Set<string>();
   private readonly completionInProgress = new Set<string>();
+  /** Task IDs whose handleInactivityRestart is currently mid-flight (after the
+   *  old worker was killed, before the restart worker is up). The completion
+   *  monitor skips these to avoid running verification on the stale transcript
+   *  of the killed session. */
+  private readonly inactivityRestartInProgress = new Set<string>();
   private readonly pendingMessages = new Map<string, string[]>();
   private readonly lastOutputAt = new Map<string, number>();
   private readonly completionMaxAttempts: number;
   private readonly completionVerifier: CompletionVerifier;
   private readonly preserveWorkerContainers: boolean;
+  private readonly activityTimeoutManager: ActivityTimeoutManager;
 
   constructor(
     private readonly config: OrchestratorConfig,
@@ -133,6 +205,20 @@ export class TaskDispatcher {
     this.completionMaxAttempts = completionControl.maxAttempts;
     this.completionVerifier = completionControl.verifier;
     this.preserveWorkerContainers = completionControl.preserveWorkerContainers ?? false;
+    /* v8 ignore start -- ts-type: defensive fallback for optional activityTimeout; TypeScript narrows via optional chaining + nullish coalescing @preserve */
+    this.activityTimeoutManager = new ActivityTimeoutManager(
+      {
+        timeoutMs: completionControl.activityTimeout?.timeoutMs ?? INACTIVITY_TIMEOUT_MS,
+        maxRestarts: completionControl.activityTimeout?.maxRestarts ?? MAX_INACTIVITY_RESTARTS,
+        logger,
+      },
+      /* v8 ignore stop @preserve */
+      (taskId) => {
+        void this.handleInactivityRestart(taskId).catch((error: unknown) => {
+          this.logger.error({ taskId, error }, 'Error in inactivity restart handler');
+        });
+      }
+    );
   }
 
   private checkDockerAvailability(): Result<void, DispatchError> | null {
@@ -572,7 +658,11 @@ export class TaskDispatcher {
     const task = loadResult.tasks[taskId];
 
     if (task === undefined) {
-      // TODO(INT-1130): call code-agent /internal/tasks/:id/dispatch-metadata when task not in state
+      const recovered = await this.tryRecoverMissingTask(taskId, message);
+      if (recovered !== null) {
+        return recovered;
+      }
+
       return { ok: false, error: { type: 'not_found', message: 'Task not found' } };
     }
 
@@ -611,6 +701,22 @@ export class TaskDispatcher {
           error: {
             type: 'not_found',
             message: 'Worker container and worktree no longer available for resume',
+          },
+        };
+      }
+
+      // Check if the container (or its session) is still available for resume.
+      // If only the worktree survives but the container is gone, --continue will
+      // start a fresh session with no context — worse than rejecting outright.
+      // Use optional chaining + ?? true for fail-open on providers that don't implement this method.
+      const canResume = (await this.isolation.provider.isResumeAvailable?.(taskId)) ?? true;
+      if (!canResume) {
+        return {
+          ok: false,
+          error: {
+            type: 'session_expired',
+            message:
+              'Session has expired — the worker container was cleaned up. Please start a new session.',
           },
         };
       }
@@ -728,6 +834,109 @@ export class TaskDispatcher {
     });
   }
 
+  private async tryRecoverMissingTask(
+    taskId: string,
+    message: string
+  ): Promise<Result<SendMessageResult, SendMessageError> | null> {
+    const metadata = await fetchDispatchMetadata(
+      {
+        codeAgentUrl: this.config.codeAgentUrl,
+        internalAuthToken: this.config.internalAuthToken,
+      },
+      taskId
+    );
+
+    if (metadata === null) {
+      return null;
+    }
+
+    if (metadata.webhookSecret === null) {
+      return null;
+    }
+
+    if (metadata.agentType === 'review' || metadata.agentType === 'remediation') {
+      return {
+        ok: false,
+        error: {
+          type: 'invalid_agent_type',
+          message: 'Cannot send messages to review/remediation tasks',
+        },
+      };
+    }
+
+    const task: Task = {
+      taskId: metadata.taskId,
+      workerType: metadata.workerType,
+      runtime: WORKER_TYPES[metadata.workerType].runtime,
+      prompt: metadata.prompt,
+      repository: metadata.repository,
+      baseBranch: metadata.baseBranch,
+      linearIssueLabels: [],
+      webhookUrl: metadata.webhookUrl,
+      webhookSecret: metadata.webhookSecret,
+      status: 'running',
+      worktreePath: '',
+      containerId: '',
+      startedAt: new Date().toISOString(),
+      attemptCount: 1,
+      maxAttempts: this.completionMaxAttempts,
+      verificationHistory: [],
+      ...(metadata.agentType !== null && { agentType: metadata.agentType }),
+      ...(metadata.linearIssueId !== null && { linearIssueId: metadata.linearIssueId }),
+      ...(metadata.trackingCommentId !== null && {
+        trackingCommentId: metadata.trackingCommentId,
+      }),
+      ...(metadata.prNumber !== null && { prNumber: metadata.prNumber }),
+      ...(metadata.continuationPrBranch !== null && {
+        continuationPrBranch: metadata.continuationPrBranch,
+      }),
+    };
+
+    this.logForwarder.registerTask(taskId, task.webhookSecret);
+    this.appendOrchestratorTaskLog(
+      taskId,
+      'Recreating task from dispatch metadata with user message'
+    );
+    this.appendTaggedTaskLog(
+      taskId,
+      'prompt',
+      message.length > 200 ? message.slice(0, 200) + '\u2026' : message
+    );
+
+    const prompt =
+      task.agentType === 'ask_agent' ? message : this.buildResumePreamble(task) + message;
+    task.pendingResumeStart = {
+      prompt,
+      acceptedAt: new Date().toISOString(),
+    };
+    await this.saveTask(task);
+
+    this.runningCount++;
+    void this.recreateTaskFromDispatchMetadata(task).catch((error: unknown) => {
+      void this.failAcceptedResume(task, error);
+    });
+    this.logger.info({ taskId }, 'Task resume accepted after dispatch metadata recovery');
+
+    return { ok: true, value: { action: 'resumed' } };
+  }
+
+  private async recreateTaskFromDispatchMetadata(task: Task): Promise<void> {
+    try {
+      task.worktreePath =
+        task.continuationPrBranch === undefined
+          ? await this.worktreeManager.createWorktree(task.taskId, task.baseBranch)
+          : await this.worktreeManager.createWorktree(
+              task.taskId,
+              task.baseBranch,
+              task.continuationPrBranch
+            );
+      await this.saveTask(task);
+      await this.resumeTaskWithUserMessage(task);
+    } catch (error) {
+      await this.failAcceptedResume(task, error);
+    }
+  }
+
   private async resumeTaskWithUserMessage(task: Task): Promise<void> {
     const prompt = task.pendingResumeStart?.prompt;
     /* v8 ignore start -- upstream: sendMessage and recoverPendingResumeTask validate pendingResumeStart before invoking this async helper; this guard cannot be reached in unit tests because callers always set pendingResumeStart before calling resumeTaskWithUserMessage @preserve */
@@ -773,7 +982,7 @@ export class TaskDispatcher {
           const task = await this.getTask(taskId);
           /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
           if (task !== null && task.status === 'running') {
-            this.logger.warn({ taskId }, 'Task approaching 3-hour timeout');
+            this.logger.warn({ taskId }, 'Task approaching 5-hour timeout');
           }
           /* v8 ignore stop @preserve */
         } catch (error) {
@@ -797,6 +1006,9 @@ export class TaskDispatcher {
           /* v8 ignore stop @preserve */
 
           this.logger.warn({ taskId }, 'Task timeout - killing');
+
+          // Stop inactivity timeout early to prevent restart during hard kill
+          this.activityTimeoutManager.stop(taskId);
 
           // Kill Docker container
           await this.isolation.provider.destroyWorker(taskId);
@@ -851,6 +1063,153 @@ export class TaskDispatcher {
     this.activeTasks.set(`${taskId}-kill`, timeout);
   }
 
+  private async handleInactivityRestart(taskId: string): Promise<void> {
+    // Mark the restart as in-flight synchronously before any await so the
+    // completion monitor cannot race and run verification on the stale
+    // transcript while destroyWorker/startWorkerAttempt are pending.
+    this.inactivityRestartInProgress.add(taskId);
+    try {
+      await this.doHandleInactivityRestart(taskId);
+    } finally {
+      this.inactivityRestartInProgress.delete(taskId);
+    }
+  }
+
+  private async doHandleInactivityRestart(taskId: string): Promise<void> {
+    // Guard: skip if completion is already in progress
+    if (this.completionInProgress.has(taskId)) {
+      this.logger.debug({ taskId }, 'Inactivity restart skipped: completion already in progress');
+      return;
+    }
+
+    const task = await this.getTask(taskId);
+    /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
+    if (task?.status !== 'running') {
+      return;
+    }
+    /* v8 ignore stop @preserve */
+
+    const canRestart = this.activityTimeoutManager.recordRestart(taskId);
+    if (!canRestart) {
+      // Max consecutive restarts exceeded — fail the task
+      this.activityTimeoutManager.stop(taskId);
+
+      this.appendTaggedTaskLog(
+        taskId,
+        'system',
+        `Inactivity timeout: worker unresponsive after ${String(MAX_INACTIVITY_RESTARTS)} consecutive restarts — failing task`
+      );
+      this.logger.error(
+        { taskId, maxRestarts: MAX_INACTIVITY_RESTARTS },
+        'Max inactivity restarts exceeded — failing task'
+      );
+
+      const result = await this.checkForResult(task);
+      const error: TaskError = {
+        code: 'TASK_INACTIVITY_TIMEOUT',
+        message: `Worker unresponsive after ${String(MAX_INACTIVITY_RESTARTS)} consecutive inactivity restarts`,
+        remediation: { action: 'retry' },
+      };
+      /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
+      await this.finalizeTask(task, 'failed', {
+        ...(result !== undefined && { result }),
+        error,
+      });
+      /* v8 ignore stop @preserve */
+      return;
+    }
+
+    const restartCount = this.activityTimeoutManager.getRestartCount(taskId);
+    // Note: do NOT call stop() here — it would clear the consecutive restart counter.
+    // The counter must persist across restarts. The timer is reset when
+    // startWorkerAttempt() calls activityTimeoutManager.start(), which calls
+    // clearTimer() internally before creating a new timer.
+
+    this.appendTaggedTaskLog(
+      taskId,
+      'system',
+      `Inactivity timeout: no output for ${String(INACTIVITY_TIMEOUT_MS / 1000)}s — killing worker and restarting (restart ${String(restartCount)}/${String(MAX_INACTIVITY_RESTARTS)})`
+    );
+    this.logger.info(
+      { taskId, restartCount, maxRestarts: MAX_INACTIVITY_RESTARTS },
+      'Inactivity restart triggered'
+    );
+
+    const evidenceDir = `/var/log/orchestrator/inactivity-evidence/${taskId}/`;
+    const [copyResult, statsResult] = await Promise.allSettled([
+      this.isolation.provider.copyOut(taskId, '/tmp', evidenceDir),
+      this.isolation.provider.statsSnapshot(taskId),
+    ]);
+    if (copyResult.status === 'rejected') {
+      this.logger.warn(
+        { taskId, error: getErrorMessage(copyResult.reason) },
+        'Failed to copy /tmp evidence before inactivity kill'
+      );
+    }
+    if (statsResult.status === 'fulfilled') {
+      this.logger.warn({ taskId, stats: statsResult.value }, 'Container stats at inactivity kill');
+    } else {
+      this.logger.warn(
+        { taskId, error: getErrorMessage(statsResult.reason) },
+        'Failed to capture container stats before inactivity kill'
+      );
+    }
+
+    try {
+      await this.isolation.provider.destroyWorker(taskId);
+    } catch (destroyError) {
+      this.logger.warn(
+        { taskId, error: destroyError },
+        'Failed to destroy worker for inactivity restart'
+      );
+    }
+    this.appendOrchestratorTaskLog(taskId, 'Worker destroyed for inactivity restart');
+
+    await this.teardownAttempt(taskId, true);
+
+    // Re-fetch to avoid race with completion monitor: if status is no longer
+    // 'running', the task was finalized by another handler and we must bail out.
+    const reloadedTask = await this.getTask(taskId);
+    /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
+    if (reloadedTask?.status !== 'running') {
+      this.logger.debug({ taskId }, 'Inactivity restart bailed out: task no longer running');
+      return;
+    }
+    /* v8 ignore stop @preserve */
+
+    this.appendTaggedTaskLog(taskId, 'prompt', INACTIVITY_RESTART_PROMPT);
+    const startResult = await this.startWorkerAttempt(task, {
+      prompt: INACTIVITY_RESTART_PROMPT,
+      continueSession: true,
+    });
+
+    if (!startResult.ok) {
+      this.logger.error(
+        { taskId, error: startResult.error },
+        'Failed to restart worker after inactivity timeout'
+      );
+      const error: TaskError = {
+        code: 'TASK_INACTIVITY_RESTART_FAILED',
+        message: 'Failed to restart worker after inactivity timeout',
+        remediation: { action: 'retry' },
+      };
+      const result = await this.checkForResult(task);
+      /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
+      await this.finalizeTask(task, 'failed', {
+        ...(result !== undefined && { result }),
+        error,
+      });
+      /* v8 ignore stop @preserve */
+      return;
+    }
+
+    task.containerId = startResult.containerId;
+    task.inactivityRestartCount = (task.inactivityRestartCount ?? 0) + 1;
+    await this.saveTask(task);
+
+    this.appendOrchestratorTaskLog(taskId, `Inactivity restart attempt started: taskId=${taskId}`);
+  }
+
   private startCompletionMonitoring(taskId: string): void {
     const checkInterval = setInterval(() => {
       void (async (): Promise<void> => {
@@ -881,6 +1240,16 @@ export class TaskDispatcher {
 
           if (!isRunning || attemptCompleted) {
             if (this.completionInProgress.has(taskId)) {
+              return;
+            }
+            // Skip: an inactivity restart is mid-flight (old worker destroyed,
+            // new one not yet up). Running completion now would verify on the
+            // stale transcript of the killed session.
+            if (this.inactivityRestartInProgress.has(taskId)) {
+              this.logger.debug(
+                { taskId },
+                'Completion monitor tick skipped: inactivity restart in progress'
+              );
               return;
             }
             this.completionInProgress.add(taskId);
@@ -1026,6 +1395,10 @@ export class TaskDispatcher {
       maxAttempts,
       agentType: completionAgentType,
       rawLogs,
+      ...(exitCode !== undefined && { lastExitCode: exitCode }),
+      ...(task.executionMemoryContext !== undefined && {
+        executionMemoryContext: task.executionMemoryContext,
+      }),
     });
     this.appendOrchestratorTaskLog(
       task.taskId,
@@ -1055,7 +1428,7 @@ export class TaskDispatcher {
     /* v8 ignore start -- ts-type: optional chaining on agentData creates narrowing branch; agentData guaranteed to have summary when present @preserve */
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `🤖 Gemini summary: ${verification.agentData?.summary ?? '(no summary extracted)'}`
+      `🤖 Verifier summary (${verification.succeededModelName ?? 'unknown'}): ${verification.agentData?.summary ?? '(no summary extracted)'}`
     );
     /* v8 ignore stop @preserve */
 
@@ -1075,13 +1448,13 @@ export class TaskDispatcher {
       },
     ];
 
-    // Verifier failure (Gemini down/parse error): retry Gemini immediately if attempts remain
-    /* v8 ignore start -- upstream: verifierFailure path requires Gemini to return parse errors; FakeCompletionVerifier always returns valid responses and cannot simulate upstream failures @preserve */
+    // Verifier failure (all validation models down or unparseable output): retry immediately if attempts remain
+    /* v8 ignore start -- upstream: verifierFailure path requires all validation models to return parse errors; FakeCompletionVerifier always returns valid responses and cannot simulate upstream failures @preserve */
     if (verification.verifierFailure) {
       if (attempt < maxAttempts) {
         this.appendOrchestratorTaskLog(
           task.taskId,
-          `Verifier failure; retrying Gemini (${String(attempt + 1)}/${String(maxAttempts)})`
+          `Verifier failure; retrying verifier (${String(attempt + 1)}/${String(maxAttempts)})`
         );
         // Re-call verifier with same logs — counts as an attempt
         const retryVerification = await this.completionVerifier.verify({
@@ -1090,6 +1463,9 @@ export class TaskDispatcher {
           maxAttempts,
           agentType: completionAgentType,
           rawLogs,
+          ...(task.executionMemoryContext !== undefined && {
+            executionMemoryContext: task.executionMemoryContext,
+          }),
         });
         task.verificationHistory = [
           ...(task.verificationHistory ?? []),
@@ -1115,12 +1491,12 @@ export class TaskDispatcher {
 
       const error: TaskError = {
         code: 'TASK_COMPLETION_VERIFIER_FAILED',
-        message: 'Gemini verifier unavailable',
+        message: 'Completion verifier unavailable (all validation models failed)',
         remediation: {
           action: 'contact_support',
           manualSteps: [
-            'Ensure INTEXURAOS_GEMINI_APP_API_KEY is configured for orchestrator.',
-            'Check Gemini provider connectivity and retry task after verifier is healthy.',
+            'Ensure INTEXURAOS_GEMINI_APP_API_KEY and INTEXURAOS_OPENROUTER_APP_API_KEY are configured for orchestrator.',
+            'Check connectivity to all configured validation models and retry task after verifier is healthy.',
           ],
         },
       };
@@ -1138,7 +1514,6 @@ export class TaskDispatcher {
     // Verification passed
     if (verification.passed && verification.agentData !== undefined) {
       // Non-zero exit code overrides verifier passed decision
-      /* v8 ignore start -- upstream: exit code override path requires non-zero taskExitCodes entry set by runtime; fake isolation provider cannot simulate non-zero container exit codes @preserve */
       if (exitCode !== undefined && exitCode !== 0) {
         this.appendOrchestratorTaskLog(
           task.taskId,
@@ -1146,19 +1521,19 @@ export class TaskDispatcher {
         );
         await this.flushTaskLogs(task.taskId);
         await this.collectTurnMetrics(task, attempt);
-        await this.teardownAttempt(task.taskId, false);
         const error: TaskError = {
           code: 'TASK_EXIT_CODE_OVERRIDE',
           message: `Non-zero exit code (${String(exitCode)}) overrides verifier passed decision`,
           remediation: { action: 'retry' },
         };
+        /* v8 ignore start -- ts-type: conditional spread for exact optional property types; FakeIsolationProvider cannot deliver a result alongside a non-zero exit code in the same fake-driven completion tick @preserve */
         await this.finalizeTask(task, 'failed', {
           ...(result !== undefined && { result }),
           error,
         });
+        /* v8 ignore stop @preserve */
         return;
       }
-      /* v8 ignore stop @preserve */
 
       /* v8 ignore start -- upstream: pending messages delivery path requires sendMessage called on a completing task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
       const pendingQueue = this.pendingMessages.get(task.taskId);
@@ -1224,7 +1599,6 @@ export class TaskDispatcher {
     }
 
     // Fatal exit code (SIGKILL=137, SIGSEGV=139): do not retry — session state is corrupted
-    /* v8 ignore start -- upstream: fatal exit code path requires SIGKILL/SIGSEGV in missingFields; fake verifier always returns empty missingFields and cannot simulate signal-based termination @preserve */
     const fatalField = hasFatalExitCodeField(verification.missingFields);
     if (fatalField !== undefined) {
       this.appendOrchestratorTaskLog(
@@ -1233,7 +1607,6 @@ export class TaskDispatcher {
       );
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
-      await this.teardownAttempt(task.taskId, false);
       const error: TaskError = {
         code: 'TASK_FATAL_EXIT_CODE',
         message: `Worker process killed by signal: ${fatalField}`,
@@ -1246,6 +1619,7 @@ export class TaskDispatcher {
       return;
     }
 
+    /* v8 ignore start -- upstream: FakeIsolationProvider cannot drive the missing-fields retry or terminal-failure paths in the remainder of this method — the fake always returns exitCode 0 and unable to reproduce multi-attempt verifier sequences or runtime resume signals @preserve */
     // Missing fields: re-launch the selected runtime with an adjusted prompt if attempts remain
     if (verification.missingFields.length > 0 && attempt < maxAttempts) {
       this.logForwarder.appendChunk(task.taskId, '\n\n');
@@ -1338,23 +1712,7 @@ export class TaskDispatcher {
     missingFields: string[],
     rawLogs: string
   ): string {
-    const transcript = getLast50Lines(rawLogs);
-    return [
-      '[AUTO-CONTINUE ATTEMPT]',
-      'Your last response was missing required fields for the completion verifier.',
-      '',
-      `Missing fields: ${missingFields.join(', ')}`,
-      '',
-      'Please ensure your final message includes all required information.',
-      `Agent type: ${agentType}`,
-      '',
-      'Last 50 lines of transcript for reference:',
-      transcript,
-      '',
-      'Constraints:',
-      '- Do not restart from scratch.',
-      '- Continue from current repository/worktree state.',
-    ].join('\n');
+    return buildMissingFieldsPrompt(agentType, missingFields, rawLogs);
   }
 
   private buildResultFromVerification(
@@ -1367,6 +1725,11 @@ export class TaskDispatcher {
     if (agentData === undefined) return base;
 
     base.summary = agentData.summary;
+    if ('memory_ids_used' in agentData) {
+      base.execution_memory_ids_used = agentData.memory_ids_used;
+      base.execution_memory_ids_rejected = agentData.memory_ids_rejected;
+      base.execution_memory_usage_summary = agentData.memory_usage_summary;
+    }
 
     /* v8 ignore start -- upstream: FakeCompletionVerifier always returns planning agentData; execution/review/remediation/pull_request variants require agent-type specific verifier responses not producible with unit test fakes @preserve */
     if (agentData.agentType === 'planning') {
@@ -1387,9 +1750,6 @@ export class TaskDispatcher {
         agentData.superpowers_subagent_driven_dev === 'used' ? '1' : '0';
       base.execution_superpowers_requesting_code_review_used =
         agentData.superpowers_requesting_code_review === 'used' ? '1' : '0';
-      base.execution_memory_ids_used = agentData.memory_ids_used;
-      base.execution_memory_ids_rejected = agentData.memory_ids_rejected;
-      base.execution_memory_usage_summary = agentData.memory_usage_summary;
       if (agentData.gh_pr_url !== '') {
         base.prUrl = agentData.gh_pr_url;
       }
@@ -1790,10 +2150,10 @@ export class TaskDispatcher {
     const workerTypeConfig = WORKER_TYPES[task.workerType];
     const runtime = getRuntime(runtimeName);
     const runtimeAttemptState = runtime.createAttemptState(task.taskId, this.logger);
-    if (params.continueSession && runtimeName === 'codex' && task.runtimeSessionId === undefined) {
+    if (params.continueSession && task.runtimeSessionId === undefined) {
       return {
         ok: false,
-        error: new Error('Codex resume requires a persisted runtime session ID'),
+        error: new Error(`${runtimeName} resume requires a persisted runtime session ID`),
       };
     }
     this.appendOrchestratorTaskLog(
@@ -1860,6 +2220,7 @@ export class TaskDispatcher {
       onLog: (chunk) => {
         const cleaned = stripDockerHeaders(chunk);
         this.lastOutputAt.set(task.taskId, Date.now());
+        this.activityTimeoutManager.touch(task.taskId);
         void this.handleRuntimeEvents(task, runtime.processLogChunk(runtimeAttemptState, cleaned));
       },
       onComplete: (exitCode) => {
@@ -1947,6 +2308,7 @@ export class TaskDispatcher {
           );
         });
 
+      this.activityTimeoutManager.start(task.taskId);
       return { ok: true, containerId: handle.containerId };
     } catch (error) {
       // If the timeout fired but createWorker is still in-flight, it may
@@ -2030,12 +2392,6 @@ export class TaskDispatcher {
       this.preserveWorkerContainers &&
       !isNonPreservableAgentType &&
       (finalStatus === 'failed' || finalStatus === 'interrupted' || finalStatus === 'completed');
-    if (shouldPreserve) {
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Preserving worker container for debugging: taskId=${task.taskId} status=${finalStatus}`
-      );
-    }
     this.appendOrchestratorTaskLog(
       task.taskId,
       `Finalizing task: status=${finalStatus} hasResult=${String(payload.result !== undefined)} hasError=${String(payload.error !== undefined)}`
@@ -2078,7 +2434,21 @@ export class TaskDispatcher {
       }
     }
     if (shouldPreserve) {
-      await this.isolation.provider.preserveWorker?.(task.taskId);
+      /* v8 ignore start -- ts-type: optional chaining + nullish coalescing on preserveWorker; IsolationProvider.preserveWorker is structurally optional but always defined by both DockerProvider and the FakeIsolationProvider, so the undefined branch is unreachable from any test entry point @preserve */
+      const preserved = (await this.isolation.provider.preserveWorker?.(task.taskId)) ?? false;
+      /* v8 ignore stop @preserve */
+      if (preserved) {
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Preserved worker container for debugging: taskId=${task.taskId} status=${finalStatus}`
+        );
+      } else {
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Failed to preserve worker container (no tracked worker): taskId=${task.taskId} status=${finalStatus}`
+        );
+        await this.teardownAttempt(task.taskId, false);
+      }
     } else {
       await this.teardownAttempt(task.taskId, false);
     }
@@ -2540,6 +2910,7 @@ export class TaskDispatcher {
         this.activeTasks.delete(key);
       }
     }
+    this.activityTimeoutManager.stop(taskId);
     this.completionInProgress.delete(taskId);
     this.attemptCompletionSignals.delete(taskId);
   }

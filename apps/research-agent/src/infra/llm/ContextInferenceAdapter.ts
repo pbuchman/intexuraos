@@ -4,7 +4,7 @@
  */
 
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
   buildInferResearchContextPrompt,
   buildInferSynthesisContextPrompt,
@@ -73,8 +73,8 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     apiKey: string,
     model: string,
     userId: string,
-    pricing: ModelPricing,
     logger: Logger,
+    usageSink: UsageSink,
     researchId?: string
   ) {
     this.client = createGeminiClient({
@@ -82,8 +82,8 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       model,
       userId,
       ...(researchId !== undefined && { researchId }),
-      pricing,
       logger,
+      usageSink,
     });
     this.logger = logger;
   }
@@ -93,7 +93,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     opts?: InferResearchContextOptions
   ): Promise<Result<ResearchContextResult, LlmError>> {
     const prompt = buildInferResearchContextPrompt(userQuery, opts);
-    const result = await this.client.generate(prompt);
+    const result = await this.client.generate(prompt, { promptType: 'research-context-inference' });
 
     if (!result.ok) {
       return { ok: false, error: mapToLlmError(result.error) };
@@ -136,7 +136,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       };
     }
 
-    const { usage } = result.value;
+    const { usage } = result.value; // @allow-result-access -- result.ok narrowed at line 99 earlier in function
     return {
       ok: true,
       value: {
@@ -154,7 +154,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     params: InferSynthesisContextParams
   ): Promise<Result<SynthesisContextResult, LlmError>> {
     const prompt = buildInferSynthesisContextPrompt(params);
-    const result = await this.client.generate(prompt);
+    const result = await this.client.generate(prompt, { promptType: 'research-synthesis-context-inference' });
 
     if (!result.ok) {
       return { ok: false, error: mapToLlmError(result.error) };
@@ -197,7 +197,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       };
     }
 
-    const { usage } = result.value;
+    const { usage } = result.value; // @allow-result-access -- result.ok narrowed at line 160 earlier in function
     return {
       ok: true,
       value: {
@@ -221,7 +221,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       invalidResponse,
       errorMessage
     );
-    const result = await this.client.generate(repairPrompt);
+    const result = await this.client.generate(repairPrompt, { promptType: 'research-context-inference-repair' });
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -269,7 +269,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       invalidResponse,
       errorMessage
     );
-    const result = await this.client.generate(repairPrompt);
+    const result = await this.client.generate(repairPrompt, { promptType: 'research-synthesis-context-inference-repair' });
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);

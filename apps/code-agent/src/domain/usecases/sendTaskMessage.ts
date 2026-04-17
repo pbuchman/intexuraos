@@ -32,6 +32,7 @@ export type SendTaskMessageErrorCode =
   | 'invalid_status'
   | 'worker_not_configured'
   | 'worker_unavailable'
+  | 'session_expired'
   | 'worker_error'
   | 'internal_error';
 
@@ -67,9 +68,9 @@ export async function sendTaskMessage(
 
   const task = taskResult.value;
 
-  // Step 1b: Reject messages to non-preservable agent types (review/remediation)
-  if (task.agentType === 'review' || task.agentType === 'remediation') {
-    logger.warn({ taskId, agentType: task.agentType }, 'Cannot send messages to review/remediation tasks');
+  // Step 1b: Reject messages to non-preservable agent types (review/remediation/planning)
+  if (task.agentType === 'review' || task.agentType === 'remediation' || task.agentType === 'planning') {
+    logger.warn({ taskId, agentType: task.agentType }, 'Cannot send messages to review/remediation/planning tasks');
     return err({ code: 'invalid_agent_type', message: `Cannot send messages to ${task.agentType} tasks` });
   }
 
@@ -152,6 +153,14 @@ export async function sendTaskMessage(
   });
 
   if (!forwardResult.ok) {
+    // Handle session_expired specially - this is an expected condition when container is cleaned up
+    if (forwardResult.error.code === 'session_expired') {
+      logger.info({ taskId }, 'Session expired — container cleaned up');
+      return err({
+        code: 'session_expired',
+        message: forwardResult.error.message,
+      });
+    }
     const errorCode = forwardResult.error.code === 'worker_unavailable' ? 'worker_unavailable' : 'worker_error';
     logger.error({ taskId, error: forwardResult.error }, 'Failed to forward message to worker');
     return err({

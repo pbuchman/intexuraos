@@ -18,7 +18,8 @@
  *   apiKey: 'sk-...',
  *   model: 'gemini-2.5-flash',
  *   userId: 'user-123',
- *   pricing: { inputPricePerMillion: 0.3, outputPricePerMillion: 2.5 },
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  *
  * const result = await client.generate('Write a poem');
@@ -33,17 +34,18 @@ import {
   createGeminiToolCallingClient,
   type ToolCallingClientConfig,
 } from '@intexuraos/infra-gemini';
-import type { AuditSink } from '@intexuraos/llm-audit';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
   getProviderForModel,
+  isOpenRouterModel,
   isValidModel,
   LlmProviders,
   type LLMError,
   type LLMModel,
-  type ModelPricing,
   type ToolCallingClient,
+  type OwnerType,
 } from '@intexuraos/llm-contract';
+import { createOpenRouterGenerateClient } from './openRouterGenerateClient.js';
 import type { Logger, Result } from '@intexuraos/common-core';
 
 /**
@@ -56,14 +58,16 @@ export interface LlmClientConfig {
   model: LLMModel;
   /** User ID for usage tracking */
   userId: string;
-  /** Pricing information for the model */
-  pricing: ModelPricing;
   /** Logger for structured LLM usage logging */
   logger: Logger;
-  /** Optional audit sink override (defaults to Firestore audit sink) */
-  auditSink?: AuditSink;
-  /** Optional usage sink override (defaults to Firestore usage sink) */
-  usageSink?: UsageSink;
+  /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
+  usageSink: UsageSink;
+  /**
+   * Owner scope of the call.
+   * When omitted, downstream defaults to 'system' to preserve legacy behavior.
+   * Pass 'user' for calls initiated directly by a human (e.g. chat, code tasks).
+   */
+  ownerType?: OwnerType;
 }
 
 /**
@@ -82,6 +86,14 @@ export interface GenerateResult {
 }
 
 /**
+ * Options for LLM generation.
+ */
+export interface GenerateOptions {
+  /** Semantic identifier for the prompt type (e.g., 'linear-issue-title', 'code-worker-validation') */
+  promptType: string;
+}
+
+/**
  * Unified LLM client interface.
  * All provider clients implement this interface.
  */
@@ -89,16 +101,17 @@ export interface LlmGenerateClient {
   /**
    * Generate text using the LLM.
    * @param prompt - Text prompt to send to the LLM
+   * @param options - Generation options including promptType for usage tracking
    * @returns Result with content and usage, or error
    */
-  generate(prompt: string): Promise<Result<GenerateResult, LLMError>>;
+  generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, LLMError>>;
 }
 
 /**
  * Supported providers for the factory.
- * App-side: only Google (Gemini) is supported.
+ * App-side: Google (Gemini) and OpenRouter are supported.
  */
-type SupportedProvider = typeof LlmProviders.Google;
+type SupportedProvider = typeof LlmProviders.Google | typeof LlmProviders.OpenRouter;
 
 /**
  * Maps model to provider and creates the appropriate client.
@@ -114,23 +127,29 @@ type SupportedProvider = typeof LlmProviders.Google;
  *   apiKey: 'sk-...',
  *   model: 'gemini-2.5-flash',
  *   userId: 'user-123',
- *   pricing: getPricing('gemini-2.5-flash'),
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  * ```
  */
 export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
-  // Validate model is supported
+  const model = config.model as string;
+
+  // OpenRouter models (or: prefix) are routed to the OpenRouter client
+  if (isOpenRouterModel(model)) {
+    return createOpenRouterGenerateClient(config);
+  }
+
+  // Validate model is a known static model
   if (!isValidModel(config.model)) {
-    const model = config.model as string;
     throw new Error(`Unsupported LLM model: ${model}`);
   }
 
-  // Check provider first, before model validation
-  const provider = LlmProviders.Google;
+  // Static models: check provider
   const providerForModel = getProviderForModel(config.model);
-  if (providerForModel !== provider) {
+  if (providerForModel !== LlmProviders.Google) {
     throw new Error(
-      `Unsupported LLM provider: ${providerForModel}. Only ${provider} is supported.`
+      `Unsupported LLM provider: ${providerForModel}. Only ${LlmProviders.Google} is supported.`
     );
   }
 
@@ -141,7 +160,7 @@ export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
  * Type guard to check if a provider is supported by the factory.
  */
 export function isSupportedProvider(provider: string): provider is SupportedProvider {
-  return provider === LlmProviders.Google;
+  return provider === LlmProviders.Google || provider === LlmProviders.OpenRouter;
 }
 
 /**

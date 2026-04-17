@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
-import { type ModelPricing, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -10,12 +11,7 @@ const mockLogger: Logger = {
   debug: vi.fn(),
 };
 
-vi.mock('@intexuraos/llm-audit', () => ({
-  createAuditContext: vi.fn().mockReturnValue({
-    success: vi.fn().mockResolvedValue(undefined),
-    error: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
 const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
 
@@ -27,17 +23,9 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 }));
 
 const { createOpenRouterClient } = await import('../client.js');
-const { createAuditContext } = await import('@intexuraos/llm-audit');
 
 const API_BASE_URL = 'https://openrouter.ai/api/v1';
 const TEST_MODEL = 'anthropic/claude-sonnet-4.6';
-
-const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing => ({
-  inputPricePerMillion: 3.0,
-  outputPricePerMillion: 15.0,
-  useProviderCost: true,
-  ...overrides,
-});
 
 describe('createOpenRouterClient', () => {
   beforeEach(() => {
@@ -50,83 +38,6 @@ describe('createOpenRouterClient', () => {
   });
 
   describe('research', () => {
-    it('includes userId and researchId in audit context', async () => {
-      nock(API_BASE_URL)
-        .post('/chat/completions')
-        .reply(200, {
-          id: 'test-id',
-          model: `${TEST_MODEL}:online`,
-          created: Date.now(),
-          object: 'chat.completion',
-          choices: [
-            {
-              index: 0,
-              message: { content: 'Research findings.', role: 'assistant' },
-              finish_reason: 'stop',
-            },
-          ],
-          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
-        });
-
-      const client = createOpenRouterClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        researchId: 'research-123',
-        pricing: createTestPricing(),
-        logger: mockLogger,
-      });
-
-      await client.research('Test prompt');
-
-      expect(vi.mocked(createAuditContext).mock.calls[0]?.[0]).toEqual(
-        expect.objectContaining({
-          provider: LlmProviders.OpenRouter,
-          model: TEST_MODEL,
-          method: 'research',
-          prompt: 'Test prompt',
-          userId: 'test-user',
-          researchId: 'research-123',
-        })
-      );
-    });
-
-    it('excludes researchId from audit context when undefined', async () => {
-      nock(API_BASE_URL)
-        .post('/chat/completions')
-        .reply(200, {
-          id: 'test-id',
-          model: `${TEST_MODEL}:online`,
-          created: Date.now(),
-          object: 'chat.completion',
-          choices: [
-            {
-              index: 0,
-              message: { content: 'Research findings.', role: 'assistant' },
-              finish_reason: 'stop',
-            },
-          ],
-          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
-        });
-
-      const client = createOpenRouterClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        pricing: createTestPricing(),
-        logger: mockLogger,
-      });
-
-      await client.research('Test prompt');
-
-      const auditArgs = vi.mocked(createAuditContext).mock.calls[0]?.[0] as unknown as Record<
-        string,
-        unknown
-      >;
-      expect(auditArgs).not.toHaveProperty('researchId');
-      expect(auditArgs?.['userId']).toBe('test-user');
-    });
-
     it('sends request with :online suffix for research', async () => {
       let capturedBody: Record<string, unknown> | undefined;
 
@@ -154,8 +65,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       await client.research('Test prompt');
@@ -191,8 +102,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: `${TEST_MODEL}:online`, // Model already has :online suffix
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       await client.research('Test prompt');
@@ -223,8 +134,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Tell me about AI');
@@ -237,8 +148,7 @@ describe('createOpenRouterClient', () => {
           outputTokens: 50,
           totalTokens: 150,
         });
-        // Cost: 100 * (3.0/1M) + 50 * (15.0/1M) = 0.0003 + 0.00075 = 0.00105
-        expect(result.value.usage.costUsd).toBeCloseTo(0.00105, 5);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -258,8 +168,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Test prompt');
@@ -297,8 +207,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Test prompt');
@@ -333,8 +243,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Test prompt');
@@ -368,8 +278,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       await client.research('Test prompt');
@@ -392,8 +302,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Test prompt');
@@ -411,8 +321,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Test prompt');
@@ -430,8 +340,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Test prompt');
@@ -449,8 +359,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       await client.research('Test prompt');
@@ -470,8 +380,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Test prompt');
@@ -489,8 +399,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.research('Test prompt');
@@ -530,11 +440,11 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
-      await client.generate('Write something');
+      await client.generate('Write something', { promptType: 'test-prompt' });
 
       // Verify NO :online suffix for synthesis
       expect(capturedBody?.['model']).toBe(TEST_MODEL);
@@ -562,11 +472,11 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -576,8 +486,7 @@ describe('createOpenRouterClient', () => {
           outputTokens: 100,
           totalTokens: 150,
         });
-        // Cost: 50 * (3.0/1M) + 100 * (15.0/1M) = 0.00015 + 0.0015 = 0.00165
-        expect(result.value.usage.costUsd).toBeCloseTo(0.00165, 5);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -603,11 +512,11 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
-      await client.generate('Write something');
+      await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -624,11 +533,11 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -643,11 +552,11 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -662,11 +571,11 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -681,11 +590,11 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -700,11 +609,11 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -719,11 +628,11 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -753,11 +662,11 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -792,11 +701,14 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
-      await client.generate('Return JSON', { responseFormat: { type: 'json_object' } });
+      await client.generate('Return JSON', {
+        responseFormat: { type: 'json_object' },
+        promptType: 'test-prompt',
+      });
 
       expect(capturedBody).toHaveProperty('response_format', { type: 'json_object' });
     });
@@ -828,11 +740,11 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
-      await client.generate('Write something');
+      await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(capturedBody).not.toHaveProperty('response_format');
     });
@@ -853,17 +765,119 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       // Should return empty content when choices is empty
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.content).toBe('');
       }
+    });
+  });
+
+  describe('OpenRouter usage.cost passthrough', () => {
+    it('uses usage.cost from API response and forwards it to the sink as providerReportedUsd', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Generated text.', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150, cost: 0.0042 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generate('hello', { promptType: 'test-prompt' });
+      expect(result.ok).toBe(true);
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({ providerReportedUsd: 0.0042 })
+      );
+    });
+
+    it('omits providerReportedUsd when usage.cost absent and falls back to token-based costUsd', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Generated text.', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await client.generate('hello', { promptType: 'test-prompt' });
+
+      const callArg = mockUsageLoggerLog.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(callArg['providerReportedUsd']).toBeUndefined();
+      expect((callArg['usage'] as { costUsd: number }).costUsd).toBe(0);
+    });
+
+    it('forwards providerReportedUsd on the research callType too', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: `${TEST_MODEL}:online`,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Research findings.', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150, cost: 0.011 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await client.research('hello');
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({ callType: 'research', providerReportedUsd: 0.011 })
+      );
     });
   });
 
@@ -893,12 +907,11 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
         usageSink: fakeSink,
       });
 
-      await client.generate('ping');
+      await client.generate('ping', { promptType: 'test-prompt' });
 
       expect(createUsageLogger).toHaveBeenCalledWith(expect.objectContaining({ sink: fakeSink }));
     });
@@ -917,8 +930,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.validateKey('test-key');
@@ -937,8 +950,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'bad-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.validateKey('bad-key');
@@ -956,8 +969,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.validateKey('test-key');
@@ -975,8 +988,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.validateKey('test-key');
@@ -994,8 +1007,8 @@ describe('createOpenRouterClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
 
       const result = await client.validateKey('test-key');
@@ -1004,6 +1017,125 @@ describe('createOpenRouterClient', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
       }
+    });
+  });
+
+  it('passes ownerType to usage logger when provided', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        id: 'test-id',
+        model: TEST_MODEL,
+        created: Date.now(),
+        object: 'chat.completion',
+        choices: [
+          {
+            index: 0,
+            message: { content: 'ok', role: 'assistant' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
+      });
+
+    const client = createOpenRouterClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+      ownerType: 'user',
+    });
+    await client.generate('hello', { promptType: 'test-prompt' });
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'user' }));
+  });
+
+  describe('promptType propagation', () => {
+    it('passes promptType to usage logger on success', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'ok', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await client.generate('hello', { promptType: 'linear-issue-title' });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({ promptType: 'linear-issue-title' })
+      );
+    });
+
+    it('passes promptType to usage logger on error', async () => {
+      nock(API_BASE_URL).post('/chat/completions').reply(500, 'Internal error');
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await client.generate('hello', { promptType: 'code-worker-validation' });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          promptType: 'code-worker-validation',
+          success: false,
+        })
+      );
+    });
+
+    it('passes promptType to usage logger', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'ok', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await client.generate('hello', { promptType: 'test-prompt' });
+
+      const callArg = mockUsageLoggerLog.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(callArg['promptType']).toBe('test-prompt');
     });
   });
 });

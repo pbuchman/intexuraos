@@ -62,7 +62,6 @@
 | Method | Path                  | Auth Type                | Status                                                          |
 | ------ | --------------------- | ------------------------ | --------------------------------------------------------------- |
 | GET    | /settings/pricing     | `requireAuth()`          | OK                                                              |
-| GET    | /settings/usage-costs | `requireAuth()`          | OK                                                              |
 | GET    | /settings/pricing     | `validateInternalAuth()` | OK (MEDIUM: path not `/internal/` prefixed — see discrepancies) |
 
 ### bookmarks-agent
@@ -133,12 +132,6 @@
 | POST   | /internal/commands            | PubSub OIDC or `validateInternalAuth()` | OK     |
 | POST   | /internal/retry-pending       | OIDC Bearer or `validateInternalAuth()` | OK     |
 | GET    | /internal/commands/:commandId | `validateInternalAuth()`                | OK     |
-
-### data-insights-agent
-
-| Method | Path                             | Auth Type                | Status |
-| ------ | -------------------------------- | ------------------------ | ------ |
-| POST   | /internal/visualizations/compute | `validateInternalAuth()` | OK     |
 
 ### image-service
 

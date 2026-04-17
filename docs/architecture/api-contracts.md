@@ -223,7 +223,6 @@ IntexuraOS provides a central API documentation hub (`api-docs-hub`) that aggreg
 | `INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL`               | research-agent               |
 | `INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL`               | commands-agent               |
 | `INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL`                | actions-agent                |
-| `INTEXURAOS_DATA_INSIGHTS_AGENT_OPENAPI_URL`          | data-insights-agent          |
 | `INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL`                | image-service                |
 | `INTEXURAOS_NOTES_AGENT_OPENAPI_URL`                  | notes-agent                  |
 | `INTEXURAOS_TODOS_AGENT_OPENAPI_URL`                  | todos-agent                  |

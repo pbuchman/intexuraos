@@ -16,7 +16,7 @@ import {
 } from '@/services/researchAgentApi.types';
 import { getModelDisplayName } from './shared.js';
 
-const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT52];
+const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT54];
 
 interface EnhanceModalProps {
   research: Research;

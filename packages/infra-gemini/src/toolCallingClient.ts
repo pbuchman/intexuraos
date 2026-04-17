@@ -15,34 +15,18 @@ import type { Content, FunctionDeclaration, Part } from '@google/genai';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type {
   LLMError,
-  ModelPricing,
   NormalizedUsage,
   ToolCallingClient,
   ToolCallingResult,
   ToolDefinition,
   ToolCallingModel,
 } from '@intexuraos/llm-contract';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
-import type { AuditSink } from '@intexuraos/llm-audit';
-import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
+import { LlmProviders } from '@intexuraos/llm-contract';
 import { createUsageLogger, type UsageSink } from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
 import { normalizeUsage } from './costCalculator.js';
 
 const DEFAULT_MAX_ITERATIONS = 5;
-
-/**
- * Self-contained pricing for tool calling models.
- * Same pattern as VERIFIER_PRICING in completion-verifier.ts.
- * Bypasses code-agent's pricingContext (which throws on pricing operations).
- */
-export const TOOL_CALLING_PRICING: Record<ToolCallingModel, ModelPricing> = {
-  [LlmModels.Gemini25Flash]: {
-    inputPricePerMillion: 0.3,
-    outputPricePerMillion: 2.5,
-    groundingCostPerRequest: 0,
-  },
-};
 
 /**
  * Configuration for creating a Gemini tool calling client.
@@ -52,10 +36,9 @@ export interface ToolCallingClientConfig {
   apiKey: string;
   model: ToolCallingModel;
   userId: string;
-  pricing: ModelPricing;
   logger: Logger;
-  auditSink?: AuditSink;
-  usageSink?: UsageSink;
+  /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
+  usageSink: UsageSink;
 }
 
 /**
@@ -63,12 +46,9 @@ export interface ToolCallingClientConfig {
  */
 export function createGeminiToolCallingClient(config: ToolCallingClientConfig): ToolCallingClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const { model, userId, pricing, logger, auditSink, usageSink } = config;
+  const { model, userId, logger, usageSink } = config;
 
-  const usageLogger = createUsageLogger({
-    logger,
-    ...(usageSink !== undefined && { sink: usageSink }),
-  });
+  const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
   function trackUsage(usage: NormalizedUsage, success: boolean, errorMessage?: string): void {
     void usageLogger.log({
@@ -92,18 +72,6 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
         onExhausted,
         repairIterations,
       } = params;
-
-      const auditContext: AuditContext = createAuditContext(
-        {
-          provider: LlmProviders.Google,
-          model,
-          method: 'toolCalling',
-          prompt: systemPrompt,
-          startedAt: new Date(),
-          userId,
-        },
-        auditSink !== undefined ? { sink: auditSink } : undefined
-      );
 
       // Build function declarations (strip `run` callbacks — only schema goes to Gemini)
       const functionDeclarations: FunctionDeclaration[] = tools.map((t) => ({
@@ -169,13 +137,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
             const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
             const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
             const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
-            const iterationUsage = normalizeUsage(
-              inputTokens,
-              outputTokens,
-              false,
-              pricing,
-              thinkingTokens
-            );
+            const iterationUsage = normalizeUsage(inputTokens, outputTokens, false, thinkingTokens);
             aggregatedUsage = addUsage(aggregatedUsage, iterationUsage);
 
             // Extract parts from response
@@ -270,7 +232,6 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
 
             if (finalText === '') {
               // Empty response
-              await auditContext.error({ error: 'Empty response from model' });
               trackUsage(aggregatedUsage, false, 'Empty response from model');
               return err({
                 code: 'API_ERROR',
@@ -295,11 +256,6 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
               'Tool calling: completed'
             );
 
-            await auditContext.success({
-              response: finalText,
-              inputTokens: aggregatedUsage.inputTokens,
-              outputTokens: aggregatedUsage.outputTokens,
-            });
             trackUsage(aggregatedUsage, true);
 
             return ok({
@@ -332,11 +288,6 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
         const lastText = lastTextPart?.text ?? '';
 
         if (lastText !== '') {
-          await auditContext.success({
-            response: lastText,
-            inputTokens: aggregatedUsage.inputTokens,
-            outputTokens: aggregatedUsage.outputTokens,
-          });
           trackUsage(aggregatedUsage, true);
 
           return ok({
@@ -347,9 +298,6 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
           });
         }
 
-        await auditContext.error({
-          error: 'Tool calling loop exceeded maxIterations',
-        });
         trackUsage(aggregatedUsage, false, 'Tool calling loop exceeded maxIterations');
         return err({
           code: 'API_ERROR',
@@ -357,7 +305,6 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
         });
       } catch (error: unknown) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         trackUsage(aggregatedUsage, false, errorMsg);
         return err(mapGeminiError(error));
       }

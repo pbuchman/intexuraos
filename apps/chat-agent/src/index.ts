@@ -12,7 +12,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_OPENAI_APP_API_KEY',
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-  'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
+  'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'INTEXURAOS_GEMINI_APP_API_KEY',
 ];
 
@@ -32,7 +32,7 @@ const PORT = Number(process.env['PORT'] ?? 8080);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
 
 async function main(): Promise<void> {
-  await initializeServices();
+  initializeServices();
 
   const app = await buildServer();
 

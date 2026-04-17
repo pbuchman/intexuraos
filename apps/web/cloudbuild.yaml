@@ -19,7 +19,6 @@ steps:
           "research-agent:RESEARCH_AGENT"
           "commands-agent:COMMANDS_AGENT"
           "actions-agent:ACTIONS_AGENT"
-          "data-insights-agent:DATA_INSIGHTS_AGENT"
           "notes-agent:NOTES_AGENT"
           "todos-agent:TODOS_AGENT"
           "bookmarks-agent:BOOKMARKS_AGENT"
@@ -32,6 +31,7 @@ steps:
           "app-settings-service:APP_SETTINGS_SERVICE"
           "cron-agent:CRON_AGENT"
           "hellscript-agent:HELLSCRIPT_AGENT"
+          "llm-usage-service:LLM_USAGE_SERVICE"
         )
 
         # Fetch service URLs from Cloud Run API (not secrets)

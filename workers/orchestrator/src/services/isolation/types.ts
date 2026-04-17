@@ -30,6 +30,7 @@ export interface WorkerTypeConfig {
   apiKeyEnvVar?:
     | 'ANTHROPIC_API_KEY'
     | 'MINIMAX_API_KEY'
+    | 'MIMO_API_KEY'
     | 'DASHSCOPE_API_KEY'
     | 'OPENROUTER_API_KEY';
   model?: string;
@@ -61,6 +62,12 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     apiBaseUrl: 'https://api.minimax.io/anthropic',
     apiKeyEnvVar: 'MINIMAX_API_KEY',
     model: 'MiniMax-M2.7',
+  },
+  'mimo-pro': {
+    runtime: 'claude',
+    apiBaseUrl: 'https://token-plan-sgp.xiaomimimo.com/anthropic',
+    apiKeyEnvVar: 'MIMO_API_KEY',
+    model: 'mimo-v2-pro',
   },
   glm: {
     runtime: 'claude',
@@ -104,6 +111,7 @@ export interface WorkerSecrets {
   LINEAR_API_KEY: string;
   SENTRY_AUTH_TOKEN: string;
   MINIMAX_API_KEY: string;
+  MIMO_API_KEY: string;
   DASHSCOPE_API_KEY: string;
   OPENROUTER_API_KEY: string;
 }
@@ -138,6 +146,12 @@ export interface ResourceUsage {
   cpuPercent: number;
   memoryUsedMB: number;
   memoryLimitMB: number;
+}
+
+export interface ContainerStatsSnapshot {
+  cpuTotalUsage: number;
+  memoryUsage: number;
+  pidsCurrent: number;
 }
 
 export interface DiscoveredContainer {
@@ -191,6 +205,19 @@ export interface IsolationProvider {
   getResourceUsage(taskId: string): Promise<ResourceUsage>;
 
   /**
+   * Copy a file or directory from the container filesystem to the host.
+   * Used to capture forensic evidence before destructive operations (e.g.
+   * inactivity-kill). Writes a tar archive to destPath.
+   */
+  copyOut(taskId: string, srcPath: string, destPath: string): Promise<void>;
+
+  /**
+   * Capture a one-shot docker stats snapshot of the container.
+   * Returns null when the container no longer exists.
+   */
+  statsSnapshot(taskId: string): Promise<ContainerStatsSnapshot | null>;
+
+  /**
    * List all running worker containers.
    */
   listWorkers(): Promise<WorkerHandle[]>;
@@ -200,7 +227,12 @@ export interface IsolationProvider {
    */
   cleanupTaskSession?(taskId: string): Promise<void>;
 
-  preserveWorker?(taskId: string): Promise<void>;
+  /**
+   * Preserve a worker's container for post-mortem debugging instead of
+   * destroying it. Returns true when the container was moved into the
+   * preserved set, false when no matching worker is tracked.
+   */
+  preserveWorker?(taskId: string): Promise<boolean>;
 
   listPreservedWorkers?(): Promise<{ containerId: string; taskId: string; preservedAt: string }[]>;
 

@@ -313,7 +313,7 @@ sequenceDiagram
 | `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | Auth0 audience for JWT validation                                 |
 | `INTEXURAOS_USER_SERVICE_URL`         | Yes      | user-service base URL                                             |
 | `INTEXURAOS_ACTIONS_AGENT_URL`        | Yes      | actions-agent base URL                                            |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | app-settings-service base URL (pricing data fetched at startup)   |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | llm-usage-service base URL (pricing data fetched at startup)      |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth                                   |
 | `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`     | Yes      | Pub/Sub topic for action creation events                          |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform-level Gemini fallback API key for classification         |

@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback, useRef, useLayoutEffect } from 'react
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
-  BarChart2,
   Bell,
   BellRing,
   Bookmark,
@@ -15,7 +14,6 @@ import {
   ChevronUp,
   Clock,
   Code2,
-  Database,
   DollarSign,
   FileText,
   Filter,
@@ -59,19 +57,11 @@ const settingsItems: NavItem[] = [
   { to: '/settings/github', label: 'GitHub', icon: GitBranch },
   { to: '/settings/code', label: 'Code Settings', icon: Server },
   { to: '/settings/api-keys', label: 'API Keys', icon: Key },
-  { to: '/settings/llm-pricing', label: 'LLM Pricing', icon: DollarSign },
-  { to: '/settings/usage-costs', label: 'Usage Costs', icon: TrendingUp },
 ];
 
 const researchAgentItems: NavItem[] = [
   { to: '/research', label: 'Library', icon: List },
   { to: '/research/new', label: 'New Study', icon: Plus },
-];
-
-const dataInsightsItems: NavItem[] = [
-  { to: '/data-insights', label: 'Data Sources', icon: List },
-  { to: '/data-insights/new', label: 'Add Source', icon: Plus },
-  { to: '/data-insights/visualizations', label: 'Visualizations', icon: BarChart2 },
 ];
 
 const hellscriptItems: NavItem[] = [
@@ -93,6 +83,11 @@ const codeTasksItems: NavItem[] = [
 const linearItems: NavItem[] = [
   { to: '/linear', label: 'Dashboard', icon: List },
   { to: '/linear/prune-candidates', label: 'Issue Cleanup', icon: Scissors },
+];
+
+const llmUsageItems: NavItem[] = [
+  { to: '/llm-usage', label: 'Events', icon: List },
+  { to: '/llm-usage/pricing', label: 'Pricing', icon: DollarSign },
 ];
 
 const cronAgentItems: NavItem[] = [
@@ -156,9 +151,6 @@ export function Sidebar(): React.JSX.Element {
   const [isResearchAgentOpen, setIsResearchAgentOpen] = useState(() =>
     window.location.hash.includes('/research')
   );
-  const [isDataInsightsOpen, setIsDataInsightsOpen] = useState(() =>
-    window.location.hash.includes('/data-insights')
-  );
   const [isHellscriptOpen, setIsHellscriptOpen] = useState(() =>
     window.location.hash.includes('/hellscript')
   );
@@ -167,6 +159,9 @@ export function Sidebar(): React.JSX.Element {
   );
   const [isLinearOpen, setIsLinearOpen] = useState(() =>
     window.location.hash.includes('/linear')
+  );
+  const [isLlmUsageOpen, setIsLlmUsageOpen] = useState(() =>
+    window.location.hash.includes('/llm-usage')
   );
   const [isCronAgentOpen, setIsCronAgentOpen] = useState(() =>
     window.location.hash.includes('/cron-agent')
@@ -221,13 +216,6 @@ export function Sidebar(): React.JSX.Element {
     }
   }, [location.pathname]);
 
-  // Auto-expand data insights when on data-insights page
-  useEffect(() => {
-    if (location.pathname.startsWith('/data-insights')) {
-      setIsDataInsightsOpen(true);
-    }
-  }, [location.pathname]);
-
   // Auto-expand hellscript when on hellscript page
   useEffect(() => {
     if (location.pathname.startsWith('/hellscript')) {
@@ -246,6 +234,13 @@ export function Sidebar(): React.JSX.Element {
   useEffect(() => {
     if (location.pathname.startsWith('/linear')) {
       setIsLinearOpen(true);
+    }
+  }, [location.pathname]);
+
+  // Auto-expand LLM usage when on llm-usage page
+  useEffect(() => {
+    if (location.pathname.startsWith('/llm-usage')) {
+      setIsLlmUsageOpen(true);
     }
   }, [location.pathname]);
 
@@ -476,6 +471,58 @@ export function Sidebar(): React.JSX.Element {
             ) : null}
           </div>
 
+          {/* LLM Usage section (collapsible) */}
+          <div className="pt-2">
+            <button
+              onClick={(): void => {
+                if (!isLlmUsageOpen) {
+                  void navigate(llmUsageItems[0]?.to ?? '/llm-usage');
+                }
+                setIsLlmUsageOpen(!isLlmUsageOpen);
+              }}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                location.pathname.startsWith('/llm-usage')
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
+              }`}
+            >
+              <TrendingUp className="h-5 w-5 shrink-0" />
+              {!isCollapsed ? (
+                <>
+                  <span className="flex-1 text-left">LLM Usage</span>
+                  {isLlmUsageOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </>
+              ) : null}
+            </button>
+
+            {/* LLM Usage sub-items */}
+            {isLlmUsageOpen && !isCollapsed ? (
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3 dark:border-slate-600">
+                {llmUsageItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/llm-usage'}
+                    className={({ isActive }): string =>
+                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
+                      }`
+                    }
+                  >
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
           {/* Cron Agent section (collapsible) */}
           <div className="pt-2">
             <button
@@ -564,58 +611,6 @@ export function Sidebar(): React.JSX.Element {
                     key={item.to}
                     to={item.to}
                     end={item.to === '/research'}
-                    className={({ isActive }): string =>
-                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                        isActive
-                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
-                      }`
-                    }
-                  >
-                    <item.icon className="h-4 w-4 shrink-0" />
-                    <span>{item.label}</span>
-                  </NavLink>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          {/* Data Insights section (collapsible) */}
-          <div className="pt-2">
-            <button
-              onClick={(): void => {
-                if (!isDataInsightsOpen) {
-                  void navigate(dataInsightsItems[0]?.to ?? '/data-insights');
-                }
-                setIsDataInsightsOpen(!isDataInsightsOpen);
-              }}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                location.pathname.startsWith('/data-insights')
-                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
-              }`}
-            >
-              <Database className="h-5 w-5 shrink-0" />
-              {!isCollapsed ? (
-                <>
-                  <span className="flex-1 text-left">Data Insights</span>
-                  {isDataInsightsOpen ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
-                </>
-              ) : null}
-            </button>
-
-            {/* Data Insights sub-items */}
-            {isDataInsightsOpen && !isCollapsed ? (
-              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3 dark:border-slate-600">
-                {dataInsightsItems.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.to === '/data-insights'}
                     className={({ isActive }): string =>
                       `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                         isActive

@@ -1,6 +1,5 @@
 import { createAppLogger } from '@intexuraos/infra-sentry';
-import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import type { CommandRepository } from './domain/ports/commandRepository.js';
 import type { ClassifierFactory } from './domain/ports/classifier.js';
 import type { EventPublisherPort } from './domain/ports/eventPublisher.js';
@@ -46,34 +45,15 @@ export interface Services {
 export interface ServiceConfig {
   userServiceUrl: string;
   actionsAgentUrl: string;
-  appSettingsServiceUrl: string;
+  llmUsageServiceUrl: string;
   internalAuthToken: string;
   gcpProjectId: string;
 }
 
 let container: Services | null = null;
 
-/**
- * Models supported for classification.
- */
-const CLASSIFIER_MODELS = [
-  LlmModels.Gemini25Flash,
-] as const;
-
-export async function initServices(config: ServiceConfig): Promise<void> {
+export function initServices(config: ServiceConfig): void {
   const logger = createAppLogger({ name: 'commands-agent' });
-
-  // Fetch pricing data from app-settings-service
-  const pricingResult = await fetchAllPricing(
-    config.appSettingsServiceUrl,
-    config.internalAuthToken
-  );
-
-  if (!pricingResult.ok) {
-    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
-  }
-
-  const pricingContext = createPricingContext(pricingResult.value, [...CLASSIFIER_MODELS] as unknown as typeof LlmModels.Gemini25Flash[]);
 
   const commandRepository = createFirestoreCommandRepository();
   const actionsAgentClient = createActionsAgentClient({
@@ -83,11 +63,18 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   });
   const classifierFactory: ClassifierFactory = (client, classifierLogger) =>
     createGeminiClassifier(client, classifierLogger);
+  const userServiceClientLogger = createAppLogger({ name: 'userServiceClient' });
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
-    pricingContext,
-    logger: createAppLogger({ name: 'userServiceClient' }),
+    logger: userServiceClientLogger,
+    usageSink: new HttpInternalAuthUsageSink({
+      usageServiceUrl: config.llmUsageServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+      service: 'commands-agent',
+      component: 'user-service-client',
+      logger: userServiceClientLogger,
+    }),
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
   const eventPublisher = createActionEventPublisher({

@@ -30,8 +30,7 @@ interface LlmClientConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
-  auditSink?: AuditSink;   // Override Firestore audit sink (optional)
-  usageSink?: UsageSink;   // Override Firestore usage sink (optional)
+  usageSink?: UsageSink;   // Override default usage sink (optional)
 }
 
 interface LlmGenerateClient {
@@ -96,7 +95,6 @@ const loopResult = await toolClient.run({ systemPrompt, messages, tools, maxIter
 | Package                    | Why Needed                              |
 | -------------------------- | --------------------------------------- |
 | `@intexuraos/infra-gemini` | Gemini client implementation            |
-| `@intexuraos/llm-audit`    | `AuditSink` type; Firestore audit sink  |
 | `@intexuraos/llm-pricing`  | `UsageSink` type; Firestore usage sink  |
 | `@intexuraos/llm-contract` | `LLMModel`, `ModelPricing`, error types |
 | `@intexuraos/common-core`  | `Logger`, `Result` types                |

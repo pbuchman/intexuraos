@@ -313,36 +313,6 @@
       "description": "Technical-Debt documentation for commands-agent"
     },
     {
-      "path": "services/data-insights-agent/features.md",
-      "title": "Data Insights Agent",
-      "category": "services",
-      "description": "Features documentation for data-insights-agent"
-    },
-    {
-      "path": "services/data-insights-agent/technical.md",
-      "title": "Data Insights Agent \u2014 Technical Reference",
-      "category": "services",
-      "description": "Technical documentation for data-insights-agent"
-    },
-    {
-      "path": "services/data-insights-agent/tutorial.md",
-      "title": "Data Insights Agent \u2014 Tutorial",
-      "category": "services",
-      "description": "Tutorial documentation for data-insights-agent"
-    },
-    {
-      "path": "services/data-insights-agent/agent.md",
-      "title": "data-insights-agent \u2014 Agent Interface",
-      "category": "services",
-      "description": "Agent documentation for data-insights-agent"
-    },
-    {
-      "path": "services/data-insights-agent/technical-debt.md",
-      "title": "Data Insights Agent \u2014 Technical Debt",
-      "category": "services",
-      "description": "Technical-Debt documentation for data-insights-agent"
-    },
-    {
       "path": "services/hellscript-agent/features.md",
       "title": "Hellscript Agent",
       "category": "services",
@@ -1181,18 +1151,6 @@
       "title": "@intexuraos/internal-clients \u2014 Technical Debt",
       "category": "packages",
       "description": "Technical debt notes for internal-clients"
-    },
-    {
-      "path": "packages/llm-audit/README.md",
-      "title": "@intexuraos/llm-audit",
-      "category": "packages",
-      "description": "Package documentation: llm-audit"
-    },
-    {
-      "path": "packages/llm-audit/technical-debt.md",
-      "title": "@intexuraos/llm-audit \u2014 Technical Debt",
-      "category": "packages",
-      "description": "Technical debt notes for llm-audit"
     },
     {
       "path": "packages/llm-contract/README.md",

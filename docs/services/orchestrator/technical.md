@@ -151,7 +151,6 @@ graph TB
             STATE[~/.code-orchestrator/state.json]
             SECRETS[~/.code-orchestrator/secrets/<br/>per-task credentials]
             LOGS[~/.code-orchestrator/logs/]
-            AUDIT[~/.code-orchestrator/logs/llm-audit.log]
             CREDS[~/.code-orchestrator/claude-creds/<br/>shared OAuth credentials]
             CODEX_AUTH[~/.code-orchestrator/codex-auth/<br/>shared Codex auth]
         end
@@ -161,7 +160,6 @@ graph TB
         SP --> STATE
         DP --> SECRETS
         LF --> LOGS
-        AAS --> AUDIT
         CM --> CREDS
         CR --> CREDS
     end

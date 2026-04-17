@@ -1,15 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import nock from 'nock';
-import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import { GeminiPromptAdapter } from '../infra/llm/GeminiPromptAdapter.js';
 import type { Logger } from '@intexuraos/common-core';
-
-vi.mock('@intexuraos/llm-audit', (): object => ({
-  createAuditContext: (): object => ({
-    success: vi.fn().mockResolvedValue(undefined),
-    error: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
 
 vi.mock('@intexuraos/llm-pricing', (): object => ({
   logUsage: vi.fn().mockResolvedValue(undefined),
@@ -18,17 +12,14 @@ vi.mock('@intexuraos/llm-pricing', (): object => ({
   }),
 }));
 
-const testPricing: ModelPricing = {
-  inputPricePerMillion: 1.25,
-  outputPricePerMillion: 10.0,
-};
-
 const mockLogger: Logger = {
   info: vi.fn(),
   error: vi.fn(),
   warn: vi.fn(),
   debug: vi.fn(),
 };
+
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
 describe('GeminiPromptAdapter', () => {
   beforeAll(() => {
@@ -76,9 +67,10 @@ describe('GeminiPromptAdapter', () => {
 
       const adapter = new GeminiPromptAdapter({
         apiKey: 'test-key',
+        model: LlmModels.Gemini25Pro,
         userId: 'test-user',
-        pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Machine learning article');
 
@@ -104,9 +96,10 @@ describe('GeminiPromptAdapter', () => {
 
       const adapter = new GeminiPromptAdapter({
         apiKey: 'test-key',
+        model: LlmModels.Gemini25Pro,
         userId: 'test-user',
-        pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -123,9 +116,10 @@ describe('GeminiPromptAdapter', () => {
 
       const adapter = new GeminiPromptAdapter({
         apiKey: 'bad-key',
+        model: LlmModels.Gemini25Pro,
         userId: 'test-user',
-        pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -142,9 +136,10 @@ describe('GeminiPromptAdapter', () => {
 
       const adapter = new GeminiPromptAdapter({
         apiKey: 'test-key',
+        model: LlmModels.Gemini25Pro,
         userId: 'test-user',
-        pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -159,9 +154,10 @@ describe('GeminiPromptAdapter', () => {
 
       const adapter = new GeminiPromptAdapter({
         apiKey: 'test-key',
+        model: LlmModels.Gemini25Pro,
         userId: 'test-user',
-        pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -176,9 +172,10 @@ describe('GeminiPromptAdapter', () => {
 
       const adapter = new GeminiPromptAdapter({
         apiKey: 'test-key',
+        model: LlmModels.Gemini25Pro,
         userId: 'test-user',
-        pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -188,7 +185,7 @@ describe('GeminiPromptAdapter', () => {
       }
     });
 
-    it('uses custom model when specified', async () => {
+    it('uses explicit model when specified', async () => {
       const validResponse = {
         title: 'Test',
         visualSummary: 'Summary',
@@ -211,8 +208,8 @@ describe('GeminiPromptAdapter', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini20Flash,
         userId: 'test-user',
-        pricing: testPricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await adapter.generateThumbnailPrompt('Test');
 

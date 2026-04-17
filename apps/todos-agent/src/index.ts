@@ -12,7 +12,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_TODOS_PROCESSING_TOPIC',
   'INTEXURAOS_USER_SERVICE_URL',
-  'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
+  'INTEXURAOS_LLM_USAGE_SERVICE_URL',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
@@ -34,12 +34,12 @@ if (sentryDsn !== undefined) {
 initSentry(sentryConfig);
 
 async function main(): Promise<void> {
-  await initServices({
+  initServices({
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '',
     todosProcessingTopic: process.env['INTEXURAOS_TODOS_PROCESSING_TOPIC'] ?? '',
     internalAuthKey: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
     userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8110',
-    appSettingsServiceUrl: process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] ?? 'http://localhost:8113',
+    llmUsageServiceUrl: process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? 'http://localhost:8113',
   });
 
   const app = await buildServer();

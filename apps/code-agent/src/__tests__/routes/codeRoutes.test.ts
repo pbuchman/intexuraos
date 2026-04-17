@@ -33,7 +33,6 @@ import type { LogChunkRepository } from '../../domain/repositories/logChunkRepos
 import type { LogLineRepository } from '../../domain/repositories/logLineRepository.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
-import type { RateLimitService, RateLimitError } from '../../domain/services/rateLimitService.js';
 import { ok, type Result } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
@@ -149,18 +148,6 @@ describe('codeRoutes', () => {
       logger,
     });
 
-    const rateLimitService: RateLimitService = {
-      async checkLimits() {
-        return ok(undefined);
-      },
-      async recordTaskStart() {
-        return;
-      },
-      async recordTaskComplete() {
-        return;
-      },
-    };
-
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -182,7 +169,6 @@ describe('codeRoutes', () => {
       logLineRepo,
       actionsAgentClient,
       linearAgentClient,
-      rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
@@ -220,7 +206,7 @@ describe('codeRoutes', () => {
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
-      toolCallingClient: undefined,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {
         async findOldest() { return ok(null); },
@@ -254,7 +240,6 @@ describe('codeRoutes', () => {
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;
-      rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
@@ -272,7 +257,7 @@ describe('codeRoutes', () => {
       gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
       webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
-      toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+      resolveToolCallingClient: (userId: string) => Promise<import('@intexuraos/common-core').Result<import('@intexuraos/llm-contract').ToolCallingClient, import('../../domain/usecases/githubAgent.js').GitHubAgentError>>;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
@@ -387,6 +372,104 @@ describe('codeRoutes', () => {
       expect(body.success).toBe(true);
       expect(body.data.result.review_comments_posted).toBe('2');
       expect(body.data.result.review_types).toBe('code_quality,architecture');
+    });
+
+    it('returns execution memory candidates and search counts when present', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Review execution memory contract',
+        sanitizedPrompt: 'review execution memory contract',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-memory-123',
+        executionMemoryContext: {
+          status: 'matched',
+          applicationId: 'app-123',
+          retrievalVersion: 'execution-memory-retrieval@1.0.0',
+          querySummary: 'Route logging and verification work',
+          matchedAt: Timestamp.now(),
+          matchedMemories: [
+            {
+              memoryId: 'mem-1',
+              title: 'Verify route serialization',
+              memoryType: 'verification_pattern',
+              score: 0.91,
+              appliesWhen: 'Route schema changes',
+              action: 'Add app.inject coverage',
+              avoid: 'Do not skip serialization',
+              verification: 'Check task detail response shape',
+            },
+          ],
+          topCandidates: [
+            {
+              memoryId: 'mem-1',
+              title: 'Verify route serialization',
+              memoryType: 'verification_pattern',
+              vectorScore: 0.85,
+              rerankScore: 0.91,
+              componentOverlap: 0.72,
+              effectiveness: 0.65,
+              passedThreshold: true,
+            },
+            {
+              memoryId: 'mem-2',
+              title: 'Route logging',
+              memoryType: 'pitfall_pattern',
+              vectorScore: 0.80,
+              rerankScore: 0.74,
+              componentOverlap: 0.63,
+              effectiveness: 0.51,
+              passedThreshold: false,
+            },
+          ],
+          totalSearchResults: 9,
+        },
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const response = await server.inject({
+        method: 'GET',
+        url: `/code/tasks/${created.value.id}`,
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.executionMemoryContext.topCandidates).toEqual([
+        {
+          memoryId: 'mem-1',
+          title: 'Verify route serialization',
+          memoryType: 'verification_pattern',
+          vectorScore: 0.85,
+          rerankScore: 0.91,
+          componentOverlap: 0.72,
+          effectiveness: 0.65,
+          passedThreshold: true,
+        },
+        {
+          memoryId: 'mem-2',
+          title: 'Route logging',
+          memoryType: 'pitfall_pattern',
+          vectorScore: 0.8,
+          rerankScore: 0.74,
+          componentOverlap: 0.63,
+          effectiveness: 0.51,
+          passedThreshold: false,
+        },
+      ]);
+      expect(body.data.executionMemoryContext.totalSearchResults).toBe(9);
     });
 
     it('returns 404 for other user\'s task', async () => {
@@ -1109,46 +1192,6 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(404);
     });
 
-    it('calls recordTaskComplete when task status changes to completed', async () => {
-      const repo = createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      // Create a task first
-      const createResult = await repo.create({
-        userId: 'user-123',
-        prompt: 'Test',
-        sanitizedPrompt: 'Test',
-        systemPromptHash: 'default',
-        workerType: 'auto',
-        workerLocation: 'mac',
-        repository: 'test/repo',
-        baseBranch: 'main',
-        traceId: 'trace_123',
-      });
-      expect(createResult.ok).toBe(true);
-      if (!createResult.ok) return;
-      const task = createResult.value;
-
-      const { getServices } = await import('../../services.js');
-      const services = getServices();
-      const recordCompleteSpy = vi.spyOn(services.rateLimitService, 'recordTaskComplete');
-
-      const response = await server.inject({
-        method: 'PATCH',
-        url: `/internal/code-tasks/${task.id}`,
-        headers: { 'x-internal-auth': 'test-internal-token' },
-        payload: {
-          status: 'planned',
-          result: { branch: 'test', commits: 1, summary: 'Done' },
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(recordCompleteSpy).toHaveBeenCalledWith('user-123', undefined);
-    });
-
   });
 
   describe('POST /internal/code/process error handling', () => {
@@ -1351,90 +1394,6 @@ describe('codeRoutes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-    });
-
-    it('returns 429 when rate limit exceeded', async () => {
-      const rateLimitService = {
-        async checkLimits(): Promise<Result<void, RateLimitError>> {
-          return {
-            ok: false,
-            error: {
-              code: 'concurrent_limit',
-              message: 'Too many concurrent tasks',
-              retryAfter: '60',
-            },
-          };
-        },
-        async recordTaskStart(): Promise<void> {
-          return;
-        },
-        async recordTaskComplete(): Promise<void> {
-          return;
-        },
-      } satisfies RateLimitService;
-
-      setServices({
-        ...getServices(),
-        rateLimitService,
-      });
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {
-          prompt: 'Fix the login bug',
-        },
-      });
-
-      expect(response.statusCode).toBe(429);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('RATE_LIMITED');
-      expect(body.error.message).toContain('concurrent');
-    });
-
-    it('returns 503 when service unavailable', async () => {
-      const rateLimitService = {
-        async checkLimits(): Promise<Result<void, RateLimitError>> {
-          return {
-            ok: false,
-            error: {
-              code: 'service_unavailable',
-              message: 'Service temporarily unavailable',
-            },
-          };
-        },
-        async recordTaskStart(): Promise<void> {
-          return;
-        },
-        async recordTaskComplete(): Promise<void> {
-          return;
-        },
-      } satisfies RateLimitService;
-
-      setServices({
-        ...getServices(),
-        rateLimitService,
-      });
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/code/submit',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {
-          prompt: 'Fix the login bug',
-        },
-      });
-
-      expect(response.statusCode).toBe(503);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('MISCONFIGURED');
     });
 
     it('returns 409 for duplicate prompt', async () => {
@@ -3460,84 +3419,6 @@ describe('codeRoutes', () => {
       expect(body.error.code).toBe('UNAUTHORIZED');
     });
 
-    it('returns 429 when rate limit exceeded', async () => {
-      const rateLimitService = {
-        async checkLimits(): Promise<Result<void, RateLimitError>> {
-          return {
-            ok: false,
-            error: {
-              code: 'concurrent_limit',
-              message: 'Too many concurrent tasks',
-              retryAfter: '60',
-            },
-          };
-        },
-        async recordTaskStart(): Promise<void> {
-          return;
-        },
-        async recordTaskComplete(): Promise<void> {
-          return;
-        },
-      } satisfies RateLimitService;
-
-      setServices({
-        ...getServices(),
-        rateLimitService,
-      });
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/code/tasks/task-123/implement',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {},
-      });
-
-      expect(response.statusCode).toBe(429);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('RATE_LIMITED');
-    });
-
-    it('returns 503 when rate limit service is unavailable', async () => {
-      const rateLimitService = {
-        async checkLimits(): Promise<Result<void, RateLimitError>> {
-          return {
-            ok: false,
-            error: {
-              code: 'service_unavailable',
-              message: 'Rate limit service unavailable',
-            },
-          };
-        },
-        async recordTaskStart(): Promise<void> {
-          return;
-        },
-        async recordTaskComplete(): Promise<void> {
-          return;
-        },
-      } satisfies RateLimitService;
-
-      setServices({
-        ...getServices(),
-        rateLimitService,
-      });
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/code/tasks/task-123/implement',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {},
-      });
-
-      expect(response.statusCode).toBe(503);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('MISCONFIGURED');
-    });
   });
 
   describe('POST /code/retry', () => {
@@ -4389,7 +4270,6 @@ describe('codeRoutes', () => {
     it('returns 200 when execution-memory services are not configured', async () => {
       const services = getServices();
       const {
-        executionMemoryQueryClient: _queryClient,
         executionMemoryEmbeddingClient: _embeddingClient,
         executionMemoryRepo: _executionMemoryRepo,
         executionMemoryApplicationRepo: _executionMemoryApplicationRepo,

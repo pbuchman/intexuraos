@@ -5,8 +5,8 @@ import {
   FAST_MODEL_DISPLAY_NAMES,
   LlmProviders,
   MODEL_PROVIDER_MAP,
-  type FastModel,
-  type LlmProvider as ContractLlmProvider,
+  DEFAULT_OPENROUTER_MODELS,
+  getProviderForModel,
 } from '@intexuraos/llm-contract';
 import { Button, Card, Input, Layout } from '@/components';
 import { useLlmKeys } from '@/hooks';
@@ -86,20 +86,32 @@ interface TestResults {
   openrouter: LlmTestResult | null;
 }
 
+interface ModelOption {
+  model: string;
+  name: string;
+  disabled: boolean;
+}
+
+interface ModelGroup {
+  provider: string;
+  label: string;
+  models: ModelOption[];
+}
+
 /**
- * Group fast models by their provider for the dropdown.
+ * Group default-eligible models by their provider for the dropdown.
+ * Includes fast models and OpenRouter default models.
  * Only includes providers that are configured AND have passing test results.
  */
-function groupModelsByProvider(
+function groupDefaultEligibleModels(
   configuredProviders: Set<string>,
   testResults?: TestResults
-): { provider: string; label: string; models: { model: FastModel; name: string; disabled: boolean }[] }[] {
-  const groups = new Map<string, { model: FastModel; name: string; disabled: boolean }[]>();
+): ModelGroup[] {
+  const groups = new Map<string, ModelOption[]>();
 
+  // Add fast models
   for (const model of ALL_FAST_MODELS) {
     const provider = MODEL_PROVIDER_MAP[model] as string;
-
-    // Skip providers that aren't configured or have failed tests
     const isConfigured = configuredProviders.has(provider);
     const testResult = testResults?.[provider as keyof TestResults];
     const hasPassingTest = testResult?.status === 'success';
@@ -109,28 +121,33 @@ function groupModelsByProvider(
     }
 
     const existing = groups.get(provider) ?? [];
-    existing.push({
-      model,
-      name: FAST_MODEL_DISPLAY_NAMES[model],
-      disabled: false,
-    });
+    existing.push({ model, name: FAST_MODEL_DISPLAY_NAMES[model], disabled: false });
     groups.set(provider, existing);
   }
 
-  const result: { provider: string; label: string; models: { model: FastModel; name: string; disabled: boolean }[] }[] = [];
+  // Add OpenRouter default models (if OpenRouter is configured and tested)
+  const orConfigured = configuredProviders.has(LlmProviders.OpenRouter);
+  const orTest = testResults?.openrouter;
+  const orPassing = orTest?.status === 'success';
+
+  if (orConfigured && orPassing) {
+    const existing = groups.get('openrouter') ?? [];
+    for (const orModel of DEFAULT_OPENROUTER_MODELS) {
+      existing.push({ model: `or:${orModel.id}`, name: orModel.name, disabled: false });
+    }
+    groups.set('openrouter', existing);
+  }
+
+  const result: ModelGroup[] = [];
   for (const [provider, models] of groups) {
-    result.push({
-      provider,
-      label: PROVIDER_GROUP_LABELS[provider] ?? provider,
-      models,
-    });
+    result.push({ provider, label: PROVIDER_GROUP_LABELS[provider] ?? provider, models });
   }
 
   return result;
 }
 
 export function ApiKeysSettingsPage(): React.JSX.Element {
-  const { keys, defaultModel, loading, error, savingDefaultModel, setKey, deleteKey, testKey, setDefaultModel } = useLlmKeys();
+  const { keys, defaultModel, fallbackModel, loading, error, savingDefaultModel, setKey, deleteKey, testKey, setDefaultModel, setFallbackModel } = useLlmKeys();
 
   if (loading) {
     return (
@@ -149,11 +166,9 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
   if (keys?.perplexity !== null && keys?.perplexity !== undefined) configuredProviders.add(LlmProviders.Perplexity);
   if (keys?.openrouter !== null && keys?.openrouter !== undefined) configuredProviders.add(LlmProviders.OpenRouter);
 
-  const modelGroups = groupModelsByProvider(configuredProviders, keys?.testResults);
+  const modelGroups = groupDefaultEligibleModels(configuredProviders, keys?.testResults);
 
-  const currentProvider = defaultModel !== null
-    ? (MODEL_PROVIDER_MAP[defaultModel as FastModel] as ContractLlmProvider | undefined) ?? null
-    : null;
+  const currentProvider = defaultModel !== null ? getProviderForModel(defaultModel) : null;
   const hasKeyForDefaultModel = currentProvider !== null && configuredProviders.has(currentProvider);
 
   return (
@@ -210,6 +225,55 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/30">
             <p className="text-sm text-amber-800 dark:text-amber-400">
               No API key configured for this model&apos;s provider. Add one below or select a different model.
+            </p>
+          </div>
+        ) : null}
+      </Card>
+
+      <Card className="mb-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <h3 className="font-medium text-slate-900 dark:text-slate-100">Fallback Model</h3>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              If the default model fails, this model is used as a fallback. Optional.
+            </p>
+          </div>
+          <div className="relative flex items-center gap-2">
+            {savingDefaultModel ? (
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+            ) : null}
+            <select
+              value={fallbackModel ?? ''}
+              onChange={(e): void => {
+                const value = e.target.value;
+                if (value === '') {
+                  void setFallbackModel(null);
+                } else {
+                  void setFallbackModel(value);
+                }
+              }}
+              disabled={savingDefaultModel || defaultModel === null}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 transition-colors focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+            >
+              <option value="">None (no fallback)</option>
+              {modelGroups.map((group) => (
+                <optgroup key={group.provider} label={group.label}>
+                  {group.models
+                    .filter((m) => m.model !== defaultModel)
+                    .map((m) => (
+                      <option key={m.model} value={m.model} disabled={m.disabled}>
+                        {m.name}{m.disabled ? ' (No API key)' : ''}
+                      </option>
+                    ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+        </div>
+        {defaultModel === null ? (
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Select a default model first to enable fallback selection.
             </p>
           </div>
         ) : null}

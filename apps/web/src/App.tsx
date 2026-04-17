@@ -1,9 +1,10 @@
 import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
 import { AuthProvider, SyncQueueProvider, ThemeProvider, useAuth } from '@/context';
-import { useTimezoneAutoDetect } from '@/hooks';
+import { usePageLifecycle, useTimezoneAutoDetect } from '@/hooks';
 import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
+import { XiaomiBatteryGuide } from '@/components/XiaomiBatteryGuide';
 import { DevBar } from '@/components/DevBar';
 import { Chat } from '@/components/Chat';
 import { config } from '@/config';
@@ -35,21 +36,17 @@ import {
   HellscriptConversationPage,
   HellscriptStylePage,
   HellscriptSamplesPage,
-  CompositeFeedFormPage,
-  CompositeFeedsListPage,
-  DataInsightsPage,
-  DataSourceFormPage,
-  DataSourcesListPage,
   GitHubConnectionPage,
   GoogleCalendarConnectionPage,
   HomePage,
   InboxPage,
-  LlmCostsPage,
+  LlmUsagePage,
+  LlmUsagePricingPage,
+  LlmUsageViewPage,
   LinearConnectionPage,
   LinearIssuesPage,
   LinearPruneCandidatesPage,
   ResearchAgentPage,
-  LlmPricingPage,
   LoginPage,
   MobileNotificationsConnectionPage,
   MobileNotificationsListPage,
@@ -61,7 +58,6 @@ import {
   ShareHistoryPage,
   ShareTargetPage,
   TodosListPage,
-  VisualizationsListPage,
   WhatsAppConnectionPage,
   WhatsAppNotesPage,
   WorkerSettingsPage,
@@ -69,6 +65,11 @@ import {
 
 function TimezoneAutoDetect(): null {
   useTimezoneAutoDetect();
+  return null;
+}
+
+function PageLifecycleManager(): null {
+  usePageLifecycle();
   return null;
 }
 
@@ -151,6 +152,11 @@ function CodeTaskViewRedirect(): React.JSX.Element {
   return <Navigate to={`/code-tasks/${id ?? ''}`} replace />;
 }
 
+function LlmUsageViewPageKeyed(): React.JSX.Element {
+  const { eventId } = useParams<{ eventId: string }>();
+  return <LlmUsageViewPage key={eventId} />;
+}
+
 function AppRoutes(): React.JSX.Element {
   return (
     <Routes>
@@ -217,22 +223,6 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <ApiKeysSettingsPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings/llm-pricing"
-        element={
-          <ProtectedRoute>
-            <LlmPricingPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings/usage-costs"
-        element={
-          <ProtectedRoute>
-            <LlmCostsPage />
           </ProtectedRoute>
         }
       />
@@ -358,6 +348,31 @@ function AppRoutes(): React.JSX.Element {
           </ProtectedRoute>
         }
       />
+      {/* LLM Usage routes */}
+      <Route
+        path="/llm-usage"
+        element={
+          <ProtectedRoute>
+            <LlmUsagePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/llm-usage/pricing"
+        element={
+          <ProtectedRoute>
+            <LlmUsagePricingPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/llm-usage/:eventId"
+        element={
+          <ProtectedRoute>
+            <LlmUsageViewPageKeyed />
+          </ProtectedRoute>
+        }
+      />
       {/* Cron Agent routes */}
       <Route
         path="/cron-agent"
@@ -413,71 +428,6 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <ResearchListPage />
-          </ProtectedRoute>
-        }
-      />
-      {/* Data Insights routes */}
-      <Route
-        path="/data-insights"
-        element={
-          <ProtectedRoute>
-            <CompositeFeedsListPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/new"
-        element={
-          <ProtectedRoute>
-            <CompositeFeedFormPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/visualizations"
-        element={
-          <ProtectedRoute>
-            <VisualizationsListPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/:feedId/visualizations"
-        element={
-          <ProtectedRoute>
-            <DataInsightsPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/:id"
-        element={
-          <ProtectedRoute>
-            <CompositeFeedFormPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/static-sources"
-        element={
-          <ProtectedRoute>
-            <DataSourcesListPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/static-sources/new"
-        element={
-          <ProtectedRoute>
-            <DataSourceFormPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/static-sources/:id"
-        element={
-          <ProtectedRoute>
-            <DataSourceFormPage />
           </ProtectedRoute>
         }
       />
@@ -616,11 +566,13 @@ export function App(): React.JSX.Element {
             <HashRouter>
               <AuthProvider>
                 <TimezoneAutoDetect />
+                <PageLifecycleManager />
                 <SyncQueueProvider>
                   <AppRoutes />
                   <UpdateBanner />
                   <IOSInstallBanner />
                   <AndroidInstallBanner />
+                  <XiaomiBatteryGuide />
                   <DevBar />
                   <Chat />
                 </SyncQueueProvider>

@@ -1,13 +1,20 @@
 import { useState } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 import type { CodeTaskWorkerType } from '@intexuraos/common-core/code-task-worker-types';
+import type { TaskMode } from '@/types';
 import { Button } from './ui/Button.js';
 import { WORKER_TYPE_LABELS } from './workers/shared.js';
+
+const TASK_MODE_LABELS: Record<TaskMode, string> = {
+  planning: 'Planning',
+  execution: 'Execution',
+};
 
 interface ConfirmSubmitModalProps {
   isOpen: boolean;
   taskTitle: string;
   workerType: CodeTaskWorkerType;
+  taskMode: TaskMode;
   onConfirm: () => Promise<void>;
   onCancel: () => void;
 }
@@ -16,6 +23,7 @@ export function ConfirmSubmitModal({
   isOpen,
   taskTitle,
   workerType,
+  taskMode,
   onConfirm,
   onCancel,
 }: ConfirmSubmitModalProps): React.JSX.Element | null {
@@ -83,7 +91,11 @@ export function ConfirmSubmitModal({
                 <span className="font-semibold text-blue-600 dark:text-blue-400">
                   {workerTypeLabel}
                 </span>
-                ?
+                {' '}in{' '}
+                <span className="font-semibold text-blue-600 dark:text-blue-400">
+                  {TASK_MODE_LABELS[taskMode]}
+                </span>
+                {' '}mode?
               </p>
             </div>
 

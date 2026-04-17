@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 import type { Logger } from '@intexuraos/common-core';
 import type { WorkerRuntime } from '../runtime/types.js';
 import { withTimeout } from '../../with-timeout.js';
+import { pipeline } from 'node:stream/promises';
 import type {
+  ContainerStatsSnapshot,
   DiscoveredContainer,
   IsolationProvider,
   WorkerConfig,
@@ -1052,6 +1054,41 @@ export class DockerProvider implements IsolationProvider {
     };
   }
 
+  async copyOut(taskId: string, srcPath: string, destPath: string): Promise<void> {
+    const worker = this.workers.get(taskId);
+    /* v8 ignore start -- ts-type: Map.get() returns T | undefined; unit test cannot reach this branch because copyOut is only invoked from handleInactivityRestart where the worker !== undefined invariant always holds @preserve */
+    if (worker === undefined) {
+      throw new Error(`Worker ${taskId} not found`);
+    }
+    /* v8 ignore stop @preserve */
+    const container = this.docker.getContainer(worker.containerId);
+    const [tarStream] = await Promise.all([
+      container.getArchive({ path: srcPath }),
+      fs.promises.mkdir(destPath, { recursive: true }),
+    ]);
+    // Raw tar archive (no extraction) — keeps `tar` package out of production deps.
+    const tarPath = path.join(destPath, `${path.basename(srcPath)}.tar`);
+    await pipeline(tarStream, fs.createWriteStream(tarPath));
+  }
+
+  async statsSnapshot(taskId: string): Promise<ContainerStatsSnapshot | null> {
+    const worker = this.workers.get(taskId);
+    /* v8 ignore start -- ts-type: Map.get() returns T | undefined; unit test cannot reach this branch because statsSnapshot is only invoked from handleInactivityRestart where the worker !== undefined invariant always holds @preserve */
+    if (worker === undefined) {
+      return null;
+    }
+    /* v8 ignore stop @preserve */
+    const container = this.docker.getContainer(worker.containerId);
+    const stats = await container.stats({ stream: false });
+    return {
+      cpuTotalUsage: stats.cpu_stats.cpu_usage.total_usage,
+      memoryUsage: stats.memory_stats.usage,
+      /* v8 ignore start -- ts-type: nullish coalescing on optional dockerode field required by strict TS @preserve */
+      pidsCurrent: stats.pids_stats?.current ?? 0,
+      /* v8 ignore stop @preserve */
+    };
+  }
+
   async listWorkers(): Promise<WorkerHandle[]> {
     return Array.from(this.workers.values()).map((w) => w.handle);
   }
@@ -1074,10 +1111,14 @@ export class DockerProvider implements IsolationProvider {
     }
   }
 
-  async preserveWorker(taskId: string): Promise<void> {
+  async preserveWorker(taskId: string): Promise<boolean> {
     const worker = this.workers.get(taskId);
     if (worker === undefined) {
-      return;
+      this.logger.warn(
+        { taskId },
+        'preserveWorker called for unknown worker — container may already be destroyed'
+      );
+      return false;
     }
 
     this.preservedWorkers.set(taskId, {
@@ -1105,6 +1146,7 @@ export class DockerProvider implements IsolationProvider {
     }
 
     this.logger.info({ taskId, containerId: worker.containerId }, 'Worker preserved for debugging');
+    return true;
   }
 
   async listPreservedWorkers(): Promise<
@@ -1560,6 +1602,11 @@ export class DockerProvider implements IsolationProvider {
           `WORKER_RUNTIME=${worker.runtime}`,
           ...(worker.runtime === 'codex' && config.runtimeSessionId !== undefined
             ? [`CODEX_THREAD_ID=${config.runtimeSessionId}`]
+            : []),
+          ...(worker.runtime === 'claude' &&
+          config.continueSession === true &&
+          config.runtimeSessionId !== undefined
+            ? [`CLAUDE_SESSION_ID=${config.runtimeSessionId}`]
             : []),
         ],
       });

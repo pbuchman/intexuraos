@@ -1,0 +1,60 @@
+From a48b2e5609667b3fbfec9d776026f97fb15e5757 Mon Sep 17 00:00:00 2001
+From: Piotr Buchman <kontakt@pbuchman.com>
+Date: Tue, 14 Apr 2026 05:33:40 +0000
+Subject: [PATCH] Remove retired data-insights-agent from deploy.yml
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The data-insights-agent service was retired but its deploy.yml references
+had to be reverted due to GitHub App token permissions. This removes all
+4 remaining references (Docker build, SERVICES array, two CLOUD_RUN_SERVICES
+arrays) to fix deployment failures.
+
+Fixes INT-1370
+
+Devised with love by 🤖 <a href="mailto:intex@intexuraos.cloud">Intex</a>
+---
+ .github/workflows/deploy.yml | 5 +----
+ 1 file changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/.github/workflows/deploy.yml b/.github/workflows/deploy.yml
+index 2d1554870..78c3e33ea 100644
+--- a/.github/workflows/deploy.yml
++++ b/.github/workflows/deploy.yml
+@@ -150,7 +150,6 @@ jobs:
+           bash cloudbuild/scripts/build-push-monitored.sh research-agent apps/research-agent/Dockerfile &
+           bash cloudbuild/scripts/build-push-monitored.sh commands-agent apps/commands-agent/Dockerfile &
+           bash cloudbuild/scripts/build-push-monitored.sh actions-agent apps/actions-agent/Dockerfile &
+-          bash cloudbuild/scripts/build-push-monitored.sh data-insights-agent apps/data-insights-agent/Dockerfile &
+           bash cloudbuild/scripts/build-push-monitored.sh notes-agent apps/notes-agent/Dockerfile &
+           bash cloudbuild/scripts/build-push-monitored.sh todos-agent apps/todos-agent/Dockerfile &
+           bash cloudbuild/scripts/build-push-monitored.sh bookmarks-agent apps/bookmarks-agent/Dockerfile &
+@@ -172,7 +171,7 @@ jobs:
+           SERVICES=(
+             image-service api-docs-hub notion-service user-service whatsapp-service
+             app-settings-service mobile-notifications-service research-agent
+-            commands-agent actions-agent data-insights-agent notes-agent
++            commands-agent actions-agent notes-agent
+             todos-agent bookmarks-agent calendar-agent linear-agent
+             web-agent code-agent chat-agent cron-agent hellscript-agent
+             llm-usage-service
+@@ -194,7 +193,6 @@ jobs:
+             "research-agent:RESEARCH_AGENT"
+             "commands-agent:COMMANDS_AGENT"
+             "actions-agent:ACTIONS_AGENT"
+-            "data-insights-agent:DATA_INSIGHTS_AGENT"
+             "notes-agent:NOTES_AGENT"
+             "todos-agent:TODOS_AGENT"
+             "bookmarks-agent:BOOKMARKS_AGENT"
+@@ -379,7 +377,6 @@ jobs:
+                 "research-agent:RESEARCH_AGENT"
+                 "commands-agent:COMMANDS_AGENT"
+                 "actions-agent:ACTIONS_AGENT"
+-                "data-insights-agent:DATA_INSIGHTS_AGENT"
+                 "notes-agent:NOTES_AGENT"
+                 "todos-agent:TODOS_AGENT"
+                 "bookmarks-agent:BOOKMARKS_AGENT"
+-- 
+2.52.0
+

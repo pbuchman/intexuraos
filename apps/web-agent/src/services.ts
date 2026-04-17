@@ -9,7 +9,7 @@ import {
   type UserServiceClient,
   type LlmSummarizer,
 } from './infra/index.js';
-import type { IPricingContext } from '@intexuraos/llm-pricing';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 
 export interface ServiceContainer {
   linkPreviewFetcher: LinkPreviewFetcherPort;
@@ -23,7 +23,7 @@ export interface ServiceDependencies {
   cloudflareApiToken: string;
   userServiceUrl: string;
   internalAuthToken: string;
-  pricingContext: IPricingContext;
+  llmUsageServiceUrl: string;
 }
 
 let container: ServiceContainer | undefined;
@@ -46,9 +46,14 @@ export function initServices(dependencies: ServiceDependencies): void {
     userServiceClient: createUserServiceClient({
       baseUrl: dependencies.userServiceUrl,
       internalAuthToken: dependencies.internalAuthToken,
-      pricingContext: dependencies.pricingContext,
       logger: createAppLogger({ name: 'userServiceClient' }),
-      platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
+      usageSink: new HttpInternalAuthUsageSink({
+        usageServiceUrl: dependencies.llmUsageServiceUrl,
+        internalAuthToken: dependencies.internalAuthToken,
+        service: 'web-agent',
+        component: 'user-service-client',
+        logger: createAppLogger({ name: 'web-agent-usage-sink' }),
+      }),
     }),
   };
 }

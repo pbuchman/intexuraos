@@ -4,11 +4,35 @@
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import type { Logger } from 'pino';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { getServices } from '../services.js';
 import { processLinearAction, validateIssue, generateIssueTitle, fullSync, fullSyncAllUsers, pruneIssues } from '../domain/index.js';
 import { PRUNE_CONFIG } from '../config.js';
 import { handleLinearError } from './routeUtils.js';
+
+/**
+ * Try each connected user until one successfully resolves an LLM client.
+ * Returns `undefined` when no user could provide a client.
+ */
+async function resolveLlmClientFromUsers(
+  userIds: readonly string[],
+  userServiceClient: Pick<UserServiceClient, 'getLlmClient'>,
+  logger: Logger
+): Promise<LlmGenerateClient | undefined> {
+  for (const userId of userIds) {
+    const result = await userServiceClient.getLlmClient(userId);
+    if (result.ok) {
+      return result.value;
+    }
+    logger.warn(
+      { userId, error: result.error },
+      'internal/pruneIssues: LLM client resolution failed for user, trying next'
+    );
+  }
+  return undefined;
+}
 
 /**
  * Validate auth for Cloud Scheduler (OIDC Bearer) or service-to-service (x-internal-auth).
@@ -664,11 +688,56 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       request.log.info('internal/pruneIssues: starting issue pruning');
 
+      // Resolve LLM client by trying each connected user until one succeeds.
+      const userIdsResult = await services.connectionRepository.getAllConnectedUserIds();
+      if (!userIdsResult.ok) {
+        return await handleLinearError(userIdsResult.error, reply);
+      }
+
+      if (userIdsResult.value.length === 0) {
+        request.log.info('internal/pruneIssues: no connected users, skipping');
+        return await reply.ok({
+          skipped: true,
+          skipReason: 'No connected users',
+          totalActive: 0,
+          stored: 0,
+          remaining: 0,
+          storedCandidates: [],
+          durationMs: 0,
+        });
+      }
+
+      const llmClient = await resolveLlmClientFromUsers(
+        userIdsResult.value,
+        services.userServiceClient,
+        request.log as unknown as Logger
+      );
+
+      if (llmClient === undefined) {
+        request.log.warn(
+          'internal/pruneIssues: no connected user could resolve an LLM client, skipping'
+        );
+        return await reply.ok({
+          skipped: true,
+          skipReason: 'No user LLM client available',
+          totalActive: 0,
+          stored: 0,
+          remaining: 0,
+          storedCandidates: [],
+          durationMs: 0,
+        });
+      }
+
+      const classifier = services.createClassifier(llmClient);
+
       const result = await pruneIssues({
-        connectionRepo: services.connectionRepository,
+        // Pass the already-fetched userIds via a wrapper to avoid a second Firestore round-trip.
+        connectionRepo: {
+          getAllConnectedUserIds: () => Promise.resolve(userIdsResult),
+        },
         issueRepo: services.issueRepository,
         pruneCandidateRepo: services.pruneCandidateRepository,
-        classifier: services.issuePruningClassifier,
+        classifier,
         logger: request.log as unknown as Logger,
         config: PRUNE_CONFIG,
       });

@@ -273,7 +273,7 @@ Chat-agent does not publish or subscribe to any Pub/Sub topics. All communicatio
 | `INTEXURAOS_OPENAI_APP_API_KEY`       | Yes      | OpenAI API key for embeddings                                 |
 | `INTEXURAOS_USER_SERVICE_URL`         | Yes      | URL for user-service                                          |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Token for internal service-to-service calls                   |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | URL for app-settings-service (pricing data)                   |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | URL for llm-usage-service (pricing data)                      |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | Yes      | Platform Gemini API key for guest sessions and user fallback  |
 | `INTEXURAOS_SENTRY_DSN`               | No       | Sentry DSN for error tracking                                 |
 | `INTEXURAOS_ENVIRONMENT`              | No       | Environment name (defaults to `development`)                  |

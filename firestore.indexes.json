@@ -189,38 +189,6 @@
       ]
     },
     {
-      "collectionGroup": "custom_data_sources",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "composite_feeds",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "notes",
       "queryScope": "COLLECTION",
       "fields": [
@@ -258,24 +226,6 @@
         },
         {
           "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "composite_feed_snapshots",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "generatedAt",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
           "order": "DESCENDING"
         }
       ]
@@ -369,20 +319,6 @@
       ]
     },
     {
-      "collectionGroup": "custom_data_sources",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "updatedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "mobile_notifications",
       "queryScope": "COLLECTION",
       "fields": [
@@ -392,24 +328,6 @@
         },
         {
           "fieldPath": "updatedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "composite_feeds",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "updatedAt",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
           "order": "DESCENDING"
         }
       ]
@@ -690,34 +608,6 @@
         {
           "fieldPath": "createdAt",
           "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "visualizations",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "visualizations",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "feedId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
         }
       ]
     },
@@ -1340,6 +1230,370 @@
         {
           "fieldPath": "latestTaskUpdatedAt",
           "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "code_tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "agentType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "source.service",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "occurredAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "source.component",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "occurredAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "request.provider",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "occurredAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "request.model",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "occurredAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "owner.id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "occurredAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "occurredAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "cost.billedUsd",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "occurredAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "usage.totalTokens",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "source.service",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "cost.billedUsd",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "source.service",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "usage.totalTokens",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "source.component",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "cost.billedUsd",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "source.component",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "usage.totalTokens",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "request.provider",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "cost.billedUsd",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "request.provider",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "usage.totalTokens",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "request.model",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "cost.billedUsd",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "request.model",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "usage.totalTokens",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "owner.id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "cost.billedUsd",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "owner.id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "usage.totalTokens",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "execution_memories",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "applicationCount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "request.provider",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "occurredAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     }

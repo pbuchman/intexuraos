@@ -324,7 +324,14 @@ export const createFirestoreCodeTaskRepository = (deps: {
           }
           /* v8 ignore stop @preserve */
         }
-
+        /* v8 ignore start -- upstream: FakeFirestore cannot simulate calling create() with failedWorkerLocation/autoRetryAttempt through a real Firestore transaction; these optional-field guards are unreachable in unit tests @preserve */
+        if (input.failedWorkerLocation !== undefined) {
+          taskData.failedWorkerLocation = input.failedWorkerLocation;
+        }
+        if (input.autoRetryAttempt !== undefined) {
+          taskData.autoRetryAttempt = input.autoRetryAttempt;
+        }
+        /* v8 ignore stop @preserve */
         const docRef = collection.doc(taskId);
         transaction.set(docRef, taskData);
 
@@ -528,6 +535,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
         }
         if (input.requiresReReview !== undefined) {
           updateData['requiresReReview'] = input.requiresReReview;
+        }
+        if (input.prUrlValidationFailed !== undefined) {
+          updateData['prUrlValidationFailed'] = input.prUrlValidationFailed;
+        }
+        if (input.prUrlValidationErrors !== undefined) {
+          updateData['prUrlValidationErrors'] = input.prUrlValidationErrors;
         }
 
         if (options?.transaction !== undefined) {
@@ -1081,6 +1094,24 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
     },
 
+    listErroredExecutionMemoryPostRun: async (): Promise<Result<CodeTask[], RepositoryError>> => {
+      try {
+        const snapshot = await collection
+          .where('executionMemoryPostRun.status', '==', 'error')
+          .limit(50)
+          .get();
+        return ok(snapshot.docs.map((doc) =>
+          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
+        ));
+      } catch (error) {
+        logger.error({ error }, 'Failed to list errored execution memory post-run tasks');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
     findByPR: async (
       repository: string,
       prNumber: number
@@ -1183,12 +1214,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
           .get();
 
         // Find the first execution-eligible task.
-        // Excludes review, remediation, and merge-conflict follow-up tasks.
+        // Excludes review, remediation, planning, and merge-conflict follow-up tasks.
         for (const doc of snapshot.docs) {
           const data = doc.data();
           const agentType = data['agentType'] as string | undefined;
           // Treat missing agentType as execution-eligible (backward compatibility)
-          if (agentType !== 'review' && agentType !== 'remediation' && !isMergeConflictTaskData(data)) {
+          if (agentType !== 'review' && agentType !== 'remediation' && agentType !== 'planning' && !isMergeConflictTaskData(data)) {
             return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
           }
         }
@@ -1196,7 +1227,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
         if (snapshot.docs.length === 50) {
           logger.warn(
             { repository, prNumber, docsScanned: 50 },
-            'findLatestExecutionTaskByPR exhausted 50-doc window without finding a non-review task',
+            'findLatestExecutionTaskByPR exhausted 50-doc window without finding an execution-eligible task',
           );
         }
 

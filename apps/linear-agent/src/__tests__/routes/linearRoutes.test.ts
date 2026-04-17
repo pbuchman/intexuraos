@@ -3,6 +3,7 @@ import { buildServer } from '../../server.js';
 import type { FastifyInstance } from 'fastify';
 import type { LinearConnection, StoredPruneCandidate } from '../../domain/models.js';
 import type { LinearError } from '../../domain/errors.js';
+import type { IssuePruningClassifier } from '../../domain/index.js';
 import type { Result } from '@intexuraos/common-core';
 import {
   FakeLinearConnectionRepository,
@@ -1934,9 +1935,9 @@ describe('linearRoutes logging coverage', () => {
     userServiceClient: new FakeUserServiceClient(),
     commentRepository: new FakeLinearCommentRepository(),
     codeAgentClient: new FakeCodeAgentClient(),
-    issuePruningClassifier: {
+    createClassifier: (_llmClient: unknown): IssuePruningClassifier => ({
       classifyCandidates: async (): Promise<Result<[], never>> => ({ ok: true as const, value: [] }),
-    },
+    }),
     pruneCandidateRepository: {
       clearAll: async (): Promise<Result<void, LinearError>> => ({ ok: true as const, value: undefined }),
       storeAll: async (): Promise<Result<void, LinearError>> => ({ ok: true as const, value: undefined }),

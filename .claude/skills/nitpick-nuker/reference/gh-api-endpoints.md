@@ -176,8 +176,10 @@ query (
 ## Useful CLI Commands
 
 ```bash
-# Get current user
-gh api user --jq '.login'
+# Get the authenticated actor's login (works for user PATs AND GitHub App
+# installation tokens). Avoid `gh api user` — it returns 403 "Resource not
+# accessible by integration" on installation tokens (ghs_*).
+gh api graphql -f query='query { viewer { login } }' --jq '.data.viewer.login'
 
 # Get PR details
 gh pr view {pr_number} --json number,headRefName,baseRefName,url

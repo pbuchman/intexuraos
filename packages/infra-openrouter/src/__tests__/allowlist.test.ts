@@ -3,7 +3,6 @@ import {
   OPENROUTER_ALLOWED_MODELS,
   OPENROUTER_VALIDATION_MODEL,
   isAllowedModel,
-  getAllowlistPricing,
   allowlistModelIds,
   buildModelInfo,
   type CatalogEntry,
@@ -12,8 +11,8 @@ import { LlmModels } from '@intexuraos/llm-contract';
 
 describe('allowlist', () => {
   describe('OPENROUTER_ALLOWED_MODELS', () => {
-    it('has exactly 14 entries', () => {
-      expect(OPENROUTER_ALLOWED_MODELS).toHaveLength(14);
+    it('has exactly 15 entries', () => {
+      expect(OPENROUTER_ALLOWED_MODELS).toHaveLength(15);
     });
 
     it('contains all expected providers', () => {
@@ -78,33 +77,9 @@ describe('allowlist', () => {
     it('returns false for or: prefixed IDs (expecting raw ID)', () => {
       expect(isAllowedModel('or:anthropic/claude-sonnet-4.6')).toBe(false);
     });
-  });
 
-  describe('getAllowlistPricing', () => {
-    it('returns pricing for known model', () => {
-      const pricing = getAllowlistPricing('anthropic/claude-sonnet-4.6');
-      expect(pricing).not.toBeUndefined();
-      if (pricing === undefined) return;
-      expect(pricing.useProviderCost).toBe(true);
-      // Claude Sonnet 4.6: $3.0/million prompt, $15.0/million completion
-      expect(pricing.inputPricePerMillion).toBeCloseTo(3.0, 2);
-      expect(pricing.outputPricePerMillion).toBeCloseTo(15.0, 2);
-    });
-
-    it('returns undefined for unknown model', () => {
-      const pricing = getAllowlistPricing('unknown/model');
-      expect(pricing).toBeUndefined();
-    });
-
-    it('returns valid pricing for all allowlisted models', () => {
-      for (const model of OPENROUTER_ALLOWED_MODELS) {
-        const pricing = getAllowlistPricing(model.id);
-        expect(pricing).not.toBeUndefined();
-        if (pricing === undefined) return;
-        expect(pricing.inputPricePerMillion).toBeGreaterThan(0);
-        expect(pricing.outputPricePerMillion).toBeGreaterThan(0);
-        expect(pricing.useProviderCost).toBe(true);
-      }
+    it('accepts google/gemini-3-flash-preview', () => {
+      expect(isAllowedModel('google/gemini-3-flash-preview')).toBe(true);
     });
   });
 
@@ -112,17 +87,12 @@ describe('allowlist', () => {
     it('is in the allowlist', () => {
       expect(isAllowedModel(OPENROUTER_VALIDATION_MODEL)).toBe(true);
     });
-
-    it('has defined pricing', () => {
-      const pricing = getAllowlistPricing(OPENROUTER_VALIDATION_MODEL);
-      expect(pricing).not.toBeUndefined();
-    });
   });
 
   describe('allowlistModelIds', () => {
     it('returns comma-separated list of all model IDs', () => {
       const ids = allowlistModelIds();
-      expect(ids.split(', ')).toHaveLength(14);
+      expect(ids.split(', ')).toHaveLength(15);
       expect(ids).toContain('anthropic/claude-sonnet-4.6');
       expect(ids).toContain('x-ai/grok-4.1-fast');
     });

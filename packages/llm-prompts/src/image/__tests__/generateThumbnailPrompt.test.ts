@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { ok, err } from '@intexuraos/common-core';
-import type { LLMClient, NormalizedUsage } from '@intexuraos/llm-contract';
+import { ok, err, type Result } from '@intexuraos/common-core';
+import type { NormalizedUsage, LLMError, GenerateResult } from '@intexuraos/llm-contract';
 import { generateThumbnailPrompt } from '../generateThumbnailPrompt.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -16,17 +16,22 @@ const mockUsage: NormalizedUsage = {
   costUsd: 0.01,
 };
 
-function createMockClient(response: string): LLMClient {
+interface MockGeneratingClient {
+  generate(
+    prompt: string,
+    options: { promptType: string }
+  ): Promise<Result<GenerateResult, LLMError>>;
+}
+
+function createMockClient(response: string): MockGeneratingClient {
   return {
-    research: vi.fn(),
     generate: vi.fn().mockResolvedValue(ok({ content: response, usage: mockUsage })),
   };
 }
 
-function createErrorClient(code: string, message: string): LLMClient {
+function createErrorClient(code: string, message: string): MockGeneratingClient {
   return {
-    research: vi.fn(),
-    generate: vi.fn().mockResolvedValue(err({ code, message })),
+    generate: vi.fn().mockResolvedValue(err({ code, message } as LLMError)),
   };
 }
 

@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { FakePricingContext } from '@intexuraos/llm-pricing';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import {
   getServices,
@@ -16,8 +15,6 @@ import {
   FakePromptGenerator,
   FakeUserServiceClient,
 } from './fakes.js';
-
-const fakePricingContext = new FakePricingContext();
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -55,7 +52,6 @@ describe('services', () => {
         generatedImageRepository: fakeRepo,
         imageStorage: fakeImageStorage,
         userServiceClient: fakeUserServiceClient,
-        pricingContext: fakePricingContext,
         createPromptGenerator: () => fakePromptGenerator,
         createImageGenerator: () => fakeImageGenerator,
         generateId: () => 'test-id',
@@ -69,7 +65,7 @@ describe('services', () => {
 
   describe('initializeServices', () => {
     it('initializes services from environment', () => {
-      initializeServices(fakePricingContext);
+      initializeServices();
 
       const services = getServices();
       expect(services.generatedImageRepository).toBeDefined();
@@ -80,27 +76,27 @@ describe('services', () => {
     });
 
     it('createPromptGenerator returns google adapter for google provider', () => {
-      initializeServices(fakePricingContext);
+      initializeServices();
 
       const services = getServices();
-      const generator = services.createPromptGenerator('google', 'test-key', 'test-user-id', mockLogger);
+      const generator = services.createPromptGenerator(LlmProviders.Google, LlmModels.Gemini25Pro, 'test-key', 'test-user-id', mockLogger);
 
       expect(generator).toBeDefined();
       expect(generator.generateThumbnailPrompt).toBeDefined();
     });
 
     it('createPromptGenerator returns openai adapter for openai provider', () => {
-      initializeServices(fakePricingContext);
+      initializeServices();
 
       const services = getServices();
-      const generator = services.createPromptGenerator('openai', 'test-key', 'test-user-id', mockLogger);
+      const generator = services.createPromptGenerator('openai', 'gpt-4.1', 'test-key', 'test-user-id', mockLogger);
 
       expect(generator).toBeDefined();
       expect(generator.generateThumbnailPrompt).toBeDefined();
     });
 
     it('createImageGenerator returns OpenAI generator for gpt-image-1', () => {
-      initializeServices(fakePricingContext);
+      initializeServices();
 
       const services = getServices();
       const generator = services.createImageGenerator(
@@ -115,7 +111,7 @@ describe('services', () => {
     });
 
     it('createImageGenerator returns Google generator for gemini-2.5-flash-image', () => {
-      initializeServices(fakePricingContext);
+      initializeServices();
 
       const services = getServices();
       const generator = services.createImageGenerator(
@@ -135,7 +131,7 @@ describe('services', () => {
       delete process.env['INTEXURAOS_USER_SERVICE_URL'];
       delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
 
-      initializeServices(fakePricingContext);
+      initializeServices();
 
       const services = getServices();
       expect(services.generatedImageRepository).toBeDefined();
@@ -143,7 +139,7 @@ describe('services', () => {
     });
 
     it('generateId returns a UUID', () => {
-      initializeServices(fakePricingContext);
+      initializeServices();
 
       const services = getServices();
       const id = services.generateId();
@@ -154,7 +150,7 @@ describe('services', () => {
 
   describe('resetServices', () => {
     it('clears the container', () => {
-      initializeServices(fakePricingContext);
+      initializeServices();
       expect(() => getServices()).not.toThrow();
 
       resetServices();

@@ -5,7 +5,7 @@
 
 import { createGptClient, type GptClient } from '@intexuraos/infra-gpt';
 import type { Logger, Result } from '@intexuraos/common-core';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import { buildResearchPrompt, buildSynthesisPrompt, titlePrompt, type ResearchContext, type SynthesisContext } from '@intexuraos/llm-prompts';
 import type {
   LlmError,
@@ -25,8 +25,8 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     apiKey: string,
     model: string,
     userId: string,
-    pricing: ModelPricing,
     logger: Logger,
+    usageSink: UsageSink,
     researchId?: string
   ) {
     this.client = createGptClient({
@@ -34,8 +34,8 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
       model,
       userId,
       ...(researchId !== undefined && { researchId }),
-      pricing,
       logger,
+      usageSink,
     });
     this.model = model;
     this.logger = logger;
@@ -74,7 +74,7 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
       synthesisContext !== undefined
         ? buildSynthesisPrompt(originalPrompt, reports, synthesisContext, additionalSources)
         : buildSynthesisPrompt(originalPrompt, reports, additionalSources);
-    const result = await this.client.generate(synthesisPrompt);
+    const result = await this.client.generate(synthesisPrompt, { promptType: 'research-synthesis' });
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -105,7 +105,7 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
       { content: prompt },
       { wordRange: { min: 5, max: 8 } }
     );
-    const result = await this.client.generate(builtPrompt);
+    const result = await this.client.generate(builtPrompt, { promptType: 'research-title-generation' });
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);

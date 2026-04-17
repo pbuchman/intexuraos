@@ -52,7 +52,8 @@ export interface LlmTestResults {
  * LLM preferences for user-selected models.
  */
 export interface LlmPreferences {
-  defaultModel: LLMModel; // User's preferred default LLM model
+  defaultModel: string; // User's preferred default LLM model (LLMModel or OpenRouterModelId)
+  fallbackModel?: string; // Optional fallback model (LLMModel or OpenRouterModelId)
 }
 
 /**

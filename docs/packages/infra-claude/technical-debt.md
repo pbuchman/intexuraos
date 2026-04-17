@@ -19,7 +19,7 @@
 ## Future Plans
 
 - Extract the `createRequestContext` + `trackUsage` + error handling pattern into a shared `@intexuraos/llm-client-base` utility (shared across Claude, Gemini, GPT)
-- Add injectable `auditSink` / `usageSink` to match the API surface of `infra-gemini`
+- Add injectable `usageSink` to match the API surface of `infra-gemini`
 - Add support for system message / instructions configuration
 - Add streaming support for long-running requests
 - Make `maxTokens` configurable via `ClaudeConfig`
@@ -34,7 +34,7 @@
 | --------------- | --------------------------------------------------------------------------------- | ----------------------------------------- |
 | `src/client.ts` | `MAX_TOKENS` constant (8192) hardcoded, not configurable                          | Incompatible with models supporting 128k+ |
 | `src/client.ts` | `createRequestContext` / `trackUsage` boilerplate duplicated across LLM clients   | Maintenance overhead                      |
-| `src/client.ts` | No injectable `auditSink`/`usageSink` unlike `infra-gemini`                       | Harder to test; must mock Firestore       |
+| `src/client.ts` | No injectable `usageSink` unlike `infra-gemini`                                   | Harder to test                            |
 
 ---
 

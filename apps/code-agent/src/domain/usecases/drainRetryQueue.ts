@@ -8,6 +8,8 @@
 import { Timestamp } from '@google-cloud/firestore';
 import { ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { DispatchRetry } from '../models/dispatchRetry.js';
 import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
@@ -62,6 +64,7 @@ export interface DrainRetryQueueDeps {
   logLineRepo: LogLineRepository;
   statusMirrorService: StatusMirrorService;
   executionMemory?: PrepareExecutionMemoryResources;
+  userServiceClient?: Pick<UserServiceClient, 'getLlmClient'>;
   createTaskForPRFn?: (request: {
     repository: string;
     prNumber: number;
@@ -270,14 +273,25 @@ async function handleNewTaskRetry(
     && isMemoryEligibleAgent(agentType)
     && taskExecutionMemoryContext === undefined
   ) {
+    let userLlmClient: LlmGenerateClient | undefined;
+    if (deps.userServiceClient !== undefined) {
+      const llmResult = await deps.userServiceClient.getLlmClient(task.userId);
+      if (llmResult.ok) {
+        userLlmClient = llmResult.value;
+      } else {
+        logger.warn({ userId: task.userId, error: llmResult.error }, 'Failed to resolve user LLM client for execution memory');
+      }
+    }
+
     taskExecutionMemoryContext = await prepareExecutionMemoryContext({
       task,
       logger,
       linearAgentClient,
-      queryClient: deps.executionMemory?.queryClient,
+      queryClient: userLlmClient,
       embeddingClient: deps.executionMemory?.embeddingClient,
       executionMemoryRepo: deps.executionMemory?.executionMemoryRepo,
       executionMemoryApplicationRepo: deps.executionMemory?.executionMemoryApplicationRepo,
+      agentType,
     });
 
     if (taskExecutionMemoryContext?.status === 'error') {

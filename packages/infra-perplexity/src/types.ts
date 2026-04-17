@@ -5,12 +5,13 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
+import type { OwnerType } from '@intexuraos/llm-contract';
 
 export type {
   LLMError as PerplexityError,
   ResearchResult,
   GenerateResult,
-  ModelPricing,
 } from '@intexuraos/llm-contract';
 
 /**
@@ -26,12 +27,9 @@ export type {
  *   apiKey: process.env.PERPLEXITY_API_KEY,
  *   model: 'sonar-pro',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 1.00,
- *     outputPricePerMillion: 1.00,
- *   },
  *   timeoutMs: 840000, // 14 minutes
- *   logger: pinoLogger, // Optional pino logger for structured logging
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  * ```
  */
@@ -44,12 +42,14 @@ export interface PerplexityConfig {
   userId: string;
   /** Optional research ID for correlating audit logs to a research run */
   researchId?: string;
-  /** Cost configuration per million tokens */
-  pricing: import('@intexuraos/llm-contract').ModelPricing;
   /** Request timeout in milliseconds. Default: 840000 (14 minutes) */
   timeoutMs?: number;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
+  /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
+  usageSink: UsageSink;
+  /** Owner scope of the call. When omitted, the usage sink defaults to 'system'. */
+  ownerType?: OwnerType;
 }
 
 /** Search context size for Perplexity requests */

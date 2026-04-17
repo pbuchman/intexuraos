@@ -14,7 +14,6 @@ import type {
   AuthTokensPublic,
   RefreshResult,
 } from '../domain/identity/index.js';
-import type { LLMModel } from '@intexuraos/llm-contract';
 import type {
   LlmProvider,
   LlmTestResponse,
@@ -458,7 +457,8 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
 
   updateLlmPreferences(
     userId: string,
-    defaultModel: LLMModel
+    defaultModel: string,
+    fallbackModel?: string | null
   ): Promise<Result<void, SettingsError>> {
     if (this.shouldFailUpdateLlmPreferences) {
       this.shouldFailUpdateLlmPreferences = false;
@@ -470,14 +470,20 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
     let existing = this.settings.get(userId);
     if (existing === undefined) {
       const now = new Date().toISOString();
-      existing = {
-        userId,
-        llmPreferences: { defaultModel },
-        createdAt: now,
-        updatedAt: now,
-      };
+      const prefs: { defaultModel: string; fallbackModel?: string } = { defaultModel };
+      if (fallbackModel !== undefined && fallbackModel !== null) {
+        prefs.fallbackModel = fallbackModel;
+      }
+      existing = { userId, llmPreferences: prefs, createdAt: now, updatedAt: now };
     } else {
-      existing.llmPreferences = { defaultModel };
+      const currentPrefs = existing.llmPreferences ?? { defaultModel };
+      currentPrefs.defaultModel = defaultModel;
+      if (fallbackModel === null) {
+        delete currentPrefs.fallbackModel;
+      } else if (fallbackModel !== undefined) {
+        currentPrefs.fallbackModel = fallbackModel;
+      }
+      existing.llmPreferences = currentPrefs;
       existing.updatedAt = new Date().toISOString();
     }
 

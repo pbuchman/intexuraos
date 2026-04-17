@@ -3,7 +3,11 @@ import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-htt
 import { getServices } from '../services.js';
 import { authenticateInternalScheduler } from './helpers/internalAuth.js';
 import { getLinearIssueContext } from '../domain/usecases/getLinearIssueContext.js';
-import { processExecutionMemoryBacklog } from '../domain/usecases/processExecutionMemoryBacklog.js';
+import {
+  processExecutionMemoryBacklog,
+  sweepErroredApplications,
+  pruneStaleMemories,
+} from '../domain/usecases/processExecutionMemoryBacklog.js';
 import { loadConfig } from '../config.js';
 
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -308,19 +312,222 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         executionMemoryRepo: services.executionMemoryRepo as NonNullable<typeof services.executionMemoryRepo>,
         executionMemoryApplicationRepo:
           services.executionMemoryApplicationRepo as NonNullable<typeof services.executionMemoryApplicationRepo>,
+        userServiceClient: services.userServiceClient,
         /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
-        ...(services.executionMemoryEvaluatorClient !== undefined && {
-          evaluatorClient: services.executionMemoryEvaluatorClient,
-        }),
-        ...(services.executionMemoryDistillerClient !== undefined && {
-          distillerClient: services.executionMemoryDistillerClient,
-        }),
         ...(services.executionMemoryEmbeddingClient !== undefined && {
           embeddingClient: services.executionMemoryEmbeddingClient,
         }),
         /* v8 ignore stop @preserve */
         limit: request.body?.limit ?? 10,
       });
+
+      if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok(result.value);
+    }
+  );
+
+  // POST /internal/execution-memory/sweep-errored - sweep permanently errored post-run tasks (INT-1352)
+  fastify.post(
+    '/internal/execution-memory/sweep-errored',
+    {
+      schema: {
+        operationId: 'sweepErroredExecutionMemory',
+        summary: 'Sweep permanently errored execution memory post-run tasks and requeue for retry',
+        description:
+          'Called by Cloud Scheduler every 6 hours. Finds tasks stuck in error state for 24+ hours and requeues them.',
+        tags: ['internal'],
+        response: {
+          200: {
+            description: 'Sweep completed',
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  requeued: { type: 'number' },
+                  skipped: { type: 'number' },
+                },
+                required: ['requeued', 'skipped'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/execution-memory/sweep-errored',
+      });
+
+      const authResult = authenticateInternalScheduler(request);
+      if (!authResult.authenticated) {
+        request.log.warn('Internal auth failed for execution-memory sweep-errored');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      if (!loadConfig().executionMemoryEnabled) {
+        return await reply.ok({ requeued: 0, skipped: 0 });
+      }
+
+      const services = getServices();
+      const result = await sweepErroredApplications({
+        logger: services.logger,
+        codeTaskRepo: services.codeTaskRepo,
+      });
+
+      if (!result.ok) {
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok(result.value);
+    }
+  );
+
+  // POST /internal/execution-memory/prune-stale - archive aged zero-application memories (INT-1352)
+  fastify.post<{ Body: { maxAgeDays?: number; dryRun?: boolean } | null }>(
+    '/internal/execution-memory/prune-stale',
+    {
+      schema: {
+        operationId: 'pruneStaleExecutionMemories',
+        summary: 'Archive aged zero-application execution memories to reduce corpus noise',
+        description:
+          'Called by Cloud Scheduler weekly. Archives memories with zero applications older than the configured age threshold.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          nullable: true,
+          additionalProperties: false,
+          properties: {
+            maxAgeDays: { type: 'number', minimum: 1 },
+            dryRun: { type: 'boolean' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Prune completed',
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  archived: { type: 'number' },
+                  skipped: { type: 'number' },
+                },
+                required: ['archived', 'skipped'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/execution-memory/prune-stale',
+      });
+
+      const authResult = authenticateInternalScheduler(request);
+      if (!authResult.authenticated) {
+        request.log.warn('Internal auth failed for execution-memory prune-stale');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      if (!loadConfig().executionMemoryEnabled) {
+        return await reply.ok({ archived: 0, skipped: 0 });
+      }
+
+      const services = getServices();
+      const executionMemoryRepo = services.executionMemoryRepo;
+      if (executionMemoryRepo === undefined) {
+        return await reply.ok({ archived: 0, skipped: 0 });
+      }
+
+      const maxAgeDays = request.body?.maxAgeDays;
+      const dryRun = request.body?.dryRun;
+      const result = await pruneStaleMemories(
+        {
+          logger: services.logger,
+          executionMemoryRepo,
+        },
+        {
+          ...(maxAgeDays !== undefined && { maxAgeDays }),
+          ...(dryRun !== undefined && { dryRun }),
+        },
+      );
 
       if (!result.ok) {
         return await reply.fail('INTERNAL_ERROR', result.error.message);
@@ -363,8 +570,24 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               linearIssueId: { type: ['string', 'null'] },
               webhookSecret: { type: ['string', 'null'] },
               prNumber: { type: ['number', 'null'] },
+              webhookUrl: { type: 'string' },
+              continuationPrBranch: { type: ['string', 'null'] },
+              trackingCommentId: { type: ['string', 'null'] },
             },
-            required: ['taskId', 'prompt', 'repository', 'baseBranch', 'agentType', 'workerType', 'linearIssueId', 'webhookSecret', 'prNumber'],
+            required: [
+              'taskId',
+              'prompt',
+              'repository',
+              'baseBranch',
+              'agentType',
+              'workerType',
+              'linearIssueId',
+              'webhookSecret',
+              'prNumber',
+              'webhookUrl',
+              'continuationPrBranch',
+              'trackingCommentId',
+            ],
           },
           401: {
             description: 'Unauthorized',
@@ -412,7 +635,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const { taskId } = request.params;
-      const { codeTaskRepo } = getServices();
+      const { codeTaskRepo, serviceUrl } = getServices();
 
       const findResult = await codeTaskRepo.findById(taskId);
       if (!findResult.ok) {
@@ -432,6 +655,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         linearIssueId: task.linearIssueId ?? null,
         webhookSecret: task.webhookSecret ?? null,
         prNumber: task.prNumber ?? null,
+        webhookUrl: `${serviceUrl ?? loadConfig().serviceUrl}/internal/webhooks/task-complete`,
+        continuationPrBranch: task.prBranch ?? null,
+        trackingCommentId: task.trackingCommentId ?? null,
       });
     }
   );

@@ -5,7 +5,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import type { EncryptedValue } from './Encryptor.js';
-import type { LlmProvider, LlmTestResult, LLMModel, TranscriptionProvider, UserSettings } from '../models/UserSettings.js';
+import type { LlmProvider, LlmTestResult, TranscriptionProvider, UserSettings } from '../models/UserSettings.js';
 import type { SettingsError } from '../models/SettingsError.js';
 
 /**
@@ -55,10 +55,15 @@ export interface UserSettingsRepository {
   updateLlmLastUsed(userId: string, provider: LlmProvider): Promise<Result<void, SettingsError>>;
 
   /**
-   * Update the user's default LLM model preference.
+   * Update the user's LLM model preferences.
    * Creates the settings document if it doesn't exist.
+   * Pass null for fallbackModel to clear it; omit (undefined) to leave it unchanged.
    */
-  updateLlmPreferences(userId: string, defaultModel: LLMModel): Promise<Result<void, SettingsError>>;
+  updateLlmPreferences(
+    userId: string,
+    defaultModel: string,
+    fallbackModel?: string | null
+  ): Promise<Result<void, SettingsError>>;
 
   /**
    * Clear the user's LLM preferences (remove defaultModel).

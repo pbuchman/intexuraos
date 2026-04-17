@@ -7,8 +7,7 @@ import {
 } from '@intexuraos/infra-pubsub';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { createTodoItemExtractionService, type TodoItemExtractionService } from './infra/gemini/todoItemExtractionService.js';
-import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 
 export interface ServiceContainer {
   todoRepository: TodoRepository;
@@ -22,30 +21,24 @@ export interface ServiceConfig {
   todosProcessingTopic: string;
   internalAuthKey: string;
   userServiceUrl: string;
-  appSettingsServiceUrl: string;
+  llmUsageServiceUrl: string;
 }
 
 let container: ServiceContainer | null = null;
 
-export async function initServices(config: ServiceConfig): Promise<void> {
-  const pricingResult = await fetchAllPricing(
-    config.appSettingsServiceUrl,
-    config.internalAuthKey
-  );
-
-  if (!pricingResult.ok) {
-    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
-  }
-
-  const pricingContext = createPricingContext(pricingResult.value, [
-    LlmModels.Gemini25Flash,
-  ]);
-
+export function initServices(config: ServiceConfig): void {
+  const userServiceClientLogger = createAppLogger({ name: 'userServiceClient' });
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthKey,
-    pricingContext,
-    logger: createAppLogger({ name: 'userServiceClient' }),
+    logger: userServiceClientLogger,
+    usageSink: new HttpInternalAuthUsageSink({
+      usageServiceUrl: config.llmUsageServiceUrl,
+      internalAuthToken: config.internalAuthKey,
+      service: 'todos-agent',
+      component: 'user-service-client',
+      logger: userServiceClientLogger,
+    }),
     platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
   });
 

@@ -1,6 +1,6 @@
 import { err, type Logger, type Result } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
-import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import { generateThumbnailPrompt } from '@intexuraos/llm-prompts';
 import type { ThumbnailPrompt } from '../../domain/index.js';
 import type { PromptGenerationError, PromptGenerator } from '../../domain/ports/promptGenerator.js';
@@ -8,26 +8,24 @@ import type { PromptGenerationError, PromptGenerator } from '../../domain/ports/
 export interface GeminiPromptAdapterConfig {
   apiKey: string;
   userId: string;
-  pricing: ModelPricing;
+  model: string;
   logger: Logger;
-  model?: string;
+  usageSink: UsageSink;
 }
-
-const DEFAULT_MODEL = LlmModels.Gemini25Pro;
 
 export class GeminiPromptAdapter implements PromptGenerator {
   private readonly apiKey: string;
   private readonly userId: string;
   private readonly model: string;
-  private readonly pricing: ModelPricing;
   private readonly logger: Logger;
+  private readonly usageSink: UsageSink;
 
   constructor(config: GeminiPromptAdapterConfig) {
     this.apiKey = config.apiKey;
     this.userId = config.userId;
-    this.model = config.model ?? DEFAULT_MODEL;
-    this.pricing = config.pricing;
+    this.model = config.model;
     this.logger = config.logger;
+    this.usageSink = config.usageSink;
   }
 
   async generateThumbnailPrompt(
@@ -37,8 +35,8 @@ export class GeminiPromptAdapter implements PromptGenerator {
       apiKey: this.apiKey,
       model: this.model,
       userId: this.userId,
-      pricing: this.pricing,
       logger: this.logger,
+      usageSink: this.usageSink,
     });
 
     const result = await generateThumbnailPrompt(client, text);

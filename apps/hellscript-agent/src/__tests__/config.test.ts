@@ -45,36 +45,36 @@ describe('config', () => {
       expect(config.gcpProjectId).toBe('my-gcp-project');
     });
 
-    it('returns empty string for internalAuthKey when not set', () => {
+    it('returns empty string for internalAuthToken when not set', () => {
       delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
 
       const config = loadConfig();
 
-      expect(config.internalAuthKey).toBe('');
+      expect(config.internalAuthToken).toBe('');
     });
 
-    it('uses internalAuthKey from environment variable', () => {
+    it('uses internalAuthToken from environment variable', () => {
       process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'secret-key-123';
 
       const config = loadConfig();
 
-      expect(config.internalAuthKey).toBe('secret-key-123');
+      expect(config.internalAuthToken).toBe('secret-key-123');
     });
 
-    it('returns empty string for geminiApiKey when not set', () => {
-      delete process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
+    it('returns empty string for userServiceUrl when not set', () => {
+      delete process.env['INTEXURAOS_USER_SERVICE_URL'];
 
       const config = loadConfig();
 
-      expect(config.geminiApiKey).toBe('');
+      expect(config.userServiceUrl).toBe('');
     });
 
-    it('uses geminiApiKey from environment variable', () => {
-      process.env['INTEXURAOS_GEMINI_APP_API_KEY'] = 'gemini-key-123';
+    it('uses userServiceUrl from environment variable', () => {
+      process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://localhost:8110';
 
       const config = loadConfig();
 
-      expect(config.geminiApiKey).toBe('gemini-key-123');
+      expect(config.userServiceUrl).toBe('http://localhost:8110');
     });
 
     describe('auth config', () => {
@@ -110,15 +110,17 @@ describe('config', () => {
       process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://auth.example.com/jwks';
       process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://auth.example.com/';
       process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'hellscript-agent';
-      process.env['INTEXURAOS_GEMINI_APP_API_KEY'] = 'gemini-prod-key';
+      process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://localhost:8110';
+      process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://localhost:8132';
 
       const config = loadConfig();
 
       expect(config).toEqual({
         port: 3000,
         gcpProjectId: 'prod-project',
-        internalAuthKey: 'prod-secret',
-        geminiApiKey: 'gemini-prod-key',
+        internalAuthToken: 'prod-secret',
+        userServiceUrl: 'http://localhost:8110',
+        llmUsageServiceUrl: 'http://localhost:8132',
         auth: {
           jwksUrl: 'https://auth.example.com/jwks',
           issuer: 'https://auth.example.com/',

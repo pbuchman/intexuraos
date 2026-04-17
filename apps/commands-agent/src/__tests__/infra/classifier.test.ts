@@ -125,7 +125,10 @@ describe('GeminiClassifier', () => {
       const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       await classifier.classify('test message');
 
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('test message'));
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('test message'),
+        expect.objectContaining({ promptType: 'command-classification' })
+      );
     });
 
     it('passes classification prompt to generate', async () => {
@@ -136,7 +139,10 @@ describe('GeminiClassifier', () => {
       const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       await classifier.classify('Team meeting tomorrow at 3pm');
 
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Classify the message'));
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('Classify the message'),
+        expect.objectContaining({ promptType: 'command-classification' })
+      );
     });
 
     it('handles timeout error', async () => {
@@ -458,7 +464,8 @@ describe('GeminiClassifier', () => {
       await classifier.classify('check this https://research-world.com');
 
       expect(mockGenerate).toHaveBeenCalledWith(
-        expect.stringContaining('https://research-world.com')
+        expect.stringContaining('https://research-world.com'),
+        expect.objectContaining({ promptType: 'command-classification' })
       );
     });
 
@@ -471,7 +478,8 @@ describe('GeminiClassifier', () => {
       await classifier.classify('https://example.com');
 
       expect(mockGenerate).toHaveBeenCalledWith(
-        expect.stringContaining('Keywords inside URLs must be IGNORED')
+        expect.stringContaining('Keywords inside URLs must be IGNORED'),
+        expect.objectContaining({ promptType: 'command-classification' })
       );
     });
   });

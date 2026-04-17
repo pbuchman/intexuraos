@@ -128,6 +128,25 @@ const executionMemoryContextSchema = {
         required: ['memoryId', 'title', 'memoryType', 'score', 'appliesWhen', 'action', 'avoid', 'verification'],
       },
     },
+    topCandidates: {
+      type: 'array',
+      nullable: true,
+      items: {
+        type: 'object',
+        properties: {
+          memoryId: { type: 'string' },
+          title: { type: 'string' },
+          memoryType: { type: 'string', enum: ['implementation_pattern', 'verification_pattern', 'pitfall_pattern', 'decomposition_pattern', 'planning_decision', 'review_finding'] },
+          vectorScore: { type: 'number' },
+          rerankScore: { type: 'number' },
+          componentOverlap: { type: 'number' },
+          effectiveness: { type: 'number' },
+          passedThreshold: { type: 'boolean' },
+        },
+        required: ['memoryId', 'title', 'memoryType', 'vectorScore', 'rerankScore', 'componentOverlap', 'effectiveness', 'passedThreshold'],
+      },
+    },
+    totalSearchResults: { type: 'number', nullable: true },
     errorCode: { type: 'string', nullable: true },
     errorMessage: { type: 'string', nullable: true },
   },
@@ -382,6 +401,17 @@ function taskToApiResponse(task: {
       avoid: string;
       verification: string;
     }[];
+    topCandidates?: {
+      memoryId: string;
+      title: string;
+      memoryType: ExecutionMemoryType;
+      vectorScore: number;
+      rerankScore: number;
+      componentOverlap: number;
+      effectiveness: number;
+      passedThreshold: boolean;
+    }[];
+    totalSearchResults?: number;
     errorCode?: string;
     errorMessage?: string;
   };
@@ -1369,7 +1399,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
-      const { codeTaskRepo, rateLimitService } = getServices();
+      const { codeTaskRepo } = getServices();
       const { taskId } = request.params;
       const body = request.body;
 
@@ -1391,17 +1421,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       if (!result.ok) {
         request.log.warn({ taskId, errorCode: result.error.code }, 'Failed to update code task');
         return await reply.fail('NOT_FOUND', result.error.message);
-      }
-
-      // Record task completion for rate limiting (decrement concurrent, update cost)
-      // Do this for terminal states: completed, failed, cancelled, interrupted
-      if (body.status !== undefined && TERMINAL_STATUSES.includes(body.status)) {
-        const userId = result.value.userId; // @allow-result-access -- .ok checked at line 736
-        // Fire and forget - don't await to avoid delaying response
-        // Note: Currently we don't receive actual cost from orchestrator, so we pass undefined
-        rateLimitService.recordTaskComplete(userId, undefined).catch((err) => {
-          request.log.error({ taskId, userId, error: err }, 'Failed to record task completion for rate limiting');
-        });
       }
 
       request.log.info({ taskId, status: result.value.status }, 'Code task updated successfully'); // @allow-result-access -- narrowed by !result.ok guard above
@@ -1599,6 +1618,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       prompt: string;
       workerType?: WorkerType;
       linearIssueId?: string;
+      taskMode?: 'planning' | 'execution';
     };
   }>(
     '/code/submit',
@@ -1615,6 +1635,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             prompt: { type: 'string', minLength: 1, maxLength: 100000 },
             workerType: workerTypeSchema,
             linearIssueId: { type: 'string' },
+            taskMode: { type: 'string', enum: ['planning', 'execution'] },
           },
           required: ['prompt'],
         },
@@ -1722,17 +1743,18 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: WorkerType; workerLocation?: string; linearIssueId?: string } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: WorkerType; workerLocation?: string; linearIssueId?: string; taskMode?: 'planning' | 'execution' } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /code/submit',
         includeParams: true,
       });
 
-      const { codeTaskRepo, rateLimitService, linearIssueService, workerSettingsRepo, taskEnqueueService } = getServices();
+      const { codeTaskRepo, linearIssueService, workerSettingsRepo, taskEnqueueService } = getServices();
       const body = request.body as {
         prompt: string;
         workerType?: WorkerType;
         linearIssueId?: string;
+        taskMode?: 'planning' | 'execution';
       };
 
       /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
@@ -1740,19 +1762,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore stop @preserve */
 
       request.log.info({ userId, promptLength: body.prompt.length }, 'Submitting code task from UI');
-
-      // Check rate limits (concurrent, hourly, prompt length)
-      const limitCheck = await rateLimitService.checkLimits(userId, body.prompt.length);
-      if (!limitCheck.ok) {
-        const { error } = limitCheck;
-        request.log.warn({ userId, error }, 'Rate limit exceeded');
-
-        // service_unavailable returns 503, other rate limits return 429
-        if (error.code === 'service_unavailable') {
-          return await reply.fail('MISCONFIGURED', error.message);
-        }
-        return await reply.fail('RATE_LIMITED', error.message);
-      }
 
       // Sanitize prompt early so raw prompt never leaks to external services
       const sanitizedPromptText = sanitizePrompt(body.prompt);
@@ -1800,7 +1809,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         baseBranch: 'development',
         traceId: `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`,
         webhookSecret,
-        agentType: hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'planning',
+        agentType: body.taskMode ?? (hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'planning'),
       };
 
       // Save linearIssueId if available (linking to existing issue)
@@ -1859,9 +1868,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         }
         return await reply.fail('INTERNAL_ERROR', enqueueResult.error.message);
       }
-
-      // Record task start for rate limiting
-      await rateLimitService.recordTaskStart(userId);
 
       // Mark Linear issue as In Progress after successful enqueue
       if (issueResult.linearIssueId !== undefined) {
@@ -1992,20 +1998,18 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo, rateLimitService, workerSettingsRepo, taskEnqueueService } = getServices();
+      const { codeTaskRepo, workerSettingsRepo, taskEnqueueService } = getServices();
       /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
 
       const result = await startAskAgent(
-        { logger: request.log, codeTaskRepo, rateLimitService, workerSettingsRepo, taskEnqueueService },
+        { logger: request.log, codeTaskRepo, workerSettingsRepo, taskEnqueueService },
         { userId, prompt: request.body.prompt },
       );
 
       if (!result.ok) {
         const { error } = result;
-        if (error.code === 'service_unavailable') return await reply.fail('MISCONFIGURED', error.message);
-        if (error.code === 'rate_limited') return await reply.fail('RATE_LIMITED', error.message);
         if (error.code === 'worker_not_configured') return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
         if (error.code === 'duplicate_prompt') return await reply.fail('CONFLICT', error.message);
         if (error.code === 'queue_full') return await reply.fail('QUEUE_FULL', error.message);
@@ -2851,7 +2855,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo, taskDispatcher, rateLimitService, statusMirrorService, workerSettingsRepo } = getServices();
+      const { codeTaskRepo, taskDispatcher, statusMirrorService, workerSettingsRepo } = getServices();
       const { taskId } = request.body;
       /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
@@ -2889,12 +2893,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', 'Failed to cancel task');
       }
 
-      // Step 5: Record task completion for rate limiting
-      rateLimitService.recordTaskComplete(userId).catch((err) => {
-        request.log.error({ taskId, userId, error: err }, 'Failed to record task completion for rate limiting');
-      });
-
-      // Step 6: Notify worker to stop (best effort)
+      // Step 5: Notify worker to stop (best effort)
       try {
         // Fetch user's worker credentials for the cancellation request
         const settingsResult = await workerSettingsRepo.getSettings(userId);
@@ -4428,7 +4427,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to POST /code/tasks/:taskId/implement',
       });
 
-      const { codeTaskRepo, linearAgentClient, taskEnqueueService, metricsClient, workerSettingsRepo, rateLimitService, gitHubPRClient, userServiceClient } =
+      const { codeTaskRepo, linearAgentClient, taskEnqueueService, metricsClient, workerSettingsRepo, gitHubPRClient, userServiceClient } =
         getServices();
       const userId = request.user?.userId;
 
@@ -4441,17 +4440,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const { taskId } = request.params as { taskId: string };
       const body = request.body as { workerType?: string } | undefined;
       const requestedWorkerType = body?.workerType;
-
-      // Check rate limits before dispatching (prompt length 0 — reuses existing task prompt)
-      const limitCheck = await rateLimitService.checkLimits(userId, 0);
-      if (!limitCheck.ok) {
-        const { error } = limitCheck;
-        request.log.warn({ userId, error }, 'Rate limit exceeded for implement request');
-        if (error.code === 'service_unavailable') {
-          return reply.fail('MISCONFIGURED', error.message);
-        }
-        return reply.fail('RATE_LIMITED', error.message);
-      }
 
       request.log.info({ taskId, userId, workerType: requestedWorkerType }, 'Processing Execution Agent implementation request');
 
@@ -4508,9 +4496,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             return reply.fail('INTERNAL_ERROR', error.message);
         }
       }
-
-      // Record task start for rate limiting
-      await rateLimitService.recordTaskStart(userId);
 
       return reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
     }
@@ -4604,6 +4589,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         }
         if (error.code === 'worker_not_configured') {
           return reply.fail('MISCONFIGURED' as ErrorCode, error.message);
+        }
+        if (error.code === 'session_expired') {
+          return reply.fail('SESSION_EXPIRED', error.message);
         }
         if (error.code === 'worker_unavailable') {
           return reply.fail('WORKER_UNAVAILABLE', error.message);
@@ -4703,9 +4691,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         statusMirrorService: services.statusMirrorService,
         executionMemory: {
           /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
-          ...(services.executionMemoryQueryClient !== undefined && {
-            queryClient: services.executionMemoryQueryClient,
-          }),
           ...(services.executionMemoryEmbeddingClient !== undefined && {
             embeddingClient: services.executionMemoryEmbeddingClient,
           }),
@@ -4717,6 +4702,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           }),
           /* v8 ignore stop @preserve */
         },
+        userServiceClient: services.userServiceClient,
         /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
         ...(services.userLookupService !== undefined && {
           createTaskForPRFn: async (request: { repository: string; prNumber: number; senderLogin: string; comment: string; eventId: string; prTitle?: string; baseBranch?: string }) => {
@@ -4769,9 +4755,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         orchestratorSecret: loadConfig().orchestratorSecret,
         executionMemory: {
           /* v8 ignore start -- ts-type: conditional spread for exactOptionalPropertyTypes is not tracked after service override tests @preserve */
-          ...(services.executionMemoryQueryClient !== undefined && {
-            queryClient: services.executionMemoryQueryClient,
-          }),
           ...(services.executionMemoryEmbeddingClient !== undefined && {
             embeddingClient: services.executionMemoryEmbeddingClient,
           }),
@@ -4783,6 +4766,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           }),
           /* v8 ignore stop @preserve */
         },
+        userServiceClient: services.userServiceClient,
       });
 
       if (!result.ok) {

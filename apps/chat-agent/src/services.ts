@@ -5,7 +5,7 @@
 
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
-import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
 import { FirestoreEmbeddingRepository } from './infra/firestore/embeddingRepository.js';
@@ -20,14 +20,6 @@ import type { Logger } from 'pino';
 
 // Re-export createChatClient for use in routes (via services layer)
 export { createChatClient };
-
-/**
- * Models supported for chat responses.
- * These are validated at startup to ensure pricing is available.
- */
-const CHAT_MODELS = [
-  LlmModels.Gemini25Flash,
-] as const;
 
 /**
  * Service container holding all adapter instances.
@@ -71,13 +63,12 @@ export function resetServices(): void {
 
 /**
  * Initialize the service container with all dependencies.
- * Fetches pricing data from app-settings-service at startup.
  */
-export async function initializeServices(): Promise<void> {
+export function initializeServices(): void {
   const openaiApiKey = process.env['INTEXURAOS_OPENAI_APP_API_KEY'];
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'];
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
-  const appSettingsServiceUrl = process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'];
+  const llmUsageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
   const guestGeminiApiKey = process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
 
   if (openaiApiKey === undefined || openaiApiKey.length === 0) {
@@ -92,8 +83,8 @@ export async function initializeServices(): Promise<void> {
     throw new Error('INTEXURAOS_INTERNAL_AUTH_TOKEN environment variable is required');
   }
 
-  if (appSettingsServiceUrl === undefined || appSettingsServiceUrl.length === 0) {
-    throw new Error('INTEXURAOS_APP_SETTINGS_SERVICE_URL environment variable is required');
+  if (llmUsageServiceUrl === undefined || llmUsageServiceUrl.length === 0) {
+    throw new Error('INTEXURAOS_LLM_USAGE_SERVICE_URL environment variable is required');
   }
 
   if (guestGeminiApiKey === undefined || guestGeminiApiKey.length === 0) {
@@ -105,28 +96,32 @@ export async function initializeServices(): Promise<void> {
     level: (process.env['LOG_LEVEL'] ?? 'info') as 'error' | 'info' | 'warn' | 'debug' | 'silent',
   });
 
-  // Fetch pricing data from app-settings-service
-  const pricingResult = await fetchAllPricing(appSettingsServiceUrl, internalAuthToken);
-
-  if (!pricingResult.ok) {
-    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
-  }
-
-  const pricingContext = createPricingContext(
-    pricingResult.value,
-    [...CHAT_MODELS] as unknown as (typeof LlmModels.Gemini25Flash)[]
-  );
-
   // Create OpenAI instance for embeddings
   const openai = new OpenAI({ apiKey: openaiApiKey });
+
+  const guestUsageSink = new HttpInternalAuthUsageSink({
+    usageServiceUrl: llmUsageServiceUrl,
+    internalAuthToken,
+    service: 'chat-agent',
+    component: 'guest-chat',
+    logger,
+  });
+
+  const userServiceUsageSink = new HttpInternalAuthUsageSink({
+    usageServiceUrl: llmUsageServiceUrl,
+    internalAuthToken,
+    service: 'chat-agent',
+    component: 'user-service-client',
+    logger,
+  });
 
   // Create guest LLM client with platform-owned Gemini API key
   const guestLlmClient = createLlmClient({
     apiKey: guestGeminiApiKey,
     model: LlmModels.Gemini25Flash,
     userId: 'guest',
-    pricing: pricingContext.getPricing(LlmModels.Gemini25Flash),
     logger,
+    usageSink: guestUsageSink,
   });
 
   container = {
@@ -139,8 +134,8 @@ export async function initializeServices(): Promise<void> {
     userServiceClient: createUserServiceClient({
       baseUrl: userServiceUrl,
       internalAuthToken,
-      pricingContext,
       logger,
+      usageSink: userServiceUsageSink,
       platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
     }),
     logger,

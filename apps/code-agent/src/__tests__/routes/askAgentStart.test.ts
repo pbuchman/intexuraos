@@ -33,7 +33,6 @@ import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepos
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
-import type { RateLimitService } from '../../domain/services/rateLimitService.js';
 import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
 import { ok, err } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
@@ -61,7 +60,6 @@ describe('POST /code/ask-agent/start', () => {
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
   let taskEnqueueService: TaskEnqueueService;
-  let rateLimitService: RateLimitService;
 
   beforeEach(async () => {
     // Set jwtVerify to resolve by default (simulating valid token)
@@ -117,12 +115,6 @@ describe('POST /code/ask-agent/start', () => {
       logger,
     });
 
-    rateLimitService = {
-      checkLimits: vi.fn().mockResolvedValue(ok(undefined)),
-      recordTaskStart: vi.fn().mockResolvedValue(undefined),
-      recordTaskComplete: vi.fn().mockResolvedValue(undefined),
-    };
-
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -144,7 +136,6 @@ describe('POST /code/ask-agent/start', () => {
       logLineRepo,
       actionsAgentClient,
       linearAgentClient,
-      rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
@@ -182,7 +173,7 @@ describe('POST /code/ask-agent/start', () => {
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
-      toolCallingClient: undefined,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
@@ -211,7 +202,6 @@ describe('POST /code/ask-agent/start', () => {
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;
-      rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
@@ -229,7 +219,7 @@ describe('POST /code/ask-agent/start', () => {
       gitHubPRClient: import('../../domain/ports/gitHubPRClient.js').GitHubPRClient;
       webhookRules: import('../../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../../domain/services/gitHubDispatchService.js').WebhookDispatchService;
-      toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+      resolveToolCallingClient: (userId: string) => Promise<import('@intexuraos/common-core').Result<import('@intexuraos/llm-contract').ToolCallingClient, import('../../domain/usecases/githubAgent.js').GitHubAgentError>>;
       eventDecisionRepo: import('../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
       dispatchRetryRepo: import('../../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../../domain/services/unifiedEvaluator.js').UnifiedEvaluator;
@@ -328,28 +318,6 @@ describe('POST /code/ask-agent/start', () => {
   });
 
   describe('error handling', () => {
-    it('returns rate limited error when rate limit exceeded', async () => {
-      vi.mocked(rateLimitService.checkLimits).mockResolvedValueOnce(
-        err({ code: 'concurrent_limit', message: 'Maximum 2 concurrent tasks allowed' }),
-      );
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/ask-agent/start',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {
-          prompt: 'Ask something',
-        },
-      });
-
-      // Rate limit errors map to RATE_LIMITED
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('RATE_LIMITED');
-    });
-
     it('returns 400 when prompt is missing', async () => {
       const response = await app.inject({
         method: 'POST',
@@ -376,27 +344,6 @@ describe('POST /code/ask-agent/start', () => {
       });
 
       expect(response.statusCode).toBe(400);
-    });
-
-    it('returns 503 when service_unavailable from rate limiter', async () => {
-      vi.mocked(rateLimitService.checkLimits).mockResolvedValueOnce(
-        err({ code: 'service_unavailable', message: 'Rate limit service unavailable' }),
-      );
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/code/ask-agent/start',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-        payload: {
-          prompt: 'Ask something',
-        },
-      });
-
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('MISCONFIGURED');
     });
 
     it('returns WORKER_NOT_CONFIGURED when no workers are enabled', async () => {

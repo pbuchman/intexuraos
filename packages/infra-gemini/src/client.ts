@@ -17,25 +17,19 @@
  *   apiKey: process.env.GOOGLE_API_KEY,
  *   model: 'gemini-2.5-flash',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 0.075,
- *     outputPricePerMillion: 0.30,
- *     groundingCostPerRequest: 0.002,
- *   }
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  *
  * const result = await client.generate('Explain quantum computing');
  * if (result.ok) {
  *   console.log(result.data.content);
- *   console.log('Cost:', result.data.usage.costUsd);
  * }
  * ```
  */
 
-import { randomUUID } from 'node:crypto';
 import { type GenerateContentResponse, GoogleGenAI } from '@google/genai';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { type AuditContext, type AuditSink, createAuditContext } from '@intexuraos/llm-audit';
 import {
   LlmModels,
   LlmProviders,
@@ -44,56 +38,41 @@ import {
   type ImageGenerateOptions,
   type ImageGenerationResult,
   type GenerateResult,
-  type ImageSize,
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import type { GeminiConfig, GeminiError, ResearchResult } from './types.js';
-import { normalizeUsage, calculateImageCost } from './costCalculator.js';
+import { normalizeUsage } from './costCalculator.js';
 import { resolveVertexRedirectUrls } from './vertexUrlResolver.js';
 
-export type GeminiClient = LLMClient;
+export interface GeminiClient extends Omit<LLMClient, 'generate'> {
+  /**
+   * Generates text completion without web search.
+   *
+   * Uses only the model's training data. Faster and cheaper than research.
+   *
+   * @param prompt - The input prompt for generation
+   * @param options - Generation options including promptType for usage tracking
+   * @returns Promise resolving to {@link GenerateResult} or {@link GeminiError}
+   */
+  generate(
+    prompt: string,
+    options: { promptType: string }
+  ): Promise<Result<GenerateResult, GeminiError>>;
+}
 
 const IMAGE_MODEL = LlmModels.Gemini25FlashImage;
-const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
-
-function createRequestContext(
-  method: string,
-  model: string,
-  prompt: string,
-  userId: string,
-  researchId: string | undefined, // @allow-undefined-type -- function parameter, not a property; ?: syntax is invalid here
-  auditSink?: AuditSink
-): { requestId: string; startTime: Date; auditContext: AuditContext } {
-  const requestId = randomUUID();
-  const startTime = new Date();
-  const auditContext = createAuditContext(
-    {
-      provider: LlmProviders.Google,
-      model,
-      method,
-      prompt,
-      startedAt: startTime,
-      userId,
-      ...(researchId !== undefined && { researchId }),
-    },
-    auditSink !== undefined ? { sink: auditSink } : undefined
-  );
-  return { requestId, startTime, auditContext };
-}
 
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const { model, userId, researchId, pricing, imagePricing, logger, usageSink, auditSink } = config;
-  const usageLogger = createUsageLogger({
-    logger,
-    ...(usageSink !== undefined && { sink: usageSink }),
-  });
+  const { model, userId, logger, usageSink, ownerType } = config;
+  const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
   function trackUsage(
     callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
-    errorMessage?: string
+    errorMessage?: string,
+    promptType?: string
   ): void {
     void usageLogger.log({
       userId,
@@ -103,20 +82,13 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
+      ...(ownerType !== undefined && { ownerType }),
+      ...(promptType !== undefined && { promptType }),
     });
   }
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GeminiError>> {
-      const { auditContext } = createRequestContext(
-        'research',
-        model,
-        prompt,
-        userId,
-        researchId,
-        auditSink
-      );
-
       try {
         const response = await ai.models.generateContent({
           model,
@@ -131,26 +103,13 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
         const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
         const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
-        const usage = normalizeUsage(
-          inputTokens,
-          outputTokens,
-          groundingEnabled,
-          pricing,
-          thinkingTokens
-        );
+        const usage = normalizeUsage(inputTokens, outputTokens, groundingEnabled, thinkingTokens);
 
-        await auditContext.success({
-          response: text,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          groundingEnabled,
-        });
         trackUsage('research', usage, true);
 
         return ok({ content: text, sources, usage });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
@@ -162,59 +121,38 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       }
     },
 
-    async generate(prompt: string): Promise<Result<GenerateResult, GeminiError>> {
-      const { auditContext } = createRequestContext(
-        'generate',
-        model,
-        prompt,
-        userId,
-        researchId,
-        auditSink
-      );
-
+    async generate(
+      prompt: string,
+      options: { promptType: string }
+    ): Promise<Result<GenerateResult, GeminiError>> {
       try {
         const response = await ai.models.generateContent({ model, contents: prompt });
         const text = response.text ?? '';
         const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
         const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
         const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
-        const usage = normalizeUsage(inputTokens, outputTokens, false, pricing, thinkingTokens);
+        const usage = normalizeUsage(inputTokens, outputTokens, false, thinkingTokens);
 
-        await auditContext.success({
-          response: text,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-        });
-        trackUsage('generate', usage, true);
+        trackUsage('generate', usage, true, undefined, options.promptType);
 
         return ok({ content: text, usage });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('generate', emptyUsage, false, errorMsg);
+        trackUsage('generate', emptyUsage, false, errorMsg, options.promptType);
         return err(mapGeminiError(error));
       }
     },
 
     async generateImage(
       prompt: string,
-      options?: ImageGenerateOptions
+      _options?: ImageGenerateOptions
     ): Promise<Result<ImageGenerationResult, GeminiError>> {
-      const { auditContext } = createRequestContext(
-        'generateImage',
-        IMAGE_MODEL,
-        prompt,
-        userId,
-        researchId,
-        auditSink
-      );
-
       try {
         const response = await ai.models.generateContent({
           model: IMAGE_MODEL,
@@ -226,32 +164,23 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 
         if (imagePart?.inlineData?.data === undefined) {
           const errorMsg = 'No image data in response';
-          await auditContext.error({ error: errorMsg });
           return err({ code: 'API_ERROR', message: errorMsg });
         }
 
         const imageBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
-        const size: ImageSize = options?.size ?? DEFAULT_IMAGE_SIZE;
-        const pricingConfig = imagePricing ?? pricing;
-        const imageCost = calculateImageCost(size, pricingConfig);
 
         const usage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
           totalTokens: 0,
-          costUsd: imageCost,
+          costUsd: 0,
         };
 
-        await auditContext.success({
-          response: '[image-generated]',
-          imageCostUsd: imageCost,
-        });
         trackUsage('image_generation', usage, true);
 
         return ok({ imageData: imageBuffer, model: IMAGE_MODEL, usage });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,

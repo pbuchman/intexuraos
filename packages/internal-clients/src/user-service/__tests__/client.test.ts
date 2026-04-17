@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import nock from 'nock';
 import { createUserServiceClient, providerToKeyField } from '../client.js';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
-import { createFakePricingContext } from '@intexuraos/llm-pricing';
+import { createFakeUsageSink } from '@intexuraos/llm-pricing';
 
 describe('providerToKeyField', () => {
   it('returns google for Google provider', () => {
@@ -34,13 +34,11 @@ describe('createUserServiceClient', () => {
     debug: vi.fn(),
   };
 
-  const mockPricingContext = createFakePricingContext();
-
   const config = {
     baseUrl: 'http://localhost:3000',
     internalAuthToken: 'test-token',
-    pricingContext: mockPricingContext,
     logger: mockLogger,
+    usageSink: createFakeUsageSink(),
   };
 
   beforeEach(() => {
@@ -516,15 +514,11 @@ describe('createUserServiceClient', () => {
       }
     });
 
-    it('creates OpenAI client when user has OpenAI model preference', async () => {
+    it('rejects GPT54 model as invalid since it is not a default-eligible model', async () => {
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.GPT52,
+          defaultModel: LlmModels.GPT54,
         },
-      };
-
-      const mockKeys = {
-        openai: 'openai-key',
       };
 
       nock('http://localhost:3000')
@@ -532,36 +526,27 @@ describe('createUserServiceClient', () => {
         .matchHeader('X-Internal-Auth', 'test-token')
         .reply(200, { success: true, data: mockSettings });
 
-      nock('http://localhost:3000')
-        .get('/internal/users/user123/llm-keys')
-        .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, { success: true, data: mockKeys });
-
       const client = createUserServiceClient(config);
       const result = await client.getLlmClient('user123');
 
-      // Note: OpenAI provider not yet supported by llm-factory, so expect error
-      // This test exercises the providerToKeyField switch case for OpenAI
+      // GPT54 is not a default-eligible model (only fast models and default OpenRouter models are)
       if (!result.ok) {
-        expect(result.error.code).toBe('NETWORK_ERROR');
-        expect(mockLogger.error).toHaveBeenCalledWith(
-          { userId: 'user123', error: expect.any(String) },
-          'Network error while creating LLM client'
+        expect(result.error.code).toBe('INVALID_MODEL');
+        expect(result.error.message).toContain(LlmModels.GPT54);
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          { userId: 'user123', invalidModel: LlmModels.GPT54 },
+          'User has invalid model preference'
         );
       } else {
-        expect.fail('Expected error result for unsupported provider');
+        expect.fail('Expected error result for non-eligible model');
       }
     });
 
-    it('creates Anthropic client when user has Anthropic model preference', async () => {
+    it('rejects ClaudeSonnet46 model as invalid since it is not a default-eligible model', async () => {
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.ClaudeSonnet45,
+          defaultModel: LlmModels.ClaudeSonnet46,
         },
-      };
-
-      const mockKeys = {
-        anthropic: 'anthropic-key',
       };
 
       nock('http://localhost:3000')
@@ -569,36 +554,60 @@ describe('createUserServiceClient', () => {
         .matchHeader('X-Internal-Auth', 'test-token')
         .reply(200, { success: true, data: mockSettings });
 
-      nock('http://localhost:3000')
-        .get('/internal/users/user123/llm-keys')
-        .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, { success: true, data: mockKeys });
-
       const client = createUserServiceClient(config);
       const result = await client.getLlmClient('user123');
 
-      // Note: Anthropic provider not yet supported by llm-factory, so expect error
-      // This test exercises the providerToKeyField switch case for Anthropic
+      // ClaudeSonnet46 is not a default-eligible model (only fast models and default OpenRouter models are)
       if (!result.ok) {
-        expect(result.error.code).toBe('NETWORK_ERROR');
-        expect(mockLogger.error).toHaveBeenCalledWith(
-          { userId: 'user123', error: expect.any(String) },
-          'Network error while creating LLM client'
+        expect(result.error.code).toBe('INVALID_MODEL');
+        expect(result.error.message).toContain(LlmModels.ClaudeSonnet46);
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          { userId: 'user123', invalidModel: LlmModels.ClaudeSonnet46 },
+          'User has invalid model preference'
         );
       } else {
-        expect.fail('Expected error result for unsupported provider');
+        expect.fail('Expected error result for non-eligible model');
       }
     });
 
-    it('creates Perplexity client when user has Perplexity model preference', async () => {
+    it('rejects SonarPro model as invalid since it is not a default-eligible model', async () => {
       const mockSettings = {
         llmPreferences: {
           defaultModel: LlmModels.SonarPro,
         },
       };
 
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: mockSettings });
+
+      const client = createUserServiceClient(config);
+      const result = await client.getLlmClient('user123');
+
+      // SonarPro is not a default-eligible model (only fast models and default OpenRouter models are)
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_MODEL');
+        expect(result.error.message).toContain(LlmModels.SonarPro);
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          { userId: 'user123', invalidModel: LlmModels.SonarPro },
+          'User has invalid model preference'
+        );
+      } else {
+        expect.fail('Expected error result for non-eligible model');
+      }
+    });
+
+    it('creates client for default-eligible OpenRouter model with allowlist pricing', async () => {
+      const openRouterModel = 'or:google/gemma-4-31b-it:free';
+      const mockSettings = {
+        llmPreferences: {
+          defaultModel: openRouterModel,
+        },
+      };
+
       const mockKeys = {
-        perplexity: 'perplexity-key',
+        openrouter: 'openrouter-key',
       };
 
       nock('http://localhost:3000')
@@ -614,16 +623,14 @@ describe('createUserServiceClient', () => {
       const client = createUserServiceClient(config);
       const result = await client.getLlmClient('user123');
 
-      // Note: Perplexity provider not yet supported by llm-factory, so expect error
-      // This test exercises the providerToKeyField switch case for Perplexity
-      if (!result.ok) {
-        expect(result.error.code).toBe('NETWORK_ERROR');
-        expect(mockLogger.error).toHaveBeenCalledWith(
-          { userId: 'user123', error: expect.any(String) },
-          'Network error while creating LLM client'
+      if (result.ok) {
+        expect(result.value).toBeDefined();
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          { userId: 'user123', model: openRouterModel, provider: LlmProviders.OpenRouter },
+          'LLM client created successfully'
         );
       } else {
-        expect.fail('Expected error result for unsupported provider');
+        expect.fail('Expected successful result for default-eligible OpenRouter model');
       }
     });
 
@@ -633,14 +640,15 @@ describe('createUserServiceClient', () => {
         platformGeminiApiKey: 'platform-gemini-key',
       };
 
+      // Use ClaudeHaiku35 which IS default-eligible but no anthropic key is configured
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.ClaudeSonnet45,
+          defaultModel: LlmModels.ClaudeHaiku35,
         },
       };
 
       const mockKeys = {
-        openai: 'openai-key',
+        openai: 'openai-key', // No anthropic key
       };
 
       nock('http://localhost:3000')
@@ -662,7 +670,7 @@ describe('createUserServiceClient', () => {
           {
             userId: 'user123',
             provider: LlmProviders.Anthropic,
-            requestedModel: LlmModels.ClaudeSonnet45,
+            requestedModel: LlmModels.ClaudeHaiku35,
           },
           'No API key for provider, falling back to platform Gemini25Flash'
         );
@@ -705,6 +713,45 @@ describe('createUserServiceClient', () => {
       } else {
         expect.fail('Expected error result');
       }
+    });
+
+    it('returns client with zero pricing when pricingContext is omitted', async () => {
+      const mockSettings = {
+        llmPreferences: {
+          defaultModel: LlmModels.Gemini25Flash,
+        },
+      };
+
+      const mockKeys = {
+        google: 'google-key',
+      };
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: mockSettings });
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: mockKeys });
+
+      const noPricingConfig = {
+        baseUrl: 'http://localhost:3000',
+        internalAuthToken: 'test-token',
+        logger: mockLogger,
+        usageSink: createFakeUsageSink(),
+      };
+
+      const client = createUserServiceClient(noPricingConfig);
+      const result = await client.getLlmClient('user123');
+
+      // Zero pricing is the expected intermediate state during the INT-1377
+      // migration: consumers drop pricingContext now, server-side pricing lands later.
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error('unreachable');
+      expect(result.value).toBeDefined();
+      expect(typeof result.value.generate).toBe('function');
     });
   });
 

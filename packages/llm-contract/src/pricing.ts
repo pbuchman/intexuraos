@@ -1,13 +1,12 @@
 /**
  * Pricing types for LLM cost calculation.
  *
- * Used by app-settings-service (for fetching/storing prices) and infra-*
- * packages (for calculating request costs).
+ * Used by llm-usage-service for fetching/storing prices and computing
+ * costs on ingestion. Client packages no longer calculate costs locally.
  *
  * @packageDocumentation
  */
 
-import type { TokenUsage } from './types.js';
 import type { LlmProvider } from './supportedModels.js';
 
 /** Supported image generation dimensions */
@@ -29,8 +28,7 @@ export type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
  *   webSearchCostPerCall: 0.0035, // $0.0035 per web search call
  * };
  *
- * // Calculate cost for a request:
- * const cost = calculateTextCost(usage, claudePricing);
+ * // Used by llm-usage-service for server-side cost calculation
  * ```
  */
 export interface ModelPricing {
@@ -69,7 +67,7 @@ export interface ModelPricing {
 /**
  * Pricing configuration for all models from a single provider.
  *
- * Used by app-settings-service to store and retrieve pricing data.
+ * Used by llm-usage-service to store and retrieve pricing data.
  * The `updatedAt` field is used to invalidate stale pricing.
  */
 export interface ProviderPricing {
@@ -79,30 +77,14 @@ export interface ProviderPricing {
   models: Record<string, ModelPricing>;
   /** ISO timestamp of last pricing update */
   updatedAt: string;
-}
-
-/**
- * Interface for calculating LLM operation costs.
- *
- * Implemented by individual provider packages (infra-claude, infra-gpt, etc.)
- * to handle provider-specific cost calculations.
- */
-export interface CostCalculator {
   /**
-   * Calculate text generation cost from token usage.
-   *
-   * @param usage - Raw token usage from provider response
-   * @param pricing - Model pricing configuration
-   * @returns Cost in USD
+   * When true, consumers should use provider-reported cost instead of calculating.
+   * Set on OpenRouter entries where cost comes from the provider API response.
    */
-  calculateTextCost(usage: TokenUsage, pricing: ModelPricing): number;
-
+  useProviderCost?: boolean;
   /**
-   * Calculate image generation cost.
-   *
-   * @param size - Image dimensions
-   * @param pricing - Model pricing configuration (must include imagePricing)
-   * @returns Cost in USD
+   * Source of cost data (e.g., 'provider_reported').
+   * Metadata marker for providers whose pricing table entries are informational only.
    */
-  calculateImageCost(size: ImageSize, pricing: ModelPricing): number;
+  costSource?: string;
 }

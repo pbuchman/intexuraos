@@ -161,6 +161,7 @@ describe('buildResearchPrompt', () => {
         safety: {
           high_stakes: true,
           required_disclaimers: ['Consult a professional'],
+          user_exclusions: [],
         },
       });
       const result = buildResearchPrompt('query', ctx);
@@ -267,6 +268,7 @@ describe('buildResearchPrompt', () => {
         safety: {
           high_stakes: false,
           required_disclaimers: ['Consult a doctor'],
+          user_exclusions: [],
         },
       });
       const result = buildResearchPrompt('query', ctx);
@@ -281,6 +283,7 @@ describe('buildResearchPrompt', () => {
         safety: {
           high_stakes: true,
           required_disclaimers: [],
+          user_exclusions: [],
         },
       });
       const result = buildResearchPrompt('query', ctx);
@@ -295,6 +298,7 @@ describe('buildResearchPrompt', () => {
         safety: {
           high_stakes: false,
           required_disclaimers: [],
+          user_exclusions: [],
         },
       });
       const result = buildResearchPrompt('query', ctx);

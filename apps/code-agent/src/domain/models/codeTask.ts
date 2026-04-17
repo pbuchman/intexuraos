@@ -114,6 +114,7 @@ export interface ExecutionMemoryContext {
   matchedAt?: Timestamp;
   matchedMemories?: ExecutionMemoryContextMemory[];
   topCandidates?: ExecutionMemoryApplicationCandidate[];
+  totalSearchResults?: number;
   errorCode?: string;
   errorMessage?: string;
 }
@@ -137,6 +138,7 @@ export interface TaskError {
   code: string;             // Error code (see design lines 1774-1812)
   message: string;          // Human-readable message
   remediation?: {           // Design reference: Lines 1818-1848
+    action?: 'retry' | 'wait' | 'fix_code' | 'contact_support' | 'retry_smaller';  // Orchestrator hint; honored by classifyFailure as fallback
     retryAfter?: number;    // Seconds to wait before retry
     manualSteps?: string;   // Instructions for user
     supportLink?: string;   // Link to docs/support
@@ -195,6 +197,8 @@ export interface CodeTask {
   prBranch?: string;           // Branch name (queryable, redundant with result.branch)
   prMergedAt?: Timestamp;      // When the PR was merged (set by handlePrClose webhook, INT-1174)
   prClosedAt?: Timestamp;      // When PR was closed without merge (set by handlePrClose webhook, INT-1316)
+  prUrlValidationFailed?: boolean;    // True if PR URL validation found issues (INT-1361)
+  prUrlValidationErrors?: string[];   // Validation error details (INT-1361)
 
   // Resume/Follow-up tracking (for PR comment auto-response - INT-465)
   parentTaskId?: string;       // If this task is a follow-up to another
@@ -249,4 +253,8 @@ export interface CodeTask {
 
   // Remediation task metadata
   requiresReReview?: boolean;    // Set by remediation tasks before pushing code
+
+  // Auto-retry metadata (INT-1375)
+  failedWorkerLocation?: string;   // Worker location that failed, to exclude on retry dispatch
+  autoRetryAttempt?: number;       // 1-based auto-retry attempt number (max 3)
 }

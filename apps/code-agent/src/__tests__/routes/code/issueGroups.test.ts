@@ -39,7 +39,6 @@ import type { Logger } from 'pino';
 import type { CodeTaskRepository, CreateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
 import type { LinearAgentClient } from '../../../domain/ports/linearAgentClient.js';
 import type { TaskDispatcherService, DispatchResult, DispatchError } from '../../../domain/services/taskDispatcher.js';
-import type { RateLimitService } from '../../../domain/services/rateLimitService.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { Result } from '@intexuraos/common-core';
 import { createWhatsAppNotifier } from '../../../infra/services/whatsappNotifierImpl.js';
@@ -47,6 +46,8 @@ import { createLinearIssueService } from '../../../domain/services/linearIssueSe
 import { createActionsAgentClient } from '../../../infra/clients/actionsAgentClient.js';
 import type { TaskGroupSummaryRepository } from '../../../domain/ports/taskGroupSummaryRepository.js';
 import type { UserGroupCounts, TaskGroupSummary } from '../../../domain/models/taskGroupSummary.js';
+import { createFakeTaskGroupSummaryRepository } from '../../fakes/fakeTaskGroupSummaryRepository.js';
+import type { FakeTaskGroupSummaryRepository } from '../../fakes/fakeTaskGroupSummaryRepository.js';
 
 function makeLinearAgentClient(): LinearAgentClient {
   const client: LinearAgentClient = {
@@ -96,6 +97,7 @@ function makeGroupSummaryRepo(overrides: Partial<TaskGroupSummaryRepository> = {
     listGroupSummaries: async (): ReturnType<TaskGroupSummaryRepository['listGroupSummaries']> => ok({ summaries: [] }),
     recomputeGroupFromTasks: async (): Promise<void> => { return; },
     recomputeWithLabels: async (): ReturnType<TaskGroupSummaryRepository['recomputeWithLabels']> => ok(undefined),
+    setImportant: async (): ReturnType<TaskGroupSummaryRepository['setImportant']> => ok(undefined),
     ...overrides,
   };
 }
@@ -195,7 +197,6 @@ describe('GET /code/issue-groups', () => {
       logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
       actionsAgentClient: actionsClient,
       linearAgentClient: linearClient,
-      rateLimitService: { async checkLimits() { return ok(undefined); }, async recordTaskStart() { return; }, async recordTaskComplete() { return; } } as RateLimitService,
       linearIssueService: createLinearIssueService({ linearAgentClient: linearClient, logger }),
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({ actionsAgentClient: actionsClient, logger }),
@@ -211,7 +212,7 @@ describe('GET /code/issue-groups', () => {
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
-      toolCallingClient: undefined,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
       eventDecisionRepo: createFirestoreEventDecisionRepository({ logger }),
       dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
       unifiedEvaluator: {} as never,
@@ -273,12 +274,6 @@ describe('GET /code/issue-groups', () => {
       async sendMessageToWorker() { return ok({ action: 'queued' }); },
     };
 
-    const rateLimitService: RateLimitService = {
-      async checkLimits() { return ok(undefined); },
-      async recordTaskStart() { return; },
-      async recordTaskComplete() { return; },
-    };
-
     const linearAgentClient = makeLinearAgentClient();
 
     const actionsAgentClient = createActionsAgentClient({
@@ -314,7 +309,6 @@ describe('GET /code/issue-groups', () => {
       }),
       actionsAgentClient,
       linearAgentClient,
-      rateLimitService,
       linearIssueService,
       metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
@@ -350,7 +344,7 @@ describe('GET /code/issue-groups', () => {
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
-      toolCallingClient: undefined,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
       eventDecisionRepo: createFirestoreEventDecisionRepository({ logger }),
       dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
       unifiedEvaluator: {} as never,
@@ -916,6 +910,38 @@ describe('GET /code/issue-groups', () => {
     expect(task?.createdAt).not.toBe('');
   });
 
+  it('serializes requiresReReview on remediation tasks (INT-1286 alt-unlock signal)', async () => {
+    const r = await codeTaskRepo.create(makeTaskInput({
+      linearIssueId: 'INT-1210',
+      traceId: 'trace-serialize-requiresReReview',
+      agentType: 'remediation',
+    }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+
+    await codeTaskRepo.update(r.value.id, {
+      status: 'implemented',
+      requiresReReview: false,
+    });
+
+    mockSummaries = [makeSummary({ linearIssueId: 'INT-1210', aggregateStatus: 'done', latestTaskStatus: 'implemented', hasPrUrl: false })];
+    mockCounts = { ...mockCounts, done: 1, totalGroups: 1 };
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: { groups: { linearIssueId: string | null; tasks: { requiresReReview?: boolean }[] }[] };
+    };
+    const group = body.data.groups.find((g) => g.linearIssueId === 'INT-1210');
+    const task = group?.tasks[0];
+    expect(task?.requiresReReview).toBe(false);
+  });
+
   // Note: sortBy validation (item 15) and limit default (item 16) are covered by
   // v8 ignore comments because Fastify JSON Schema enforces enum/default before
   // the handler runs, making the fallback branches unreachable in tests.
@@ -1065,11 +1091,6 @@ describe('GET /code/issue-groups', () => {
         logger,
       }),
       linearAgentClient: makeLinearAgentClient(),
-      rateLimitService: {
-        async checkLimits() { return ok(undefined); },
-        async recordTaskStart() { return; },
-        async recordTaskComplete() { return; },
-      } as RateLimitService,
       linearIssueService: createLinearIssueService({
         linearAgentClient: makeLinearAgentClient(),
         logger,
@@ -1112,7 +1133,7 @@ describe('GET /code/issue-groups', () => {
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
-      toolCallingClient: undefined,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
       eventDecisionRepo: createFirestoreEventDecisionRepository({ logger }),
       dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
       unifiedEvaluator: {} as never,
@@ -1179,11 +1200,6 @@ describe('GET /code/issue-groups', () => {
         logger,
       }),
       linearAgentClient: failingLinearClient,
-      rateLimitService: {
-        async checkLimits() { return ok(undefined); },
-        async recordTaskStart() { return; },
-        async recordTaskComplete() { return; },
-      } as RateLimitService,
       linearIssueService: createLinearIssueService({
         linearAgentClient: failingLinearClient,
         logger,
@@ -1226,7 +1242,7 @@ describe('GET /code/issue-groups', () => {
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
-      toolCallingClient: undefined,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
       eventDecisionRepo: createFirestoreEventDecisionRepository({ logger }),
       dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
       unifiedEvaluator: {} as never,
@@ -1417,8 +1433,7 @@ describe('GET /code/issue-groups', () => {
         logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }),
         linearAgentClient: makeLinearAgentClient(),
-        rateLimitService: { async checkLimits() { return ok(undefined); }, async recordTaskStart() { return; }, async recordTaskComplete() { return; } } as RateLimitService,
-        linearIssueService: createLinearIssueService({ linearAgentClient: makeLinearAgentClient(), logger }),
+          linearIssueService: createLinearIssueService({ linearAgentClient: makeLinearAgentClient(), logger }),
         metricsClient: createNoOpMetricsClient(),
         statusMirrorService: createStatusMirrorService({ actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }), logger }),
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
@@ -1433,7 +1448,7 @@ describe('GET /code/issue-groups', () => {
         gitHubPRClient: {} as never,
         webhookRules: {} as never,
         dispatchService: {} as never,
-        toolCallingClient: undefined,
+        resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
         eventDecisionRepo: createFirestoreEventDecisionRepository({ logger }),
         dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
         unifiedEvaluator: {} as never,
@@ -1516,8 +1531,7 @@ describe('GET /code/issue-groups', () => {
         logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }),
         linearAgentClient: makeLinearAgentClient(),
-        rateLimitService: { async checkLimits() { return ok(undefined); }, async recordTaskStart() { return; }, async recordTaskComplete() { return; } } as RateLimitService,
-        linearIssueService: createLinearIssueService({ linearAgentClient: makeLinearAgentClient(), logger }),
+          linearIssueService: createLinearIssueService({ linearAgentClient: makeLinearAgentClient(), logger }),
         metricsClient: createNoOpMetricsClient(),
         statusMirrorService: createStatusMirrorService({ actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }), logger }),
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
@@ -1532,7 +1546,7 @@ describe('GET /code/issue-groups', () => {
         gitHubPRClient: {} as never,
         webhookRules: {} as never,
         dispatchService: {} as never,
-        toolCallingClient: undefined,
+        resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
         eventDecisionRepo: createFirestoreEventDecisionRepository({ logger }),
         dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
         unifiedEvaluator: {} as never,
@@ -1581,8 +1595,7 @@ describe('GET /code/issue-groups', () => {
         logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }),
         linearAgentClient: makeLinearAgentClient(),
-        rateLimitService: { async checkLimits() { return ok(undefined); }, async recordTaskStart() { return; }, async recordTaskComplete() { return; } } as RateLimitService,
-        linearIssueService: createLinearIssueService({ linearAgentClient: makeLinearAgentClient(), logger }),
+          linearIssueService: createLinearIssueService({ linearAgentClient: makeLinearAgentClient(), logger }),
         metricsClient: createNoOpMetricsClient(),
         statusMirrorService: createStatusMirrorService({ actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }), logger }),
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
@@ -1597,7 +1610,7 @@ describe('GET /code/issue-groups', () => {
         gitHubPRClient: {} as never,
         webhookRules: {} as never,
         dispatchService: {} as never,
-        toolCallingClient: undefined,
+        resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
         eventDecisionRepo: createFirestoreEventDecisionRepository({ logger }),
         dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
         unifiedEvaluator: {} as never,
@@ -2328,5 +2341,190 @@ describe('GET /code/issue-groups', () => {
       // Task is not a phantom (it exists), so done count stays at 1
       expect(body.data.counts['done']).toBe(1);
     });
+  });
+});
+
+describe('POST /code/issue-groups/:groupKey/important', () => {
+  let fakeFirestore: ReturnType<typeof createFakeFirestore>;
+  let logger: Logger;
+  let server: Awaited<ReturnType<typeof buildServer>>;
+  let codeTaskRepo: CodeTaskRepository;
+  let fakeRepo: FakeTaskGroupSummaryRepository;
+
+  beforeEach(async () => {
+    mockedJwtVerify.mockResolvedValue({
+      payload: { sub: 'test-user-id', email: 'test@example.com' },
+      protectedHeader: new Uint8Array(),
+    } as never);
+
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] = 'test-orchestrator-secret';
+
+    fakeFirestore = createFakeFirestore();
+    setFirestore(fakeFirestore as unknown as Firestore);
+
+    logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+      child: vi.fn().mockReturnThis(),
+    } as unknown as Logger;
+
+    codeTaskRepo = createFirestoreCodeTaskRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    fakeRepo = createFakeTaskGroupSummaryRepository();
+
+    setServices(makeBaseServices({ codeTaskRepo, groupSummaryRepo: fakeRepo as unknown as ReturnType<typeof makeGroupSummaryRepo> }));
+    server = await buildServer();
+  });
+
+  afterEach(async () => {
+    await server.close();
+    resetServices();
+    resetFirestore();
+    fakeRepo.reset();
+  });
+
+  function makeBaseServices(overrides: {
+    codeTaskRepo?: CodeTaskRepository;
+    groupSummaryRepo?: ReturnType<typeof makeGroupSummaryRepo>;
+  } = {}): ServiceContainer {
+    const actionsClient = createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger });
+    const linearClient = makeLinearAgentClient();
+    const repoToUse = overrides.codeTaskRepo ?? codeTaskRepo;
+    return {
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+      codeTaskRepo: repoToUse,
+      taskDispatcher: {
+        async dispatch(): Promise<Result<DispatchResult, DispatchError>> { return ok({ dispatched: true, workerLocation: 'mac' }); },
+        async cancelOnWorker() { return; },
+        async sendMessageToWorker() { return ok({ action: 'queued' }); },
+      } as TaskDispatcherService,
+      whatsappNotifier: createWhatsAppNotifier({ whatsappPublisher: { publishSendMessage: async () => ok(undefined) } as unknown as WhatsAppSendPublisher }),
+      logChunkRepo: createFirestoreLogChunkRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      logLineRepo: createFirestoreLogLineRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      actionsAgentClient: actionsClient,
+      linearAgentClient: linearClient,
+      linearIssueService: createLinearIssueService({ linearAgentClient: linearClient, logger }),
+      metricsClient: createNoOpMetricsClient(),
+      statusMirrorService: createStatusMirrorService({ actionsAgentClient: actionsClient, logger }),
+      processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: repoToUse, logger }),
+      detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: repoToUse, logger }),
+      cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: repoToUse, logger }),
+      workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      workerHealthProbe: mockWorkerHealthProbe,
+      gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
+      gitHubPRSummaryRepo: {} as never,
+      turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
+      userServiceClient: mockUserServiceClient,
+      gitHubPRClient: {} as never,
+      webhookRules: {} as never,
+      dispatchService: {} as never,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
+      eventDecisionRepo: createFirestoreEventDecisionRepository({ logger }),
+      dispatchRetryRepo: createFirestoreDispatchRetryRepository({ logger }),
+      unifiedEvaluator: {} as never,
+      automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+      taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
+      mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
+      mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repoToUse, logger }),
+      autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: repoToUse, logger }),
+      groupSummaryRepo: overrides.groupSummaryRepo ?? makeGroupSummaryRepo(),
+    };
+  }
+
+  async function seedTask(linearIssueId: string): Promise<void> {
+    const result = await codeTaskRepo.create(makeTaskInput({ linearIssueId, traceId: `trace-${String(Date.now())}-${String(Math.random())}` }));
+    if (!result.ok) throw new Error('Failed to create task');
+    const taskResult = await codeTaskRepo.findById(result.value.id);
+    if (!taskResult.ok) throw new Error('Failed to find task');
+    await fakeRepo.updateAfterCreate(taskResult.value);
+  }
+
+  it('marks a group as important', async () => {
+    await seedTask('INT-500');
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/code/issue-groups/INT-500/important',
+      headers: { authorization: 'Bearer test-token' },
+      payload: { important: true },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { data: { important: boolean } };
+    expect(body.data.important).toBe(true);
+  });
+
+  it('unmarks a group as important', async () => {
+    await seedTask('INT-500');
+    await fakeRepo.setImportant('test-user-id', 'INT-500', true);
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/code/issue-groups/INT-500/important',
+      headers: { authorization: 'Bearer test-token' },
+      payload: { important: false },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { data: { important: boolean } };
+    expect(body.data.important).toBe(false);
+  });
+
+  it('returns NOT_FOUND for non-existent group', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/code/issue-groups/nonexistent/important',
+      headers: { authorization: 'Bearer test-token' },
+      payload: { important: true },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('returns 500 when setImportant encounters a Firestore error', async () => {
+    // Override fakeRepo.setImportant to simulate FIRESTORE_ERROR
+    const originalSetImportant = fakeRepo.setImportant.bind(fakeRepo);
+    fakeRepo.setImportant = async (): ReturnType<typeof fakeRepo.setImportant> =>
+      err({ code: 'FIRESTORE_ERROR', message: 'Simulated Firestore failure' });
+
+    await seedTask('INT-500');
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/code/issue-groups/INT-500/important',
+      headers: { authorization: 'Bearer test-token' },
+      payload: { important: true },
+    });
+
+    expect(response.statusCode).toBe(500);
+    fakeRepo.setImportant = originalSetImportant;
+  });
+
+  it('includes isImportant in GET response when group is marked important', async () => {
+    await seedTask('INT-500');
+    await fakeRepo.setImportant('test-user-id', 'INT-500', true);
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/code/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as { data: { groups: { linearIssueId: string | null; isImportant?: boolean }[] } };
+    const group = body.data.groups.find((g) => g.linearIssueId === 'INT-500');
+    expect(group).toBeDefined();
+    expect(group?.isImportant).toBe(true);
   });
 });

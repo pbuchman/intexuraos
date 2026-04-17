@@ -34,7 +34,6 @@ import type { LogChunkRepository } from '../domain/repositories/logChunkReposito
 import type { LogLineRepository } from '../domain/repositories/logLineRepository.js';
 import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../domain/services/whatsappNotifier.js';
-import type { RateLimitService } from '../domain/services/rateLimitService.js';
 import type { LinearIssueService } from '../domain/services/linearIssueService.js';
 import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
 import type { StatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
@@ -63,18 +62,6 @@ describe('OpenAPI contract', () => {
     const fakeFirestore = createFakeFirestore() as unknown as Firestore;
     setFirestore(fakeFirestore);
     const logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
-
-    const rateLimitService: RateLimitService = {
-      async checkLimits() {
-        return ok(undefined);
-      },
-      async recordTaskStart() {
-        return;
-      },
-      async recordTaskComplete() {
-        return;
-      },
-    };
 
     const actionsAgentClient = createActionsAgentClient({
       baseUrl: 'http://actions-agent',
@@ -144,7 +131,6 @@ describe('OpenAPI contract', () => {
         logger,
       }),
       metricsClient: createNoOpMetricsClient(),
-      rateLimitService,
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({
         logger,
@@ -158,7 +144,7 @@ describe('OpenAPI contract', () => {
       gitHubPRClient: {} as never,
       webhookRules: {} as never,
       dispatchService: {} as never,
-      toolCallingClient: undefined,
+      resolveToolCallingClient: (() => { throw new Error('unused'); }) as never,
       eventDecisionRepo: {} as never,
       dispatchRetryRepo: {} as never,
       unifiedEvaluator: {} as never,
@@ -187,7 +173,6 @@ describe('OpenAPI contract', () => {
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearAgentClient: LinearAgentClient;
-      rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
@@ -205,7 +190,7 @@ describe('OpenAPI contract', () => {
       gitHubPRClient: import('../domain/ports/gitHubPRClient.js').GitHubPRClient;
       webhookRules: import('../domain/services/gitHubWebhookRules.js').WebhookRulesService;
       dispatchService: import('../domain/services/gitHubDispatchService.js').WebhookDispatchService;
-      toolCallingClient: import('@intexuraos/llm-contract').ToolCallingClient | undefined;
+      resolveToolCallingClient: (userId: string) => Promise<import('@intexuraos/common-core').Result<import('@intexuraos/llm-contract').ToolCallingClient, import('../domain/usecases/githubAgent.js').GitHubAgentError>>;
       eventDecisionRepo: import('../domain/repositories/eventDecisionRepository.js').EventDecisionRepository;
       dispatchRetryRepo: import('../domain/repositories/dispatchRetryRepository.js').DispatchRetryRepository;
       unifiedEvaluator: import('../domain/services/unifiedEvaluator.js').UnifiedEvaluator;

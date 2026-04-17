@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LlmProviders, type ModelPricing } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -8,6 +8,8 @@ const mockLogger: Logger = {
   warn: vi.fn(),
   debug: vi.fn(),
 };
+
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
 const mockMessagesCreate = vi.fn();
 
@@ -28,13 +30,6 @@ vi.mock('@anthropic-ai/sdk', () => {
   return { default: MockAnthropic };
 });
 
-vi.mock('@intexuraos/llm-audit', () => ({
-  createAuditContext: vi.fn().mockReturnValue({
-    success: vi.fn().mockResolvedValue(undefined),
-    error: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-
 const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@intexuraos/llm-pricing', () => ({
@@ -45,18 +40,8 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 }));
 
 const { createClaudeClient } = await import('../client.js');
-const { createAuditContext } = await import('@intexuraos/llm-audit');
 
 const TEST_MODEL = 'claude-sonnet-4-20250514';
-
-const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing => ({
-  inputPricePerMillion: 3.0,
-  outputPricePerMillion: 15.0,
-  cacheReadMultiplier: 0.1,
-  cacheWriteMultiplier: 1.25,
-  webSearchCostPerCall: 0.01,
-  ...overrides,
-});
 
 describe('createClaudeClient', () => {
   beforeEach(() => {
@@ -64,7 +49,7 @@ describe('createClaudeClient', () => {
   });
 
   describe('research', () => {
-    it('includes userId and researchId in audit context', async () => {
+    it('returns research result with content and usage', async () => {
       mockMessagesCreate.mockResolvedValue({
         content: [{ type: 'text', text: 'Research findings about AI.' }],
         usage: { input_tokens: 100, output_tokens: 50 },
@@ -74,72 +59,18 @@ describe('createClaudeClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        researchId: 'research-123',
-        pricing: createTestPricing(),
         logger: mockLogger,
-      });
-
-      await client.research('Tell me about AI');
-
-      expect(vi.mocked(createAuditContext).mock.calls[0]?.[0]).toEqual(
-        expect.objectContaining({
-          provider: LlmProviders.Anthropic,
-          model: TEST_MODEL,
-          method: 'research',
-          prompt: 'Tell me about AI',
-          userId: 'test-user',
-          researchId: 'research-123',
-        })
-      );
-    });
-
-    it('excludes researchId from audit context when undefined', async () => {
-      mockMessagesCreate.mockResolvedValue({
-        content: [{ type: 'text', text: 'Research findings about AI.' }],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      });
-
-      const client = createClaudeClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        pricing: createTestPricing(),
-        logger: mockLogger,
-      });
-
-      await client.research('Tell me about AI');
-
-      const auditArgs = vi.mocked(createAuditContext).mock.calls[0]?.[0] as unknown as Record<
-        string,
-        unknown
-      >;
-      expect(auditArgs).not.toHaveProperty('researchId');
-      expect(auditArgs?.['userId']).toBe('test-user');
-    });
-
-    it('returns research result with content and usage from pricing', async () => {
-      mockMessagesCreate.mockResolvedValue({
-        content: [{ type: 'text', text: 'Research findings about AI.' }],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      });
-
-      const pricing = createTestPricing();
-      const client = createClaudeClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        pricing,
-        logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Tell me about AI');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage.costUsd).toBeCloseTo(0.00105, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
-    it('counts web search calls and adds cost', async () => {
+    it('counts web search calls', async () => {
       mockMessagesCreate.mockResolvedValue({
         content: [
           { type: 'tool_use', name: 'web_search', id: 'call1' },
@@ -149,24 +80,23 @@ describe('createClaudeClient', () => {
         usage: { input_tokens: 100, output_tokens: 50 },
       });
 
-      const pricing = createTestPricing({ webSearchCostPerCall: 0.01 });
       const client = createClaudeClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.usage.webSearchCalls).toBe(2);
-        expect(result.value.usage.costUsd).toBeCloseTo(0.02105, 5);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
-    it('handles cache read tokens with multiplier', async () => {
+    it('handles cache read tokens', async () => {
       mockMessagesCreate.mockResolvedValue({
         content: [{ type: 'text', text: 'Content' }],
         usage: {
@@ -176,13 +106,12 @@ describe('createClaudeClient', () => {
         },
       });
 
-      const pricing = createTestPricing({ cacheReadMultiplier: 0.1 });
       const client = createClaudeClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -190,15 +119,10 @@ describe('createClaudeClient', () => {
       if (result.ok) {
         // Contract Compliance: expect aggregated 'cacheTokens'
         expect(result.value.usage.cacheTokens).toBe(30);
-
-        // Cost verification (Read price):
-        // Cost: ((70+3)/1M * 3.0) + (50/1M * 15.0) = 0.000969
-        // Note: Regular input calculation logic inside calculator handles the logic:
-        // regularInput (100) is passed. We assume standard usage struct from client maps correctly.
       }
     });
 
-    it('handles cache creation tokens with multiplier', async () => {
+    it('handles cache creation tokens', async () => {
       mockMessagesCreate.mockResolvedValue({
         content: [{ type: 'text', text: 'Content' }],
         usage: {
@@ -208,13 +132,12 @@ describe('createClaudeClient', () => {
         },
       });
 
-      const pricing = createTestPricing({ cacheWriteMultiplier: 1.25 });
       const client = createClaudeClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -237,13 +160,12 @@ describe('createClaudeClient', () => {
         usage: { input_tokens: 100, output_tokens: 50 },
       });
 
-      const pricing = createTestPricing();
       const client = createClaudeClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -267,13 +189,12 @@ describe('createClaudeClient', () => {
         usage: { input_tokens: 100, output_tokens: 50 },
       });
 
-      const pricing = createTestPricing();
       const client = createClaudeClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -286,13 +207,12 @@ describe('createClaudeClient', () => {
     it('returns error on API failure', async () => {
       mockMessagesCreate.mockRejectedValue(new MockAPIError(401, 'Invalid key'));
 
-      const pricing = createTestPricing();
       const client = createClaudeClient({
         apiKey: 'bad-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -305,13 +225,12 @@ describe('createClaudeClient', () => {
     it('handles rate limit error', async () => {
       mockMessagesCreate.mockRejectedValue(new MockAPIError(429, 'Rate limited'));
 
-      const pricing = createTestPricing();
       const client = createClaudeClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -324,13 +243,12 @@ describe('createClaudeClient', () => {
     it('handles overloaded error', async () => {
       mockMessagesCreate.mockRejectedValue(new MockAPIError(529, 'Overloaded'));
 
-      const pricing = createTestPricing();
       const client = createClaudeClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -343,13 +261,12 @@ describe('createClaudeClient', () => {
     it('handles timeout error', async () => {
       mockMessagesCreate.mockRejectedValue(new MockAPIError(500, 'Request timeout'));
 
-      const pricing = createTestPricing();
       const client = createClaudeClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -362,13 +279,12 @@ describe('createClaudeClient', () => {
     it('handles generic API error', async () => {
       mockMessagesCreate.mockRejectedValue(new MockAPIError(500, 'Internal error'));
 
-      const pricing = createTestPricing();
       const client = createClaudeClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -381,13 +297,12 @@ describe('createClaudeClient', () => {
     it('handles non-APIError exceptions', async () => {
       mockMessagesCreate.mockRejectedValue(new Error('Network failure'));
 
-      const pricing = createTestPricing();
       const client = createClaudeClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -406,22 +321,19 @@ describe('createClaudeClient', () => {
         usage: { input_tokens: 200, output_tokens: 100 },
       });
 
-      const pricing = createTestPricing();
       const client = createClaudeClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Generate something');
+      const result = await client.generate('Generate something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.content).toBe('Generated text output.');
-        // Input: 200 * 3.0 = 600, Output: 100 * 15.0 = 1500
-        // Total: 2100 / 1M = 0.0021
-        expect(result.value.usage.costUsd).toBeCloseTo(0.0021, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -436,15 +348,14 @@ describe('createClaudeClient', () => {
         },
       });
 
-      const pricing = createTestPricing();
       const client = createClaudeClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test prompt');
+      const result = await client.generate('Test prompt', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -455,20 +366,58 @@ describe('createClaudeClient', () => {
     it('returns error on API failure in generate', async () => {
       mockMessagesCreate.mockRejectedValue(new MockAPIError(401, 'Invalid key'));
 
-      const pricing = createTestPricing();
       const client = createClaudeClient({
         apiKey: 'bad-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test prompt');
+      const result = await client.generate('Test prompt', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_KEY');
       }
     });
+  });
+
+  it('passes ownerType to usage logger when provided', async () => {
+    mockMessagesCreate.mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    });
+
+    const client = createClaudeClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+      ownerType: 'user',
+    });
+    await client.generate('hello', { promptType: 'test-prompt' });
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'user' }));
+  });
+
+  it('passes promptType to usage logger', async () => {
+    mockMessagesCreate.mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    });
+
+    const client = createClaudeClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+    await client.generate('hello', { promptType: 'test-prompt' });
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ promptType: 'test-prompt' })
+    );
   });
 });

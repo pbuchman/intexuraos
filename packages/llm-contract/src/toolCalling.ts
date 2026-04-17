@@ -48,8 +48,8 @@ export interface ToolDefinition {
 /**
  * Abstract tool calling client interface.
  *
- * Logger, auditSink, and usageSink are baked into the client instance
- * at factory creation time — callers do not pass them.
+ * Logger and usageSink are baked into the client instance at factory
+ * creation time — callers do not pass them.
  */
 export interface ToolCallingClient {
   /**

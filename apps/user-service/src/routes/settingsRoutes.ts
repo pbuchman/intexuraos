@@ -6,7 +6,7 @@
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth, logIncomingRequest } from '@intexuraos/common-http';
-import { isFastModel, getProviderForModel } from '@intexuraos/llm-contract';
+import { isDefaultEligibleModel, getProviderForModel } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import { getUserSettings, isTranscriptionProvider, isValidTimezone, type GetUserSettingsErrorCode } from '../domain/settings/index.js';
 
@@ -146,7 +146,11 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           properties: {
             defaultModel: {
               type: 'string',
-              description: 'Default fast model for generate() calls',
+              description: 'Default model for generate() calls',
+            },
+            fallbackModel: {
+              type: ['string', 'null'],
+              description: 'Optional fallback model. Pass null to clear.',
             },
           },
         },
@@ -160,6 +164,7 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 type: 'object',
                 properties: {
                   defaultModel: { type: 'string' },
+                  fallbackModel: { type: 'string', nullable: true },
                 },
               },
               diagnostics: { $ref: 'Diagnostics#' },
@@ -220,19 +225,19 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const params = request.params as { uid: string };
-      const body = request.body as { defaultModel: string };
+      const body = request.body as { defaultModel: string; fallbackModel?: string | null };
 
       if (params.uid !== user.userId) {
         return await reply.fail('FORBIDDEN', 'Cannot update other user settings');
       }
 
-      if (!isFastModel(body.defaultModel)) {
-        return await reply.fail('INVALID_REQUEST', `Invalid model: ${body.defaultModel}. Must be a supported fast model.`);
+      if (!isDefaultEligibleModel(body.defaultModel)) {
+        return await reply.fail('INVALID_REQUEST', `Invalid model: ${body.defaultModel}. Must be a supported model.`);
       }
 
       const { userSettingsRepository } = getServices();
 
-      // Verify the user has an API key configured for the model's provider
+      // Verify the user has an API key configured for the defaultModel's provider
       const provider = getProviderForModel(body.defaultModel);
       const settingsResult = await userSettingsRepository.getSettings(params.uid);
 
@@ -240,7 +245,9 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', settingsResult.error.message);
       }
 
-      const hasKey = settingsResult.value?.llmApiKeys?.[provider] !== undefined;
+      const settings = settingsResult.value;
+      const llmApiKeys = settings?.llmApiKeys;
+      const hasKey = llmApiKeys?.[provider] !== undefined;
       if (!hasKey) {
         return await reply.fail(
           'INVALID_REQUEST',
@@ -248,13 +255,31 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
       }
 
-      const result = await userSettingsRepository.updateLlmPreferences(params.uid, body.defaultModel);
+      // Validate fallbackModel if provided and not null
+      if (body.fallbackModel !== undefined && body.fallbackModel !== null) {
+        if (!isDefaultEligibleModel(body.fallbackModel)) {
+          return await reply.fail('INVALID_REQUEST', `Invalid fallback model: ${body.fallbackModel}. Must be a supported model.`);
+        }
+        if (body.fallbackModel === body.defaultModel) {
+          return await reply.fail('INVALID_REQUEST', 'Fallback model must be different from the default model.');
+        }
+        const fallbackProvider = getProviderForModel(body.fallbackModel);
+        const hasFallbackKey = llmApiKeys[fallbackProvider] !== undefined;
+        if (!hasFallbackKey) {
+          return await reply.fail(
+            'INVALID_REQUEST',
+            `Cannot set fallback model to ${body.fallbackModel}: no API key configured for provider '${fallbackProvider}'`
+          );
+        }
+      }
+
+      const result = await userSettingsRepository.updateLlmPreferences(params.uid, body.defaultModel, body.fallbackModel);
 
       if (!result.ok) {
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      return await reply.ok({ defaultModel: body.defaultModel });
+      return await reply.ok({ defaultModel: body.defaultModel, fallbackModel: body.fallbackModel ?? null });
     }
   );
 

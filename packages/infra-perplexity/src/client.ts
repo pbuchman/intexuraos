@@ -22,25 +22,21 @@
  *   apiKey: process.env.PERPLEXITY_API_KEY,
  *   model: 'sonar-pro',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 1.00,
- *     outputPricePerMillion: 1.00,
- *   },
  *   timeoutMs: 840000, // 14 minutes for deep research
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  *
  * const result = await client.research('Latest AI developments');
  * if (result.ok) {
  *   console.log(result.data.content);
  *   console.log('Sources:', result.data.sources);
- *   console.log('Cost:', result.data.usage.costUsd);
+ *   console.log('Tokens:', result.data.usage.totalTokens);
  * }
  * ```
  */
 
-import { randomUUID } from 'node:crypto';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import {
   LlmModels,
   LlmProviders,
@@ -60,7 +56,16 @@ import type {
 } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
-export type PerplexityClient = Pick<LLMClient, 'research' | 'generate'>;
+export interface GenerateOptions {
+  promptType: string;
+}
+
+export type PerplexityClient = Pick<LLMClient, 'research'> & {
+  generate(
+    prompt: string,
+    options: GenerateOptions
+  ): Promise<Result<GenerateResult, PerplexityError>>;
+};
 
 const API_BASE_URL = 'https://api.perplexity.ai';
 
@@ -91,27 +96,6 @@ async function fetchWithTimeout(
   } finally {
     clearTimeout(timeoutId);
   }
-}
-
-function createRequestContext(
-  method: string,
-  model: string,
-  prompt: string,
-  userId: string,
-  researchId?: string
-): { requestId: string; startTime: Date; auditContext: AuditContext } {
-  const requestId = randomUUID();
-  const startTime = new Date();
-  const auditContext = createAuditContext({
-    provider: LlmProviders.Perplexity,
-    model,
-    method,
-    prompt,
-    startedAt: startTime,
-    userId,
-    ...(researchId !== undefined && { researchId }),
-  });
-  return { requestId, startTime, auditContext };
 }
 
 class PerplexityApiError extends Error {
@@ -157,7 +141,7 @@ async function processStreamResponse(
       if (result.done) {
         break;
       }
-      const value = result.value as Uint8Array | undefined;
+      const value = result.value as Uint8Array | undefined; // @allow-result-access -- ReadableStreamReadResult, not a Result type
 
       // Decode current chunk and append to buffer
       buffer += decoder.decode(value, { stream: true });
@@ -214,18 +198,19 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
     apiKey,
     model,
     userId,
-    researchId,
-    pricing,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     logger,
+    usageSink,
+    ownerType,
   } = config;
-  const usageLogger = createUsageLogger({ logger });
+  const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
   function trackUsage(
     callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
-    errorMessage?: string
+    errorMessage?: string,
+    promptType?: string
   ): void {
     void usageLogger.log({
       userId,
@@ -235,6 +220,8 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
+      ...(ownerType !== undefined && { ownerType }),
+      ...(promptType !== undefined && { promptType }),
     });
   }
 
@@ -242,18 +229,11 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
     if (usage === undefined) {
       return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 };
     }
-    return normalizeUsage(
-      usage.prompt_tokens,
-      usage.completion_tokens,
-      usage.cost?.total_cost,
-      pricing
-    );
+    return normalizeUsage(usage.prompt_tokens, usage.completion_tokens, usage.cost?.total_cost);
   }
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, PerplexityError>> {
-      const { auditContext } = createRequestContext('research', model, prompt, userId, researchId);
-
       try {
         const searchContext = SEARCH_CONTEXT_MAP[model] ?? 'medium';
 
@@ -291,7 +271,6 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
           const errorText = await response.text();
           const apiError = new PerplexityApiError(response.status, errorText);
           const errorMsg = getErrorMessage(apiError);
-          await auditContext.error({ error: errorMsg });
           const emptyUsage: NormalizedUsage = {
             inputTokens: 0,
             outputTokens: 0,
@@ -303,25 +282,18 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
         }
 
         // --- STREAM PROCESSING ---
-        let rawUsage: PerplexityUsage | undefined;
+        let rawUsage: PerplexityUsage | undefined; // @allow-undefined-type -- local variable for stream capture, not an optional property
         const { content, citations } = await processStreamResponse(response, (u) => {
           rawUsage = u;
         });
 
         const usage = extractUsage(rawUsage);
 
-        await auditContext.success({
-          response: content,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          providerCost: usage.costUsd,
-        });
         trackUsage('research', usage, true);
 
         return ok({ content, sources: citations, usage });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
@@ -333,9 +305,10 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
       }
     },
 
-    async generate(prompt: string): Promise<Result<GenerateResult, PerplexityError>> {
-      const { auditContext } = createRequestContext('generate', model, prompt, userId, researchId);
-
+    async generate(
+      prompt: string,
+      options: GenerateOptions
+    ): Promise<Result<GenerateResult, PerplexityError>> {
       try {
         const requestBody: PerplexityRequestBody = {
           model,
@@ -366,14 +339,13 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
           const errorText = await response.text();
           const apiError = new PerplexityApiError(response.status, errorText);
           const errorMsg = getErrorMessage(apiError);
-          await auditContext.error({ error: errorMsg });
           const emptyUsage: NormalizedUsage = {
             inputTokens: 0,
             outputTokens: 0,
             totalTokens: 0,
             costUsd: 0,
           };
-          trackUsage('generate', emptyUsage, false, errorMsg);
+          trackUsage('generate', emptyUsage, false, errorMsg, options.promptType);
           return err(mapPerplexityError(apiError));
         }
 
@@ -382,25 +354,18 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
         const content = data.choices[0]?.message.content ?? '';
         const usage = extractUsage(data.usage);
 
-        await auditContext.success({
-          response: content,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          providerCost: usage.costUsd,
-        });
-        trackUsage('generate', usage, true);
+        trackUsage('generate', usage, true, undefined, options.promptType);
 
         return ok({ content, usage });
       } catch (error) {
         const errorMsg = getErrorMessage(error);
-        await auditContext.error({ error: errorMsg });
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('generate', emptyUsage, false, errorMsg);
+        trackUsage('generate', emptyUsage, false, errorMsg, options.promptType);
         return err(mapPerplexityError(error));
       }
     },

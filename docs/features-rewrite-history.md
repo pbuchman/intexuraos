@@ -55,7 +55,6 @@ All 24 services scored through the full 6-critic panel. Existing drafts presente
 | code-worker                  | 8 R   | 9     | 9.5   | 9     | 9     | 8.5   | 8.83 | 5/6  | Targeted edits  |
 | code-agent                   | 7 R   | 9     | 9     | 9     | 8 R   | 9     | 8.50 | 4/6  | Targeted edits  |
 | commands-agent               | 9     | 7 R   | 8     | 7 R   | 7 R   | 7 R   | 7.50 | 2/6  | Targeted edits  |
-| data-insights-agent          | 8 R   | 9     | 9     | 8     | 7 R   | 8     | 8.17 | 4/6  | Targeted edits  |
 | email-service                | 9     | 9     | 8     | 9     | 8     | 8     | 8.50 | 6/6  | Done            |
 | image-service                | 8 R   | 9     | 9     | 9     | 8     | 8     | 8.50 | 5/6  | Targeted edits  |
 | linear-agent                 | 8 R   | 9     | 9     | 9     | 9     | 9     | 8.83 | 5/6  | Targeted edits  |
@@ -83,7 +82,6 @@ All 24 services scored through the full 6-critic panel. Existing drafts presente
 | linear-agent                 | Corrected label sync direction; enrichment scope clarified                                                                                                          |
 | actions-agent                | Classification routes to agents, doesn't execute actions itself                                                                                                     |
 | image-service                | Storage backend details corrected                                                                                                                                   |
-| data-insights-agent          | Auto-refresh not wired to any route/scheduler — manual refresh only                                                                                                 |
 | notes-agent                  | Sync direction and conflict resolution corrected                                                                                                                    |
 
 ### Patterns Observed

@@ -5,19 +5,19 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
+
+import type { OwnerType } from '@intexuraos/llm-contract';
 
 export type {
   LLMError as ClaudeError,
   ResearchResult,
   GenerateResult,
   SynthesisInput,
-  ModelPricing,
 } from '@intexuraos/llm-contract';
 
 /**
  * Configuration for creating a Claude client.
- *
- * Extends {@link LLMConfig} with Anthropic-specific pricing configuration.
  *
  * @example
  * ```ts
@@ -27,14 +27,8 @@ export type {
  *   apiKey: process.env.ANTHROPIC_API_KEY,
  *   model: 'claude-sonnet-4-5',
  *   userId: 'user-123',
- *   pricing: {
- *     inputPricePerMillion: 3.00,
- *     outputPricePerMillion: 15.00,
- *     cacheReadMultiplier: 0.1,
- *     cacheWriteMultiplier: 1.25,
- *     webSearchCostPerCall: 0.0035,
- *   },
- *   logger: pinoLogger, // Optional pino logger for structured logging
+ *   logger: pinoLogger,
+ *   usageSink: myUsageSink,
  * });
  * ```
  */
@@ -47,8 +41,10 @@ export interface ClaudeConfig {
   userId: string;
   /** Optional research ID for correlating audit logs to a research run */
   researchId?: string;
-  /** Cost configuration per million tokens */
-  pricing: import('@intexuraos/llm-contract').ModelPricing;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
+  /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
+  usageSink: UsageSink;
+  /** Owner scope of the call. When omitted, the usage sink defaults to 'system'. */
+  ownerType?: OwnerType;
 }

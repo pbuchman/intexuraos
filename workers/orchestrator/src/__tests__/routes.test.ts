@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createHmac } from 'node:crypto';
 import { registerRoutes, cleanUpExpiredNonces } from '../routes.js';
+import { buildSystemPrompt } from '../services/system-prompt.js';
 import type { TaskDispatcher } from '../services/task-dispatcher.js';
 import type { GitHubTokenService } from '../github/token-service.js';
 import type { IsolationProvider } from '../services/isolation/types.js';
@@ -461,6 +462,153 @@ describe('Routes', () => {
 
       expect(response.statusCode).toBe(503);
       expect(response.json()).toMatchObject({ error: 'Docker daemon is not responding' });
+    });
+  });
+
+  describe('POST /tasks — field propagation to dispatcher', () => {
+    it('forwards executionMemoryContext to dispatcher.submitTask', async () => {
+      const payload = {
+        taskId: 'emc-1',
+        workerType: 'auto',
+        prompt: 'p',
+        webhookUrl: 'https://example.com/hook',
+        webhookSecret: 'sec',
+        linearIssueLabels: [],
+        hasChildren: false,
+        executionMemoryContext: {
+          applicationId: 'app_1',
+          retrievalVersion: 'v1',
+          querySummary: 'q',
+          matchedMemories: [
+            {
+              memoryId: 'mem_1',
+              title: 't',
+              memoryType: 'implementation_pattern',
+              score: 0.5,
+              appliesWhen: 'a',
+              action: 'x',
+              avoid: 'y',
+              verification: 'z',
+            },
+          ],
+        },
+      };
+      const { headers, body } = createSignedRequest(payload);
+      const response = await app.inject({ method: 'POST', url: '/tasks', headers, body });
+      expect(response.statusCode).toBe(202);
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          executionMemoryContext: payload.executionMemoryContext,
+        })
+      );
+    });
+
+    it('forwards trackingCommentId to dispatcher.submitTask', async () => {
+      const payload = {
+        taskId: 'tc-1',
+        workerType: 'auto',
+        prompt: 'p',
+        webhookUrl: 'https://example.com/hook',
+        webhookSecret: 'sec',
+        linearIssueLabels: [],
+        hasChildren: false,
+        trackingCommentId: '1234567',
+      };
+      const { headers, body } = createSignedRequest(payload);
+      const response = await app.inject({ method: 'POST', url: '/tasks', headers, body });
+      expect(response.statusCode).toBe(202);
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({ trackingCommentId: '1234567' })
+      );
+    });
+
+    it('forwards reviewTypes to dispatcher.submitTask', async () => {
+      const payload = {
+        taskId: 'rt-1',
+        workerType: 'auto',
+        prompt: 'p',
+        webhookUrl: 'https://example.com/hook',
+        webhookSecret: 'sec',
+        linearIssueLabels: [],
+        hasChildren: false,
+        reviewTypes: ['code_quality', 'security'],
+      };
+      const { headers, body } = createSignedRequest(payload);
+      const response = await app.inject({ method: 'POST', url: '/tasks', headers, body });
+      expect(response.statusCode).toBe(202);
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({ reviewTypes: ['code_quality', 'security'] })
+      );
+    });
+
+    it('forwards retriedFrom to dispatcher.submitTask', async () => {
+      const payload = {
+        taskId: 'rf-1',
+        workerType: 'auto',
+        prompt: 'p',
+        webhookUrl: 'https://example.com/hook',
+        webhookSecret: 'sec',
+        linearIssueLabels: [],
+        hasChildren: false,
+        retriedFrom: 'task_original_abc',
+      };
+      const { headers, body } = createSignedRequest(payload);
+      const response = await app.inject({ method: 'POST', url: '/tasks', headers, body });
+      expect(response.statusCode).toBe(202);
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({ retriedFrom: 'task_original_abc' })
+      );
+    });
+
+    it('executionMemoryContext flows from POST body into the rendered system prompt', async () => {
+      const memoryContext = {
+        applicationId: 'app_e2e',
+        retrievalVersion: 'v1',
+        querySummary: 'q',
+        matchedMemories: [
+          {
+            memoryId: 'mem_e2e_abc',
+            title: 'Check composite index before query',
+            memoryType: 'verification_pattern' as const,
+            score: 0.7,
+            appliesWhen: 'multi-field firestore queries',
+            action: 'add index to firestore-collections.json',
+            avoid: 'running query without index',
+            verification: 'query returns results without error',
+          },
+        ],
+      };
+      const payload = {
+        taskId: 'e2e-1',
+        workerType: 'auto',
+        prompt: 'p',
+        webhookUrl: 'https://example.com/hook',
+        webhookSecret: 'sec',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'review',
+        executionMemoryContext: memoryContext,
+      };
+      const { headers, body } = createSignedRequest(payload);
+      const response = await app.inject({ method: 'POST', url: '/tasks', headers, body });
+      expect(response.statusCode).toBe(202);
+
+      const submitCalls = (dispatcher.submitTask as ReturnType<typeof vi.fn>).mock.calls;
+      expect(submitCalls.length).toBeGreaterThanOrEqual(1);
+      const firstCall = submitCalls[0];
+      expect(firstCall).toBeDefined();
+      const submitted = (firstCall as unknown as [Record<string, unknown>])[0];
+      expect(submitted['executionMemoryContext']).toEqual(memoryContext);
+
+      const rendered = buildSystemPrompt({
+        taskId: submitted['taskId'] as string,
+        linearIssueLabels: submitted['linearIssueLabels'] as string[],
+        agentType: 'review',
+        executionMemoryContext: submitted['executionMemoryContext'] as typeof memoryContext,
+      });
+      expect(rendered).toContain('### Execution Memory Context');
+      expect(rendered).toContain('mem_e2e_abc');
+      expect(rendered).toContain('Execution Memories Received');
     });
   });
 
@@ -1205,6 +1353,32 @@ describe('Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
+    });
+
+    it('should return 410 for session_expired error', async () => {
+      vi.mocked(dispatcher.sendMessage).mockResolvedValueOnce({
+        ok: false,
+        error: {
+          type: 'session_expired',
+          message:
+            'Session has expired — the worker container was cleaned up. Please start a new session.',
+        },
+      });
+
+      const { headers, body } = createSignedRequest({ message: 'Follow-up' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks/expired-session/message',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(410);
+      expect(response.json()).toEqual({
+        error:
+          'Session has expired — the worker container was cleaned up. Please start a new session.',
+      });
     });
   });
 

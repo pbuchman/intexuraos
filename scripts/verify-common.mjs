@@ -23,8 +23,6 @@ const FORBIDDEN_KEYWORDS = [
   'Research', // research-agent domain
   'Notification', // mobile-notifications-service domain
   'Note', // notes-agent domain
-  'Feed', // data-insights-agent domain
-  'DataSource', // data-insights-agent domain
   'Message', // whatsapp-service domain
   'Webhook', // whatsapp-service domain
   // External service specific

@@ -3,8 +3,9 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockResearch = vi.fn();
 const mockGenerate = vi.fn();
@@ -20,11 +21,6 @@ vi.mock('@intexuraos/infra-gpt', () => ({
 
 const { GptAdapter } = await import('../../../infra/llm/GptAdapter.js');
 
-const testPricing: ModelPricing = {
-  inputPricePerMillion: 2.0,
-  outputPricePerMillion: 8.0,
-};
-
 const mockLogger: Logger = {
   info: vi.fn(),
   error: vi.fn(),
@@ -34,10 +30,18 @@ const mockLogger: Logger = {
 
 describe('GptAdapter', () => {
   let adapter: InstanceType<typeof GptAdapter>;
+  let fakeUsageSink: FakeUsageSink;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GptAdapter('test-key', LlmModels.O4MiniDeepResearch, 'test-user-id', testPricing, mockLogger);
+    fakeUsageSink = new FakeUsageSink();
+    adapter = new GptAdapter(
+      'test-key',
+      LlmModels.O4MiniDeepResearch,
+      'test-user-id',
+      mockLogger,
+      fakeUsageSink
+    );
   });
 
   describe('constructor', () => {
@@ -47,8 +51,8 @@ describe('GptAdapter', () => {
         'test-key',
         LlmModels.O4MiniDeepResearch,
         'test-user-id',
-        testPricing,
         mockLogger,
+        fakeUsageSink,
         'research-123'
       );
 
@@ -57,8 +61,8 @@ describe('GptAdapter', () => {
         model: LlmModels.O4MiniDeepResearch,
         userId: 'test-user-id',
         researchId: 'research-123',
-        pricing: testPricing,
         logger: mockLogger,
+        usageSink: fakeUsageSink,
       });
     });
   });
@@ -132,8 +136,14 @@ describe('GptAdapter', () => {
           costUsd: 0.001,
         });
       }
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Prompt'));
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Claude result'));
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('Prompt'),
+        expect.objectContaining({ promptType: 'research-synthesis' })
+      );
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('Claude result'),
+        expect.objectContaining({ promptType: 'research-synthesis' })
+      );
     });
 
     it('includes external reports in synthesis prompt', async () => {
@@ -145,7 +155,10 @@ describe('GptAdapter', () => {
         [{ content: 'External context' }]
       );
 
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('External context'));
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('External context'),
+        expect.objectContaining({ promptType: 'research-synthesis' })
+      );
     });
 
     it('uses synthesis context when provided', async () => {
@@ -198,8 +211,8 @@ describe('GptAdapter', () => {
         'test-key',
         LlmModels.O4MiniDeepResearch,
         'test-user-id',
-        testPricing,
-        mockLogger
+        mockLogger,
+        fakeUsageSink
       );
 
       mockGenerate.mockResolvedValue({
@@ -233,10 +246,17 @@ describe('GptAdapter', () => {
         expect(result.value.usage.costUsd).toBe(0.001);
       }
       expect(mockGenerate).toHaveBeenCalledWith(
-        expect.stringContaining('Generate a short, concise title')
+        expect.stringContaining('Generate a short, concise title'),
+        expect.objectContaining({ promptType: 'research-title-generation' })
       );
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('SAME LANGUAGE'));
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Test prompt'));
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('SAME LANGUAGE'),
+        expect.objectContaining({ promptType: 'research-title-generation' })
+      );
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('Test prompt'),
+        expect.objectContaining({ promptType: 'research-title-generation' })
+      );
     });
 
     it('maps errors correctly', async () => {

@@ -1,13 +1,19 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
 import { buildServer } from '../../server.js';
 import { setServices, resetServices, type ServiceContainer } from '../../services.js';
 import { ok, err } from '@intexuraos/common-core';
 import type { FastifyInstance } from 'fastify';
+import type { PruneCandidate } from '../../domain/index.js';
 
 // Set up internal auth token for testing
 process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
 
+function createFakeClassifyCandidates(): Mock {
+  return vi.fn().mockResolvedValue(ok([] as PruneCandidate[]));
+}
+
 function createFakeServices(): ServiceContainer {
+  const classifyCandidates = createFakeClassifyCandidates();
   return {
     connectionRepository: {
       getAllConnectedUserIds: vi.fn().mockResolvedValue(ok(['user-1'])),
@@ -53,13 +59,11 @@ function createFakeServices(): ServiceContainer {
       countByIssueId: vi.fn(), getCommentSummaries: vi.fn(), deleteById: vi.fn(),
     },
     userServiceClient: {
-      getLlmClient: vi.fn(),
+      getLlmClient: vi.fn().mockResolvedValue(ok({ generate: vi.fn().mockResolvedValue(ok({ content: '[]', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 } })) })),
       getLlmClientDirect: vi.fn(),
     } as unknown as ServiceContainer['userServiceClient'],
     codeAgentClient: { triggerCodeTask: vi.fn() },
-    issuePruningClassifier: {
-      classifyCandidates: vi.fn().mockResolvedValue(ok([])),
-    },
+    createClassifier: vi.fn().mockReturnValue({ classifyCandidates }),
     pruneCandidateRepository: {
       clearAll: vi.fn().mockResolvedValue(ok(undefined)),
       storeAll: vi.fn().mockResolvedValue(ok(undefined)),
@@ -116,6 +120,111 @@ describe('POST /internal/linear/prune-issues', () => {
     expect(response.statusCode).toBe(200);
   });
 
+  it('returns 200 with skipped stats when candidates are pending review', async () => {
+    // Seed existing candidates via the pruneCandidateRepository
+    services.pruneCandidateRepository.listAll = vi.fn().mockResolvedValue(
+      ok([
+        {
+          id: 'existing-1',
+          identifier: 'INT-999',
+          title: 'Old candidate',
+          score: 80,
+          reason: 'Cancelled',
+          category: 'cancelled',
+          classifiedAt: '2026-04-01T00:00:00.000Z',
+        },
+      ])
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/linear/prune-issues',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+    expect(body.data.skipped).toBe(true);
+    expect(body.data.skipReason).toContain('pending review');
+    // createClassifier is still called (LLM resolved before pruneIssues) but classifyCandidates is not called by pruneIssues
+    expect(services.createClassifier).toHaveBeenCalledOnce();
+    const classifier = (services.createClassifier as ReturnType<typeof vi.fn>).mock.results[0]?.value as { classifyCandidates: ReturnType<typeof vi.fn> };
+    expect(classifier.classifyCandidates).not.toHaveBeenCalled();
+  });
+
+  it('returns 200 skipped when no connected users', async () => {
+    services.connectionRepository.getAllConnectedUserIds = vi.fn().mockResolvedValue(ok([]));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/linear/prune-issues',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+    expect(body.data.skipped).toBe(true);
+    expect(body.data.skipReason).toBe('No connected users');
+    expect(services.createClassifier).not.toHaveBeenCalled();
+  });
+
+  it('returns 200 skipped when all users fail LLM client resolution', async () => {
+    services.connectionRepository.getAllConnectedUserIds = vi.fn().mockResolvedValue(ok(['user-1', 'user-2']));
+    services.userServiceClient.getLlmClient = vi.fn().mockResolvedValue(
+      err({ code: 'API_ERROR', message: 'User service unavailable' })
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/linear/prune-issues',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+    expect(body.data.skipped).toBe(true);
+    expect(body.data.skipReason).toBe('No user LLM client available');
+    expect(services.userServiceClient.getLlmClient).toHaveBeenCalledTimes(2);
+    expect(services.createClassifier).not.toHaveBeenCalled();
+  });
+
+  it('falls back to second user when first user LLM resolution fails', async () => {
+    services.connectionRepository.getAllConnectedUserIds = vi.fn().mockResolvedValue(ok(['user-a', 'user-b']));
+    const fakeClient = { generate: vi.fn().mockResolvedValue(ok({ content: '[]', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 } })) };
+    services.userServiceClient.getLlmClient = vi.fn()
+      .mockResolvedValueOnce(err({ code: 'API_ERROR', message: 'No key for user-a' }))
+      .mockResolvedValueOnce(ok(fakeClient));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/linear/prune-issues',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(services.userServiceClient.getLlmClient).toHaveBeenCalledTimes(2);
+    expect(services.userServiceClient.getLlmClient).toHaveBeenNthCalledWith(1, 'user-a');
+    expect(services.userServiceClient.getLlmClient).toHaveBeenNthCalledWith(2, 'user-b');
+    expect(services.createClassifier).toHaveBeenCalledWith(fakeClient);
+  });
+
+  it('returns 500 when getAllConnectedUserIds fails', async () => {
+    services.connectionRepository.getAllConnectedUserIds = vi.fn().mockResolvedValue(
+      err({ code: 'INTERNAL_ERROR', message: 'Firestore unavailable' })
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/linear/prune-issues',
+      headers: { 'x-internal-auth': 'test-internal-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+  });
+
   it('returns 500 when pruneIssues fails', async () => {
     // Need to seed enough issues to trigger pruning (above 200 threshold)
     const issues = Array.from({ length: 210 }, (_, i) => ({
@@ -138,9 +247,11 @@ describe('POST /internal/linear/prune-issues', () => {
       teamId: 'team-1',
     }));
     services.issueRepository.listByUserId = vi.fn().mockResolvedValue(ok(issues));
-    services.issuePruningClassifier.classifyCandidates = vi.fn().mockResolvedValue(
-      err({ code: 'INTERNAL_ERROR', message: 'Gemini unavailable' })
-    );
+    services.createClassifier = vi.fn().mockReturnValue({
+      classifyCandidates: vi.fn().mockResolvedValue(
+        err({ code: 'INTERNAL_ERROR', message: 'Gemini unavailable' })
+      ),
+    });
 
     const response = await app.inject({
       method: 'POST',

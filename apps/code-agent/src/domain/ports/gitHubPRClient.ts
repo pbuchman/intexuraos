@@ -52,6 +52,7 @@ export interface GitHubPullRequestDetails {
   mergeable: boolean | null;
   mergeableState: string | null;
   headSha: string;
+  createdAt: string;
 }
 
 export interface GitHubPRClient {

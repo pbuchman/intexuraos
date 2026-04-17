@@ -171,7 +171,6 @@ export interface AppConfig {
   ResearchAgentUrl: string;
   commandsAgentServiceUrl: string;
   actionsAgentUrl: string;
-  dataInsightsAgentUrl: string;
   notesAgentUrl: string;
   todosAgentUrl: string;
   bookmarksAgentUrl: string;
@@ -182,6 +181,7 @@ export interface AppConfig {
   cronAgentUrl: string;
   hellscriptAgentUrl: string;
   appSettingsServiceUrl: string;
+  llmUsageServiceUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
   firebaseAuthDomain: string;
@@ -373,193 +373,6 @@ export interface ActionsResponse {
   nextCursor?: string;
 }
 
-/**
- * Custom data source from data-insights-agent
- */
-export interface DataSource {
-  id: string;
-  userId: string;
-  title: string;
-  content: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Request to create a data source
- */
-export interface CreateDataSourceRequest {
-  title: string;
-  content: string;
-}
-
-/**
- * Request to update a data source
- */
-export interface UpdateDataSourceRequest {
-  title?: string;
-  content?: string;
-}
-
-/**
- * Response from generate title endpoint
- */
-export interface GenerateTitleResponse {
-  title: string;
-}
-
-/**
- * Notification filter configuration for composite feeds.
- * app is multi-select (array), source is single-select (string).
- */
-export interface CompositeFeedNotificationFilter {
-  id: string;
-  name: string;
-  app?: string[];
-  source?: string;
-  title?: string;
-}
-
-/**
- * Chart type IDs for the 6 supported visualization types.
- */
-export type ChartTypeId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6';
-
-/**
- * A single data insight generated from composite feed analysis.
- */
-export interface DataInsight {
-  id: string;
-  title: string;
-  description: string;
-  trackableMetric: string;
-  suggestedChartType: ChartTypeId;
-  generatedAt: string;
-}
-
-/**
- * Composite feed from data-insights-agent.
- * Aggregates static data sources and notification filters.
- */
-export interface CompositeFeed {
-  id: string;
-  userId: string;
-  name: string;
-  purpose: string;
-  staticSourceIds: string[];
-  notificationFilters: CompositeFeedNotificationFilter[];
-  dataInsights: DataInsight[] | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Request to create a composite feed.
- */
-export interface CreateCompositeFeedRequest {
-  purpose: string;
-  staticSourceIds: string[];
-  notificationFilters: Omit<CompositeFeedNotificationFilter, 'id'>[];
-}
-
-/**
- * Request to update a composite feed.
- */
-export interface UpdateCompositeFeedRequest {
-  purpose?: string;
-  staticSourceIds?: string[];
-  notificationFilters?: Omit<CompositeFeedNotificationFilter, 'id'>[];
-}
-
-/**
- * Static source data in composite feed response.
- */
-export interface CompositeFeedStaticSource {
-  id: string;
-  name: string;
-  content: string;
-}
-
-/**
- * Notification item in composite feed response.
- */
-export interface CompositeFeedNotificationItem {
-  id: string;
-  app: string;
-  title: string;
-  body: string;
-  timestamp: string;
-  source?: string;
-}
-
-/**
- * Filtered notifications section in composite feed data.
- */
-export interface CompositeFeedFilteredNotifications {
-  filterId: string;
-  filterName: string;
-  criteria: {
-    app?: string[];
-    source?: string[];
-    title?: string;
-  };
-  items: CompositeFeedNotificationItem[];
-}
-
-/**
- * Composite feed data response.
- */
-export interface CompositeFeedData {
-  feedId: string;
-  feedName: string;
-  purpose: string;
-  generatedAt: string;
-  staticSources: CompositeFeedStaticSource[];
-  notifications: CompositeFeedFilteredNotifications[];
-}
-
-/**
- * Pre-computed composite feed snapshot
- */
-export interface CompositeFeedSnapshot extends CompositeFeedData {
-  expiresAt: string;
-}
-
-/**
- * Visualization status lifecycle.
- */
-export type VisualizationStatus = 'pending' | 'ready' | 'refreshing' | 'error';
-
-/**
- * Saved visualization from data-insights-agent.
- */
-export interface Visualization {
-  id: string;
-  userId: string;
-  feedId: string;
-  feedName: string;
-  insightId: string;
-  insightTitle: string;
-  trackableMetric: string;
-  chartConfig: Record<string, unknown>;
-  transformInstructions: string;
-  chartData: unknown[] | null;
-  status: VisualizationStatus;
-  lastError?: string;
-  lastRefreshedAt?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Request to create a visualization.
- */
-export interface CreateVisualizationRequest {
-  feedId: string;
-  insightId: string;
-  chartConfig: Record<string, unknown>;
-  transformInstructions: string;
-}
 
 /**
  * Note from notes-agent
@@ -743,14 +556,20 @@ export interface ProviderPricing {
 }
 
 /**
- * All providers pricing response
+ * All providers pricing response.
+ *
+ * Matches the shape returned by `llm-usage-service`'s `GET /llm-usage/pricing`
+ * (5 providers: google, openai, anthropic, perplexity, openrouter). The 4
+ * calculated-cost providers are required; openrouter is included by the
+ * backend but its cost comes from the provider's own API response, so the
+ * pricing UI only renders the 4 calculated-cost cards.
  */
 export interface AllProvidersPricing {
   google: ProviderPricing;
   openai: ProviderPricing;
   anthropic: ProviderPricing;
   perplexity: ProviderPricing;
-  zai: ProviderPricing;
+  openrouter?: ProviderPricing;
 }
 
 /**
@@ -841,51 +660,6 @@ export interface GitHubConnectionStatus {
   scopes?: string[];
   createdAt?: string;
   updatedAt?: string;
-}
-
-/**
- * Monthly cost breakdown for LLM usage
- */
-export interface MonthlyCost {
-  month: string;
-  costUsd: number;
-  calls: number;
-  inputTokens: number;
-  outputTokens: number;
-  percentage: number;
-}
-
-/**
- * Cost breakdown by LLM model
- */
-export interface ModelCost {
-  model: string;
-  costUsd: number;
-  calls: number;
-  percentage: number;
-}
-
-/**
- * Cost breakdown by call type
- */
-export interface CallTypeCost {
-  callType: string;
-  costUsd: number;
-  calls: number;
-  percentage: number;
-}
-
-/**
- * Aggregated LLM usage costs for a user
- */
-export interface AggregatedCosts {
-  totalCostUsd: number;
-  totalCalls: number;
-  totalInputTokens: number;
-  totalOutputTokens: number;
-  monthlyBreakdown: MonthlyCost[];
-  byModel: ModelCost[];
-  byCallType: CallTypeCost[];
 }
 
 /**
@@ -1191,6 +965,7 @@ export interface CodeTaskExecutionMemoryContext {
   matchedAt?: string;
   matchedMemories?: CodeTaskExecutionMemoryMatch[];
   topCandidates?: CodeTaskExecutionMemoryCandidate[];
+  totalSearchResults?: number;
   errorCode?: string;
   errorMessage?: string;
 }
@@ -1253,6 +1028,8 @@ export interface CodeTask {
   executionMemoryPostRun?: CodeTaskExecutionMemoryPostRun;
 }
 
+export type TaskMode = 'planning' | 'execution';
+
 /**
  * Request to submit a code task
  *
@@ -1264,6 +1041,7 @@ export interface SubmitCodeTaskRequest {
   prompt: string;
   workerType?: CodeTaskWorkerType;
   linearIssueId?: string;
+  taskMode?: TaskMode;
 }
 
 /**
@@ -1517,6 +1295,20 @@ export type {
   WritingSample,
 } from './hellscript.js';
 export { WRITING_CATEGORIES } from './hellscript.js';
+
+// LLM Usage types
+export type {
+  UsageEvent,
+  UsageEventSortField,
+  UsageEventFilters,
+  ListLlmUsageEventsRequest,
+  ListLlmUsageEventsResponse,
+  GetUsageEventResponse,
+  AggregateMetrics,
+  UsageQueryRow,
+  LlmUsageQueryRequest,
+  LlmUsageQueryResponse,
+} from './llmUsage.js';
 
 // Cron Agent types
 export type {

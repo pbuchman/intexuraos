@@ -1,35 +1,21 @@
 /**
  * LLM Usage Logger.
  *
- * Logs LLM usage to Firestore for cost tracking and analytics.
- * Follows the same pattern as llm-audit - direct Firestore writes, no DI needed.
- *
- * Structure:
- * llm_usage_stats/{model}/                      (model as doc ID)
- *   by_call_type/{callType}/                    (callType subcollection)
- *     by_period/
- *       total/                                  (all-time aggregate)
- *         by_user/{userId}
- *       YYYY-MM/                                (monthly aggregate)
- *         by_user/{userId}
- *       YYYY-MM-DD/                             (daily stats)
- *         by_user/{userId}
+ * Logs LLM usage via a pluggable UsageSink. Every UsageLogger requires an
+ * explicit sink — there is no silent default. Production apps should wire up
+ * HttpInternalAuthUsageSink to forward events to llm-usage-service. Tests may
+ * pass a fake sink (e.g., FakeUsageSink). The legacy NoopUsageSink remains
+ * exported as a deliberate opt-out for CLI tools / scripts that genuinely do
+ * not want usage tracking.
  */
 
-import { getFirestore, FieldValue } from '@intexuraos/infra-firestore';
 import { getErrorMessage } from '@intexuraos/common-core';
-import type { NormalizedUsage } from '@intexuraos/llm-contract';
+import type { NormalizedUsage, OwnerType } from '@intexuraos/llm-contract';
 import type { LlmProvider } from './types.js';
 import type { Logger } from '@intexuraos/common-core';
 
-const COLLECTION_NAME = 'llm_usage_stats';
-
 /**
  * LLM operation types for usage tracking.
- *
- * @remarks
- * Each call type is tracked separately in Firestore for granular cost analysis.
- * Used to categorize operations for both usage stats and pricing calculations.
  *
  * @example
  * ```ts
@@ -47,38 +33,11 @@ export type CallType =
   | 'generate'
   /** Image generation operations */
   | 'image_generation'
-  /** Visualization chart data analysis */
-  | 'visualization_insights'
-  /** Vega-Lite chart generation */
-  | 'visualization_vegalite'
   /** Tool calling / function calling agent loops */
   | 'tool_calling';
 
 /**
  * Parameters for logging LLM usage.
- *
- * @remarks
- * Passed to {@link UsageLogger.log} to record token usage and costs to Firestore.
- * Aggregated by model, call type, period (total/monthly/daily), and user.
- *
- * @example
- * ```ts
- * const params: UsageLogParams = {
- *   userId: 'user-123',
- *   provider: 'anthropic',
- *   model: 'claude-sonnet-4-5',
- *   callType: 'research',
- *   usage: {
- *     inputTokens: 1000,
- *     outputTokens: 500,
- *     totalTokens: 1500,
- *     costUsd: 0.0105,
- *     webSearchCalls: 3,
- *   },
- *   success: true,
- *   logger: pinoLogger, // Optional pino logger
- * };
- * ```
  */
 export interface UsageLogParams {
   /** User ID for per-user tracking */
@@ -97,6 +56,14 @@ export interface UsageLogParams {
   errorMessage?: string;
   /** Optional pino logger for structured logging */
   logger?: Logger;
+  /** Owner scope of the call. Defaults to 'system' when omitted to preserve legacy behavior. */
+  ownerType?: OwnerType;
+  /** Label identifying the calling client/transport (e.g. 'openrouter-generate'). Defaults to source.component when omitted. */
+  clientName?: string;
+  /** Cost reported by the provider (e.g. OpenRouter usage.cost). When set, the receiver records pricingSource: 'provider_reported'. */
+  providerReportedUsd?: number | null;
+  /** Semantic identifier for what the prompt was used for (e.g. 'linear-issue-title', 'code-worker-validation') */
+  promptType?: string;
 }
 
 /**
@@ -107,146 +74,11 @@ export interface UsageSink {
 }
 
 /**
- * Default sink that persists usage aggregates to Firestore.
- */
-export class FirestoreUsageSink implements UsageSink {
-  async log(params: UsageLogParams): Promise<void> {
-    const firestore = getFirestore();
-    const now = new Date();
-    const dateKey = now.toISOString().slice(0, 10); // YYYY-MM-DD
-    const monthKey = now.toISOString().slice(0, 7); // YYYY-MM
-
-    // Path: llm_usage_stats/{model}/by_call_type/{callType}/by_period/{period}
-    const modelRef = firestore.collection(COLLECTION_NAME).doc(params.model);
-    const callTypeRef = modelRef.collection('by_call_type').doc(params.callType);
-
-    const batch = firestore.batch();
-
-    // Ensure model doc exists with metadata (prevents ghost documents)
-    batch.set(
-      modelRef,
-      {
-        model: params.model,
-        provider: params.provider,
-        updatedAt: now.toISOString(),
-      },
-      { merge: true }
-    );
-
-    // Ensure callType doc exists with metadata
-    batch.set(
-      callTypeRef,
-      {
-        callType: params.callType,
-        updatedAt: now.toISOString(),
-      },
-      { merge: true }
-    );
-
-    // Update periods: total, month, day
-    const periods = ['total', monthKey, dateKey];
-    for (const period of periods) {
-      const periodRef = callTypeRef.collection('by_period').doc(period);
-      const updateData = {
-        provider: params.provider,
-        model: params.model,
-        callType: params.callType,
-        period,
-        totalCalls: FieldValue.increment(1),
-        successfulCalls: FieldValue.increment(params.success ? 1 : 0),
-        failedCalls: FieldValue.increment(params.success ? 0 : 1),
-        inputTokens: FieldValue.increment(params.usage.inputTokens),
-        outputTokens: FieldValue.increment(params.usage.outputTokens),
-        totalTokens: FieldValue.increment(params.usage.inputTokens + params.usage.outputTokens),
-        costUsd: FieldValue.increment(params.usage.costUsd),
-        updatedAt: now.toISOString(),
-      };
-      batch.set(periodRef, updateData, { merge: true });
-    }
-
-    await batch.commit();
-
-    // Log per-user stats if userId is provided
-    if (params.userId !== '') {
-      await this.logUserUsage(params, now, callTypeRef, dateKey);
-    }
-  }
-
-  /**
-   * Log per-user usage stats.
-   * Path: llm_usage_stats/{model}/by_call_type/{callType}/by_period/{date}/by_user/{userId}
-   */
-  private async logUserUsage(
-    params: UsageLogParams,
-    now: Date,
-    callTypeRef: FirebaseFirestore.DocumentReference,
-    dateKey: string
-  ): Promise<void> {
-    const firestore = getFirestore();
-    const userDocRef = callTypeRef
-      .collection('by_period')
-      .doc(dateKey)
-      .collection('by_user')
-      .doc(params.userId);
-
-    const updateData = {
-      userId: params.userId,
-      totalCalls: FieldValue.increment(1),
-      successfulCalls: FieldValue.increment(params.success ? 1 : 0),
-      inputTokens: FieldValue.increment(params.usage.inputTokens),
-      outputTokens: FieldValue.increment(params.usage.outputTokens),
-      costUsd: FieldValue.increment(params.usage.costUsd),
-      updatedAt: now.toISOString(),
-    };
-
-    await firestore.runTransaction(async (transaction) => {
-      const doc = await transaction.get(userDocRef);
-      if (doc.exists) {
-        transaction.update(userDocRef, updateData);
-      } else {
-        transaction.set(userDocRef, {
-          ...updateData,
-          createdAt: now.toISOString(),
-        });
-      }
-    });
-  }
-}
-
-/**
- * Sink that emits usage payloads to structured logs instead of Firestore.
- */
-export class StructuredLogUsageSink implements UsageSink {
-  readonly logger: Logger;
-
-  constructor(deps: { logger: Logger }) {
-    this.logger = deps.logger;
-  }
-
-  log(params: UsageLogParams): Promise<void> {
-    this.logger.info(
-      {
-        usage: {
-          userId: params.userId,
-          provider: params.provider,
-          model: params.model,
-          callType: params.callType,
-          inputTokens: params.usage.inputTokens,
-          outputTokens: params.usage.outputTokens,
-          totalTokens: params.usage.totalTokens,
-          costUsd: params.usage.costUsd,
-          success: params.success,
-          ...(params.errorMessage !== undefined && { errorMessage: params.errorMessage }),
-        },
-      },
-      'LLM usage sink log'
-    );
-    return Promise.resolve();
-  }
-}
-
-/**
  * Sink that discards all usage events.
+ *
+ * Deliberate opt-out for CLI tools, scripts, and other contexts that genuinely
+ * do not want usage tracking. No longer used as a silent default — every
+ * LLM client construction must pass an explicit sink.
  */
 export class NoopUsageSink implements UsageSink {
   log(): Promise<void> {
@@ -260,17 +92,6 @@ export class NoopUsageSink implements UsageSink {
  * @remarks
  * Controlled by `INTEXURAOS_LOG_LLM_USAGE` environment variable.
  * Defaults to `true` - only disabled if explicitly set to `false`, `0`, or `no` (case-insensitive).
- *
- * @returns `true` if logging is enabled, `false` otherwise
- *
- * @example
- * ```ts
- * import { isUsageLoggingEnabled } from '@intexuraos/llm-pricing';
- *
- * if (isUsageLoggingEnabled()) {
- *   console.log('LLM usage will be tracked');
- * }
- * ```
  */
 export function isUsageLoggingEnabled(): boolean {
   const envValue = process.env['INTEXURAOS_LOG_LLM_USAGE'];
@@ -284,68 +105,26 @@ export function isUsageLoggingEnabled(): boolean {
  * LLM Usage Logger.
  *
  * @remarks
- * Logs LLM usage to Firestore for cost tracking and analytics.
- * Requires a Logger instance for structured logging - no optional logging.
- *
- * @example
- * ```ts
- * import { UsageLogger } from '@intexuraos/llm-pricing';
- * import pino from 'pino';
- *
- * const logger = pino({ name: 'my-service' });
- * const usageLogger = new UsageLogger({ logger });
- *
- * await usageLogger.log({
- *   userId: 'user-123',
- *   provider: 'anthropic',
- *   model: 'claude-sonnet-4-5',
- *   callType: 'research',
- *   usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.0105 },
- *   success: true,
- * });
- * ```
+ * Wraps a UsageSink and emits structured logs alongside delegation to the sink.
+ * Requires both a Logger and an explicit UsageSink — production apps should
+ * pass HttpInternalAuthUsageSink, tests should pass a fake, and CLI/script
+ * contexts that genuinely opt out can pass NoopUsageSink.
  */
 export class UsageLogger {
   readonly logger: Logger;
   readonly sink: UsageSink;
 
-  constructor(deps: { logger: Logger; sink?: UsageSink }) {
+  constructor(deps: { logger: Logger; sink: UsageSink }) {
     this.logger = deps.logger;
-    this.sink = deps.sink ?? new FirestoreUsageSink();
+    this.sink = deps.sink;
   }
 
   /**
-   * Log LLM usage to Firestore and Cloud Logging.
+   * Log LLM usage via the configured sink and to structured logs.
    *
    * @remarks
-   * Fire-and-forget operation - errors are logged but don't propagate to avoid
-   * disrupting LLM operations. Writes to three aggregation levels:
-   * - `total`: All-time aggregate
-   * - `{YYYY-MM}`: Monthly aggregate
-   * - `{YYYY-MM-DD}`: Daily aggregate
-   *
-   * Also writes per-user stats under `by_user/{userId}` subcollection.
-   *
-   * @param params - Usage parameters including tokens, cost, and metadata
-   *
-   * @example
-   * ```ts
-   * await usageLogger.log({
-   *   userId: 'user-123',
-   *   provider: 'anthropic',
-   *   model: 'claude-sonnet-4-5',
-   *   callType: 'research',
-   *   usage: {
-   *     inputTokens: 1000,
-   *     outputTokens: 500,
-   *     totalTokens: 1500,
-   *     costUsd: 0.0105,
-   *   },
-   *   success: true,
-   * });
-   * ```
-   *
-   * @see {@link UsageLogParams} for parameter structure
+   * Fire-and-forget operation - sink errors are logged but don't propagate to
+   * avoid disrupting LLM operations.
    */
   async log(params: UsageLogParams): Promise<void> {
     if (!isUsageLoggingEnabled()) return;
@@ -362,6 +141,7 @@ export class UsageLogger {
         costUsd: params.usage.costUsd,
         success: params.success,
         ...(params.errorMessage !== undefined && { errorMessage: params.errorMessage }),
+        ...(params.promptType !== undefined && { promptType: params.promptType }),
       },
       'LLM usage logged'
     );
@@ -376,46 +156,7 @@ export class UsageLogger {
 
 /**
  * Create a UsageLogger instance.
- *
- * @remarks
- * Factory function for creating a UsageLogger with required logger dependency.
- * Use this instead of `new UsageLogger()` for consistency.
- *
- * @param deps - Dependencies including required logger
- * @returns Configured UsageLogger instance
- *
- * @example
- * ```ts
- * import { createUsageLogger } from '@intexuraos/llm-pricing';
- * import pino from 'pino';
- *
- * const logger = pino({ name: 'my-service' });
- * const usageLogger = createUsageLogger({ logger });
- * ```
  */
-export function createUsageLogger(deps: { logger: Logger; sink?: UsageSink }): UsageLogger {
+export function createUsageLogger(deps: { logger: Logger; sink: UsageSink }): UsageLogger {
   return new UsageLogger(deps);
-}
-
-/**
- * @deprecated Use {@link UsageLogger.log} or {@link createUsageLogger} instead.
- * This standalone function will be removed in a future version.
- *
- * Log LLM usage to Firestore and Cloud Logging.
- *
- * @remarks
- * This is a legacy function for backward compatibility.
- * It uses a silent logger (no output) - migrate to UsageLogger class for proper logging.
- *
- * @param params - Usage parameters including tokens, cost, and metadata
- */
-export async function logUsage(params: UsageLogParams): Promise<void> {
-  const silentLogger: Logger = {
-    info: () => undefined,
-    warn: () => undefined,
-    error: () => undefined,
-    debug: () => undefined,
-  };
-  const usageLogger = new UsageLogger({ logger: silentLogger });
-  await usageLogger.log(params);
 }

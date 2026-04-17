@@ -268,7 +268,6 @@ All routes verified against `apps/*/src/routes/`. Auth: `Bearer` = Auth0 JWT, `I
 | Method | Path                    | Auth     | Route File        | Status |
 | ------ | ----------------------- | -------- | ----------------- | ------ |
 | GET    | `/settings/pricing`     | None     | publicRoutes.ts   | OK     |
-| GET    | `/settings/usage-costs` | Bearer   | publicRoutes.ts   | OK     |
 | GET    | `/settings/pricing`     | Internal | internalRoutes.ts | OK     |
 
 ### bookmarks-agent
@@ -361,34 +360,6 @@ Workers run as Cloud Functions, not Cloud Run. No HTTP endpoints — event-drive
 | POST   | `/internal/commands`            | Internal | internalRoutes.ts | OK     |
 | POST   | `/internal/retry-pending`       | Internal | internalRoutes.ts | OK     |
 | GET    | `/internal/commands/:commandId` | Internal | internalRoutes.ts | OK     |
-
-### data-insights-agent
-
-| Method | Path                                                            | Auth     | Route File             | Status |
-| ------ | --------------------------------------------------------------- | -------- | ---------------------- | ------ |
-| POST   | `/data-sources`                                                 | Bearer   | dataSourceRoutes.ts    | OK     |
-| GET    | `/data-sources`                                                 | Bearer   | dataSourceRoutes.ts    | OK     |
-| GET    | `/data-sources/:id`                                             | Bearer   | dataSourceRoutes.ts    | OK     |
-| PATCH  | `/data-sources/:id`                                             | Bearer   | dataSourceRoutes.ts    | OK     |
-| DELETE | `/data-sources/:id`                                             | Bearer   | dataSourceRoutes.ts    | OK     |
-| POST   | `/data-sources/generate-title`                                  | Bearer   | dataSourceRoutes.ts    | OK     |
-| POST   | `/composite-feeds`                                              | Bearer   | compositeFeedRoutes.ts | OK     |
-| GET    | `/composite-feeds`                                              | Bearer   | compositeFeedRoutes.ts | OK     |
-| GET    | `/composite-feeds/:id`                                          | Bearer   | compositeFeedRoutes.ts | OK     |
-| PATCH  | `/composite-feeds/:id`                                          | Bearer   | compositeFeedRoutes.ts | OK     |
-| DELETE | `/composite-feeds/:id`                                          | Bearer   | compositeFeedRoutes.ts | OK     |
-| GET    | `/composite-feeds/:id/schema`                                   | Bearer   | compositeFeedRoutes.ts | OK     |
-| GET    | `/composite-feeds/:id/data`                                     | Bearer   | compositeFeedRoutes.ts | OK     |
-| GET    | `/composite-feeds/:id/snapshot`                                 | Bearer   | compositeFeedRoutes.ts | OK     |
-| GET    | `/composite-feeds/:feedId/preview`                              | Bearer   | compositeFeedRoutes.ts | OK     |
-| POST   | `/composite-feeds/:feedId/analyze`                              | Bearer   | dataInsightsRoutes.ts  | OK     |
-| POST   | `/composite-feeds/:feedId/insights/:insightId/chart-definition` | Bearer   | dataInsightsRoutes.ts  | OK     |
-| POST   | `/visualizations`                                               | Bearer   | visualizationRoutes.ts | OK     |
-| GET    | `/visualizations`                                               | Bearer   | visualizationRoutes.ts | OK     |
-| GET    | `/visualizations/:id`                                           | Bearer   | visualizationRoutes.ts | OK     |
-| DELETE | `/visualizations/:id`                                           | Bearer   | visualizationRoutes.ts | OK     |
-| POST   | `/visualizations/:id/refresh`                                   | Bearer   | visualizationRoutes.ts | OK     |
-| POST   | `/internal/visualizations/compute`                              | Internal | internalRoutes.ts      | OK     |
 
 ### image-service
 

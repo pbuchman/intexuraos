@@ -42,6 +42,7 @@ export interface Config {
   geminiAppApiKey: string;
   executionMemoryEnabled: boolean;
   openaiAppApiKey: string;
+  llmUsageServiceUrl: string;
 }
 
 export function loadConfig(): Config {
@@ -66,6 +67,7 @@ export function loadConfig(): Config {
   const executionMemoryEnabled =
     (process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] ?? '').toLowerCase() === 'true';
   const openaiAppApiKey = process.env['INTEXURAOS_OPENAI_APP_API_KEY'] ?? '';
+  const llmUsageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '';
 
   return {
     port,
@@ -96,5 +98,6 @@ export function loadConfig(): Config {
     geminiAppApiKey,
     executionMemoryEnabled,
     openaiAppApiKey,
+    llmUsageServiceUrl,
   };
 }

@@ -5,7 +5,7 @@ Unified factory for creating LLM clients across different providers. Maps model 
 **Version:** 3.3.0
 **Node:** >=22.0.0
 **Type:** ESM
-**Dependencies:** `@intexuraos/common-core`, `@intexuraos/infra-gemini`, `@intexuraos/llm-audit`, `@intexuraos/llm-contract`, `@intexuraos/llm-pricing`
+**Dependencies:** `@intexuraos/common-core`, `@intexuraos/infra-gemini`, `@intexuraos/llm-contract`, `@intexuraos/llm-pricing`
 
 ## Why It Exists
 
@@ -94,7 +94,6 @@ interface LlmClientConfig {
   userId: string;
   pricing: ModelPricing;
   logger: Logger;
-  auditSink?: AuditSink;  // from @intexuraos/llm-audit; defaults to Firestore sink
   usageSink?: UsageSink;  // from @intexuraos/llm-pricing; defaults to Firestore sink
 }
 
@@ -119,7 +118,7 @@ interface LlmGenerateClient {
 
 **Packages (1):** `internal-clients`
 
-**Apps (10):** `actions-agent`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `commands-agent`, `data-insights-agent`, `linear-agent`, `research-agent`, `todos-agent`, `web-agent`
+**Apps (9):** `actions-agent`, `bookmarks-agent`, `calendar-agent`, `chat-agent`, `commands-agent`, `linear-agent`, `research-agent`, `todos-agent`, `web-agent`
 
 **Workers (1):** `orchestrator`
 

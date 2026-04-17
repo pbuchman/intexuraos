@@ -6,7 +6,7 @@
 
 import { createPerplexityClient, type PerplexityClient } from '@intexuraos/infra-perplexity';
 import type { Logger, Result } from '@intexuraos/common-core';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import { buildResearchPrompt, type ResearchContext } from '@intexuraos/llm-prompts';
 import type {
   LlmError,
@@ -23,8 +23,8 @@ export class PerplexityAdapter implements LlmResearchProvider {
     apiKey: string,
     model: string,
     userId: string,
-    pricing: ModelPricing,
     logger: Logger,
+    usageSink: UsageSink,
     researchId?: string
   ) {
     this.client = createPerplexityClient({
@@ -32,8 +32,8 @@ export class PerplexityAdapter implements LlmResearchProvider {
       model,
       userId,
       ...(researchId !== undefined && { researchId }),
-      pricing,
       logger,
+      usageSink,
     });
     this.model = model;
     this.logger = logger;

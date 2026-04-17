@@ -22,9 +22,13 @@ const COMMON_SERVICE_ENV = {
   INTEXURAOS_GCP_PROJECT_ID: process.env.INTEXURAOS_GCP_PROJECT_ID,
   INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
   INTEXURAOS_MINIMAX_APP_API_KEY: process.env.INTEXURAOS_MINIMAX_APP_API_KEY,
+  INTEXURAOS_MIMO_APP_API_KEY: process.env.INTEXURAOS_MIMO_APP_API_KEY,
   INTEXURAOS_GEMINI_APP_API_KEY: process.env.INTEXURAOS_GEMINI_APP_API_KEY,
   INTEXURAOS_DASHSCOPE_APP_API_KEY: process.env.INTEXURAOS_DASHSCOPE_APP_API_KEY,
   INTEXURAOS_OPENROUTER_APP_API_KEY: process.env.INTEXURAOS_OPENROUTER_APP_API_KEY,
+  INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS:
+    process.env.INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS ??
+    'or:google/gemma-4-31b-it:free,or:google/gemma-4-31b-it,gemini-2.5-flash',
   INTEXURAOS_ENVIRONMENT: process.env.INTEXURAOS_ENVIRONMENT ?? 'dev',
   INTEXURAOS_RUNTIME: 'dev',
   INTEXURAOS_DASH0_OTLP_ENDPOINT: process.env.INTEXURAOS_DASH0_OTLP_ENDPOINT,
@@ -40,7 +44,6 @@ const COMMON_SERVICE_URLS = {
   INTEXURAOS_RESEARCH_AGENT_URL: 'http://localhost:8116',
   INTEXURAOS_COMMANDS_AGENT_URL: 'http://localhost:8117',
   INTEXURAOS_ACTIONS_AGENT_URL: 'http://localhost:8118',
-  INTEXURAOS_DATA_INSIGHTS_AGENT_URL: 'http://localhost:8119',
   INTEXURAOS_IMAGE_SERVICE_URL: 'http://localhost:8120',
   INTEXURAOS_NOTES_AGENT_URL: 'http://localhost:8121',
   INTEXURAOS_APP_SETTINGS_SERVICE_URL: 'http://localhost:8122',
@@ -53,6 +56,7 @@ const COMMON_SERVICE_URLS = {
   INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8127',
   INTEXURAOS_CRON_AGENT_URL: 'http://localhost:8130',
   INTEXURAOS_HELLSCRIPT_AGENT_URL: 'http://localhost:8131',
+  INTEXURAOS_LLM_USAGE_SERVICE_URL: 'http://localhost:8132',
 };
 
 // Service-specific env vars (Pub/Sub topics, non-URL config)
@@ -116,6 +120,7 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_QUEUE_TTL_MINUTES: process.env.INTEXURAOS_QUEUE_TTL_MINUTES ?? '1440',
     INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS: process.env.INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS ?? '3',
     INTEXURAOS_RETRY_QUEUE_TTL_MINUTES: process.env.INTEXURAOS_RETRY_QUEUE_TTL_MINUTES ?? '10',
+    // INTEXURAOS_LLM_USAGE_SERVICE_URL: already in COMMON_SERVICE_URLS (http://localhost:8132)
     // INTEXURAOS_ENABLE_METRICS: not set — Cloud Monitoring disabled on home-dev (no IAM role)
   },
   'bookmarks-agent': {
@@ -153,6 +158,9 @@ const SERVICE_ENV_MAPPINGS = {
   'chat-agent': {
     // OpenAI API key for embeddings (from .envrc)
     INTEXURAOS_OPENAI_APP_API_KEY: process.env.INTEXURAOS_OPENAI_APP_API_KEY,
+  },
+  'llm-usage-service': {
+    INTEXURAOS_ORCHESTRATOR_SECRET: process.env.INTEXURAOS_ORCHESTRATOR_SECRET,
   },
 };
 
@@ -227,6 +235,7 @@ module.exports = {
     createServiceConfig('code-agent', 8128),
     createServiceConfig('cron-agent', 8130),
     createServiceConfig('hellscript-agent', 8131),
+    createServiceConfig('llm-usage-service', 8132),
 
     // Services that depend on app-settings-service (fetch pricing at startup)
     // Poll health endpoint until app-settings-service is ready (max 30s)
@@ -235,9 +244,6 @@ module.exports = {
     createServiceConfig('actions-agent', 8118, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('research-agent', 8116, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('todos-agent', 8123, { waitForService: 'http://localhost:8122/health' }),
-    createServiceConfig('data-insights-agent', 8119, {
-      waitForService: 'http://localhost:8122/health',
-    }),
     createServiceConfig('image-service', 8120, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('calendar-agent', 8125, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('linear-agent', 8126, { waitForService: 'http://localhost:8122/health' }),

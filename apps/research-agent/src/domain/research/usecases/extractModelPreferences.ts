@@ -23,7 +23,7 @@ import type { ApiKeyStore, TextGenerationClient } from '../ports/index.js';
  */
 export interface ExtractModelPreferencesResult {
   selectedModels: ResearchModel[];
-  synthesisModel: ResearchModel | undefined;
+  synthesisModel: ResearchModel | undefined; // @allow-undefined-type -- explicitly returned as undefined in multiple fallback paths
 }
 
 /**
@@ -41,10 +41,10 @@ export interface ExtractModelPreferencesDeps {
 const RESEARCH_MODELS: ResearchModel[] = [
   LlmModels.Gemini25Pro,
   LlmModels.Gemini25Flash,
-  LlmModels.ClaudeOpus45,
-  LlmModels.ClaudeSonnet45,
+  LlmModels.ClaudeOpus46,
+  LlmModels.ClaudeSonnet46,
   LlmModels.O4MiniDeepResearch,
-  LlmModels.GPT52,
+  LlmModels.GPT54,
   LlmModels.Sonar,
   LlmModels.SonarPro,
   LlmModels.SonarDeepResearch,
@@ -56,10 +56,10 @@ const RESEARCH_MODELS: ResearchModel[] = [
 const MODEL_DISPLAY_NAMES: Record<ResearchModel, string> = {
   [LlmModels.Gemini25Pro]: 'Gemini 2.5 Pro',
   [LlmModels.Gemini25Flash]: 'Gemini 2.5 Flash',
-  [LlmModels.ClaudeOpus45]: 'Claude Opus 4.5',
-  [LlmModels.ClaudeSonnet45]: 'Claude Sonnet 4.5',
+  [LlmModels.ClaudeOpus46]: 'Claude Opus 4.6',
+  [LlmModels.ClaudeSonnet46]: 'Claude Sonnet 4.6',
   [LlmModels.O4MiniDeepResearch]: 'O4 Mini Deep Research',
-  [LlmModels.GPT52]: 'GPT 5.2',
+  [LlmModels.GPT54]: 'GPT 5.4',
   [LlmModels.Sonar]: 'Sonar',
   [LlmModels.SonarPro]: 'Sonar Pro',
   [LlmModels.SonarDeepResearch]: 'Sonar Deep Research',
@@ -225,7 +225,7 @@ export async function extractModelPreferences(
   try {
     logger.info({ messageLength: originalMessage.length }, 'Extracting model preferences from message');
 
-    const result = await llmClient.generate(prompt);
+    const result = await llmClient.generate(prompt, { promptType: 'research-model-preference-extraction' });
 
     if (!result.ok) {
       logger.warn(
@@ -237,10 +237,10 @@ export async function extractModelPreferences(
 
     // Parse the response
     const validModelIds = availableModels.map((m) => m.id);
-    const parsed = parseModelExtractionResponse(result.value.content, validModelIds);
+    const parsed = parseModelExtractionResponse(result.value.content, validModelIds); // @allow-result-access -- guarded by if (!result.ok) early return above
 
     if (parsed === null) {
-      logger.warn({ response: result.value.content.substring(0, 200) }, 'Failed to parse model extraction response');
+      logger.warn({ response: result.value.content.substring(0, 200) }, 'Failed to parse model extraction response'); // @allow-result-access -- guarded by if (!result.ok) early return above
       return { selectedModels: [], synthesisModel: undefined };
     }
 

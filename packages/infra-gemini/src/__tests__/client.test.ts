@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type ModelPricing, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -8,6 +9,8 @@ const mockLogger: Logger = {
   warn: vi.fn(),
   debug: vi.fn(),
 };
+
+const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
 const mockGenerateContent = vi.fn();
 
@@ -17,13 +20,6 @@ vi.mock('@google/genai', () => {
   }
   return { GoogleGenAI: MockGoogleGenAI };
 });
-
-vi.mock('@intexuraos/llm-audit', () => ({
-  createAuditContext: vi.fn().mockReturnValue({
-    success: vi.fn().mockResolvedValue(undefined),
-    error: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
 
 const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
 
@@ -35,48 +31,32 @@ vi.mock('@intexuraos/llm-pricing', () => ({
 }));
 
 const { createGeminiClient } = await import('../client.js');
-const { createAuditContext } = await import('@intexuraos/llm-audit');
 const { createUsageLogger } = await import('@intexuraos/llm-pricing');
 
 const TEST_MODEL = LlmModels.Gemini25Flash;
-
-const createTestPricing = (overrides: Partial<ModelPricing> = {}): ModelPricing => ({
-  inputPricePerMillion: 0.15,
-  outputPricePerMillion: 0.6,
-  groundingCostPerRequest: 0.035,
-  imagePricing: {
-    '1024x1024': 0.02,
-    '1536x1024': 0.04,
-    '1024x1536': 0.04,
-  },
-  ...overrides,
-});
 
 describe('createGeminiClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('passes audit and usage sinks to shared infra clients', async () => {
+  it('passes usage sink to createUsageLogger', async () => {
     mockGenerateContent.mockResolvedValue({
       text: 'ok',
       usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
       candidates: [{}],
     });
-    const auditSink = { save: vi.fn().mockResolvedValue({ ok: true, value: undefined }) };
     const usageSink = { log: vi.fn().mockResolvedValue(undefined) };
 
     const client = createGeminiClient({
       apiKey: 'test-key',
       model: TEST_MODEL,
       userId: 'test-user',
-      pricing: createTestPricing(),
       logger: mockLogger,
-      auditSink,
       usageSink,
     });
 
-    await client.generate('hello');
+    await client.generate('hello', { promptType: 'test-prompt' });
 
     expect(createUsageLogger).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -84,11 +64,10 @@ describe('createGeminiClient', () => {
         sink: usageSink,
       })
     );
-    expect(createAuditContext).toHaveBeenCalledWith(expect.any(Object), { sink: auditSink });
   });
 
   describe('research', () => {
-    it('includes userId and researchId in audit context', async () => {
+    it('returns research result with content and usage', async () => {
       mockGenerateContent.mockResolvedValue({
         text: 'Research findings about AI.',
         usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50 },
@@ -99,64 +78,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        researchId: 'research-123',
-        pricing: createTestPricing(),
         logger: mockLogger,
-      });
-
-      await client.research('Tell me about AI');
-
-      expect(vi.mocked(createAuditContext).mock.calls[0]?.[0]).toEqual(
-        expect.objectContaining({
-          provider: LlmProviders.Google,
-          model: TEST_MODEL,
-          method: 'research',
-          prompt: 'Tell me about AI',
-          userId: 'test-user',
-          researchId: 'research-123',
-        })
-      );
-    });
-
-    it('excludes researchId from audit context when undefined', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: 'Research findings about AI.',
-        usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50 },
-        candidates: [{ groundingMetadata: {} }],
-      });
-
-      const client = createGeminiClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        pricing: createTestPricing(),
-        logger: mockLogger,
-      });
-
-      await client.research('Tell me about AI');
-
-      const auditArgs = vi.mocked(createAuditContext).mock.calls[0]?.[0] as unknown as Record<
-        string,
-        unknown
-      >;
-      expect(auditArgs).not.toHaveProperty('researchId');
-      expect(auditArgs?.['userId']).toBe('test-user');
-    });
-
-    it('returns research result with content and usage from pricing', async () => {
-      mockGenerateContent.mockResolvedValue({
-        text: 'Research findings about AI.',
-        usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50 },
-        candidates: [{ groundingMetadata: {} }],
-      });
-
-      const pricing = createTestPricing();
-      const client = createGeminiClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        pricing,
-        logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Tell me about AI');
 
@@ -168,8 +91,7 @@ describe('createGeminiClient', () => {
           outputTokens: 50,
           totalTokens: 150,
         });
-        // Cost with grounding: (100/1M * 0.15) + (50/1M * 0.6) + 0.035 = 0.000015 + 0.00003 + 0.035 = 0.035045
-        expect(result.value.usage.costUsd).toBeCloseTo(0.035045, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -193,8 +115,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -225,8 +147,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -243,21 +165,19 @@ describe('createGeminiClient', () => {
         candidates: [{ groundingMetadata: {} }],
       });
 
-      const pricing = createTestPricing({ groundingCostPerRequest: 0.035 });
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.usage.groundingEnabled).toBe(true);
-        // Cost includes grounding: tokens + 0.035
-        expect(result.value.usage.costUsd).toBeGreaterThan(0.035);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -268,20 +188,18 @@ describe('createGeminiClient', () => {
         candidates: [{}],
       });
 
-      const pricing = createTestPricing({ groundingCostPerRequest: 0.035 });
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        // Cost without grounding: only token costs
-        expect(result.value.usage.costUsd).toBeLessThan(0.001);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -296,8 +214,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.research('Test prompt');
 
@@ -319,8 +237,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -337,8 +255,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -355,8 +273,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test prompt');
 
@@ -373,8 +291,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       await client.research('Test prompt');
 
@@ -397,46 +315,38 @@ describe('createGeminiClient', () => {
         candidates: [{ groundingMetadata: {} }],
       });
 
-      const pricing = createTestPricing();
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Tell me about AI');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.usage.thinkingTokens).toBe(200);
-        // Cost with thinking + grounding:
-        // input: 100 * 0.15 / 1M = 0.000015
-        // output: 50 * 0.6 / 1M = 0.00003
-        // thinking: 200 * 0.6 / 1M = 0.00012
-        // grounding: 0.035
-        // total: 0.035165
-        expect(result.value.usage.costUsd).toBeCloseTo(0.035165, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
   });
 
   describe('generate', () => {
-    it('returns generate result with content and usage from pricing', async () => {
+    it('returns generate result with content and usage', async () => {
       mockGenerateContent.mockResolvedValue({
         text: 'Generated text.',
         usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 100 },
       });
 
-      const pricing = createTestPricing();
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -446,8 +356,7 @@ describe('createGeminiClient', () => {
           outputTokens: 100,
           totalTokens: 150,
         });
-        // Cost without grounding: (50/1M * 0.15) + (100/1M * 0.6) = 0.0000075 + 0.00006 = 0.0000675
-        expect(result.value.usage.costUsd).toBeCloseTo(0.0000675, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -461,10 +370,10 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      await client.generate('Write something');
+      await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -484,10 +393,10 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -502,10 +411,10 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -523,26 +432,19 @@ describe('createGeminiClient', () => {
         },
       });
 
-      const pricing = createTestPricing();
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.usage.thinkingTokens).toBe(500);
-        // Cost without grounding (scaled integers, then / 1M):
-        // input: 50 * 0.15 = 7.5
-        // output: 100 * 0.6 = 60
-        // thinking: 500 * 0.6 = 300
-        // total scaled: 367.5 → Math.round → 368
-        // costUsd: 368 / 1M = 0.000368
-        expect(result.value.usage.costUsd).toBeCloseTo(0.000368, 6);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -560,10 +462,10 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -584,20 +486,86 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Write something');
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.usage.thinkingTokens).toBeUndefined();
       }
     });
+
+    it('passes promptType to usage logger when provided', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Generated text.',
+        usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 100 },
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('Write something', { promptType: 'linear-issue-title' });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          promptType: 'linear-issue-title',
+        })
+      );
+    });
+
+    it('passes promptType to usage log when provided', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'Generated text.',
+        usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 100 },
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('Write something', { promptType: 'test-prompt' });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'generate',
+          success: true,
+          promptType: 'test-prompt',
+        })
+      );
+    });
+
+    it('passes promptType to usage logger on error', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('API error'));
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('Write something', { promptType: 'code-validation' });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          promptType: 'code-validation',
+          success: false,
+        })
+      );
+    });
   });
 
   describe('generateImage', () => {
-    it('returns image result with cost from pricing', async () => {
+    it('returns image result with zero cost', async () => {
       const imageB64 = Buffer.from('fake-image-data').toString('base64');
       mockGenerateContent.mockResolvedValue({
         candidates: [
@@ -609,15 +577,12 @@ describe('createGeminiClient', () => {
         ],
       });
 
-      const pricing = createTestPricing({
-        imagePricing: { '1024x1024': 0.02, '1536x1024': 0.04, '1024x1536': 0.04 },
-      });
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -626,11 +591,11 @@ describe('createGeminiClient', () => {
       if (result.ok) {
         expect(result.value.model).toBe(LlmModels.Gemini25FlashImage);
         expect(result.value.imageData).toBeInstanceOf(Buffer);
-        expect(result.value.usage.costUsd).toBe(0.02);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
-    it('uses specified image size for cost calculation', async () => {
+    it('uses specified image size', async () => {
       const imageB64 = Buffer.from('fake-image-data').toString('base64');
       mockGenerateContent.mockResolvedValue({
         candidates: [
@@ -642,26 +607,23 @@ describe('createGeminiClient', () => {
         ],
       });
 
-      const pricing = createTestPricing({
-        imagePricing: { '1024x1024': 0.02, '1536x1024': 0.04, '1024x1536': 0.04 },
-      });
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat', { size: '1536x1024' });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage.costUsd).toBe(0.04);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
-    it('uses separate imagePricing when provided', async () => {
+    it('returns image with zero cost when no imagePricing', async () => {
       const imageB64 = Buffer.from('fake-image-data').toString('base64');
       mockGenerateContent.mockResolvedValue({
         candidates: [
@@ -673,26 +635,19 @@ describe('createGeminiClient', () => {
         ],
       });
 
-      const pricing = createTestPricing();
-      const imagePricing: ModelPricing = {
-        inputPricePerMillion: 0,
-        outputPricePerMillion: 0,
-        imagePricing: { '1024x1024': 0.01, '1536x1024': 0.02, '1024x1536': 0.02 },
-      };
       const client = createGeminiClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing,
-        imagePricing,
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage.costUsd).toBe(0.01);
+        expect(result.value.usage.costUsd).toBe(0);
       }
     });
 
@@ -711,8 +666,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -740,8 +695,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       await client.generateImage('A cat');
@@ -761,8 +716,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -782,8 +737,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -800,8 +755,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -818,8 +773,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -836,8 +791,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -854,8 +809,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -872,10 +827,10 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test');
+      const result = await client.generate('Test', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -890,10 +845,10 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test');
+      const result = await client.generate('Test', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -908,10 +863,10 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test');
+      const result = await client.generate('Test', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -926,10 +881,10 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test');
+      const result = await client.generate('Test', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -944,8 +899,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -963,8 +918,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -982,8 +937,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -1001,8 +956,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -1020,8 +975,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Test');
 
@@ -1038,10 +993,10 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
-      const result = await client.generate('Test');
+      const result = await client.generate('Test', { promptType: 'test-prompt' });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -1056,8 +1011,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       const result = await client.generateImage('A cat');
@@ -1080,8 +1035,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Query');
 
@@ -1115,8 +1070,8 @@ describe('createGeminiClient', () => {
         apiKey: 'test-key',
         model: TEST_MODEL,
         userId: 'test-user',
-        pricing: createTestPricing(),
         logger: mockLogger,
+        usageSink: mockUsageSink,
       });
       const result = await client.research('Query');
 
@@ -1125,5 +1080,24 @@ describe('createGeminiClient', () => {
         expect(result.value.sources).toEqual(['https://valid.com']);
       }
     });
+  });
+
+  it('passes ownerType to usage logger when provided', async () => {
+    mockGenerateContent.mockResolvedValue({
+      text: 'ok',
+      usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 5 },
+    });
+
+    const client = createGeminiClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+      ownerType: 'user',
+    });
+    await client.generate('hello', { promptType: 'test-prompt' });
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'user' }));
   });
 });

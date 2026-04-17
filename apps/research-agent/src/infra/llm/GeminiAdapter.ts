@@ -5,7 +5,7 @@
 
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
 import type { Logger, Result } from '@intexuraos/common-core';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
   buildResearchPrompt,
   buildSynthesisPrompt,
@@ -33,8 +33,8 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     apiKey: string,
     model: string,
     userId: string,
-    pricing: ModelPricing,
     logger: Logger,
+    usageSink: UsageSink,
     researchId?: string
   ) {
     this.client = createGeminiClient({
@@ -42,8 +42,8 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
       model,
       userId,
       ...(researchId !== undefined && { researchId }),
-      pricing,
       logger,
+      usageSink,
     });
     this.model = model;
     this.logger = logger;
@@ -82,7 +82,7 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
       synthesisContext !== undefined
         ? buildSynthesisPrompt(originalPrompt, reports, synthesisContext, additionalSources)
         : buildSynthesisPrompt(originalPrompt, reports, additionalSources);
-    const result = await this.client.generate(synthesisPrompt);
+    const result = await this.client.generate(synthesisPrompt, { promptType: 'research-synthesis' });
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -113,7 +113,7 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
       { content: prompt },
       { wordRange: { min: 5, max: 8 }, includeExamples: true }
     );
-    const result = await this.client.generate(builtPrompt);
+    const result = await this.client.generate(builtPrompt, { promptType: 'research-title-generation' });
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -141,7 +141,7 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
   async generateContextLabel(content: string): Promise<Result<LabelGenerateResult, LlmError>> {
     this.logger.info({ model: this.model, contentLength: content.length }, 'Gemini label generation started');
     const builtPrompt = labelPrompt.build({ content }, { contentPreviewLimit: 2000 });
-    const result = await this.client.generate(builtPrompt);
+    const result = await this.client.generate(builtPrompt, { promptType: 'research-context-label' });
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
