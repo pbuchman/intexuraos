@@ -93,4 +93,43 @@ describe('aggregateDigest', () => {
     if (result.ok) return;
     expect(result.error.code).toBe('llm-call-failed');
   });
+
+  it('handles cold-start input (null state, empty summaries) without error', async () => {
+    const llmClient = new FakeLlmClient([
+      { type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) },
+    ]);
+
+    const result = await aggregateDigest(
+      { llmClient, logger: noopLogger },
+      {
+        userId: 'u', groupKey: 'grupa-wedkarska-skool', date: '2026-04-15',
+        previousState: null,
+        last3Summaries: [],
+        todaysMessages: [],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    // Verify the prompt embedded an empty-state placeholder (not "null")
+    const prompt = llmClient.calls[0]?.prompt ?? '';
+    expect(prompt).toContain('previousState (lub {} dla cold start)');
+  });
+
+  it('handles previousState = empty object equivalently to null', async () => {
+    const llmClient = new FakeLlmClient([
+      { type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) },
+    ]);
+
+    const result = await aggregateDigest(
+      { llmClient, logger: noopLogger },
+      {
+        userId: 'u', groupKey: 'grupa-wedkarska-skool', date: '2026-04-15',
+        previousState: {},
+        last3Summaries: [],
+        todaysMessages: [],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+  });
 });
