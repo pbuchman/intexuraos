@@ -11,12 +11,14 @@ describe('DigestError factories', () => {
   it('creates llm-call-failed', () => {
     const e: DigestError = llmCallFailed('upstream timeout');
     expect(e.code).toBe('llm-call-failed');
+    if (e.code !== 'llm-call-failed') return;
     expect(e.message).toBe('upstream timeout');
   });
 
   it('creates repair-exhausted with attempt count', () => {
     const e: DigestError = repairExhausted(3, 'final invalid JSON');
     expect(e.code).toBe('repair-exhausted');
+    if (e.code !== 'repair-exhausted') return;
     expect(e.attempts).toBe(3);
   });
 

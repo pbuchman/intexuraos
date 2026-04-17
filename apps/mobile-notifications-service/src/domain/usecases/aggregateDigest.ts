@@ -1,5 +1,5 @@
 import type { Logger, Result } from '@intexuraos/common-core';
-import { ok, err } from '@intexuraos/common-core';
+import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import {
   buildDigestPrompt,
@@ -40,7 +40,7 @@ export async function aggregateDigest(
   for (let attempt = 0; attempt <= MAX_REPAIR_ATTEMPTS; attempt += 1) {
     const response = await deps.llmClient.generate(prompt, { promptType });
     if (!response.ok) {
-      return err(llmCallFailed(response.error.message ?? 'LLM call failed'));
+      return err(llmCallFailed(response.error.message));
     }
     lastResponseContent = response.value.content;
 
@@ -65,7 +65,7 @@ function tryParseAndValidate(content: string): { ok: true; value: AggregationOut
   try {
     parsed = JSON.parse(content);
   } catch (e) {
-    return { ok: false, error: `JSON.parse failed: ${e instanceof Error ? e.message : String(e)}` };
+    return { ok: false, error: `JSON.parse failed: ${getErrorMessage(e)}` };
   }
   const validation = AggregationOutputSchema.safeParse(parsed);
   if (!validation.success) {
