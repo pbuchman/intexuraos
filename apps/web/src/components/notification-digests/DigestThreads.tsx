@@ -53,7 +53,7 @@ function ThreadCard({ thread }: { thread: DigestThread }): React.JSX.Element {
             {expanded ? 'Ukryj fakty' : `Pokaż ${String(thread.keyFacts.length)} faktów`}
           </button>
           {expanded ? (
-            <ul className="mt-2 space-y-1 pl-5 text-sm text-slate-700 dark:text-slate-200" style={{ listStyleType: 'disc' }}>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700 dark:text-slate-200">
               {thread.keyFacts.map((fact, i) => (
                 <li key={`${String(i)}-${fact.slice(0, 20)}`}>{fact}</li>
               ))}

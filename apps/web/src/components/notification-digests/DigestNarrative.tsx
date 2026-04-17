@@ -17,7 +17,6 @@ export function DigestNarrative({ narrative }: DigestNarrativeProps): React.JSX.
       <p
         lang="pl"
         className="max-w-prose leading-relaxed text-slate-700 dark:text-slate-200"
-        style={{ fontFeatureSettings: "'kern' 1, 'liga' 1" }}
       >
         {narrative}
       </p>
