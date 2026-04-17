@@ -364,8 +364,8 @@ describe('askAgentPrompt', () => {
 });
 
 describe('prompt versions', () => {
-  it('reviewPrompt version is 9.2.1', () => {
-    expect(reviewPrompt.version).toBe('9.2.1');
+  it('reviewPrompt version is 10.0.0', () => {
+    expect(reviewPrompt.version).toBe('10.0.0');
   });
 
   it('pullRequestPrompt version is 5.0.0', () => {
