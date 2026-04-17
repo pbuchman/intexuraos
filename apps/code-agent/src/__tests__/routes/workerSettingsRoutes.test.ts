@@ -179,6 +179,7 @@ describe('Worker Settings Routes', () => {
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      prTriagePublisher: {} as never,
     } as ServiceContainer);
 
     app = await buildServer();

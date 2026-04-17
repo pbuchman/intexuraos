@@ -183,6 +183,7 @@ describe('POST /code/submit', () => {
         detectOnPush: vi.fn().mockResolvedValue(undefined),
         reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
       },
+      prTriagePublisher: {} as never,
       mergeQueueWatchRepo: {
         create: vi.fn(),
         findById: vi.fn(),
@@ -227,6 +228,7 @@ describe('POST /code/submit', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
+      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
     });
 
     // Set up worker settings for the test user

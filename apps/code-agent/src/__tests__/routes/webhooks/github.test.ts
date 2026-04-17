@@ -280,6 +280,7 @@ describe('POST /webhooks/github', () => {
       },
       automationLog: { record: vi.fn().mockResolvedValue(undefined) },
       taskEnqueueService: {} as never,
+      prTriagePublisher: { publishPRTriage: vi.fn().mockResolvedValue({ ok: true, value: undefined }) },
     };
 
     setServices(mockServices);
@@ -532,11 +533,7 @@ describe('POST /webhooks/github', () => {
       expect(body.success).toBe(true);
     });
 
-    it('triggers unified evaluator for pull_request events', async () => {
-      const { getServices } = await import('../../../services.js');
-      const currentServices = getServices();
-      const mockEvaluate = vi.mocked(currentServices.unifiedEvaluator.evaluate);
-
+    it('publishes a PRTriageEvent instead of calling unifiedEvaluator inline', async () => {
       const prPayload = {
         action: 'opened',
         number: 123,
@@ -572,11 +569,19 @@ describe('POST /webhooks/github', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Wait for the fire-and-forget evaluate to complete
-      await waitForDetachedAsync(() => mockEvaluate.mock.calls.length >= 1);
+      // The unified evaluator must NOT be called inline — triage is now Pub/Sub
+      expect(mockServices.unifiedEvaluator.evaluate).not.toHaveBeenCalled();
 
-      // The unified evaluator should have been called
-      expect(mockEvaluate).toHaveBeenCalled();
+      // The PR triage publisher must have been called exactly once
+      expect(mockServices.prTriagePublisher.publishPRTriage).toHaveBeenCalledOnce();
+      expect(mockServices.prTriagePublisher.publishPRTriage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventId: expect.any(String),
+          repository: 'intexuraos/intexuraos',
+          pullRequestNumber: 123,
+          correlationId: expect.any(String),
+        })
+      );
     });
 
     it('should return 200 but not store events for non-intexuraos repositories', async () => {
@@ -2098,9 +2103,9 @@ describe('POST /webhooks/github', () => {
         normalizationStatus: 'duplicate',
       });
 
-      // Verify evaluator was NOT called
-      const services = (await import('../../../services.js')).getServices();
-      expect(services.unifiedEvaluator.evaluate).not.toHaveBeenCalled();
+      // Verify neither the evaluator nor the publisher was called — triage is skipped for duplicates
+      expect(mockServices.unifiedEvaluator.evaluate).not.toHaveBeenCalled();
+      expect(mockServices.prTriagePublisher.publishPRTriage).not.toHaveBeenCalled();
     });
 
     it('should acknowledge and log error for non-duplicate save failures', async () => {
@@ -2573,6 +2578,8 @@ describe('POST /webhooks/github', () => {
       setServices({
         ...mockServices,
         eventDecisionRepo: mockEventDecisionRepo,
+        // Publish fails → triggers inline evaluator fallback path
+        prTriagePublisher: { publishPRTriage: vi.fn().mockResolvedValue({ ok: false, error: { code: 'PUBLISH_ERROR', message: 'topic not found' } }) },
         unifiedEvaluator: {
           evaluate: vi.fn().mockRejectedValue(new Error('evaluation crashed')),
         },
@@ -3311,6 +3318,8 @@ describe('POST /webhooks/github', () => {
           save: mockEventDecisionRepo.save,
           // findByEventIds intentionally omitted (undefined)
         } as import('../../../domain/repositories/eventDecisionRepository.js').EventDecisionRepository,
+        // Publish fails → triggers inline evaluator fallback path
+        prTriagePublisher: { publishPRTriage: vi.fn().mockResolvedValue({ ok: false, error: { code: 'PUBLISH_ERROR', message: 'topic not found' } }) },
         unifiedEvaluator: {
           evaluate: vi.fn().mockRejectedValue(new Error('evaluation crashed')),
         },
@@ -3477,7 +3486,7 @@ describe('POST /webhooks/github', () => {
         body: payload,
       });
 
-      await waitForDetachedAsync(() => vi.mocked(mockServices.unifiedEvaluator.evaluate).mock.calls.length >= 1);
+      await waitForDetachedAsync(() => vi.mocked(mockServices.prTriagePublisher.publishPRTriage).mock.calls.length >= 1);
       expect(mockMarkQa).not.toHaveBeenCalled();
       expect(mockRemoveLabel).not.toHaveBeenCalled();
     });
