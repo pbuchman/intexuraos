@@ -9,6 +9,8 @@ import type {
   GroupStateRepository,
   DigestLockRepository,
 } from './domain/repositories/digestRepositories.js';
+import type { DigestSubscription } from './domain/digestSubscriptions.js';
+import { DIGEST_SUBSCRIPTIONS } from './domain/digestSubscriptions.js';
 import { FirestoreSignatureConnectionRepository } from './infra/firestore/firestoreSignatureConnectionRepository.js';
 import { FirestoreNotificationRepository } from './infra/firestore/firestoreNotificationRepository.js';
 import { FirestoreNotificationFiltersRepository } from './infra/firestore/notificationFiltersRepository.js';
@@ -25,6 +27,7 @@ export interface ServiceContainer {
   groupStateRepository: GroupStateRepository;
   digestLockRepository: DigestLockRepository;
   backfillRunRepository: BackfillRunRepository;
+  digestSubscriptions: readonly DigestSubscription[];
 }
 
 let container: ServiceContainer | null = null;
@@ -38,6 +41,7 @@ export function getServices(): ServiceContainer {
     groupStateRepository: new FirestoreGroupStateRepository(),
     digestLockRepository: new FirestoreDigestLockRepository(),
     backfillRunRepository: new FirestoreBackfillRunRepository(),
+    digestSubscriptions: DIGEST_SUBSCRIPTIONS,
   };
   return container;
 }

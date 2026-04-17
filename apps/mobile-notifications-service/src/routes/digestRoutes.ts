@@ -8,7 +8,7 @@ import type { BackfillRunRepository } from '../domain/repositories/digestReposit
 import { runDigestForGroup, type RunDigestForGroupResult } from '../domain/usecases/runDigestForGroup.js';
 import type { DigestError } from '../domain/usecases/digestErrors.js';
 import { yesterdayCet } from '../domain/usecases/yesterdayCet.js';
-import { DIGEST_SUBSCRIPTIONS } from '../domain/digestSubscriptions.js';
+import { findSubscription } from '../domain/digestSubscriptions.js';
 import { startDigestBackfill } from '../domain/usecases/runDigestBackfill.js';
 import { runRequestSchema, runResponseSchema } from './digestSchemas.js';
 
@@ -189,12 +189,16 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('UNAUTHORIZED', 'missing or invalid internal auth');
       }
       const { userId, groupKey, date, chainNext } = req.body;
+      const subscription = findSubscription(getServices().digestSubscriptions, userId, groupKey);
+      if (subscription === undefined) {
+        return await reply.fail('INVALID_REQUEST', `no digest subscription for userId=${userId} groupKey=${groupKey}`);
+      }
       const llmClient = buildLlmClient(userId);
       const modelId = getDigestModel();
       const holder = chainNext !== undefined ? 'backfill' : 'manual';
       const result = await runDigestForGroup(
         { llmClient, logger, modelId },
-        { userId, groupKey, date, holder },
+        { userId, groupKey, groupTitlePrefix: subscription.groupTitlePrefix, date, holder },
       );
 
       if (chainNext !== undefined) {
@@ -258,11 +262,11 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
       const date = yesterdayCet();
       const results = await Promise.all(
-        DIGEST_SUBSCRIPTIONS.map(async (sub) => {
+        getServices().digestSubscriptions.map(async (sub) => {
           const llm = buildLlmClient(sub.userId);
           const r = await runDigestForGroup(
             { llmClient: llm, logger, modelId: getDigestModel() },
-            { userId: sub.userId, groupKey: sub.groupKey, date, holder: 'cron' },
+            { userId: sub.userId, groupKey: sub.groupKey, groupTitlePrefix: sub.groupTitlePrefix, date, holder: 'cron' },
           );
           return r.ok ? 1 as const : 0 as const;
         }),
@@ -422,11 +426,15 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const user = await requireAuth(req, reply);
       if (user === null) return;
       const { groupKey, date } = req.body;
+      const subscription = findSubscription(getServices().digestSubscriptions, user.userId, groupKey);
+      if (subscription === undefined) {
+        return await reply.fail('INVALID_REQUEST', `no digest subscription for groupKey=${groupKey}`);
+      }
       const llmClient = buildLlmClient(user.userId);
       const modelId = getDigestModel();
       const result = await runDigestForGroup(
         { llmClient, logger, modelId },
-        { userId: user.userId, groupKey, date, holder: 'manual' },
+        { userId: user.userId, groupKey, groupTitlePrefix: subscription.groupTitlePrefix, date, holder: 'manual' },
       );
       if (!result.ok) {
         if (result.error.code === 'lock-held') {
@@ -476,6 +484,9 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { groupKey, fromDate, toDate } = req.body;
       if (fromDate > toDate) {
         return await reply.fail('INVALID_REQUEST', 'fromDate must be on or before toDate');
+      }
+      if (findSubscription(getServices().digestSubscriptions, user.userId, groupKey) === undefined) {
+        return await reply.fail('INVALID_REQUEST', `no digest subscription for groupKey=${groupKey}`);
       }
 
       const base = getSelfBaseUrl();

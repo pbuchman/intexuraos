@@ -17,3 +17,11 @@ export const DIGEST_SUBSCRIPTIONS: readonly DigestSubscription[] = [
     groupTitlePrefix: 'Grupa Wędkarska Skool',
   },
 ] as const;
+
+export function findSubscription(
+  list: readonly DigestSubscription[],
+  userId: string,
+  groupKey: string,
+): DigestSubscription | undefined {
+  return list.find((s) => s.userId === userId && s.groupKey === groupKey);
+}
