@@ -36,17 +36,17 @@ function createMockUsageServiceClient(
 
 function createValidRequest(): UsageIngestRequest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     events: [
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         eventId: 'evt-001',
         occurredAt: '2026-04-10T12:00:00Z',
         owner: { type: 'user', id: 'user-1' },
         source: { service: 'code-agent', component: 'orchestrator', client: 'cli', environment: 'dev' },
         request: { provider: LlmProviders.Anthropic, model: 'claude-sonnet-4-20250514', operation: 'generate', success: true, durationMs: 1500 },
         usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, cacheReadTokens: 0, cacheWriteTokens: 0, cachedTokens: 0, reasoningTokens: 0, thinkingTokens: 0, webSearchCalls: 0, groundingEnabled: false, imageCount: 0 },
-        cost: { billedUsd: 0.01, providerReportedUsd: null, calculatedUsd: 0.01, pricingSource: 'calculated' },
+        cost: { providerReportedUsd: null, pricingSource: 'pending' },
         correlation: { requestId: null, traceId: null, taskId: 'task_abc', researchId: null, attempt: null, sessionId: null },
         error: null,
       },
