@@ -9,3 +9,4 @@ export { DigestActions } from './DigestActions.js';
 export { RegenerateConfirmModal } from './RegenerateConfirmModal.js';
 export { BackfillRangeModal } from './BackfillRangeModal.js';
 export { BackfillProgressGrid } from './BackfillProgressGrid.js';
+export { MonthPicker } from './MonthPicker.js';
