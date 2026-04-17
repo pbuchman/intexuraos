@@ -1337,6 +1337,72 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.passed).toBe(true);
     });
 
+    it('accepts memory acknowledgment when raw logs carry Docker RFC3339 timestamps (regression for INT-1413)', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/org/repo/pull/1872',
+            memory_ids_used: 'mem_b349148e-2e7d-4124-b645-dff4d458a773',
+            memory_ids_rejected: 'mem_f1fe7662-2e74-41d6-8c4a-9bf32d16c3ce',
+            memory_usage_summary: 'Used the first memory, rejected the second.',
+            summary: 'Implemented.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-int-1413-regression',
+        attempt: 1,
+        maxAttempts: 3,
+        agentType: 'execution',
+        rawLogs: [
+          '2026-04-17T16:12:19.476123456Z 📋 **Execution Memories Received:**',
+          '2026-04-17T16:12:19.500000000Z I have received and reviewed 2 execution memories for this task:',
+          '2026-04-17T16:12:19.520000000Z - [1] mem_b349148e-2e7d-4124-b645-dff4d458a773 — "Pre-submit verification" — APPLICABLE because reason',
+          '2026-04-17T16:12:19.540000000Z - [2] mem_f1fe7662-2e74-41d6-8c4a-9bf32d16c3ce — "Address reviewer feedback" — NOT APPLICABLE because reason',
+          '2026-04-17T16:12:20.000000000Z step 1',
+          '2026-04-17T16:12:20.100000000Z step 2',
+          '2026-04-17T16:12:20.200000000Z done',
+        ].join('\n'),
+        executionMemoryContext: {
+          applicationId: 'app-int-1413',
+          retrievalVersion: 'execution-memory-retrieval@3.0.0',
+          querySummary: 'Review regression',
+          matchedMemories: [
+            {
+              memoryId: 'mem_b349148e-2e7d-4124-b645-dff4d458a773',
+              title: 'Pre-submit verification',
+              memoryType: 'verification_pattern',
+              score: 0.7,
+              appliesWhen: 'always',
+              action: 'verify',
+              avoid: 'shortcut',
+              verification: 'check',
+            },
+            {
+              memoryId: 'mem_f1fe7662-2e74-41d6-8c4a-9bf32d16c3ce',
+              title: 'Address reviewer feedback',
+              memoryType: 'implementation_pattern',
+              score: 0.6,
+              appliesWhen: 'reviews',
+              action: 'reply',
+              avoid: 'silence',
+              verification: 'check',
+            },
+          ],
+        },
+      });
+
+      expect(result.missingFields).toEqual([]);
+      expect(result.passed).toBe(true);
+    });
+
     it('flags memory_acknowledgment when a memory is not listed in the acknowledgment block', async () => {
       generateMock.mockResolvedValueOnce({
         ok: true,
