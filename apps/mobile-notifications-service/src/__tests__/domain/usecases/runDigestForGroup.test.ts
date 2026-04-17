@@ -313,6 +313,36 @@ describe('runDigestForGroup', () => {
     expect(capturedTitleFilter).toBe('Grupa Wędkarska Skool');
   });
 
+  it('passes CET day bounds to notification repo based on input.date', async () => {
+    const llm = new FakeLlmClient([{ type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) }]);
+    let capturedFrom: number | undefined;
+    let capturedTo: number | undefined;
+    setMockServices({
+      digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
+      notificationRepository: {
+        ...fakeNotificationRepo([]),
+        findByUserIdPaginated: async (_userId, opts) => {
+          capturedFrom = opts?.filter?.postTimeSecFrom;
+          capturedTo = opts?.filter?.postTimeSecTo;
+          return { ok: true as const, value: { notifications: [] } };
+        },
+      },
+      digestRepository: { save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }), findByDate: async () => ({ ok: true, value: null }), findRecentByGroup: async () => ({ ok: true, value: [] }), findInRange: async () => ({ ok: true, value: { items: [] } }) },
+      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
+    });
+
+    await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'grupa-wedkarska-skool', groupTitlePrefix: 'Grupa Wędkarska Skool', date: '2026-04-17', holder: 'manual' },
+    );
+
+    // 2026-04-17 CEST (UTC+2): from = 2026-04-16T22:00:00Z .. to = 2026-04-17T22:00:00Z
+    expect(capturedFrom).toBeDefined();
+    expect(capturedTo).toBeDefined();
+    expect(new Date((capturedFrom ?? 0) * 1000).toISOString()).toBe('2026-04-16T22:00:00.000Z');
+    expect(new Date((capturedTo ?? 0) * 1000).toISOString()).toBe('2026-04-17T22:00:00.000Z');
+  });
+
   it('regenerated is true when digest already exists for the date', async () => {
     const llm = new FakeLlmClient([{ type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) }]);
     setMockServices({

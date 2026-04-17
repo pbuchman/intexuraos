@@ -361,6 +361,31 @@ describe('FirestoreNotificationRepository', () => {
       // Should handle gracefully (already tested in earlier tests)
       expect(result.ok).toBe(true);
     });
+
+    it('filters by postTimeSec range when postTimeSecFrom/postTimeSecTo are set', async () => {
+      const mk = (text: string, timestampMs: number, notifId: string): CreateNotificationInput => ({
+        userId: 'user-range',
+        source: 'android',
+        device: 'dev',
+        app: 'com.whatsapp',
+        title: 'Grupa',
+        text,
+        timestamp: timestampMs,
+        postTime: String(Math.floor(timestampMs / 1000)),
+        notificationId: notifId,
+      });
+      await repository.save(mk('t1', 100_000, 'r1'));
+      await repository.save(mk('t2', 200_000, 'r2'));
+      await repository.save(mk('t3', 300_000, 'r3'));
+
+      const result = await repository.findByUserIdPaginated('user-range', {
+        limit: 10,
+        filter: { postTimeSecFrom: 150, postTimeSecTo: 250, app: ['com.whatsapp'] },
+      });
+      if (!result.ok) throw new Error(`unexpected: ${result.error.message}`);
+      const texts = result.value.notifications.map((n) => n.text).sort();
+      expect(texts).toEqual(['t2']);
+    });
   });
 
   describe('existsByNotificationIdAndUserId', () => {

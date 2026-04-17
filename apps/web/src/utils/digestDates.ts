@@ -18,3 +18,41 @@ export function enumerateDates(fromIso: string, toIso: string): readonly string[
   }
   return out;
 }
+
+export function currentMonthIso(now: Date = new Date()): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  return `${String(y)}-${m}`;
+}
+
+export function firstDayOfMonth(monthIso: string): string {
+  return `${monthIso}-01`;
+}
+
+export function lastDayOfMonth(monthIso: string): string {
+  const parts = monthIso.split('-').map((s) => parseInt(s, 10));
+  const y = parts[0];
+  const m = parts[1];
+  if (y === undefined || m === undefined) throw new Error(`lastDayOfMonth: invalid ${monthIso}`);
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return `${monthIso}-${String(lastDay).padStart(2, '0')}`;
+}
+
+export function shiftMonth(monthIso: string, delta: number): string {
+  const parts = monthIso.split('-').map((s) => parseInt(s, 10));
+  const y = parts[0];
+  const m = parts[1];
+  if (y === undefined || m === undefined) throw new Error(`shiftMonth: invalid ${monthIso}`);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${String(d.getUTCFullYear())}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+export function monthLabelPl(monthIso: string): string {
+  const parts = monthIso.split('-').map((s) => parseInt(s, 10));
+  const y = parts[0];
+  const m = parts[1];
+  if (y === undefined || m === undefined) return monthIso;
+  const label = new Intl.DateTimeFormat('pl-PL', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(y, m - 1, 15)));
+  return label;
+}

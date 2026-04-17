@@ -8,8 +8,12 @@ function buildMarkdown(summary: DailySummary): string {
   lines.push('');
   lines.push(`Wiadomości: ${String(summary.messageCount)}`);
   lines.push('');
-  if (summary.narrative.trim() !== '') {
-    lines.push(summary.narrative);
+  if (summary.headline.trim() !== '') {
+    lines.push(`## ${summary.headline}`);
+    lines.push('');
+  }
+  if (summary.bullets.length > 0) {
+    for (const b of summary.bullets) lines.push(`- ${b}`);
     lines.push('');
   }
   if (summary.threads.length > 0) {

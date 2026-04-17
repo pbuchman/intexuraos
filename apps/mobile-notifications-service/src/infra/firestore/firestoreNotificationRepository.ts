@@ -151,6 +151,12 @@ export class FirestoreNotificationRepository implements NotificationRepository {
         if (options.filter?.app !== undefined && options.filter.app.length > 0) {
           query = query.where('app', 'in', options.filter.app);
         }
+        if (options.filter?.postTimeSecFrom !== undefined) {
+          query = query.where('timestamp', '>=', options.filter.postTimeSecFrom * 1000);
+        }
+        if (options.filter?.postTimeSecTo !== undefined) {
+          query = query.where('timestamp', '<', options.filter.postTimeSecTo * 1000);
+        }
 
         query = query.orderBy('receivedAt', 'desc');
 
