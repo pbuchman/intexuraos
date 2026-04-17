@@ -38,7 +38,4 @@ export {
   createCalendarPreviewPublisher,
 } from './calendarPreviewPublisher.js';
 
-export {
-  type PRTriagePublisher,
-  createPRTriagePublisher,
-} from './prTriagePublisher.js';
+export { type PRTriagePublisher, createPRTriagePublisher } from './prTriagePublisher.js';
