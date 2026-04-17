@@ -1,6 +1,7 @@
 import { ok, err, getErrorMessage, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type {
+  DigestLockHolder,
   DigestLockRepository,
   RepositoryError,
 } from '../../domain/repositories/digestRepositories.js';
@@ -11,7 +12,7 @@ const TTL_MS = 5 * 60 * 1000;
 interface LockDoc {
   readonly userId: string;
   readonly groupKey: string;
-  readonly holder: 'cron' | 'backfill' | 'manual';
+  readonly holder: DigestLockHolder;
   readonly currentDate: string;
   readonly acquiredAt: string;
   readonly expiresAt: string;
@@ -23,7 +24,7 @@ function docId(userId: string, groupKey: string): string {
 
 export class FirestoreDigestLockRepository implements DigestLockRepository {
   async acquire(input: {
-    userId: string; groupKey: string; holder: 'cron' | 'backfill' | 'manual'; currentDate: string;
+    userId: string; groupKey: string; holder: DigestLockHolder; currentDate: string;
   }): Promise<Result<{ acquired: boolean; heldBy?: string }, RepositoryError>> {
     try {
       const db = getFirestore();

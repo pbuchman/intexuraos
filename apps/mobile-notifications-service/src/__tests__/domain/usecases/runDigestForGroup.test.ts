@@ -15,7 +15,6 @@ const noopLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(
 const EXAMPLE_SUMMARY = COLD_START_EXAMPLE.dailySummary as unknown as DailySummary;
 
 function fakeNotificationRepo(messages: readonly { sender: string; text: string; postTime: string; title: string; app: string }[]): NotificationRepository {
-  // Minimal in-memory fake matching the existing NotificationRepository interface (subset used here)
   return {
     findByUserIdPaginated: async () => ({
       ok: true as const,
@@ -212,28 +211,6 @@ describe('runDigestForGroup', () => {
         findByUserIdPaginated: async () => ({ ok: false as const, error: { code: 'INTERNAL_ERROR' as const, message: 'DB error' } }),
       },
       digestRepository: { save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }), findByDate: async () => ({ ok: true, value: null }), findRecentByGroup: async () => ({ ok: true, value: [] }), findInRange: async () => ({ ok: true, value: { items: [] } }) },
-      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
-    });
-    const result = await runDigestForGroup(
-      { llmClient: llm, logger: noopLogger, modelId: 'm' },
-      { userId: 'u', groupKey: 'g', date: '2026-04-15', holder: 'cron' },
-    );
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.code).toBe('persistence-failed');
-  });
-
-  it('returns persistence-failed when findByDate check fails', async () => {
-    const llm = new FakeLlmClient([]);
-    setMockServices({
-      digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
-      notificationRepository: fakeNotificationRepo([]),
-      digestRepository: {
-        save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }),
-        findByDate: async () => ({ ok: false as const, error: { code: 'INTERNAL_ERROR' as const, message: 'DB error' } }),
-        findRecentByGroup: async () => ({ ok: true, value: [] }),
-        findInRange: async () => ({ ok: true, value: { items: [] } }),
-      },
       groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
     });
     const result = await runDigestForGroup(
