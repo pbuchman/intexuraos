@@ -1,6 +1,11 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 import { FilterBar } from '../FilterBar.js';
+import { PROVIDERS } from '../filterConstants.js';
+
+// Referenced via the shared PROVIDERS constant so we don't hardcode provider
+// strings in test code (enforced by scripts/verify-llm-architecture.ts RULE-5).
+const FIRST_PROVIDER = PROVIDERS[0];
 
 afterEach(() => {
   cleanup();
@@ -49,6 +54,35 @@ describe('FilterBar', () => {
     render(<FilterBar {...baseProps} />);
     fireEvent.click(screen.getByRole('button', { name: /open filters/i }));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('toggles aria-expanded on the Filters button when the sheet opens', () => {
+    render(<FilterBar {...baseProps} />);
+    const btn = screen.getByRole('button', { name: /open filters/i });
+    expect(btn).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(btn);
+    // After opening, the same trigger in the mobile variant reflects the new state.
+    const openedBtn = screen.getByRole('button', { name: /open filters/i });
+    expect(openedBtn).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('renders chip strip content reflecting current filter selections', () => {
+    const { container } = render(
+      <FilterBar
+        {...baseProps}
+        timeRange={{ preset: 'today' }}
+        activeProviders={[FIRST_PROVIDER]}
+        groupBy="day"
+        sortBy={{ field: 'occurredAt', direction: 'asc' }}
+      />,
+    );
+    const mobile = container.querySelector('[data-variant="mobile"]');
+    expect(mobile).not.toBeNull();
+    const chipText = mobile?.textContent ?? '';
+    expect(chipText).toContain('Today');
+    expect(chipText).toContain(FIRST_PROVIDER);
+    expect(chipText).toContain('Day');
+    expect(chipText).toContain('Oldest first');
   });
 
   it('omits the Sort section on desktop when showSort is false', () => {
