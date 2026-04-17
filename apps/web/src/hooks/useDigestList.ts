@@ -1,0 +1,136 @@
+/**
+ * Hook: list daily digests for a single group over a date range.
+ *
+ * Loads one page from mobile-notifications-service /notifications/digests.
+ * Filter/sort state is persisted in localStorage so the list page stays
+ * in sync across reloads. Mirrors the localStorage pattern from
+ * CodeTasksPage / useIssueGroups.
+ */
+
+import { useCallback, useEffect, useState } from 'react';
+import { useAuth } from '@/context';
+import { getErrorMessage } from '@intexuraos/common-core/errors';
+import { listDigests } from '@/services/notificationDigestsApi';
+import type { PersistedDailySummary } from '@/types/notificationDigests';
+
+export type DigestStatusFilter = 'all' | 'regenerated' | 'single-generation';
+export type DigestSortOption = 'date-desc' | 'date-asc' | 'message-count-desc';
+
+export const DIGEST_LIST_FILTER_STORAGE_KEY = 'notification-digests-filter';
+export const DIGEST_LIST_SORT_STORAGE_KEY = 'notification-digests-sort';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_RANGE_DAYS = 30;
+
+export interface UseDigestListOptions {
+  readonly groupKey: string;
+  /** Inclusive start date (YYYY-MM-DD). Defaults to 30 days ago. */
+  readonly fromDate?: string;
+  /** Inclusive end date (YYYY-MM-DD). Defaults to today (browser local). */
+  readonly toDate?: string;
+}
+
+export interface UseDigestListResult {
+  readonly items: readonly PersistedDailySummary[];
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly filter: DigestStatusFilter;
+  readonly sort: DigestSortOption;
+  readonly fromDate: string;
+  readonly toDate: string;
+  readonly setFilter: (filter: DigestStatusFilter) => void;
+  readonly setSort: (sort: DigestSortOption) => void;
+  readonly refresh: () => Promise<void>;
+}
+
+export function isDigestStatusFilter(value: unknown): value is DigestStatusFilter {
+  return value === 'all' || value === 'regenerated' || value === 'single-generation';
+}
+
+export function isDigestSortOption(value: unknown): value is DigestSortOption {
+  return value === 'date-desc' || value === 'date-asc' || value === 'message-count-desc';
+}
+
+export function loadDigestFilterFromStorage(): DigestStatusFilter {
+  const stored = localStorage.getItem(DIGEST_LIST_FILTER_STORAGE_KEY);
+  return isDigestStatusFilter(stored) ? stored : 'all';
+}
+
+export function loadDigestSortFromStorage(): DigestSortOption {
+  const stored = localStorage.getItem(DIGEST_LIST_SORT_STORAGE_KEY);
+  return isDigestSortOption(stored) ? stored : 'date-desc';
+}
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function daysAgo(n: number): string {
+  return new Date(Date.now() - n * DAY_MS).toISOString().slice(0, 10);
+}
+
+function applyFilter(
+  items: readonly PersistedDailySummary[],
+  filter: DigestStatusFilter,
+): readonly PersistedDailySummary[] {
+  if (filter === 'all') return items;
+  if (filter === 'regenerated') return items.filter((d) => d.generation > 1);
+  return items.filter((d) => d.generation === 1);
+}
+
+function applySort(
+  items: readonly PersistedDailySummary[],
+  sort: DigestSortOption,
+): readonly PersistedDailySummary[] {
+  const copy = [...items];
+  if (sort === 'date-desc') return copy.sort((a, b) => b.summary.date.localeCompare(a.summary.date));
+  if (sort === 'date-asc') return copy.sort((a, b) => a.summary.date.localeCompare(b.summary.date));
+  return copy.sort((a, b) => b.summary.messageCount - a.summary.messageCount);
+}
+
+export function useDigestList(options: UseDigestListOptions): UseDigestListResult {
+  const { getAccessToken } = useAuth();
+  const fromDate = options.fromDate ?? daysAgo(DEFAULT_RANGE_DAYS);
+  const toDate = options.toDate ?? today();
+  const [raw, setRaw] = useState<readonly PersistedDailySummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilterState] = useState<DigestStatusFilter>(loadDigestFilterFromStorage);
+  const [sort, setSortState] = useState<DigestSortOption>(loadDigestSortFromStorage);
+
+  const refresh = useCallback(async (): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = await getAccessToken();
+      const resp = await listDigests(token, {
+        groupKey: options.groupKey,
+        fromDate,
+        toDate,
+      });
+      setRaw(resp.items);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Nie udało się pobrać podsumowań'));
+    } finally {
+      setLoading(false);
+    }
+  }, [getAccessToken, options.groupKey, fromDate, toDate]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const setFilter = useCallback((next: DigestStatusFilter): void => {
+    setFilterState(next);
+    localStorage.setItem(DIGEST_LIST_FILTER_STORAGE_KEY, next);
+  }, []);
+
+  const setSort = useCallback((next: DigestSortOption): void => {
+    setSortState(next);
+    localStorage.setItem(DIGEST_LIST_SORT_STORAGE_KEY, next);
+  }, []);
+
+  const items = applySort(applyFilter(raw, filter), sort);
+
+  return { items, loading, error, filter, sort, fromDate, toDate, setFilter, setSort, refresh };
+}
