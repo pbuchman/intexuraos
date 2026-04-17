@@ -5,6 +5,19 @@ import { resetServices } from '../../services.js';
 import { COLD_START_EXAMPLE } from '@intexuraos/llm-prompts';
 import { setupJwksServer, teardownJwksServer, createToken } from '../testUtils.js';
 import { clearJwksCache } from '@intexuraos/common-http';
+import type { PersistedDailySummary } from '../../domain/repositories/digestRepositories.js';
+import type { GroupState } from '../../domain/schemas/digestSchemas.js';
+import type { Notification } from '../../domain/notifications/index.js';
+
+// COLD_START_EXAMPLE uses readonly tuple literals that don't satisfy mutable array types.
+// Cast via unknown to satisfy the repository interfaces in mock stubs.
+const EXAMPLE_SUMMARY = COLD_START_EXAMPLE.dailySummary as unknown as PersistedDailySummary['summary'];
+const EXAMPLE_PERSISTED: PersistedDailySummary = { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: 'or:google/gemini-3-flash-preview' };
+const NULL_NOTIFICATION = null as unknown as Notification;
+const EXAMPLE_GROUP_STATE: GroupState = {
+  userId: 'u', groupKey: 'g', updatedAt: '',
+  identityLedger: [], moderatorEvents: [], openThreads: [], recentSummaryDates: [],
+};
 
 const INTERNAL_AUTH_TOKEN = 'test-internal-auth';
 
@@ -46,13 +59,13 @@ describe('POST /internal/notifications/digest/run', () => {
       },
       notificationRepository: {
         findByUserIdPaginated: async () => ({ ok: true, value: { notifications: [] } }),
-        save: async () => ({ ok: true, value: { id: 'x' } }),
+        save: async () => ({ ok: true, value: NULL_NOTIFICATION }),
         findById: async () => ({ ok: true, value: null }),
         existsByNotificationIdAndUserId: async () => ({ ok: true, value: false }),
         delete: async () => ({ ok: true, value: undefined }),
       },
       digestRepository: {
-        save: async () => ({ ok: true, value: { summary: COLD_START_EXAMPLE.dailySummary, generation: 1, generatedAt: '', modelId: 'or:google/gemini-3-flash-preview' } }),
+        save: async () => ({ ok: true, value: EXAMPLE_PERSISTED }),
         findByDate: async () => ({ ok: true, value: null }),
         findRecentByGroup: async () => ({ ok: true, value: [] }),
         findInRange: async () => ({ ok: true, value: { items: [] } }),
@@ -64,14 +77,15 @@ describe('POST /internal/notifications/digest/run', () => {
       },
     });
 
-    vi.mock('@intexuraos/llm-factory', async () => {
+    vi.mock('@intexuraos/llm-factory', async (): Promise<typeof import('@intexuraos/llm-factory')> => {
       const actual = await vi.importActual<typeof import('@intexuraos/llm-factory')>('@intexuraos/llm-factory');
       return {
         ...actual,
         createLlmClient: () => ({
-          generate: async () => ({ ok: true, value: { content: JSON.stringify(COLD_START_EXAMPLE), usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 } } }),
+          generate: async (): Promise<{ ok: true; value: { content: string; usage: { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number } } }> =>
+            ({ ok: true, value: { content: JSON.stringify(COLD_START_EXAMPLE), usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 } } }),
         }),
-      };
+      } as typeof import('@intexuraos/llm-factory');
     });
 
     const app = await buildServer();
@@ -109,13 +123,13 @@ describe('POST /internal/notifications/digest/run-yesterday', () => {
       },
       notificationRepository: {
         findByUserIdPaginated: async () => ({ ok: true, value: { notifications: [] } }),
-        save: async () => ({ ok: true, value: { id: 'x' } }),
+        save: async () => ({ ok: true, value: NULL_NOTIFICATION }),
         findById: async () => ({ ok: true, value: null }),
         existsByNotificationIdAndUserId: async () => ({ ok: true, value: false }),
         delete: async () => ({ ok: true, value: undefined }),
       },
       digestRepository: {
-        save: async () => ({ ok: true, value: { summary: COLD_START_EXAMPLE.dailySummary, generation: 1, generatedAt: '', modelId: 'or:google/gemini-3-flash-preview' } }),
+        save: async () => ({ ok: true, value: EXAMPLE_PERSISTED }),
         findByDate: async () => ({ ok: true, value: null }),
         findRecentByGroup: async () => ({ ok: true, value: [] }),
         findInRange: async () => ({ ok: true, value: { items: [] } }),
@@ -127,14 +141,15 @@ describe('POST /internal/notifications/digest/run-yesterday', () => {
       },
     });
 
-    vi.mock('@intexuraos/llm-factory', async () => {
+    vi.mock('@intexuraos/llm-factory', async (): Promise<typeof import('@intexuraos/llm-factory')> => {
       const actual = await vi.importActual<typeof import('@intexuraos/llm-factory')>('@intexuraos/llm-factory');
       return {
         ...actual,
         createLlmClient: () => ({
-          generate: async () => ({ ok: true, value: { content: JSON.stringify(COLD_START_EXAMPLE), usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 } } }),
+          generate: async (): Promise<{ ok: true; value: { content: string; usage: { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number } } }> =>
+            ({ ok: true, value: { content: JSON.stringify(COLD_START_EXAMPLE), usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 } } }),
         }),
-      };
+      } as typeof import('@intexuraos/llm-factory');
     });
 
     const app = await buildServer();
@@ -164,8 +179,8 @@ describe('GET /notifications/digests', () => {
   it('returns paginated digest list for authenticated user', async () => {
     setMockServices({
       digestRepository: {
-        findInRange: async () => ({ ok: true, value: { items: [{ summary: COLD_START_EXAMPLE.dailySummary, generation: 1, generatedAt: '2026-04-15T00:00:00Z', modelId: 'm' }] } }),
-        save: async () => ({ ok: true, value: { summary: COLD_START_EXAMPLE.dailySummary, generation: 1, generatedAt: '', modelId: 'm' } }),
+        findInRange: async () => ({ ok: true, value: { items: [EXAMPLE_PERSISTED] } }),
+        save: async () => ({ ok: true, value: EXAMPLE_PERSISTED }),
         findByDate: async () => ({ ok: true, value: null }),
         findRecentByGroup: async () => ({ ok: true, value: [] }),
       },
@@ -198,7 +213,7 @@ describe('GET /notifications/digests/:groupKey/:date', () => {
     setMockServices({
       digestRepository: {
         findByDate: async () => ({ ok: true, value: null }),
-        save: async () => ({ ok: true, value: { summary: COLD_START_EXAMPLE.dailySummary, generation: 1, generatedAt: '', modelId: 'm' } }),
+        save: async () => ({ ok: true, value: EXAMPLE_PERSISTED }),
         findRecentByGroup: async () => ({ ok: true, value: [] }),
         findInRange: async () => ({ ok: true, value: { items: [] } }),
       },
@@ -217,8 +232,8 @@ describe('GET /notifications/digests/:groupKey/:date', () => {
   it('returns digest when found', async () => {
     setMockServices({
       digestRepository: {
-        findByDate: async () => ({ ok: true, value: { summary: COLD_START_EXAMPLE.dailySummary, generation: 1, generatedAt: '2026-04-15T00:00:00Z', modelId: 'm' } }),
-        save: async () => ({ ok: true, value: { summary: COLD_START_EXAMPLE.dailySummary, generation: 1, generatedAt: '', modelId: 'm' } }),
+        findByDate: async () => ({ ok: true, value: EXAMPLE_PERSISTED }),
+        save: async () => ({ ok: true, value: EXAMPLE_PERSISTED }),
         findRecentByGroup: async () => ({ ok: true, value: [] }),
         findInRange: async () => ({ ok: true, value: { items: [] } }),
       },
@@ -267,10 +282,9 @@ describe('GET /notifications/digests/:groupKey/:date/state', () => {
   });
 
   it('returns state when found', async () => {
-    const mockState = { groupKey: 'g', date: '2026-04-15', recentSummaryDates: [], participants: [] };
     setMockServices({
       groupStateRepository: {
-        getByDate: async () => ({ ok: true, value: mockState }),
+        getByDate: async () => ({ ok: true, value: EXAMPLE_GROUP_STATE }),
         getLatest: async () => ({ ok: true, value: null }),
         save: async () => ({ ok: true, value: undefined }),
       },
@@ -285,7 +299,7 @@ describe('GET /notifications/digests/:groupKey/:date/state', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<{ success: boolean; data: { groupKey: string } }>();
     expect(body.success).toBe(true);
-    expect(body.data.groupKey).toBe('g');
+    expect(body.data.groupKey).toBe(EXAMPLE_GROUP_STATE.groupKey);
     await app.close();
   });
 });

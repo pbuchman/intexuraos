@@ -34,7 +34,7 @@ describe('listDates', () => {
 
 describe('startDigestBackfill', () => {
   it('creates run doc and triggers first date via httpPost', async () => {
-    const posted: Array<{ path: string; body: unknown }> = [];
+    const posted: { path: string; body: unknown }[] = [];
     const httpPost = async (path: string, body: unknown): Promise<Result<unknown, { message: string }>> => {
       posted.push({ path, body });
       return { ok: true, value: {} };

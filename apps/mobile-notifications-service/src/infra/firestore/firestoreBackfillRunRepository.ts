@@ -12,7 +12,7 @@ export interface BackfillRun {
   readonly status: 'queued' | 'running' | 'completed' | 'failed';
   readonly totalDates: number;
   readonly completedDates: readonly string[];
-  readonly failedDates: ReadonlyArray<{ readonly date: string; readonly error: string }>;
+  readonly failedDates: readonly { readonly date: string; readonly error: string }[];
   readonly currentDate: string | null;
   readonly startedAt: string;
   readonly updatedAt: string;
