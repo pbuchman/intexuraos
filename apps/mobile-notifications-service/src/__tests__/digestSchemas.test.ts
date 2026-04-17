@@ -28,7 +28,8 @@ const validDailySummary = {
   date: '2024-01-15',
   groupKey: 'group-123',
   messageCount: 42,
-  narrative: 'A busy day in the group.',
+  headline: 'A busy day in the group.',
+  bullets: ['First key fact of the day.', 'Second key fact of the day.', 'Third key fact of the day.'],
   threads: [validThread],
   moderatorPosts: [validModeratorPost],
   openQuestions: ['Will the event be postponed?'],
@@ -71,7 +72,8 @@ describe('DailySummarySchema', () => {
       date: '2024-01-15',
       groupKey: 'group-123',
       messageCount: 0,
-      narrative: 'Quiet day.',
+      headline: 'Quiet day.',
+      bullets: ['Fact one.', 'Fact two.', 'Fact three.'],
       threads: [],
       moderatorPosts: [],
       openQuestions: [],
@@ -239,5 +241,50 @@ describe('AggregationOutputSchema', () => {
       dailySummary: validDailySummary,
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('DailySummarySchema — hybrid content fields', () => {
+  const base = {
+    date: '2026-04-17', groupKey: 'g', messageCount: 10,
+    threads: [], moderatorPosts: [], openQuestions: [], activityOutliers: [],
+  };
+
+  it('requires headline and bullets', () => {
+    const r = DailySummarySchema.safeParse(base);
+    expect(r.success).toBe(false);
+  });
+
+  it('accepts 3 to 7 bullets', () => {
+    const ok = DailySummarySchema.safeParse({
+      ...base,
+      headline: 'Lede w jednym zdaniu.',
+      bullets: ['a', 'b', 'c'],
+    });
+    expect(ok.success).toBe(true);
+
+    const tooFew = DailySummarySchema.safeParse({
+      ...base, headline: 'x', bullets: ['a', 'b'],
+    });
+    expect(tooFew.success).toBe(false);
+
+    const tooMany = DailySummarySchema.safeParse({
+      ...base, headline: 'x', bullets: Array(8).fill('x'),
+    });
+    expect(tooMany.success).toBe(false);
+  });
+
+  it('rejects unknown narrative field (legacy removed)', () => {
+    const withNarrative = DailySummarySchema.safeParse({
+      ...base, headline: 'x', bullets: ['a', 'b', 'c'], narrative: 'Prose here.',
+    });
+    // Zod by default strips unknown keys on object schemas; assert the parsed
+    // result no longer carries `narrative` so old data can't leak through.
+    if (withNarrative.success) {
+      expect((withNarrative.data as Record<string, unknown>)['narrative']).toBeUndefined();
+    } else {
+      // If the schema is declared .strict(), the parse will fail — that's fine too.
+      expect(withNarrative.success).toBe(false);
+    }
   });
 });
