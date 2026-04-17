@@ -50,6 +50,9 @@ import {
   LoginPage,
   MobileNotificationsConnectionPage,
   MobileNotificationsListPage,
+  NotificationDigestBackfillPage,
+  NotificationDigestsPage,
+  NotificationDigestViewPage,
   NotesListPage,
   NotionConnectionPage,
   GitHubEventLogPage,
@@ -533,6 +536,31 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <MobileNotificationsListPage />
+          </ProtectedRoute>
+        }
+      />
+      {/* Notification digest routes (most specific first) */}
+      <Route
+        path="/notifications/digests/backfill/:runId"
+        element={
+          <ProtectedRoute>
+            <NotificationDigestBackfillPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notifications/digests/:groupKey/:date"
+        element={
+          <ProtectedRoute>
+            <NotificationDigestViewPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notifications/digests"
+        element={
+          <ProtectedRoute>
+            <NotificationDigestsPage />
           </ProtectedRoute>
         }
       />
