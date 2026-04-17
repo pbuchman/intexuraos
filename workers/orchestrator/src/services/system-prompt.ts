@@ -878,7 +878,7 @@ Rules:
 export const reviewPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-review',
   description: 'Review agent system prompt for automated read-only PR review',
-  version: '9.2.1',
+  version: '10.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName, reviewTypes } =
       params;
@@ -1170,6 +1170,9 @@ REVIEW_AGENT_FINAL:
 - requirements_tracker_updated: <yes|no — whether the requirements tracker comment was created/updated>
 - gh_actions_status: <all passed|N failed|pending|not yet triggered — GitHub Actions check result>
 - needs_remediation: <0|1 — 1 if any finding requires code changes that bring value to the codebase, 0 if clean or all findings are informational/cosmetic only. Operational/manual verification steps (deploying migrations, running commands in environments, manual testing in dev/prod, applying infrastructure changes) are post-merge activities — they do NOT count as code remediation and must NOT set this to 1 on their own>
+- memory_ids_used: <comma-separated injected IDs you applied, or "none">
+- memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">
+- memory_usage_summary: <one-sentence description of how memories influenced the review, or "none" if no memories were injected>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what was reviewed, key findings, overall quality assessment, remediation needed. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
