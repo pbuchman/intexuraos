@@ -2323,7 +2323,7 @@ describe('verify — fatal exit code via lastExitCode input', () => {
       attempt: 1,
       maxAttempts: 5,
       agentType: 'planning',
-      rawLogs: 'output',
+      rawLogs: transcriptWithMeaningfulLines('exit-zero'),
       lastExitCode: 0,
     });
     expect(result.passed).toBe(true);
@@ -2354,7 +2354,7 @@ describe('verify — fatal exit code via lastExitCode input', () => {
       attempt: 1,
       maxAttempts: 5,
       agentType: 'planning',
-      rawLogs: 'output',
+      rawLogs: transcriptWithMeaningfulLines('exit-undefined'),
     });
     expect(result.passed).toBe(true);
     expect(generateMock).toHaveBeenCalledOnce();
@@ -2392,7 +2392,7 @@ describe('verify — succeededModelName', () => {
       attempt: 1,
       maxAttempts: 5,
       agentType: 'planning',
-      rawLogs: 'logs',
+      rawLogs: transcriptWithMeaningfulLines('primary'),
     });
     expect(result.passed).toBe(true);
     expect(result.succeededModelName).toBe('or:google/gemma-4-31b-it:free');
@@ -2420,7 +2420,7 @@ describe('verify — succeededModelName', () => {
       attempt: 1,
       maxAttempts: 5,
       agentType: 'planning',
-      rawLogs: 'logs',
+      rawLogs: transcriptWithMeaningfulLines('fallback'),
     });
     expect(result.passed).toBe(true);
     expect(result.succeededModelName).toBe('gemini-2.5-flash');
@@ -2440,7 +2440,7 @@ describe('verify — succeededModelName', () => {
       attempt: 1,
       maxAttempts: 5,
       agentType: 'planning',
-      rawLogs: 'logs',
+      rawLogs: transcriptWithMeaningfulLines('schema-fail'),
     });
     expect(result.passed).toBe(false);
     expect(result.succeededModelName).toBe('or:google/gemma-4-31b-it:free');
@@ -2457,7 +2457,7 @@ describe('verify — succeededModelName', () => {
       attempt: 1,
       maxAttempts: 5,
       agentType: 'planning',
-      rawLogs: 'logs',
+      rawLogs: transcriptWithMeaningfulLines('all-fail'),
     });
     expect(result.passed).toBe(false);
     expect(result.verifierFailure).toBe(true);
