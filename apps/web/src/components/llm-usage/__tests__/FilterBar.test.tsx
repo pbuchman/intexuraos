@@ -90,4 +90,12 @@ describe('FilterBar', () => {
     const desktop = container.querySelector('[data-variant="desktop"]');
     expect(desktop?.textContent).not.toContain('Newest first');
   });
+
+  it('mobile variant uses z-30 so it stays below the sidebar drawer (INT-1405)', () => {
+    const { container } = render(<FilterBar {...baseProps} />);
+    const mobile = container.querySelector('[data-variant="mobile"]');
+    expect(mobile).not.toBeNull();
+    expect(mobile?.classList.contains('z-30')).toBe(true);
+    expect(mobile?.classList.contains('z-40')).toBe(false);
+  });
 });
