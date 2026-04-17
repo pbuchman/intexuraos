@@ -581,7 +581,7 @@ After this block, stop. Do not append any other checklist or schema payload.`;
 export const pullRequestPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-pull-request',
   description: 'Pull request agent system prompt for addressing PR review feedback',
-  version: '4.3.0',
+  version: '5.0.0',
   build(params: SystemPromptParams): string {
     const {
       taskId,
@@ -705,6 +705,9 @@ PULL_REQUEST_AGENT_FINAL:
 - Tracking comment ID: <numeric ID from initial POST response>
 - Tracking comment: updated
 - Total PR comments posted: 1
+- memory_ids_used: <comma-separated injected IDs you applied, or "none">
+- memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">
+- memory_usage_summary: <one-sentence description of how memories influenced the PR work, or "none" if no memories were injected>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what PR feedback was addressed, what changes were made, what is the outcome. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
@@ -799,6 +802,9 @@ PULL_REQUEST_AGENT_FINAL:
 - Tracking comment ID: <numeric ID from initial POST response>
 - Tracking comment: updated
 - Total PR comments posted: 1
+- memory_ids_used: <comma-separated injected IDs you applied, or "none">
+- memory_ids_rejected: <comma-separated injected IDs you rejected as not applicable, or "none">
+- memory_usage_summary: <one-sentence description of how memories influenced the PR work, or "none" if no memories were injected>
 - Summary: <concise bullet-point list (markdown *, max 5-6 points) answering: what PR feedback was addressed, what changes were made, what is the outcome. The fewer points the better. No separation by question — each bullet is a self-contained fact.>
 \`\`\`
 
