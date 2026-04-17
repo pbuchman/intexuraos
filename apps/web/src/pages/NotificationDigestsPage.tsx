@@ -5,14 +5,15 @@ import { Button, Layout } from '@/components';
 import { useAuth } from '@/context';
 import {
   BackfillRangeModal,
-  DigestHeatmap,
   DigestRow,
+  MonthPicker,
 } from '@/components/notification-digests';
 import {
   useDigestList,
   type DigestSortOption,
   type DigestStatusFilter,
 } from '@/hooks/useDigestList';
+import { currentMonthIso } from '@/utils/digestDates.js';
 import { startBackfill } from '@/services/notificationDigestsApi';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 
@@ -53,10 +54,12 @@ export function NotificationDigestsPage(): React.JSX.Element {
   const navigate = useNavigate();
 
   const groupKey = DEFAULT_GROUP_KEY;
+  const [month, setMonth] = useState<string>(() => currentMonthIso());
+
   const {
-    items, loading, error, filter, sort, fromDate, toDate,
+    items, loading, error, filter, sort,
     setFilter, setSort,
-  } = useDigestList({ groupKey });
+  } = useDigestList({ groupKey, month });
 
   const [backfillOpen, setBackfillOpen] = useState(false);
   const [backfillBusy, setBackfillBusy] = useState(false);
@@ -89,9 +92,6 @@ export function NotificationDigestsPage(): React.JSX.Element {
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
             Podsumowania dzienne
           </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {String(items.length)} {items.length === 1 ? 'dzień' : 'dni'} · {String(regeneratedCount)} wygenerowanych ponownie
-          </p>
         </div>
         <Button
           variant="secondary"
@@ -138,7 +138,12 @@ export function NotificationDigestsPage(): React.JSX.Element {
         </div>
       </div>
 
-      <DigestHeatmap digests={items} groupKey={groupKey} fromDate={fromDate} toDate={toDate} />
+      <div className="mb-4 flex items-center justify-between">
+        <MonthPicker month={month} onChange={setMonth} />
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          {String(items.length)} {items.length === 1 ? 'dzień' : 'dni'} · {String(regeneratedCount)} wygenerowanych ponownie
+        </span>
+      </div>
 
       {error !== null ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">

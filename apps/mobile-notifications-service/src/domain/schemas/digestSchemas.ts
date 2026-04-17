@@ -12,7 +12,8 @@ export const DailySummarySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   groupKey: z.string(),
   messageCount: z.number().int().nonnegative(),
-  narrative: z.string(),
+  headline: z.string().min(1).max(200),
+  bullets: z.array(z.string().min(1).max(300)).min(3).max(7),
   threads: z.array(
     z.object({
       topic: z.string(),

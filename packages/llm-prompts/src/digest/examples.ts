@@ -14,8 +14,15 @@ export const COLD_START_EXAMPLE = {
     date: '2026-04-08',
     groupKey: 'grupa-wedkarska-skool',
     messageCount: 83,
-    narrative:
-      'Dzień zaczął się od podbicia wcześniejszego pytania, a Michał wyjaśnił rano, że stary film jest sprzed roku i zapowiedział nagranie nowego w sobotę z publikacją na platformie. Dołączył Henryk, został ciepło powitany i dostał sporo wskazówek o działaniu platformy Skool i zdobywaniu punktów. Wokół Henryka powstał też wątek pomocy technicznej z dostępem do WhatsApp/Skool; Michał wysłał testową wiadomość, by sprawdzić widoczność, sprawa pozostała otwarta. Wieczorem grupa rozruszała się towarzysko – powitania, żarty i kawały. Pojawiły się też konkretne porady: o ciętym czerwonym robaku w zanęcie na leszcza oraz o łowieniu lina w chłodniejszym okresie, z rekomendacjami zanęt i dodatków.',
+    headline:
+      'Michał zapowiedział nagranie nowego filmu w sobotę, a Henryk dołączył jako nowicjusz z problemami dostępowymi.',
+    bullets: [
+      'Grzegorz dwukrotnie podbił pytanie o stary film; Michał zapowiedział nagranie nowego w sobotę i publikację na platformie.',
+      'Henryk Kerber (76 l.) został powitany; Robert wyjaśnił mu mechanikę punktów i poziomów na Skool.',
+      'Michał wysłał Henrykowi testową wiadomość, aby zdiagnozować problem z dostępem — brak potwierdzenia rozwiązania.',
+      'Wieczorny luz towarzyski: powitania, żarty, wymiana kawałów.',
+      'Porady: cięty czerwony robak w zanęcie na leszcza; rekomendacje zanęt na lina w chłodnej wodzie.',
+    ],
     threads: [
       {
         topic: 'old-video-request-new-upload-plan',
@@ -134,8 +141,14 @@ export const WITH_CONTEXT_EXAMPLE = {
     date: '2026-04-11',
     groupKey: 'grupa-wedkarska-skool',
     messageCount: 76,
-    narrative:
-      'Poranek zaczął się od prośby o darmowe mapy batymetryczne i kilku zdjęć z przygotowań Grzegorza do porannej zasiadki na lina. Pojawiły się szybkie porady o ekspresowej fermentacji kukurydzy z puszki oraz kilka technicznych pytań Henryka o kolejność gotowania i dodawania drożdży. Wieczorem padło pytanie o najbliższy live i krótkie rekomendacje zanęt z platformy, a następnie rozwinęła się żywa dyskusja o sensowności fermentu w zimnej wodzie, zakończona sprostowaniem i podlinkowaniem materiałów z platformy. Na koniec Hubert kilkukrotnie prosił Michała o prywatną odpowiedź na Skool.',
+    headline:
+      'Ożywiona dyskusja o fermentowanych zanętach w chłodnej wodzie i poszukiwanie darmowych map głębokości.',
+    bullets: [
+      'Grzegorz szukał darmowej aplikacji z mapami głębokości; ADAM12 polecił płatną Fish Deeper, Mateusz zaznaczył, że dany staw nie jest zeskanowany.',
+      'Hubert zakwestionował sens fermentu w połowie kwietnia; Mateusz sprostował, że fermentacja zachodzi też w niższych temperaturach, a dyfuzja zapachów jest wolniejsza.',
+      'Ireneusz podał link do odpowiedniej lekcji na platformie — wątek domknięty.',
+      'Hubert kilkukrotnie prosił Michała o prywatną odpowiedź na Skool — bez reakcji.',
+    ],
     threads: [
       {
         topic: 'free-depth-maps-apps-and-deeper-availability',

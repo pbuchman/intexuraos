@@ -4,6 +4,7 @@ import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { getServices } from '../../services.js';
 import { filterAndDedupeNotifications, type RawNotification } from '../messageFilter.js';
 import { aggregateDigest } from './aggregateDigest.js';
+import { cetDayBounds } from './cetDayBounds.js';
 import {
   type DigestError,
   lockHeld,
@@ -52,6 +53,7 @@ export async function runDigestForGroup(
   if (!lock.value.acquired) return err(lockHeld(lock.value.heldBy ?? 'unknown'));
 
   try {
+    const bounds = cetDayBounds(input.date);
     const [previousState, lastSummaries, messages] = await Promise.all([
       services.groupStateRepository.getByDate({
         userId: input.userId, groupKey: input.groupKey, date: previousDate(input.date),
@@ -61,7 +63,12 @@ export async function runDigestForGroup(
       }),
       services.notificationRepository.findByUserIdPaginated(input.userId, {
         limit: 1000,
-        filter: { title: input.groupTitlePrefix, app: ['com.whatsapp'] },
+        filter: {
+          title: input.groupTitlePrefix,
+          app: ['com.whatsapp'],
+          postTimeSecFrom: bounds.fromSec,
+          postTimeSecTo: bounds.toSec,
+        },
       }),
     ]);
     if (!previousState.ok) return err(persistenceFailed(previousState.error.message));
