@@ -29,7 +29,7 @@ export const internalUsageWebhookRoute: FastifyPluginCallback = (fastify, _opts,
           required: ['schemaVersion', 'events'],
           additionalProperties: false,
           properties: {
-            schemaVersion: { type: 'integer', enum: [1] },
+            schemaVersion: { type: 'integer', enum: [2] },
             events: {
               type: 'array',
               items: {
@@ -48,7 +48,7 @@ export const internalUsageWebhookRoute: FastifyPluginCallback = (fastify, _opts,
                 ],
                 additionalProperties: false,
                 properties: {
-                  schemaVersion: { type: 'integer', enum: [1] },
+                  schemaVersion: { type: 'integer', enum: [2] },
                   eventId: { type: 'string', minLength: 1 },
                   occurredAt: { type: 'string', format: 'date-time' },
                   owner: {
@@ -94,6 +94,7 @@ export const internalUsageWebhookRoute: FastifyPluginCallback = (fastify, _opts,
                       },
                       success: { type: 'boolean' },
                       durationMs: { type: 'number', minimum: 0 },
+                      promptType: { type: 'string' },
                     },
                   },
                   usage: {
@@ -128,15 +129,13 @@ export const internalUsageWebhookRoute: FastifyPluginCallback = (fastify, _opts,
                   },
                   cost: {
                     type: 'object',
-                    required: ['billedUsd', 'providerReportedUsd', 'calculatedUsd', 'pricingSource'],
+                    required: ['providerReportedUsd', 'pricingSource'],
                     additionalProperties: false,
                     properties: {
-                      billedUsd: { type: 'number', minimum: 0 },
                       providerReportedUsd: { type: ['number', 'null'] },
-                      calculatedUsd: { type: ['number', 'null'] },
                       pricingSource: {
                         type: 'string',
-                        enum: ['provider_reported', 'calculated', 'mixed', 'external'],
+                        enum: ['provider_reported', 'pending'],
                       },
                     },
                   },

@@ -23,10 +23,10 @@ const config: UsageServiceConfig = {
 };
 
 const sampleIngestRequest: UsageIngestRequest = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   events: [
     {
-      schemaVersion: 1,
+      schemaVersion: 2,
       eventId: 'evt_001',
       occurredAt: '2026-04-10T00:00:00Z',
       owner: { type: 'user', id: 'u1' },
@@ -52,10 +52,8 @@ const sampleIngestRequest: UsageIngestRequest = {
         imageCount: 0,
       },
       cost: {
-        billedUsd: 0.001,
         providerReportedUsd: null,
-        calculatedUsd: 0.001,
-        pricingSource: 'calculated',
+        pricingSource: 'pending',
       },
       correlation: {
         requestId: 'req_1',
@@ -389,7 +387,7 @@ describe('createUsageServiceClient', () => {
     const sampleListResponse = {
       events: [
         {
-          schemaVersion: 1 as const,
+          schemaVersion: 2 as const,
           eventId: 'evt_001',
           occurredAt: '2026-04-10T00:00:00Z',
           receivedAt: '2026-04-10T00:00:01Z',
@@ -422,10 +420,8 @@ describe('createUsageServiceClient', () => {
             imageCount: 0,
           },
           cost: {
-            billedUsd: 0.001,
             providerReportedUsd: null,
-            calculatedUsd: 0.001,
-            pricingSource: 'calculated' as const,
+            pricingSource: 'pending' as const,
           },
           correlation: {
             requestId: null,
@@ -498,7 +494,7 @@ describe('createUsageServiceClient', () => {
   describe('getUsageEvent', () => {
     const sampleGetResponse = {
       event: {
-        schemaVersion: 1 as const,
+        schemaVersion: 2 as const,
         eventId: 'evt_001',
         occurredAt: '2026-04-10T00:00:00Z',
         receivedAt: '2026-04-10T00:00:01Z',
@@ -531,10 +527,8 @@ describe('createUsageServiceClient', () => {
           imageCount: 0,
         },
         cost: {
-          billedUsd: 0.001,
           providerReportedUsd: null,
-          calculatedUsd: 0.001,
-          pricingSource: 'calculated' as const,
+          pricingSource: 'pending' as const,
         },
         correlation: {
           requestId: null,

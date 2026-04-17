@@ -34,6 +34,7 @@ export interface UsageEventRequest {
   operation: 'research' | 'generate' | 'image_generation' | 'tool_calling' | 'other';
   success: boolean;
   durationMs: number;
+  promptType?: string;
 }
 
 export interface UsageEventUsage {
@@ -51,10 +52,8 @@ export interface UsageEventUsage {
 }
 
 export interface UsageEventCost {
-  billedUsd: number;
   providerReportedUsd: number | null;
-  calculatedUsd: number | null;
-  pricingSource: 'provider_reported' | 'calculated' | 'mixed' | 'external';
+  pricingSource: 'provider_reported' | 'pending';
 }
 
 export interface UsageEventCorrelation {
@@ -72,7 +71,7 @@ export interface UsageEventError {
 }
 
 export interface UsageEventInput {
-  schemaVersion: 1;
+  schemaVersion: 2;
   eventId: string;
   occurredAt: string;
   owner: UsageEventOwner;
@@ -85,7 +84,7 @@ export interface UsageEventInput {
 }
 
 export interface UsageIngestRequest {
-  schemaVersion: 1;
+  schemaVersion: 2;
   events: UsageEventInput[];
 }
 
