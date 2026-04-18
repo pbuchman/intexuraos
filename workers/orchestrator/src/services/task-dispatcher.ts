@@ -40,6 +40,7 @@ import type {
   ComplianceValidationInput,
 } from './agent-compliance-validator.js';
 import type { ExecutionAgentData } from './completion-verifier.js';
+import type { ExecutionMemoryPromptContext } from '../types/execution-memory.js';
 import { readSessionTranscript } from './transcript-reader.js';
 import { formatTranscript } from './transcript-formatter.js';
 import { extractPrNumber } from './deep-validator-helpers.js';
@@ -71,12 +72,14 @@ const MEMORY_FIELDS = [
 export function buildMissingFieldsPrompt(
   agentType: CompletionAgentType,
   missingFields: string[],
-  rawLogs: string
+  rawLogs: string,
+  executionMemoryContext?: ExecutionMemoryPromptContext
 ): string {
   const transcript = getLast50Lines(rawLogs);
   const hasMemoryFailures = missingFields.some((field) => MEMORY_FIELDS.includes(field));
+  const hasAckFailure = missingFields.includes('memory_acknowledgment');
 
-  const memoryGuidance = hasMemoryFailures
+  const triplet = hasMemoryFailures
     ? [
         '',
         'EXECUTION MEMORY REPORTING FAILURE:',
@@ -90,12 +93,17 @@ export function buildMissingFieldsPrompt(
       ]
     : [];
 
+  const ackGuidance = hasAckFailure
+    ? buildMemoryAcknowledgmentGuidance(executionMemoryContext)
+    : [];
+
   return [
     '[AUTO-CONTINUE ATTEMPT]',
     'Your last response was missing required fields for the completion verifier.',
     '',
     `Missing fields: ${missingFields.join(', ')}`,
-    ...memoryGuidance,
+    ...ackGuidance,
+    ...triplet,
     '',
     'Please ensure your final message includes all required information.',
     `Agent type: ${agentType}`,
@@ -107,6 +115,36 @@ export function buildMissingFieldsPrompt(
     '- Do not restart from scratch.',
     '- Continue from current repository/worktree state.',
   ].join('\n');
+}
+
+function buildMemoryAcknowledgmentGuidance(
+  context: ExecutionMemoryPromptContext | undefined // @allow-undefined-type -- function parameter, not optional property
+): string[] {
+  const idLines =
+    context !== undefined && context.matchedMemories.length > 0
+      ? [
+          'Injected memory IDs you MUST acknowledge (one bullet per ID):',
+          ...context.matchedMemories.map(
+            (memory, index) =>
+              `- [${String(index + 1)}] ${memory.memoryId} — "${memory.title}" — APPLICABLE|NOT APPLICABLE because <one-sentence reason>`
+          ),
+          '',
+        ]
+      : [];
+
+  return [
+    '',
+    'MEMORY ACKNOWLEDGMENT BLOCK MISSING:',
+    'The completion verifier requires this exact block, EACH bullet on the start of a new line with no leading characters other than "- ":',
+    '',
+    '📋 **Execution Memories Received:**',
+    'I have received and reviewed <N> execution memories for this task:',
+    '- [<n>] <memoryId> — "<title>" — APPLICABLE|NOT APPLICABLE because <one-sentence reason>',
+    '',
+    'Emit the block verbatim BEFORE your final REVIEW_AGENT_FINAL / PLAN_AGENT_FINAL / (etc.) block.',
+    'Do NOT inline the bullets as the value of a field — they must be standalone lines that start with "- [".',
+    ...idLines,
+  ];
 }
 
 const TASK_TIMEOUT_WARNING_MS = 295 * 60 * 1000; // 4h 55m
@@ -1637,7 +1675,8 @@ export class TaskDispatcher {
       const resumePrompt = this.buildMissingFieldsPrompt(
         completionAgentType,
         verification.missingFields,
-        rawLogs
+        rawLogs,
+        task.executionMemoryContext
       );
       const resumePreview =
         resumePrompt.length > 500 ? resumePrompt.slice(0, 500) + '\u2026' : resumePrompt;
@@ -1712,9 +1751,10 @@ export class TaskDispatcher {
   private buildMissingFieldsPrompt(
     agentType: CompletionAgentType,
     missingFields: string[],
-    rawLogs: string
+    rawLogs: string,
+    executionMemoryContext?: ExecutionMemoryPromptContext
   ): string {
-    return buildMissingFieldsPrompt(agentType, missingFields, rawLogs);
+    return buildMissingFieldsPrompt(agentType, missingFields, rawLogs, executionMemoryContext);
   }
 
   private buildResultFromVerification(
