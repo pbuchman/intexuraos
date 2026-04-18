@@ -80,38 +80,33 @@ describe('buildMissingFieldsPrompt', () => {
   });
 
   it('includes the acknowledgment block template and injected IDs when memory_acknowledgment is missing', () => {
-    const result = buildMissingFieldsPrompt(
-      'review',
-      ['memory_acknowledgment'],
-      rawLogs,
-      {
-        applicationId: 'app-1',
-        retrievalVersion: 'execution-memory-retrieval@3.0.0',
-        querySummary: 'q',
-        matchedMemories: [
-          {
-            memoryId: 'mem_aaa',
-            title: 'First memory',
-            memoryType: 'pitfall_pattern',
-            score: 0.9,
-            appliesWhen: 'x',
-            action: 'x',
-            avoid: 'x',
-            verification: 'x',
-          },
-          {
-            memoryId: 'mem_bbb',
-            title: 'Second memory',
-            memoryType: 'review_finding',
-            score: 0.8,
-            appliesWhen: 'y',
-            action: 'y',
-            avoid: 'y',
-            verification: 'y',
-          },
-        ],
-      }
-    );
+    const result = buildMissingFieldsPrompt('review', ['memory_acknowledgment'], rawLogs, {
+      applicationId: 'app-1',
+      retrievalVersion: 'execution-memory-retrieval@3.0.0',
+      querySummary: 'q',
+      matchedMemories: [
+        {
+          memoryId: 'mem_aaa',
+          title: 'First memory',
+          memoryType: 'pitfall_pattern',
+          score: 0.9,
+          appliesWhen: 'x',
+          action: 'x',
+          avoid: 'x',
+          verification: 'x',
+        },
+        {
+          memoryId: 'mem_bbb',
+          title: 'Second memory',
+          memoryType: 'review_finding',
+          score: 0.8,
+          appliesWhen: 'y',
+          action: 'y',
+          avoid: 'y',
+          verification: 'y',
+        },
+      ],
+    });
 
     expect(result).toContain('MEMORY ACKNOWLEDGMENT BLOCK MISSING');
     expect(result).toContain('📋 **Execution Memories Received:**');
@@ -122,28 +117,23 @@ describe('buildMissingFieldsPrompt', () => {
   });
 
   it('omits the acknowledgment block template when memory_acknowledgment is NOT missing', () => {
-    const result = buildMissingFieldsPrompt(
-      'review',
-      ['memory_ids_used'],
-      rawLogs,
-      {
-        applicationId: 'app-1',
-        retrievalVersion: 'execution-memory-retrieval@3.0.0',
-        querySummary: 'q',
-        matchedMemories: [
-          {
-            memoryId: 'mem_aaa',
-            title: 'First memory',
-            memoryType: 'pitfall_pattern',
-            score: 0.9,
-            appliesWhen: 'x',
-            action: 'x',
-            avoid: 'x',
-            verification: 'x',
-          },
-        ],
-      }
-    );
+    const result = buildMissingFieldsPrompt('review', ['memory_ids_used'], rawLogs, {
+      applicationId: 'app-1',
+      retrievalVersion: 'execution-memory-retrieval@3.0.0',
+      querySummary: 'q',
+      matchedMemories: [
+        {
+          memoryId: 'mem_aaa',
+          title: 'First memory',
+          memoryType: 'pitfall_pattern',
+          score: 0.9,
+          appliesWhen: 'x',
+          action: 'x',
+          avoid: 'x',
+          verification: 'x',
+        },
+      ],
+    });
 
     expect(result).not.toContain('MEMORY ACKNOWLEDGMENT BLOCK MISSING');
     expect(result).toContain('EXECUTION MEMORY REPORTING FAILURE:');
@@ -178,11 +168,7 @@ describe('buildMissingFieldsPrompt', () => {
   });
 
   it('accepts missing executionMemoryContext and still mentions acknowledgment when flagged', () => {
-    const result = buildMissingFieldsPrompt(
-      'review',
-      ['memory_acknowledgment'],
-      rawLogs
-    );
+    const result = buildMissingFieldsPrompt('review', ['memory_acknowledgment'], rawLogs);
     expect(result).toContain('MEMORY ACKNOWLEDGMENT BLOCK MISSING');
     expect(result).toContain('📋 **Execution Memories Received:**');
   });
