@@ -1337,6 +1337,122 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.passed).toBe(true);
     });
 
+    it('passes with a soft warning when the acknowledgment block is absent but the triplet is consistent', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/org/repo/pull/1874',
+            memory_ids_used: '',
+            memory_ids_rejected: 'mem_d2999121-0694-413d-adb0-35e45223c8d6',
+            memory_usage_summary:
+              'No memories were applicable; rejected the migration-testing memory as the PR fixes a timestamp unit bug.',
+            summary: 'Reviewed PR.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-soft-warning',
+        attempt: 1,
+        maxAttempts: 3,
+        agentType: 'execution',
+        rawLogs: [
+          '[claude] started work',
+          '[claude] step 2',
+          '[claude] step 3',
+          '[claude] step 4',
+          '[claude] finished work',
+        ].join('\n'),
+        executionMemoryContext: {
+          applicationId: 'app-1',
+          retrievalVersion: 'execution-memory-retrieval@3.0.0',
+          querySummary: 'Digest 500 fix',
+          matchedMemories: [
+            {
+              memoryId: 'mem_d2999121-0694-413d-adb0-35e45223c8d6',
+              title: 'Creating complex data migrations without dedicated test coverage',
+              memoryType: 'pitfall_pattern',
+              score: 0.56,
+              appliesWhen: 'Developing a migration',
+              action: 'Cover all branches',
+              avoid: 'Skipping tests',
+              verification: 'Unit-test the migration',
+            },
+          ],
+        },
+      });
+
+      expect(result.passed).toBe(true);
+      expect(result.missingFields).not.toContain('memory_acknowledgment');
+      expect(loggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          softWarnings: expect.arrayContaining(['memory_acknowledgment']),
+        }),
+        expect.stringContaining('soft')
+      );
+    });
+
+    it('keeps memory_acknowledgment as a hard failure when the triplet is inconsistent (unaccounted memory)', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/org/repo/pull/1874',
+            memory_ids_used: '',
+            memory_ids_rejected: '',
+            memory_usage_summary: 'No memories applied.',
+            summary: 'Reviewed PR.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-hard-failure',
+        attempt: 1,
+        maxAttempts: 3,
+        agentType: 'execution',
+        rawLogs: [
+          '[claude] started work',
+          '[claude] step 2',
+          '[claude] step 3',
+          '[claude] step 4',
+          '[claude] finished work',
+        ].join('\n'),
+        executionMemoryContext: {
+          applicationId: 'app-1',
+          retrievalVersion: 'execution-memory-retrieval@3.0.0',
+          querySummary: 'x',
+          matchedMemories: [
+            {
+              memoryId: 'mem_xxx',
+              title: 'X',
+              memoryType: 'pitfall_pattern',
+              score: 0.56,
+              appliesWhen: 'x',
+              action: 'x',
+              avoid: 'x',
+              verification: 'x',
+            },
+          ],
+        },
+      });
+
+      expect(result.passed).toBe(false);
+      expect(result.missingFields).toContain('memory_acknowledgment');
+      expect(result.missingFields).toContain('memory_ids_unaccounted');
+    });
+
     it('accepts memory acknowledgment when raw logs carry Docker RFC3339 timestamps (regression for INT-1413)', async () => {
       generateMock.mockResolvedValueOnce({
         ok: true,
@@ -1403,7 +1519,7 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.passed).toBe(true);
     });
 
-    it('flags memory_acknowledgment when a memory is not listed in the acknowledgment block', async () => {
+    it('soft-warns memory_acknowledgment when a memory is not listed in the block but the triplet is consistent', async () => {
       generateMock.mockResolvedValueOnce({
         ok: true,
         value: {
@@ -1465,8 +1581,14 @@ describe('OrchestratorCompletionVerifier', () => {
         },
       });
 
-      expect(result.passed).toBe(false);
-      expect(result.missingFields).toContain('memory_acknowledgment');
+      expect(result.passed).toBe(true);
+      expect(result.missingFields).not.toContain('memory_acknowledgment');
+      expect(loggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          softWarnings: expect.arrayContaining(['memory_acknowledgment']),
+        }),
+        expect.stringContaining('soft')
+      );
     });
 
     it('verifier acknowledgment format matches the current system prompt template', () => {
