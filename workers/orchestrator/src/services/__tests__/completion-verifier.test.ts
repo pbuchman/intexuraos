@@ -1453,6 +1453,114 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.missingFields).toContain('memory_ids_unaccounted');
     });
 
+    it('end-to-end: prompt from buildMissingFieldsPrompt yields a compliant block that the verifier accepts', async () => {
+      const { buildMissingFieldsPrompt } = await import('../task-dispatcher.js');
+
+      // ---- Attempt 1: agent emits only the triplet with an *unaccounted* memory — hard failure ---
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/org/repo/pull/1',
+            memory_ids_used: '',
+            memory_ids_rejected: '',
+            memory_usage_summary: '',
+            summary: 'Reviewed.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+
+      const memoryContext = {
+        applicationId: 'app-1',
+        retrievalVersion: 'execution-memory-retrieval@3.0.0',
+        querySummary: 'q',
+        matchedMemories: [
+          {
+            memoryId: 'mem_loop_aaa',
+            title: 'Loop A',
+            memoryType: 'pitfall_pattern' as const,
+            score: 0.9,
+            appliesWhen: 'x',
+            action: 'x',
+            avoid: 'x',
+            verification: 'x',
+          },
+        ],
+      };
+
+      const verifier = createVerifier();
+      const attempt1RawLogs = [
+        '[claude] started',
+        '[claude] step 2',
+        '[claude] step 3',
+        '[claude] step 4',
+        '[claude] finished',
+      ].join('\n');
+
+      const attempt1 = await verifier.verify({
+        taskId: 'task-loop',
+        attempt: 1,
+        maxAttempts: 3,
+        agentType: 'execution',
+        rawLogs: attempt1RawLogs,
+        executionMemoryContext: memoryContext,
+      });
+      expect(attempt1.passed).toBe(false);
+      expect(attempt1.missingFields).toContain('memory_acknowledgment');
+      expect(attempt1.missingFields).toContain('memory_ids_unaccounted');
+
+      // ---- buildMissingFieldsPrompt produces instructions for attempt 2 ---
+      const resumePrompt = buildMissingFieldsPrompt(
+        'execution',
+        attempt1.missingFields,
+        attempt1RawLogs,
+        memoryContext
+      );
+      expect(resumePrompt).toContain('📋 **Execution Memories Received:**');
+      expect(resumePrompt).toContain('mem_loop_aaa');
+
+      // ---- Attempt 2: agent follows the prompt — emits the exact block + consistent triplet ---
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/org/repo/pull/1',
+            memory_ids_used: '',
+            memory_ids_rejected: 'mem_loop_aaa',
+            memory_usage_summary: 'Rejected the loop memory as not applicable.',
+            summary: 'Reviewed.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+
+      const attempt2RawLogs = [
+        attempt1RawLogs,
+        '[claude] 📋 **Execution Memories Received:**',
+        '[claude] I have received and reviewed 1 execution memories for this task:',
+        '[claude] - [1] mem_loop_aaa — "Loop A" — NOT APPLICABLE because unrelated',
+        '[claude] finalized',
+      ].join('\n');
+
+      const attempt2 = await verifier.verify({
+        taskId: 'task-loop',
+        attempt: 2,
+        maxAttempts: 3,
+        agentType: 'execution',
+        rawLogs: attempt2RawLogs,
+        executionMemoryContext: memoryContext,
+      });
+      expect(attempt2.passed).toBe(true);
+      expect(attempt2.missingFields).toEqual([]);
+    });
+
     it('accepts memory acknowledgment when raw logs carry Docker RFC3339 timestamps (regression for INT-1413)', async () => {
       generateMock.mockResolvedValueOnce({
         ok: true,
