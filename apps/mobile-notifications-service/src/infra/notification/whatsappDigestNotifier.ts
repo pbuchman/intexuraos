@@ -40,7 +40,7 @@ export class WhatsAppDigestNotifier implements DigestNotifier {
       messageCount: input.messageCount,
     });
     const ctaUrl = { displayText: 'View Full Digest', url: buildDigestUrl(this.webAppUrl, input.groupKey, input.date) };
-    const correlationId = `digest-ready-${input.userId}-${input.groupKey}-${input.date}`;
+    const correlationId = `digest-ready-${input.userId}-${encodeURIComponent(input.groupKey)}-${input.date}`;
 
     const published = await this.publisher.publishSendMessage({
       userId: input.userId,
