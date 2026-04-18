@@ -553,6 +553,13 @@ export function buildMemoryAcknowledgmentPattern(memoryId: string): RegExp {
   return new RegExp(String.raw`^\s*(?:\[[^\]]+\]\s+)?-\s*\[\d+\]\s+${escaped}\b`, 'm');
 }
 
+interface MemoryReportingValidationResult {
+  /** Hard failures — the verifier must reject this verdict. */
+  failures: string[];
+  /** Soft warnings — log only, do not fail. */
+  softWarnings: string[];
+}
+
 function validateMemoryReporting(
   rawLogs: string,
   executionMemoryContext: ExecutionMemoryPromptContext,
@@ -561,56 +568,61 @@ function validateMemoryReporting(
     memory_ids_rejected?: string;
     memory_usage_summary?: string;
   }
-): string[] {
+): MemoryReportingValidationResult {
   const injectedIds = executionMemoryContext.matchedMemories.map((memory) => memory.memoryId);
   if (injectedIds.length === 0) {
-    return [];
+    return { failures: [], softWarnings: [] };
   }
 
   const normalizedLogs = stripDockerHeaders(rawLogs);
-  const missingFields: string[] = [];
 
   const hasAcknowledgment =
     normalizedLogs.includes('Execution Memories Received') &&
     injectedIds.every((memoryId) =>
       buildMemoryAcknowledgmentPattern(memoryId).test(normalizedLogs)
     );
-  if (!hasAcknowledgment) {
-    missingFields.push('memory_acknowledgment');
-  }
 
   /* v8 ignore start -- schema: Zod schema defaults always provide strings; helper stays optional for structural typing across agent variants @preserve */
   const usedIds = normalizeMemoryCsv(agentData.memory_ids_used ?? '');
   const rejectedIds = normalizeMemoryCsv(agentData.memory_ids_rejected ?? '');
+  const summary = (agentData.memory_usage_summary ?? '').trim();
+  /* v8 ignore stop @preserve */
+
   const injectedSet = new Set(injectedIds);
   const usedSet = new Set(usedIds);
   const rejectedSet = new Set(rejectedIds);
 
-  if ((agentData.memory_usage_summary ?? '').trim() === '') {
-    missingFields.push('memory_usage_summary');
+  const tripletFailures: string[] = [];
+  if (summary === '') {
+    tripletFailures.push('memory_usage_summary');
   }
-  /* v8 ignore stop @preserve */
-
   if (usedIds.some((memoryId) => !injectedSet.has(memoryId))) {
-    missingFields.push('memory_ids_used_invalid');
+    tripletFailures.push('memory_ids_used_invalid');
   }
-
   if (rejectedIds.some((memoryId) => !injectedSet.has(memoryId))) {
-    missingFields.push('memory_ids_rejected_invalid');
+    tripletFailures.push('memory_ids_rejected_invalid');
   }
-
   if (usedIds.some((memoryId) => rejectedSet.has(memoryId))) {
-    missingFields.push('memory_ids_overlap');
+    tripletFailures.push('memory_ids_overlap');
   }
-
   const unaccountedIds = injectedIds.filter(
     (memoryId) => !usedSet.has(memoryId) && !rejectedSet.has(memoryId)
   );
   if (unaccountedIds.length > 0) {
-    missingFields.push('memory_ids_unaccounted');
+    tripletFailures.push('memory_ids_unaccounted');
   }
 
-  return missingFields;
+  const failures: string[] = [...tripletFailures];
+  const softWarnings: string[] = [];
+  if (!hasAcknowledgment) {
+    if (tripletFailures.length === 0) {
+      softWarnings.push('memory_acknowledgment');
+    } else {
+      failures.push('memory_acknowledgment');
+    }
+  }
+
+  return { failures, softWarnings };
 }
 
 export class OrchestratorCompletionVerifier implements CompletionVerifier {
@@ -864,23 +876,36 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     }
 
     const agentData = toAgentData(input.agentType, parseResult.data);
-    const memoryValidationFailures =
+    const memoryValidation: MemoryReportingValidationResult =
       input.executionMemoryContext !== undefined
         ? validateMemoryReporting(input.rawLogs, input.executionMemoryContext, agentData)
-        : [];
-    if (memoryValidationFailures.length > 0) {
+        : { failures: [], softWarnings: [] };
+
+    if (memoryValidation.softWarnings.length > 0) {
       this.logger.warn(
         {
           taskId: input.taskId,
           attempt: input.attempt,
           model: succeededModelName,
-          memoryValidationFailures,
+          softWarnings: memoryValidation.softWarnings,
+        },
+        'Completion verifier memory validation soft warning: triplet consistent, block missing'
+      );
+    }
+
+    if (memoryValidation.failures.length > 0) {
+      this.logger.warn(
+        {
+          taskId: input.taskId,
+          attempt: input.attempt,
+          model: succeededModelName,
+          memoryValidationFailures: memoryValidation.failures,
         },
         'Completion verifier memory validation failed'
       );
       return {
         passed: false,
-        missingFields: memoryValidationFailures,
+        missingFields: memoryValidation.failures,
         verifierFailure: false,
         succeededModelName,
         trace: { transcript, prompt, response: lastGeneratedContent },
