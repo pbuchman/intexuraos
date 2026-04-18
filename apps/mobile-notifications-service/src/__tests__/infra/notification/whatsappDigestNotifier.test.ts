@@ -34,7 +34,7 @@ describe('WhatsAppDigestNotifier', () => {
     expect(captured[0]?.ctaUrl?.url).toBe(
       'https://intexuraos.cloud/#/notifications/digests/my%20group/2026-04-15'
     );
-    expect(captured[0]?.correlationId).toBe('digest-ready-u1-my group-2026-04-15');
+    expect(captured[0]?.correlationId).toBe('digest-ready-u1-my%20group-2026-04-15');
   });
 
   it('returns notification_failed error when publisher returns err', async () => {

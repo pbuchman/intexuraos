@@ -465,4 +465,29 @@ describe('runDigestForGroup', () => {
     );
     expect(result.ok).toBe(true);
   });
+
+  it('does NOT notify on regeneration (generation > 1) to avoid duplicate WhatsApp messages', async () => {
+    const llm = new FakeLlmClient([{ type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) }]);
+    const notifier = { sendDigestReady: vi.fn(async () => ({ ok: true as const, value: undefined })) };
+    setMockServices({
+      digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
+      notificationRepository: fakeNotificationRepo([]),
+      digestRepository: {
+        save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 2, generatedAt: '', modelId: '' } }),
+        findByDate: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
+      digestNotifier: notifier,
+    });
+    const result = await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'manual' },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.regenerated).toBe(true);
+    expect(notifier.sendDigestReady).not.toHaveBeenCalled();
+  });
 });

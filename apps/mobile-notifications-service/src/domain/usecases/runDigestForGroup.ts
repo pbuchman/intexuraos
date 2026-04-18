@@ -106,21 +106,26 @@ export async function runDigestForGroup(
     });
     if (!persistState.ok) return err(persistenceFailed(persistState.error.message));
 
-    // Fire-and-log WhatsApp digest notification. The digest is already persisted;
-    // a notification failure must not fail the use case (observed via logger).
-    const notified = await services.digestNotifier.sendDigestReady({
-      userId: input.userId,
-      groupKey: input.groupKey,
-      date: input.date,
-      headline: aggregation.value.dailySummary.headline,
-      bullets: aggregation.value.dailySummary.bullets,
-      messageCount: aggregation.value.dailySummary.messageCount,
-    });
-    if (!notified.ok) {
-      deps.logger.warn(
-        { userId: input.userId, groupKey: input.groupKey, date: input.date, error: notified.error },
-        'runDigestForGroup: digest notifier failed; digest still persisted',
-      );
+    // Fire-and-log WhatsApp digest notification on the FIRST successful save only.
+    // Subsequent regenerations (generation > 1) are suppressed to avoid spamming
+    // users with duplicate messages for the same digest day. The digest is already
+    // persisted; a notification failure must not fail the use case (observed via
+    // logger).
+    if (persistSummary.value.generation === 1) {
+      const notified = await services.digestNotifier.sendDigestReady({
+        userId: input.userId,
+        groupKey: input.groupKey,
+        date: input.date,
+        headline: aggregation.value.dailySummary.headline,
+        bullets: aggregation.value.dailySummary.bullets,
+        messageCount: aggregation.value.dailySummary.messageCount,
+      });
+      if (!notified.ok) {
+        deps.logger.warn(
+          { userId: input.userId, groupKey: input.groupKey, date: input.date, error: notified.error },
+          'runDigestForGroup: digest notifier failed; digest still persisted',
+        );
+      }
     }
 
     return ok({
