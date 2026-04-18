@@ -995,7 +995,9 @@ module "mobile_notifications_service" {
   })
 
   env_vars = merge(local.common_service_env_vars, {
-    INTEXURAOS_DIGEST_LLM_MODEL = "or:google/gemini-3-flash-preview"
+    INTEXURAOS_DIGEST_LLM_MODEL           = "or:google/gemini-3-flash-preview"
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_WEB_APP_URL                = "https://${var.web_app_domain}"
   })
 
   depends_on = [
