@@ -48,7 +48,7 @@
 
 ## Pre-Flight (do these before starting)
 
-- Read `/repo/apps/research-agent/src/infra/notification/whatsappNotificationSender.ts` and `/repo/apps/code-agent/src/infra/services/whatsappNotifierImpl.ts` — these are the two reference patterns.
+- Read `/repo/apps/research-agent/src/infra/notification/WhatsAppNotificationSender.ts` and `/repo/apps/code-agent/src/infra/services/whatsappNotifierImpl.ts` — these are the two reference patterns.
 - Read `/repo/packages/infra-pubsub/src/whatsappSendPublisher.ts` lines 1-88 — the publisher signature you'll call.
 - Read `/repo/apps/mobile-notifications-service/src/services.ts` (all 56 lines) — the DI shape you'll extend.
 - Read `/repo/apps/mobile-notifications-service/src/domain/usecases/runDigestForGroup.ts` (all 125 lines) — know exactly where to hook the call.
@@ -799,10 +799,11 @@ Edit `terraform/environments/dev/main.tf`, inside `module "mobile_notifications_
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_DIGEST_LLM_MODEL           = "or:google/gemini-3-flash-preview"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_WEB_APP_URL                = "https://${var.web_app_domain}"
   })
 ```
 
-Note: `INTEXURAOS_WEB_APP_URL` is already provided via `local.common_service_env_vars` — do not re-declare.
+Note: `INTEXURAOS_WEB_APP_URL` is NOT part of `local.common_service_env_vars` (verified against `terraform/environments/dev/main.tf` lines 278-303) — it MUST be declared explicitly here, matching the pattern used by `research_agent` (line 1141) and `actions_agent` (line 1207).
 
 - [ ] **Step 3: Declare in PM2 dev shell**
 
