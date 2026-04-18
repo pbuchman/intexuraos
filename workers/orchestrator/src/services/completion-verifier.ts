@@ -553,7 +553,7 @@ export function buildMemoryAcknowledgmentPattern(memoryId: string): RegExp {
   return new RegExp(String.raw`^\s*(?:\[[^\]]+\]\s+)?-\s*\[\d+\]\s+${escaped}\b`, 'm');
 }
 
-export interface MemoryReportingValidationResult {
+interface MemoryReportingValidationResult {
   /** Hard failures — the verifier must reject this verdict. */
   failures: string[];
   /** Soft warnings — log only, do not fail. */
