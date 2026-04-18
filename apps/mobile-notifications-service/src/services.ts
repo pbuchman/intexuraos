@@ -18,6 +18,11 @@ import { FirestoreDigestRepository } from './infra/firestore/firestoreDigestRepo
 import { FirestoreGroupStateRepository } from './infra/firestore/firestoreGroupStateRepository.js';
 import { FirestoreDigestLockRepository } from './infra/firestore/firestoreDigestLockRepository.js';
 import { FirestoreBackfillRunRepository } from './infra/firestore/firestoreBackfillRunRepository.js';
+import { createAppLogger } from '@intexuraos/infra-sentry';
+import { createWhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { DigestNotifier } from './domain/services/digestNotifier.js';
+import { NoopDigestNotifier } from './domain/services/digestNotifier.js';
+import { WhatsAppDigestNotifier } from './infra/notification/index.js';
 
 export interface ServiceContainer {
   signatureConnectionRepository: SignatureConnectionRepository;
@@ -28,9 +33,26 @@ export interface ServiceContainer {
   digestLockRepository: DigestLockRepository;
   backfillRunRepository: BackfillRunRepository;
   digestSubscriptions: readonly DigestSubscription[];
+  digestNotifier: DigestNotifier;
 }
 
 let container: ServiceContainer | null = null;
+
+function createDigestNotifier(): DigestNotifier {
+  const projectId = process.env['INTEXURAOS_GCP_PROJECT_ID'];
+  const topicName = process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'];
+  const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+  if (
+    projectId === undefined || projectId === '' ||
+    topicName === undefined || topicName === '' ||
+    webAppUrl === undefined || webAppUrl === ''
+  ) {
+    return new NoopDigestNotifier();
+  }
+  const logger = createAppLogger({ name: 'whatsapp-digest-notifier' });
+  const publisher = createWhatsAppSendPublisher({ projectId, topicName, logger });
+  return new WhatsAppDigestNotifier({ publisher, webAppUrl, logger });
+}
 
 export function getServices(): ServiceContainer {
   container ??= {
@@ -42,6 +64,7 @@ export function getServices(): ServiceContainer {
     digestLockRepository: new FirestoreDigestLockRepository(),
     backfillRunRepository: new FirestoreBackfillRunRepository(),
     digestSubscriptions: DIGEST_SUBSCRIPTIONS,
+    digestNotifier: createDigestNotifier(),
   };
   return container;
 }
