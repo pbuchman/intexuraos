@@ -365,4 +365,129 @@ describe('runDigestForGroup', () => {
     expect(result.value.regenerated).toBe(true);
     expect(result.value.generation).toBe(2);
   });
+
+  it('publishes a WhatsApp digest-ready notification after successful save', async () => {
+    const llm = new FakeLlmClient([{ type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) }]);
+    const sent: unknown[] = [];
+    setMockServices({
+      digestLockRepository: {
+        acquire: async () => ({ ok: true, value: { acquired: true } }),
+        release: async () => ({ ok: true, value: undefined }),
+      },
+      notificationRepository: fakeNotificationRepo([]),
+      digestRepository: {
+        save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }),
+        findByDate: async () => ({ ok: true, value: null }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: {
+        getByDate: async () => ({ ok: true, value: null }),
+        getLatest: async () => ({ ok: true, value: null }),
+        save: async () => ({ ok: true, value: undefined }),
+      },
+      digestNotifier: {
+        sendDigestReady: async (input) => { sent.push(input); return { ok: true as const, value: undefined }; },
+      },
+    });
+    const result = await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'manual' },
+    );
+    expect(result.ok).toBe(true);
+    expect(sent).toHaveLength(1);
+    const call = sent[0] as { userId: string; groupKey: string; date: string; headline: string; bullets: readonly string[]; messageCount: number };
+    expect(call.userId).toBe('u');
+    expect(call.groupKey).toBe('g');
+    expect(call.date).toBe('2026-04-15');
+    expect(call.headline).toBe(EXAMPLE_SUMMARY.headline);
+    expect(call.bullets).toEqual(EXAMPLE_SUMMARY.bullets);
+    expect(call.messageCount).toBe(EXAMPLE_SUMMARY.messageCount);
+  });
+
+  it('does NOT notify when the lock is held', async () => {
+    const llm = new FakeLlmClient([{ type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) }]);
+    const notifier = { sendDigestReady: vi.fn(async () => ({ ok: true as const, value: undefined })) };
+    setMockServices({
+      digestLockRepository: {
+        acquire: async () => ({ ok: true, value: { acquired: false, heldBy: 'cron' } }),
+        release: async () => ({ ok: true, value: undefined }),
+      },
+      notificationRepository: fakeNotificationRepo([]),
+      digestRepository: { save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }), findByDate: async () => ({ ok: true, value: null }), findRecentByGroup: async () => ({ ok: true, value: [] }), findInRange: async () => ({ ok: true, value: { items: [] } }) },
+      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
+      digestNotifier: notifier,
+    });
+    await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'manual' },
+    );
+    expect(notifier.sendDigestReady).not.toHaveBeenCalled();
+  });
+
+  it('does NOT notify when digestRepository.save fails', async () => {
+    const llm = new FakeLlmClient([{ type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) }]);
+    const notifier = { sendDigestReady: vi.fn(async () => ({ ok: true as const, value: undefined })) };
+    setMockServices({
+      digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
+      notificationRepository: fakeNotificationRepo([]),
+      digestRepository: { save: async () => ({ ok: false as const, error: { code: 'INTERNAL_ERROR', message: 'boom' } }), findByDate: async () => ({ ok: true, value: null }), findRecentByGroup: async () => ({ ok: true, value: [] }), findInRange: async () => ({ ok: true, value: { items: [] } }) },
+      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
+      digestNotifier: notifier,
+    });
+    const result = await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'manual' },
+    );
+    expect(result.ok).toBe(false);
+    expect(notifier.sendDigestReady).not.toHaveBeenCalled();
+  });
+
+  it('still returns ok(...) when the digest notifier fails', async () => {
+    const llm = new FakeLlmClient([{ type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) }]);
+    setMockServices({
+      digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
+      notificationRepository: fakeNotificationRepo([]),
+      digestRepository: {
+        save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }),
+        findByDate: async () => ({ ok: true, value: null }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
+      digestNotifier: {
+        sendDigestReady: async () => ({ ok: false as const, error: { code: 'notification_failed', message: 'pubsub down' } }),
+      },
+    });
+    const result = await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'manual' },
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('does NOT notify on regeneration (generation > 1) to avoid duplicate WhatsApp messages', async () => {
+    const llm = new FakeLlmClient([{ type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) }]);
+    const notifier = { sendDigestReady: vi.fn(async () => ({ ok: true as const, value: undefined })) };
+    setMockServices({
+      digestLockRepository: { acquire: async () => ({ ok: true, value: { acquired: true } }), release: async () => ({ ok: true, value: undefined }) },
+      notificationRepository: fakeNotificationRepo([]),
+      digestRepository: {
+        save: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 2, generatedAt: '', modelId: '' } }),
+        findByDate: async () => ({ ok: true, value: { summary: EXAMPLE_SUMMARY, generation: 1, generatedAt: '', modelId: '' } }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: { getByDate: async () => ({ ok: true, value: null }), getLatest: async () => ({ ok: true, value: null }), save: async () => ({ ok: true, value: undefined }) },
+      digestNotifier: notifier,
+    });
+    const result = await runDigestForGroup(
+      { llmClient: llm, logger: noopLogger, modelId: 'm' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', date: '2026-04-15', holder: 'manual' },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.regenerated).toBe(true);
+    expect(notifier.sendDigestReady).not.toHaveBeenCalled();
+  });
 });
