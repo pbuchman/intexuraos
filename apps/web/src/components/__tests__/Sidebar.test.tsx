@@ -30,30 +30,45 @@ describe('Sidebar', () => {
     cleanup();
   });
 
-  it('renders a Digests link to /notifications/digests when Notifications group is expanded', async () => {
+  it('renders Digests as a top-level NavLink without expanding Mobile, positioned between Inbox and Hellscript', () => {
     render(
-      <MemoryRouter initialEntries={['/notifications']}>
+      <MemoryRouter initialEntries={['/inbox']}>
         <Sidebar />
       </MemoryRouter>
     );
 
-    const digestsLink = await screen.findByRole('link', { name: /digests/i });
+    // Digests must be visible on initial mount (no group expansion required).
+    const digestsLink = screen.getByRole('link', { name: /digests/i });
     expect(digestsLink).toBeInTheDocument();
     expect(digestsLink.getAttribute('href')).toMatch(/\/notifications\/digests$/);
+
+    // Verify DOM order: Inbox -> Digests -> Hellscript group trigger.
+    const inboxLink = screen.getByRole('link', { name: /inbox/i });
+    const hellscriptTrigger = screen.getByRole('button', { name: /hellscript/i });
+
+    expect(
+      inboxLink.compareDocumentPosition(digestsLink) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      digestsLink.compareDocumentPosition(hellscriptTrigger) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 
-  it('Digests link has NavLink sub-item styling classes', async () => {
+  it('Digests link carries top-level styling (py-2.5, text-sm, font-medium, rounded-lg), not sub-item py-2', () => {
     render(
-      <MemoryRouter initialEntries={['/notifications']}>
+      <MemoryRouter initialEntries={['/inbox']}>
         <Sidebar />
       </MemoryRouter>
     );
 
-    const digestsLink = await screen.findByRole('link', { name: /digests/i });
-    // Matches the sub-item styling shared with "All" link (rounded-lg + px-3 py-2 + text-sm).
-    expect(digestsLink.className).toContain('rounded-lg');
-    expect(digestsLink.className).toContain('px-3');
-    expect(digestsLink.className).toContain('py-2');
-    expect(digestsLink.className).toContain('text-sm');
+    const digestsLink = screen.getByRole('link', { name: /digests/i });
+    const classes = digestsLink.className.split(/\s+/);
+
+    expect(classes).toContain('rounded-lg');
+    expect(classes).toContain('py-2.5');
+    expect(classes).toContain('text-sm');
+    expect(classes).toContain('font-medium');
+    // Sub-item padding must not be applied.
+    expect(classes).not.toContain('py-2');
   });
 });
