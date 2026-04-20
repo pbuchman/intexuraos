@@ -1140,10 +1140,12 @@ describe('WhatsAppNotifier', () => {
       await notifier.notifyResumedTaskComplete('user-123', task);
 
       const publishCall = getPublishSendMessageMock().mock.calls[0];
-      const params = publishCall?.[0] as { userId: string; message: string };
+      const params = publishCall?.[0] as { userId: string; message: string; important?: boolean };
       expect(params.userId).toBe('user-123');
       expect(params.message).toContain('🔁');
       expect(params.message).toContain('Fix token refresh');
+      // INT-1418: resumed-task completion is marked important
+      expect(params.important).toBe(true);
     });
 
     it('includes PR URL in message and ctaUrl when present', async () => {
