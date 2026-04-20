@@ -90,7 +90,9 @@ describe('WhatsAppPreferencesCard', () => {
 
   it('disables radios while the initial GET is in flight', async () => {
     const getMock = await getPreferencesMock();
-    let resolveGet: (value: { notificationLevel: 'all' | 'important' }) => void = () => {};
+    let resolveGet: (value: { notificationLevel: 'all' | 'important' }) => void = () => {
+      // Reassigned below once the Promise runs its executor.
+    };
     getMock.mockReturnValue(
       new Promise((resolve) => {
         resolveGet = resolve;
