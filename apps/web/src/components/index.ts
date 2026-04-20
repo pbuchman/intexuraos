@@ -23,6 +23,7 @@ export { GitHubEventLogTableRow, type GitHubEventLogTableRowProps } from './GitH
 export { PREventsGroup, type PREventsGroupProps } from './PREventsGroup.js';
 export { ModelSelector, getSelectedModelsList, PROVIDER_MODELS, MAX_TOTAL_MODELS } from './ModelSelector.js';
 export { VersionInfoModal } from './VersionInfoModal.js';
+export { WhatsAppPreferencesCard } from './WhatsAppPreferencesCard.js';
 export { LinearIssueCombobox } from './LinearIssueCombobox.js';
 export { LinearIssueSelectorModal } from './LinearIssueSelectorModal.js';
 export * from './ui/index.js';
