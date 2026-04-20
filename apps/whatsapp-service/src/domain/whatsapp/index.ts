@@ -6,6 +6,13 @@
 // Models
 export type { WhatsAppErrorCode, WhatsAppError, WhatsAppResult } from './models/error.js';
 
+export {
+  DEFAULT_NOTIFICATION_LEVEL,
+  isNotificationLevel,
+  type NotificationLevel,
+  type NotificationPreferences,
+} from './models/NotificationPreferences.js';
+
 export type {
   WhatsAppMessage,
   WhatsAppMessageMetadata,
