@@ -13,6 +13,7 @@ import {
   FakeLinkPreviewFetcherPort,
   FakeMediaStorage,
   FakeMessageSender,
+  FakeNotificationPreferencesRepository,
   FakeOutboundMessageRepository,
   FakePhoneVerificationRepository,
   FakeThumbnailGeneratorPort,
@@ -466,6 +467,7 @@ export interface TestContext {
   whatsappCloudApi: FakeWhatsAppCloudApiPort;
   outboundMessageRepository: FakeOutboundMessageRepository;
   phoneVerificationRepository: FakePhoneVerificationRepository;
+  notificationPreferencesRepository: FakeNotificationPreferencesRepository;
   messageSender: FakeMessageSender;
   linkPreviewFetcher: FakeLinkPreviewFetcherPort;
 }
@@ -484,6 +486,8 @@ export function setupTestContext(): TestContext {
     whatsappCloudApi: null as unknown as FakeWhatsAppCloudApiPort,
     outboundMessageRepository: null as unknown as FakeOutboundMessageRepository,
     phoneVerificationRepository: null as unknown as FakePhoneVerificationRepository,
+    notificationPreferencesRepository:
+      null as unknown as FakeNotificationPreferencesRepository,
     messageSender: null as unknown as FakeMessageSender,
     linkPreviewFetcher: null as unknown as FakeLinkPreviewFetcherPort,
   };
@@ -505,6 +509,7 @@ export function setupTestContext(): TestContext {
     context.whatsappCloudApi = new FakeWhatsAppCloudApiPort();
     context.outboundMessageRepository = new FakeOutboundMessageRepository();
     context.phoneVerificationRepository = new FakePhoneVerificationRepository();
+    context.notificationPreferencesRepository = new FakeNotificationPreferencesRepository();
     context.messageSender = new FakeMessageSender();
     context.linkPreviewFetcher = new FakeLinkPreviewFetcherPort();
 
@@ -520,6 +525,7 @@ export function setupTestContext(): TestContext {
       linkPreviewFetcher: context.linkPreviewFetcher,
       outboundMessageRepository: context.outboundMessageRepository,
       phoneVerificationRepository: context.phoneVerificationRepository,
+      notificationPreferencesRepository: context.notificationPreferencesRepository,
     });
 
     clearJwksCache();

@@ -5,6 +5,9 @@
 import type { Result } from '@intexuraos/common-core';
 import type {
   IgnoredReason,
+  NotificationLevel,
+  NotificationPreferences,
+  NotificationPreferencesRepository,
   WhatsAppError,
   LinkPreviewState,
   PhoneVerification,
@@ -32,12 +35,14 @@ import {
   findVerificationById,
   getMessage,
   getMessagesByUser,
+  getPreferences,
   getUserMapping,
   getWebhookEvent,
   incrementVerificationAttempts,
   isPhoneVerified,
   isUserConnected,
   saveMessage,
+  savePreferences,
   saveUserMapping,
   saveWebhookEvent,
   updateLinkPreview,
@@ -221,5 +226,25 @@ export class PhoneVerificationRepositoryAdapter implements PhoneVerificationRepo
     existingPendingId?: string;
   }, WhatsAppError>> {
     return await createVerificationWithChecks(params);
+  }
+}
+
+/**
+ * Class adapter for NotificationPreferencesRepository.
+ */
+export class NotificationPreferencesRepositoryAdapter
+  implements NotificationPreferencesRepository
+{
+  async getPreferences(
+    userId: string
+  ): Promise<Result<NotificationPreferences, WhatsAppError>> {
+    return await getPreferences(userId);
+  }
+
+  async savePreferences(
+    userId: string,
+    level: NotificationLevel
+  ): Promise<Result<NotificationPreferences, WhatsAppError>> {
+    return await savePreferences(userId, level);
   }
 }
