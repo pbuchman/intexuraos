@@ -47,6 +47,7 @@ describe('WhatsAppNotificationSender', () => {
         userId: 'user-123',
         message: expect.stringContaining('AI Research'),
         correlationId: 'research-research-456',
+        important: true,
       });
     });
 
@@ -142,6 +143,7 @@ describe('WhatsAppNotificationSender', () => {
         userId: 'user-123',
         message: expect.stringContaining(LlmModels.Gemini25Pro),
         correlationId: 'research-failure-research-456',
+        important: true,
       });
     });
 
