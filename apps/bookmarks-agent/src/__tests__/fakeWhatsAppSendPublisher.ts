@@ -9,6 +9,7 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
     message: string;
     replyToMessageId?: string;
     correlationId: string;
+    important?: boolean;
   }[] = [];
   private nextError: PublishError | null = null;
 
@@ -20,6 +21,7 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
     userId: string;
     message: string;
     replyToMessageId?: string;
+    important?: boolean;
     correlationId?: string;
   }): Promise<Result<void, PublishError>> {
     if (this.nextError !== null) {
@@ -33,6 +35,7 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
       message: params.message,
       ...(params.replyToMessageId !== undefined && { replyToMessageId: params.replyToMessageId }),
       correlationId: params.correlationId ?? crypto.randomUUID(),
+      ...(params.important !== undefined && { important: params.important }),
     });
     return ok(undefined);
   }
