@@ -55,6 +55,8 @@ describe('summarizeBookmark', () => {
         message:
           '📑 *Bookmark Summary*\n\n*Example Page*\n\nThis page is about example content and provides useful information.\n\n🔗 https://example.com/page',
         correlationId: `bookmark-${bookmarkId}`,
+        // INT-1418 (plan follow-up #1881): bookmark summary is important.
+        important: true,
       });
     });
 
