@@ -23,6 +23,7 @@ export async function handleCancelTaskButton(
       userId,
       message: 'Unable to cancel task: service temporarily unavailable.',
       correlationId: `cancel-task-error-${taskId}`,
+      important: true,
     });
     return err(new Error('Code agent client not configured'));
   }
@@ -33,6 +34,7 @@ export async function handleCancelTaskButton(
       userId,
       message: 'Unable to cancel task: missing security code.',
       correlationId: `cancel-task-error-${taskId}`,
+      important: true,
     });
     return err(new Error('Cancel-task button missing nonce'));
   }
@@ -58,6 +60,7 @@ export async function handleCancelTaskButton(
       userId,
       message,
       correlationId: `cancel-task-error-${taskId}`,
+      important: true,
     });
 
     return ok({
@@ -72,6 +75,7 @@ export async function handleCancelTaskButton(
     userId,
     message: '🛑 Task cancellation requested.',
     correlationId: `cancel-task-success-${taskId}`,
+    important: true,
   });
 
   return ok({
