@@ -84,6 +84,7 @@ export async function handleButtonResponse(
           userId: action.userId,
           message: 'This action is no longer available. It may have been deleted or already processed.',
           correlationId: `approval-not-found-${action.id}`,
+          important: true,
         });
         return ok({ matched: false });
       }
@@ -101,6 +102,7 @@ export async function handleButtonResponse(
         userId: action.userId,
         message: `✅ Approved! Processing your ${action.type}: "${action.title}"`,
         correlationId: `approval-approved-${action.id}`,
+        important: true,
       });
 
       if (!approvePublishResult.ok) {

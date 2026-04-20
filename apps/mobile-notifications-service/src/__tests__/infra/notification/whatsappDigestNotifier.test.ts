@@ -35,6 +35,8 @@ describe('WhatsAppDigestNotifier', () => {
       'https://intexuraos.cloud/#/notifications/digests/my%20group/2026-04-15'
     );
     expect(captured[0]?.correlationId).toBe('digest-ready-u1-my%20group-2026-04-15');
+    // INT-1418 (plan follow-up #1881): daily digest is important.
+    expect(captured[0]?.important).toBe(true);
   });
 
   it('returns notification_failed error when publisher returns err', async () => {

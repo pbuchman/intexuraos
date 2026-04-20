@@ -166,6 +166,12 @@ export interface SendMessageEvent {
   ctaUrl?: { displayText: string; url: string };
 
   /**
+   * Optional: marks the message as important. When true, delivery bypasses
+   * the recipient's 'important'-only notification filter.
+   */
+  important?: boolean;
+
+  /**
    * Correlation ID for tracing across services.
    */
   correlationId: string;

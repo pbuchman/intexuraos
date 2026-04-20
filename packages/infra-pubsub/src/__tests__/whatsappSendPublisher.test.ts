@@ -186,6 +186,37 @@ describe('createWhatsAppSendPublisher', () => {
       expect(Object.prototype.hasOwnProperty.call(publishedData, 'ctaUrl')).toBe(false);
     });
 
+    it('includes important=true when provided', async () => {
+      const publisher = createWhatsAppSendPublisher(config);
+
+      const result = await publisher.publishSendMessage({
+        userId: 'user-123',
+        message: 'Critical alert',
+        important: true,
+      });
+
+      expect(result.ok).toBe(true);
+
+      const call = mockPublishMessage.mock.calls[0] as [{ data: Buffer }];
+      const publishedData = JSON.parse(call[0].data.toString()) as Record<string, unknown>;
+
+      expect(publishedData['important']).toBe(true);
+    });
+
+    it('omits important when not provided', async () => {
+      const publisher = createWhatsAppSendPublisher(config);
+
+      await publisher.publishSendMessage({
+        userId: 'user-123',
+        message: 'Simple message',
+      });
+
+      const call = mockPublishMessage.mock.calls[0] as [{ data: Buffer }];
+      const publishedData = JSON.parse(call[0].data.toString()) as Record<string, unknown>;
+
+      expect(Object.prototype.hasOwnProperty.call(publishedData, 'important')).toBe(false);
+    });
+
     it('returns TOPIC_NOT_FOUND error when topic does not exist', async () => {
       mockPublishMessage.mockRejectedValue(new Error('NOT_FOUND: Topic does not exist'));
 

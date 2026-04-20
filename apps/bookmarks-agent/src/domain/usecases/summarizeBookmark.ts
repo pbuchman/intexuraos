@@ -115,6 +115,9 @@ export async function summarizeBookmark(
       userId,
       message,
       correlationId: `bookmark-${bookmarkId}`,
+      // INT-1418 (plan follow-up #1881): bookmark summary is a user-facing
+      // summary of content the user explicitly saved — important.
+      important: true,
     });
 
     if (!publishResult.ok) {

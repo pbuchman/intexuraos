@@ -6,6 +6,13 @@
 // Models
 export type { WhatsAppErrorCode, WhatsAppError, WhatsAppResult } from './models/error.js';
 
+export {
+  DEFAULT_NOTIFICATION_LEVEL,
+  isNotificationLevel,
+  type NotificationLevel,
+  type NotificationPreferences,
+} from './models/NotificationPreferences.js';
+
 export type {
   WhatsAppMessage,
   WhatsAppMessageMetadata,
@@ -67,6 +74,8 @@ export type {
   OutboundMessageRepository,
 } from './ports/outboundMessageRepository.js';
 
+export type { NotificationPreferencesRepository } from './ports/notificationPreferencesRepository.js';
+
 // Events
 export type {
   ApprovalReplyEvent,
@@ -116,6 +125,11 @@ export {
   ProcessWebhookEventUseCase,
   type ProcessWebhookEventDeps,
 } from './usecases/processWebhookEventUseCase.js';
+
+export {
+  shouldDeliverMessage,
+  type ShouldDeliverMessageInput,
+} from './usecases/shouldDeliverMessage.js';
 
 // Utilities
 export { normalizePhoneNumber } from './utils/index.js';

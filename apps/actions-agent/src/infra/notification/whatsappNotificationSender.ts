@@ -42,6 +42,7 @@ export class WhatsAppNotificationSender implements NotificationSender {
       userId,
       message,
       correlationId: `research-draft-ready-${researchId}`,
+      important: true,
     });
 
     return ok(undefined);
