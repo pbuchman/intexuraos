@@ -74,6 +74,8 @@ export type {
   OutboundMessageRepository,
 } from './ports/outboundMessageRepository.js';
 
+export type { NotificationPreferencesRepository } from './ports/notificationPreferencesRepository.js';
+
 // Events
 export type {
   ApprovalReplyEvent,
