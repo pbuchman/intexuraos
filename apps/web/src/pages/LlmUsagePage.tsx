@@ -61,7 +61,9 @@ function isSortState(v: unknown): v is SortState {
 }
 
 function isGroupByMode(v: unknown): v is GroupByMode {
-  return typeof v === 'string' && ['none', 'day', 'component', 'service', 'model', 'openrouter-model', 'promptType'].includes(v);
+  // Stale 'promptType' values from localStorage fall through to DEFAULT_GROUP_BY
+  // after that option was removed from the UI.
+  return typeof v === 'string' && ['none', 'day', 'component', 'service', 'model', 'openrouter-model'].includes(v);
 }
 
 // --- Defaults ---
