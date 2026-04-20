@@ -36,7 +36,7 @@ function summarizeTask(task: CodeTask): string {
 }
 
 async function resolveTaskTitle(
-  linearAgentClient: LinearAgentClient | undefined,
+  linearAgentClient: LinearAgentClient | undefined, // @allow-undefined-type -- positional param with required params after; optional ?: syntax not usable here
   userId: string,
   task: CodeTask
 ): Promise<string> {
@@ -46,7 +46,7 @@ async function resolveTaskTitle(
       identifier: task.linearIssueId,
     });
     if (linearResult.ok) {
-      return linearResult.value.title;
+      return linearResult.value.title; // @allow-result-access -- narrowed by linearResult.ok check immediately above
     }
   }
 
@@ -172,6 +172,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
         message,
         ctaUrl: { displayText: 'View Task', url: buildTaskUrl(task.id) },
         correlationId: task.traceId,
+        important: true,
       });
 
       if (!result.ok) {
@@ -211,6 +212,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
         buttons,
         ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id) },
         correlationId: task.traceId,
+        important: true,
       });
 
       if (!result.ok) {
@@ -248,6 +250,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
         buttons,
         ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id) },
         correlationId: task.traceId,
+        important: true,
       });
 
       if (!result.ok) {
@@ -313,6 +316,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
         message,
         buttons,
         correlationId: task.traceId,
+        important: true,
       });
 
       if (!result.ok) {
@@ -323,6 +327,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
             userId,
             message: fallbackMessage,
             correlationId: task.traceId,
+            important: true,
           });
           if (!fallbackResult.ok) {
             return err({
@@ -383,6 +388,7 @@ Workers were still busy and the task timed out. Please retry when workers are av
         message,
         ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id) },
         correlationId: task.traceId,
+        important: true,
       });
 
       if (!result.ok) {
@@ -410,6 +416,7 @@ Please check worker availability and retry manually if needed.`;
       const result = await whatsappPublisher.publishSendMessage({
         userId,
         message,
+        important: true,
       });
 
       if (!result.ok) {
@@ -498,6 +505,7 @@ A follow-up fix task has been automatically dispatched.`;
         message,
         ctaUrl: { displayText: 'View Task', url: buildTaskUrl(task.id) },
         correlationId: task.traceId,
+        important: true,
       });
 
       if (!result.ok) {

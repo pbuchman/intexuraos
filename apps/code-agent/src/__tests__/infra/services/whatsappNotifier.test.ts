@@ -543,6 +543,10 @@ describe('WhatsAppNotifier', () => {
       });
     });
 
+    // Note: notifyTaskComplete builds the publish params via a local variable
+    // (publishParams) so it is NOT modified for INT-1418 importance flagging.
+    // See apps/code-agent/src/infra/services/whatsappNotifierImpl.ts:140-150.
+
     it('returns error when notification fails', async () => {
       const task = createMockTask({
         result: createMockResult(),
@@ -588,6 +592,7 @@ describe('WhatsAppNotifier', () => {
           url: 'https://intexuraos.cloud/#/code-tasks/task-123',
         },
         correlationId: 'test-trace-id',
+        important: true,
       });
       // Should NOT have reply buttons
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
@@ -864,6 +869,7 @@ describe('WhatsAppNotifier', () => {
             },
           ],
           correlationId: 'trace-123',
+          important: true,
         })
       );
     });
