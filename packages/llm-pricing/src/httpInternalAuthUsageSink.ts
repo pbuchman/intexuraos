@@ -1,6 +1,7 @@
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
-import type { UsageSink, UsageLogParams } from './usageLogger.js';
+import type { UsageLogParams } from './usageLogger.js';
+import { UsageSink } from './usageLogger.js';
 import { buildUsageEvent } from './buildUsageEvent.js';
 
 /**
@@ -27,14 +28,15 @@ export interface HttpInternalAuthUsageSinkConfig {
  * Uses X-Internal-Auth for authentication. No HMAC signing.
  * Failures are non-fatal: logged as warnings and swallowed.
  */
-export class HttpInternalAuthUsageSink implements UsageSink {
+export class HttpInternalAuthUsageSink extends UsageSink {
   private readonly config: HttpInternalAuthUsageSinkConfig;
 
   constructor(config: HttpInternalAuthUsageSinkConfig) {
+    super();
     this.config = config;
   }
 
-  async log(params: UsageLogParams): Promise<void> {
+  override async log(params: UsageLogParams): Promise<void> {
     const taskId = this.config.getCorrelationTaskId?.() ?? null;
     const event = buildUsageEvent(
       params,

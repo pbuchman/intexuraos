@@ -1,7 +1,8 @@
 import { createHmac } from 'node:crypto';
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
-import type { UsageSink, UsageLogParams } from './usageLogger.js';
+import type { UsageLogParams } from './usageLogger.js';
+import { UsageSink } from './usageLogger.js';
 import { buildUsageEvent } from './buildUsageEvent.js';
 
 /**
@@ -29,14 +30,15 @@ export interface HttpWebhookUsageSinkConfig {
  *
  * Failures are non-fatal: logged as warnings and swallowed.
  */
-export class HttpWebhookUsageSink implements UsageSink {
+export class HttpWebhookUsageSink extends UsageSink {
   private readonly config: HttpWebhookUsageSinkConfig;
 
   constructor(config: HttpWebhookUsageSinkConfig) {
+    super();
     this.config = config;
   }
 
-  async log(params: UsageLogParams): Promise<void> {
+  override async log(params: UsageLogParams): Promise<void> {
     const taskId = this.config.getCorrelationTaskId?.() ?? null;
     const event = buildUsageEvent(
       params,
