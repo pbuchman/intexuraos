@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
-import type { UsageSink } from '@intexuraos/llm-pricing';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -10,7 +10,7 @@ const mockLogger: Logger = {
   debug: vi.fn(),
 };
 
-const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
+const mockUsageSink = new FakeUsageSink();
 
 const mockOrGenerate = vi.fn();
 

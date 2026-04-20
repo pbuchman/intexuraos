@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LlmModels } from '@intexuraos/llm-contract';
 import type { ToolCallingClient } from '@intexuraos/llm-contract';
-import type { UsageSink } from '@intexuraos/llm-pricing';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
 
 const mockLogger: Logger = {
@@ -27,20 +27,27 @@ vi.mock('@google/genai', () => {
   return { GoogleGenAI: MockGoogleGenAI, FunctionCallingConfigMode };
 });
 
-const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
-
-vi.mock('@intexuraos/llm-pricing', () => ({
-  createUsageLogger: vi.fn().mockReturnValue({
-    log: mockUsageLoggerLog,
-  }),
+const { mockUsageLoggerLog } = vi.hoisted(() => ({
+  mockUsageLoggerLog: vi.fn().mockResolvedValue(undefined),
 }));
+
+vi.mock('@intexuraos/llm-pricing', async (): Promise<typeof import('@intexuraos/llm-pricing')> => {
+  const actual =
+    await vi.importActual<typeof import('@intexuraos/llm-pricing')>('@intexuraos/llm-pricing');
+  return {
+    ...actual,
+    createUsageLogger: vi.fn().mockReturnValue({
+      log: mockUsageLoggerLog,
+    }),
+  } as typeof import('@intexuraos/llm-pricing');
+});
 
 const { createUsageLogger } = await import('@intexuraos/llm-pricing');
 const { createGeminiToolCallingClient } = await import('../toolCallingClient.js');
 
 const TEST_MODEL = LlmModels.Gemini25Flash;
 
-const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
+const mockUsageSink = new FakeUsageSink();
 
 function createClient(): ToolCallingClient {
   return createGeminiToolCallingClient({
@@ -537,9 +544,7 @@ describe('createGeminiToolCallingClient', () => {
   });
 
   it('passes usageSink to createUsageLogger when provided', async () => {
-    const fakeSink: UsageSink = {
-      log: vi.fn().mockResolvedValue(undefined),
-    };
+    const fakeSink = new FakeUsageSink();
     mockGenerateContent.mockResolvedValueOnce(textResponse('ok'));
 
     const client = createGeminiToolCallingClient({

@@ -3,7 +3,8 @@
  * Provides mock UsageSink for tests.
  */
 
-import type { UsageLogParams, UsageSink } from './usageLogger.js';
+import type { UsageLogParams } from './usageLogger.js';
+import { UsageSink } from './usageLogger.js';
 
 /**
  * Snapshot of a usage event captured by {@link FakeUsageSink}.
@@ -23,10 +24,10 @@ export type FakeUsageSinkRecord = UsageLogParams;
  * expect(sink.records[0].callType).toBe('generate');
  * ```
  */
-export class FakeUsageSink implements UsageSink {
+export class FakeUsageSink extends UsageSink {
   readonly records: FakeUsageSinkRecord[] = [];
 
-  log(params: UsageLogParams): Promise<void> {
+  override log(params: UsageLogParams): Promise<void> {
     this.records.push(params);
     return Promise.resolve();
   }

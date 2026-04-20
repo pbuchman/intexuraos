@@ -5,6 +5,7 @@ import { resetServices } from '../../services.js';
 import { COLD_START_EXAMPLE } from '@intexuraos/llm-prompts';
 import { setupJwksServer, teardownJwksServer, createToken } from '../testUtils.js';
 import { clearJwksCache } from '@intexuraos/common-http';
+import { __resetUsageSinkForTests } from '../../routes/digestRoutes.js';
 import type { PersistedDailySummary } from '../../domain/repositories/digestRepositories.js';
 import type { GroupState } from '../../domain/schemas/digestSchemas.js';
 import type { Notification } from '../../domain/notifications/index.js';
@@ -32,10 +33,97 @@ beforeEach(() => {
   process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
   process.env['INTEXURAOS_DIGEST_LLM_MODEL'] = 'or:google/gemini-3-flash-preview';
   process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'test-key';
+  process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://usage.test.local';
 });
 afterEach(() => {
   resetServices();
+  __resetUsageSinkForTests();
   vi.restoreAllMocks();
+});
+
+describe('LLM usage reporting (INT-1421)', () => {
+  // Regression guard for INT-1421: digest LLM calls MUST be routed through
+  // HttpInternalAuthUsageSink so events reach llm-usage-service. The bug was
+  // a bespoke inline `{ log: () => Promise.resolve() }` silently swallowing
+  // every event. The nominal UsageSink brand prevents recurrence at the type
+  // level; this test verifies the wiring at runtime.
+  it('wires HttpInternalAuthUsageSink (not a no-op) into every digest LLM client', async () => {
+    const { capture } = vi.hoisted(() => ({ capture: { sink: null as unknown } }));
+
+    vi.doMock('@intexuraos/llm-factory', async (): Promise<typeof import('@intexuraos/llm-factory')> => {
+      const actual = await vi.importActual<typeof import('@intexuraos/llm-factory')>('@intexuraos/llm-factory');
+      return {
+        ...actual,
+        createLlmClient: (config: import('@intexuraos/llm-factory').LlmClientConfig) => {
+          capture.sink = config.usageSink;
+          return {
+            generate: async (): Promise<{ ok: true; value: { content: string; usage: { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number } } }> =>
+              ({ ok: true, value: { content: JSON.stringify(COLD_START_EXAMPLE), usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 } } }),
+          };
+        },
+      } as typeof import('@intexuraos/llm-factory');
+    });
+
+    // Re-import server AND helpers from the fresh module graph so they share
+    // the same services container after vi.resetModules().
+    vi.resetModules();
+    const { buildServer: freshBuildServer } = await import('../../server.js');
+    const { setMockServices: freshSetMockServices } = await import('../helpers/mockServices.js');
+    const { __resetUsageSinkForTests: freshResetSink } = await import('../../routes/digestRoutes.js');
+    // Re-import HttpInternalAuthUsageSink from the fresh graph so the
+    // instanceof assertion below compares against the same class identity
+    // digestRoutes uses.
+    const { HttpInternalAuthUsageSink: FreshHttpInternalAuthUsageSink } = await import('@intexuraos/llm-pricing');
+    freshResetSink();
+
+    freshSetMockServices({
+      digestLockRepository: {
+        acquire: async () => ({ ok: true, value: { acquired: true } }),
+        release: async () => ({ ok: true, value: undefined }),
+      },
+      notificationRepository: {
+        findByUserIdPaginated: async () => ({ ok: true, value: { notifications: [] } }),
+        save: async () => ({ ok: true, value: NULL_NOTIFICATION }),
+        findById: async () => ({ ok: true, value: null }),
+        existsByNotificationIdAndUserId: async () => ({ ok: true, value: false }),
+        delete: async () => ({ ok: true, value: undefined }),
+      },
+      digestRepository: {
+        save: async () => ({ ok: true, value: EXAMPLE_PERSISTED }),
+        findByDate: async () => ({ ok: true, value: null }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: {
+        getByDate: async () => ({ ok: true, value: null }),
+        getLatest: async () => ({ ok: true, value: null }),
+        save: async () => ({ ok: true, value: undefined }),
+      },
+    });
+
+    const app = await freshBuildServer();
+    const res1 = await app.inject({
+      method: 'POST',
+      url: '/internal/notifications/digest/run',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      payload: { userId: 'u', groupKey: 'g', date: '2026-04-15' },
+    });
+    expect(res1.statusCode).toBe(200);
+    expect(capture.sink).toBeInstanceOf(FreshHttpInternalAuthUsageSink);
+    const firstSink = capture.sink;
+
+    // Second request exercises the singleton cache branch in getUsageSink()
+    // and confirms the sink instance is reused — no per-request allocation.
+    const res2 = await app.inject({
+      method: 'POST',
+      url: '/internal/notifications/digest/run',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      payload: { userId: 'u', groupKey: 'g', date: '2026-04-16' },
+    });
+    expect(res2.statusCode).toBe(200);
+    expect(capture.sink).toBe(firstSink);
+    await app.close();
+  });
 });
 
 describe('POST /internal/notifications/digest/run', () => {
