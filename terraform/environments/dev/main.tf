@@ -1031,7 +1031,6 @@ resource "google_cloud_scheduler_job" "mobile_notifications_digest_yesterday" {
   http_target {
     http_method = "POST"
     uri         = "${module.mobile_notifications_service.service_url}/internal/notifications/digest/run-yesterday"
-    body        = base64encode("{}")
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email

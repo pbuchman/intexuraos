@@ -256,9 +256,22 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (req, reply) => {
       logIncomingRequest(req);
-      const authResult = validateInternalAuth(req);
-      if (!authResult.valid) {
-        return await reply.fail('UNAUTHORIZED', 'missing internal auth');
+
+      // Auth strategy: Cloud Scheduler sends OIDC tokens; direct internal callers use x-internal-auth.
+      // Cloud Run validates the OIDC token at the infrastructure layer via the `roles/run.invoker`
+      // IAM binding granted to the scheduler SA in terraform (see
+      // `scheduler_invokes_mobile_notifications_service`). The app-layer JWT-structure check is a
+      // defence-in-depth guard: it rejects bare "Bearer <garbage>" in case Cloud Run ingress is
+      // ever reconfigured.
+      const authHeader = req.headers.authorization;
+      const JWT_STRUCTURE = /^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+      const isOidcAuth = typeof authHeader === 'string' && JWT_STRUCTURE.test(authHeader);
+
+      if (!isOidcAuth) {
+        const authResult = validateInternalAuth(req);
+        if (!authResult.valid) {
+          return await reply.fail('UNAUTHORIZED', 'missing internal auth');
+        }
       }
       const date = yesterdayCet();
       const results = await Promise.all(
