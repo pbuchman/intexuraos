@@ -115,6 +115,68 @@ describe('POST /internal/notifications/digest/run-yesterday', () => {
     await app.close();
   });
 
+  it('accepts requests authenticated via OIDC Bearer (Cloud Scheduler)', async () => {
+    setMockServices({
+      digestLockRepository: {
+        acquire: async () => ({ ok: true, value: { acquired: true } }),
+        release: async () => ({ ok: true, value: undefined }),
+      },
+      notificationRepository: {
+        findByUserIdPaginated: async () => ({ ok: true, value: { notifications: [] } }),
+        save: async () => ({ ok: true, value: NULL_NOTIFICATION }),
+        findById: async () => ({ ok: true, value: null }),
+        existsByNotificationIdAndUserId: async () => ({ ok: true, value: false }),
+        delete: async () => ({ ok: true, value: undefined }),
+      },
+      digestRepository: {
+        save: async () => ({ ok: true, value: EXAMPLE_PERSISTED }),
+        findByDate: async () => ({ ok: true, value: null }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: {
+        getByDate: async () => ({ ok: true, value: null }),
+        getLatest: async () => ({ ok: true, value: null }),
+        save: async () => ({ ok: true, value: undefined }),
+      },
+    });
+
+    vi.mock('@intexuraos/llm-factory', async (): Promise<typeof import('@intexuraos/llm-factory')> => {
+      const actual = await vi.importActual<typeof import('@intexuraos/llm-factory')>('@intexuraos/llm-factory');
+      return {
+        ...actual,
+        createLlmClient: () => ({
+          generate: async (): Promise<{ ok: true; value: { content: string; usage: { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number } } }> =>
+            ({ ok: true, value: { content: JSON.stringify(COLD_START_EXAMPLE), usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 } } }),
+        }),
+      } as typeof import('@intexuraos/llm-factory');
+    });
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/internal/notifications/digest/run-yesterday',
+      headers: { authorization: 'Bearer header.payload.signature' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ success: boolean; data: { dispatched: number; date: string } }>();
+    expect(body.success).toBe(true);
+    expect(body.data.dispatched).toBe(1);
+    await app.close();
+  });
+
+  it('rejects bare "Bearer <garbage>" to prevent auth bypass', async () => {
+    setMockServices({});
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/internal/notifications/digest/run-yesterday',
+      headers: { authorization: 'Bearer not-a-jwt' },
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
   it('dispatches one run per DIGEST_SUBSCRIPTIONS entry and returns dispatched count', async () => {
     setMockServices({
       digestLockRepository: {
