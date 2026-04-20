@@ -61,6 +61,12 @@ export interface SendMessageEvent {
   ctaUrl?: { displayText: string; url: string };
 
   /**
+   * Optional: marks the message as important so whatsapp-service delivers it
+   * even when the recipient has opted into 'important' notifications only.
+   */
+  important?: boolean;
+
+  /**
    * Correlation ID for tracing across services.
    */
   correlationId: string;
