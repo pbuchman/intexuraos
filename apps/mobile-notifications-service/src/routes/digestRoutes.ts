@@ -1,6 +1,7 @@
 import type { FastifyPluginCallback } from 'fastify';
 import { logIncomingRequest, validateInternalAuth, requireAuth } from '@intexuraos/common-http';
 import { createLlmClient, type LlmClientConfig } from '@intexuraos/llm-factory';
+import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { ok, err, getErrorMessage, type Result } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
@@ -34,6 +35,39 @@ function getDigestModel(): string {
   if (m === undefined || m === '') throw new Error('INTEXURAOS_DIGEST_LLM_MODEL not set');
   /* v8 ignore stop @preserve */
   return m;
+}
+
+let usageSinkSingleton: HttpInternalAuthUsageSink | null = null;
+
+/**
+ * Build (and memoize) the HTTP usage sink that forwards LLM usage events to
+ * `llm-usage-service`. Required env vars are guaranteed at boot by
+ * `validateRequiredEnv(REQUIRED_ENV)` in `index.ts`.
+ */
+function getUsageSink(): HttpInternalAuthUsageSink {
+  if (usageSinkSingleton !== null) return usageSinkSingleton;
+  const url = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'];
+  const token = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+  /* v8 ignore start -- module-init: REQUIRED_ENV guarantees both vars at boot; the branch is unreachable in any booted test @preserve */
+  if (url === undefined || url === '') throw new Error('INTEXURAOS_LLM_USAGE_SERVICE_URL not set');
+  if (token === undefined || token === '') throw new Error('INTEXURAOS_INTERNAL_AUTH_TOKEN not set');
+  /* v8 ignore stop @preserve */
+  usageSinkSingleton = new HttpInternalAuthUsageSink({
+    usageServiceUrl: url,
+    internalAuthToken: token,
+    service: 'mobile-notifications-service',
+    component: 'digest',
+    logger,
+  });
+  return usageSinkSingleton;
+}
+
+/**
+ * Test-only hook to reset the memoized sink between test cases so env var
+ * changes take effect. Do not call from production code.
+ */
+export function __resetUsageSinkForTests(): void {
+  usageSinkSingleton = null;
 }
 
 export function getSelfBaseUrl(): string {
@@ -155,7 +189,7 @@ function buildLlmClient(userId: string): ReturnType<typeof createLlmClient> {
     model: model as LlmClientConfig['model'],
     userId,
     logger,
-    usageSink: { log: () => Promise.resolve() },
+    usageSink: getUsageSink(),
     ownerType: 'system',
   };
   return createLlmClient(config);

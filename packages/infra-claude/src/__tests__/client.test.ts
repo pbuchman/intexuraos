@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
-import type { UsageSink } from '@intexuraos/llm-pricing';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -9,7 +9,7 @@ const mockLogger: Logger = {
   debug: vi.fn(),
 };
 
-const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
+const mockUsageSink = new FakeUsageSink();
 
 const mockMessagesCreate = vi.fn();
 
@@ -30,14 +30,23 @@ vi.mock('@anthropic-ai/sdk', () => {
   return { default: MockAnthropic };
 });
 
-const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
-
-vi.mock('@intexuraos/llm-pricing', () => ({
-  logUsage: vi.fn().mockResolvedValue(undefined),
-  createUsageLogger: vi.fn().mockReturnValue({
-    log: mockUsageLoggerLog,
-  }),
+// Hoisted so the vi.mock factory below can reference it (vi.mock is hoisted
+// to the top of the file; plain `const` bindings are not).
+const { mockUsageLoggerLog } = vi.hoisted(() => ({
+  mockUsageLoggerLog: vi.fn().mockResolvedValue(undefined),
 }));
+
+vi.mock('@intexuraos/llm-pricing', async (): Promise<typeof import('@intexuraos/llm-pricing')> => {
+  const actual =
+    await vi.importActual<typeof import('@intexuraos/llm-pricing')>('@intexuraos/llm-pricing');
+  return {
+    ...actual,
+    logUsage: vi.fn().mockResolvedValue(undefined),
+    createUsageLogger: vi.fn().mockReturnValue({
+      log: mockUsageLoggerLog,
+    }),
+  } as typeof import('@intexuraos/llm-pricing');
+});
 
 const { createClaudeClient } = await import('../client.js');
 

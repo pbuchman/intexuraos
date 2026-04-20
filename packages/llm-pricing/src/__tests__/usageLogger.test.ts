@@ -4,10 +4,30 @@ import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 
 import {
   UsageLogger,
+  UsageSink,
   createUsageLogger,
   isUsageLoggingEnabled,
   NoopUsageSink,
+  type UsageLogParams,
 } from '../usageLogger.js';
+
+/**
+ * Spy-instrumented UsageSink for these tests.
+ *
+ * We subclass the nominally-branded UsageSink so TypeScript accepts the value
+ * wherever a real sink is required, and expose `log` as a `vi.fn()` so
+ * assertions can verify invocation. An inline `{ log: vi.fn() }` would fail
+ * to satisfy the branded type — which is precisely the point.
+ */
+class SpyUsageSink extends UsageSink {
+  override log = vi.fn<(params: UsageLogParams) => Promise<void>>().mockResolvedValue(undefined);
+}
+
+class ThrowingSpyUsageSink extends UsageSink {
+  override log = vi
+    .fn<(params: UsageLogParams) => Promise<void>>()
+    .mockRejectedValue(new Error('sink boom'));
+}
 
 /**
  * Fake logger for tests.
@@ -108,7 +128,7 @@ describe('usageLogger', () => {
       });
 
       it('uses the provided sink when given', () => {
-        const customSink = { log: vi.fn().mockResolvedValue(undefined) };
+        const customSink = new SpyUsageSink();
         const usageLogger = new UsageLogger({ logger: fakeLogger, sink: customSink });
         expect(usageLogger.sink).toBe(customSink);
       });
@@ -116,14 +136,14 @@ describe('usageLogger', () => {
 
     describe('log', () => {
       it('delegates to the custom sink', async () => {
-        const sink = { log: vi.fn().mockResolvedValue(undefined) };
+        const sink = new SpyUsageSink();
         const usageLogger = new UsageLogger({ logger: fakeLogger, sink });
         await usageLogger.log(baseParams);
         expect(sink.log).toHaveBeenCalledWith(baseParams);
       });
 
       it('logs usage via logger on success', async () => {
-        const sink = { log: vi.fn().mockResolvedValue(undefined) };
+        const sink = new SpyUsageSink();
         const usageLogger = new UsageLogger({ logger: fakeLogger, sink });
         await usageLogger.log(baseParams);
 
@@ -144,7 +164,7 @@ describe('usageLogger', () => {
       });
 
       it('includes errorMessage when success is false', async () => {
-        const sink = { log: vi.fn().mockResolvedValue(undefined) };
+        const sink = new SpyUsageSink();
         const usageLogger = new UsageLogger({ logger: fakeLogger, sink });
         await usageLogger.log({ ...baseParams, success: false, errorMessage: 'boom' });
 
@@ -155,7 +175,7 @@ describe('usageLogger', () => {
       });
 
       it('logs an error when the sink throws', async () => {
-        const sink = { log: vi.fn().mockRejectedValue(new Error('sink boom')) };
+        const sink = new ThrowingSpyUsageSink();
         const usageLogger = new UsageLogger({ logger: fakeLogger, sink });
         await usageLogger.log(baseParams);
 
@@ -167,7 +187,7 @@ describe('usageLogger', () => {
 
       it('skips logging when disabled via env var', async () => {
         process.env['INTEXURAOS_LOG_LLM_USAGE'] = 'false';
-        const sink = { log: vi.fn().mockResolvedValue(undefined) };
+        const sink = new SpyUsageSink();
         const usageLogger = new UsageLogger({ logger: fakeLogger, sink });
         await usageLogger.log(baseParams);
 
@@ -184,6 +204,32 @@ describe('usageLogger', () => {
     });
   });
 
+  describe('UsageSink nominal brand (INT-1421 regression guard)', () => {
+    // The bug that triggered INT-1421 was someone writing
+    //   `usageSink: { log: () => Promise.resolve() }`
+    // inline at digestRoutes.ts:158. A structural interface permitted that,
+    // digest LLM calls never reached llm-usage-service, and the regression
+    // went unnoticed in production. These tests encode the contract that a
+    // valid UsageSink MUST be a subclass instance (never an ad-hoc object).
+    it('NoopUsageSink is instanceof UsageSink', () => {
+      expect(new NoopUsageSink()).toBeInstanceOf(UsageSink);
+    });
+
+    it('custom subclass of UsageSink is instanceof UsageSink', () => {
+      expect(new SpyUsageSink()).toBeInstanceOf(UsageSink);
+    });
+
+    it('inline object literal is NOT instanceof UsageSink', () => {
+      // The runtime counterpart of the compile-time brand check. A bespoke
+      // `{ log: () => Promise.resolve() }` is rejected here; at compile time
+      // it is rejected because the class has a private `__usageSinkBrand`
+      // field that object literals cannot synthesize. If this assertion ever
+      // starts failing, the brand has been removed — restore it.
+      const bogus = { log: (): Promise<void> => Promise.resolve() };
+      expect(bogus instanceof UsageSink).toBe(false);
+    });
+  });
+
   describe('createUsageLogger factory', () => {
     it('creates UsageLogger with provided logger and sink', () => {
       const sink = new NoopUsageSink();
@@ -194,7 +240,7 @@ describe('usageLogger', () => {
     });
 
     it('passes through a custom sink', () => {
-      const customSink = { log: vi.fn().mockResolvedValue(undefined) };
+      const customSink = new SpyUsageSink();
       const usageLogger = createUsageLogger({ logger: fakeLogger, sink: customSink });
       expect(usageLogger.sink).toBe(customSink);
     });
@@ -202,7 +248,7 @@ describe('usageLogger', () => {
 
   describe('UsageLogger.log forwarding new optional fields', () => {
     it('forwards ownerType, clientName, providerReportedUsd to the sink when provided', async () => {
-      const fakeSink = { log: vi.fn().mockResolvedValue(undefined) };
+      const fakeSink = new SpyUsageSink();
       const logger = createUsageLogger({ logger: fakeLogger, sink: fakeSink });
 
       await logger.log({
@@ -222,19 +268,19 @@ describe('usageLogger', () => {
     });
 
     it('omits new optional fields from the sink call when not provided', async () => {
-      const fakeSink = { log: vi.fn().mockResolvedValue(undefined) };
+      const fakeSink = new SpyUsageSink();
       const logger = createUsageLogger({ logger: fakeLogger, sink: fakeSink });
 
       await logger.log(baseParams);
 
-      const callArg = fakeSink.log.mock.calls[0]?.[0] as Record<string, unknown>;
+      const callArg = fakeSink.log.mock.calls[0]?.[0] as unknown as Record<string, unknown>;
       expect(callArg['ownerType']).toBeUndefined();
       expect(callArg['clientName']).toBeUndefined();
       expect(callArg['providerReportedUsd']).toBeUndefined();
     });
 
     it('forwards promptType to the sink when provided', async () => {
-      const fakeSink = { log: vi.fn().mockResolvedValue(undefined) };
+      const fakeSink = new SpyUsageSink();
       const logger = createUsageLogger({ logger: fakeLogger, sink: fakeSink });
 
       await logger.log({
@@ -250,7 +296,7 @@ describe('usageLogger', () => {
     });
 
     it('includes promptType in structured log when provided', async () => {
-      const fakeSink = { log: vi.fn().mockResolvedValue(undefined) };
+      const fakeSink = new SpyUsageSink();
       const logger = createUsageLogger({ logger: fakeLogger, sink: fakeSink });
 
       await logger.log({
@@ -267,7 +313,7 @@ describe('usageLogger', () => {
     });
 
     it('omits promptType from structured log when not provided', async () => {
-      const fakeSink = { log: vi.fn().mockResolvedValue(undefined) };
+      const fakeSink = new SpyUsageSink();
       const logger = createUsageLogger({ logger: fakeLogger, sink: fakeSink });
 
       await logger.log(baseParams);

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 import { LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
-import type { UsageSink } from '@intexuraos/llm-pricing';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -11,16 +11,23 @@ const mockLogger: Logger = {
   debug: vi.fn(),
 };
 
-const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
+const mockUsageSink = new FakeUsageSink();
 
-const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
-
-vi.mock('@intexuraos/llm-pricing', () => ({
-  logUsage: vi.fn().mockResolvedValue(undefined),
-  createUsageLogger: vi.fn().mockReturnValue({
-    log: mockUsageLoggerLog,
-  }),
+const { mockUsageLoggerLog } = vi.hoisted(() => ({
+  mockUsageLoggerLog: vi.fn().mockResolvedValue(undefined),
 }));
+
+vi.mock('@intexuraos/llm-pricing', async (): Promise<typeof import('@intexuraos/llm-pricing')> => {
+  const actual =
+    await vi.importActual<typeof import('@intexuraos/llm-pricing')>('@intexuraos/llm-pricing');
+  return {
+    ...actual,
+    logUsage: vi.fn().mockResolvedValue(undefined),
+    createUsageLogger: vi.fn().mockReturnValue({
+      log: mockUsageLoggerLog,
+    }),
+  } as typeof import('@intexuraos/llm-pricing');
+});
 
 const { createOpenRouterClient } = await import('../client.js');
 
@@ -902,7 +909,7 @@ describe('createOpenRouterClient', () => {
           usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
         });
 
-      const fakeSink = { log: vi.fn().mockResolvedValue(undefined) };
+      const fakeSink = new FakeUsageSink();
       const client = createOpenRouterClient({
         apiKey: 'test-key',
         model: TEST_MODEL,

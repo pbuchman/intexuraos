@@ -1,16 +1,22 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import nock from 'nock';
 import { LlmModels } from '@intexuraos/llm-contract';
-import type { UsageSink } from '@intexuraos/llm-pricing';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 import { GeminiPromptAdapter } from '../infra/llm/GeminiPromptAdapter.js';
 import type { Logger } from '@intexuraos/common-core';
 
-vi.mock('@intexuraos/llm-pricing', (): object => ({
-  logUsage: vi.fn().mockResolvedValue(undefined),
-  createUsageLogger: vi.fn().mockReturnValue({
-    log: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
+vi.mock('@intexuraos/llm-pricing', async (): Promise<typeof import('@intexuraos/llm-pricing')> => {
+  const actual = await vi.importActual<typeof import('@intexuraos/llm-pricing')>(
+    '@intexuraos/llm-pricing',
+  );
+  return {
+    ...actual,
+    logUsage: vi.fn().mockResolvedValue(undefined),
+    createUsageLogger: vi.fn().mockReturnValue({
+      log: vi.fn().mockResolvedValue(undefined),
+    }),
+  } as typeof import('@intexuraos/llm-pricing');
+});
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -19,7 +25,7 @@ const mockLogger: Logger = {
   debug: vi.fn(),
 };
 
-const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
+const mockUsageSink = new FakeUsageSink();
 
 describe('GeminiPromptAdapter', () => {
   beforeAll(() => {
