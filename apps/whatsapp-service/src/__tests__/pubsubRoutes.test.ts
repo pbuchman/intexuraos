@@ -11,6 +11,7 @@ import {
   FakeLinkPreviewFetcherPort,
   FakeMediaStorage,
   FakeMessageSender,
+  FakeNotificationPreferencesRepository,
   FakeOutboundMessageRepository,
   FakePhoneVerificationRepository,
   FakeThumbnailGeneratorPort,
@@ -70,6 +71,7 @@ describe('Pub/Sub Routes', () => {
   let messageRepository: FakeWhatsAppMessageRepository;
   let userMappingRepository: FakeWhatsAppUserMappingRepository;
   let outboundMessageRepository: FakeOutboundMessageRepository;
+  let prefs: FakeNotificationPreferencesRepository;
 
   beforeEach(async () => {
     messageSender = new FakeMessageSender();
@@ -78,6 +80,7 @@ describe('Pub/Sub Routes', () => {
     userMappingRepository = new FakeWhatsAppUserMappingRepository();
 
     outboundMessageRepository = new FakeOutboundMessageRepository();
+    prefs = new FakeNotificationPreferencesRepository();
 
     setServices({
       webhookEventRepository: new FakeWhatsAppWebhookEventRepository(),
@@ -91,6 +94,7 @@ describe('Pub/Sub Routes', () => {
       linkPreviewFetcher: new FakeLinkPreviewFetcherPort(),
       outboundMessageRepository,
       phoneVerificationRepository: new FakePhoneVerificationRepository(),
+      notificationPreferencesRepository: prefs,
     });
 
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;

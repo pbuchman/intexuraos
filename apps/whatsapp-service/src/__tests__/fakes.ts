@@ -25,6 +25,9 @@ import type {
   MediaCleanupEvent,
   MediaStoragePort,
   MediaUrlInfo,
+  NotificationLevel,
+  NotificationPreferences,
+  NotificationPreferencesRepository,
   OutboundMessage,
   OutboundMessageRepository,
   PhoneVerification,
@@ -1430,5 +1433,47 @@ export class FakePhoneVerificationRepository implements PhoneVerificationReposit
     this.shouldFailCountRecent = false;
     this.shouldFailIncrementAttempts = false;
     this.shouldFailUpdateStatus = false;
+  }
+}
+
+/**
+ * Fake NotificationPreferencesRepository for testing.
+ */
+export class FakeNotificationPreferencesRepository
+  implements NotificationPreferencesRepository
+{
+  private levels = new Map<string, NotificationLevel>();
+  private failNextError: WhatsAppError | null = null;
+
+  setLevel(userId: string, level: NotificationLevel): void {
+    this.levels.set(userId, level);
+  }
+
+  failNext(error: WhatsAppError): void {
+    this.failNextError = error;
+  }
+
+  async getPreferences(
+    userId: string
+  ): Promise<Result<NotificationPreferences, WhatsAppError>> {
+    if (this.failNextError !== null) {
+      const error = this.failNextError;
+      this.failNextError = null;
+      return err(error);
+    }
+    return ok({ notificationLevel: this.levels.get(userId) ?? 'all' });
+  }
+
+  async savePreferences(
+    userId: string,
+    level: NotificationLevel
+  ): Promise<Result<NotificationPreferences, WhatsAppError>> {
+    this.levels.set(userId, level);
+    return ok({ notificationLevel: level });
+  }
+
+  clear(): void {
+    this.levels.clear();
+    this.failNextError = null;
   }
 }
