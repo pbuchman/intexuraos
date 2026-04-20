@@ -16,6 +16,7 @@ import {
   ExtractLinkPreviewsUseCase,
   HandleTranscriptionCompletedUseCase,
   ProcessWebhookEventUseCase,
+  shouldDeliverMessage,
 } from '../domain/whatsapp/index.js';
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { WebhookPayload } from './schemas.js';
@@ -206,6 +207,34 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           },
           'Found phone number for user'
         );
+
+        const { notificationPreferencesRepository } = getServices();
+        const prefsResult = await notificationPreferencesRepository.getPreferences(
+          eventData.userId
+        );
+        const level = prefsResult.ok ? prefsResult.value.notificationLevel : 'all';
+        if (!prefsResult.ok) {
+          request.log.warn(
+            {
+              userId: eventData.userId,
+              correlationId: eventData.correlationId,
+              error: prefsResult.error.message,
+            },
+            'Failed to read notification preferences — falling back to deliver'
+          );
+        }
+        if (!shouldDeliverMessage({ level, important: eventData.important })) {
+          request.log.info(
+            {
+              userId: eventData.userId,
+              correlationId: eventData.correlationId,
+              level,
+              important: eventData.important ?? false,
+            },
+            'Dropping non-important WhatsApp message per user preference'
+          );
+          return await reply.ok({});
+        }
 
         const { messageSender, outboundMessageRepository } = getServices();
 
