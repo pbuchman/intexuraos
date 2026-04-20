@@ -12,6 +12,8 @@
  * GET    /whatsapp/messages/:message_id/media     → ./messageMediaRoutes.ts
  * GET    /whatsapp/messages/:message_id/thumbnail → ./messageMediaRoutes.ts
  * DELETE /whatsapp/messages/:message_id           → ./messageMediaRoutes.ts
+ * GET    /whatsapp/preferences        → ./preferencesRoutes.ts
+ * PUT    /whatsapp/preferences        → ./preferencesRoutes.ts
  * POST   /internal/whatsapp/pubsub/send-message   → ./pubsubRoutes.ts
  * ─────────────────────────────────────────────────────────────
  */

@@ -41,3 +41,8 @@ export {
   countRecentVerificationsByPhone,
   createVerificationWithChecks,
 } from './phoneVerificationRepository.js';
+
+export {
+  getPreferences,
+  savePreferences,
+} from './notificationPreferencesRepository.js';

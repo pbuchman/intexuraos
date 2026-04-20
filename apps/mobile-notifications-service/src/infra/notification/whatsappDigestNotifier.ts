@@ -47,6 +47,10 @@ export class WhatsAppDigestNotifier implements DigestNotifier {
       message,
       ctaUrl,
       correlationId,
+      // INT-1418 (plan follow-up #1881): the digest is the curated daily
+      // summary the user explicitly opted into — losing it under
+      // notificationLevel='important' defeats the digest's purpose.
+      important: true,
     });
 
     if (!published.ok) {
