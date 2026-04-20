@@ -175,6 +175,7 @@ export function createHandleApprovalReplyUseCase(
         userId,
         message: 'This action is no longer available. It may have been deleted or already processed.',
         correlationId: `approval-not-found-${targetActionId}`,
+        important: true,
       });
       return ok({ matched: false });
     }
@@ -242,6 +243,7 @@ export function createHandleApprovalReplyUseCase(
       message: `Please use the buttons to approve or reject. If buttons expired, here they are again:`,
       buttons,
       correlationId: `approval-resend-${action.id}`,
+      important: true,
     });
 
     return ok({

@@ -56,6 +56,7 @@ export async function handleProceedToImplementationButton(
       userId,
       message,
       correlationId: `proceed-implementation-error-${taskId}`,
+      important: true,
     });
     if (!errorNotifyResult.ok) {
       logger.warn({ taskId, error: errorNotifyResult.error.message }, 'Failed to send error notification to user');
@@ -73,6 +74,7 @@ export async function handleProceedToImplementationButton(
     userId,
     message: `🚀 Starting implementation for your task!\n\nYou'll receive another message when it's complete.`,
     correlationId: `proceed-implementation-success-${taskId}`,
+    important: true,
   });
   if (!successNotifyResult.ok) {
     logger.warn({ taskId, error: successNotifyResult.error.message }, 'Failed to send success notification to user');
