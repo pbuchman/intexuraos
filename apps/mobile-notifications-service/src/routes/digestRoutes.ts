@@ -267,7 +267,9 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const JWT_STRUCTURE = /^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
       const isOidcAuth = typeof authHeader === 'string' && JWT_STRUCTURE.test(authHeader);
 
-      if (!isOidcAuth) {
+      if (isOidcAuth) {
+        req.log.info('Authenticated via OIDC token (Cloud Scheduler)');
+      } else {
         const authResult = validateInternalAuth(req);
         if (!authResult.valid) {
           return await reply.fail('UNAUTHORIZED', 'missing internal auth');
