@@ -169,6 +169,7 @@ export const preferencesRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       }
 
       const parsed = putSchema.safeParse(request.body);
+      /* v8 ignore start -- schema: Fastify schema validation rejects invalid bodies before this handler runs, so zod's !success branch is unreachable from tests; the global setupSentryErrorHandler returns 400 INVALID_REQUEST first and this zod call cannot be triggered @preserve */
       if (!parsed.success) {
         const errors = parsed.error.errors.map((e) => ({
           path: e.path.join('.'),
@@ -176,6 +177,7 @@ export const preferencesRoutes: FastifyPluginCallback = (fastify, _opts, done) =
         }));
         return await reply.fail('INVALID_REQUEST', 'Validation failed', undefined, { errors });
       }
+      /* v8 ignore stop @preserve */
 
       const level: NotificationLevel = parsed.data.notificationLevel;
       const { notificationPreferencesRepository } = getServices();

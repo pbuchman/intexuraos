@@ -1468,6 +1468,11 @@ export class FakeNotificationPreferencesRepository
     userId: string,
     level: NotificationLevel
   ): Promise<Result<NotificationPreferences, WhatsAppError>> {
+    if (this.failNextError !== null) {
+      const error = this.failNextError;
+      this.failNextError = null;
+      return err(error);
+    }
     this.levels.set(userId, level);
     return ok({ notificationLevel: level });
   }

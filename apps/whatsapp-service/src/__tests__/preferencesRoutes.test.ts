@@ -184,6 +184,29 @@ describe('WhatsApp Preferences Routes', () => {
       expect(getBody.data.notificationLevel).toBe('important');
     });
 
+    it('returns 502 when savePreferences fails with downstream error', async () => {
+      const token = await createToken({ sub: 'user-save-downstream' });
+      ctx.notificationPreferencesRepository.failNext({
+        code: 'INTERNAL_ERROR',
+        message: 'Simulated savePreferences failure',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'PUT',
+        url: '/whatsapp/preferences',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { notificationLevel: 'important' },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+
     it('supports switching back from important to all', async () => {
       const token = await createToken({ sub: 'user-switch' });
 
