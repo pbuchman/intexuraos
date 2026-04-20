@@ -124,5 +124,10 @@ export {
   type ProcessWebhookEventDeps,
 } from './usecases/processWebhookEventUseCase.js';
 
+export {
+  shouldDeliverMessage,
+  type ShouldDeliverMessageInput,
+} from './usecases/shouldDeliverMessage.js';
+
 // Utilities
 export { normalizePhoneNumber } from './utils/index.js';
