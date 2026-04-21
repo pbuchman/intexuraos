@@ -105,6 +105,21 @@ describe('queryUsage', () => {
     }
   });
 
+  it('rejects request.promptType as a groupBy field (DailyUsageAggregate does not track promptType)', async () => {
+    const result = await queryUsage(
+      { logger, usageAggregateRepository: aggregateRepo },
+      {
+        timeRange: { from: '2026-04-10T00:00:00Z', to: '2026-04-10T23:59:59Z' },
+        groupBy: ['request.promptType'],
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_GROUP_BY');
+    }
+  });
+
   it('rejects invalid sortBy fields', async () => {
     const result = await queryUsage(
       { logger, usageAggregateRepository: aggregateRepo },
