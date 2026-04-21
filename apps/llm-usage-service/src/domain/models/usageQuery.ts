@@ -33,7 +33,6 @@ export const ALLOWED_GROUP_BY = [
   'request.model',
   'request.operation',
   'request.success',
-  'request.promptType',
 ] as const;
 
 export const ALLOWED_SORT_FIELDS = [
