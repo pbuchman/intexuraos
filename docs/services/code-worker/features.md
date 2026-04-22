@@ -37,7 +37,7 @@ Codex tasks support configurable reasoning effort (`codex-xhigh` for complex pro
 
 Most retry systems are amnesiacs. When an attempt fails — a test breaks, a timeout hits, the approach needs rethinking — they tear everything down and start from scratch. The agent reinstalls dependencies, re-reads the codebase, re-discovers the same dead ends, and burns through the same forty minutes of setup before it can try something new.
 
-Code Worker does not restart. It recovers. The environment stays alive between attempts. The orchestrator triggers each retry as a new command inside the same running container, resuming the agent's previous session with full context about what it tried and why it failed. Installed packages persist. The codebase is already indexed. The session history is intact.
+Code Worker does not restart. It recovers. The environment stays alive between attempts. The orchestrator triggers each retry as a new command inside the same running container, resuming the agent's previous session by explicit session ID — so the agent picks up with full context about what it tried and why it failed. Installed packages persist. The codebase is already indexed. The session history is intact.
 
 This is not a small optimization. It is the difference between an agent that takes three cold starts to solve a hard problem — each one burning setup time and API tokens — and an agent that accumulates knowledge across attempts, treating each failure as information rather than a reason to forget everything.
 

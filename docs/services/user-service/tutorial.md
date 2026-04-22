@@ -2,7 +2,7 @@
 
 > **Time:** 20–30 minutes
 > **Prerequisites:** Node.js 20+, IntexuraOS dev environment, Auth0 tenant
-> **You'll learn:** How to authenticate, manage LLM API keys (including OpenRouter), set default models, connect Google and GitHub OAuth, configure transcription preferences, and set timezone
+> **You'll learn:** How to authenticate, manage LLM API keys (including OpenRouter), set default and fallback models, connect Google and GitHub OAuth, configure transcription preferences, and set timezone
 
 ---
 
@@ -13,7 +13,7 @@ A working integration that:
 - Authenticates via the device code flow
 - Stores and validates LLM API keys (5 providers including OpenRouter)
 - Tests keys with real provider calls
-- Sets a default LLM model for all agents
+- Sets a default LLM model and an optional fallback model for all agents
 - Configures transcription preferences
 - Sets timezone preferences
 - Connects Google and GitHub accounts
@@ -227,6 +227,7 @@ curl https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
   "success": true,
   "data": {
     "defaultModel": null,
+    "fallbackModel": null,
     "google": null,
     "openai": "sk-p...XXXX",
     "anthropic": null,
@@ -311,17 +312,17 @@ curl -X DELETE https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/l
 }
 ```
 
-If the deleted provider was the default model's provider, the default model is automatically cleared.
+If the deleted provider was used by the default or fallback model, those preferences are automatically cleared.
 
 ---
 
-## Part 6: Set Default LLM Model (3 minutes)
+## Part 6: Set Default and Fallback LLM Models (5 minutes)
 
-Configure which fast model all agents use by default.
+Configure which models all agents use by default and as a fallback.
 
 ### Step 6.1: Set a default model
 
-The service validates that the model is a supported fast model AND that you have an API key configured for the model's provider.
+The service validates that the model passes `isDefaultEligibleModel()` AND that you have an API key configured for the model's provider.
 
 ```bash
 curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
@@ -338,9 +339,50 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
 {
   "success": true,
   "data": {
-    "defaultModel": "claude-haiku-3-5"
+    "defaultModel": "claude-haiku-3-5",
+    "fallbackModel": null
   }
 }
+```
+
+### Step 6.2: Set a fallback model
+
+The fallback must differ from the default and must have an API key configured for its provider.
+
+```bash
+curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "defaultModel": "claude-haiku-3-5",
+    "fallbackModel": "gpt-4o-mini"
+  }'
+```
+
+**Success response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "defaultModel": "claude-haiku-3-5",
+    "fallbackModel": "gpt-4o-mini"
+  }
+}
+```
+
+### Step 6.3: Clear the fallback model
+
+Pass `null` to remove the fallback.
+
+```bash
+curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "defaultModel": "claude-haiku-3-5",
+    "fallbackModel": null
+  }'
 ```
 
 **No API key for provider:**
@@ -355,9 +397,21 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
 }
 ```
 
+**Fallback same as default:**
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Fallback model must be different from the default model."
+  }
+}
+```
+
 ### Checkpoint
 
-All agents now use "claude-haiku-3-5" by default, and the service ensures the API key exists for Anthropic.
+All agents now use "claude-haiku-3-5" by default and fall back to "gpt-4o-mini" when Anthropic is unavailable.
 
 ---
 
@@ -636,7 +690,7 @@ curl https://user-service.intexuraos.com/internal/users/by-github-username/octoc
 }
 ```
 
-### Step 11.5: Get user preferences (includes timezone)
+### Step 11.5: Get user preferences (includes fallback model and timezone)
 
 ```bash
 curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
@@ -650,7 +704,8 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
   "success": true,
   "data": {
     "llmPreferences": {
-      "defaultModel": "claude-haiku-3-5"
+      "defaultModel": "claude-haiku-3-5",
+      "fallbackModel": "gpt-4o-mini"
     },
     "transcriptionPreferences": {
       "provider": "speechmatics"
@@ -705,6 +760,20 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 ```
 
 **Solution:** Add an API key for the model's provider before setting the default model.
+
+### Error: Fallback same as default
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Fallback model must be different from the default model."
+  }
+}
+```
+
+**Solution:** Choose a fallback model from a different provider or a different model than the default.
 
 ### Error: Rate limit
 
@@ -789,8 +858,8 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 | Token refresh fails      | Access token expired            | User may have revoked access; re-authentication required         |
 | Rate limit misdiagnosed  | "Invalid API key" for 429 error | Rate limits are correctly identified — ensure service is current |
 | Test costs money         | Charges on provider account     | Test endpoint makes real API calls; use sparingly                |
-| Pricing fetch fails      | Service fails to start          | Ensure app-settings-service is running and accessible            |
-| Default model rejected   | 400 INVALID_REQUEST             | Model must pass `isFastModel()` AND have API key set             |
+| Default model rejected   | 400 INVALID_REQUEST             | Model must pass `isDefaultEligibleModel()` AND have API key set  |
+| Fallback model rejected  | 400 INVALID_REQUEST             | Fallback must differ from default AND have API key for provider  |
 | GitHub token not found   | 404 NOT_FOUND                   | User must connect GitHub account first                           |
 | OpenRouter key rejected  | 400 INVALID_REQUEST             | Verify key starts with `sk-or-` and is active on OpenRouter      |
 | Invalid timezone         | 400 INVALID_REQUEST             | Use IANA timezone strings, not UTC offsets or abbreviations      |
@@ -812,7 +881,7 @@ Now that you understand the basics:
 ### Easy
 
 1. Get the Auth configuration
-2. List your LLM API key status (now includes OpenRouter)
+2. List your LLM API key status (now includes fallbackModel)
 3. Check Google and GitHub OAuth connection status
 
 ### Medium
@@ -820,7 +889,7 @@ Now that you understand the basics:
 1. Complete the device code flow end-to-end
 2. Add an API key and verify it's encrypted in Firestore
 3. Test an API key and verify the result is stored
-4. Set a default model and read it back via the internal endpoint
+4. Set a default model and a fallback model, then read them back via the internal endpoint
 5. Set a transcription provider preference
 6. Set a timezone preference and verify via internal settings endpoint
 
@@ -830,6 +899,7 @@ Now that you understand the basics:
 2. Implement a service that fetches internal API keys (including OpenRouter)
 3. Create a full OAuth flow handler for calendar integration
 4. Connect GitHub and use the internal endpoint to find a user by username
+5. Set default + fallback models, delete the fallback provider's API key, verify the cascade clears only the fallback
 
 <details>
 <summary>Solutions</summary>
@@ -854,7 +924,21 @@ curl -X POST https://user-service.intexuraos.com/users/$UID/settings/llm-keys/op
   -H "Authorization: Bearer $TOKEN"
 ```
 
-### Exercise 3: Medium — Set Timezone
+### Exercise 3: Medium — Set Default + Fallback Models
+
+```bash
+# Set both models
+curl -X PATCH https://user-service.intexuraos.com/users/$UID/settings \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"defaultModel": "claude-haiku-3-5", "fallbackModel": "gpt-4o-mini"}'
+
+# Verify via internal endpoint
+curl https://user-service.intexuraos.com/internal/users/$UID/settings \
+  -H "X-Internal-Auth: $INTERNAL_AUTH_TOKEN"
+```
+
+### Exercise 4: Medium — Set Timezone
 
 ```bash
 # Set timezone
@@ -868,7 +952,7 @@ curl https://user-service.intexuraos.com/internal/users/$UID/settings \
   -H "X-Internal-Auth: $INTERNAL_AUTH_TOKEN"
 ```
 
-### Exercise 4: Hard — CLI Device Code Flow
+### Exercise 5: Hard — CLI Device Code Flow
 
 ```typescript
 async function deviceLogin(): Promise<string> {
@@ -903,13 +987,33 @@ async function deviceLogin(): Promise<string> {
 }
 ```
 
-### Exercise 5: Hard — Find User by GitHub Username
+### Exercise 6: Hard — Cascade Test
 
 ```bash
-# Connect GitHub first (via OAuth flow in browser)
-# Then look up the user by their GitHub username
-curl https://user-service.intexuraos.com/internal/users/by-github-username/octocat \
-  -H "X-Internal-Auth: $INTERNAL_AUTH_TOKEN"
+# Set up: add OpenAI and Anthropic keys
+curl -X PATCH https://user-service.intexuraos.com/users/$UID/settings/llm-keys \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"provider": "openai", "apiKey": "sk-proj-..."}'
+
+curl -X PATCH https://user-service.intexuraos.com/users/$UID/settings/llm-keys \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"provider": "anthropic", "apiKey": "sk-ant-..."}'
+
+# Set default (Anthropic) + fallback (OpenAI)
+curl -X PATCH https://user-service.intexuraos.com/users/$UID/settings \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"defaultModel": "claude-haiku-3-5", "fallbackModel": "gpt-4o-mini"}'
+
+# Delete OpenAI key — fallback should be cleared, default preserved
+curl -X DELETE https://user-service.intexuraos.com/users/$UID/settings/llm-keys/openai \
+  -H "Authorization: Bearer $TOKEN"
+
+# Verify: defaultModel still set, fallbackModel cleared
+curl https://user-service.intexuraos.com/users/$UID/settings/llm-keys \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 </details>

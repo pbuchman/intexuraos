@@ -28,7 +28,7 @@ After enrichment, the system reads the page and generates a concise AI summary. 
 
 ### WhatsApp Delivery
 
-You do not have to check a dashboard to see your summary. The moment the AI finishes, the summary is sent directly to your WhatsApp — no need to open another app or remember to follow up.
+You do not have to check a dashboard to see your summary. The moment the AI finishes, the summary is sent directly to your WhatsApp as an important message — ensuring it is never suppressed by notification preferences. No need to open another app or remember to follow up.
 
 ### Tag-Based Organization
 
@@ -43,7 +43,7 @@ The system will not save the same link twice. If you bookmark a URL you have alr
 - **Zero-friction capture** — Save links from WhatsApp or other platform agents without switching apps
 - **Rich preview cards** — Title, description, images, and site information extracted automatically from every page
 - **AI summaries on arrival** — Every bookmark comes with a concise explanation of what the page contains
-- **WhatsApp notification** — Summaries delivered to your chat the moment they are ready
+- **WhatsApp notification** — Summaries delivered to your chat the moment they are ready, marked as important so they always reach you
 - **Tag-based filtering** — Organize by topic, project, or priority and find bookmarks when you need them
 - **Duplicate prevention** — The same URL is never saved twice; the system returns the existing bookmark
 - **Archive and restore** — Hide finished bookmarks from your default view, bring them back when needed

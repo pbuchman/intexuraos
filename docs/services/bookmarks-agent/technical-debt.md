@@ -1,7 +1,7 @@
 # Bookmarks Agent — Technical Debt
 
-**Last Updated:** 2026-04-07
-**Analysis Run:** [2026-04-07 documentation-runs.md entry](../../documentation-runs.md)
+**Last Updated:** 2026-04-22
+**Analysis Run:** [2026-04-22 documentation-runs.md entry](../../documentation-runs.md)
 
 ---
 
@@ -38,7 +38,7 @@ Features that are planned but not yet implemented:
 2. **Annotation support** — User notes attached to bookmarks
 3. **Reading list queue** — Track read/unread status with time estimates
 4. **Summary regeneration** — Re-run AI summary on demand (currently only OG refresh via force-refresh)
-5. **Configurable WhatsApp notifications** — User preference to enable/disable summary delivery
+5. **Configurable WhatsApp notifications** — User preference to enable/disable summary delivery (currently always sent as important)
 6. **Public API enrichment trigger** — Allow enrichment from the public `POST /bookmarks` endpoint (currently only internal create triggers it)
 
 ---
@@ -69,7 +69,7 @@ All endpoints and use cases have test coverage. The 100% branch coverage thresho
 | Routes (internal)  | Tested | Integration tests via app.inject()                          |
 | Routes (Pub/Sub)   | Tested | Unit tests with mocked publishers, transient retry tests    |
 | Use cases          | Tested | Unit tests with dependency injection, transient error paths |
-| WhatsApp publisher | Tested | Mocked in summarizeBookmark tests                           |
+| WhatsApp publisher | Tested | Mocked in summarizeBookmark tests, important flag asserted  |
 | Image proxy        | Tested | Port/adapter pattern with dedicated tests                   |
 | Infrastructure     | Tested | Tested via route integration tests                          |
 | Server setup       | Tested | buildServer + health check tests                            |
@@ -124,6 +124,7 @@ const publishResult = await whatsAppSendPublisher.publishSendMessage({
   userId,
   message: summaryMessage,
   correlationId: `bookmark-${bookmarkId}`,
+  important: true,
 });
 
 if (!publishResult.ok) {
@@ -138,9 +139,11 @@ if (!publishResult.ok) {
 2. Users can view summaries in the web dashboard
 3. WhatsApp notification is a convenience feature
 
+The `important: true` flag ensures that when delivery succeeds, the message is never suppressed by the user's notification level preference.
+
 ### Event Ordering
 
-The three-stage pipeline (create → enrich → summarize) uses separate Pub/Sub topics. This ensures:
+The three-stage pipeline (create -> enrich -> summarize) uses separate Pub/Sub topics. This ensures:
 
 1. Each stage can fail independently
 2. Retries do not re-process earlier stages
@@ -174,7 +177,14 @@ The public `POST /bookmarks` endpoint does not trigger enrichment — only the i
 | INT-172 | Enrichment pipeline test coverage gaps      | Added comprehensive tests                                   | 2026-01-20 |
 | —       | OG fetch and summarization were synchronous | Split into async Pub/Sub pipeline                           | 2026-01-15 |
 
-### Recent Improvements (v3.4.0–v3.5.0)
+### Recent Improvements (v3.5.0–v3.6.0)
+
+| Improvement                          | Description                                                                                           | Date       |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------- | ---------- |
+| Important flag on WhatsApp summaries | Bookmark summary messages now published with `important: true` to bypass notification level filtering | 2026-04-20 |
+| Test fake important flag support     | FakeWhatsAppSendPublisher extended to record and assert on `important` field                          | 2026-04-20 |
+
+### Previous Improvements (v3.4.0–v3.5.0)
 
 | Improvement                              | Description                                                                                | Date       |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------ | ---------- |

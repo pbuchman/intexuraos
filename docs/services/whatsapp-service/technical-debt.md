@@ -1,7 +1,7 @@
 # WhatsApp Service — Technical Debt
 
-**Last Updated:** 2026-04-07
-**Analysis Run:** v3.5.0 documentation refresh
+**Last Updated:** 2026-04-22
+**Analysis Run:** v3.6.0 documentation refresh
 
 ---
 
@@ -55,14 +55,15 @@ All endpoints and use cases have test coverage. The service maintains >95% cover
 
 ### Coverage Areas
 
-- Routes: Fully tested (webhook, message, message media, mapping, pubsub, verification)
-- Use cases: All covered (ProcessWebhookEventUseCase, processAudioMessage, processImageMessage, handleTranscriptionCompleted, extractLinkPreviews)
+- Routes: Fully tested (webhook, message, message media, mapping, pubsub, verification, preferences)
+- Use cases: All covered (ProcessWebhookEventUseCase, processAudioMessage, processImageMessage, handleTranscriptionCompleted, extractLinkPreviews, shouldDeliverMessage)
 - Infrastructure: Tested via routes and dedicated infra tests
 - Approval reply handling, OutboundMessage tracking
 - Phone verification, interactive buttons
 - No-nonce buttons, reject intent, read receipts on button click
 - Event-driven transcription via srt-service, CTA URL messages
 - Sentry quota protection via SKIP_SENTRY_KEY in sender error paths
+- Notification preferences: GET/PUT endpoints, shouldDeliverMessage logic, importance filter in send-message handler, savePreferences failure path
 
 ### Test Files
 
@@ -72,15 +73,19 @@ Located in `apps/whatsapp-service/src/__tests__/`:
 - `webhookReceiver.test.ts` — Webhook HMAC signature validation and receipt
 - `webhookVerification.test.ts` — Webhook hub challenge verification
 - `messageRoutes.test.ts` — Message list operations
-- `messageMediaRoutes.test.ts` — Media URL, thumbnail URL, message deletion
+- `messageMediaRoutes.test.ts` — Media URL, thumbnail URL, message deletion (was `outboundMessageRepository.test.ts`)
 - `mappingRoutes.test.ts` — User phone number mapping (with verification gate)
-- `pubsubRoutes.test.ts` — Pub/Sub event handlers (including interactive messages, CTA URL, transcription-completed, 429 retry classification)
+- `pubsubRoutes.test.ts` — Pub/Sub event handlers (including interactive messages, CTA URL, transcription-completed, 429 retry classification, notification importance filter)
+- `preferencesRoutes.test.ts` — Notification preferences GET/PUT endpoints
 - `verificationRoutes.test.ts` — Phone verification send/confirm/status
 - `shared.test.ts` — Shared utility functions (extractButtonResponse with button_reply fix)
+- `domain/shouldDeliverMessage.test.ts` — shouldDeliverMessage use case
+- `domain/notificationPreferences.test.ts` — NotificationPreferences model and type guard
 - `usecases/processAudioMessage.test.ts` — Audio download and GCS storage
 - `usecases/processImageMessage.test.ts` — Image download, thumbnail, GCS storage
 - `usecases/handleTranscriptionCompleted.test.ts` — srt-service event handling (INT-684)
 - `usecases/extractLinkPreviews.test.ts` — Link preview extraction
+- `infra/notificationPreferencesRepository.test.ts` — Notification preferences repository
 - `infra/phoneVerificationRepository.test.ts` — Verification repository
 - `infra/sender.test.ts` — WhatsApp sender (sendTextMessage, sendInteractiveMessage, sendCtaUrlMessage)
 - `infra/**/*.test.ts` — Other infra implementations
@@ -170,6 +175,7 @@ No deprecated APIs or dependencies in use. Speechmatics direct dependency was re
 
 | Date       | Issue                                                             | Resolution                                                                  |
 | ---------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| 2026-04-21 | No user control over notification volume                          | Added notification preferences with importance filter (INT-1418)            |
 | 2026-03-29 | WhatsApp API errors exhausting Sentry quota                       | Added SKIP_SENTRY_KEY to all error log paths in sender.ts (INT-1172)        |
 | 2026-03-29 | 429 rate limit responses classified as permanent errors           | Excluded 429 from permanent error classification in send-message handler    |
 | 2026-03-24 | v8 ignore blocks lacked blocker keyword enforcement               | Enforced strict v8 ignore validation with blocker keyword checks            |

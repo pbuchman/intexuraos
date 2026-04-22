@@ -9,7 +9,7 @@
 | Attribute | Value                                                                                             |
 | --------- | ------------------------------------------------------------------------------------------------- |
 | Name      | bookmarks-agent                                                                                   |
-| Version   | 3.5.0                                                                                             |
+| Version   | 3.6.0                                                                                             |
 | Port      | 8124                                                                                              |
 | Role      | Link Intelligence Service                                                                         |
 | Goal      | Save, enrich, and organize bookmarks with OpenGraph metadata, AI summaries, and WhatsApp delivery |
@@ -52,7 +52,7 @@ interface CreateBookmarkOutput {
 **Endpoint:** `POST /internal/bookmarks`
 **Auth:** `X-Internal-Auth` header
 
-**When to use:** When creating a bookmark from another service (e.g., actions-agent). Triggers async enrichment pipeline (OG fetch -> AI summary -> WhatsApp notification).
+**When to use:** When creating a bookmark from another service (e.g., actions-agent). Triggers async enrichment pipeline (OG fetch -> AI summary -> WhatsApp notification with important flag).
 
 **Input Schema:**
 
@@ -272,7 +272,7 @@ interface Bookmark {
 1. POST /internal/bookmarks -> get bookmark ID
 2. Poll GET /bookmarks/:id until ogFetchStatus !== 'pending'
 3. Bookmark now has ogPreview and aiSummary populated
-4. User receives WhatsApp notification automatically
+4. User receives WhatsApp notification automatically (marked important)
 ```
 
 ### Pattern 2: Handle Duplicate URL
@@ -313,9 +313,9 @@ web-agent generates AI summary
       |                          | (transient error: 429, timeout)
 aiSummary populated              HTTP 503 -> Pub/Sub retries with backoff
       |
-Pub/Sub: whatsapp.message.send
+Pub/Sub: whatsapp.message.send (important: true)
       |
-WhatsApp message delivered to user
+WhatsApp message delivered to user (bypasses notification level filter)
 ```
 
 ---
@@ -369,20 +369,20 @@ const response = await fetch(`${BOOKMARKS_AGENT_URL}/internal/bookmarks`, {
 
 ### WhatsApp Delivery Message Format
 
-After AI summarization, the service publishes a WhatsApp message:
+After AI summarization, the service publishes a WhatsApp message with `important: true`:
 
 ```
-📑 *Bookmark Summary*
+*Bookmark Summary*
 
 *[Page Title]*
 
 [AI Summary]
 
-🔗 [Original URL]
+[Original URL]
 ```
 
-The title line is omitted if no title is available. `correlationId` is `bookmark-{bookmarkId}`.
+The title line is omitted if no title is available. `correlationId` is `bookmark-{bookmarkId}`. The `important: true` flag ensures the message bypasses notification level filtering and always reaches the user.
 
 ---
 
-**Last updated:** 2026-04-07 (v3.5.0 documentation refresh)
+**Last updated:** 2026-04-22 (v3.6.0 documentation refresh)

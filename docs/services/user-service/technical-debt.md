@@ -1,7 +1,7 @@
 # User Service - Technical Debt
 
-**Last Updated:** 2026-04-07
-**Analysis Run:** [2026-04-07 entry](../../documentation-runs.md)
+**Last Updated:** 2026-04-22
+**Analysis Run:** [2026-04-22 entry](../../documentation-runs.md)
 
 ---
 
@@ -58,7 +58,7 @@ Currently Google and GitHub OAuth are implemented. Planned additions:
 
 | File                          | Lines | Issue                                        | Suggestion                                  |
 | ----------------------------- | ----- | -------------------------------------------- | ------------------------------------------- |
-| `src/routes/llmKeysRoutes.ts` | 585   | Handles GET, PATCH, POST, DELETE in one file | Acceptable: routes are cohesive by resource |
+| `src/routes/llmKeysRoutes.ts` | 608   | Handles GET, PATCH, POST, DELETE in one file | Acceptable: routes are cohesive by resource |
 
 The `llmKeysRoutes.ts` file is large but all routes are cohesive around the LLM keys resource. Splitting would scatter related logic across files without clear benefit.
 
@@ -98,10 +98,10 @@ Comprehensive test coverage across all layers with 100% branch coverage enforcem
 
 - **formatLlmError()**: 100% branch coverage with 35+ test cases
 - **Authentication flows**: Device code, refresh, OAuth fully tested
-- **Settings management**: CRUD operations tested including transcription and timezone preferences
+- **Settings management**: CRUD operations tested including transcription, timezone, default model, and fallback model preferences
 - **Encryption**: AES-256-GCM encryption/decryption tested
 - **Internal endpoints**: Auth validation and all 6 endpoints tested
-- **Default model**: Validation, provider key check, and cascade clearing tested
+- **Default + fallback model**: Validation, provider key check, cascade clearing (both full and fallback-only) tested
 - **Google OAuth**: Full flow (initiate, callback, status, disconnect) tested
 - **GitHub OAuth**: Full flow (initiate, callback, status, disconnect) tested
 - **OpenRouter**: Key validation and testing routes tested
@@ -109,29 +109,29 @@ Comprehensive test coverage across all layers with 100% branch coverage enforcem
 
 ### Test Files
 
-| Test File                               | Coverage Area                                      |
-| --------------------------------------- | -------------------------------------------------- |
-| `configRoutes.test.ts`                  | Auth0 config endpoint                              |
-| `deviceRoutes.test.ts`                  | Device code flow (start + poll)                    |
-| `tokenRoutes.test.ts`                   | Token refresh                                      |
-| `firebaseRoutes.test.ts`                | Firebase token exchange                            |
-| `frontendRoutes.test.ts`                | Login/logout/me endpoints                          |
-| `oauthRoutes.test.ts`                   | OAuth2 token/authorize (ChatGPT Actions)           |
-| `oauthConnectionRoutes.test.ts`         | Google OAuth connection management                 |
-| `gitHubOAuthConnectionRoutes.test.ts`   | GitHub OAuth connection management                 |
-| `settingsRoutes.test.ts`                | User settings + default model + transcription + tz |
-| `llmKeysRoutes.test.ts`                 | LLM key CRUD + test (5 providers)                  |
-| `internalRoutes.test.ts`                | Service-to-service endpoints (6)                   |
-| `formatLlmError.test.ts`                | Provider error parsing                             |
-| `encryption.test.ts`                    | AES-256-GCM encrypt/decrypt                        |
-| `auth0Client.test.ts`                   | Auth0 SDK wrapper                                  |
-| `authTokenRepository.test.ts`           | Firestore token storage                            |
-| `userSettingsRepository.test.ts`        | Firestore settings storage                         |
-| `oauthConnectionRepository.test.ts`     | Firestore OAuth storage                            |
-| `googleOAuthClient.test.ts`             | Google OAuth client                                |
-| `gitHubOAuthClient.test.ts`             | GitHub OAuth client                                |
-| `llmValidator.test.ts`                  | LLM key validation (5 providers incl. OpenRouter)  |
-| `maskApiKey.test.ts`                    | Key masking utility                                |
+| Test File                               | Coverage Area                                               |
+| --------------------------------------- | ----------------------------------------------------------- |
+| `configRoutes.test.ts`                  | Auth0 config endpoint                                       |
+| `deviceRoutes.test.ts`                  | Device code flow (start + poll)                             |
+| `tokenRoutes.test.ts`                   | Token refresh                                               |
+| `firebaseRoutes.test.ts`                | Firebase token exchange                                     |
+| `frontendRoutes.test.ts`                | Login/logout/me endpoints                                   |
+| `oauthRoutes.test.ts`                   | OAuth2 token/authorize (ChatGPT Actions)                    |
+| `oauthConnectionRoutes.test.ts`         | Google OAuth connection management                          |
+| `gitHubOAuthConnectionRoutes.test.ts`   | GitHub OAuth connection management                          |
+| `settingsRoutes.test.ts`                | User settings + default/fallback model + transcription + tz |
+| `llmKeysRoutes.test.ts`                 | LLM key CRUD + test (5 providers)                           |
+| `internalRoutes.test.ts`                | Service-to-service endpoints (6)                            |
+| `formatLlmError.test.ts`                | Provider error parsing                                      |
+| `encryption.test.ts`                    | AES-256-GCM encrypt/decrypt                                 |
+| `auth0Client.test.ts`                   | Auth0 SDK wrapper                                           |
+| `authTokenRepository.test.ts`           | Firestore token storage                                     |
+| `userSettingsRepository.test.ts`        | Firestore settings storage                                  |
+| `oauthConnectionRepository.test.ts`     | Firestore OAuth storage                                     |
+| `googleOAuthClient.test.ts`             | Google OAuth client                                         |
+| `gitHubOAuthClient.test.ts`             | GitHub OAuth client                                         |
+| `llmValidator.test.ts`                  | LLM key validation (5 providers incl. OpenRouter)           |
+| `maskApiKey.test.ts`                    | Key masking utility                                         |
 
 ---
 
@@ -160,6 +160,27 @@ No deprecated APIs or dependencies in use.
 ---
 
 ## Recent Changes
+
+### v3.6.0 (2026-04-22)
+
+**Change:** Added fallback model selection to LLM preferences (INT-1362, PRs #1793, #1789). Users can set an optional `fallbackModel` alongside the `defaultModel`. The platform automatically retries with the fallback when the primary model is unavailable. Validation ensures fallback differs from default, both are eligible models, and both have API keys configured. Cascade deletion clears the fallback independently if only the fallback provider's key is deleted.
+
+**Change:** Centralized LLM pricing removal (INT-1387, PR #1831). Replaced the `app-settings-service` pricing dependency with `HttpInternalAuthUsageSink` that reports usage to `llm-usage-service`. The service no longer fails to start if pricing data is unavailable.
+
+**Change:** Made `promptType` required in all `generate()` calls (INT-1392). LLM validation and testing now pass a semantic `promptType` for usage tracking.
+
+**Change:** Model validation renamed from `isFastModel()` to `isDefaultEligibleModel()`, broadening the set of models eligible for default and fallback selection.
+
+**Files changed:**
+- `apps/user-service/src/domain/settings/models/UserSettings.ts` (fallbackModel field)
+- `apps/user-service/src/routes/settingsRoutes.ts` (fallback validation + isDefaultEligibleModel)
+- `apps/user-service/src/routes/llmKeysRoutes.ts` (fallbackModel in response + cascade clearing)
+- `apps/user-service/src/routes/internalRoutes.ts` (fallbackModel in internal settings response)
+- `apps/user-service/src/services.ts` (HttpInternalAuthUsageSink wiring, llm-pricing removal)
+- `apps/user-service/src/infra/llm/LlmValidatorImpl.ts` (promptType in generate calls)
+- `apps/user-service/src/infra/firestore/userSettingsRepository.ts` (fallback persistence + clearLlmPreferences)
+
+---
 
 ### v3.5.0 (2026-04-07)
 
@@ -250,6 +271,13 @@ Release version bump only. No functional changes to user-service code.
 ---
 
 ## Resolved Issues
+
+### 2026-04-22
+
+| Issue    | Description                                             | Resolution                                                                      |
+| -------- | ------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| INT-1387 | Service failed to start if pricing data was unavailable | Replaced app-settings-service pricing dependency with async usage sink          |
+| -        | isFastModel() too restrictive for model eligibility     | Replaced with isDefaultEligibleModel() to broaden eligible default/fallback set |
 
 ### 2026-03-19
 

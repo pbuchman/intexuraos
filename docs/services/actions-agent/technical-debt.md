@@ -1,7 +1,7 @@
 # Actions Agent - Technical Debt
 
-**Last Updated:** 2026-04-07
-**Analysis Run:** v3.5.0 documentation refresh (code task CTA notifications, CTA emoji fix, codex-xhigh worker type)
+**Last Updated:** 2026-04-22
+**Analysis Run:** v3.6.0 documentation refresh (important notification marking, centralized LLM pricing removal)
 
 ---
 
@@ -153,6 +153,22 @@ No deprecated APIs or dependencies in use.
 ---
 
 ## Resolved Issues
+
+### Centralized LLM Pricing Removal (INT-1387)
+
+**Issue:** Actions-agent depended on `app-settings-service` at startup to fetch LLM pricing configuration, adding a startup dependency and coupling to a deprecated pricing source.
+
+**Resolution:** Removed `app-settings-service` dependency entirely. LLM usage is now reported via `HttpInternalAuthUsageSink` from `@intexuraos/llm-pricing` to `llm-usage-service`, which centralizes all pricing logic. Simplifies the dependency graph and eliminates startup-time pricing fetches.
+
+**Date Resolved:** 2026-04-16
+
+### Important WhatsApp Notification Marking (INT-1418)
+
+**Issue:** Action notifications (approval requests, completion messages, cancellation confirmations) did not carry the `important` flag, meaning they could be filtered out when users had notification level set to "important only" in whatsapp-service.
+
+**Resolution:** All `whatsappPublisher.publishSendMessage` calls in actions-agent now include `important: true`. This covers handleActionTemplate, executeActionTemplate, handleApprovalReply, handleButtonResponse, handleCancelTaskButton, handleProceedToImplementationButton, executeRejection, and executeCodeAction.
+
+**Date Resolved:** 2026-04-20
 
 ### Code Task CTA Button Notifications (INT-1260)
 
@@ -419,6 +435,8 @@ The following design decisions were made recently and should be revisited if iss
 5. **Worker type detection from message text** - Keyword matching ("use opus") is simple but brittle if model names appear as common words. Currently safe because all worker type names are distinctive.
 
 6. **CTA button pattern for completion notifications** - Both calendar and code task completions use CTA buttons instead of inline URLs. This provides a cleaner UX but requires WhatsApp Cloud API support for CTA URL messages.
+
+7. **All notifications marked important** - Every WhatsApp message from actions-agent carries `important: true`. This ensures action messages bypass notification filtering but means the flag cannot be used for finer-grained priority within the service.
 
 ## Early Technical Decisions
 

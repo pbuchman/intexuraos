@@ -258,9 +258,9 @@ interface UpdateTodoItemInput {
 
 ## Dependencies
 
-| Service              | Why Needed                               | Failure Behavior                               |
-| -------------------- | ---------------------------------------- | ---------------------------------------------- |
-| user-service         | Get user's LLM client for extraction     | Warning item added to todo; todo still created |
-| app-settings-service | Fetch LLM pricing at startup             | Service fails to start                         |
-| Firestore            | Persist todos                            | All endpoints return 500                       |
-| Pub/Sub              | Trigger async AI extraction              | Todo created but extraction skipped            |
+| Service           | Why Needed                               | Failure Behavior                               |
+| ----------------- | ---------------------------------------- | ---------------------------------------------- |
+| user-service      | Get user's LLM client for extraction     | Warning item added to todo; todo still created |
+| llm-usage-service | Report LLM usage and costs               | Usage not tracked; extraction still works      |
+| Firestore         | Persist todos                            | All endpoints return 500                       |
+| Pub/Sub           | Trigger async AI extraction              | Todo created but extraction skipped            |

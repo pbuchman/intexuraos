@@ -6,12 +6,12 @@
 
 ## Identity
 
-| Attribute | Value                                                 |
-| --------- | ----------------------------------------------------- |
-| Name      | mobile-notifications-service                          |
-| Role      | Mobile notification capture and storage service       |
-| Goal      | Capture, store, and query mobile device notifications |
-| Port      | 8114                                                  |
+| Attribute | Value                                                                                                                      |
+| --------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Name      | mobile-notifications-service                                                                                               |
+| Role      | Mobile notification capture, storage, and WhatsApp group digest generation                                                 |
+| Goal      | Capture device notifications, query them for analysis, and produce AI-generated daily digests from WhatsApp group messages |
+| Port      | 8114                                                                                                                       |
 
 ---
 
@@ -35,7 +35,7 @@ interface QueryNotificationsInput {
     source?: string;  // Single value match
     title?: string;   // Case-insensitive substring match
   };
-  limit?: number;     // 1–1000, default 50
+  limit?: number;     // 1-1000, default 50
 }
 ```
 
@@ -96,7 +96,7 @@ interface InternalNotification {
 
 ```typescript
 interface ListNotificationsParams {
-  limit?: number;   // 1–100, default 50
+  limit?: number;   // 1-100, default 50
   cursor?: string;  // Pagination cursor from previous response
   source?: string;  // Comma-separated source filter
   app?: string;     // Comma-separated app filter
@@ -200,6 +200,163 @@ interface WebhookOutput {
 }
 ```
 
+### List Digests
+
+**Endpoint:** `GET /notifications/digests`
+
+**When to use:** When displaying AI-generated daily summaries for a WhatsApp group over a date range.
+
+**Auth:** Bearer JWT
+
+**Input Schema:**
+
+```typescript
+interface ListDigestsParams {
+  groupKey: string;           // Required
+  fromDate: string;           // YYYY-MM-DD, required
+  toDate: string;             // YYYY-MM-DD, required
+  limit?: number;             // 1-100, default 30
+  cursor?: string;            // Pagination cursor
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface ListDigestsOutput {
+  items: PersistedDailySummary[];
+  nextCursor?: string;
+}
+
+interface PersistedDailySummary {
+  summary: DailySummary;
+  generation: number;
+  generatedAt: string;  // ISO 8601
+  modelId: string;
+}
+
+interface DailySummary {
+  date: string;         // YYYY-MM-DD (CET)
+  groupKey: string;
+  messageCount: number;
+  headline: string;     // Max 200 chars
+  bullets: string[];    // 3-7 items, max 300 chars each
+  threads: Thread[];
+  moderatorPosts: ModeratorPost[];
+  openQuestions: string[];
+  activityOutliers: ActivityOutlier[];
+}
+```
+
+### Get Single Digest
+
+**Endpoint:** `GET /notifications/digests/:groupKey/:date`
+
+**When to use:** When displaying a specific day's digest.
+
+**Auth:** Bearer JWT. Returns 404 if no digest exists for that date.
+
+### Run Digest (User)
+
+**Endpoint:** `POST /notifications/digests/run`
+
+**When to use:** When the user wants to regenerate a digest for a specific group and date.
+
+**Auth:** Bearer JWT
+
+**Input Schema:**
+
+```typescript
+interface UserRunDigestInput {
+  groupKey: string;    // Min length 1
+  date: string;        // YYYY-MM-DD
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface RunDigestOutput {
+  summaryDocId: string;
+  generation: number;
+  messageCount: number;
+  modelId: string;
+  regenerated: boolean;
+  lockSkipped?: boolean;  // True if lock was held by another run
+}
+```
+
+### Start Backfill
+
+**Endpoint:** `POST /notifications/digests/backfill`
+
+**When to use:** When generating digests for a historical date range.
+
+**Auth:** Bearer JWT
+
+**Input Schema:**
+
+```typescript
+interface StartBackfillInput {
+  groupKey: string;
+  fromDate: string;   // YYYY-MM-DD, must be <= toDate
+  toDate: string;     // YYYY-MM-DD
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface StartBackfillOutput {
+  runId: string;
+  queuedDates: string[];  // Dates that will be processed
+}
+```
+
+### Get Backfill Status
+
+**Endpoint:** `GET /notifications/digests/backfill/:runId`
+
+**When to use:** When polling for backfill progress.
+
+**Auth:** Bearer JWT. Returns 404 if run not found.
+
+**Output Schema:**
+
+```typescript
+interface BackfillRun {
+  runId: string;
+  userId: string;
+  groupKey: string;
+  fromDate: string;
+  toDate: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  totalDates: number;
+  completedDates: string[];
+  failedDates: { date: string; error: string }[];
+  currentDate: string | null;
+  startedAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+```
+
+### Run Digest (Internal)
+
+**Endpoint:** `POST /internal/notifications/digest/run`
+
+**When to use:** Internal only — called by the backfill chain or for programmatic digest generation.
+
+**Auth:** `X-Internal-Auth` header
+
+### Run Yesterday Digest (Internal/Cron)
+
+**Endpoint:** `POST /internal/notifications/digest/run-yesterday`
+
+**When to use:** Called by Cloud Scheduler daily to generate digests for all subscriptions.
+
+**Auth:** OIDC Bearer token (Cloud Scheduler) or `X-Internal-Auth` header
+
 ### Get Filter Options
 
 **Endpoint:** `GET /notifications/filters`
@@ -242,7 +399,7 @@ interface SavedFilter {
 
 ```typescript
 interface CreateSavedFilterInput {
-  name: string;     // 1–100 characters, required
+  name: string;     // 1-100 characters, required
   app?: string[];
   device?: string[];
   source?: string;
@@ -272,12 +429,16 @@ interface CreateSavedFilterInput {
 - Expect the plaintext signature after the initial `POST /connect` response — it is never re-shown
 - Send notifications without the `X-Mobile-Notifications-Signature` header — returns 400
 - Call `GET /notifications/filters` expecting 404 for new users — returns empty arrays instead
+- Run a digest for a group the user is not subscribed to — returns 400
+- Expect WhatsApp notifications on digest regeneration — only first generation triggers notifications
 
 **Requires:**
 
 - User must be authenticated (Bearer JWT) for all public endpoints
 - Device must have a valid active signature for webhook ingestion
-- Internal auth token for `POST /internal/mobile-notifications/query`
+- Internal auth token for `POST /internal/mobile-notifications/query` and `POST /internal/notifications/digest/run`
+- OIDC token or internal auth for `POST /internal/notifications/digest/run-yesterday`
+- Digest subscription must exist for the (userId, groupKey) pair
 
 ---
 
@@ -308,28 +469,56 @@ interface CreateSavedFilterInput {
 4. Optionally save filter as preset via POST /notifications/filters/saved
 ```
 
+### Pattern 4: Browse Daily Digests
+
+```
+1. Call GET /notifications/digests with groupKey, fromDate, toDate
+2. Display headline and bullets for each day
+3. On click, call GET /notifications/digests/:groupKey/:date for full detail
+```
+
+### Pattern 5: Backfill Historical Digests
+
+```
+1. Call POST /notifications/digests/backfill with groupKey, fromDate, toDate
+2. Store returned runId
+3. Poll GET /notifications/digests/backfill/:runId until status === 'completed' or 'failed'
+4. On completion, browse digests via Pattern 4
+```
+
+---
+
+## Events Published
+
+| Event                        | When                         | Payload                                                                                                   |
+| ---------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------- |
+| WhatsApp send (digest-ready) | First-generation digest save | `{ userId, message, ctaUrl, correlationId, important: true }` via `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` |
+
 ---
 
 ## Error Handling
 
-| Error Code | Meaning                  | Recovery Action                             |
-| ---------- | ------------------------ | ------------------------------------------- |
-| 400        | Missing signature header | Add X-Mobile-Notifications-Signature header |
-| 401        | Invalid signature/token  | Reconnect device or refresh JWT             |
-| 403        | Not owner                | Verify you own the resource                 |
-| 404        | Not found                | Verify resource ID exists                   |
-| 500        | Internal error           | Retry with backoff                          |
+| Error Code | Meaning                                     | Recovery Action                            |
+| ---------- | ------------------------------------------- | ------------------------------------------ |
+| 400        | Missing signature header or invalid request | Add required header or fix request payload |
+| 401        | Invalid signature/token                     | Reconnect device or refresh JWT            |
+| 403        | Not owner                                   | Verify you own the resource                |
+| 404        | Not found                                   | Verify resource ID exists                  |
+| 500        | Internal error                              | Retry with backoff                         |
 
 ---
 
 ## Dependencies
 
-| Service       | Why Needed         | Failure Behavior      |
-| ------------- | ------------------ | --------------------- |
-| Firestore     | Persistent storage | Endpoint returns 500  |
-| Auth0 (JWKS)  | JWT validation     | Public endpoints fail |
-| Internal Auth | Service-to-service | Internal endpoint 401 |
+| Service                 | Why Needed            | Failure Behavior                       |
+| ----------------------- | --------------------- | -------------------------------------- |
+| Firestore               | Persistent storage    | Endpoint returns 500                   |
+| Auth0 (JWKS)            | JWT validation        | Public endpoints fail                  |
+| Internal Auth           | Service-to-service    | Internal endpoint 401                  |
+| OpenRouter              | LLM digest generation | Digest run fails (lock released)       |
+| llm-usage-service       | LLM usage reporting   | Fire-and-forget via sink               |
+| Pub/Sub (WhatsApp Send) | Digest delivery       | Logged warning; digest still persisted |
 
 ---
 
-**Last updated:** 2026-04-07
+**Last updated:** 2026-04-22

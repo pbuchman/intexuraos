@@ -1,7 +1,7 @@
 # Commands Agent — Technical Debt
 
-**Last Updated:** 2026-04-07
-**Analysis Run:** [2026-04-07 — v3.5.0](../../documentation-runs.md)
+**Last Updated:** 2026-04-22
+**Analysis Run:** [2026-04-22 — v3.6.0](../../documentation-runs.md)
 
 ---
 
@@ -30,9 +30,7 @@ Based on code analysis and git history:
 
 4. **Circuit breaker for actions-agent** — Commands fail with `failed` status when actions-agent is unavailable; a circuit breaker pattern would improve resilience during outages
 
-5. **Graceful degradation for startup pricing** — `initServices()` hard-fails when app-settings-service is unreachable; cached or default pricing would improve boot resilience
-
-6. **Runtime prompt loading** — The classification prompt lives in `packages/llm-prompts`. Changes require a package rebuild and service redeploy. Runtime prompt loading would enable faster iteration on classification logic
+5. **Runtime prompt loading** — The classification prompt lives in `packages/llm-prompts`. Changes require a package rebuild and service redeploy. Runtime prompt loading would enable faster iteration on classification logic
 
 ---
 
@@ -111,9 +109,9 @@ No deprecated API usage detected. GLM-4.7 and all ZAI/DashScope models fully rem
 
 Commands-agent creates actions via HTTP to actions-agent at `POST /internal/actions`. If actions-agent is unavailable, the command is set to `failed` status with a `failureReason`. Consider a circuit breaker pattern or retry with exponential backoff for transient failures.
 
-### app-settings-service startup dependency
+### llm-usage-service dependency
 
-`initServices()` calls `fetchAllPricing()` from `app-settings-service` before accepting any requests. If app-settings-service is unreachable at boot, commands-agent fails to initialize entirely. This creates a hard coupling at startup. Consider graceful degradation (e.g., cached or default pricing) to improve boot resilience.
+LLM usage tracking is wired via `HttpInternalAuthUsageSink` to `llm-usage-service`. Usage reporting is fire-and-forget — if llm-usage-service is unavailable, classification still succeeds but usage data is lost. This replaced the previous hard startup dependency on `app-settings-service` (removed in v3.6.0, INT-1387).
 
 ### Prompt versioning coupling
 
@@ -126,6 +124,22 @@ Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct servic
 ---
 
 ## Resolved Issues
+
+### LLM pricing centralized to llm-usage-service
+
+**Resolved in:** INT-1387 (a4f53cd70, 2026-04-15)
+
+**Previous issue:** `initServices()` called `fetchAllPricing()` from `app-settings-service` at startup. If app-settings-service was unreachable, commands-agent failed to initialize entirely — a hard boot-time coupling.
+
+**Solution:** Removed the startup pricing fetch. LLM usage tracking now goes through `HttpInternalAuthUsageSink` wired into the user-service client, which reports to `llm-usage-service`. The `app-settings-service` dependency was eliminated entirely.
+
+### promptType made required in LlmGenerateClient
+
+**Resolved in:** INT-1392 (8aae64e4b, 2026-04-18)
+
+**Previous issue:** The `promptType` parameter in `client.generate()` was optional, meaning LLM usage could be logged without identifying which prompt produced it — making per-prompt-type cost analytics unreliable.
+
+**Solution:** Made `promptType` a required parameter. The classifier now passes `'command-classification'` explicitly. Test assertions were strengthened to verify the semantic value of promptType, not just its presence.
 
 ### Domain port boundaries established for infrastructure clients
 

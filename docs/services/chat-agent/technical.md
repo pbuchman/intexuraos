@@ -86,6 +86,12 @@ sequenceDiagram
 
 | Hash       | Description                                                               | Date       |
 | ---------- | ------------------------------------------------------------------------- | ---------- |
+| `8aae64e4` | Make promptType required in LlmGenerateClient and all callers (INT-1392)  | 2026-04-14 |
+| `fc9f300f` | Remove pricing from service container (INT-1387)                          | 2026-04-14 |
+| `830d5a91` | Add retry with exponential backoff to pricing fetch                       | 2026-04-12 |
+| `8b1211dc` | Wire HttpInternalAuthUsageSink in all LLM callers (INT-1342)              | 2026-04-11 |
+| `209f59e8` | Migrate LLM usage sinks to HTTP + delete llm-events-service (INT-1342)    | 2026-04-11 |
+| `8767c5e2` | Migrate pricing consumers from app-settings-service                       | 2026-04-10 |
 | `287db2b6` | Add getUserTimezone stub to FakeUserServiceClient (interface conformance) | 2026-03-27 |
 | `47b1b9e9` | Remove redundant "Say yes to confirm" from system prompt                  | 2026-03-17 |
 | `c4e3a13c` | Release v3.3.0                                                            | 2026-03-15 |
@@ -95,12 +101,6 @@ sequenceDiagram
 | `44ea683a` | Release v3.2.0                                                            | 2026-03-07 |
 | `99febe66` | Wire GitHub OAuth integration, update cross-service mocks                 | 2026-03-02 |
 | `b3f34d85` | Release v3.1.0                                                            | 2026-02-22 |
-| `c8a42105` | Release v3.0.0                                                            | 2026-02-19 |
-| `6063175b` | Add dev-mode log formatting for PM2 readability                           | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                                       | 2026-02-16 |
-| `e60eafc1` | Standardize API key secrets to APP naming convention                      | 2026-02-15 |
-| `c72b7c53` | Switch default LLM to Gemini 2.5 Flash + Gemini fallback                  | 2026-02-15 |
-| `45f001c1` | Switch PM2 ecosystem to pnpm --filter with start:local                    | 2026-02-14 |
 
 ## API Endpoints
 
@@ -239,26 +239,26 @@ Chat-agent does not publish or subscribe to any Pub/Sub topics. All communicatio
 
 ### Internal Services
 
-| Service              | Purpose                                |
-| -------------------- | -------------------------------------- |
-| user-service         | Fetch per-user LLM client and API keys |
-| app-settings-service | Fetch LLM pricing data at startup      |
+| Service           | Purpose                                |
+| ----------------- | -------------------------------------- |
+| user-service      | Fetch per-user LLM client and API keys |
+| llm-usage-service | Report LLM token usage via HTTP        |
 
 ### Packages
 
-| Package                        | Purpose                             |
-| ------------------------------ | ----------------------------------- |
-| `@intexuraos/common-core`      | Result types, error helpers         |
-| `@intexuraos/common-http`      | Auth plugins, request logging       |
-| `@intexuraos/http-server`      | Health checks, env validation       |
-| `@intexuraos/http-contracts`   | Core API schema definitions         |
-| `@intexuraos/infra-firestore`  | Firestore singleton + vector search |
-| `@intexuraos/infra-otel`       | Dash0 OpenTelemetry instrumentation |
-| `@intexuraos/infra-sentry`     | Sentry logging, error handler       |
-| `@intexuraos/internal-clients` | user-service client                 |
-| `@intexuraos/llm-contract`     | LLM model enums, error types        |
-| `@intexuraos/llm-factory`      | LLM client factory                  |
-| `@intexuraos/llm-pricing`      | Pricing context for LLM models      |
+| Package                        | Purpose                                 |
+| ------------------------------ | --------------------------------------- |
+| `@intexuraos/common-core`      | Result types, error helpers             |
+| `@intexuraos/common-http`      | Auth plugins, request logging           |
+| `@intexuraos/http-server`      | Health checks, env validation           |
+| `@intexuraos/http-contracts`   | Core API schema definitions             |
+| `@intexuraos/infra-firestore`  | Firestore singleton + vector search     |
+| `@intexuraos/infra-otel`       | Dash0 OpenTelemetry instrumentation     |
+| `@intexuraos/infra-sentry`     | Sentry logging, error handler           |
+| `@intexuraos/internal-clients` | user-service client                     |
+| `@intexuraos/llm-contract`     | LLM model enums, error types            |
+| `@intexuraos/llm-factory`      | LLM client factory                      |
+| `@intexuraos/llm-pricing`      | HTTP usage sink for LLM token reporting |
 
 ## Configuration
 
@@ -273,7 +273,7 @@ Chat-agent does not publish or subscribe to any Pub/Sub topics. All communicatio
 | `INTEXURAOS_OPENAI_APP_API_KEY`       | Yes      | OpenAI API key for embeddings                                 |
 | `INTEXURAOS_USER_SERVICE_URL`         | Yes      | URL for user-service                                          |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Token for internal service-to-service calls                   |
-| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | URL for llm-usage-service (pricing data)                      |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | URL for llm-usage-service (token usage reporting)             |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | Yes      | Platform Gemini API key for guest sessions and user fallback  |
 | `INTEXURAOS_SENTRY_DSN`               | No       | Sentry DSN for error tracking                                 |
 | `INTEXURAOS_ENVIRONMENT`              | No       | Environment name (defaults to `development`)                  |
