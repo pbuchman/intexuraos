@@ -104,15 +104,25 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit      | Description                                                      | Date       |
-| ----------- | ---------------------------------------------------------------- | ---------- |
-| `d3db7a24`  | Add timezone preference to user settings (INT-1126)              | 2026-03-27 |
-| `e2afa180`  | Address PR review: DRY violations, JSDoc, buildModelInfo extract | 2026-03-25 |
-| `7540e6cb`  | Fix validateKey to use lightweight /api/v1/key endpoint          | 2026-03-25 |
-| `b4564912`  | Fix or: prefix stripping for OpenRouterAdapter and validation    | 2026-03-24 |
-| `83717bbb`  | OpenRouter Backend Infrastructure (Phase A) (INT-1011)           | 2026-03-24 |
-| `5d88167`   | Standardize v8-ignore wording across OAuth route files           | 2026-03-19 |
-| `bfaeae3`   | Remove unnecessary v8-ignores, standardize remainder (INT-988)   | 2026-03-19 |
+### v3.6.0
+
+- **Primary + fallback LLM model selection** (INT-1362, PRs #1793, #1789): Added `fallbackModel` to `LlmPreferences` domain model. `PATCH /users/:uid/settings` now accepts an optional `fallbackModel` field. The service validates that fallback differs from default, that the user has an API key for the fallback provider, and that the model passes `isDefaultEligibleModel()`. Deleting an API key cascades to clear both `defaultModel` and `fallbackModel` if either depends on the deleted provider. Internal `GET /internal/users/:uid/settings` now returns `fallbackModel` alongside `defaultModel`. GET `/users/:uid/settings/llm-keys` returns `fallbackModel` in the response.
+- **Centralized LLM pricing removal** (INT-1387, PR #1831): Removed the `llm-pricing` startup dependency that fetched pricing from `app-settings-service`. Replaced with `HttpInternalAuthUsageSink` that reports usage to `llm-usage-service` asynchronously. The service no longer fails to start if pricing data is unavailable.
+- **`promptType` required in LLM calls** (INT-1392): All `generate()` calls via `LlmValidatorImpl` now pass a semantic `promptType` string for usage tracking.
+- **Model validation renamed**: `isFastModel()` replaced with `isDefaultEligibleModel()` from `@intexuraos/llm-contract`, broadening the set of models eligible for default/fallback selection.
+
+| Commit      | Description                                                              | Date       |
+| ----------- | ------------------------------------------------------------------------ | ---------- |
+| `dedd0e3`   | Strengthen test assertions to verify semantic promptType (INT-1392)      | 2026-04-17 |
+| `8aae64e`   | Make promptType required in LlmGenerateClient and all callers (INT-1392) | 2026-04-17 |
+| `a4f53cd`   | Remove LLM pricing from 9 remaining apps + delete deprecated (INT-1387)  | 2026-04-15 |
+| `d778333`   | Add nullable to fallbackModel schema in internal route                   | 2026-04-14 |
+| `26ef235`   | Resolve uncovered branches in fallback model feature                     | 2026-04-14 |
+| `5ac6f86`   | Address code review feedback for fallback model feature                  | 2026-04-14 |
+| `37fc477`   | Remove unnecessary optional chain in settings routes                     | 2026-04-14 |
+| `c42bea7`   | Add fallbackModel to LlmPreferences domain model                         | 2026-04-14 |
+| `830d5a9`   | Add retry with exponential backoff to pricing fetch (llm-pricing)        | 2026-04-13 |
+| `8b1211d`   | Wire HttpInternalAuthUsageSink in all LLM callers (INT-1342)             | 2026-04-12 |
 
 ## API Endpoints
 
@@ -136,10 +146,10 @@ sequenceDiagram
 | Method | Path                                            | Description                              | Auth         |
 | ------ | ----------------------------------------------- | ---------------------------------------- | ------------ |
 | GET    | `/users/:uid/settings`                          | Get user settings                        | Bearer token |
-| PATCH  | `/users/:uid/settings`                          | Update default LLM model                 | Bearer token |
+| PATCH  | `/users/:uid/settings`                          | Update default + fallback LLM model      | Bearer token |
 | PATCH  | `/users/:uid/settings/transcription`            | Update transcription provider preference | Bearer token |
 | PATCH  | `/users/:uid/settings/timezone`                 | Update timezone preference               | Bearer token |
-| GET    | `/users/:uid/settings/llm-keys`                 | Get LLM API keys (masked) + defaultModel | Bearer token |
+| GET    | `/users/:uid/settings/llm-keys`                 | Get LLM API keys (masked) + model prefs  | Bearer token |
 | PATCH  | `/users/:uid/settings/llm-keys`                 | Set/update LLM API key                   | Bearer token |
 | POST   | `/users/:uid/settings/llm-keys/:provider/test`  | Test LLM API key                         | Bearer token |
 | DELETE | `/users/:uid/settings/llm-keys/:provider`       | Delete LLM API key                       | Bearer token |
@@ -182,7 +192,7 @@ sequenceDiagram
 | `userId`                     | string                    | User identifier                       |
 | `llmApiKeys`                 | LlmApiKeys                | AES-256 encrypted API keys            |
 | `llmTestResults`             | LlmTestResults            | Last test result per provider         |
-| `llmPreferences`             | LlmPreferences            | User's default model settings         |
+| `llmPreferences`             | LlmPreferences            | User's default + fallback model       |
 | `transcriptionPreferences`   | TranscriptionPreferences  | User's transcription provider         |
 | `timezone`                   | string                    | IANA timezone (e.g., "Europe/Berlin") |
 | `notifications`              | NotificationSettings      | Notification filter rules             |
@@ -201,17 +211,18 @@ sequenceDiagram
 
 ### LlmTestResult
 
-| Field      | Type                         | Description           |
-| ---------- | ---------------------------- | --------------------- |
-| `status`   | `'success' \                 | 'failure'`            | Test outcome |
-| `message`  | string                       | LLM response or error |
-| `testedAt` | string                       | ISO 8601 timestamp    |
+| Field      | Type                       | Description           |
+| ---------- | -------------------------- | --------------------- |
+| `status`   | `'success' \               | 'failure'`            | Test outcome |
+| `message`  | string                     | LLM response or error |
+| `testedAt` | string                     | ISO 8601 timestamp    |
 
 ### LlmPreferences
 
-| Field          | Type     | Description                         |
-| -------------- | -------- | ----------------------------------- |
-| `defaultModel` | LLMModel | User's preferred default fast model |
+| Field           | Type   | Description                                               |
+| --------------- | ------ | --------------------------------------------------------- |
+| `defaultModel`  | string | User's preferred default LLM model                        |
+| `fallbackModel` | string | Optional fallback model (different provider from default) |
 
 ### TranscriptionPreferences
 
@@ -221,14 +232,14 @@ sequenceDiagram
 
 ### OAuthConnection
 
-| Field       | Type                         | Description              |
-| ----------- | ---------------------------- | ------------------------ |
-| `userId`    | string                       | User identifier          |
-| `provider`  | `'google' \                  | 'github'`                | OAuth provider |
-| `email`     | string                       | User's email or username |
-| `tokens`    | OAuthTokens                  | Encrypted tokens         |
-| `createdAt` | string                       | Connection timestamp     |
-| `updatedAt` | string                       | Last refresh timestamp   |
+| Field       | Type                       | Description              |
+| ----------- | -------------------------- | ------------------------ |
+| `userId`    | string                     | User identifier          |
+| `provider`  | `'google' \                | 'github'`                | OAuth provider |
+| `email`     | string                     | User's email or username |
+| `tokens`    | OAuthTokens                | Encrypted tokens         |
+| `createdAt` | string                     | Connection timestamp     |
+| `updatedAt` | string                     | Last refresh timestamp   |
 
 ### OAuthTokens
 
@@ -329,12 +340,13 @@ None — user-service does not publish or subscribe to Pub/Sub events.
 
 ### Internal Services
 
-| Service        | Communication Direction          |
-| -------------- | -------------------------------- |
-| research-agent | <- provides decrypted LLM keys   |
-| image-service  | <- provides decrypted LLM keys   |
-| calendar-agent | <- provides Google OAuth tokens  |
-| code-agent     | <- provides GitHub OAuth tokens  |
+| Service           | Communication Direction                 |
+| ----------------- | --------------------------------------- |
+| research-agent    | <- provides decrypted LLM keys          |
+| image-service     | <- provides decrypted LLM keys          |
+| calendar-agent    | <- provides Google OAuth tokens         |
+| code-agent        | <- provides GitHub OAuth tokens         |
+| llm-usage-service | -> reports LLM usage for key validation |
 
 ### Infrastructure
 
@@ -359,7 +371,7 @@ None — user-service does not publish or subscribe to Pub/Sub events.
 | `INTEXURAOS_TOKEN_ENCRYPTION_KEY`       | Yes      | Key for encrypting stored Auth0 tokens                    |
 | `INTEXURAOS_ENCRYPTION_KEY`             | Yes      | AES-256 key for API key encryption (64 hex chars)         |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes      | Shared secret for internal endpoints                      |
-| `INTEXURAOS_LLM_USAGE_SERVICE_URL`      | Yes      | URL of llm-usage-service (fetches LLM pricing)            |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`      | Yes      | URL of llm-usage-service (reports LLM usage)              |
 | `INTEXURAOS_WEB_APP_URL`                | Yes      | Web app URL for OAuth redirects                           |
 | `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`     | Yes      | Google OAuth client ID                                    |
 | `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET` | Yes      | Google OAuth client secret                                |
@@ -390,9 +402,11 @@ None — user-service does not publish or subscribe to Pub/Sub events.
 
 **Internal endpoints use response contract**: All internal endpoints return `{ success: true, data: ... }` or `{ success: false, error: { code, message } }`. Callers must read from `response.data` instead of the top level.
 
-**Default model validation**: `PATCH /users/:uid/settings` validates `defaultModel` against `isFastModel()` from `@intexuraos/llm-contract` AND verifies the user has an API key configured for that model's provider. Unsupported model names return 400 `INVALID_REQUEST`.
+**Default model validation**: `PATCH /users/:uid/settings` validates `defaultModel` against `isDefaultEligibleModel()` from `@intexuraos/llm-contract` AND verifies the user has an API key configured for that model's provider. Unsupported model names return 400 `INVALID_REQUEST`.
 
-**Default model cascade on key deletion**: Deleting an LLM API key automatically clears `defaultModel` if the current default belongs to the deleted provider.
+**Fallback model validation**: `fallbackModel` must pass the same `isDefaultEligibleModel()` check, must differ from `defaultModel`, and must have an API key configured for its provider. Pass `null` to clear the fallback.
+
+**Model cascade on key deletion**: Deleting an LLM API key automatically clears `defaultModel` (and `fallbackModel`) if they use the deleted provider. If only the fallback uses the deleted provider, only the fallback is cleared while the default is preserved.
 
 **OAuth2 routes use raw send**: OAuth2 spec routes (`/auth/oauth/token`, `/auth/oauth/authorize`) intentionally bypass the response contract via `@allow-raw-send` annotations because the OAuth2 spec requires flat `{ error, error_description }` responses.
 
@@ -400,7 +414,7 @@ None — user-service does not publish or subscribe to Pub/Sub events.
 
 **Error code mapping**: Internal endpoint error codes follow the standard response contract codes: `UNAUTHORIZED` (401), `NOT_FOUND` (404), `MISCONFIGURED` (503), `DOWNSTREAM_ERROR` (502).
 
-**Pricing context at startup**: The service fetches LLM pricing from `app-settings-service` at boot. If that service is unavailable, startup fails.
+**LLM usage reporting**: The service reports LLM usage (from key validation/testing) to `llm-usage-service` via `HttpInternalAuthUsageSink`. This replaced the previous `app-settings-service` pricing dependency — the service no longer fails to start if pricing data is unavailable.
 
 **GitHub tokens never expire**: GitHub access tokens are stored with a far-future expiry (`9999-12-31`). They do not need refresh logic but can be revoked at any time.
 
@@ -434,7 +448,7 @@ apps/user-service/src/
         refreshAccessToken.ts  # Token refresh logic
     settings/
       models/
-        UserSettings.ts        # Settings aggregate (LLM keys, preferences, transcription, timezone)
+        UserSettings.ts        # Settings aggregate (LLM keys, preferences incl. fallback, transcription, timezone)
         SettingsError.ts       # Settings error types
       ports/
         UserSettingsRepository.ts # Settings storage
@@ -486,7 +500,7 @@ apps/user-service/src/
     oauthConnectionRoutes.ts   # Google OAuth connection management
     gitHubOAuthConnectionRoutes.ts # GitHub OAuth connection management
     configRoutes.ts            # Auth0 config
-    settingsRoutes.ts          # User settings + default model + transcription + timezone
+    settingsRoutes.ts          # User settings + default/fallback model + transcription + timezone
     llmKeysRoutes.ts           # LLM key management (CRUD + test, 5 providers)
     frontendRoutes.ts          # Login/logout/me pages
     internalRoutes.ts          # Service-to-service (6 endpoints)

@@ -1,4 +1,4 @@
-# Research Agent -- Tutorial
+# Research Agent — Tutorial
 
 > **Time:** 20-30 minutes
 > **Prerequisites:** Node.js 20+, valid Auth0 access token, at least one LLM provider API key configured in user-service
@@ -80,7 +80,7 @@ export RESEARCH_ID="res_abc123"
 
 ### What Just Happened?
 
-Research Agent saved the research to Firestore with status `pending` and published a `research.process` event to Pub/Sub. The processing runs asynchronously -- the response comes back immediately without waiting for LLM calls. During processing, the service infers a structured research context from your prompt (domain, answer style, source preferences) and uses it to build tailored prompts for each model.
+Research Agent saved the research to Firestore with status `pending` and published a `research.process` event to Pub/Sub. The processing runs asynchronously — the response comes back immediately without waiting for LLM calls. During processing, the service infers a structured research context from your prompt (domain, answer style, source preferences) and uses it to build tailored prompts for each model.
 
 ---
 
@@ -188,7 +188,7 @@ After `proceed`, the research moves to `synthesizing` and completes normally usi
 
 ## Part 4: Browse OpenRouter Models (5 minutes)
 
-If you have an OpenRouter API key configured, you can access 14 curated frontier models from 10 providers.
+If you have an OpenRouter API key configured, you can access 15 curated frontier models from 10 providers.
 
 ### Step 4.1: List Available Models
 
@@ -298,14 +298,14 @@ curl -s "$BASE_URL/research/$ENHANCED_ID" \
 
 | Problem                          | Solution                                                                                                           |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `401 Unauthorized`               | Your bearer token is expired -- refresh it via the web app login flow                                              |
+| `401 Unauthorized`               | Your bearer token is expired — refresh it via the web app login flow                                               |
 | `404 Not Found`                  | The research ID does not exist or belongs to a different user                                                      |
-| Status stuck at `processing`     | Check Pub/Sub subscription delivery -- the LLM call topic may be backlogged                                        |
-| Status `failed`, all models down | At least one API key is missing or invalid -- check user-service keys                                              |
+| Status stuck at `processing`     | Check Pub/Sub subscription delivery — the LLM call topic may be backlogged                                         |
+| Status `failed`, all models down | At least one API key is missing or invalid — check user-service keys                                               |
 | `enhance` returns `NO_CHANGES`   | You must provide at least one of: additionalModels, additionalContexts, synthesisModel change, or removeContextIds |
 | Notion export not appearing      | Confirm `POST /research/settings/notion` was called with a valid page ID                                           |
-| OpenRouter models endpoint 404   | OpenRouter API key not configured in user-service -- add one first                                                 |
-| OpenRouter model rejected        | The model ID is not on the curated allowlist -- check `GET /research/openrouter/models` for valid IDs              |
+| OpenRouter models endpoint 404   | OpenRouter API key not configured in user-service — add one first                                                  |
+| OpenRouter model rejected        | The model ID is not on the curated allowlist — check `GET /research/openrouter/models` for valid IDs               |
 
 ---
 
@@ -314,7 +314,7 @@ curl -s "$BASE_URL/research/$ENHANCED_ID" \
 Now that you understand the basics:
 
 1. Configure Notion export via `POST /research/settings/notion` to get automatic research archiving
-2. Explore the draft workflow -- use `POST /research/draft` to create a review-before-run flow
+2. Explore the draft workflow — use `POST /research/draft` to create a review-before-run flow
 3. Use `POST /research/validate-input` to check prompt quality before submitting
 4. Read the [Technical Reference](technical.md) for full API schemas and the complete status lifecycle
 5. See how [actions-agent](../actions-agent/technical.md) triggers draft research from natural language commands
@@ -326,8 +326,8 @@ Now that you understand the basics:
 Test your understanding:
 
 1. **Easy:** List all your researches and find the one with the highest `totalCostUsd`
-2. **Medium:** Submit a research with `skipSynthesis: true` -- observe what status it reaches and why the result differs from a normal research
-3. **Hard:** Submit a research mixing native and OpenRouter models, wait for `awaiting_confirmation` (you can simulate by providing an invalid API key for one model), then test all three confirmation decisions -- `proceed`, `retry`, and `cancel` -- and observe the resulting status transitions
+2. **Medium:** Submit a research with `skipSynthesis: true` — observe what status it reaches and why the result differs from a normal research
+3. **Hard:** Submit a research mixing native and OpenRouter models, wait for `awaiting_confirmation` (you can simulate by providing an invalid API key for one model), then test all three confirmation decisions — `proceed`, `retry`, and `cancel` — and observe the resulting status transitions
 
 <details>
 <summary>Solutions</summary>

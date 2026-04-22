@@ -2,11 +2,22 @@
 
 Complete documentation for all IntexuraOS services, workers, and packages.
 
-**Version 3.5.0** — April 7, 2026
+**Version 3.6.0** — April 22, 2026
 
 ---
 
-## v3.5.0 Highlights
+## v3.6.0 Highlights
+
+| Component                        | Key Changes                                                                                                                                                                                                                                                                   |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **code-worker**                  | Claude resume fix — `--resume <sessionId>` replaces `--continue` for reliable session resumption, `CLAUDE_SESSION_ID` now required for Claude resumes                                                                                                                         |
+| **mobile-notifications-service** | WhatsApp Group Digest pipeline — end-to-end AI-generated daily digests from WhatsApp group messages with headline/bullets summaries, persistent group state, backfill, and WhatsApp delivery via Pub/Sub                                                                      |
+| **hellscript-agent**             | Per-user LLM client resolution via user-service (INT-1369), centralized LLM pricing removal (INT-1387), usage tracking via `HttpInternalAuthUsageSink`                                                                                                                        |
+| **actions-agent**                | Important WhatsApp notification marking (INT-1418), centralized LLM pricing removal (INT-1387)                                                                                                                                                                                |
+| **orchestrator**                 | Execution memory pipeline simplification (soft-warning for memory_acknowledgment), log cap raised to 8MB, task timeout extended to 5h, StatusUpdateClient for redundant status delivery, mimo-pro worker type, test_quality review scope, configurable validation model chain |
+| **code-agent**                   | Robust task finalization via dedicated status endpoint, PR triage through Pub/Sub push, important flag for issue groups, GitHub Agent inherits user LLM settings, task mode selector (planning/execution), self-healing failure triage, draft PR blocking                     |
+
+## v3.5.0 Highlights (Previous)
 
 | Component            | Key Changes                                                                                                                                                                                                                                                                                 |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -174,10 +185,10 @@ graph TB
 
 ### Voice & Transcription
 
-| Service                                          | AI Models       | Capability                                                       |
-| ------------------------------------------------ | --------------- | ---------------------------------------------------------------- |
-| [whatsapp-service](whatsapp-service/features.md) | Via srt-service | Voice transcription, approval buttons, CTA deep links            |
-| [transcription](transcription/features.md)       | Speechmatics    | Audio-to-text with auto language detection and AI summaries      |
+| Service                                          | AI Models       | Capability                                                                            |
+| ------------------------------------------------ | --------------- | ------------------------------------------------------------------------------------- |
+| [whatsapp-service](whatsapp-service/features.md) | Via srt-service | Voice transcription, approval buttons, CTA deep links, notification importance filter |
+| [transcription](transcription/features.md)       | Speechmatics    | Audio-to-text with auto language detection and AI summaries                           |
 
 ---
 
@@ -214,15 +225,16 @@ Services that manage user content with AI-enhanced features.
 
 Core platform services that support the AI agents.
 
-| Service                                                                  | Purpose                        | AI              | Docs                                                                                                                                                                                                                                                                           |
-| ------------------------------------------------------------------------ | ------------------------------ | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [actions-agent](actions-agent/features.md)                               | Central action orchestration   | -               | [features](actions-agent/features.md) / [technical](actions-agent/technical.md) / [tutorial](actions-agent/tutorial.md) / [debt](actions-agent/technical-debt.md) / [agent](actions-agent/agent.md)                                                                            |
-| [whatsapp-service](whatsapp-service/features.md)                         | WhatsApp messaging & approvals | Via srt-service | [features](whatsapp-service/features.md) / [technical](whatsapp-service/technical.md) / [tutorial](whatsapp-service/tutorial.md) / [debt](whatsapp-service/technical-debt.md) / [agent](whatsapp-service/agent.md)                                                             |
-| [user-service](user-service/features.md)                                 | Auth, API keys, settings       | LLM validation  | [features](user-service/features.md) / [technical](user-service/technical.md) / [tutorial](user-service/tutorial.md) / [debt](user-service/technical-debt.md) / [agent](user-service/agent.md)                                                                                 |
-| [mobile-notifications-service](mobile-notifications-service/features.md) | Push notification gateway      | -               | [features](mobile-notifications-service/features.md) / [technical](mobile-notifications-service/technical.md) / [tutorial](mobile-notifications-service/tutorial.md) / [debt](mobile-notifications-service/technical-debt.md) / [agent](mobile-notifications-service/agent.md) |
-| [notion-service](notion-service/features.md)                             | Notion integration             | -               | [features](notion-service/features.md) / [technical](notion-service/technical.md) / [tutorial](notion-service/tutorial.md) / [debt](notion-service/technical-debt.md) / [agent](notion-service/agent.md)                                                                       |
-| [app-settings-service](app-settings-service/features.md)                 | LLM pricing and analytics      | -               | [features](app-settings-service/features.md) / [technical](app-settings-service/technical.md) / [tutorial](app-settings-service/tutorial.md) / [debt](app-settings-service/technical-debt.md) / [agent](app-settings-service/agent.md)                                         |
-| [api-docs-hub](api-docs-hub/features.md)                                 | OpenAPI documentation          | -               | [features](api-docs-hub/features.md) / [technical](api-docs-hub/technical.md) / [tutorial](api-docs-hub/tutorial.md) / [debt](api-docs-hub/technical-debt.md) / [agent](api-docs-hub/agent.md)                                                                                 |
+| Service                                                                  | Purpose                                             | AI              | Docs                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------ | --------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [actions-agent](actions-agent/features.md)                               | Central action orchestration                        | -               | [features](actions-agent/features.md) / [technical](actions-agent/technical.md) / [tutorial](actions-agent/tutorial.md) / [debt](actions-agent/technical-debt.md) / [agent](actions-agent/agent.md)                                                                            |
+| [whatsapp-service](whatsapp-service/features.md)                         | WhatsApp messaging, approvals & notification filter | Via srt-service | [features](whatsapp-service/features.md) / [technical](whatsapp-service/technical.md) / [tutorial](whatsapp-service/tutorial.md) / [debt](whatsapp-service/technical-debt.md) / [agent](whatsapp-service/agent.md)                                                             |
+| [user-service](user-service/features.md)                                 | Auth, API keys, model prefs                         | LLM validation  | [features](user-service/features.md) / [technical](user-service/technical.md) / [tutorial](user-service/tutorial.md) / [debt](user-service/technical-debt.md) / [agent](user-service/agent.md)                                                                                 |
+| [mobile-notifications-service](mobile-notifications-service/features.md) | Notification capture + WhatsApp digest              | OpenRouter LLM  | [features](mobile-notifications-service/features.md) / [technical](mobile-notifications-service/technical.md) / [tutorial](mobile-notifications-service/tutorial.md) / [debt](mobile-notifications-service/technical-debt.md) / [agent](mobile-notifications-service/agent.md) |
+| [notion-service](notion-service/features.md)                             | Notion integration                                  | -               | [features](notion-service/features.md) / [technical](notion-service/technical.md) / [tutorial](notion-service/tutorial.md) / [debt](notion-service/technical-debt.md) / [agent](notion-service/agent.md)                                                                       |
+| [app-settings-service](app-settings-service/features.md)                 | Platform config (minimal)                           | -               | [features](app-settings-service/features.md) / [technical](app-settings-service/technical.md) / [tutorial](app-settings-service/tutorial.md) / [debt](app-settings-service/technical-debt.md) / [agent](app-settings-service/agent.md)                                         |
+| [llm-usage-service](llm-usage-service/features.md)                       | LLM usage tracking and cost                         | -               | [features](llm-usage-service/features.md) / [technical](llm-usage-service/technical.md) / [tutorial](llm-usage-service/tutorial.md) / [debt](llm-usage-service/technical-debt.md) / [agent](llm-usage-service/agent.md)                                                        |
+| [api-docs-hub](api-docs-hub/features.md)                                 | OpenAPI documentation                               | -               | [features](api-docs-hub/features.md) / [technical](api-docs-hub/technical.md) / [tutorial](api-docs-hub/tutorial.md) / [debt](api-docs-hub/technical-debt.md) / [agent](api-docs-hub/agent.md)                                                                                 |
 
 ### User Interface
 
@@ -485,6 +497,6 @@ graph TD
 
 ---
 
-**Last updated:** 2026-04-07
+**Last updated:** 2026-04-22
 
 **Components documented:** 22 apps + 6 workers + 24 packages = 52 total (predev-lifecycle has no docs yet)

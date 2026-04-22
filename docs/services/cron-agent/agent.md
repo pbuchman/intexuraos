@@ -207,9 +207,10 @@ interface CronExecution {
 
 ## Dependencies
 
-| Service          | Why Needed                        | Failure Behavior                 |
-| ---------------- | --------------------------------- | -------------------------------- |
-| Gemini 2.5 Flash | Parse schedules, execute actions  | Create/trigger fails             |
-| Firestore        | Store schedules and executions    | All operations fail              |
-| Target services  | Provide tools for agent execution | Execution fails for that service |
-| Cloud Scheduler  | Invoke tick endpoint periodically | Scheduled executions stop        |
+| Service           | Why Needed                        | Failure Behavior                        |
+| ----------------- | --------------------------------- | --------------------------------------- |
+| Gemini 2.5 Flash  | Parse schedules, execute actions  | Create/trigger fails                    |
+| Firestore         | Store schedules and executions    | All operations fail                     |
+| Target services   | Provide tools for agent execution | Execution fails for that service        |
+| Cloud Scheduler   | Invoke tick endpoint periodically | Scheduled executions stop               |
+| LLM Usage Service | Centralized token usage tracking  | Usage not recorded; execution continues |

@@ -115,23 +115,23 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit      | Description                                                         | Date       |
-| ----------- | ------------------------------------------------------------------- | ---------- |
-| `287db2b62` | Add getUserTimezone to UserServiceClient (package-level)            | 2026-03-27 |
-| `549c9698`  | Enforce strict v8 ignore validation with blocker keyword checks     | 2026-03-24 |
-| `f3c35d4f1` | Deduplicate internalRoutes.ts handlers (INT-897)                    | 2026-03-17 |
-| `9cee58adc` | Split calendarRoutes.ts into focused route files (INT-896)          | 2026-03-16 |
-| `93aeac4a`  | Remove ZAI provider and GLM-4.7 models, finalize GLM-5 (INT-836)    | 2026-03-12 |
-| `155c2b6b`  | Write tests for v8-ignore blocks (INT-787)                          | 2026-03-10 |
-| `99febe66`  | Wire GitHub OAuth integration and update cross-service mocks        | 2026-03-02 |
-| `14a4085d`  | Pass full user prompt to calendar-agent instead of title only       | 2026-02-24 |
-| `9f80098e`  | Address all PR review findings for calendar preview [INT-535]       | 2026-02-23 |
-| `aca56231`  | Implement synchronous calendar preview in approval messages         | 2026-02-23 |
-| `5ee70b37`  | Link calendar approval to Google Calendar event (htmlLink)          | 2026-02-20 |
-| `6063175b`  | Add dev-mode log formatting for PM2 readability                     | 2026-02-16 |
-| `a52a6bbc`  | Add Dash0 OpenTelemetry integration                                 | 2026-02-16 |
-| `e60eafc1`  | Standardize API key secrets to APP naming convention                | 2026-02-15 |
-| `c72b7c53`  | Switch default LLM to Gemini 2.5 Flash + add fallbacks              | 2026-02-15 |
+| Commit      | Description                                                                  | Date       |
+| ----------- | ---------------------------------------------------------------------------- | ---------- |
+| `8aae64e4b` | Make promptType required in LlmGenerateClient (INT-1392)                     | 2026-04-20 |
+| `a4f53cd70` | Remove LLM pricing from calendar-agent, centralize via usage sink (INT-1387) | 2026-04-18 |
+| `8b1211dc0` | Wire HttpInternalAuthUsageSink in all LLM callers (INT-1342)                 | 2026-04-15 |
+| `8767c5e22` | Migrate pricing from app-settings-service to llm-usage-service               | 2026-04-12 |
+| `287db2b62` | Add getUserTimezone to UserServiceClient (package-level)                     | 2026-03-27 |
+| `549c9698`  | Enforce strict v8 ignore validation with blocker keyword checks              | 2026-03-24 |
+| `f3c35d4f1` | Deduplicate internalRoutes.ts handlers (INT-897)                             | 2026-03-17 |
+| `9cee58adc` | Split calendarRoutes.ts into focused route files (INT-896)                   | 2026-03-16 |
+| `93aeac4a`  | Remove ZAI provider and GLM-4.7 models, finalize GLM-5 (INT-836)             | 2026-03-12 |
+| `155c2b6b`  | Write tests for v8-ignore blocks (INT-787)                                   | 2026-03-10 |
+| `99febe66`  | Wire GitHub OAuth integration and update cross-service mocks                 | 2026-03-02 |
+| `14a4085d`  | Pass full user prompt to calendar-agent instead of title only                | 2026-02-24 |
+| `9f80098e`  | Address all PR review findings for calendar preview [INT-535]                | 2026-02-23 |
+| `aca56231`  | Implement synchronous calendar preview in approval messages                  | 2026-02-23 |
+| `5ee70b37`  | Link calendar approval to Google Calendar event (htmlLink)                   | 2026-02-20 |
 
 ## API Endpoints
 
@@ -285,10 +285,11 @@ interface GeneratePreviewMessage {
 
 ### Internal Services
 
-| Service        | Endpoint                                 | Purpose                             |
-| -------------- | ---------------------------------------- | ----------------------------------- |
-| `user-service` | `/internal/users/:id/oauth/google/token` | Fetch Google OAuth access token     |
-| `user-service` | `/internal/users/:id/llm-client`         | Get LLM client for event extraction |
+| Service             | Endpoint                                 | Purpose                                          |
+| ------------------- | ---------------------------------------- | ------------------------------------------------ |
+| `user-service`      | `/internal/users/:id/oauth/google/token` | Fetch Google OAuth access token                  |
+| `user-service`      | `/internal/users/:id/llm-client`         | Get LLM client for event extraction              |
+| `llm-usage-service` | `/internal/usage`                        | LLM usage tracking via HttpInternalAuthUsageSink |
 
 ### External APIs
 
@@ -300,19 +301,19 @@ interface GeneratePreviewMessage {
 
 ## Configuration
 
-| Environment Variable                  | Required | Description                             |
-| ------------------------------------- | -------- | --------------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | GCP project ID                          |
-| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | JWT key set URL for auth validation     |
-| `INTEXURAOS_AUTH_ISSUER`              | Yes      | JWT issuer for auth validation          |
-| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience for auth validation        |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth         |
-| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | user-service base URL                   |
-| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | llm-usage-service URL for pricing       |
-| `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry DSN for error reporting          |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini LLM API key (fallback)  |
-| `INTEXURAOS_ENVIRONMENT`              | No       | Environment name (default: development) |
-| `PORT`                                | No       | Server port (default: 8125)             |
+| Environment Variable                  | Required | Description                              |
+| ------------------------------------- | -------- | ---------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | GCP project ID                           |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | JWT key set URL for auth validation      |
+| `INTEXURAOS_AUTH_ISSUER`              | Yes      | JWT issuer for auth validation           |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | JWT audience for auth validation         |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth          |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | user-service base URL                    |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | llm-usage-service URL for usage tracking |
+| `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry DSN for error reporting           |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini LLM API key (fallback)   |
+| `INTEXURAOS_ENVIRONMENT`              | No       | Environment name (default: development)  |
+| `PORT`                                | No       | Server port (default: 8125)              |
 
 ## Gotchas
 
@@ -401,4 +402,4 @@ apps/calendar-agent/src/
 
 ---
 
-**Last updated:** 2026-04-07
+**Last updated:** 2026-04-22

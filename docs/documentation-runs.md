@@ -1,3 +1,574 @@
+## 2026-04-22 — orchestrator v3.6.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/orchestrator/features.md`
+- `docs/services/orchestrator/technical.md`
+- `docs/services/orchestrator/tutorial.md`
+- `docs/services/orchestrator/technical-debt.md`
+- `docs/services/orchestrator/agent.md`
+- `docs/services/index.md` (highlights updated)
+
+**Inferred Insights:**
+
+- Why: Self-hosted code task orchestration engine that keeps source code on user infrastructure while enforcing cross-model verification — no model ever grades its own work
+- Killer feature: Configurable validation model chain with soft-warning memory acknowledgment — the completion verifier tries multiple models in priority order and treats consistent memory usage triplets as soft warnings rather than hard failures, preventing memory reporting from stalling otherwise successful tasks
+- Future plans: Multi-machine orchestration, container image versioning, task priority queue, real-time resource monitoring
+- Limitations: Docker required, 5-hour attempt ceiling, all validation models must be reachable for verification, 8MB log cap, Linux-only metrics
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 2
+
+**Changes since v3.5.0:**
+
+- Execution memory pipeline simplification — memory_acknowledgment downgraded to soft warning (INT-1403)
+- Robust memory_acknowledgment recovery fixing code-review task stalls (INT-1411, INT-1415)
+- Log cap raised to 8MB and task timeout extended to 5h
+- StatusUpdateClient for redundant terminal status delivery (INT-1413)
+- Docker RFC3339 timestamp stripping fix (INT-1411)
+- User default model for execution memory replacing hardcoded Gemini (INT-1371)
+- Gemini client usage mapping for user model standardization (INT-1369)
+- mimo-pro worker type (Xiaomi MiMo)
+- test_quality review scope
+- Inactivity restart tracking (inactivityRestartCount)
+- retriedFrom field declared in CreateTaskRequestSchema
+- LLM usage sinks migrated to HTTP webhook pattern (INT-1342)
+
+---
+
+## 2026-04-22 — actions-agent v3.6.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/actions-agent/features.md`
+- `docs/services/actions-agent/technical.md`
+- `docs/services/actions-agent/tutorial.md`
+- `docs/services/actions-agent/technical-debt.md`
+- `docs/services/actions-agent/agent.md`
+- `docs/services/index.md` (highlights updated)
+
+**Inferred Insights:**
+
+- Why: Central dispatch service that bridges the gap between command classification and action execution, routing each classified command to the right specialist agent with confidence-based judgment about when to act autonomously and when to ask for approval
+- Killer feature: Confidence-based auto-execution with WhatsApp interactive button approval — high-confidence actions execute instantly while low-confidence actions pause for one-tap approval via WhatsApp buttons, with no LLM in the approval loop
+- Future plans: Reminder handler implementation, Linear action auto-execute support, executeLinkAction/executeCodeAction template migration, configurable per-user confidence thresholds, bulk action execution, additional notification channels
+- Limitations: No reminder execution, no per-user confidence threshold, WhatsApp-only approval, no bulk approval, button-only approval (no text interpretation)
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1
+- Test gaps: 0
+- Type issues: 4
+- TODOs: 0
+
+**Changes since v3.5.0:**
+
+- Important WhatsApp notification marking (INT-1418) — all notifications flagged as important to bypass notification filtering
+- Centralized LLM pricing removal (INT-1387) — removed app-settings-service dependency, usage reported via HttpInternalAuthUsageSink to llm-usage-service
+- LLM model constant migrations (gpt-5.4, claude 4.6)
+- HttpInternalAuthUsageSink wiring in LLM call sites (INT-1342)
+
+---
+
+## 2026-04-22 — user-service v3.6.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/user-service/features.md`
+- `docs/services/user-service/technical.md`
+- `docs/services/user-service/tutorial.md`
+- `docs/services/user-service/technical-debt.md`
+- `docs/services/user-service/agent.md`
+- `docs/services/index.md` (description updated)
+
+**Inferred Insights:**
+
+- Why: Centralized identity, credential, and preference vault for a multi-provider AI platform — encrypts API keys, manages OAuth tokens, and distributes credentials to downstream agents
+- Killer feature: Primary + fallback LLM model selection with automatic retry when primary is unavailable, plus encrypted multi-provider API key vault with real-time validation
+- Future plans: Microsoft/Notion OAuth, usage analytics, key rotation, budget alerts, per-user rate limiting, additional transcription providers, OpenRouter/Perplexity-specific error parsing
+- Limitations: Auth0-only auth, two OAuth providers (Google/GitHub), validation costs money (except OpenRouter), one transcription provider (Speechmatics)
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Changes since v3.5.0:**
+
+- Primary + fallback LLM model selection (INT-1362): fallbackModel in LlmPreferences, validation, cascade clearing
+- Centralized LLM pricing removal (INT-1387): replaced app-settings-service dependency with HttpInternalAuthUsageSink
+- promptType required in all generate() calls (INT-1392)
+- Model validation broadened from isFastModel() to isDefaultEligibleModel()
+
+---
+
+## 2026-04-22 — whatsapp-service v3.6.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/whatsapp-service/features.md`
+- `docs/services/whatsapp-service/technical.md`
+- `docs/services/whatsapp-service/tutorial.md`
+- `docs/services/whatsapp-service/technical-debt.md`
+- `docs/services/whatsapp-service/agent.md`
+- `docs/services/index.md` (updated whatsapp-service description)
+
+**Inferred Insights:**
+
+- Why: Mobile command center for IntexuraOS — captures thoughts, routes commands, and enables two-way approval workflows via WhatsApp
+- Killer feature: Notification importance filter (INT-1418) — users set notification level to 'important' to suppress low-priority messages while ensuring critical approvals always reach their phone
+- Future plans: Telegram/SMS support, video messages, message threading, multi-phone per user
+- Limitations: WhatsApp Business API required, 24-hour messaging window, no video, one phone per user, platform rate limits
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+- SRP violations: 1 (processWebhookEventUseCase.ts — medium)
+- Code duplicates: 1 (Pub/Sub auth detection — low)
+
+---
+
+## 2026-04-22 — mobile-notifications-service v3.6.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/mobile-notifications-service/features.md`
+- `docs/services/mobile-notifications-service/technical.md`
+- `docs/services/mobile-notifications-service/tutorial.md`
+- `docs/services/mobile-notifications-service/technical-debt.md`
+- `docs/services/mobile-notifications-service/agent.md`
+- `docs/services/index.md` (highlights updated)
+
+**Inferred Insights:**
+
+- Why: Captures mobile device notifications into a structured, searchable data store for cross-platform analysis; now also generates AI-powered daily digests from WhatsApp group messages
+- Killer feature: WhatsApp Group Digest Pipeline — end-to-end LLM-powered daily summaries with persistent group state, headline/bullets format, backfill support, and WhatsApp delivery
+- Future plans: Firestore-backed digest subscriptions (replace hard-coded array), configurable digest timezone, iOS support, push provider integration, rich notifications, batch operations
+- Limitations: Digest subscriptions hard-coded, CET-only timezone, Android-only capture, single active connection per user
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Changes since v3.5.0:**
+
+- WhatsApp Group Digest pipeline: aggregation, LLM prompts, Firestore repos, lock mechanism, CET day bounds (INT-1382)
+- WhatsApp delivery for digests via Pub/Sub (INT-1417)
+- Per-day input isolation + headline/bullets UI schema (INT-1410)
+- Fixed missing daily summaries from cron (INT-1420)
+- Fixed digest timestamp filter ms vs sec (INT-1412)
+- Added digest time-range Firestore index (INT-1413)
+- Digest filters by groupTitlePrefix not slug (INT-1409)
+- Restored digest LLM usage reporting + UsageSink brand (INT-1421)
+- Removed 5-batch cap in title filter (INT-1398)
+- Notification message filter + dedup utility (INT-1395)
+
+---
+
+## 2026-04-22 — bookmarks-agent v3.6.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/bookmarks-agent/features.md`
+- `docs/services/bookmarks-agent/technical.md`
+- `docs/services/bookmarks-agent/tutorial.md`
+- `docs/services/bookmarks-agent/technical-debt.md`
+- `docs/services/bookmarks-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Traditional bookmarking captures addresses but discards understanding; bookmarks-agent enriches saved links with OpenGraph metadata and AI summaries, delivering results via WhatsApp
+- Killer feature: Async three-stage pipeline (create -> enrich -> summarize) with Pub/Sub event-driven processing that enriches bookmarks with OG metadata and AI summaries, then delivers results to WhatsApp
+- Future plans: Full-text search, link validation, folder hierarchy, bookmark sharing, import/export, summary regeneration on demand
+- Limitations: Flat tag-based organization only, no full-text search, no sharing, summary quality varies with page structure
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Changes since v3.5.0:**
+
+- WhatsApp summary messages now marked as important (INT-1418) — bypasses notification level filtering
+- FakeWhatsAppSendPublisher extended with important flag for test assertions
+
+---
+
+## 2026-04-22 — hellscript-agent v3.6.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/hellscript-agent/features.md`
+- `docs/services/hellscript-agent/technical.md`
+- `docs/services/hellscript-agent/tutorial.md`
+- `docs/services/hellscript-agent/technical-debt.md`
+- `docs/services/hellscript-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Converts unstructured thoughts into polished, platform-specific drafts — capturing ideas in any order and generating versioned markdown documents with category-aware writing configuration
+- Killer feature: AI-powered intent interpretation that determines whether an utterance is adding a thought, reordering, or requesting a draft — combined with per-platform style configuration and writing samples
+- Future plans: Draft export beyond markdown, collaborative editing, buffer archiving/deletion, Pub/Sub integration, streaming draft generation, additional writing categories
+- Limitations: 10k char utterance cap, 5k char style instructions, 5 samples per category, single-user buffers, markdown-only output, three categories only
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Changes since v3.5.0:**
+
+- Replaced startup-scoped `GeminiClient` with per-user `LlmGenerateClient` resolved via `UserServiceClient.getLlmClient()` at request time (INT-1369)
+- Removed centralized LLM pricing — usage tracking now handled by `llm-usage-service` via `HttpInternalAuthUsageSink` (INT-1387)
+- Made `promptType` required in `LlmGenerateClient` calls (INT-1392)
+- Wired `HttpInternalAuthUsageSink` for LLM usage tracking (INT-1342)
+- New env vars: `INTEXURAOS_USER_SERVICE_URL`, `INTEXURAOS_LLM_USAGE_SERVICE_URL`
+- `INTEXURAOS_GEMINI_APP_API_KEY` moved from required to optional (platform fallback key)
+
+---
+
+## 2026-04-22 — app-settings-service v3.6.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/app-settings-service/features.md`
+- `docs/services/app-settings-service/technical.md`
+- `docs/services/app-settings-service/tutorial.md`
+- `docs/services/app-settings-service/technical-debt.md`
+- `docs/services/app-settings-service/agent.md`
+- `docs/services/index.md` (purpose updated)
+
+**Inferred Insights:**
+
+- Why: Centralized platform configuration hub; currently a minimal scaffold after LLM pricing migration
+- Killer feature: None remaining — all pricing functionality migrated to llm-usage-service in v3.6.0
+- Future plans: Evaluate decommissioning vs repurposing for budget management / feature flags; remove stale startup dependencies from 5 downstream services
+- Limitations: No business endpoints, no domain logic, no test files, empty service container
+
+**Key changes since last run (2026-04-07):**
+
+- All LLM pricing routes (`/settings/pricing`, `/internal/settings/pricing`) removed (INT-1339, INT-1387)
+- Usage costs page and backend deleted (INT-1342 Part D)
+- Domain ports, Firestore infra, and routes directories emptied/removed
+- All test files removed
+- Service reduced to health check + OpenAPI system endpoints only
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 3 (all High — empty shell service, false startup dependencies, stale dependency)
+- Test gaps: 1 (High — 0% coverage, no test files)
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-04-22 — llm-usage-service v3.6.0
+
+**Action:** Created
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/llm-usage-service/features.md`
+- `docs/services/llm-usage-service/technical.md`
+- `docs/services/llm-usage-service/tutorial.md`
+- `docs/services/llm-usage-service/technical-debt.md`
+- `docs/services/llm-usage-service/agent.md`
+- `docs/services/index.md` (doc links updated)
+
+**Inferred Insights:**
+
+- Why: Centralizes LLM usage tracking across 5 providers (Anthropic, OpenAI, Google, Perplexity, OpenRouter) with unified cost calculation, eliminating per-service pricing logic and providing a single source of truth for AI spending
+- Killer feature: Consolidated cost calculation engine that normalizes costs across all providers — handling cache multipliers, web search fees, grounding costs, and image generation — from a single pricing cache
+- Future plans: Propagate promptType to daily aggregates for groupBy support, add rate limiting to public endpoints, support pagination on aggregate queries
+- Limitations: Aggregate queries fetch all daily records for the time range (in-memory filter/group), promptType not available as groupBy dimension, pricing cache has 5-minute TTL
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 2
+- Test gaps: 0
+- Type issues: 1
+- TODOs: 0
+
+---
+
+## 2026-04-22 — transcription v3.6.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/transcription/features.md`
+- `docs/services/transcription/technical.md`
+- `docs/services/transcription/tutorial.md`
+- `docs/services/transcription/technical-debt.md`
+- `docs/services/transcription/agent.md`
+
+**Inferred Insights:**
+
+- Why: Converts WhatsApp voice notes into searchable text so downstream services can extract tasks, generate summaries, and enable full-text search
+- Killer feature: Automatic audio-to-text pipeline with 100+ custom vocabulary terms, AI summaries, and auto language detection
+- Future plans: Alternative transcription providers (Whisper, Google STT), streaming transcription, per-user vocabulary management
+- Limitations: WhatsApp-only trigger, Speechmatics-only provider, batch processing only, ~5 min polling window
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Changes since v3.5.0:**
+
+- Vocabulary cleanup: removed retired data-insights-agent entry
+- Technical debt resolved: v8 ignore blocks in adapter.ts previously listed as debt were already covered by tests (corrected in this run)
+
+---
+
+## 2026-04-22 — cron-agent v3.6.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/cron-agent/features.md`
+- `docs/services/cron-agent/technical.md`
+- `docs/services/cron-agent/tutorial.md`
+- `docs/services/cron-agent/technical-debt.md`
+- `docs/services/cron-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Automates recurring cross-service workflows — users define schedules in natural language and the system executes them via LLM-driven tool calling
+- Killer feature: LLM-driven tool-calling agent that dynamically discovers service APIs via OpenAPI specs and executes multi-step instructions autonomously
+- Future plans: Web UI for schedule management (backend complete, frontend pending), application-level OIDC validation for tick endpoint
+- Limitations: 5-minute minimum interval, 50 schedules per user, 10 iterations per execution, 50KB response truncation, 100 schedules per tick
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 1
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+---
+
+## 2026-04-22 — image-service v3.6.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/image-service/features.md` (no changes — no new user-facing features)
+- `docs/services/image-service/technical.md`
+- `docs/services/image-service/tutorial.md` (no changes — no new endpoints)
+- `docs/services/image-service/technical-debt.md`
+- `docs/services/image-service/agent.md`
+
+**Inferred Insights:**
+
+- Why: Translates raw text content into professional AI-generated images with automatic prompt engineering and thumbnailing, so users never need to write image prompts
+- Killer feature: Two-step generation pipeline — LLM-powered prompt enhancement followed by multi-provider image generation with automatic GCS storage and thumbnailing
+- Future plans: Additional image providers (Stable Diffusion, Ideogram), image editing/inpainting, style presets, batch generation, per-user cost budgets
+- Limitations: Internal-only access, no image editing, no style selection, no variations, no deduplication
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0 (pricing mismatch resolved in INT-1387)
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Changes since v3.5.0:**
+
+- LLM pricing fully removed from service (INT-1387) — `REQUIRED_MODELS`, `pricingContext`, `ModelPricing` all deleted; `initializeServices()` now synchronous
+- Explicit model parameter in `createPromptGenerator` (INT-1369) — eliminated hardcoded Gemini25Pro default
+- Usage sinks migrated to HTTP-based `HttpInternalAuthUsageSink` (INT-1342) — reports to centralized `llm-usage-service`
+- Usage sink component branding (INT-1421) — granular cost attribution per adapter
+
+---
+
+## 2026-04-22 — commands-agent v3.6.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/commands-agent/features.md`
+- `docs/services/commands-agent/technical.md`
+- `docs/services/commands-agent/tutorial.md`
+- `docs/services/commands-agent/technical-debt.md`
+- `docs/services/commands-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Single front door for all natural language input — classifies messages into typed actions via 5-step LLM prompt
+- Killer feature: Structured 5-step classification prompt with explicit intent priority, bilingual support, and URL keyword isolation
+- Future plans: Additional language support, confidence threshold tuning, structured output mode, circuit breaker for actions-agent, runtime prompt loading
+- Limitations: Two languages (English/Polish), no reclassification after fact, share menu bias, no multi-message context
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 2
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**v3.6.0 Notable Changes:**
+
+- Centralized LLM pricing removal — replaced app-settings-service startup dependency with HttpInternalAuthUsageSink to llm-usage-service (INT-1387)
+- promptType made required in LlmGenerateClient for per-prompt usage analytics (INT-1392)
+
+---
+
+## 2026-04-22 — todos-agent v3.6.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/todos-agent/features.md` (no changes — no user-facing feature work)
+- `docs/services/todos-agent/technical.md`
+- `docs/services/todos-agent/tutorial.md` (no changes — no tutorial-impacting work)
+- `docs/services/todos-agent/technical-debt.md`
+- `docs/services/todos-agent/agent.md`
+
+**Inferred Insights:**
+
+- Why: Native task management embedded in the platform — captures tasks from any channel (WhatsApp, voice, web, other agents) and uses AI to decompose natural language into structured items
+- Killer feature: AI-powered item extraction from natural language descriptions via Gemini 2.5 Flash, triggered asynchronously through Pub/Sub
+- Future plans: Todo templates, recurring todos, task dependencies, bulk operations, full-text search, collaboration, reminders, subtask nesting
+- Limitations: No recurring tasks, no task dependencies, no reminders, no collaboration, one level of item depth
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Changes since v3.5.0:**
+
+- Centralized LLM pricing removal — replaced app-settings-service startup pricing fetch with HttpInternalAuthUsageSink to llm-usage-service (INT-1387)
+- Made promptType required in LLM generate calls (INT-1392)
+- initServices became synchronous (no more async pricing fetch at startup)
+- INTEXURAOS_APP_SETTINGS_SERVICE_URL replaced with INTEXURAOS_LLM_USAGE_SERVICE_URL
+
+---
+
+## 2026-04-22 — code-worker v3.6.0
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files:**
+
+- `docs/services/code-worker/features.md`
+- `docs/services/code-worker/technical.md`
+- `docs/services/code-worker/tutorial.md`
+- `docs/services/code-worker/technical-debt.md`
+- `docs/services/code-worker/agent.md`
+- `docs/services/index.md` (v3.6.0 highlights added)
+
+**Inferred Insights:**
+
+- Why: Provides isolated, security-hardened Docker environments for AI coding agents (Claude Code and Codex) running on user-owned infrastructure
+- Killer feature: Session continuity across retries — the environment stays alive between attempts, and the agent resumes with full context via explicit session IDs
+- Future plans: Read-only root filesystem, image size optimization via multi-stage build, seccomp profile, image versioning strategy, plugin auto-update, Codex forensics parity
+- Limitations: One task per environment, no private network access, secrets readable during execution, two-hour cap per attempt, no persistent storage
+
+**Documentation Coverage:** 100%
+
+**Technical Debt Found:**
+
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+- TODOs: 0
+
+**Changes since v3.5.0:**
+
+- Claude resume fix: `--resume <sessionId>` replaces `--continue` for reliable session resumption
+- New `CLAUDE_SESSION_ID` env var required for Claude resume attempts
+- Fail-fast guard added mirroring existing Codex `CODEX_THREAD_ID` guard
+- CI pipeline renamed claude-worker build step to code-worker (INT-1368)
+- Centralized LLM pricing removal (INT-1387)
+
+---
+
 ## 2026-04-07 — code-agent v3.5.0
 
 **Action:** Updated

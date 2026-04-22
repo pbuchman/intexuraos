@@ -66,7 +66,7 @@ When sending a code task, you can specify which AI model to use directly in your
 
 ### Get Rich Notifications When Work Completes
 
-When an action finishes, you receive a detailed WhatsApp notification — not just "task completed" but a message tailored to the action type.
+When an action finishes, you receive a detailed WhatsApp notification — not just "task completed" but a message tailored to the action type. All action notifications are marked as important, ensuring they reach you even when notification filtering is enabled.
 
 Calendar events show the event title, date, time, duration, and location in a formatted message, with a "View in Calendar" button that opens the event directly in Google Calendar. Code tasks show a "View Progress" button linking to the code task detail page. Research, to-dos, notes, and bookmarks each include a link to the created resource.
 
@@ -104,6 +104,7 @@ Every message you send through IntexuraOS is already routed through the actions 
 - **Mandatory approval where mistakes are costly** — Project tracking issues always ask first, regardless of confidence
 - **One-tap approval via WhatsApp** — Approve or Reject with a single button tap; code actions show estimated cost and time upfront
 - **Rich WhatsApp notifications** — Calendar completions show event details with a "View in Calendar" button; code task completions show a "View Progress" button; each action type delivers context-specific completion messages
+- **Important notification marking** — All action notifications are flagged as important, ensuring delivery even when the user has notification filtering enabled
 - **Multi-phase engineering task control** — Approve, proceed to implementation, cancel, or view code tasks at each stage from WhatsApp
 - **Seven specialized agents, one dispatcher** — Research, to-dos, notes, bookmarks, calendar, project tracking, and engineering tasks each have a dedicated service
 - **Natural language worker selection** — Say "use opus" or "use sonnet" in code task messages to select the AI model

@@ -352,6 +352,7 @@ interface CalendarPreview {
 | **Supported Execute Types** | Execute supports: research, todo, note, link, calendar, linear (not code or reminder)  |
 | **Terminal States**         | Actions in 'completed' or 'rejected' cannot be modified via approval                   |
 | **Auto-Execution**          | Actions with >= 90% confidence auto-execute (except linear and reminder)               |
+| **Notification Priority**   | All WhatsApp notifications are marked as important (bypass notification filtering)     |
 
 ---
 
@@ -507,21 +508,21 @@ whatsapp-service -> action.approval.reply (buttonId: "approve:{actionId}")
 
 ## Dependencies
 
-| Service              | Why Needed                            | Failure Behavior             |
-| -------------------- | ------------------------------------- | ---------------------------- |
-| commands-agent       | Fetch command text for type changes   | Type change fails            |
-| research-agent       | Execute research actions              | Action marked as failed      |
-| todos-agent          | Execute todo actions                  | Action marked as failed      |
-| notes-agent          | Execute note actions                  | Action marked as failed      |
-| bookmarks-agent      | Execute link actions                  | Action marked as failed      |
-| calendar-agent       | Execute calendar actions, previews    | Action marked as failed      |
-| linear-agent         | Execute linear issue creation         | Action marked as failed      |
-| code-agent           | Execute code tasks, cancel, phase 2   | Action marked as failed      |
-| user-service         | User API keys for LLM pricing         | Startup fails                |
-| app-settings-service | LLM pricing configuration             | Startup fails                |
-| Firestore            | Action persistence                    | All operations fail          |
-| Pub/Sub              | Event distribution, notifications     | Best-effort (non-fatal)      |
+| Service              | Why Needed                            | Failure Behavior              |
+| -------------------- | ------------------------------------- | ----------------------------- |
+| commands-agent       | Fetch command text for type changes   | Type change fails             |
+| research-agent       | Execute research actions              | Action marked as failed       |
+| todos-agent          | Execute todo actions                  | Action marked as failed       |
+| notes-agent          | Execute note actions                  | Action marked as failed       |
+| bookmarks-agent      | Execute link actions                  | Action marked as failed       |
+| calendar-agent       | Execute calendar actions, previews    | Action marked as failed       |
+| linear-agent         | Execute linear issue creation         | Action marked as failed       |
+| code-agent           | Execute code tasks, cancel, phase 2   | Action marked as failed       |
+| user-service         | User API keys for LLM usage           | Startup fails                 |
+| llm-usage-service    | Centralized LLM usage reporting       | Usage not tracked (non-fatal) |
+| Firestore            | Action persistence                    | All operations fail           |
+| Pub/Sub              | Event distribution, notifications     | Best-effort (non-fatal)       |
 
 ---
 
-**Last updated:** 2026-04-07
+**Last updated:** 2026-04-22

@@ -16,7 +16,7 @@ Send any thought, in any order. The Hellscript Agent accumulates your ideas into
 
 ### AI-Powered Intent Interpretation
 
-The system understands what you mean, not just what you say. Gemini 2.5 Flash interprets each utterance to determine whether you are adding a thought, deleting one, reordering your outline, or requesting a draft.
+The system understands what you mean, not just what you say. The LLM interprets each utterance to determine whether you are adding a thought, deleting one, reordering your outline, or requesting a draft.
 
 **Example:** Say "move the conclusion point to the top" — the agent recognizes this as a reorder operation and restructures your thought list accordingly.
 
@@ -31,6 +31,12 @@ Define your voice separately for each platform you write for. Set style instruct
 When you are ready, request a draft and the agent synthesizes all your thoughts, style instructions, and writing samples into a coherent markdown document. Each draft is versioned, so you can iterate without losing previous versions. The agent considers your prior draft when generating updates, building on what already works.
 
 **Example:** After capturing 10 thoughts about a product announcement, say "write the draft for LinkedIn" — the agent produces a structured markdown document incorporating everything you have shared, styled to match your LinkedIn voice.
+
+### Per-User Model Configuration
+
+Each user's LLM calls use their own configured model and API key, resolved at request time via the user-service. This allows individual users to bring their own Gemini API key or fall back to the platform's shared key.
+
+**Example:** A user with a personal Gemini API key gets billed directly to their account. A user without one falls back to the platform key — no configuration required on their part.
 
 ### Buffer Workspace View
 
@@ -50,6 +56,7 @@ When you are ready, you say "write the draft" and select LinkedIn as the categor
 - AI interprets intent so you do not need structured commands
 - Platform-specific style configuration produces drafts that match each audience
 - Every draft is versioned — iterate freely without losing previous work
+- Per-user model configuration — bring your own API key or use the platform default
 - Graceful degradation — if the LLM cannot interpret an utterance, it falls back to appending a thought
 
 ## Limitations
@@ -57,7 +64,7 @@ When you are ready, you say "write the draft" and select LinkedIn as the categor
 - Utterance length is capped at 10,000 characters per impose request
 - Style instruction text is limited to 5,000 characters per category
 - Writing sample text is limited to 10,000 characters; maximum 5 samples per category
-- Draft generation depends on Gemini 2.5 Flash availability — if the LLM call fails, the event is still recorded but no draft is produced
+- Draft generation depends on LLM availability — if the call fails, the event is still recorded but no draft is produced
 - No collaborative editing — each buffer belongs to a single authenticated user
 - No export formats beyond markdown
 - Three writing categories only: threads, linkedin, general

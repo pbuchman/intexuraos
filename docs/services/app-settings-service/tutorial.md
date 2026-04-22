@@ -1,17 +1,18 @@
 # App Settings Service — Tutorial
 
-> **Time:** 15-20 minutes
-> **Prerequisites:** Auth0 access token, IntexuraOS project access
-> **You will learn:** How to fetch LLM pricing and calculate estimated costs before making LLM calls
+> **Time:** 5 minutes
+> **Prerequisites:** IntexuraOS dev environment running
+> **You will learn:** How the service fits into the platform startup chain
 
 ---
 
 ## What You Will Build
 
-A working integration that:
+An understanding of:
 
-- Fetches current LLM pricing for all 4 providers
-- Calculates estimated costs before making an LLM call
+- How the health check endpoint works
+- How downstream services depend on app-settings-service at startup
+- How to verify the service is operational
 
 ---
 
@@ -19,17 +20,14 @@ A working integration that:
 
 Before starting, ensure you have:
 
-- [ ] A valid Auth0 Bearer token (from the web dashboard)
-- [ ] For internal endpoints: the `INTEXURAOS_INTERNAL_AUTH_TOKEN` value
-- [ ] `curl` or an HTTP client installed
+- [ ] IntexuraOS dev environment configured
+- [ ] PM2 running via `ecosystem.config.cjs`
 
 ---
 
 ## Part 1: Health Check (2 minutes)
 
-Verify the service is running.
-
-### Step 1.1: Check Service Health
+### Step 1.1: Verify Service Health
 
 ```bash
 curl -s http://localhost:8122/health | jq .
@@ -42,7 +40,7 @@ curl -s http://localhost:8122/health | jq .
   "status": "ok",
   "serviceName": "app-settings-service",
   "version": "0.0.4",
-  "timestamp": "2026-04-07T12:00:00.000Z",
+  "timestamp": "2026-04-22T12:00:00.000Z",
   "checks": [
     { "name": "secrets", "status": "ok", "latencyMs": 0 },
     { "name": "firestore", "status": "ok", "latencyMs": 15 }
@@ -52,217 +50,68 @@ curl -s http://localhost:8122/health | jq .
 
 ### What Just Happened?
 
-The health endpoint verifies two things: that required secrets (internal auth token) are loaded, and that Firestore is reachable. If both pass, the service reports `"ok"`.
+The health endpoint verifies two things: that required secrets (`INTEXURAOS_INTERNAL_AUTH_TOKEN`) are present, and that Firestore is reachable. Both must pass for the service to report `"ok"`.
 
 ---
 
-## Part 2: Fetch LLM Pricing (5 minutes)
+## Part 2: OpenAPI Specification (2 minutes)
 
-### Step 2.1: Get All Provider Pricing (Public)
+### Step 2.1: View the OpenAPI Spec
 
 ```bash
-curl -s http://localhost:8122/settings/pricing \
-  -H "Authorization: Bearer YOUR_TOKEN" | jq .
+curl -s http://localhost:8122/openapi.json | jq .info
 ```
 
 **Expected response:**
 
 ```json
 {
-  "success": true,
-  "data": {
-    "google": {
-      "provider": "google",
-      "updatedAt": "2026-02-01T00:00:00Z",
-      "models": {
-        "gemini-2.5-flash": {
-          "inputPricePerMillion": 0.075,
-          "outputPricePerMillion": 0.30,
-          "groundingCostPerRequest": 0.0035
-        },
-        "gemini-2.5-pro": {
-          "inputPricePerMillion": 1.25,
-          "outputPricePerMillion": 10.0
-        }
-      }
-    },
-    "openai": { "...": "..." },
-    "anthropic": { "...": "..." },
-    "perplexity": { "...": "..." }
-  }
+  "title": "app-settings-service",
+  "description": "IntexuraOS App Settings Service - Centralized configuration management",
+  "version": "0.0.4"
 }
 ```
 
-> **Note:** Prices are per **million** tokens, not per thousand.
+### Step 2.2: Browse Swagger UI
 
-### Step 2.2: Get Pricing via Internal Endpoint
-
-Services call this at startup to populate their `PricingContext`:
-
-```bash
-curl -s http://localhost:8122/internal/settings/pricing \
-  -H "X-Internal-Auth: YOUR_INTERNAL_TOKEN" | jq .
-```
-
-Returns the same pricing structure as the public endpoint.
-
-**Checkpoint:** You should see pricing data for all 4 providers with at least one model each.
+Open `http://localhost:8122/docs` in your browser to see the interactive API documentation.
 
 ---
 
-## Part 3: Calculate Estimated Cost (5 minutes)
+## Part 3: Startup Dependencies (1 minute)
 
-Use the pricing data to estimate costs before making LLM calls.
+Five services wait for app-settings-service to be healthy before starting:
 
-### Step 3.1: Fetch Pricing and Extract Model Data
-
-```typescript
-const response = await fetch('http://localhost:8122/settings/pricing', {
-  headers: { Authorization: `Bearer ${token}` },
-});
-const { data: pricing } = await response.json();
-
-const geminiFlash = pricing.google.models['gemini-2.5-flash'];
+```
+user-service       --> polls http://localhost:8122/health
+commands-agent     --> polls http://localhost:8122/health
+actions-agent      --> polls http://localhost:8122/health
+research-agent     --> polls http://localhost:8122/health
+todos-agent        --> polls http://localhost:8122/health
 ```
 
-### Step 3.2: Calculate Token Cost
-
-```typescript
-function estimateCost(
-  model: { inputPricePerMillion: number; outputPricePerMillion: number },
-  inputTokens: number,
-  outputTokens: number,
-): number {
-  return (
-    (inputTokens / 1_000_000) * model.inputPricePerMillion +
-    (outputTokens / 1_000_000) * model.outputPricePerMillion
-  );
-}
-
-// Example: 5000 input tokens, 2000 output tokens with Gemini 2.5 Flash
-const cost = estimateCost(geminiFlash, 5000, 2000);
-// $0.000375 + $0.0006 = $0.000975
-```
-
-### Step 3.3: Account for Optional Costs
-
-Some models have additional costs beyond tokens:
-
-```typescript
-function estimateFullCost(
-  model: {
-    inputPricePerMillion: number;
-    outputPricePerMillion: number;
-    groundingCostPerRequest?: number;
-    webSearchCostPerCall?: number;
-  },
-  inputTokens: number,
-  outputTokens: number,
-  options?: { grounding?: boolean; webSearch?: boolean },
-): number {
-  let cost =
-    (inputTokens / 1_000_000) * model.inputPricePerMillion +
-    (outputTokens / 1_000_000) * model.outputPricePerMillion;
-
-  if (options?.grounding && model.groundingCostPerRequest !== undefined) {
-    cost += model.groundingCostPerRequest;
-  }
-  if (options?.webSearch && model.webSearchCostPerCall !== undefined) {
-    cost += model.webSearchCostPerCall;
-  }
-
-  return cost;
-}
-```
-
-**Result:** You can now preview costs before making any LLM call.
-
----
-
-## Response Format
-
-All endpoints return a standardized response contract:
-
-- **Success:** `{ "success": true, "data": { ... } }`
-- **Error:** `{ "success": false, "error": { "code": "...", "message": "..." } }`
+If app-settings-service is down, these services will not start (30-second timeout).
 
 ---
 
 ## Troubleshooting
 
-| Problem                | Cause                            | Solution                                           |
-| ---------------------- | -------------------------------- | -------------------------------------------------- |
-| 401 UNAUTHORIZED       | Missing or invalid token         | Check Bearer token or X-Internal-Auth header       |
-| 500 INTERNAL_ERROR     | Missing pricing data             | Contact admin — Firestore pricing needs migration  |
-| Service not starting   | Missing model pricing            | Run Firestore pricing migration                    |
+| Problem                    | Cause                                | Solution                                        |
+| -------------------------- | ------------------------------------ | ----------------------------------------------- |
+| Health returns "degraded"  | Firestore connectivity issue         | Check GCP credentials and project configuration |
+| Health returns "down"      | Missing required secrets             | Verify `INTEXURAOS_INTERNAL_AUTH_TOKEN` is set  |
+| Downstream services stuck  | app-settings-service not running     | Start the service or check PM2 status           |
+
+---
+
+## Note on Current State
+
+As of v3.6.0, this service has no business endpoints. All LLM pricing and usage cost functionality was migrated to `llm-usage-service`. The service's primary role is as a startup health anchor for downstream services. See the [Technical Reference](technical.md) for details.
 
 ---
 
 ## Next Steps
 
-Now that you understand the basics:
-
-1. Explore the [OpenAPI documentation](http://localhost:8122/docs) for full schema details
-2. Read the [Technical Reference](technical.md) for architecture and gotchas
-3. Check [research-agent](../research-agent/features.md) to see how pricing feeds into LLM cost tracking
-
----
-
-## Exercises
-
-Test your understanding:
-
-1. **Easy:** Fetch pricing and find which model has the lowest input cost per million tokens
-2. **Hard:** Write a function that takes a model name and token counts, fetches pricing from the API, and returns the estimated cost in USD including optional grounding fees
-
-<details>
-<summary>Solutions</summary>
-
-### Exercise 1: Cheapest Input Model
-
-```typescript
-const { data: pricing } = await fetch('/settings/pricing', {
-  headers: { Authorization: `Bearer ${token}` },
-}).then((r) => r.json());
-
-let cheapest = { model: '', cost: Infinity };
-for (const [, provider] of Object.entries(pricing)) {
-  for (const [model, config] of Object.entries(provider.models)) {
-    if (config.inputPricePerMillion < cheapest.cost) {
-      cheapest = { model, cost: config.inputPricePerMillion };
-    }
-  }
-}
-console.log(`Cheapest: ${cheapest.model} at $${cheapest.cost}/M tokens`);
-```
-
-### Exercise 2: Cost Estimator Function
-
-```typescript
-async function estimateLLMCost(
-  modelName: string,
-  inputTokens: number,
-  outputTokens: number,
-  options?: { grounding?: boolean },
-): Promise<number> {
-  const { data: pricing } = await fetch('/settings/pricing', {
-    headers: { Authorization: `Bearer ${token}` },
-  }).then((r) => r.json());
-
-  for (const provider of Object.values(pricing)) {
-    const model = provider.models[modelName];
-    if (model) {
-      let cost =
-        (inputTokens / 1_000_000) * model.inputPricePerMillion +
-        (outputTokens / 1_000_000) * model.outputPricePerMillion;
-      if (options?.grounding && model.groundingCostPerRequest) {
-        cost += model.groundingCostPerRequest;
-      }
-      return Math.round(cost * 1_000_000) / 1_000_000;
-    }
-  }
-  throw new Error(`Model ${modelName} not found in pricing`);
-}
-```
-
-</details>
+1. Read the [Technical Reference](technical.md) for architecture details
+2. Review the [Technical Debt](technical-debt.md) for consolidation considerations
+3. See the `llm-usage-service` documentation for LLM pricing and usage cost APIs
