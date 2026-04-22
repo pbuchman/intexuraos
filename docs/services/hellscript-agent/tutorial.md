@@ -58,9 +58,10 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscr
 ### What Just Happened?
 
 1. A new buffer was created (since no `bufferId` was provided)
-2. Gemini 2.5 Flash interpreted your utterance as an `append_thought` intent
-3. The thought was added to the buffer's materialized state
-4. The event was recorded in the buffer's event subcollection
+2. The user's LLM client was resolved via user-service
+3. The LLM interpreted your utterance as an `append_thought` intent
+4. The thought was added to the buffer's materialized state
+5. The event was recorded in the buffer's event subcollection
 
 **Save the `bufferId`** from the response — you will use it in subsequent requests.
 
@@ -298,6 +299,20 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscr
 
 **Solution:** Verify the buffer ID is correct and belongs to your authenticated user.
 
+### Common Error: LLM Client Resolution Failed
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INTERNAL_ERROR",
+    "message": "Failed to initialize LLM client. Please try again."
+  }
+}
+```
+
+**Solution:** This occurs when the user-service cannot resolve an LLM client for the user. Ensure the user has a valid Gemini API key configured, or that the platform fallback key (`INTEXURAOS_GEMINI_APP_API_KEY`) is set.
+
 ---
 
 ## Troubleshooting
@@ -309,6 +324,7 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/hellscr
 | `action: "category_required"`   | Re-send the impose with a `category` field                         |
 | `action: "fallback_append"`     | The LLM could not interpret intent; utterance was saved as thought |
 | `CONFLICT` on sample creation   | Delete an existing sample first (max 5 per category)               |
+| `INTERNAL_ERROR` on impose      | LLM client resolution may have failed; check user config           |
 | `500 Internal Error`            | Check service health at `/health`; retry with backoff              |
 
 ---

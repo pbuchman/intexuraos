@@ -2,7 +2,7 @@
 
 > **Time:** 20–30 minutes
 > **Prerequisites:** GCP project access, WhatsApp Business API setup, IntexuraOS development environment
-> **You'll learn:** How to integrate with whatsapp-service for message sending, approval workflows, and reply correlation
+> **You'll learn:** How to integrate with whatsapp-service for message sending, approval workflows, notification preferences, and reply correlation
 
 ---
 
@@ -13,6 +13,7 @@ A working integration that:
 - Sends WhatsApp messages to users via the internal Pub/Sub API
 - Sends interactive approval messages with buttons
 - Sends CTA URL messages with clickable deep links
+- Marks messages as important to bypass notification filters
 - Tracks outbound messages for reply correlation
 - Handles approval responses (buttons and text replies)
 - Processes the approval workflow end-to-end
@@ -45,6 +46,7 @@ Outgoing: Your Service -> Pub/Sub -> whatsapp-service -> WhatsApp
 2. **OutboundMessage Tracking**: Sent messages are stored with correlationId for reply correlation
 3. **Approval Correlation**: CorrelationId format `action-{type}-approval-{actionId}` enables actionId extraction from text replies
 4. **Event-Driven Transcription**: Audio files are stored in GCS, then srt-service transcribes asynchronously
+5. **Notification Importance Filter**: Users can set their notification level to `important` — only messages with `important: true` are delivered when this filter is active
 
 ---
 
@@ -62,6 +64,7 @@ interface SendMessageEvent {
   replyToMessageId?: string;                         // Optional: reply to specific message
   buttons?: WhatsAppInteractiveButton[];             // Optional: interactive buttons
   ctaUrl?: { displayText: string; url: string };     // Optional: CTA URL button
+  important?: boolean;                               // Optional: bypass 'important' filter
   correlationId: string;                             // For tracking and reply correlation
   timestamp: string;                                 // ISO 8601
 }
@@ -121,13 +124,35 @@ await topic.publishMessage({
 });
 ```
 
+### Step 2.4: Send an Important Message
+
+When a user's notification level is set to `important`, only messages with `important: true` are delivered. For critical notifications — approval requests, error alerts, completed tasks that need attention — always set the flag:
+
+```typescript
+const urgentEvent: SendMessageEvent = {
+  type: 'whatsapp.message.send',
+  userId: 'user-abc-123',
+  message: 'CRITICAL: Production deployment requires your approval.',
+  important: true,  // Bypasses 'important'-only filter
+  correlationId: 'deploy-approval-dep-456',
+  timestamp: new Date().toISOString(),
+};
+
+await topic.publishMessage({
+  data: Buffer.from(JSON.stringify(urgentEvent)),
+});
+```
+
+Messages without `important: true` (or with `important` absent) are silently dropped when the user's notification level is `important`. The service returns 200 OK — Pub/Sub does not retry dropped messages.
+
 ### What Just Happened?
 
 1. Event published to the `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` topic
 2. WhatsApp-service receives via push subscription at `/internal/whatsapp/pubsub/send-message`
 3. Service looks up phone number for userId from `whatsapp_user_mappings`
-4. Message sent via WhatsApp Cloud API (text, interactive, or CTA based on payload shape)
-5. OutboundMessage saved to `whatsapp_outbound_messages` with wamid and correlationId
+4. Service reads notification preferences — if level is `important` and the message is not flagged `important`, the message is dropped
+5. Message sent via WhatsApp Cloud API (text, interactive, or CTA based on payload shape)
+6. OutboundMessage saved to `whatsapp_outbound_messages` with wamid and correlationId
 
 **Checkpoint:** User receives message on WhatsApp within a few seconds.
 
@@ -151,6 +176,7 @@ const approvalEvent: SendMessageEvent = {
     { type: 'reply', reply: { id: `approve:${actionId}`, title: 'Approve' } },
     { type: 'reply', reply: { id: `cancel:${actionId}`, title: 'Cancel' } },
   ],
+  important: true,  // Approval requests should always bypass the filter
   correlationId: `action-${actionType}-approval-${actionId}`,
   timestamp: new Date().toISOString(),
 };
@@ -315,6 +341,20 @@ When sending messages via Pub/Sub, whatsapp-service classifies errors:
 
 If your service needs to know about delivery failures, monitor the send-message handler logs. WhatsApp API errors are logged with `SKIP_SENTRY_KEY` to avoid Sentry quota exhaustion.
 
+### Scenario F: Notification Importance Best Practices
+
+When publishing `SendMessageEvent`, decide whether to set `important: true`:
+
+| Message Type                 | Set `important`? | Rationale                                         |
+| ---------------------------- | ---------------- | ------------------------------------------------- |
+| Approval requests            | Yes              | User must act — blocking a workflow               |
+| Error alerts                 | Yes              | User needs immediate awareness                    |
+| Task completion (actionable) | Yes              | PR reviews, deployment approvals                  |
+| Routine status updates       | No               | Non-urgent, can wait for dashboard                |
+| Informational notifications  | No               | Nice-to-know, not need-to-know                    |
+
+If the user's notification level is `all` (the default), the `important` flag has no effect — all messages are delivered regardless.
+
 ---
 
 ## Troubleshooting
@@ -322,6 +362,7 @@ If your service needs to know about delivery failures, monitor the send-message 
 | Problem                       | Solution                                                              |
 | ----------------------------- | --------------------------------------------------------------------- |
 | "Message not delivered"       | Check user has connected WhatsApp number via `GET /whatsapp/status`   |
+| "Message silently dropped"    | User's notification level may be `important` — set `important: true`  |
 | "Phone not verified"          | Run `/whatsapp/verify/send` then `/whatsapp/verify/confirm` first     |
 | "No approval event received"  | Verify buttonId format or correlationId matches expected pattern      |
 | "actionId is undefined"       | User replied to non-approval message; check correlationId pattern     |

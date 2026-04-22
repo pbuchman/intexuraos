@@ -239,31 +239,26 @@ sequenceDiagram
 
 | Commit      | Description                                                                           | Date       |
 | ----------- | ------------------------------------------------------------------------------------- | ---------- |
+| `8aae64e4b` | Make promptType required in LlmGenerateClient calls (INT-1392)                        | 2026-04-17 |
+| `c05f8fab9` | Pass promptType for LLM usage tracking (INT-1390)                                     | 2026-04-16 |
+| `a4f53cd70` | Remove LLM pricing from linear-agent — centralized in llm-usage-service (INT-1387)    | 2026-04-15 |
+| `7a64b10e4` | Replace fixed Gemini client with per-request user LLM client for pruning (INT-1369)   | 2026-04-14 |
+| `e4459fe38` | Skip pruning when candidates are pending user review (INT-1349)                       | 2026-04-12 |
+| `6bea344a5` | Eliminate double getAllConnectedUserIds fetch in pruning route                        | 2026-04-14 |
 | `892125a5d` | Write-through label cache in updateIssueMetadata                                      | 2026-04-05 |
 | `ccbc21106` | Recompute group summaries on Linear label changes (INT-1187)                          | 2026-03-31 |
-| `32a36dfbf` | Add group-level Firestore aggregation for issue-groups endpoint performance           | 2026-03-31 |
-| `64ee5e0af` | Add public prune-candidates endpoints and update internal route (INT-1168)            | 2026-03-30 |
-| `a7c0907c2` | Add confirmPruneDeletion use case for user-initiated deletion (INT-1168)              | 2026-03-30 |
-| `b91ea2c31` | Change pruneIssues to store candidates instead of deleting (INT-1168)                 | 2026-03-30 |
-| `a9185451e` | Implement Gemini-based issue pruning classifier (INT-1164)                            | 2026-03-29 |
-| `cc0e72e31` | Extend completed issue retention from 7 to 60 days (INT-963)                          | 2026-03-29 |
-| `2b5903763` | Fall back to findByIdentifier in metadata route when findById returns null (INT-1147) | 2026-03-29 |
-| `ae259d7ef` | Add subtask parent breadcrumbs                                                        | 2026-03-29 |
-| `e96ac421a` | Review-outcome label fallback + dropped label detection (INT-1079)                    | 2026-03-28 |
 
-### AI-Powered Issue Pruning (INT-1164, INT-1168)
+### Centralized LLM Pricing Removal (INT-1387)
 
-New automated system to keep the Linear workspace under subscription limits:
+LLM pricing logic has been removed from linear-agent. Pricing is now handled centrally by `llm-usage-service` via `HttpInternalAuthUsageSink`. This eliminates the direct dependency on `app-settings-service` for pricing data at startup. The service now reports LLM usage with `promptType` tags (e.g., `issue-pruning-classification`, `linear-action-extraction`, `linear-issue-title-generation`) to the usage service for cost attribution.
 
-- **Threshold-based activation** — pruning activates when active issue count exceeds 200 (configurable via `PRUNE_CONFIG`)
-- **Gemini classification** — uses Gemini 2.5 Flash to score issues as deletion candidates, categorizing them as cancelled, duplicate, sub-issue, simple-fix, review-only, or other
-- **Two-phase deletion** — candidates are stored in Firestore for user review via `GET /linear/prune-candidates`, then confirmed via `DELETE /linear/prune-candidates`
-- **Zod-validated LLM response** — Gemini output is parsed with Zod schema validation to enforce correct format
-- **Soft-delete** — issues are trashed in Linear (recoverable) and removed from all connected users' local Firestore copies
+### Per-Request User LLM Client for Pruning (INT-1369)
 
-### Group Summary Recomputes on Label Changes (INT-1187)
+Issue pruning no longer uses a fixed Gemini client initialized at startup. Instead, the pruning route resolves an LLM client from the first available connected user at request time via `userServiceClient.getLlmClient()`. This aligns pruning with the standard per-user model resolution pattern and removes the dependency on `INTEXURAOS_GEMINI_APP_API_KEY` for pruning. The `createClassifier` factory in the service container now accepts an `LlmGenerateClient` parameter. If no connected user can provide an LLM client, pruning skips gracefully.
 
-When labels are updated via the internal metadata endpoint or detected via webhook, the Linear Agent notifies code-agent to recompute group summaries. The metadata endpoint also performs a write-through label cache update to prevent stale label data between webhook arrivals.
+### Pruning Guard for Pending Candidates (INT-1349)
+
+The hourly prune scheduler now checks for existing unreviewed candidates before running a new classification. If candidates from a previous run are still pending user review, the scheduler skips and reports the pending count. This prevents overwriting candidates the user has not yet reviewed.
 
 ### Extended Completed Issue Retention (INT-963)
 
@@ -628,12 +623,15 @@ Uses the user's configured LLM provider (typically Gemini 2.5 Flash) to parse na
 
 ### Issue Pruning Classifier
 
-Uses Gemini 2.5 Flash via a platform API key (not user-scoped) to score synced issues as deletion candidates. The classifier:
+Uses the user's configured LLM provider (resolved per-request from the first available connected user via `userServiceClient.getLlmClient()`) to score synced issues as deletion candidates. The classifier:
 
 1. Builds a structured prompt with issue metadata (identifier, title, state, labels, description preview, parent relationships)
 2. Requests the LLM to return a JSON array of scored candidates
 3. Validates the response with a Zod schema (`GeminiCandidateArraySchema`) requiring valid identifiers, 0-100 scores, non-empty reasons, and valid categories
-4. Falls back gracefully if no Gemini API key is configured
+4. Skips gracefully if no connected user can resolve an LLM client
+5. Skips if candidates from a previous run are still pending user review
+
+The `createClassifier` factory in the service container accepts an `LlmGenerateClient` parameter, resolved at request time in the pruning route handler. LLM calls include `promptType: 'issue-pruning-classification'` for usage attribution.
 
 Prompt version: `1.1.0`
 
@@ -698,32 +696,32 @@ The client is split into three focused modules:
 
 ## Configuration
 
-| Variable                              | Required | Description                           |
-| ------------------------------------- | -------- | ------------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | GCP project identifier                |
-| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User service for LLM keys             |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Service-to-service auth               |
-| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | LLM pricing context source            |
-| `INTEXURAOS_CODE_AGENT_URL`           | Yes      | Code agent for auto-trigger on assign |
-| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | Auth0 JWKS endpoint                   |
-| `INTEXURAOS_AUTH_ISSUER`              | Yes      | Auth0 issuer                          |
-| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | Auth0 audience                        |
-| `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry error tracking                 |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key (for pruning) |
-| `INTEXURAOS_ENVIRONMENT`              | No       | Sentry environment tag                |
+| Variable                              | Required | Description                                            |
+| ------------------------------------- | -------- | ------------------------------------------------------ |
+| `INTEXURAOS_GCP_PROJECT_ID`           | Yes      | GCP project identifier                                 |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User service for LLM keys                              |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Service-to-service auth                                |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | LLM usage reporting                                    |
+| `INTEXURAOS_CODE_AGENT_URL`           | Yes      | Code agent for auto-trigger on assign                  |
+| `INTEXURAOS_AUTH_JWKS_URL`            | Yes      | Auth0 JWKS endpoint                                    |
+| `INTEXURAOS_AUTH_ISSUER`              | Yes      | Auth0 issuer                                           |
+| `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | Auth0 audience                                         |
+| `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry error tracking                                  |
+| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key (user-service client fallback) |
+| `INTEXURAOS_ENVIRONMENT`              | No       | Sentry environment tag                                 |
 
 ## Dependencies
 
 ### Internal Services
 
-| Service              | Endpoint                                         | Purpose                                     |
-| -------------------- | ------------------------------------------------ | ------------------------------------------- |
-| user-service         | `/internal/user/llm-client`                      | LLM API key retrieval                       |
-| app-settings-service | `/internal/pricing`                              | LLM pricing data                            |
-| code-agent           | `/internal/code/process`                         | Auto-trigger code tasks on issue assignment |
-| code-agent           | `/internal/issue-groups/:id/recompute-summary`   | Recompute group summaries on label changes  |
-| actions-agent        | (caller)                                         | Upstream orchestrator                       |
-| code-agent           | (caller)                                         | Programmatic issue management               |
+| Service            | Endpoint                                       | Purpose                                             |
+| ------------------ | ---------------------------------------------- | --------------------------------------------------- |
+| user-service       | `/internal/user/llm-client`                    | LLM client resolution (per-user model)              |
+| llm-usage-service  | `/internal/llm-usage`                          | LLM usage reporting (via HttpInternalAuthUsageSink) |
+| code-agent         | `/internal/code/process`                       | Auto-trigger code tasks on issue assignment         |
+| code-agent         | `/internal/issue-groups/:id/recompute-summary` | Recompute group summaries on label changes          |
+| actions-agent      | (caller)                                       | Upstream orchestrator                               |
+| code-agent         | (caller)                                       | Programmatic issue management                       |
 
 ### External Services
 

@@ -1,7 +1,7 @@
 # Todos Agent — Technical Debt
 
-**Last Updated:** 2026-04-07
-**Analysis Run:** Autonomous documentation refresh (service-scribe, v3.5.0 release)
+**Last Updated:** 2026-04-22
+**Analysis Run:** Autonomous documentation refresh (service-scribe, v3.6.0 release)
 
 ---
 
@@ -103,6 +103,10 @@ No deprecated APIs or dependencies in use.
 
 ## Recent Improvements
 
+### v3.6.0 (2026-04-22)
+
+Centralized LLM pricing removal (INT-1387). Replaced `fetchAllPricing`/`createPricingContext` startup flow (which fetched pricing from app-settings-service) with `HttpInternalAuthUsageSink` that reports usage to llm-usage-service. This eliminated the app-settings-service dependency, made `initServices` synchronous, and replaced `INTEXURAOS_APP_SETTINGS_SERVICE_URL` with `INTEXURAOS_LLM_USAGE_SERVICE_URL`. Added required `promptType: 'todo-item-extraction'` parameter to LLM generate calls (INT-1392).
+
 ### v3.5.0 (2026-04-07)
 
 Refactored `reorderTodoItems` use case (INT-1072, commit `613ac528`) to replace a v8-ignore workaround with a cleaner implementation. The previous code used a separate validation pass followed by `.map()` with a never-throwing fallback wrapped in `v8 ignore`. The new implementation uses a single `Map`-based iteration loop that returns early on missing items, eliminating the need for coverage exemptions entirely.
@@ -175,6 +179,8 @@ Achieved 100% branch coverage with proper v8 ignore annotations (INT-427).
 
 | Date       | Issue                                     | Resolution                                                                 |
 | ---------- | ----------------------------------------- | -------------------------------------------------------------------------- |
+| 2026-04-22 | app-settings-service startup dependency   | Replaced with HttpInternalAuthUsageSink to llm-usage-service (INT-1387)    |
+| 2026-04-22 | LLM generate calls missing promptType     | Added required promptType parameter (INT-1392)                             |
 | 2026-03-23 | v8-ignore workaround in reorderTodoItems  | Refactored to Map-based iteration, no coverage exemption needed (INT-1072) |
 | 2026-03-19 | PENDING v8-ignore annotations             | Standardized to permanent ts-type (INT-987)                                |
 | 2026-03-12 | ZAI/GLM-4.7 still in LLM chain            | Removed ZAI provider and GLM-4.7 (93aeac4a)                                |

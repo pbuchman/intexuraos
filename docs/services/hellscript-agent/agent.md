@@ -16,7 +16,7 @@
 
 **Endpoint:** `POST /hellscript/impose`
 
-**When to use:** When you need to send a user utterance to a writing buffer. Creates a new buffer if `bufferId` is omitted.
+**When to use:** When you need to send a user utterance to a writing buffer. Creates a new buffer if `bufferId` is omitted. The user's LLM client is resolved per-request via user-service.
 
 **Input Schema:**
 
@@ -197,7 +197,7 @@ interface WritingSample {
 **Requires:**
 
 - Valid Bearer token (JWT) for all endpoints
-- Gemini 2.5 Flash API availability for intent interpretation and draft generation
+- User must have a configured LLM client (own Gemini API key or platform fallback key)
 - A resolved category (from request body or LLM inference) for draft generation
 
 ## Usage Patterns
@@ -239,13 +239,13 @@ interface WritingSample {
 
 ## Error Handling
 
-| Error Code | Meaning                 | Recovery Action                              |
-| ---------- | ----------------------- | -------------------------------------------- |
-| 400        | Invalid request body    | Check utterance length, category validity    |
-| 401        | Unauthorized            | Refresh Bearer token                         |
-| 404        | Buffer/sample not found | Verify ID and ownership                      |
-| 409        | Max samples exceeded    | Delete an existing sample before creating    |
-| 500        | Internal server error   | Retry with backoff                           |
+| Error Code | Meaning                 | Recovery Action                                                |
+| ---------- | ----------------------- | -------------------------------------------------------------- |
+| 400        | Invalid request body    | Check utterance length, category validity                      |
+| 401        | Unauthorized            | Refresh Bearer token                                           |
+| 404        | Buffer/sample not found | Verify ID and ownership                                        |
+| 409        | Max samples exceeded    | Delete an existing sample before creating                      |
+| 500        | Internal server error   | Retry with backoff; may indicate LLM client resolution failure |
 
 ## Events Published
 
@@ -253,8 +253,10 @@ None. Hellscript Agent does not publish Pub/Sub events.
 
 ## Dependencies
 
-| Service          | Why Needed                           | Failure Behavior                               |
-| ---------------- | ------------------------------------ | ---------------------------------------------- |
-| Firestore        | Buffer, event, draft, config storage | Request fails with 500                         |
-| Gemini 2.5 Flash | Intent interpretation                | Falls back to `fallback_append`                |
-| Gemini 2.5 Flash | Draft generation                     | Returns `DraftGenerationError`; no draft saved |
+| Service           | Why Needed                                | Failure Behavior                               |
+| ----------------- | ----------------------------------------- | ---------------------------------------------- |
+| user-service      | Resolve per-user LLM client               | Returns 500 — impose cannot proceed            |
+| llm-usage-service | LLM usage tracking                        | Non-blocking — tracking failure logged only    |
+| Firestore         | Buffer, event, draft, config storage      | Request fails with 500                         |
+| Gemini            | Intent interpretation                     | Falls back to `fallback_append`                |
+| Gemini            | Draft generation                          | Returns `DraftGenerationError`; no draft saved |

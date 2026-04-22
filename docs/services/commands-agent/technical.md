@@ -2,7 +2,7 @@
 
 ## Overview
 
-Commands-agent classifies natural language input into action types using a structured 5-step LLM prompt backed by Gemini 2.5 Flash. It receives commands from WhatsApp (via Pub/Sub push) and the PWA (via REST), creates actions through actions-agent, and publishes `action.created` events for downstream processing. Runs on Cloud Run with Fastify, Firestore persistence, and Dash0 OpenTelemetry for distributed tracing.
+Commands-agent classifies natural language input into action types using a structured 5-step LLM prompt backed by Gemini 2.5 Flash. It receives commands from WhatsApp (via Pub/Sub push) and the PWA (via REST), creates actions through actions-agent, and publishes `action.created` events for downstream processing. LLM usage is tracked via `HttpInternalAuthUsageSink` to llm-usage-service. Runs on Cloud Run with Fastify, Firestore persistence, and Dash0 OpenTelemetry for distributed tracing.
 
 ## Architecture
 
@@ -162,18 +162,18 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit      | Description                                                      | Date       |
-| ----------- | ---------------------------------------------------------------- | ---------- |
-| `287db2b62` | Add getUserTimezone to UserServiceClient (test fakes updated)    | 2026-03-27 |
-| `473a7e193` | Add JSDoc to UserServiceError domain port (INT-894)              | 2026-03-20 |
-| `436dfb5d7` | Define domain port for user service (INT-894)                    | 2026-03-19 |
-| `75ec965bd` | Deduplicate retryPendingCommands with processCommand (INT-893)   | 2026-03-19 |
-| `47dc96f13` | Fix trailing newlines in schema files (INT-895)                  | 2026-03-19 |
-| `d4d01e364` | Extract commandSchema from commandsRoutes (INT-895)              | 2026-03-19 |
-| `4d9202830` | Decompose processCommand.ts use-case (INT-892)                   | 2026-03-19 |
-| `e9ddcec50` | Extract PubSub handling from internalRoutes (INT-891)            | 2026-03-17 |
-| `af267af6c` | Extract repository calls from commandsRoutes into use-cases      | 2026-03-16 |
-| `34fde5ee`  | Add tests for commandsRoutes.ts owner auth + status (INT-867)    | 2026-03-15 |
+| Commit      | Description                                                                 | Date       |
+| ----------- | --------------------------------------------------------------------------- | ---------- |
+| `dedd0e3d9` | Strengthen test assertions to verify semantic promptType (INT-1392)         | 2026-04-18 |
+| `8aae64e4b` | Make promptType required in LlmGenerateClient (INT-1392)                    | 2026-04-18 |
+| `a4f53cd70` | Remove LLM pricing from service, delete deprecated dependency (INT-1387)    | 2026-04-15 |
+| `6f2a13c14` | Remove pricing from client configs (INT-1387)                               | 2026-04-14 |
+| `8b1211dc0` | Wire HttpInternalAuthUsageSink in all LLM callers (INT-1342)                | 2026-04-11 |
+| `8767c5e22` | Migrate consumers from app-settings-service to llm-usage-service (INT-1342) | 2026-04-10 |
+| `287db2b62` | Add getUserTimezone to UserServiceClient (test fakes updated)               | 2026-03-27 |
+| `473a7e193` | Add JSDoc to UserServiceError domain port (INT-894)                         | 2026-03-20 |
+| `436dfb5d7` | Define domain port for user service (INT-894)                               | 2026-03-19 |
+| `75ec965bd` | Deduplicate retryPendingCommands with processCommand (INT-893)              | 2026-03-19 |
 
 ## API Endpoints
 
@@ -267,11 +267,11 @@ sequenceDiagram
 
 ### Internal Services
 
-| Service                | Endpoint                   | Purpose                                        |
-| ---------------------- | -------------------------- | ---------------------------------------------- |
-| `user-service`         | (via internal-clients)     | Fetch LLM client for classification            |
-| `actions-agent`        | `POST /internal/actions`   | Create actions from classified commands        |
-| `app-settings-service` | (via llm-pricing)          | Fetch LLM pricing data at startup              |
+| Service              | Endpoint                 | Purpose                                 |
+| -------------------- | ------------------------ | --------------------------------------- |
+| `user-service`       | (via internal-clients)   | Fetch LLM client for classification     |
+| `actions-agent`      | `POST /internal/actions` | Create actions from classified commands |
+| `llm-usage-service`  | (via llm-pricing)        | LLM usage tracking and cost reporting   |
 
 ### Packages
 
@@ -279,7 +279,7 @@ sequenceDiagram
 | -------------------- | ------------------------------------------------------- |
 | `llm-prompts`        | Classification prompt builder                           |
 | `llm-factory`        | LLM client abstraction                                  |
-| `llm-pricing`        | Fetch and cache LLM pricing from app-settings           |
+| `llm-pricing`        | `HttpInternalAuthUsageSink` for LLM usage tracking      |
 | `llm-contract`       | Shared `LlmModels` enum and type contracts              |
 | `internal-clients`   | Shared user-service HTTP client                         |
 | `infra-sentry`       | Sentry-enabled logger factory                           |
@@ -313,7 +313,7 @@ sequenceDiagram
 | `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | Auth0 audience for JWT validation                                 |
 | `INTEXURAOS_USER_SERVICE_URL`         | Yes      | user-service base URL                                             |
 | `INTEXURAOS_ACTIONS_AGENT_URL`        | Yes      | actions-agent base URL                                            |
-| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | llm-usage-service base URL (pricing data fetched at startup)      |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | llm-usage-service base URL for LLM usage tracking                 |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth                                   |
 | `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`     | Yes      | Pub/Sub topic for action creation events                          |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform-level Gemini fallback API key for classification         |
@@ -336,7 +336,9 @@ sequenceDiagram
 
 **Archive vs delete** — Classified commands can only be archived (`PATCH /commands/:commandId` with `status: "archived"`). Only commands with status `received`, `pending_classification`, or `failed` can be deleted.
 
-**Pricing context at startup** — `initServices()` calls `fetchAllPricing()` from `app-settings-service` before accepting any requests. If app-settings-service is unavailable at startup, the service fails to initialize entirely.
+**LLM usage tracking** — The user-service client is wired with `HttpInternalAuthUsageSink` from `llm-pricing`, which reports LLM usage to `llm-usage-service` for cost tracking. This replaced the previous startup pricing fetch from `app-settings-service` (removed in v3.6.0).
+
+**Required promptType** — All `client.generate()` calls must include a `promptType` string (e.g., `'command-classification'`). This was made required in v3.6.0 (INT-1392) to enable per-prompt-type usage analytics.
 
 **Response contract** — All endpoints use `reply.ok(data)` and `reply.fail(code, message)`. Responses wrap data under `{ success: true, data: {...} }` and errors under `{ success: false, error: { code, message } }`.
 

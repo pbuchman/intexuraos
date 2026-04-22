@@ -99,7 +99,7 @@ curl -X GET "https://actions-agent.intexuraos.com/actions?status=pending,awaitin
 
 ## Part 2: WhatsApp Interactive Button Approval (10 minutes)
 
-The most powerful feature of actions-agent is approving actions by tapping interactive WhatsApp buttons.
+The most powerful feature of actions-agent is approving actions by tapping interactive WhatsApp buttons. All action notifications are marked as important, so they reach you even when notification filtering is enabled.
 
 ### How It Works
 

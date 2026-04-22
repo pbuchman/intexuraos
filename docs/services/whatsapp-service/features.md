@@ -23,6 +23,12 @@ Four interactions with four different agents. None required opening an app, logg
 
 ## How It Helps
 
+### Control Your Notification Volume
+
+Not every agent update deserves a WhatsApp buzz. Set your notification level to "important" and only messages explicitly flagged as high-priority reach your phone. Routine status updates stay in the web dashboard. Switch back to "all" whenever you want the full stream. The preference is private — no other service or user sees your setting.
+
+**Example:** You are deep in a focus session and set your notification level to "important." The research-agent finishes three routine lookups — silence. Then a critical approval request comes through flagged as important — your phone buzzes. You tap Approve without breaking your flow.
+
 ### One Channel for Every Agent
 
 Unlike Slack bots or Telegram integrations — where each workflow lives in a separate bot — this one handles an entire operating system through a single conversation. No new app and no behavior change. WhatsApp is already in your pocket.
@@ -61,6 +67,7 @@ Verify your WhatsApp number with a one-time six-digit code sent to your phone. E
 
 ## Key Benefits
 
+- **Notification importance filter** — Set your notification level to "important" to suppress low-priority messages and only receive what matters
 - **Event-driven transcription** — Audio messages are transcribed asynchronously via srt-service with AI-generated summaries
 - **Tap-to-decide** — Interactive buttons or plain text replies for instant approvals on the move
 - **Deep link CTA buttons** — Open pull requests, dashboards, and reports directly from WhatsApp notifications

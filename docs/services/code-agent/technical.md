@@ -120,7 +120,24 @@ sequenceDiagram
 
 ## Recent Changes
 
-Changes since v3.4.0, sourced from release context and git history:
+Changes since v3.5.0, sourced from release context and git history:
+
+| Change                                      | Description                                                                                                                                                                                                                                                           | Reference          |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| Dedicated task status endpoint              | `PATCH /internal/code-tasks/:id/status` — lightweight, idempotent endpoint for the orchestrator to commit terminal task status directly to Firestore before the side-effect-heavy completion webhook fires. Prevents stalled tasks from webhook timeouts.             | INT-1414, PR #1875 |
+| PR triage via Pub/Sub push subscription     | PR triage processing moved from inline webhook execution to a Pub/Sub push subscription (`POST /internal/code/pubsub/pr-triage`). The webhook publishes a `PRTriageEvent` and returns immediately; triage runs asynchronously through the push handler.               | INT-1406, PR #1864 |
+| Important flag for issue groups             | `POST /code/issue-groups/:groupKey/important` — users mark issue groups as high-priority via the `isImportant` field on `TaskGroupSummary`.                                                                                                                           | INT-1383, PR #1830 |
+| GitHub Agent inherits user LLM settings     | `resolveToolCallingClient` replaced the static `toolCallingClient` with per-user resolution. Tries the user's own Google API key first, falls back to the platform key. Ensures the GitHub Agent triage pipeline uses the user's configured LLM provider.             | INT-1389, PR #1835 |
+| Task mode selector (planning/execution)     | `POST /code/submit` accepts optional `taskMode` parameter (`'planning'` or `'execution'`), letting users explicitly choose between the design-first workflow and direct implementation.                                                                               | INT-1360, PR #1788 |
+| Block code tasks on draft PRs               | `DraftPRRule` added to the webhook rules chain. When `isDraft` is `true`, all code tasks are blocked — preventing wasted compute on work-in-progress branches. The `isDraft` field was added to the domain model and parsers.                                         | INT-1345, PR #1792 |
+| Suppress merge step for closed/merged PRs   | The task pipeline no longer attempts the merge step when the PR is already closed or merged, avoiding unnecessary GitHub API calls and confusing error messages.                                                                                                      | INT-1380, PR #1833 |
+| Self-healing failure triage                 | `triageFailedTask` classifies failures and auto-retries tasks up to 3 times, excluding the failed worker location on each retry. Tasks failing with `TASK_EXIT_CODE_OVERRIDE` trigger automatic retry on a different worker.                                          | INT-1375, PR #1855 |
+| Inactivity-restart wrong-PR bug fix         | Fixed a bug where inactivity restarts dispatched to the wrong PR. Added PR URL validation (`prUrlValidationFailed`, `prUrlValidationErrors` fields) and kill-time forensics logging.                                                                                  | INT-1361, PR #1787 |
+| Usage webhook gateway v2 alignment          | Migrated usage-webhook gateway and client types to the v2 schema for consistency with `llm-usage-service`.                                                                                                                                                            | INT-1378, PR #1857 |
+| Zombie sweep scheduling                     | Zombie detection now runs every 5 minutes via Cloud Scheduler instead of relying solely on on-demand detection, using unified `detectZombieTasks` logic querying `lastHeartbeat`.                                                                                     | Various            |
+| WhatsApp notification importance            | Resumed-task-complete and other key notifications marked as important for priority delivery.                                                                                                                                                                          | INT-1418           |
+
+### Changes from v3.4.0 to v3.5.0 (Previous)
 
 | Change                                    | Description                                                                                                                                                                                                                                                                   | Reference                                                                                |
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -132,9 +149,6 @@ Changes since v3.4.0, sourced from release context and git history:
 | Auto-Archive Merged Tasks                 | Daily cron archives tasks whose PRs were merged 7+ days ago. `prMergedAt` field set by `handlePrClose` webhook. `POST /internal/auto-archive-merged-tasks` endpoint.                                                                                                          | INT-1276                                                                                 |
 | Internal Code Submit                      | `POST /internal/code/submit` endpoint for internal task creation on behalf of a user.                                                                                                                                                                                         | INT-1287                                                                                 |
 | Review-Outcome Merge Labels               | Merge labels set based on review outcomes. Merge button pipeline wired through unified evaluator.                                                                                                                                                                             | INT-1132, INT-1167                                                                       |
-| Sender Authorization Enforcement          | Unauthorized sender comments receive a GitHub PR comment explaining the rejection.                                                                                                                                                                                            | INT-1086                                                                                 |
-| Drain Queue Deadlock Fix                  | Per-PR guard prevents deadlock in drain queue. Stale task fallback for pruned tasks.                                                                                                                                                                                          | INT-1131, INT-1190                                                                       |
-| V8 Ignore Blocks Replaced                 | Real tests added for previously exempted branches across routes and use cases.                                                                                                                                                                                                | INT-1071, INT-1072, INT-1073, INT-1237                                                   |
 | CI Failure Auto-Handling                  | Failed CI checks on agent PRs detected and retried or escalated via the webhook pipeline.                                                                                                                                                                                     | INT-853                                                                                  |
 | Per-Agent-Type Worker Settings            | Different agent types independently tuned for worker type and performance.                                                                                                                                                                                                    | INT-1124                                                                                 |
 
@@ -158,6 +172,7 @@ Changes since v3.4.0, sourced from release context and git history:
 | `POST`   | `/code/retry`                                      | Retry a failed, cancelled, or interrupted task       |
 | `GET`    | `/code/queue`                                      | Get task queue status                                |
 | `GET`    | `/code/issue-groups`                               | List issue groups with aggregated status (paginated) |
+| `POST`   | `/code/issue-groups/:groupKey/important`           | Toggle important flag on an issue group              |
 | `GET`    | `/code/workers/status`                             | Get worker health status                             |
 | `POST`   | `/code/workers/refresh-status`                     | Refresh worker health status synchronously           |
 | `GET`    | `/code/worker-settings`                            | Get user's worker settings (secrets masked)          |
@@ -186,6 +201,7 @@ Changes since v3.4.0, sourced from release context and git history:
 | `POST`  | `/internal/code/process`                            | Submit task from actions-agent             | actions-agent     |
 | `POST`  | `/internal/code/submit`                             | Create task on behalf of a user            | Internal services |
 | `PATCH` | `/internal/code-tasks/:taskId`                      | Worker callback — update task state        | Orchestrator      |
+| `PATCH` | `/internal/code-tasks/:id/status`                   | Commit terminal task status (idempotent)   | Orchestrator      |
 | `GET`   | `/internal/code-tasks/linear/:linearIssueId/active` | Check for active blocking task             | linear-agent      |
 | `GET`   | `/internal/code-tasks/zombies`                      | Detect zombie (stale) tasks                | Cloud Scheduler   |
 | `POST`  | `/internal/code/heartbeat`                          | Process heartbeat from orchestrator        | Orchestrator      |
@@ -203,6 +219,7 @@ Changes since v3.4.0, sourced from release context and git history:
 | `POST`  | `/internal/webhooks/task-complete`                  | Task completion webhook (HMAC signed)      | Orchestrator      |
 | `POST`  | `/internal/webhooks/task-event`                     | Task lifecycle event webhook (HMAC signed) | Orchestrator      |
 | `POST`  | `/internal/webhooks/compliance-report`              | Compliance report webhook (HMAC signed)    | Orchestrator      |
+| `POST`  | `/internal/code/pubsub/pr-triage`                   | Pub/Sub push handler for PR triage events  | Cloud Pub/Sub     |
 | `POST`  | `/internal/merge-conflicts/reconcile`               | Sync Firestore PR state from GitHub (cron) | Cloud Scheduler   |
 | `POST`  | `/internal/merge-queue/tick`                        | Process one merge cycle for active watches | Cloud Scheduler   |
 | `GET`   | `/internal/linear/issue-context/:identifier`        | Proxy issue context from linear-agent      | Orchestrator      |
@@ -252,6 +269,10 @@ Changes since v3.4.0, sourced from release context and git history:
 | `executionMemoryPostRun` | `ExecutionMemoryPostRun?` | Post-run distillation state                                                       |
 | `requiresReReview`       | `boolean?`                | Set by remediation tasks before pushing code                                      |
 | `reviewTypes`            | `string[]?`               | Review types requested                                                            |
+| `prUrlValidationFailed`  | `boolean?`                | True if PR URL validation found issues (INT-1361)                                 |
+| `prUrlValidationErrors`  | `string[]?`               | Validation error details (INT-1361)                                               |
+| `failedWorkerLocation`   | `string?`                 | Worker location that failed, excluded on retry dispatch                           |
+| `autoRetryAttempt`       | `number?`                 | 1-based auto-retry attempt number (max 3)                                         |
 | `createdAt`              | `Timestamp`               | Creation timestamp                                                                |
 | `updatedAt`              | `Timestamp`               | Last update (used in zombie detection queries)                                    |
 
@@ -366,9 +387,16 @@ Changes since v3.4.0, sourced from release context and git history:
 
 ### Published Events
 
-| Topic env var                           | When                               | Payload                               |
-| --------------------------------------- | ---------------------------------- | ------------------------------------- |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Task started, completed, or failed | WhatsApp message with CTA URL buttons |
+| Topic env var                            | When                                          | Payload                               |
+| ---------------------------------------- | --------------------------------------------- | ------------------------------------- |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`  | Task started, completed, or failed            | WhatsApp message with CTA URL buttons |
+| `INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC`      | GitHub webhook receives actionable PR event   | PR triage event (push subscription)   |
+
+### Subscribed Events
+
+| Topic env var                            | Handler                                | Action                                  |
+| ---------------------------------------- | -------------------------------------- | --------------------------------------- |
+| `INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC`      | `POST /internal/code/pubsub/pr-triage` | Evaluate PR event via unified evaluator |
 
 ## Firestore Collections
 
@@ -435,6 +463,7 @@ Changes since v3.4.0, sourced from release context and git history:
 | `INTEXURAOS_SERVICE_URL`                | Callback URL — orchestrator reports task status here        | Yes                         |
 | `INTEXURAOS_WHATSAPP_SERVICE_URL`       | WhatsApp service URL                                        | Production                  |
 | `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Pub/Sub topic for WhatsApp send messages                    | Production                  |
+| `INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC`     | Pub/Sub topic for PR triage push subscription               | Production                  |
 | `INTEXURAOS_LINEAR_AGENT_URL`           | linear-agent base URL                                       | Production                  |
 | `INTEXURAOS_ACTIONS_AGENT_URL`          | actions-agent base URL                                      | Production                  |
 | `INTEXURAOS_USER_SERVICE_URL`           | user-service base URL                                       | Production                  |
@@ -475,6 +504,13 @@ Changes since v3.4.0, sourced from release context and git history:
 - **Remediation tasks use `agentType: 'remediation'`** and push to the existing PR branch. Multiple remediation tasks can coexist (no dedup like review tasks).
 - **Group summary recomputation is incremental.** The `withGroupUpdates` repository decorator updates `task_group_summaries` on every task state change. Stale summaries are reconciled by the hourly archive cron.
 - **`onReviewSkipped` sets the `ready-to-merge` label.** When LLM triage skips a review (e.g., documentation-only change), the callback sets the label on the Linear issue and recomputes the group summary. Only fires for execution-origin tasks, not planning.
+- **PR triage runs asynchronously via Pub/Sub push.** The GitHub webhook handler publishes a `PRTriageEvent` to `INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC` and returns 200 immediately. The push subscription delivers the event to `POST /internal/code/pubsub/pr-triage` for evaluation. This decouples webhook response time from triage compute.
+- **The status endpoint (`PATCH /internal/code-tasks/:id/status`) is idempotent.** If the task is already in a terminal state, it returns 200 no-op without calling the repository. The orchestrator calls this endpoint before the full completion webhook to ensure terminal status is persisted even if the webhook fails.
+- **Draft PRs block all code tasks.** The `DraftPRRule` in the webhook rules chain skips all events where `isDraft === true`. When `isDraft` is `null` (event type does not carry draft info), the rule fails open.
+- **`resolveToolCallingClient` is per-user, not static.** The GitHub Agent tries the user's own Google API key first (via `userServiceClient.getApiKeys`), then falls back to the platform `INTEXURAOS_GEMINI_APP_API_KEY`. This means different users can use different Gemini keys for triage.
+- **`taskMode` on `/code/submit` is optional.** When omitted, the default behavior applies. Set `'planning'` for design-first or `'execution'` for direct implementation.
+- **Auto-retry excludes the failed worker location.** Tasks that fail with `TASK_EXIT_CODE_OVERRIDE` are retried up to 3 times (`autoRetryAttempt`), each time excluding the `failedWorkerLocation` from dispatch.
+- **Zombie sweep runs every 5 minutes.** The `POST /internal/code/detect-zombies` endpoint is triggered by Cloud Scheduler on a 5-minute interval, using `lastHeartbeat` field for detection.
 
 ## File Structure
 
@@ -536,7 +572,10 @@ apps/code-agent/src/
 │   │   ├── backLinkPlanningTask.ts       — Link planning -> execution task
 │   │   ├── cancelTaskWithNonce.ts        — WhatsApp cancel button
 │   │   ├── handlePrClose.ts             — Set prMergedAt on PR close
-│   │   └── fanOutChildTasks.ts           — Fan out child tasks
+│   │   ├── fanOutChildTasks.ts           — Fan out child tasks
+│   │   ├── autoRetryTask.ts             — Auto-retry on transient failures
+│   │   ├── triageFailedTask.ts          — Classify failure + decide retry/escalate
+│   │   └── forwardUsageEvents.ts        — Forward usage events to llm-usage-service
 │   ├── services/
 │   │   ├── unifiedEvaluator.ts           — Two-tier webhook evaluation
 │   │   ├── gitHubWebhookRules.ts         — Hard rule chain (6 rules)
@@ -572,7 +611,8 @@ apps/code-agent/src/
 │   ├── workerSettingsRoutes.ts           — Worker configuration CRUD
 │   ├── internalRoutes.ts                 — Cron endpoints + Linear proxy
 │   ├── code/
-│   │   ├── issueGroupRoutes.ts          — Issue group listing (paginated)
+│   │   ├── issueGroupRoutes.ts          — Issue group listing + important flag
+│   │   ├── updateTaskStatusRoute.ts     — PATCH /internal/code-tasks/:id/status
 │   │   ├── github-event-log.ts           — Event decision log endpoints
 │   │   ├── github-pr-summaries.ts        — PR summary list endpoint
 │   │   ├── github-pre-events.ts          — PR events timeline endpoint
@@ -585,7 +625,8 @@ apps/code-agent/src/
 │   └── webhooks/
 │       ├── github.ts                     — GitHub webhook receiver
 │       ├── taskEvent.ts                  — Task lifecycle event webhook
-│       └── complianceReport.ts          — Compliance report webhook
+│       ├── complianceReport.ts          — Compliance report webhook
+│       └── prTriagePubsubRoute.ts       — Pub/Sub push handler for PR triage
 ├── scripts/
 │   └── backfillGroupSummaries.ts        — One-time backfill for group summaries
 ├── config.ts

@@ -45,25 +45,21 @@ graph TB
 
 ## Recent Changes
 
-| Commit      | Description                                                   | Date       |
-| ----------- | ------------------------------------------------------------- | ---------- |
-| `e003737c`  | Add test for absolute URL and remove invalid v8 ignore        | 2026-04-04 |
-| `d1d3cfb8`  | Standardize code task WhatsApp notification format (CTA)      | 2026-04-04 |
-| `9d48e9bd`  | Remove emoji from WhatsApp CTA URL displayText (INT-1259)     | 2026-04-04 |
-| `b3da4353`  | Add prefix collision regression tests for workerTypeDetection | 2026-03-28 |
-| `19f7b8e4`  | Add codex-xhigh worker type preset (INT-1109)                 | 2026-03-28 |
+| Commit      | Description                                                         | Date       |
+| ----------- | ------------------------------------------------------------------- | ---------- |
+| `c3032701`  | Mark important WhatsApp notifications (INT-1418)                    | 2026-04-20 |
+| `a4f53cd7`  | Remove LLM pricing from actions-agent (INT-1387)                    | 2026-04-16 |
+| `9fda4f7c`  | Migrate all call sites to gpt-5.4 and claude 4.6 model constants    | 2026-04-14 |
+| `8b1211dc`  | Wire HttpInternalAuthUsageSink in all LLM call sites (INT-1342)     | 2026-04-12 |
+| `8767c5e2`  | Migrate LLM pricing consumers from app-settings to usage service    | 2026-04-10 |
 
-### Code Task CTA Button Notifications (INT-1260)
+### Important WhatsApp Notification Marking (INT-1418)
 
-Changed code task completion WhatsApp notifications from embedding the URL in message text to using CTA button pattern (matching calendar events). The message is now a clean "Code Task Created" with a tappable "View Progress" button. Also detects absolute URLs (same pattern as `executeCalendarAction`) to avoid prepending `webAppUrl`.
+All WhatsApp notifications sent by actions-agent now include `important: true` in the publish payload. This ensures action-related messages (approval requests, completion notifications, cancellation confirmations) reach users even when they have notification filtering set to "important only" in whatsapp-service.
 
-### WhatsApp CTA Emoji Fix (INT-1259)
+### Centralized LLM Pricing Removal (INT-1387)
 
-Removed emoji characters from WhatsApp CTA URL `displayText` field. WhatsApp's interactive message CTA does not support emoji in the display text, causing characters like the calendar emoji to render as "?" on the recipient's device.
-
-### codex-xhigh Worker Type (INT-1109)
-
-Added `codex-xhigh` to `CODE_TASK_WORKER_TYPES` as a high-effort Codex preset. The `workerTypeDetection` utility automatically supports it via dynamic rule generation from the shared `CODE_TASK_WORKER_TYPES` array — no code change was needed in actions-agent's detection logic. Word-boundary regex prevents false positives when "codex" is a prefix of "codex-xhigh".
+Removed the direct dependency on `app-settings-service` for LLM pricing configuration. Actions-agent now uses `HttpInternalAuthUsageSink` from `@intexuraos/llm-pricing` to report LLM usage to `llm-usage-service`, which centralizes pricing logic. This eliminates startup-time pricing fetches and simplifies the service's dependency graph.
 
 ## Data Flow
 
@@ -300,7 +296,7 @@ interface HandleActionConfig {
 }
 ```
 
-Each handler provides a `buildMessage` function and optional hooks. The template handles auto-execution (if `executeAction` dependency is injected and confidence >= 90%), WhatsApp message construction with `buildApprovalButtons`, and non-fatal notification failure handling.
+Each handler provides a `buildMessage` function and optional hooks. The template handles auto-execution (if `executeAction` dependency is injected and confidence >= 90%), WhatsApp message construction with `buildApprovalButtons`, and non-fatal notification failure handling. All notifications are published with `important: true`.
 
 ### executeActionTemplate (INT-885)
 
@@ -440,18 +436,18 @@ const handler = registerActionHandler(createHandleXxxActionUseCase, deps);
 
 ### Internal Services
 
-| Service                | Purpose                                                                                       |
-| ---------------------- | --------------------------------------------------------------------------------------------- |
-| `commands-agent`       | Fetch command text for type transitions, create new commands                                  |
-| `research-agent`       | Execute research actions                                                                      |
-| `todos-agent`          | Execute todo actions                                                                          |
-| `notes-agent`          | Execute note actions                                                                          |
-| `bookmarks-agent`      | Execute link actions, force-refresh duplicate bookmarks                                       |
-| `calendar-agent`       | Execute calendar actions, generate previews, fetch previews                                   |
-| `linear-agent`         | Execute Linear issue creation actions                                                         |
-| `code-agent`           | Execute code tasks, cancel tasks, submit to phase 2 implementation                            |
-| `user-service`         | Fetch user API keys for LLM (via `@intexuraos/internal-clients/user-service`)                 |
-| `app-settings-service` | Fetch LLM pricing configuration at startup                                                    |
+| Service             | Purpose                                                                       |
+| ------------------- | ----------------------------------------------------------------------------- |
+| `commands-agent`    | Fetch command text for type transitions, create new commands                  |
+| `research-agent`    | Execute research actions                                                      |
+| `todos-agent`       | Execute todo actions                                                          |
+| `notes-agent`       | Execute note actions                                                          |
+| `bookmarks-agent`   | Execute link actions, force-refresh duplicate bookmarks                       |
+| `calendar-agent`    | Execute calendar actions, generate previews, fetch previews                   |
+| `linear-agent`      | Execute Linear issue creation actions                                         |
+| `code-agent`        | Execute code tasks, cancel tasks, submit to phase 2 implementation            |
+| `user-service`      | Fetch user API keys for LLM (via `@intexuraos/internal-clients/user-service`) |
+| `llm-usage-service` | Report LLM usage for centralized pricing (via `HttpInternalAuthUsageSink`)    |
 
 ### Infrastructure
 
@@ -481,7 +477,7 @@ const handler = registerActionHandler(createHandleXxxActionUseCase, deps);
 | `INTEXURAOS_CALENDAR_AGENT_URL`          | Yes      | Calendar-agent base URL                                   |
 | `INTEXURAOS_LINEAR_AGENT_URL`            | Yes      | Linear-agent base URL                                     |
 | `INTEXURAOS_CODE_AGENT_URL`              | Yes      | Code-agent base URL                                       |
-| `INTEXURAOS_LLM_USAGE_SERVICE_URL`       | Yes      | LLM usage service URL (for LLM pricing)                   |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`       | Yes      | LLM usage service URL (for usage reporting)               |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`         | Yes      | Shared secret for service-to-service calls                |
 | `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`        | Yes      | Unified actions queue topic name                          |
 | `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`  | Yes      | WhatsApp send topic                                       |
@@ -516,6 +512,8 @@ const handler = registerActionHandler(createHandleXxxActionUseCase, deps);
 
 **Code task CTA button notifications (INT-1260)**: Code task completion notifications use CTA button pattern (same as calendar). Message is "Code Task Created" with a "View Progress" tappable button linking to the code task page. Absolute URLs from code-agent are detected and passed through without prepending `webAppUrl`.
 
+**Important notification flag**: All WhatsApp messages published by actions-agent include `important: true`. This ensures action notifications bypass the "important only" filter in whatsapp-service. Added in v3.6.0 (INT-1418).
+
 **Approval reply idempotency**: The `updateStatusIf` method uses Firestore transactions to atomically check and update status. If the status does not match expectations, the operation is a no-op, preventing race conditions when multiple Pub/Sub messages arrive concurrently.
 
 **Text replies re-send buttons**: When a user sends a text reply to an approval message (no buttonId), the system re-sends fresh interactive buttons. There is no LLM fallback — approval is button-only.
@@ -539,6 +537,8 @@ const handler = registerActionHandler(createHandleXxxActionUseCase, deps);
 **OpenAPI description mismatch**: The `server.ts` OpenAPI info still references "Research Agent" in the description field, leftover from the rename from research-agent to actions-agent.
 
 **handleAction template callbacks**: The `preProcess` hook runs before `buildMessage` and passes data through. Used by `handleCalendarAction` to generate the preview synchronously before constructing the approval message. The `onAutoExecuteSuccess` hook enables type-specific logging (e.g., code action failure-despite-success logging).
+
+**LLM usage reporting (INT-1342)**: Actions-agent wires `HttpInternalAuthUsageSink` in `userServiceClient` to report LLM usage to `llm-usage-service`. The `app-settings-service` dependency for LLM pricing was removed in v3.6.0 (INT-1387).
 
 ## File Structure
 

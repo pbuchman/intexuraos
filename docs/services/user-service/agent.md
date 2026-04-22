@@ -6,11 +6,11 @@
 
 ## Identity
 
-| Field    | Value                                                                                                                          |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **Name** | user-service                                                                                                                   |
-| **Role** | User Authentication and Settings Service                                                                                       |
-| **Goal** | Manage authentication, OAuth connections (Google + GitHub), LLM API keys (5 providers), user preferences, and error formatting |
+| Field    | Value                                                                                                                                                      |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Name** | user-service                                                                                                                                               |
+| **Role** | User Authentication and Settings Service                                                                                                                   |
+| **Goal** | Manage authentication, OAuth connections (Google + GitHub), LLM API keys (5 providers), user preferences (default + fallback models), and error formatting |
 
 ---
 
@@ -31,8 +31,8 @@ interface UserServiceTools {
   getUserSettings(userId: string): Promise<UserSettings>;
   updateUserSettings(
     userId: string,
-    params: { defaultModel: string }
-  ): Promise<{ defaultModel: string }>;
+    params: { defaultModel: string; fallbackModel?: string | null }
+  ): Promise<{ defaultModel: string; fallbackModel: string | null }>;
   updateTranscriptionPreferences(
     userId: string,
     params: { provider: TranscriptionProvider }
@@ -132,7 +132,8 @@ interface UserSettings {
 }
 
 interface LlmPreferences {
-  defaultModel: string; // Must pass isFastModel() validation AND have API key for provider
+  defaultModel: string; // Must pass isDefaultEligibleModel() AND have API key for provider
+  fallbackModel?: string; // Optional, must differ from defaultModel, must have API key for its provider
 }
 
 interface TranscriptionPreferences {
@@ -141,6 +142,7 @@ interface TranscriptionPreferences {
 
 interface LlmKeysStatus {
   defaultModel: string | null; // User's preferred default LLM model
+  fallbackModel: string | null; // User's fallback LLM model (auto-retry when primary unavailable)
   google: string | null; // Masked key preview (e.g., "AIza...XXXX")
   openai: string | null;
   anthropic: string | null;
@@ -189,25 +191,26 @@ interface GitHubOAuthConnectionStatus {
 
 ## Constraints
 
-| Rule                           | Description                                                            |
-| ------------------------------ | ---------------------------------------------------------------------- |
-| **Self-Access Only**           | Users can only access their own settings                               |
-| **Encrypted Storage**          | API keys encrypted at rest with AES-256-GCM                            |
-| **Key Validation**             | API keys validated with provider before storing                        |
-| **5 Providers**                | Supports Google, OpenAI, Anthropic, Perplexity, OpenRouter             |
-| **Rate Limit Precedence**      | Error parser checks rate limits before API key errors                  |
-| **Internal Auth**              | Service-to-service calls require X-Internal-Auth header                |
-| **Model Validation**           | `defaultModel` must pass `isFastModel()` AND have API key for provider |
-| **Model Cascade on Delete**    | Deleting API key clears defaultModel if it uses deleted provider       |
-| **OAuth2 Raw Responses**       | `/auth/oauth/*` routes use flat OAuth2-spec responses                  |
-| **GitHub Tokens Never Expire** | GitHub access tokens stored with far-future expiry (9999-12-31)        |
-| **OAuth State TTL**            | OAuth state parameters expire after 10 minutes                         |
-| **OpenRouter Zero-Cost Valid** | OpenRouter keys validated via `/api/v1/key` (no token cost)            |
-| **IANA Timezone Only**         | Timezone must be a valid IANA string (e.g., `Europe/Berlin`)           |
+| Rule                           | Description                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------------ |
+| **Self-Access Only**           | Users can only access their own settings                                       |
+| **Encrypted Storage**          | API keys encrypted at rest with AES-256-GCM                                    |
+| **Key Validation**             | API keys validated with provider before storing                                |
+| **5 Providers**                | Supports Google, OpenAI, Anthropic, Perplexity, OpenRouter                     |
+| **Rate Limit Precedence**      | Error parser checks rate limits before API key errors                          |
+| **Internal Auth**              | Service-to-service calls require X-Internal-Auth header                        |
+| **Model Validation**           | `defaultModel` must pass `isDefaultEligibleModel()` AND have API key           |
+| **Fallback Validation**        | `fallbackModel` must differ from default, pass eligibility, and have API key   |
+| **Model Cascade on Delete**    | Deleting API key clears default/fallback if they use the deleted provider      |
+| **OAuth2 Raw Responses**       | `/auth/oauth/*` routes use flat OAuth2-spec responses                          |
+| **GitHub Tokens Never Expire** | GitHub access tokens stored with far-future expiry (9999-12-31)                |
+| **OAuth State TTL**            | OAuth state parameters expire after 10 minutes                                 |
+| **OpenRouter Zero-Cost Valid** | OpenRouter keys validated via `/api/v1/key` (no token cost)                    |
+| **IANA Timezone Only**         | Timezone must be a valid IANA string (e.g., `Europe/Berlin`)                   |
 
 ---
 
-## Error Formatting Rules (v2.0.0)
+## Error Formatting Rules
 
 The service formats provider-specific errors into user-friendly messages. Error detection follows precedence:
 
@@ -277,16 +280,27 @@ const testResult = await testLlmApiKey(userId, 'openai');
 // testResult.message contains the LLM's response or formatted error
 ```
 
-### Set Default Model (Requires API Key)
+### Set Default and Fallback Models
 
 ```typescript
-// Set preferred fast model -- must have API key for provider
-const result = await updateUserSettings(userId, { defaultModel: 'claude-haiku-3-5' });
-// Fails with INVALID_REQUEST if no Anthropic API key configured
+// Set preferred default model + fallback -- must have API keys for both providers
+const result = await updateUserSettings(userId, {
+  defaultModel: 'claude-haiku-3-5',
+  fallbackModel: 'gpt-4o-mini',
+});
+// Fails with INVALID_REQUEST if no API key configured for either provider
+// Fails with INVALID_REQUEST if fallbackModel === defaultModel
 
-// Deleting API key cascades: if default model uses deleted provider, it's cleared
-await deleteLlmApiKey(userId, 'anthropic');
-// defaultModel is now null (was claude-haiku-3-5 which is Anthropic)
+// Clear fallback by passing null
+const cleared = await updateUserSettings(userId, {
+  defaultModel: 'claude-haiku-3-5',
+  fallbackModel: null,
+});
+
+// Deleting API key cascades:
+// - If default model uses deleted provider: both default and fallback cleared
+// - If only fallback uses deleted provider: only fallback cleared
+await deleteLlmApiKey(userId, 'openai');
 ```
 
 ### Set Transcription Provider
@@ -308,7 +322,7 @@ const result = await updateTimezone(userId, { timezone: 'Europe/Berlin' });
 ### Internal Service Access
 
 ```typescript
-// Called by research-agent to get decrypted keys (now includes openrouter)
+// Called by research-agent to get decrypted keys (includes openrouter)
 const response = await getDecryptedLlmKeys(userId);
 // response.data.openai contains full "sk-proj-..." key
 // response.data.openrouter contains full "sk-or-v1-..." key
@@ -325,9 +339,10 @@ const githubOAuth = await getGitHubOAuthToken(userId);
 const user = await getUserByGitHubUsername('octocat');
 // user.data.userId -- used for routing GitHub webhooks to the right user
 
-// Called by any service to get user preferences (now includes timezone)
+// Called by any service to get user preferences (includes fallback model and timezone)
 const prefs = await getUserPreferences(userId);
 // prefs.data.llmPreferences?.defaultModel -- user's preferred model
+// prefs.data.llmPreferences?.fallbackModel -- user's fallback model
 // prefs.data.transcriptionPreferences?.provider -- user's preferred transcription provider
 // prefs.data.timezone -- user's IANA timezone (e.g., "Europe/Berlin")
 ```
@@ -336,14 +351,14 @@ const prefs = await getUserPreferences(userId);
 
 ## Internal Endpoints
 
-| Method | Path                                                | Purpose                                                 |
-| ------ | --------------------------------------------------- | ------------------------------------------------------- |
-| GET    | `/internal/users/:uid/llm-keys`                     | Get decrypted LLM keys (called by research-agent)       |
-| POST   | `/internal/users/:uid/llm-keys/:provider/last-used` | Update last used timestamp                              |
-| GET    | `/internal/users/:uid/oauth/google/token`           | Get valid Google OAuth token (called by calendar-agent) |
-| GET    | `/internal/users/:uid/oauth/github/token`           | Get GitHub OAuth token (called by code-agent)           |
-| GET    | `/internal/users/by-github-username/:username`      | Find user by GitHub username (called by code-agent)     |
-| GET    | `/internal/users/:uid/settings`                     | Get user preferences (LLM + transcription + timezone)   |
+| Method | Path                                                | Purpose                                                        |
+| ------ | --------------------------------------------------- | -------------------------------------------------------------- |
+| GET    | `/internal/users/:uid/llm-keys`                     | Get decrypted LLM keys (called by research-agent)              |
+| POST   | `/internal/users/:uid/llm-keys/:provider/last-used` | Update last used timestamp                                     |
+| GET    | `/internal/users/:uid/oauth/google/token`           | Get valid Google OAuth token (called by calendar-agent)        |
+| GET    | `/internal/users/:uid/oauth/github/token`           | Get GitHub OAuth token (called by code-agent)                  |
+| GET    | `/internal/users/by-github-username/:username`      | Find user by GitHub username (called by code-agent)            |
+| GET    | `/internal/users/:uid/settings`                     | Get user preferences (LLM + fallback + transcription + tz)     |
 
 ---
 
@@ -389,16 +404,16 @@ Keys are validated using cheap, fast models to minimize cost. OpenRouter uses a 
 
 ## Dependencies
 
-| Service              | Why Needed                 | Failure Behavior                        |
-| -------------------- | -------------------------- | --------------------------------------- |
-| Auth0                | User authentication        | Auth endpoints return 503               |
-| Google OAuth         | Calendar token management  | OAuth endpoints return 503              |
-| GitHub OAuth         | Code automation tokens     | GitHub OAuth endpoints return 503       |
-| app-settings-service | LLM pricing at startup     | Service fails to start                  |
-| Firebase Admin SDK   | Custom token generation    | Firebase token endpoint returns 500     |
-| Firestore            | All persistent state       | Endpoints return 500                    |
-| LLM APIs (5)         | Key validation and testing | Validation/test returns formatted error |
+| Service            | Why Needed                   | Failure Behavior                        |
+| ------------------ | ---------------------------- | --------------------------------------- |
+| Auth0              | User authentication          | Auth endpoints return 503               |
+| Google OAuth       | Calendar token management    | OAuth endpoints return 503              |
+| GitHub OAuth       | Code automation tokens       | GitHub OAuth endpoints return 503       |
+| llm-usage-service  | LLM usage reporting          | Usage not tracked (non-fatal)           |
+| Firebase Admin SDK | Custom token generation      | Firebase token endpoint returns 500     |
+| Firestore          | All persistent state         | Endpoints return 500                    |
+| LLM APIs (5)       | Key validation and testing   | Validation/test returns formatted error |
 
 ---
 
-**Last updated:** 2026-04-07
+**Last updated:** 2026-04-22
