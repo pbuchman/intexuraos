@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
-import type { UsageSink } from '@intexuraos/llm-pricing';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -10,7 +10,7 @@ const mockLogger: Logger = {
   debug: vi.fn(),
 };
 
-const mockUsageSink: UsageSink = { log: vi.fn().mockResolvedValue(undefined) };
+const mockUsageSink = new FakeUsageSink();
 
 const mockGenerateContent = vi.fn();
 
@@ -21,14 +21,21 @@ vi.mock('@google/genai', () => {
   return { GoogleGenAI: MockGoogleGenAI };
 });
 
-const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
-
-vi.mock('@intexuraos/llm-pricing', () => ({
-  logUsage: vi.fn().mockResolvedValue(undefined),
-  createUsageLogger: vi.fn().mockReturnValue({
-    log: mockUsageLoggerLog,
-  }),
+const { mockUsageLoggerLog } = vi.hoisted(() => ({
+  mockUsageLoggerLog: vi.fn().mockResolvedValue(undefined),
 }));
+
+vi.mock('@intexuraos/llm-pricing', async (): Promise<typeof import('@intexuraos/llm-pricing')> => {
+  const actual =
+    await vi.importActual<typeof import('@intexuraos/llm-pricing')>('@intexuraos/llm-pricing');
+  return {
+    ...actual,
+    logUsage: vi.fn().mockResolvedValue(undefined),
+    createUsageLogger: vi.fn().mockReturnValue({
+      log: mockUsageLoggerLog,
+    }),
+  } as typeof import('@intexuraos/llm-pricing');
+});
 
 const { createGeminiClient } = await import('../client.js');
 const { createUsageLogger } = await import('@intexuraos/llm-pricing');
@@ -46,7 +53,7 @@ describe('createGeminiClient', () => {
       usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
       candidates: [{}],
     });
-    const usageSink = { log: vi.fn().mockResolvedValue(undefined) };
+    const usageSink = new FakeUsageSink();
 
     const client = createGeminiClient({
       apiKey: 'test-key',

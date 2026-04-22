@@ -40,6 +40,7 @@ export async function executeRejection(
       userId: action.userId,
       message: 'This action is no longer available. It may have been deleted or already processed.',
       correlationId: `approval-not-found-${action.id}`,
+      important: true,
     });
     return ok({ matched: false });
   }
@@ -60,6 +61,7 @@ export async function executeRejection(
     userId: action.userId,
     message,
     correlationId: `approval-cancelled-${action.id}`,
+    important: true,
   });
 
   if (!publishResult.ok) {

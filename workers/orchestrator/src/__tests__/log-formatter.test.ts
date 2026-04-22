@@ -79,4 +79,28 @@ describe('stripDockerHeaders', () => {
     const raw = '\x1B[2mTest Files\x1B[22m \x1B[1m\x1B[31m1 failed\x1B[39m\x1B[22m';
     expect(stripDockerHeaders(raw)).toBe('Test Files 1 failed');
   });
+
+  it('strips Docker RFC3339 timestamps prefixed by `container.logs({ timestamps: true })`', () => {
+    const raw =
+      '2026-04-17T16:12:19.476123456Z - [1] mem_b349148e-2e7d-4124-b645-dff4d458a773 — APPLICABLE\n2026-04-17T16:12:19.500000000Z next line';
+    expect(stripDockerHeaders(raw)).toBe(
+      '- [1] mem_b349148e-2e7d-4124-b645-dff4d458a773 — APPLICABLE\nnext line'
+    );
+  });
+
+  it('strips Docker timestamps even after ANSI and frame headers are stripped', () => {
+    const header = String.fromCharCode(1, 0, 0, 0, 0, 0, 0, 80);
+    const raw =
+      header +
+      '2026-04-17T16:12:19.476123456Z \x1B[32mOK\x1B[39m\n' +
+      '2026-04-17T16:12:20.000000000Z plain';
+    expect(stripDockerHeaders(raw)).toBe('OK\nplain');
+  });
+
+  it('leaves lines without a Docker timestamp prefix unchanged', () => {
+    const raw = '[claude] - [1] mem_abc — APPLICABLE\nplain text\n2026 not-a-timestamp';
+    expect(stripDockerHeaders(raw)).toBe(
+      '[claude] - [1] mem_abc — APPLICABLE\nplain text\n2026 not-a-timestamp'
+    );
+  });
 });

@@ -1,41 +1,40 @@
 # App Settings Service
 
-The cost transparency layer for IntexuraOS — know exactly what every AI interaction costs before you start, and track where every dollar goes after.
+Centralized configuration hub for IntexuraOS platform settings.
 
 ## The Problem
 
-AI services bill by the token, and every provider prices differently. Google charges one rate, OpenAI another, Anthropic a third. Some models charge for cache reads, others for web searches, others for image generation. Multiply that by four providers and fourteen models, and the true cost of any given interaction becomes nearly impossible to calculate on your own.
+A distributed microservices platform needs a single source of truth for shared configuration. Without a dedicated settings service, each service manages its own configuration in isolation, leading to inconsistencies, stale values, and no centralized place to query or update platform-wide settings.
 
-Without visibility, usage creeps upward unnoticed. A month passes and the bill arrives with no explanation of which models drove the cost, which workflows consumed the most tokens, or how spending shifted week over week. You are left guessing.
+## Current State (v3.6.0)
 
-## Use Case: Understanding What You Spend
-
-Built for anyone managing AI costs across multiple providers and workflows.
-
-You open the dashboard before kicking off a batch of research tasks. The pricing page shows current rates for all four providers — Google, OpenAI, Anthropic, and Perplexity — broken down by model, with input and output token costs displayed per million tokens. Specialty costs are listed too: cache read multipliers, web search fees, grounding charges, image pricing. You compare two models side by side and pick the one that fits your budget.
-
-A week later, you check your usage. The system shows your total spend, total calls, and total tokens consumed — input and output counted separately. The breakdown splits by month, by model, and by call type. Each segment includes its dollar cost, call count, and percentage of your total. You adjust the time window from the default ninety days down to thirty to focus on recent activity.
+In v3.6.0, LLM pricing and usage cost analytics were migrated to the dedicated `llm-usage-service` (INT-1387, INT-1342). The service currently operates as a minimal configuration scaffold with health check infrastructure. Other services in the platform still depend on it at startup via health check polling, and the service remains registered in the internal service catalog, Terraform, and PM2 ecosystem.
 
 ## How It Helps
 
-Every model in the system has verified pricing. At startup, the service checks that every registered model has a complete pricing entry. If any model is missing, the service refuses to start. This guarantee means the costs you see are never stale and never incomplete.
+### Platform Health Anchor
 
-Other services in the platform pull pricing data at launch so they can track costs in real time as they process your requests. The result: by the time you check your usage, the numbers are already there — aggregated, categorized, and rounded to six decimal places.
+Multiple services poll the app-settings-service health endpoint before starting. This dependency chain ensures that shared infrastructure (Firestore, secrets) is verified before downstream services begin accepting traffic.
+
+**Example:** When the dev environment starts, user-service, commands-agent, actions-agent, research-agent, and todos-agent all wait for app-settings-service to report healthy before booting.
+
+### OpenAPI Service Catalog Participant
+
+The service exposes its OpenAPI specification at `/openapi.json` and Swagger UI at `/docs`, making it discoverable by the cron-agent's service catalog and the api-docs-hub aggregator.
 
 ## Key Benefits
 
-- **All providers, one view** — Four providers and every model they offer, displayed in a single pricing endpoint
-- **Verified completeness** — The service will not run unless every model has pricing data, so gaps are impossible
-- **Personal cost tracking** — See your own usage broken down by month, model, and call type
-- **Flexible time range** — Query anywhere from the last day to the last year of usage, with a sensible ninety-day default
+- **Startup dependency anchor** for five downstream services that poll its health endpoint
+- **OpenAPI-compliant** with auto-generated Swagger documentation
+- **Infrastructure-ready** with Sentry error tracking, CORS, and standardized health checks
 
 ## Limitations
 
-- **Read-only** — Pricing is configured by administrators; there is no self-service pricing management
-- **No budgets or alerts** — The service reports costs but does not enforce spending limits
-- **No forecasting** — Historical data only; no projected cost estimates
-- **Monthly aggregates** — The API groups usage by month; there is no daily breakdown in the response
+- **No business endpoints** since v3.6.0 — all LLM pricing and usage cost routes were removed
+- **No domain logic** — domain ports and Firestore infra layers are empty scaffolds
+- **No test files** — all tests were removed alongside the pricing functionality
+- **Candidate for consolidation** — the service's remaining responsibilities (health anchor, OpenAPI spec) could be absorbed by another service
 
 ---
 
-_Part of [IntexuraOS](../overview.md) — Cost transparency across every AI provider, every model, every call._
+_Part of [IntexuraOS](../overview.md) — Platform configuration and service health orchestration._

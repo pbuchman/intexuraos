@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
 import type { ExecutionMemoryPromptContext } from '../../types/execution-memory.js';
+import { reviewPrompt } from '../system-prompt.js';
 
 const {
   OrchestratorCompletionVerifier,
@@ -21,6 +22,7 @@ const {
   getLast20Lines,
   detectFatalExitCode,
   getVerifierTaskId,
+  buildMemoryAcknowledgmentPattern,
 } = await import('../completion-verifier.js');
 
 const loggerInfo = vi.fn();
@@ -1201,8 +1203,8 @@ describe('OrchestratorCompletionVerifier', () => {
         agentType: 'execution',
         rawLogs: [
           '[claude] 📋 **Execution Memories Received:**',
-          '[claude] - [mem_142] Route logging',
-          '[claude] - [mem_155] Route coverage',
+          '[claude] - [1] mem_142 — "Route logging" — APPLICABLE because route changes',
+          '[claude] - [2] mem_155 — "Route coverage" — APPLICABLE because route changes',
           '[claude] started work',
           '[claude] finished work',
         ].join('\n'),
@@ -1268,6 +1270,477 @@ describe('OrchestratorCompletionVerifier', () => {
         },
       });
       expect(result.passed).toBe(true);
+    });
+
+    it('accepts the [index] memoryId acknowledgment format emitted by v7+/v10+ prompts', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/org/repo/pull/1868',
+            memory_ids_used: 'mem_b349148e-2e7d-4124-b645-dff4d458a773',
+            memory_ids_rejected: 'mem_f1fe7662-2e74-41d6-8c4a-9bf32d16c3ce',
+            memory_usage_summary: 'Used the first memory, rejected the second.',
+            summary: 'Implemented.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-INT-1410',
+        attempt: 1,
+        maxAttempts: 3,
+        agentType: 'execution',
+        rawLogs: [
+          '[claude] 📋 **Execution Memories Received:**',
+          '[claude] I have received and reviewed 2 execution memories for this task:',
+          '[claude] - [1] mem_b349148e-2e7d-4124-b645-dff4d458a773 — "Pre-submit verification" — APPLICABLE because reason',
+          '[claude] - [2] mem_f1fe7662-2e74-41d6-8c4a-9bf32d16c3ce — "Address minor reviewer feedback" — NOT APPLICABLE because reason',
+          '[claude] started work',
+          '[claude] finished work',
+        ].join('\n'),
+        executionMemoryContext: {
+          applicationId: 'app-123',
+          retrievalVersion: 'execution-memory-retrieval@3.0.0',
+          querySummary: 'Digest fix review',
+          matchedMemories: [
+            {
+              memoryId: 'mem_b349148e-2e7d-4124-b645-dff4d458a773',
+              title: 'Pre-submit verification',
+              memoryType: 'verification_pattern',
+              score: 0.58,
+              appliesWhen: 'Before PR submit',
+              action: 'Re-check diff vs plan',
+              avoid: 'Skipping diff review',
+              verification: 'Diff matches plan',
+            },
+            {
+              memoryId: 'mem_f1fe7662-2e74-41d6-8c4a-9bf32d16c3ce',
+              title: 'Address minor reviewer feedback',
+              memoryType: 'review_finding',
+              score: 0.56,
+              appliesWhen: 'Receiving minor review comments',
+              action: 'Fix stale comments',
+              avoid: 'Dismissing minor feedback',
+              verification: 'Comments addressed',
+            },
+          ],
+        },
+      });
+
+      expect(result.missingFields).not.toContain('memory_acknowledgment');
+      expect(result.passed).toBe(true);
+    });
+
+    it('passes with a soft warning when the acknowledgment block is absent but the triplet is consistent', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/org/repo/pull/1874',
+            memory_ids_used: '',
+            memory_ids_rejected: 'mem_d2999121-0694-413d-adb0-35e45223c8d6',
+            memory_usage_summary:
+              'No memories were applicable; rejected the migration-testing memory as the PR fixes a timestamp unit bug.',
+            summary: 'Reviewed PR.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-soft-warning',
+        attempt: 1,
+        maxAttempts: 3,
+        agentType: 'execution',
+        rawLogs: [
+          '[claude] started work',
+          '[claude] step 2',
+          '[claude] step 3',
+          '[claude] step 4',
+          '[claude] finished work',
+        ].join('\n'),
+        executionMemoryContext: {
+          applicationId: 'app-1',
+          retrievalVersion: 'execution-memory-retrieval@3.0.0',
+          querySummary: 'Digest 500 fix',
+          matchedMemories: [
+            {
+              memoryId: 'mem_d2999121-0694-413d-adb0-35e45223c8d6',
+              title: 'Creating complex data migrations without dedicated test coverage',
+              memoryType: 'pitfall_pattern',
+              score: 0.56,
+              appliesWhen: 'Developing a migration',
+              action: 'Cover all branches',
+              avoid: 'Skipping tests',
+              verification: 'Unit-test the migration',
+            },
+          ],
+        },
+      });
+
+      expect(result.passed).toBe(true);
+      expect(result.missingFields).not.toContain('memory_acknowledgment');
+      expect(loggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          softWarnings: expect.arrayContaining(['memory_acknowledgment']),
+        }),
+        expect.stringContaining('soft')
+      );
+    });
+
+    it('keeps memory_acknowledgment as a hard failure when the triplet is inconsistent (unaccounted memory)', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/org/repo/pull/1874',
+            memory_ids_used: '',
+            memory_ids_rejected: '',
+            memory_usage_summary: 'No memories applied.',
+            summary: 'Reviewed PR.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-hard-failure',
+        attempt: 1,
+        maxAttempts: 3,
+        agentType: 'execution',
+        rawLogs: [
+          '[claude] started work',
+          '[claude] step 2',
+          '[claude] step 3',
+          '[claude] step 4',
+          '[claude] finished work',
+        ].join('\n'),
+        executionMemoryContext: {
+          applicationId: 'app-1',
+          retrievalVersion: 'execution-memory-retrieval@3.0.0',
+          querySummary: 'x',
+          matchedMemories: [
+            {
+              memoryId: 'mem_xxx',
+              title: 'X',
+              memoryType: 'pitfall_pattern',
+              score: 0.56,
+              appliesWhen: 'x',
+              action: 'x',
+              avoid: 'x',
+              verification: 'x',
+            },
+          ],
+        },
+      });
+
+      expect(result.passed).toBe(false);
+      expect(result.missingFields).toContain('memory_acknowledgment');
+      expect(result.missingFields).toContain('memory_ids_unaccounted');
+    });
+
+    it('end-to-end: prompt from buildMissingFieldsPrompt yields a compliant block that the verifier accepts', async () => {
+      const { buildMissingFieldsPrompt } = await import('../task-dispatcher.js');
+
+      // ---- Attempt 1: agent emits only the triplet with an *unaccounted* memory — hard failure ---
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/org/repo/pull/1',
+            memory_ids_used: '',
+            memory_ids_rejected: '',
+            memory_usage_summary: '',
+            summary: 'Reviewed.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+
+      const memoryContext = {
+        applicationId: 'app-1',
+        retrievalVersion: 'execution-memory-retrieval@3.0.0',
+        querySummary: 'q',
+        matchedMemories: [
+          {
+            memoryId: 'mem_loop_aaa',
+            title: 'Loop A',
+            memoryType: 'pitfall_pattern' as const,
+            score: 0.9,
+            appliesWhen: 'x',
+            action: 'x',
+            avoid: 'x',
+            verification: 'x',
+          },
+        ],
+      };
+
+      const verifier = createVerifier();
+      const attempt1RawLogs = [
+        '[claude] started',
+        '[claude] step 2',
+        '[claude] step 3',
+        '[claude] step 4',
+        '[claude] finished',
+      ].join('\n');
+
+      const attempt1 = await verifier.verify({
+        taskId: 'task-loop',
+        attempt: 1,
+        maxAttempts: 3,
+        agentType: 'execution',
+        rawLogs: attempt1RawLogs,
+        executionMemoryContext: memoryContext,
+      });
+      expect(attempt1.passed).toBe(false);
+      expect(attempt1.missingFields).toContain('memory_acknowledgment');
+      expect(attempt1.missingFields).toContain('memory_ids_unaccounted');
+
+      // ---- buildMissingFieldsPrompt produces instructions for attempt 2 ---
+      const resumePrompt = buildMissingFieldsPrompt(
+        'execution',
+        attempt1.missingFields,
+        attempt1RawLogs,
+        memoryContext
+      );
+      expect(resumePrompt).toContain('📋 **Execution Memories Received:**');
+      expect(resumePrompt).toContain('mem_loop_aaa');
+
+      // ---- Attempt 2: agent follows the prompt — emits the exact block + consistent triplet ---
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/org/repo/pull/1',
+            memory_ids_used: '',
+            memory_ids_rejected: 'mem_loop_aaa',
+            memory_usage_summary: 'Rejected the loop memory as not applicable.',
+            summary: 'Reviewed.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+
+      const attempt2RawLogs = [
+        attempt1RawLogs,
+        '[claude] 📋 **Execution Memories Received:**',
+        '[claude] I have received and reviewed 1 execution memories for this task:',
+        '[claude] - [1] mem_loop_aaa — "Loop A" — NOT APPLICABLE because unrelated',
+        '[claude] finalized',
+      ].join('\n');
+
+      const attempt2 = await verifier.verify({
+        taskId: 'task-loop',
+        attempt: 2,
+        maxAttempts: 3,
+        agentType: 'execution',
+        rawLogs: attempt2RawLogs,
+        executionMemoryContext: memoryContext,
+      });
+      expect(attempt2.passed).toBe(true);
+      expect(attempt2.missingFields).toEqual([]);
+    });
+
+    it('accepts memory acknowledgment when raw logs carry Docker RFC3339 timestamps (regression for INT-1413)', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/org/repo/pull/1872',
+            memory_ids_used: 'mem_b349148e-2e7d-4124-b645-dff4d458a773',
+            memory_ids_rejected: 'mem_f1fe7662-2e74-41d6-8c4a-9bf32d16c3ce',
+            memory_usage_summary: 'Used the first memory, rejected the second.',
+            summary: 'Implemented.',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-int-1413-regression',
+        attempt: 1,
+        maxAttempts: 3,
+        agentType: 'execution',
+        rawLogs: [
+          '2026-04-17T16:12:19.476123456Z 📋 **Execution Memories Received:**',
+          '2026-04-17T16:12:19.500000000Z I have received and reviewed 2 execution memories for this task:',
+          '2026-04-17T16:12:19.520000000Z - [1] mem_b349148e-2e7d-4124-b645-dff4d458a773 — "Pre-submit verification" — APPLICABLE because reason',
+          '2026-04-17T16:12:19.540000000Z - [2] mem_f1fe7662-2e74-41d6-8c4a-9bf32d16c3ce — "Address reviewer feedback" — NOT APPLICABLE because reason',
+          '2026-04-17T16:12:20.000000000Z step 1',
+          '2026-04-17T16:12:20.100000000Z step 2',
+          '2026-04-17T16:12:20.200000000Z done',
+        ].join('\n'),
+        executionMemoryContext: {
+          applicationId: 'app-int-1413',
+          retrievalVersion: 'execution-memory-retrieval@3.0.0',
+          querySummary: 'Review regression',
+          matchedMemories: [
+            {
+              memoryId: 'mem_b349148e-2e7d-4124-b645-dff4d458a773',
+              title: 'Pre-submit verification',
+              memoryType: 'verification_pattern',
+              score: 0.7,
+              appliesWhen: 'always',
+              action: 'verify',
+              avoid: 'shortcut',
+              verification: 'check',
+            },
+            {
+              memoryId: 'mem_f1fe7662-2e74-41d6-8c4a-9bf32d16c3ce',
+              title: 'Address reviewer feedback',
+              memoryType: 'implementation_pattern',
+              score: 0.6,
+              appliesWhen: 'reviews',
+              action: 'reply',
+              avoid: 'silence',
+              verification: 'check',
+            },
+          ],
+        },
+      });
+
+      expect(result.missingFields).toEqual([]);
+      expect(result.passed).toBe(true);
+    });
+
+    it('soft-warns memory_acknowledgment when a memory is not listed in the block but the triplet is consistent', async () => {
+      generateMock.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            outcome: 'implemented',
+            superpowers_subagent_driven_dev: 'used',
+            superpowers_requesting_code_review: 'used',
+            gh_pr_url: 'https://github.com/org/repo/pull/1',
+            memory_ids_used: 'mem_a',
+            memory_ids_rejected: 'mem_b',
+            memory_usage_summary: 'x',
+            summary: 's',
+          }),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+        },
+      });
+
+      const verifier = createVerifier();
+      const result = await verifier.verify({
+        taskId: 'task-missing-ack',
+        attempt: 1,
+        maxAttempts: 3,
+        agentType: 'execution',
+        rawLogs: [
+          '[claude] 📋 **Execution Memories Received:**',
+          '[claude] - [1] mem_a — "A" — APPLICABLE because x',
+          // mem_b missing on purpose
+          '[claude] work line 1',
+          '[claude] work line 2',
+          '[claude] work line 3',
+          '[claude] done',
+        ].join('\n'),
+        executionMemoryContext: {
+          applicationId: 'app-123',
+          retrievalVersion: 'execution-memory-retrieval@3.0.0',
+          querySummary: '',
+          matchedMemories: [
+            {
+              memoryId: 'mem_a',
+              title: 'A',
+              memoryType: 'pitfall_pattern',
+              score: 0.9,
+              appliesWhen: 'x',
+              action: 'x',
+              avoid: 'x',
+              verification: 'x',
+            },
+            {
+              memoryId: 'mem_b',
+              title: 'B',
+              memoryType: 'pitfall_pattern',
+              score: 0.9,
+              appliesWhen: 'x',
+              action: 'x',
+              avoid: 'x',
+              verification: 'x',
+            },
+          ],
+        },
+      });
+
+      expect(result.passed).toBe(true);
+      expect(result.missingFields).not.toContain('memory_acknowledgment');
+      expect(loggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          softWarnings: expect.arrayContaining(['memory_acknowledgment']),
+        }),
+        expect.stringContaining('soft')
+      );
+    });
+
+    it('verifier acknowledgment format matches the current system prompt template', () => {
+      const rendered = reviewPrompt.build({
+        taskId: 'task-test',
+        linearIssueId: 'INT-1',
+        linearIssueTitle: 'Test',
+        linearIssueLabels: [],
+        taskUrl: 'https://intexuraos.cloud/#/code-tasks/task-test',
+        workerType: 'auto',
+        modelName: 'claude-4',
+        executionMemoryContext: {
+          applicationId: 'app',
+          retrievalVersion: 'v',
+          querySummary: 'q',
+          matchedMemories: [
+            {
+              memoryId: 'mem_xyz',
+              title: 'T',
+              memoryType: 'pitfall_pattern',
+              score: 0.9,
+              appliesWhen: 'x',
+              action: 'x',
+              avoid: 'x',
+              verification: 'x',
+            },
+          ],
+        },
+      });
+
+      // Prompt instructs the agent to emit "- [1] mem_xyz — …"
+      expect(rendered).toMatch(/- \[\{index\}\] \{memoryId\}/);
+      // Verifier regex — imported from production code, NOT hand-typed — accepts
+      // that shape for a concrete memoryId. If either side drifts, this test fails.
+      const ackPattern = buildMemoryAcknowledgmentPattern('mem_xyz');
+      expect(ackPattern.test('- [1] mem_xyz — "T" — APPLICABLE because reason')).toBe(true);
+      expect(ackPattern.test('[claude] - [1] mem_xyz — "T" — APPLICABLE because reason')).toBe(
+        true
+      );
+      // And rejects the legacy `[<memoryId>]` format so prompt/verifier drift is loud.
+      expect(ackPattern.test('- [mem_xyz] some-label')).toBe(false);
+      // And rejects naked mentions elsewhere (e.g. in the final block) — the
+      // acknowledgment must be an explicit bullet, not a stray memoryId reference.
+      expect(ackPattern.test('memory_ids_used: mem_xyz')).toBe(false);
     });
   });
 
@@ -1341,7 +1814,7 @@ describe('OrchestratorCompletionVerifier', () => {
         maxAttempts: 5,
         agentType: 'pull_request',
         rawLogs:
-          '[claude] 📋 **Execution Memories Received:**\n[claude] - [mem_142] PR reply pattern\n[claude] step 1\n[claude] step 2\n[claude] done\n',
+          '[claude] 📋 **Execution Memories Received:**\n[claude] - [1] mem_142 — "PR reply pattern" — APPLICABLE because reason\n[claude] step 1\n[claude] step 2\n[claude] done\n',
         executionMemoryContext: {
           applicationId: 'app-123',
           retrievalVersion: 'execution-memory-retrieval@1.0.0',
@@ -1589,7 +2062,7 @@ describe('OrchestratorCompletionVerifier', () => {
         maxAttempts: 5,
         agentType: 'planning',
         rawLogs:
-          '[claude] 📋 **Execution Memories Received:**\n[claude] - [mem_142] Memory for planning\n[claude] step 1\n[claude] step 2\n[claude] done\n',
+          '[claude] 📋 **Execution Memories Received:**\n[claude] - [1] mem_142 — "Memory for planning" — APPLICABLE because reason\n[claude] step 1\n[claude] step 2\n[claude] done\n',
         executionMemoryContext: makeMemoryContext(['mem_142']),
       });
       expect(result.passed).toBe(true);
@@ -1623,7 +2096,7 @@ describe('OrchestratorCompletionVerifier', () => {
         maxAttempts: 5,
         agentType: 'planning',
         rawLogs:
-          '[claude] 📋 **Execution Memories Received:**\n[claude] - [mem_142] Memory for planning\n[claude] step 1\n[claude] step 2\n[claude] done\n',
+          '[claude] 📋 **Execution Memories Received:**\n[claude] - [1] mem_142 — "Memory for planning" — APPLICABLE because reason\n[claude] step 1\n[claude] step 2\n[claude] done\n',
         executionMemoryContext: makeMemoryContext(['mem_142']),
       });
       expect(result.passed).toBe(true);

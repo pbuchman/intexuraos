@@ -244,8 +244,9 @@ docker exec code-worker-managed /entrypoint.sh run-attempt
 # Update prompt for follow-up
 echo "Now show me the README content." > /tmp/test-secrets/user-prompt.txt
 
-# Resume continues the previous runtime session
-docker exec -e WORKER_CONTINUE=1 code-worker-managed /entrypoint.sh run-attempt
+# Resume continues the previous runtime session (CLAUDE_SESSION_ID required for Claude runtime)
+docker exec -e WORKER_CONTINUE=1 -e CLAUDE_SESSION_ID=<session-id-from-previous-attempt> \
+  code-worker-managed /entrypoint.sh run-attempt
 ```
 
 ### Step 5.5: Clean up
@@ -373,21 +374,22 @@ The stub streams output line-by-line to match real Codex behavior.
 
 ## Troubleshooting
 
-| Issue                       | Symptom                                                    | Solution                                                     |
-| --------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------ |
-| Container exits immediately | `[entrypoint] ERROR: Running as root is forbidden`         | Run with `--user 1001:1001`                                  |
-| GCP auth fails              | `[entrypoint] GCP auth failed (non-fatal)`                 | Verify `/secrets/gcp-sa.json` contains a valid SA key        |
-| Secret sync fails           | `[entrypoint] Secret sync failed (non-fatal...)`           | Check GCP SA has Secret Manager access; existing .envrc used |
-| No git repo detected        | `[entrypoint] WARNING: /repo is not a git repository`      | Ensure the mounted directory has a `.git` dir or file        |
-| Claude onboarding prompt    | Interactive setup screens on startup                       | Check that config defaults are at `/opt/claude-defaults/`    |
-| Plugins not loaded          | MCP servers fail to start                                  | Check `/opt/claude-plugins/.claude/plugins/` exists in image |
-| Network not found           | Docker network error on container start                    | Run `./scripts/setup-worker-network.sh` first                |
-| UID permission denied       | Permission errors writing to /home/claude                  | Verify tmpfs mount has `uid=1001,gid=1001`                   |
-| Token not refreshing        | Stale GitHub token after 1 hour                            | Orchestrator's TokenRefresher must be running                |
-| run-attempt fails instantly | `[entrypoint] ERROR: Worker not ready`                     | Wait for `/tmp/worker-ready` before calling run-attempt      |
-| run-attempt prompt errors   | `[entrypoint] ERROR: /secrets/system-prompt.txt not found` | Write prompt files to secrets dir before calling run-attempt |
-| Codex resume fails          | `CODEX_THREAD_ID is required for resumed Codex attempts`   | Set `CODEX_THREAD_ID` env var when using `WORKER_CONTINUE=1` |
-| Unknown runtime             | `Unsupported worker runtime`                               | Set `WORKER_RUNTIME` to `claude` or `codex`                  |
+| Issue                       | Symptom                                                     | Solution                                                                           |
+| --------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Container exits immediately | `[entrypoint] ERROR: Running as root is forbidden`          | Run with `--user 1001:1001`                                                        |
+| GCP auth fails              | `[entrypoint] GCP auth failed (non-fatal)`                  | Verify `/secrets/gcp-sa.json` contains a valid SA key                              |
+| Secret sync fails           | `[entrypoint] Secret sync failed (non-fatal...)`            | Check GCP SA has Secret Manager access; existing .envrc used                       |
+| No git repo detected        | `[entrypoint] WARNING: /repo is not a git repository`       | Ensure the mounted directory has a `.git` dir or file                              |
+| Claude onboarding prompt    | Interactive setup screens on startup                        | Check that config defaults are at `/opt/claude-defaults/`                          |
+| Plugins not loaded          | MCP servers fail to start                                   | Check `/opt/claude-plugins/.claude/plugins/` exists in image                       |
+| Network not found           | Docker network error on container start                     | Run `./scripts/setup-worker-network.sh` first                                      |
+| UID permission denied       | Permission errors writing to /home/claude                   | Verify tmpfs mount has `uid=1001,gid=1001`                                         |
+| Token not refreshing        | Stale GitHub token after 1 hour                             | Orchestrator's TokenRefresher must be running                                      |
+| run-attempt fails instantly | `[entrypoint] ERROR: Worker not ready`                      | Wait for `/tmp/worker-ready` before calling run-attempt                            |
+| run-attempt prompt errors   | `[entrypoint] ERROR: /secrets/system-prompt.txt not found`  | Write prompt files to secrets dir before calling run-attempt                       |
+| Claude resume fails         | `CLAUDE_SESSION_ID is required for resumed Claude attempts` | Set `CLAUDE_SESSION_ID` env var when using `WORKER_CONTINUE=1` with Claude runtime |
+| Codex resume fails          | `CODEX_THREAD_ID is required for resumed Codex attempts`    | Set `CODEX_THREAD_ID` env var when using `WORKER_CONTINUE=1` with Codex runtime    |
+| Unknown runtime             | `Unsupported worker runtime`                                | Set `WORKER_RUNTIME` to `claude` or `codex`                                        |
 
 ---
 
@@ -402,7 +404,7 @@ The stub streams output line-by-line to match real Codex behavior.
 ## Exercises
 
 1. **Easy:** Build the test image and run the `file-test` command to verify mount permissions
-2. **Medium:** Start a managed-mode container, run two consecutive attempts (second with `--continue`), and verify session continuity in the logs
+2. **Medium:** Start a managed-mode container, run two consecutive attempts (second with `WORKER_CONTINUE=1` and `CLAUDE_SESSION_ID`), and verify session continuity in the logs
 3. **Hard:** Start a managed-mode container with `WORKER_RUNTIME=codex`, run an attempt, then resume with `WORKER_CONTINUE=1` and a `CODEX_THREAD_ID`, verifying the Codex runtime evidence log lines
 
 <details>
@@ -451,9 +453,10 @@ until docker exec continuity-test test -f /tmp/worker-ready; do sleep 1; done
 echo "First task" > /tmp/test-secrets/user-prompt.txt
 docker exec continuity-test /entrypoint.sh run-attempt
 
-# Resume attempt
+# Resume attempt (CLAUDE_SESSION_ID required for Claude runtime)
 echo "Follow-up task" > /tmp/test-secrets/user-prompt.txt
-docker exec -e WORKER_CONTINUE=1 continuity-test /entrypoint.sh run-attempt
+docker exec -e WORKER_CONTINUE=1 -e CLAUDE_SESSION_ID=<session-id> \
+  continuity-test /entrypoint.sh run-attempt
 
 # Check logs for both attempts
 docker logs continuity-test | grep "run-attempt\|Resuming"

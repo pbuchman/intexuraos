@@ -66,6 +66,7 @@ export function createHandleActionTemplate(
         message,
         buttons,
         correlationId: `action-${config.actionType}-approval-${event.actionId}`,
+        important: true,
       });
 
       if (!publishResult.ok) {

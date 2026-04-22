@@ -84,4 +84,4 @@ Send a message through WhatsApp, record a voice note, or use the share menu on y
 
 ---
 
-_Part of [IntexuraOS](../overview.md) — one front door for everything you need to say._
+_Part of [IntexuraOS](../overview.md) — one front door for everything you need to say_

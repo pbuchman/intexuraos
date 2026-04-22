@@ -175,6 +175,7 @@ describe('POST /internal/webhooks/compliance-report', () => {
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      prTriagePublisher: {} as never,
     } as ServiceContainer);
 
     app = await buildServer();
@@ -428,6 +429,7 @@ describe('POST /internal/webhooks/compliance-report', () => {
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      prTriagePublisher: {} as never,
     } as ServiceContainer);
 
     const body = buildValidPayload();

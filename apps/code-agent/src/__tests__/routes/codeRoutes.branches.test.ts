@@ -450,11 +450,9 @@ describe('codeRoutes branch coverage', () => {
       expect(body.data.dispatchedAt).toBe(now.toISOString());
     });
 
-    it('falls back to empty string when timestampToIso returns undefined for createdAt', async () => {
-      const { Timestamp } = await import('@google-cloud/firestore');
-      const now = new Date();
-      // Mock findByIdForUser to return a task where createdAt is an object without toDate()
-      // This exercises the ?? '' fallback path at line 317
+    it('falls back to empty string when timestampToIso returns undefined for createdAt and updatedAt', async () => {
+      // Mock findByIdForUser to return a task where createdAt and updatedAt are objects without toDate()
+      // This exercises the ?? '' fallback path for both timestamp fields
       const mockRepo = {
         ...getServices().codeTaskRepo,
         findByIdForUser: vi.fn().mockResolvedValue(ok({
@@ -473,7 +471,7 @@ describe('codeRoutes branch coverage', () => {
           callbackReceived: false,
           // Pass objects without toDate() to trigger timestampToIso returning undefined
           createdAt: { seconds: 123 } as never,
-          updatedAt: Timestamp.fromDate(now),
+          updatedAt: { seconds: 456 } as never,
         })),
       } as unknown as CodeTaskRepository;
 
@@ -487,8 +485,9 @@ describe('codeRoutes branch coverage', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      // createdAt should fall back to '' since timestampToIso returns undefined
+      // Both should fall back to '' since timestampToIso returns undefined
       expect(body.data.createdAt).toBe('');
+      expect(body.data.updatedAt).toBe('');
     });
   });
 

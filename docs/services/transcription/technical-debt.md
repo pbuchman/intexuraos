@@ -1,7 +1,7 @@
 # Transcription Worker — Technical Debt
 
-**Last Updated:** 2026-03-15
-**Analysis Run:** [2026-03-07 entry](../../documentation-runs.md)
+**Last Updated:** 2026-04-22
+**Analysis Run:** [2026-04-22 entry](../../documentation-runs.md)
 
 ---
 
@@ -9,11 +9,11 @@
 
 | Category    | Count | Severity |
 | ----------- | ----- | -------- |
-| Code Smells | 1     | Low      |
+| Code Smells | 0     | -        |
 | Test Gaps   | 0     | -        |
 | Type Issues | 0     | -        |
 | TODOs       | 0     | -        |
-| **Total**   | **1** | Low      |
+| **Total**   | **0** | -        |
 
 ---
 
@@ -27,11 +27,7 @@
 
 ## Code Smells
 
-### Low Priority
-
-| File                                    | Issue                                                                                          | Impact                                                                                                                                                                                                                               |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/providers/speechmatics/adapter.ts` | v8 ignore blocks for error extraction utilities (`extractErrorMessage`, `extractErrorContext`) | These type-narrowing functions handle unknown error shapes from the Speechmatics SDK and are legitimately hard to cover exhaustively. The v8 ignore annotations are justified but could be reduced if the SDK provided typed errors. |
+No code smells identified.
 
 ---
 
@@ -78,10 +74,6 @@ No significant code duplication identified. Error handling follows a consistent 
 
 | File         | Category      | Lines   | Reason                                                        |
 | ------------ | ------------- | ------- | ------------------------------------------------------------- |
-| `adapter.ts` | `ts-type`     | 52–71   | `extractErrorMessage` type narrowing for unknown error shapes |
-| `adapter.ts` | `ts-type`     | 76–120  | `extractErrorContext` type narrowing with optional properties |
-| `adapter.ts` | `upstream`    | 310–322 | Metadata language fallback for Speechmatics API response      |
-| `adapter.ts` | `upstream`    | 325–334 | Non-array results guard for malformed API response            |
 | `index.ts`   | `module-init` | 71–79   | Config, storage, publisher initialized at cold start          |
 | `logger.ts`  | `module-init` | 25–33   | Logger initialized at module load                             |
 
@@ -91,7 +83,9 @@ All annotations use valid categories from the project's coverage exemption rules
 
 ## Resolved Issues
 
-No previously identified issues (this is the first documentation run for this service).
+| Date       | Issue                                                        | Resolution                                                |
+| ---------- | ------------------------------------------------------------ | --------------------------------------------------------- |
+| 2026-03-09 | v8 ignore blocks in `adapter.ts` for error extraction utils  | Replaced with real test coverage (`5a4f7131`, `1d89a24a`) |
 
 ---
 

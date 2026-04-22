@@ -324,6 +324,6 @@ interface ArchiveCommandBody {
 | ---------------------- | ----------------------------------------- | ------------------------------------------------------- |
 | `user-service`         | Fetch LLM client (API key + model config) | Command set to `pending_classification`; retried later  |
 | `actions-agent`        | Create action from classification result  | Command set to `failed` with `failureReason`            |
-| `app-settings-service` | LLM pricing data at startup               | Service fails to initialize entirely                    |
+| `llm-usage-service`    | LLM usage tracking and cost reporting     | Usage data lost; classification still succeeds          |
 | Firestore              | Persist commands                          | Request fails with 500                                  |
 | Pub/Sub                | Publish `action.created` event            | Logged as error; command is still marked `classified`   |

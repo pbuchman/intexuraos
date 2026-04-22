@@ -13,8 +13,7 @@ export type GroupByMode =
   | 'component'
   | 'service'
   | 'model'
-  | 'openrouter-model'
-  | 'promptType';
+  | 'openrouter-model';
 
 export interface SortState {
   field: UsageEventSortField;
@@ -49,7 +48,6 @@ export const GROUP_BY_MAP: Record<GroupByMode, string[]> = {
   service: ['source.service'],
   model: ['request.model'],
   'openrouter-model': ['request.provider', 'request.model'],
-  promptType: ['request.promptType'],
 };
 
 export const GROUP_BY_OPTIONS: { key: GroupByMode; label: string }[] = [
@@ -59,7 +57,6 @@ export const GROUP_BY_OPTIONS: { key: GroupByMode; label: string }[] = [
   { key: 'service', label: 'Service' },
   { key: 'model', label: 'Model' },
   { key: 'openrouter-model', label: 'OpenRouter Model' },
-  { key: 'promptType', label: 'Prompt Type' },
 ];
 
 // "Most expensive" / "Most tokens" sorts are intentionally omitted:

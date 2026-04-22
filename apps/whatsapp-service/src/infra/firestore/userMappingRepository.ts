@@ -15,6 +15,9 @@ export interface WhatsAppUserMappingPublic {
 
 interface WhatsAppUserMappingDoc extends WhatsAppUserMappingPublic {
   userId: string;
+  // PRIVATE: notification importance level. Must NEVER leak into
+  // WhatsAppUserMappingPublic / GET /whatsapp/status / Pub/Sub events.
+  notificationLevel?: 'all' | 'important';
 }
 
 const COLLECTION_NAME = 'whatsapp_user_mappings';

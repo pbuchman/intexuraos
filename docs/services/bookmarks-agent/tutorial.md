@@ -154,6 +154,8 @@ After `aiSummarizedAt` is populated, you should receive a WhatsApp message conta
 - AI-generated summary
 - Original URL
 
+The message is marked as important, so it will always be delivered regardless of your notification level preference.
+
 **Checkpoint:** Your bookmark should have `ogFetchStatus: "processed"` and a non-null `aiSummary`.
 
 ---
@@ -276,7 +278,7 @@ The proxy:
    |-- Calls web-agent /internal/page-summaries
    |-- Success:
    |   |-- Updates aiSummary, aiSummarizedAt
-   |   |-- Published: whatsapp.message.send event
+   |   |-- Published: whatsapp.message.send event (important: true)
    |-- Transient error (429, timeout, network):
    |   |-- Returns HTTP 503 -> Pub/Sub retries with exponential backoff
    |-- Permanent error (NO_CONTENT, 400):
@@ -285,7 +287,7 @@ The proxy:
 4. WhatsApp Delivery
    |-- whatsapp-service SendMessageWorker receives event
    |-- Looks up phone number from userId
-   |-- Sends summary message to user
+   |-- Sends summary message to user (always delivered — marked important)
 ```
 
 ---

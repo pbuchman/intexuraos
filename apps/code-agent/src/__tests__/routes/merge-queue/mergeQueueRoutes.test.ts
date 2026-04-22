@@ -216,6 +216,7 @@ describe('Merge queue JWT routes', () => {
         reconcile: vi.fn().mockResolvedValue({ processed: 0 }),
       },
       mergeQueueWatchRepo: mockMergeQueueWatchRepo,
+      prTriagePublisher: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -251,6 +252,7 @@ describe('Merge queue JWT routes', () => {
       automationLog: import('../../../domain/ports/automationLog.js').AutomationLog;
       taskEnqueueService: import('../../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeQueueWatchRepo: import('../../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
+      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
     });
 
     server = await buildServer();

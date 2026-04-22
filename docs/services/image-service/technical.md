@@ -108,6 +108,31 @@ sequenceDiagram
 
 ## Recent Changes
 
+### v3.6.0 (since v3.5.0)
+
+Centralized LLM pricing removal and usage sink migration. No new endpoints or user-facing behavior changes.
+
+| Commit      | Description                                                                                                          | Date       |
+| ----------- | -------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `398d351a`  | Fix digest LLM usage sink + brand UsageSink nominally (INT-1421)                                                     | 2026-04-22 |
+| `a4f53cd7`  | Remove LLM pricing from image-service — delete `REQUIRED_MODELS`, `pricingContext`, `ModelPricing` fields (INT-1387) | 2026-04-15 |
+| `6f2a13c1`  | Address PR review: remove pricing from client configs                                                                | 2026-04-15 |
+| `012ce46c`  | Replace remaining hardcoded provider strings in tests                                                                | 2026-04-14 |
+| `4c0a27b6`  | Replace hardcoded model/provider strings with LlmModels/LlmProviders constants                                       | 2026-04-14 |
+| `84b5d81a`  | Rename ambiguous `geminiFlashPricing` var and drop dead pricing code                                                 | 2026-04-14 |
+| `a96e4857`  | Fix pricing mismatch — pass model explicitly to `createPromptGenerator` (INT-1369)                                   | 2026-04-14 |
+| `830d5a91`  | Add retry with exponential backoff to pricing fetch (llm-pricing)                                                    | 2026-04-13 |
+| `8b1211dc`  | Wire `HttpInternalAuthUsageSink` in all LLM call sites (INT-1342)                                                    | 2026-04-12 |
+| `209f59e8`  | Migrate LLM usage sinks to HTTP + delete llm-usage Firestore writes (INT-1342)                                       | 2026-04-11 |
+| `8767c5e2`  | Migrate pricing consumers from app-settings-service to llm-pricing package                                           | 2026-04-10 |
+
+**Key changes:**
+
+- **Pricing fully removed (INT-1387):** `REQUIRED_MODELS` array, `pricingContext` parameter, `ModelPricing` fields in adapter configs, and the `fetchAllPricingWithRetry` call in `initializeServices` — all deleted. `initializeServices()` is now synchronous (no `await` needed). This eliminates the pricing model mismatch gotcha documented in v3.5.0.
+- **Explicit model in prompt generation (INT-1369):** `createPromptGenerator` signature changed from `(provider, apiKey, userId, logger)` to `(provider, model, apiKey, userId, logger)`. The Gemini adapter no longer defaults to `Gemini25Pro` — the model is always passed explicitly from `ImagePromptModelConfig.modelId`.
+- **HTTP-based usage sinks (INT-1342):** All LLM call sites now use `HttpInternalAuthUsageSink` to report usage to `llm-usage-service` via HTTP, replacing the previous direct Firestore-based `UsageLogger`. Requires `INTEXURAOS_LLM_USAGE_SERVICE_URL` env var.
+- **Usage sink branding (INT-1421):** Each usage sink is branded with a `component` identifier (e.g., `gemini-prompt-adapter`, `openai-image-generator`) for granular cost attribution.
+
 ### v3.5.0 (since v3.4.0)
 
 Minor maintenance changes only — no new features or architectural changes to image-service itself. The headline change affecting this service (INT-1310 provider failover for cover image generation) is implemented in **research-agent**, the primary caller.
@@ -234,17 +259,6 @@ Best-effort deletion — looks up the image record for its slug, deletes from GC
 | `gpt-4.1`        | OpenAI   | Prompt enhancement |
 | `gemini-2.5-pro` | Google   | Prompt enhancement |
 
-### Pricing Models (from index.ts REQUIRED_MODELS)
-
-| Model                    | Purpose                    |
-| ------------------------ | -------------------------- |
-| `gemini-2.5-flash`       | Pricing context for Gemini |
-| `gpt-4o-mini`            | Pricing context for OpenAI |
-| `gpt-image-1`            | Image generation pricing   |
-| `gemini-2.5-flash-image` | Image generation pricing   |
-
-**Note:** The pricing models (`gemini-2.5-flash`, `gpt-4o-mini`) differ from the actual prompt generation models (`gemini-2.5-pro`, `gpt-4.1`). See Gotchas section.
-
 ## Pub/Sub
 
 None. Image-service does not publish or subscribe to Pub/Sub events.
@@ -283,14 +297,12 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for internal auth               |
 | `INTEXURAOS_IMAGE_BUCKET`             | Yes      | GCS bucket name for image storage             |
 | `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`    | Yes      | Public base URL for GCS objects               |
-| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | LLM usage service URL (pricing data)          |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | LLM usage service URL for usage reporting     |
 | `INTEXURAOS_SENTRY_DSN`               | No       | Sentry error tracking DSN                     |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key for user fallback     |
 | `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint for OpenTelemetry tracing |
 
 ## Gotchas
-
-**Pricing model mismatch**: The `REQUIRED_MODELS` in `index.ts` fetches pricing for `gemini-2.5-flash` and `gpt-4o-mini`, but the prompt adapters actually use `gemini-2.5-pro` and `gpt-4.1` respectively. This means cost tracking may use incorrect per-token rates for prompt generation.
 
 **Slug generation**: The `slug` field is derived from the title using `slugify()` — max 50 characters, lowercase, normalized unicode, hyphens for spaces. Only used when a title is provided (research cover images).
 
@@ -361,13 +373,21 @@ apps/image-service/src/
       imageSchemas.ts              # Image generation + delete request/response schemas
       promptSchemas.ts             # Prompt generation request/response schemas
   serviceContainer.ts              # DI container interface (ServiceContainer type + get/set/reset)
-  serviceFactory.ts                # Service initialization with env vars and pricing context
+  serviceFactory.ts                # Service initialization with env vars and usage sinks
   services.ts                      # Re-exports from serviceContainer.ts and serviceFactory.ts
-  index.ts                         # Entry point with env validation + pricing init
+  index.ts                         # Entry point with env validation
   server.ts                        # Fastify server setup with Swagger, CORS, health
 ```
 
 ## Migration Notes
+
+### v3.6.0: LLM Pricing Removal and Usage Sink Migration (2026-04-10–2026-04-22)
+
+- **LLM pricing fully removed (INT-1387):** `REQUIRED_MODELS`, `pricingContext` parameter, `ModelPricing` fields in all adapter configs, and the async `fetchAllPricingWithRetry` call in `initializeServices` — all deleted. `initializeServices()` is now synchronous.
+- **Pricing model mismatch resolved:** The v3.5.0 gotcha about `REQUIRED_MODELS` fetching pricing for wrong models (`gemini-2.5-flash`/`gpt-4o-mini` vs actual `gemini-2.5-pro`/`gpt-4.1`) is no longer relevant — pricing is handled centrally in `llm-usage-service`.
+- **Explicit model in prompt generation (INT-1369):** `createPromptGenerator` signature expanded with `model: string` parameter. `GeminiPromptAdapter` no longer has a hardcoded default model — it must be passed explicitly.
+- **HTTP-based usage sinks (INT-1342):** `UsageLogger` (direct Firestore writes) replaced with `HttpInternalAuthUsageSink` (HTTP calls to `llm-usage-service`). Each adapter gets a component-branded sink for granular attribution.
+- **New env var required:** `INTEXURAOS_LLM_USAGE_SERVICE_URL` — base URL for the centralized LLM usage reporting service.
 
 ### v3.5.0: Test Coverage Improvements (2026-03-25)
 

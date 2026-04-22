@@ -178,7 +178,7 @@ export function createExecuteCodeActionUseCase(
       });
     }
 
-    const { codeTaskId, resourceUrl } = result.value;
+    const { codeTaskId, resourceUrl } = result.value; // @allow-result-access -- narrowed by !result.ok early return above
     logger.info({ actionId, codeTaskId, resourceUrl }, 'Code task created successfully');
 
     // Design lines 1471-1474: Store resource_url and approvalEventId in action payload
@@ -208,6 +208,7 @@ export function createExecuteCodeActionUseCase(
       message: whatsappMessage,
       ctaUrl: { displayText: 'View Progress', url: fullUrl },
       correlationId: `code-complete-${actionId}`,
+      important: true,
     });
 
     if (!publishResult.ok) {

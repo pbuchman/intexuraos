@@ -93,7 +93,7 @@ sequenceDiagram
     else Success
         WA-->>BA: AI summary
         BA->>FS: Update aiSummary, aiSummarizedAt
-        BA->>WSP: Publish whatsapp.message.send
+        BA->>WSP: Publish whatsapp.message.send (important: true)
         BA-->>SP: 200 OK
     end
 
@@ -104,6 +104,8 @@ sequenceDiagram
 
 | Commit     | Description                                                                 | Date       |
 | ---------- | --------------------------------------------------------------------------- | ---------- |
+| `3e04155`  | Mark bookmark summary WhatsApp messages as important (INT-1418)             | 2026-04-20 |
+| `5397ce3`  | Extend FakeWhatsAppSendPublisher with important flag (INT-1418)             | 2026-04-20 |
 | `af79b3ea` | Pass title/description hints to web-agent summary request                   | 2026-04-02 |
 | `e6896a97` | Downgrade expected operational warnings from warn to info level             | 2026-03-27 |
 | `46245ea8` | Fix infra/summary/index.ts exports — use barrel import (INT-913)            | 2026-03-19 |
@@ -112,8 +114,6 @@ sequenceDiagram
 | `5e715ce0` | Extract OpenAPI config from server.ts (INT-910)                             | 2026-03-16 |
 | `f1772ebf` | Fix fire-and-forget publishing in createBookmark use-case (INT-909)         | 2026-03-16 |
 | `f9dafc9f` | Move enrich publishing into createBookmark use-case (INT-909)               | 2026-03-16 |
-| `8f554243` | Extract image proxy into port/adapter pattern (INT-908)                     | 2026-03-16 |
-| `ef82a60c` | Add tests for server.ts buildServer + health check (INT-877)                | 2026-03-15 |
 
 ## API Endpoints
 
@@ -212,11 +212,11 @@ sequenceDiagram
 
 ### Published Events
 
-| Topic                                   | Event Type              | Payload                              | Trigger                          |
-| --------------------------------------- | ----------------------- | ------------------------------------ | -------------------------------- |
-| `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`     | `bookmarks.enrich`      | `{ bookmarkId, userId, url }`        | After internal bookmark creation |
-| `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`  | `bookmarks.summarize`   | `{ bookmarkId, userId }`             | After successful OG enrichment   |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | `whatsapp.message.send` | `{ userId, message, correlationId }` | After successful AI summary      |
+| Topic                                   | Event Type              | Payload                                               | Trigger                          |
+| --------------------------------------- | ----------------------- | ----------------------------------------------------- | -------------------------------- |
+| `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`     | `bookmarks.enrich`      | `{ bookmarkId, userId, url }`                         | After internal bookmark creation |
+| `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`  | `bookmarks.summarize`   | `{ bookmarkId, userId }`                              | After successful OG enrichment   |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | `whatsapp.message.send` | `{ userId, message, correlationId, important: true }` | After successful AI summary      |
 
 ### Subscribed Events
 
@@ -268,12 +268,13 @@ interface SendMessageEvent {
   userId: string;
   message: string;
   correlationId: string;
+  important: boolean;
   timestamp: string;
   replyToMessageId?: string;
 }
 ```
 
-The `summarizeBookmark` use case publishes this event after successful AI summarization. whatsapp-service's SendMessageWorker processes the event and delivers the message.
+The `summarizeBookmark` use case publishes this event after successful AI summarization with `important: true`, ensuring bookmark summaries are always delivered regardless of the user's notification level preference. whatsapp-service's SendMessageWorker processes the event and delivers the message.
 
 ### Transient Error Type
 
@@ -292,20 +293,20 @@ The Pub/Sub route checks for this error code and responds with HTTP 503 to trigg
 
 All required env vars are validated at startup via `validateRequiredEnv()` in `index.ts`. `INTEXURAOS_SENTRY_DSN` is validated separately before `validateRequiredEnv()`.
 
-| Environment Variable                    | Required | Description                                   |
-| --------------------------------------- | -------- | --------------------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID`             | Yes      | GCP project for Pub/Sub                       |
-| `INTEXURAOS_AUTH_JWKS_URL`              | Yes      | Auth0 JWKS endpoint                           |
-| `INTEXURAOS_AUTH_ISSUER`                | Yes      | Auth0 token issuer                            |
-| `INTEXURAOS_AUTH_AUDIENCE`              | Yes      | Auth0 token audience                          |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes      | Internal auth header value                    |
-| `INTEXURAOS_WEB_AGENT_URL`              | Yes      | Web-agent base URL                            |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | Yes      | WhatsApp send topic name                      |
-| `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`     | Yes      | Enrichment topic name                         |
-| `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`  | Yes      | Summarization topic name                      |
-| `INTEXURAOS_SENTRY_DSN`                 | Yes      | Sentry DSN for error reporting                |
-| `INTEXURAOS_ENVIRONMENT`                | No       | Sentry environment tag (default: development) |
-| `PORT`                                  | No       | Server port (default: 8080)                   |
+| Environment Variable                     | Required | Description                                   |
+| ---------------------------------------- | -------- | --------------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`              | Yes      | GCP project for Pub/Sub                       |
+| `INTEXURAOS_AUTH_JWKS_URL`               | Yes      | Auth0 JWKS endpoint                           |
+| `INTEXURAOS_AUTH_ISSUER`                 | Yes      | Auth0 token issuer                            |
+| `INTEXURAOS_AUTH_AUDIENCE`               | Yes      | Auth0 token audience                          |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`         | Yes      | Internal auth header value                    |
+| `INTEXURAOS_WEB_AGENT_URL`               | Yes      | Web-agent base URL                            |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`  | Yes      | WhatsApp send topic name                      |
+| `INTEXURAOS_PUBSUB_BOOKMARK_ENRICH`      | Yes      | Enrichment topic name                         |
+| `INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE`   | Yes      | Summarization topic name                      |
+| `INTEXURAOS_SENTRY_DSN`                  | Yes      | Sentry DSN for error reporting                |
+| `INTEXURAOS_ENVIRONMENT`                 | No       | Sentry environment tag (default: development) |
+| `PORT`                                   | No       | Server port (default: 8080)                   |
 
 ## Gotchas
 
@@ -314,6 +315,7 @@ All required env vars are validated at startup via `validateRequiredEnv()` in `i
 - **Duplicate detection by userId+url** — Same URL can exist for different users
 - **OG fetch can fail** — Some sites block scrapers; status will be `failed`
 - **WhatsApp delivery is fire-and-forget** — If Pub/Sub publish fails, no retry for WhatsApp notification (summary is still saved)
+- **WhatsApp messages marked important** — Bookmark summaries are published with `important: true`, bypassing user notification level filtering
 - **Force refresh always fetches** — Unlike enrichment, force-refresh ignores `processed` status and always re-fetches
 - **Transient vs permanent errors** — Only transient errors (429, timeout, network) trigger Pub/Sub retry; permanent errors (NO_CONTENT, 400) result in graceful degradation with HTTP 200
 - **Legacy bookmarks have no status field** — Firestore repository defaults to `'active'` for documents missing the `status` field
@@ -346,7 +348,7 @@ apps/bookmarks-agent/src/
       archiveBookmark.ts             # Soft delete (idempotent)
       unarchiveBookmark.ts           # Restore from archive (idempotent)
       enrichBookmark.ts              # OG fetch + trigger summarize
-      summarizeBookmark.ts           # AI summary + WhatsApp delivery
+      summarizeBookmark.ts           # AI summary + WhatsApp delivery (important: true)
       updateBookmarkInternal.ts      # Internal updates (OG, AI)
       forceRefreshBookmark.ts        # Force OG re-fetch
   infra/

@@ -40,6 +40,7 @@ export class WhatsAppNotificationSender implements NotificationSender {
       userId,
       message,
       correlationId: `research-${researchId}`,
+      important: true,
     });
 
     return ok(undefined);
@@ -56,6 +57,7 @@ export class WhatsAppNotificationSender implements NotificationSender {
       userId,
       message,
       correlationId: `research-failure-${researchId}`,
+      important: true,
     });
 
     return ok(undefined);

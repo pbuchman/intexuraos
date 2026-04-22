@@ -2,7 +2,7 @@
 
 ## Overview
 
-Mobile-notifications-service receives push notification data from Android devices via webhook, validates device signatures using SHA-256 hash comparison, deduplicates notifications, and stores them in Firestore. It runs on Cloud Run with Fastify and exposes public, internal, and webhook endpoints. Local port: 8114.
+Mobile-notifications-service receives push notification data from Android devices via webhook, validates device signatures using SHA-256 hash comparison, deduplicates notifications, and stores them in Firestore. It also runs a WhatsApp group digest pipeline that aggregates daily messages into AI-generated summaries using LLM calls, persists group state across days, and delivers digest-ready notifications via Pub/Sub to WhatsApp. Runs on Cloud Run with Fastify. Local port: 8114.
 
 ## Architecture
 
@@ -12,39 +12,51 @@ graph TB
         Mobile[Android Device]
         Tasker[Tasker/Automate]
         WebApp[Web Application]
+        Scheduler[Cloud Scheduler]
     end
 
     subgraph "mobile-notifications-service"
         Webhook[Webhook Routes]
         Public[Public Routes]
+        Digest[Digest Routes]
         Internal[Internal Routes]
         Domain[Domain Layer]
         Infra[Firestore Repositories]
+        Notifier[WhatsApp Digest Notifier]
     end
 
     subgraph "Dependencies"
         Firestore[(Firestore)]
+        PubSub[Pub/Sub]
+        OpenRouter[OpenRouter LLM]
+        LlmUsage[llm-usage-service]
     end
 
     Mobile --> Tasker
     Tasker -->|POST + Signature| Webhook
     WebApp -->|Bearer JWT| Public
+    WebApp -->|Bearer JWT| Digest
+    Scheduler -->|OIDC / Internal| Digest
     Webhook --> Domain
     Public --> Domain
+    Digest --> Domain
     Internal --> Domain
     Domain --> Infra
+    Domain --> OpenRouter
+    Domain --> LlmUsage
     Infra --> Firestore
+    Notifier --> PubSub
 
     classDef service fill:#e1f5ff
     classDef storage fill:#fff4e6
     classDef external fill:#f0f0f0
 
-    class Webhook,Public,Internal,Domain,Infra service
-    class Firestore storage
-    class Mobile,Tasker,WebApp,DataInsights external
+    class Webhook,Public,Digest,Internal,Domain,Infra,Notifier service
+    class Firestore,PubSub storage
+    class Mobile,Tasker,WebApp,Scheduler,OpenRouter,LlmUsage external
 ```
 
-## Data Flow
+## Data Flow — Notification Capture
 
 ```mermaid
 sequenceDiagram
@@ -66,26 +78,57 @@ sequenceDiagram
     Service-->>-Tasker: { status: "accepted", id: "..." }
 ```
 
+## Data Flow — Digest Pipeline
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Trigger as Cloud Scheduler / User
+    participant Service as mobile-notifications-service
+    participant Firestore
+    participant LLM as OpenRouter LLM
+    participant PubSub as Pub/Sub (WhatsApp Send)
+
+    Trigger->>+Service: POST /digest/run-yesterday (or /digest/run)
+    Service->>Firestore: Acquire digest lock (userId, groupKey)
+    Service->>Firestore: Fetch previous day state + last 3 summaries
+    Service->>Firestore: Query notifications (CET day bounds, title prefix, com.whatsapp)
+    Service->>Service: Filter and deduplicate messages
+    Service->>LLM: Generate digest (aggregateDigest prompt)
+    LLM-->>Service: { dailySummary, stateUpdate }
+    Service->>Firestore: Save daily summary + group state
+    Service->>PubSub: Publish digest-ready (first generation only)
+    Service->>Firestore: Release digest lock
+    Service-->>-Trigger: { summaryDocId, generation, messageCount, modelId }
+```
+
 ## Recent Changes
 
-| Commit     | Change                                                       | Date       |
-| ---------- | ------------------------------------------------------------ | ---------- |
-| `549c969`  | Enforce strict v8 ignore validation with blocker keywords    | 2026-03-24 |
-| `6ca6e5a`  | Address review comments on v8-ignore tests                   | 2026-03-11 |
-| `34d0200`  | Add v8-ignore exemptions for ts-type branches                | 2026-03-11 |
-| `b271a4a`  | Write tests for v8-ignore blocks and remove exemptions       | 2026-03-10 |
-| `6063175`  | Add dev-mode log formatting for PM2 readability              | 2026-02-16 |
-| `a52a6bb`  | Add Dash0 OpenTelemetry integration (distributed tracing)    | 2026-02-16 |
-| `5aa3e1b`  | Enable strict 100% coverage enforcement (Phase 3)            | 2026-01-31 |
-| `4468d72`  | Add @allow-raw-send annotations for 204 No Content responses | 2026-01-30 |
+### v3.6.0 — WhatsApp Group Digest Pipeline (INT-1382, Highlighted)
 
-### v3.5.0 — v8 Ignore Blocker Keywords
+End-to-end pipeline that processes WhatsApp group messages into AI-generated digest summaries with daily highlights. Headline feature for this release.
 
-Commit `549c969` updated v8 ignore annotation explanations across 42 files as part of a platform-wide enforcement pass. In mobile-notifications-service, the existing annotations already used correct blocker keywords (`ts-type`, `test-infra`) and required no functional changes.
+| Change                                        | Description                                                                                               | Reference                 |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------- |
+| WhatsApp Group Digest pipeline                | Full digest pipeline: aggregation, LLM prompts, Firestore repos, lock mechanism, backfill, CET day bounds | INT-1382, PR #1863, #1856 |
+| WhatsApp delivery for digests                 | Publish digest-ready notification via Pub/Sub to WhatsApp send topic                                      | INT-1417, PR #1879, #1877 |
+| Per-day input isolation + headline/bullets UI | Digest schema changed from narrative to headline + bullets structure                                      | INT-1410, PR #1868        |
+| Fixed missing daily summaries                 | Fixed digest cron run-yesterday endpoint returning 0 dispatched                                           | INT-1420, PR #1884        |
+| Fixed timestamp filter (ms vs sec)            | Digest notification query used milliseconds instead of seconds for postTimeSec filter                     | INT-1412, PR #1874        |
+| Added digest time-range index                 | Firestore composite index for efficient postTimeSec range queries                                         | INT-1413, PR #1872        |
+| Digest filters by groupTitlePrefix            | Changed from slug-based to prefix-based group title matching                                              | INT-1409, PR #1866        |
+| Restored digest LLM usage reporting           | Wired HttpInternalAuthUsageSink with brand for llm-usage-service                                          | INT-1421, PR #1887        |
+| Removed 5-batch cap in title filter           | Title filter now iterates through all matching batches                                                    | INT-1398, PR #1843        |
+| Notification message filter + dedup           | Added filterAndDedupeNotifications utility for cleaning raw notifications                                 | INT-1395, PR #1844        |
 
-### v3.3.0 — v8 Ignore Test Replacement
+### Previous (pre-v3.5.0)
 
-v8 ignore blocks in `firestoreNotificationRepository.ts` and `firestoreSignatureConnectionRepository.ts` were replaced with real tests covering Firestore error paths and edge cases. Remaining v8 ignore directives use the documented `ts-type` category for `noUncheckedIndexedAccess` safety branches that TypeScript requires but cannot be triggered at runtime.
+| Commit    | Change                                                    | Date       |
+| --------- | --------------------------------------------------------- | ---------- |
+| `549c969` | Enforce strict v8 ignore validation with blocker keywords | 2026-03-24 |
+| `6ca6e5a` | Address review comments on v8-ignore tests                | 2026-03-11 |
+| `b271a4a` | Write tests for v8-ignore blocks and remove exemptions    | 2026-03-10 |
+| `5aa3e1b` | Enable strict 100% coverage enforcement (Phase 3)         | 2026-01-31 |
 
 ## API Endpoints
 
@@ -98,10 +141,10 @@ v8 ignore blocks in `firestoreNotificationRepository.ts` and `firestoreSignature
 
 ### Notifications
 
-| Method | Path                                     | Purpose             | Auth         | Response |
-| ------ | ---------------------------------------- | ------------------- | ------------ | -------- |
-| GET    | `/mobile-notifications`                  | List notifications  | Bearer token | 200 OK   |
-| DELETE | `/mobile-notifications/:notification_id` | Delete notification | Bearer token | 200 OK   |
+| Method | Path                                     | Purpose             | Auth         |
+| ------ | ---------------------------------------- | ------------------- | ------------ |
+| GET    | `/mobile-notifications`                  | List notifications  | Bearer token |
+| DELETE | `/mobile-notifications/:notification_id` | Delete notification | Bearer token |
 
 ### Filters
 
@@ -111,11 +154,29 @@ v8 ignore blocks in `firestoreNotificationRepository.ts` and `firestoreSignature
 | POST   | `/notifications/filters/saved`     | Create saved filter        | Bearer token | 201 Created    |
 | DELETE | `/notifications/filters/saved/:id` | Delete saved filter        | Bearer token | 204 No Content |
 
+### Digest (User-Facing)
+
+| Method | Path                                           | Purpose                            | Auth         |
+| ------ | ---------------------------------------------- | ---------------------------------- | ------------ |
+| GET    | `/notifications/digests`                       | List digests for date range        | Bearer token |
+| GET    | `/notifications/digests/:groupKey/:date`       | Get single digest                  | Bearer token |
+| GET    | `/notifications/digests/:groupKey/:date/state` | Get group state snapshot           | Bearer token |
+| POST   | `/notifications/digests/run`                   | Regenerate digest for group + date | Bearer token |
+| POST   | `/notifications/digests/backfill`              | Start backfill run for date range  | Bearer token |
+| GET    | `/notifications/digests/backfill/:runId`       | Get backfill run status            | Bearer token |
+
+### Digest (Internal)
+
+| Method | Path                                           | Purpose                                          | Auth                  |
+| ------ | ---------------------------------------------- | ------------------------------------------------ | --------------------- |
+| POST   | `/internal/notifications/digest/run`           | Run digest for (userId, groupKey, date)          | Internal token        |
+| POST   | `/internal/notifications/digest/run-yesterday` | Run digest for all subscriptions (CET yesterday) | OIDC / Internal token |
+
 ### Internal
 
-| Method | Path                                   | Purpose                                   | Auth           |
-| ------ | -------------------------------------- | ----------------------------------------- | -------------- |
-| POST   | `/internal/mobile-notifications/query` | Query notifications (internal consumers)  | Internal token |
+| Method | Path                                   | Purpose                                  | Auth           |
+| ------ | -------------------------------------- | ---------------------------------------- | -------------- |
+| POST   | `/internal/mobile-notifications/query` | Query notifications (internal consumers) | Internal token |
 
 ### Webhook
 
@@ -152,7 +213,7 @@ Authentication: `X-Mobile-Notifications-Signature` header. The header value is S
 
 | Parameter | Type    | Description                                               |
 | --------- | ------- | --------------------------------------------------------- |
-| `limit`   | integer | 1–100, default 50                                         |
+| `limit`   | integer | 1-100, default 50                                         |
 | `cursor`  | string  | Pagination cursor from previous response                  |
 | `source`  | string  | Filter by source (comma-separated for multiple)           |
 | `app`     | string  | Filter by app package name (comma-separated for multiple) |
@@ -168,7 +229,7 @@ interface QueryNotificationsBody {
     source?: string;  // Single value
     title?: string;   // Case-insensitive contains
   };
-  limit?: number;     // 1–1000, default 50
+  limit?: number;     // 1-1000, default 50
 }
 ```
 
@@ -202,48 +263,139 @@ Internal response maps `text` to `body` and `receivedAt` to `timestamp` for comp
 | `deviceLabel`   | string (optional) | User-provided label                 |
 | `createdAt`     | string            | ISO 8601 timestamp                  |
 
-### NotificationFiltersData
+### DailySummary (Digest)
 
-| Field          | Type                      | Description                                  |
-| -------------- | ------------------------- | -------------------------------------------- |
-| `userId`       | string                    | Owner user ID                                |
-| `options`      | NotificationFilterOptions | Available values from received notifications |
-| `savedFilters` | SavedNotificationFilter[] | User's saved filter presets                  |
-| `createdAt`    | string                    | ISO 8601 timestamp                           |
-| `updatedAt`    | string                    | ISO 8601 timestamp                           |
+| Field              | Type            | Description                                                            |
+| ------------------ | --------------- | ---------------------------------------------------------------------- |
+| `date`             | string          | YYYY-MM-DD (CET)                                                       |
+| `groupKey`         | string          | Group identifier                                                       |
+| `messageCount`     | number          | Messages processed                                                     |
+| `headline`         | string          | One-line summary (max 200 chars)                                       |
+| `bullets`          | string[]        | 3-7 key points (max 300 chars each)                                    |
+| `threads`          | Thread[]        | Conversation threads with topic, participants, resolved flag, keyFacts |
+| `moderatorPosts`   | ModeratorPost[] | Posts by moderators with time, topic, summary                          |
+| `openQuestions`    | string[]        | Unanswered questions from the day                                      |
+| `activityOutliers` | Outlier[]       | Unusually active participants with message count and note              |
 
-### SavedNotificationFilter
+### GroupState (Digest)
 
-| Field       | Type                | Description                             |
-| ----------- | ------------------- | --------------------------------------- |
-| `id`        | string              | Filter ID (UUID)                        |
-| `name`      | string              | User-provided filter name (1–100 chars) |
-| `app`       | string[] (optional) | App package names to filter             |
-| `device`    | string[] (optional) | Device names to filter                  |
-| `source`    | string (optional)   | Source to filter                        |
-| `title`     | string (optional)   | Title substring to filter               |
-| `createdAt` | string              | ISO 8601 timestamp                      |
+| Field                | Type       | Description                                                                       |
+| -------------------- | ---------- | --------------------------------------------------------------------------------- |
+| `userId`             | string     | Owner user ID                                                                     |
+| `groupKey`           | string     | Group identifier                                                                  |
+| `updatedAt`          | string     | ISO 8601 timestamp                                                                |
+| `identityLedger`     | Identity[] | Known participants with sender, firstSeen, totalMessages, activeDays, role, notes |
+| `moderatorEvents`    | Event[]    | Historical moderator events with date, topic, summary                             |
+| `openThreads`        | Thread[]   | Unresolved threads with topic, openedOn, lastSignal, lastSignalDate               |
+| `recentSummaryDates` | string[]   | Last 30 summary dates for context window                                          |
+
+### BackfillRun
+
+| Field                 | Type              | Description                                   |
+| --------------------- | ----------------- | --------------------------------------------- |
+| `runId`               | string            | Unique run identifier                         |
+| `userId`              | string            | Owner user ID                                 |
+| `groupKey`            | string            | Group identifier                              |
+| `fromDate` / `toDate` | string            | Date range (YYYY-MM-DD)                       |
+| `status`              | BackfillStatus    | `queued` / `running` / `completed` / `failed` |
+| `totalDates`          | number            | Total days in range                           |
+| `completedDates`      | string[]          | Successfully processed dates                  |
+| `failedDates`         | BackfillFailure[] | Failed dates with error details               |
+| `currentDate`         | string or null    | Currently processing date                     |
+
+### DigestSubscription
+
+| Field              | Type   | Description                                           |
+| ------------------ | ------ | ----------------------------------------------------- |
+| `userId`           | string | Subscribed user ID                                    |
+| `groupKey`         | string | Group identifier slug                                 |
+| `groupTitlePrefix` | string | WhatsApp group title prefix for notification matching |
+
+Currently hard-coded in `digestSubscriptions.ts`. See Future Plans in `technical-debt.md`.
+
+## Pub/Sub
+
+### Published Events
+
+| Topic                                   | Event        | Payload                                                       | Trigger                      |
+| --------------------------------------- | ------------ | ------------------------------------------------------------- | ---------------------------- |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC` | digest-ready | `{ userId, message, ctaUrl, correlationId, important: true }` | First-generation digest save |
+
+The WhatsApp digest notifier publishes a send-message event when a digest is saved for the first time (generation === 1). Regenerations are suppressed to avoid duplicate WhatsApp messages.
+
+## Digest Pipeline Details
+
+### Lock Mechanism
+
+Each digest run acquires an advisory lock on `(userId, groupKey)` with a 5-minute TTL. Three holder types: `cron` (daily scheduler), `backfill` (date-range backfill), `manual` (user-triggered). If a lock is held, the run returns `lockSkipped: true` instead of failing.
+
+### CET Day Bounds
+
+Day boundaries are computed using `Europe/Warsaw` timezone (CET/CEST). The `cetDayBounds` function resolves the UTC epoch range for a given local date by probing Intl.DateTimeFormat offsets.
+
+### LLM Aggregation
+
+`aggregateDigest` sends a prompt to OpenRouter with the day's filtered messages, previous group state, and last 3 summaries. The response is validated against a Zod schema (`AggregationOutputSchema`). If validation fails, up to 3 repair attempts are made using `buildDigestRepairPrompt`. LLM usage is reported to `llm-usage-service` via `HttpInternalAuthUsageSink`.
+
+### Message Filtering
+
+`filterAndDedupeNotifications` removes meta-rows (e.g., "3 new messages"), drops entries with invalid `postTime`, and deduplicates by (sender, text) within a 90-second window.
+
+### Backfill Chaining
+
+Backfill processes dates sequentially via self-referential HTTP calls. Each completed day triggers the next via `POST /internal/notifications/digest/run` with a `chainNext` payload. Progress is tracked in `notification_digest_backfill_runs`.
+
+### Daily Cron
+
+`POST /internal/notifications/digest/run-yesterday` accepts both OIDC tokens (from Cloud Scheduler) and internal auth tokens. It iterates all subscriptions and runs digests for yesterday's CET date.
 
 ## Firestore Collections
 
-| Collection                       | Document Key | Description                               |
-| -------------------------------- | ------------ | ----------------------------------------- |
-| `mobile_notifications`           | Auto-ID      | Notification documents                    |
-| `mobile_notification_signatures` | Auto-ID      | Signature-to-user binding documents       |
-| `mobile_notifications_filters`   | userId       | Filter options and saved filters per user |
+| Collection                          | Document Key                       | Description                               |
+| ----------------------------------- | ---------------------------------- | ----------------------------------------- |
+| `mobile_notifications`              | Auto-ID                            | Notification documents                    |
+| `mobile_notification_signatures`    | Auto-ID                            | Signature-to-user binding documents       |
+| `mobile_notifications_filters`      | userId                             | Filter options and saved filters per user |
+| `notification_daily_digests`        | `{userId}_{groupKey}_{YYYY-MM-DD}` | Daily WhatsApp digest summaries           |
+| `notification_group_states`         | `{userId}_{groupKey}_{YYYY-MM-DD}` | Per-date group state snapshots            |
+| `notification_digest_locks`         | `{userId}_{groupKey}`              | Advisory locks with 5-minute TTL          |
+| `notification_digest_backfill_runs` | runId                              | Backfill run progress tracking            |
+
+## Dependencies
+
+### External Services
+
+| Service                | Purpose                 | Failure Mode                           |
+| ---------------------- | ----------------------- | -------------------------------------- |
+| OpenRouter             | LLM digest generation   | Digest run fails (lock released)       |
+| llm-usage-service      | LLM usage reporting     | Fire-and-forget via sink               |
+| WhatsApp (via Pub/Sub) | Digest delivery to user | Logged warning; digest still persisted |
+
+### Internal Services
+
+| Service               | Endpoint                             | Purpose                        |
+| --------------------- | ------------------------------------ | ------------------------------ |
+| Self (backfill chain) | `/internal/notifications/digest/run` | Sequential day-by-day backfill |
 
 ## Configuration
 
-| Environment Variable        | Required | Description                             |
-| --------------------------- | -------- | --------------------------------------- |
-| `INTEXURAOS_GCP_PROJECT_ID` | Yes      | GCP project for Firestore               |
-| `INTEXURAOS_AUTH_JWKS_URL`  | Yes      | JWT JWKS endpoint URL                   |
-| `INTEXURAOS_AUTH_ISSUER`    | Yes      | JWT issuer                              |
-| `INTEXURAOS_AUTH_AUDIENCE`  | Yes      | JWT audience                            |
-| `INTEXURAOS_SENTRY_DSN`     | No       | Sentry DSN for error reporting          |
-| `INTEXURAOS_ENVIRONMENT`    | No       | Environment name (default: development) |
-| `PORT`                      | No       | Server port (default: 8080)             |
-| `HOST`                      | No       | Server host (default: 0.0.0.0)          |
+| Environment Variable                          | Required | Description                             |
+| --------------------------------------------- | -------- | --------------------------------------- |
+| `INTEXURAOS_GCP_PROJECT_ID`                   | Yes      | GCP project for Firestore               |
+| `INTEXURAOS_AUTH_JWKS_URL`                    | Yes      | JWT JWKS endpoint URL                   |
+| `INTEXURAOS_AUTH_ISSUER`                      | Yes      | JWT issuer                              |
+| `INTEXURAOS_AUTH_AUDIENCE`                    | Yes      | JWT audience                            |
+| `INTEXURAOS_DIGEST_LLM_MODEL`                 | Yes      | LLM model ID for digest generation      |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`              | Yes      | Shared secret for internal endpoints    |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY`           | Yes      | OpenRouter API key                      |
+| `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | Yes      | Self-URL for backfill chain calls       |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`       | Yes      | Pub/Sub topic for WhatsApp send         |
+| `INTEXURAOS_WEB_APP_URL`                      | Yes      | Web app URL for digest deep links       |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`            | Yes      | LLM usage service URL                   |
+| `INTEXURAOS_SENTRY_DSN`                       | No       | Sentry DSN for error reporting          |
+| `INTEXURAOS_ENVIRONMENT`                      | No       | Environment name (default: development) |
+| `PORT`                                        | No       | Server port (default: 8080)             |
+| `HOST`                                        | No       | Server host (default: 0.0.0.0)          |
 
 ## Gotchas
 
@@ -255,7 +407,7 @@ Internal response maps `text` to `body` and `receivedAt` to `timestamp` for comp
 
 - **Idempotency** — Duplicate webhooks with the same `notification_id` per user are silently ignored (`status: "ignored"`, `reason: "duplicate"`).
 
-- **Title filter is in-memory** — The `title` filter uses case-insensitive substring matching performed in application code after the Firestore query. Batch iteration is capped at 5 rounds to prevent excessive reads.
+- **Title filter is in-memory** — The `title` filter uses case-insensitive substring matching performed in application code after the Firestore query. The 5-batch cap was removed in v3.6.0 — it now iterates all batches.
 
 - **Filter defaults** — `GET /notifications/filters` returns an empty options document if no notifications have been received yet; it never returns 404.
 
@@ -267,7 +419,19 @@ Internal response maps `text` to `body` and `receivedAt` to `timestamp` for comp
 
 - **Cursor encoding** — Pagination cursors are base64-encoded JSON containing `receivedAt` and `id`. Invalid cursors are silently ignored (treated as no cursor).
 
-- **Raw body capture** — The webhook endpoint (`/mobile-notifications/webhooks`) captures the raw request body in a `preParsing` hook for debugging JSON parse errors. Only this endpoint has raw body capture enabled.
+- **Raw body capture** — The webhook endpoint (`/mobile-notifications/webhooks`) captures the raw request body in a `preParsing` hook for debugging JSON parse errors.
+
+- **Digest CET timezone** — Day boundaries use `Europe/Warsaw`. A date of `2026-04-15` resolves to midnight-to-midnight in CET/CEST, not UTC.
+
+- **Digest lock skipping** — If a lock is held when running a digest, the endpoint returns success with `lockSkipped: true` and zero values instead of an error.
+
+- **Digest notifications suppress on regeneration** — WhatsApp notifications are only sent on first-generation saves. Regenerating a digest does not re-notify the user.
+
+- **Digest subscriptions are hard-coded** — `DIGEST_SUBSCRIPTIONS` is a constant array in `digestSubscriptions.ts`. Adding a group requires a code change.
+
+- **run-yesterday dual auth** — The daily cron endpoint accepts both OIDC Bearer tokens (Cloud Scheduler) and `x-internal-auth` header (direct internal calls). The OIDC check validates JWT structure as defence-in-depth; actual Cloud Run IAM binding handles the primary auth.
+
+- **Backfill chain self-calls** — Backfill uses `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` to POST to itself. If the URL is misconfigured, backfill silently fails after the first day.
 
 ## File Structure
 
@@ -279,13 +443,15 @@ apps/mobile-notifications-service/src/
       ports/               # Repository interfaces
       usecases/            # createConnection, processNotification, listNotifications, deleteNotification
     filters/               # Filter models and repository interface
-      models/              # NotificationFiltersData, SavedNotificationFilter, FilterOptionField
-      ports/               # NotificationFiltersRepository
+    repositories/          # Digest repository port interfaces (DigestRepository, GroupStateRepository, DigestLockRepository, BackfillRunRepository)
+    schemas/               # Zod schemas for DailySummary, GroupState, AggregationOutput
+    services/              # DigestNotifier port + NoopDigestNotifier
+    usecases/              # aggregateDigest, runDigestForGroup, runDigestBackfill, cetDayBounds, yesterdayCet, digestErrors
+    digestSubscriptions.ts # Hard-coded WhatsApp group subscriptions
+    messageFilter.ts       # filterAndDedupeNotifications utility
   infra/
-    firestore/             # Repository implementations
-      firestoreNotificationRepository.ts
-      firestoreSignatureConnectionRepository.ts
-      notificationFiltersRepository.ts
+    firestore/             # All Firestore repository implementations (7 repositories)
+    notification/          # WhatsAppDigestNotifier + formatDigestMessage
   routes/
     connectRoutes.ts       # POST /mobile-notifications/connect
     statusRoutes.ts        # GET /mobile-notifications/status
@@ -293,8 +459,10 @@ apps/mobile-notifications-service/src/
     filterRoutes.ts        # GET/POST/DELETE /notifications/filters/...
     webhookRoutes.ts       # POST /mobile-notifications/webhooks
     internalRoutes.ts      # POST /internal/mobile-notifications/query
+    digestRoutes.ts        # All digest endpoints (internal + user-facing + backfill)
+    digestSchemas.ts       # Request/response schemas for digest routes
     schemas.ts             # OpenAPI schema definitions
-  services.ts              # DI container (3 repositories)
+  services.ts              # DI container (7 repositories + subscriptions + notifier)
   server.ts                # Fastify server setup
   config.ts                # Zod-validated configuration
   index.ts                 # Entry point with Sentry init

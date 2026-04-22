@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
-  Archive,
   ArrowRight,
   Bell,
+  BellOff,
   Bot,
   Brain,
   CheckCircle2,
@@ -11,20 +11,23 @@ import {
   Clock,
   Code2,
   Container,
+  DollarSign,
   Eye,
-  Globe,
+  Flag,
   GitPullRequest,
   Layers,
   Lock,
   Mail,
   MessageSquare,
   Mic,
-  PenTool,
   RefreshCw,
-  Route,
+  Settings,
   Shield,
   Smartphone,
+  SplitSquareVertical,
+  Tags,
   Terminal,
+  Workflow,
   Zap,
 } from 'lucide-react';
 import React from 'react';
@@ -206,7 +209,7 @@ function HeroSection(): React.JSX.Element {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-500" />
             </span>
-            IntexuraOS v3.5.0
+            IntexuraOS v3.6.0
           </div>
 
           <p className="mx-auto mb-4 max-w-xl text-lg leading-relaxed text-neutral-600">
@@ -592,39 +595,39 @@ function WhatsNewSection(): React.JSX.Element {
     iconColor: string;
   }[] = [
     {
-      title: 'Hellscript Agent',
+      title: 'WhatsApp Group Digests',
       description:
-        'AI-powered writing following user style and preferences with categorized writing configuration.',
-      icon: PenTool,
-      borderColor: 'border-purple-200',
-      bgGradient: 'bg-gradient-to-br from-purple-50 to-white',
-      iconBg: 'bg-purple-100',
-      iconColor: 'text-purple-700',
-    },
-    {
-      title: 'Codex Runtime',
-      description:
-        'OpenAI Codex as a full execution backend with authentication, log processing, and worker types.',
-      icon: Terminal,
-      borderColor: 'border-cyan-200',
-      bgGradient: 'bg-gradient-to-br from-cyan-50 to-white',
-      iconBg: 'bg-cyan-100',
-      iconColor: 'text-cyan-700',
-    },
-    {
-      title: 'Execution Memory',
-      description:
-        'Data collection pipeline with vector retrieval and post-run distillation — agents learn from past tasks.',
-      icon: Brain,
+        'End-to-end pipeline turns WhatsApp group messages into AI-generated daily digest summaries.',
+      icon: MessageSquare,
       borderColor: 'border-emerald-200',
       bgGradient: 'bg-gradient-to-br from-emerald-50 to-white',
       iconBg: 'bg-emerald-100',
       iconColor: 'text-emerald-700',
     },
     {
-      title: 'Remediation Agent',
+      title: 'Centralized LLM Pricing',
       description:
-        'Autonomous auto-improvement loop with cross-LLM checks and event-sourcing for AI-native improvements.',
+        'Single shared pricing package replaces duplicated definitions across 9 services.',
+      icon: DollarSign,
+      borderColor: 'border-cyan-200',
+      bgGradient: 'bg-gradient-to-br from-cyan-50 to-white',
+      iconBg: 'bg-cyan-100',
+      iconColor: 'text-cyan-700',
+    },
+    {
+      title: 'Notification Importance Filter',
+      description:
+        'Suppress low-priority WhatsApp notifications with an importance level filter.',
+      icon: BellOff,
+      borderColor: 'border-purple-200',
+      bgGradient: 'bg-gradient-to-br from-purple-50 to-white',
+      iconBg: 'bg-purple-100',
+      iconColor: 'text-purple-700',
+    },
+    {
+      title: 'LLM Model Fallback',
+      description:
+        'Primary and fallback default model selection with automatic retry when primary is unavailable.',
       icon: RefreshCw,
       borderColor: 'border-blue-200',
       bgGradient: 'bg-gradient-to-br from-blue-50 to-white',
@@ -632,54 +635,84 @@ function WhatsNewSection(): React.JSX.Element {
       iconColor: 'text-blue-700',
     },
     {
-      title: 'OpenRouter Integration',
+      title: 'Prompt Type Tracking',
       description:
-        'Route tasks through OpenRouter models with backend infrastructure, frontend selection, and pricing.',
-      icon: Route,
+        'End-to-end tracking through the LLM call stack shows which prompt drove each usage entry.',
+      icon: Tags,
       borderColor: 'border-violet-200',
       bgGradient: 'bg-gradient-to-br from-violet-50 to-white',
       iconBg: 'bg-violet-100',
       iconColor: 'text-violet-700',
     },
     {
-      title: 'Ask Agent',
+      title: 'Task Mode Selector',
       description:
-        'Interactive back-and-forth Claude Code sessions directly from the UI.',
-      icon: MessageSquare,
+        'Explicitly choose between planning and execution mode when starting a task.',
+      icon: SplitSquareVertical,
       borderColor: 'border-amber-200',
       bgGradient: 'bg-gradient-to-br from-amber-50 to-white',
       iconBg: 'bg-amber-100',
       iconColor: 'text-amber-700',
     },
     {
-      title: 'Code Task Groups',
+      title: 'PWA Resilience',
       description:
-        'Backend grouping and pagination of code tasks by Linear issue with batch archive support.',
-      icon: Layers,
+        'Improved Progressive Web App stability on Android HyperOS.',
+      icon: Smartphone,
       borderColor: 'border-green-200',
       bgGradient: 'bg-gradient-to-br from-green-50 to-white',
       iconBg: 'bg-green-100',
       iconColor: 'text-green-700',
     },
     {
-      title: 'Cloudflare Web Research',
+      title: 'Pub/Sub PR Triage',
       description:
-        'Replaced Crawl4AI with Cloudflare Browser Rendering for reliable JS-rendered page research.',
-      icon: Globe,
+        'PR triage processing moved to Pub/Sub push so it no longer blocks the main request path.',
+      icon: Workflow,
       borderColor: 'border-rose-200',
       bgGradient: 'bg-gradient-to-br from-rose-50 to-white',
       iconBg: 'bg-rose-100',
       iconColor: 'text-rose-700',
     },
     {
-      title: 'Auto-Archive & CI Handling',
+      title: 'Robust Task Finalization',
       description:
-        'Merged tasks archived automatically. Failed CI checks on agent PRs retried without intervention.',
-      icon: Archive,
+        'Dedicated status endpoint ensures code tasks complete correctly instead of stalling.',
+      icon: CheckCircle2,
       borderColor: 'border-indigo-200',
       bgGradient: 'bg-gradient-to-br from-indigo-50 to-white',
       iconBg: 'bg-indigo-100',
       iconColor: 'text-indigo-700',
+    },
+    {
+      title: 'Issue Group Importance',
+      description:
+        'Mark issue groups as high-priority with an important flag.',
+      icon: Flag,
+      borderColor: 'border-orange-200',
+      bgGradient: 'bg-gradient-to-br from-orange-50 to-white',
+      iconBg: 'bg-orange-100',
+      iconColor: 'text-orange-700',
+    },
+    {
+      title: 'Execution Memory Simplification',
+      description:
+        'Simplified pipeline reduces complexity and improves orchestrator maintainability.',
+      icon: Brain,
+      borderColor: 'border-teal-200',
+      bgGradient: 'bg-gradient-to-br from-teal-50 to-white',
+      iconBg: 'bg-teal-100',
+      iconColor: 'text-teal-700',
+    },
+    {
+      title: 'Agent Model Inheritance',
+      description:
+        'Code agent inherits user default LLM model settings instead of using hardcoded model.',
+      icon: Settings,
+      borderColor: 'border-sky-200',
+      bgGradient: 'bg-gradient-to-br from-sky-50 to-white',
+      iconBg: 'bg-sky-100',
+      iconColor: 'text-sky-700',
     },
   ];
 
@@ -700,13 +733,13 @@ function WhatsNewSection(): React.JSX.Element {
             </a>
           </div>
           <h2 className="mb-6 text-4xl font-bold tracking-tight text-neutral-900 md:text-5xl">
-            v3.5.0 —{' '}
+            v3.6.0 —{' '}
             <span className="bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-              9 new capabilities.
+              12 new capabilities.
             </span>
           </h2>
           <p className="text-lg leading-relaxed text-neutral-600">
-            Codex Runtime, Execution Memory, Remediation Agent, OpenRouter, Ask Agent, and more.
+            WhatsApp Group Digests, Centralized LLM Pricing, Notification Importance Filter, and more.
           </p>
         </div>
 
@@ -973,7 +1006,7 @@ function Footer(): React.JSX.Element {
         <div className="flex items-center gap-2">
           <div className="h-6 w-6 rounded-md bg-cyan-600" />
           <span className="font-bold text-neutral-900">IntexuraOS</span>
-          <span className="text-xs text-neutral-400">v3.5.0</span>
+          <span className="text-xs text-neutral-400">v3.6.0</span>
         </div>
         <p className="text-sm text-neutral-500">
           &copy; {new Date().getFullYear()}{' '}

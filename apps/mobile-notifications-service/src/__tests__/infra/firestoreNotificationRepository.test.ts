@@ -361,6 +361,74 @@ describe('FirestoreNotificationRepository', () => {
       // Should handle gracefully (already tested in earlier tests)
       expect(result.ok).toBe(true);
     });
+
+    it('filters by postTimeSec range when postTimeSecFrom/postTimeSecTo are set', async () => {
+      const mk = (text: string, timestampSec: number, notifId: string): CreateNotificationInput => ({
+        userId: 'user-range',
+        source: 'android',
+        device: 'dev',
+        app: 'com.whatsapp',
+        title: 'Grupa',
+        text,
+        timestamp: timestampSec,
+        postTime: String(timestampSec),
+        notificationId: notifId,
+      });
+      await repository.save(mk('t1', 100, 'r1'));
+      await repository.save(mk('t2', 200, 'r2'));
+      await repository.save(mk('t3', 300, 'r3'));
+
+      const result = await repository.findByUserIdPaginated('user-range', {
+        limit: 10,
+        filter: { postTimeSecFrom: 150, postTimeSecTo: 250, app: ['com.whatsapp'] },
+      });
+      if (!result.ok) throw new Error(`unexpected: ${result.error.message}`);
+      const texts = result.value.notifications.map((n) => n.text).sort();
+      expect(texts).toEqual(['t2']);
+    });
+
+    // Migration 096 deploys the composite Firestore index (app + userId +
+    // receivedAt + timestamp) required by digest backfill. FakeFirestore does
+    // not surface missing-index errors, so this test cannot validate index
+    // presence directly. Instead it pins the combined-filter query shape that
+    // exercises the index in production, ensuring the call site keeps using
+    // the field combination that migration 096 covers.
+    it('filters by app + title + postTimeSec range simultaneously (migration 096 index)', async () => {
+      const mk = (
+        app: string,
+        title: string,
+        text: string,
+        timestampSec: number,
+        notifId: string
+      ): CreateNotificationInput => ({
+        userId: 'user-combo',
+        source: 'android',
+        device: 'dev',
+        app,
+        title,
+        text,
+        timestamp: timestampSec,
+        postTime: String(timestampSec),
+        notificationId: notifId,
+      });
+      await repository.save(mk('com.whatsapp', 'Grupa Wedkarska', 'A', 200, 'c1'));
+      await repository.save(mk('com.whatsapp', 'Other Group', 'B', 200, 'c2'));
+      await repository.save(mk('com.telegram', 'Grupa Wedkarska', 'C', 200, 'c3'));
+      await repository.save(mk('com.whatsapp', 'Grupa Wedkarska', 'D', 500, 'c4'));
+
+      const result = await repository.findByUserIdPaginated('user-combo', {
+        limit: 10,
+        filter: {
+          app: ['com.whatsapp'],
+          title: 'wedkarska',
+          postTimeSecFrom: 150,
+          postTimeSecTo: 250,
+        },
+      });
+      if (!result.ok) throw new Error(`unexpected: ${result.error.message}`);
+      expect(result.value.notifications).toHaveLength(1);
+      expect(result.value.notifications[0]?.text).toBe('A');
+    });
   });
 
   describe('existsByNotificationIdAndUserId', () => {

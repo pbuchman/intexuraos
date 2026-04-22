@@ -3,11 +3,11 @@ export type { LlmPricing, LlmProvider } from './types.js';
 export {
   isUsageLoggingEnabled,
   UsageLogger,
+  UsageSink,
   createUsageLogger,
   NoopUsageSink,
   type UsageLogParams,
   type CallType,
-  type UsageSink,
 } from './usageLogger.js';
 
 export { FakeUsageSink, createFakeUsageSink, type FakeUsageSinkRecord } from './testFixtures.js';

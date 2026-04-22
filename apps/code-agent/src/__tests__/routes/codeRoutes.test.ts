@@ -230,6 +230,7 @@ describe('codeRoutes', () => {
         update: vi.fn(),
         appendMergedPr: vi.fn(),
       },
+      prTriagePublisher: {} as never,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -265,6 +266,7 @@ describe('codeRoutes', () => {
       taskEnqueueService: import('../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
+      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
     });
 
     // Set up worker settings for the test user
@@ -2391,6 +2393,36 @@ describe('codeRoutes', () => {
       });
 
       expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 200 when authenticated via OIDC bearer token', async () => {
+      const mockDetectZombieTasks = vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          detected: 0,
+          interrupted: 0,
+          errors: [],
+          locksToCleanup: [],
+        },
+      });
+
+      setServices({
+        ...getServices(),
+        detectZombieTasks: mockDetectZombieTasks as never,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/detect-zombies',
+        headers: {
+          authorization: 'Bearer fake-oidc-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(mockDetectZombieTasks).toHaveBeenCalled();
     });
 
     it('returns 500 when zombie detection fails', async () => {

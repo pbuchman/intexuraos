@@ -15,6 +15,7 @@
  *   });
  */
 
+import { FieldValue } from '@google-cloud/firestore';
 import type { CollectionReference, DocumentData, WriteResult } from '@google-cloud/firestore';
 
 /**
@@ -24,11 +25,16 @@ type DocumentStore = Map<string, Map<string, DocumentData>>;
 
 /**
  * Check if a value is a FieldValue.delete() sentinel.
- * The actual FieldValue.delete() returns an object with isEqual method.
+ * The real FieldValue.delete() returns a DeleteTransform instance.
+ * We must NOT treat arbitrary objects-with-isEqual (e.g. Timestamp, Date,
+ * other FieldValue sentinels like increment) as delete sentinels, or we'll
+ * silently drop writes. Match by constructor name for resilience against
+ * SDK internals changes while still being specific to DeleteTransform.
  */
 function isFieldValueDelete(value: unknown): boolean {
   if (value === null || typeof value !== 'object') return false;
-  return 'isEqual' in value && typeof (value as { isEqual: unknown }).isEqual === 'function';
+  if (!(value instanceof FieldValue)) return false;
+  return value.constructor.name === 'DeleteTransform';
 }
 
 /**
@@ -368,19 +374,25 @@ class FakeQuery {
         const data = doc.data();
         if (data === undefined) return false;
         const fieldValue: unknown = data[filter.field];
+        // For ordinal comparisons, normalize Timestamp/Date to millis so the
+        // fake matches real Firestore semantics for time-based queries.
+        const fieldMillis = getTimestampValue(fieldValue);
+        const filterMillis = getTimestampValue(filter.value);
+        const aOrdinal = fieldMillis ?? (fieldValue as number);
+        const bOrdinal = filterMillis ?? (filter.value as number);
         switch (filter.op) {
           case '==':
             return fieldValue === filter.value;
           case '!=':
             return fieldValue !== filter.value;
           case '<':
-            return (fieldValue as number) < (filter.value as number);
+            return aOrdinal < bOrdinal;
           case '<=':
-            return (fieldValue as number) <= (filter.value as number);
+            return aOrdinal <= bOrdinal;
           case '>':
-            return (fieldValue as number) > (filter.value as number);
+            return aOrdinal > bOrdinal;
           case '>=':
-            return (fieldValue as number) >= (filter.value as number);
+            return aOrdinal >= bOrdinal;
           case 'array-contains':
             return Array.isArray(fieldValue) && fieldValue.includes(filter.value);
           case 'in':
