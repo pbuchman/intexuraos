@@ -72,9 +72,11 @@ The reconciliation runs as a separate Cloud Scheduler job, decoupled from the we
 
 **Example:** Your co-founder merges a PR to `development` that renames a utility function. Two of your bot-authored PRs import that function. Within a minute, the cron detects the conflict, and the agent dispatches resolution tasks for both PRs. By the time you check the dashboard, the conflicts are resolved and the PRs are ready to merge.
 
-### Design First, Then Build
+### Design First, Then Build — With Explicit Mode Selection
 
 Every task moves through two distinct phases. In the first, the agent interprets your request, creates a Linear issue, and produces a design — which files it will change, what approach it will take, and how it plans to verify the result. Then it stops. No code is written. You review the design on your own schedule: over coffee, on the train, between meetings. If the approach looks right, you approve it. If not, you redirect. Only after your explicit approval does the second phase begin — writing code, running tests, and opening a pull request.
+
+You can now explicitly choose between planning and execution mode when submitting a task via the `taskMode` parameter. If you already have a plan and want to skip the design phase, set `taskMode: 'execution'` to go straight to implementation. If you want the design-first workflow, set `taskMode: 'planning'`. Omitting the parameter uses the default behavior.
 
 This checkpoint exists because the most expensive mistake an AI coding tool can make is building the wrong thing quickly. A two-minute design review costs nothing. A pull request built on a misunderstanding costs an hour of review and a round trip back to square one.
 
@@ -82,15 +84,15 @@ The design phase also creates a paper trail. Every task has a Linear issue, a pl
 
 **Example:** You ask the agent to add date filtering to the activity dashboard. The design comes back proposing to filter the data after loading everything into the browser. You know the dataset will grow to millions of rows, so you reply: "Filter in the database query instead — do not load everything first." The agent revises its plan. When the execution phase runs, it builds the right solution on the first attempt.
 
-### Code Tasks Grouped by Linear Issue
+### Code Tasks Grouped by Linear Issue — With Important Flags
 
 Tasks are no longer a flat list. The dashboard groups tasks by the Linear issue they belong to, showing each issue as a single row with aggregated status, pipeline progress, and action states. You see at a glance which issues have tasks in progress, which need your attention, which are done, and which have failed — all with server-side pagination and sorting.
 
 Each group displays its pipeline steps (planned, implemented, reviewed, remediated) and a consolidated status badge: active, needs-action, done, failed, or archived. Filter by status to focus on what matters — "needs-action" shows groups waiting for your approval or review, while "archived" hides completed work from your daily view.
 
-Batch archiving lets you select multiple groups and archive them in a single action.
+You can now mark issue groups as important, flagging them for high-priority attention. Batch archiving lets you select multiple groups and archive them in a single action.
 
-**Example:** You have twelve Linear issues with active code tasks. Instead of scrolling through thirty individual tasks, you see twelve rows. The `INT-445` row shows "needs-action" because the planning task finished and the implementation is waiting for your approval. You tap the row, review the plan, and approve — all without losing context.
+**Example:** You have twelve Linear issues with active code tasks. Instead of scrolling through thirty individual tasks, you see twelve rows. The `INT-445` row shows "needs-action" because the planning task finished and the implementation is waiting for your approval. You flag `INT-500` as important because it blocks the release. You tap the row, review the plan, and approve — all without losing context.
 
 ### Auto-Archive Merged Code Tasks
 
@@ -108,13 +110,13 @@ The verification is not a rubber stamp. Gemini reads the test output, checks whe
 
 **Example:** The agent finishes a task and reports success. Gemini reads the execution log, finds that two of six tests failed during the final run, and flags the task as incomplete. You see this on the dashboard immediately instead of discovering broken tests after merging the PR.
 
-### Your Infrastructure, Your Code
+### Your Infrastructure, Your Code — With Inherited LLM Settings
 
 Every line of code the agent writes is produced inside an isolated environment running on a machine you configure and control — a desktop in your office, a cloud server in your own account, any Unix machine with an internet connection. Your source code never leaves your network. The agent connects to your worker through your own infrastructure, using your own AI subscription for the compute. You own the machine, you own the code, you own the bill.
 
 You name your workers, order them by priority, and the system handles the rest. If the primary worker is occupied, the agent routes to the next available one. Health checks confirm each worker is reachable before dispatching, so you know immediately if something is misconfigured. If all workers are busy, tasks enter a queue and dispatch automatically when capacity opens. Worker credentials — the keys that connect the agent to your machines — are encrypted with AES-256-GCM at rest and masked in every API response.
 
-Multiple worker types are available across several AI providers — you pick the model that fits the task, or let the agent choose automatically. Different agent types (planning, execution, review, remediation) can be tuned to use different worker types independently.
+Multiple worker types are available across several AI providers — you pick the model that fits the task, or let the agent choose automatically. Different agent types (planning, execution, review, remediation) can be tuned to use different worker types independently. The GitHub Agent now inherits your default LLM model settings instead of using hardcoded models, so the triage pipeline uses the provider you configured.
 
 **Example:** You set up a high-spec desktop as your primary worker and a cloud VM as your backup. During a busy afternoon, you submit three tasks in quick succession. The first runs on your desktop, the second routes to the cloud VM, and the third queues until a slot opens — all without you making a single routing decision.
 
@@ -136,15 +138,33 @@ When CI checks fail on a bot-authored PR, the system detects the failure through
 
 **Example:** The agent opens a PR and CI fails because a snapshot test needs updating. The system detects the failure, creates a follow-up task to update the snapshot, and the fix is pushed to the same branch — all before you check the dashboard.
 
+### Self-Healing Failure Triage
+
+When a task fails, the system classifies the failure and determines whether to auto-retry on a different worker, retry on the same worker, or escalate to the dashboard. Tasks that fail with exit code overrides — indicating transient infrastructure issues — are automatically retried up to three times, each attempt excluding the worker location that failed. The triage records which worker failed and routes the retry elsewhere, maximizing the chance of success without human intervention.
+
+**Example:** A task fails because the primary worker's Docker daemon is temporarily unresponsive. The triage system detects the transient error, excludes that worker, and dispatches the retry to your backup worker. You see the task complete successfully without ever knowing about the infrastructure hiccup.
+
+### Robust Task Finalization
+
+A dedicated status endpoint (`PATCH /internal/code-tasks/:id/status`) ensures task completion is committed to Firestore reliably, separate from the side-effect-heavy webhook. The orchestrator writes the terminal status first via this lightweight, idempotent endpoint, then fires the full completion webhook for notifications, Linear updates, and PR labeling. If the webhook fails, the task is already in the correct terminal state — no more stalled tasks from webhook timeouts.
+
+**Example:** The orchestrator finishes a task and the completion webhook times out due to a transient network issue. Because the status was already committed via the dedicated endpoint, the task shows the correct final state in the dashboard immediately. The webhook retries and handles the side effects later.
+
+### PR Triage via Pub/Sub
+
+PR triage processing now routes through a Pub/Sub push subscription instead of running inline in the GitHub webhook handler. The webhook publishes a triage event to a topic, and the push subscription delivers it to a dedicated endpoint for evaluation. This decouples the webhook response from the triage compute — the webhook returns immediately, and triage runs asynchronously.
+
+**Example:** A flurry of PR comments arrives simultaneously. Instead of the webhook handler blocking on each triage evaluation, it publishes events to Pub/Sub and returns 200 instantly. The triage evaluations run concurrently through the push subscription, and each event is processed without blocking the others.
+
 ### Guardrails and Cost Control
 
 The agent enforces per-user limits in real time: three concurrent tasks, ten per hour, and two hundred dollars per month. These limits are checked before work begins, not reconciled after the bill arrives. You always know what the work costs before you commit to it.
 
 Every prompt passes through two sanitization layers before reaching your worker. The first strips embedded secrets — AWS keys, API tokens, private keys, passwords — so sensitive credentials never reach the AI model. The second rejects prompt injection patterns — system override markers, encoded payloads, and control characters — preventing attempts to manipulate the agent's behavior. Prompts are capped at 10,000 characters, and a four-layer deduplication system prevents the same task from being created twice.
 
-Tasks that go silent for thirty minutes trigger zombie detection — the system interrupts the hung process automatically, so a stalled task does not burn through your budget overnight. WhatsApp notifications arrive when a task starts, finishes, or fails, each with a tap-to-open button linking to the pull request or the task dashboard. Merge conflicts on bot-authored PRs are detected automatically and dispatched for resolution without manual intervention.
+Tasks that go silent for thirty minutes trigger zombie detection — the system interrupts the hung process automatically, so a stalled task does not burn through your budget overnight. The zombie sweep now runs every five minutes for faster detection. WhatsApp notifications arrive when a task starts, finishes, or fails, each with a tap-to-open button linking to the pull request or the task dashboard. Merge conflicts on bot-authored PRs are detected automatically and dispatched for resolution without manual intervention. Draft PRs are blocked from triggering code tasks entirely — no wasted compute on work-in-progress branches.
 
-**Example:** You submit a task before bed. The agent finishes at 2 a.m. and sends a WhatsApp notification with a button linking to the pull request. When you wake up, you tap the button, review the PR, and merge it before breakfast. If the task had stalled, the thirty-minute heartbeat timeout would have interrupted it and notified you — no runaway compute, no surprise bill.
+**Example:** You submit a task before bed. The agent finishes at 2 a.m. and sends a WhatsApp notification with a button linking to the pull request. When you wake up, you tap the button, review the PR, and merge it before breakfast. If the task had stalled, the five-minute zombie sweep would have interrupted it and notified you — no runaway compute, no surprise bill.
 
 ### Full Visibility into Every Decision
 
@@ -167,13 +187,17 @@ Connect a worker machine, link your Linear and GitHub accounts through the dashb
 - **Ask Agent for interactive exploration** — Back-and-forth conversations with Claude Code directly from the dashboard, with persistent sessions across devices
 - **Merge queue eliminates manual PR coordination** — Bot-authored PRs merge in order, automatically, with CI checks verified before each merge
 - **Merge conflict resolution runs unattended** — Conflicts are detected by a dedicated cron job and dispatched for resolution without blocking the webhook pipeline
-- **Design before code** — You approve the plan before a single line is written, so no compute is wasted on wrong assumptions
+- **Design before code with explicit mode selection** — Choose planning or execution mode, or let the system default; you approve the plan before a single line is written
 - **Independent two-provider verification** — Claude writes the code, Gemini independently verifies the result, so no single model grades its own work
 - **Voice note to pull request** — Record a WhatsApp voice note about a bug, and the system transcribes, classifies, designs, codes, tests, and opens a pull request without you touching a keyboard
-- **Your machines, your code** — Source code stays on infrastructure you own, using your own AI subscriptions, with credentials encrypted at rest
-- **Issue-grouped task dashboard** — Tasks grouped by Linear issue with aggregated status, pipeline progress, and batch operations
+- **Your machines, your code, your LLM settings** — Source code stays on infrastructure you own, using your own AI subscriptions and model preferences, with credentials encrypted at rest
+- **Issue-grouped task dashboard with important flags** — Tasks grouped by Linear issue with aggregated status, pipeline progress, batch operations, and priority marking
 - **Auto-archive keeps the dashboard clean** — Merged tasks are archived automatically after seven days, and stale groups are cleaned up hourly
 - **PR comments become tasks** — Review feedback on a pull request automatically creates or resumes a task with full context, keeping the loop inside GitHub
+- **Self-healing failure triage** — Failed tasks are automatically classified, retried on different workers, or escalated based on the failure type
+- **Robust task finalization** — Dedicated status endpoint ensures tasks reach terminal state even if the completion webhook fails
+- **Asynchronous PR triage** — Pub/Sub decouples webhook response time from triage evaluation, preventing webhook timeouts during heavy event loads
+- **Draft PR blocking** — Code tasks are blocked on draft PRs, preventing wasted compute on work-in-progress changes
 - **Predictable spend** — Per-user limits on concurrency, hourly rate, and monthly cost are enforced before the work begins, not after
 - **Full audit trail** — Live logs, per-task metrics, cost breakdowns, narrative summaries, expandable webhook payloads, and a unified PR automation log give you complete visibility
 

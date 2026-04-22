@@ -22,7 +22,7 @@ graph TB
         Firestore[(Firestore<br/>todos collection)]
         PubSub[Pub/Sub<br/>todos-processing]
         UserService[user-service]
-        AppSettings[app-settings-service]
+        UsageService[llm-usage-service]
         LLM[LLM Provider<br/>Gemini 2.5 Flash]
     end
 
@@ -32,7 +32,7 @@ graph TB
     Infra --> Firestore
     Infra --> PubSub
     Infra --> UserService
-    Infra --> AppSettings
+    Infra --> UsageService
     UserService --> LLM
 
     classDef service fill:#e1f5ff
@@ -91,7 +91,20 @@ sequenceDiagram
 
 ## Recent Changes
 
-### v3.5.0 (since v3.4.0)
+### v3.6.0 (since v3.5.0)
+
+| Commit     | Description                                                             | Date       |
+| ---------- | ----------------------------------------------------------------------- | ---------- |
+| `8aae64e4` | Make `promptType` required in LlmGenerateClient calls (INT-1392)        | 2026-04-22 |
+| `a4f53cd7` | Remove LLM pricing from todos-agent, delete deprecated deps (INT-1387)  | 2026-04-18 |
+| `6f2a13c1` | Remove pricing from client configs (PR review follow-up)                | 2026-04-17 |
+| `830d5a91` | Add retry with exponential backoff to pricing fetch (transient)         | 2026-04-15 |
+| `8b1211dc` | Wire HttpInternalAuthUsageSink in all LLM callers (INT-1342)            | 2026-04-14 |
+| `8767c5e2` | Migrate from app-settings-service to llm-usage-service (INT-1387)       | 2026-04-12 |
+
+**Summary:** The LLM pricing infrastructure was centralized in this release. The service no longer fetches pricing from app-settings-service at startup via `fetchAllPricing`/`createPricingContext`. Instead, LLM usage tracking is handled by `HttpInternalAuthUsageSink` which reports to llm-usage-service. This made `initServices` synchronous (no longer `async`), removed the app-settings-service dependency entirely, and replaced `INTEXURAOS_APP_SETTINGS_SERVICE_URL` with `INTEXURAOS_LLM_USAGE_SERVICE_URL`. Additionally, `promptType: 'todo-item-extraction'` was added to the LLM generate call to satisfy the new required parameter (INT-1392).
+
+### v3.5.0 (previous release)
 
 | Commit     | Description                                                                       | Date       |
 | ---------- | --------------------------------------------------------------------------------- | ---------- |
@@ -100,7 +113,7 @@ sequenceDiagram
 
 **Summary:** Two changes touched todos-agent in this release. The `reorderTodoItems` use case was refactored (INT-1072) to eliminate a v8-ignore workaround by switching from a separate validation pass plus `.map()` with a never-throwing fallback to a single `Map`-based iteration loop that returns early on missing items. The `getUserTimezone` method was added to the `UserServiceClient` interface, requiring test mock updates in `testUtils.ts` and `todoItemExtractionService.test.ts`.
 
-### v3.4.0 (previous release)
+### v3.4.0
 
 | Commit     | Description                                                   | Date       |
 | ---------- | ------------------------------------------------------------- | ---------- |
@@ -242,10 +255,10 @@ When a new item is added to a completed todo, the status reverts to `in_progress
 
 ### Internal Services
 
-| Service              | Endpoint                             | Purpose                              |
-| -------------------- | ------------------------------------ | ------------------------------------ |
-| user-service         | `/internal/users/:userId/llm-client` | Get user's LLM client                |
-| app-settings-service | `/internal/settings/pricing`         | Fetch LLM pricing for model selector |
+| Service           | Endpoint                             | Purpose                     |
+| ----------------- | ------------------------------------ | --------------------------- |
+| user-service      | `/internal/users/:userId/llm-client` | Get user's LLM client       |
+| llm-usage-service | `/internal/usage`                    | Report LLM usage and costs  |
 
 ### Infrastructure
 
@@ -265,7 +278,7 @@ When a new item is added to a completed todo, the status reverts to `in_progress
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Internal service auth key              | Yes      |
 | `INTEXURAOS_TODOS_PROCESSING_TOPIC`   | Pub/Sub topic for processing           | Yes      |
 | `INTEXURAOS_USER_SERVICE_URL`         | User-service base URL                  | Yes      |
-| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | LLM usage service base URL (pricing)   | Yes      |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | LLM usage service base URL             | Yes      |
 | `INTEXURAOS_SENTRY_DSN`               | Sentry error tracking                  | No       |
 | `INTEXURAOS_ENVIRONMENT`              | Environment name                       | No       |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini API key (LLM fallback) | No       |

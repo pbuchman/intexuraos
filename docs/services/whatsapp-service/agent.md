@@ -29,6 +29,7 @@ interface SendMessageEvent {
   type: 'whatsapp.message.send';
   userId: string;        // IntexuraOS user ID — phone number looked up internally
   message: string;       // Message text
+  important?: boolean;   // When true, delivery bypasses 'important'-only notification filter
   correlationId: string; // Unique ID for tracking; arbitrary format for plain notifications
   timestamp: string;     // ISO 8601
 }
@@ -65,6 +66,7 @@ interface SendCtaUrlEvent {
     displayText: string; // Button label shown to user
     url: string;         // URL to open on tap
   };
+  important?: boolean;   // When true, delivery bypasses 'important'-only filter
   correlationId: string;
   timestamp: string;
 }
@@ -78,6 +80,7 @@ interface SendCtaUrlEvent {
   "userId": "user-abc-123",
   "message": "PR #42 ready for review",
   "ctaUrl": { "displayText": "View PR", "url": "https://github.com/org/repo/pull/42" },
+  "important": true,
   "correlationId": "pr-ready-pr-42",
   "timestamp": "2026-03-07T10:30:00Z"
 }
@@ -99,6 +102,7 @@ interface SendApprovalEvent {
   userId: string;
   message: string;
   buttons: WhatsAppInteractiveButton[];
+  important?: boolean;   // Should be true for approvals — they require user action
   correlationId: string; // MUST use format: action-{type}-approval-{actionId}
   timestamp: string;
 }
@@ -135,6 +139,7 @@ interface WhatsAppInteractiveButton {
     { "type": "reply", "reply": { "id": "approve:act-xyz-789", "title": "Approve" } },
     { "type": "reply", "reply": { "id": "cancel:act-xyz-789", "title": "Cancel" } }
   ],
+  "important": true,
   "correlationId": "action-todo-approval-act-xyz-789",
   "timestamp": "2026-03-07T10:30:00Z"
 }
@@ -279,6 +284,50 @@ interface SignedUrlResult {
 
 ---
 
+### Get Notification Preferences
+
+**Endpoint:** `GET /whatsapp/preferences`
+
+**Auth:** Bearer token
+
+**When to use:** Read the authenticated user's notification level.
+
+**Output Schema:**
+
+```typescript
+interface PreferencesResult {
+  notificationLevel: 'all' | 'important';
+}
+```
+
+---
+
+### Update Notification Preferences
+
+**Endpoint:** `PUT /whatsapp/preferences`
+
+**Auth:** Bearer token
+
+**When to use:** Change the authenticated user's notification level. Set to `important` to suppress non-important messages.
+
+**Input Schema:**
+
+```typescript
+interface UpdatePreferencesInput {
+  notificationLevel: 'all' | 'important';
+}
+```
+
+**Output Schema:**
+
+```typescript
+interface PreferencesResult {
+  notificationLevel: 'all' | 'important';
+}
+```
+
+---
+
 ## Key Types
 
 ```typescript
@@ -286,6 +335,7 @@ type MediaType = 'text' | 'image' | 'audio';
 type TranscriptionStatus = 'pending' | 'processing' | 'completed' | 'failed';
 type LinkPreviewStatus = 'pending' | 'completed' | 'failed';
 type PhoneVerificationStatus = 'pending' | 'verified' | 'expired' | 'max_attempts';
+type NotificationLevel = 'all' | 'important';
 
 interface TranscriptionState {
   status: TranscriptionStatus;
@@ -319,6 +369,10 @@ interface OutboundMessage {
   sentAt: string;
   expiresAt: number;     // Unix timestamp — documents expire after 7 days
 }
+
+interface NotificationPreferences {
+  notificationLevel: NotificationLevel; // Default: 'all'
+}
 ```
 
 ---
@@ -331,12 +385,14 @@ interface OutboundMessage {
 - Expect emoji reactions to trigger `action.approval.reply` — reactions are silently ignored
 - Rely on OutboundMessage correlation after 7 days — records expire via Firestore TTL
 - Call `POST /whatsapp/connect` without first verifying the phone number via the verification flow
+- Assume messages without `important: true` will be delivered — the user may have set their notification level to `important`
 
 **Requires:**
 
 - User must have a verified and connected WhatsApp phone number (`GET /whatsapp/status` returns `connected: true`) before messages can be delivered
 - Approval correlationId MUST match `action-{type}-approval-{actionId}` for text-reply correlation to work
 - Button titles must be 20 characters or fewer
+- Set `important: true` on approval requests and critical notifications to ensure delivery regardless of notification level
 
 ---
 
@@ -347,23 +403,25 @@ interface OutboundMessage {
 ```
 1. Publish SendMessageEvent (no buttons, no ctaUrl) to INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC
 2. whatsapp-service looks up phone number for userId
-3. Message sent via WhatsApp Cloud API
-4. No response expected
+3. whatsapp-service checks notification preferences — drops if level=important and important is falsy
+4. Message sent via WhatsApp Cloud API
+5. No response expected
 ```
 
 ### Pattern 2: Send Deep Link
 
 ```
 1. Publish SendMessageEvent with ctaUrl to INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC
-2. whatsapp-service sends CTA URL message with clickable button
-3. User taps button — link opens in browser
-4. No approval event published
+2. whatsapp-service checks notification preferences (set important: true for actionable links)
+3. whatsapp-service sends CTA URL message with clickable button
+4. User taps button — link opens in browser
+5. No approval event published
 ```
 
 ### Pattern 3: Request Approval
 
 ```
-1. Publish SendMessageEvent with buttons and correlationId: action-{type}-approval-{actionId}
+1. Publish SendMessageEvent with buttons, important: true, and correlationId: action-{type}-approval-{actionId}
 2. whatsapp-service sends interactive message and saves OutboundMessage (wamid, correlationId)
 3. User taps button OR replies with text
 4. whatsapp-service publishes ApprovalReplyEvent to INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC
@@ -387,6 +445,14 @@ interface OutboundMessage {
 1. POST /whatsapp/verify/send — sends 6-digit OTP via WhatsApp
 2. POST /whatsapp/verify/confirm — validates code; marks phone verified
 3. POST /whatsapp/connect — links verified phone to user account
+```
+
+### Pattern 6: Manage Notification Preferences
+
+```
+1. GET /whatsapp/preferences — read current notification level
+2. PUT /whatsapp/preferences — set to 'all' or 'important'
+3. When level is 'important', only SendMessageEvents with important: true are delivered
 ```
 
 ---
@@ -447,4 +513,4 @@ interface OutboundMessage {
 
 ---
 
-**Last updated:** 2026-04-07
+**Last updated:** 2026-04-22

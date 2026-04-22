@@ -11,7 +11,7 @@
 | Goal      | Accept task requests, dispatch to workers, and return pull request URLs   |
 
 ```yaml
-version: 3.5.0
+version: 3.6.0
 port: 8128
 framework: fastify
 runtime: node22
@@ -241,6 +241,38 @@ interface IssueGroupsQuery {
 type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
 ```
 
+### Toggle Issue Group Important Flag
+
+**Endpoint:** `POST /code/issue-groups/:groupKey/important`
+
+**When to use:** Mark or unmark an issue group as high-priority
+
+```typescript
+interface ToggleImportantBody {
+  important: boolean;
+}
+```
+
+### Dedicated Task Status Update
+
+**Endpoint:** `PATCH /internal/code-tasks/:id/status`
+
+**When to use:** Orchestrator commits terminal task status before the full completion webhook
+
+```typescript
+interface UpdateTaskStatusBody {
+  taskId: string;
+  status: 'completed' | 'failed' | 'interrupted' | 'cancelled';
+  completedAt: string; // ISO 8601
+  error?: { code: string; message: string };
+  result?: { prUrl?: string; branch?: string; summary?: string };
+}
+
+// Idempotent: returns 200 no-op if task is already terminal.
+// No side effects — Linear/WhatsApp/GitHub labelling stays on the task-complete webhook.
+// Auth: X-Internal-Auth + HMAC-SHA256 signature over raw request body.
+```
+
 ### Linear Issue Context Proxy
 
 **Endpoint:** `GET /internal/linear/issue-context/:identifier`
@@ -324,6 +356,7 @@ interface UnifiedEvaluator {
 
 // Step 1: Hard rules (deterministic)
 // - CodeWorkerOutputRule: skips events from code worker bots
+// - DraftPRRule: blocks ALL code-tasks on draft PRs (isDraft === true)
 // - CIFailureRule: detects CI failures on agent PR branches
 // - ActionableEventRule: filters to supported event+action combos
 // - ProtectedBaseBranchRule: skips pushes to protected branches
@@ -342,7 +375,12 @@ interface GitHubAgentEvalResult {
 // Triage output is validated against Zod schemas (TriageSkipSchema, TriageReviewSchema).
 // Invalid output triggers automatic repair prompt via buildTriageRepairMessage.
 // LLM retries once with failed response as corrective context.
-// GitHub Agent only activates when INTEXURAOS_GEMINI_APP_API_KEY is set and non-empty.
+// GitHub Agent uses per-user resolveToolCallingClient: tries user's own Google API key
+// first, falls back to platform INTEXURAOS_GEMINI_APP_API_KEY. Only activates when a
+// valid key is available.
+
+// PR triage runs asynchronously via Pub/Sub push subscription (INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC).
+// The webhook publishes a PRTriageEvent and returns immediately; the push handler evaluates.
 
 // onReviewSkipped callback: when LLM triage skips a review for an execution-origin task,
 // sets 'ready-to-merge' label on the Linear issue and records automation log.
@@ -735,6 +773,16 @@ interface ReconcileResult {
   skipped: number;
   error: number;
 }
+```
+
+### Self-Healing Failure Triage
+
+```typescript
+// triageFailedTask classifies task failures and decides: auto-retry, permanent failure, or escalate.
+// Auto-retry dispatches to a different worker (excludes failedWorkerLocation).
+// Max 3 auto-retry attempts per task (autoRetryAttempt field).
+// Tasks failing with TASK_EXIT_CODE_OVERRIDE trigger automatic retry.
+// WhatsApp notification sent on auto-retry with attempt number and reason.
 ```
 
 ### Auto-Archive

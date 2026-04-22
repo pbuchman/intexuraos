@@ -23,7 +23,7 @@ interface OrchestratorTools {
   // Submit a new code task for execution
   submitTask(params: {
     taskId: string;
-    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'mimo-pro' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
     prompt: string;
     repository?: string;
     baseBranch?: string;
@@ -37,7 +37,8 @@ interface OrchestratorTools {
     prNumber?: number;
     continuationPrNumber?: number;
     continuationPrBranch?: string;
-    reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review')[];
+    reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review' | 'test_quality')[];
+    retriedFrom?: string;
     slug?: string;
     webhookUrl: string;
     webhookSecret: string;
@@ -61,12 +62,13 @@ interface OrchestratorTools {
   // - Completed/failed/interrupted task: task is resumed with a new worker session
   // - Review/remediation tasks: rejected with 409
   // - Ask agent tasks: message delivered directly without resume preamble
+  // - Expired sessions: rejected with 410
   sendMessage(params: {
     taskId: string;
     message: string; // max 20000 chars
   }): Promise<SendMessageResult>;
   // Auth: HMAC-signed
-  // Errors: 400 (validation), 404 (not found), 409 (invalid status or agent type)
+  // Errors: 400 (validation), 404 (not found), 409 (invalid status or agent type), 410 (session expired)
 
   // Check service health and capacity
   getHealth(): Promise<{
@@ -125,7 +127,7 @@ interface OrchestratorResources {
 ```typescript
 interface Task {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'mimo-pro' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
   runtime?: 'claude' | 'codex';
   runtimeSessionId?: string;
   prompt: string;
@@ -146,7 +148,7 @@ interface Task {
   prNumber?: number;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
-  reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review')[];
+  reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review' | 'test_quality')[];
   status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
   worktreePath: string;
   containerId: string;
@@ -159,6 +161,7 @@ interface Task {
   resumedAfterSuccess?: boolean;
   lastSuccessResult?: TaskResult;
   pendingResumeStart?: PendingResumeStart;
+  inactivityRestartCount?: number;
 }
 
 interface TaskVerificationRecord {
@@ -288,9 +291,10 @@ Execution Agent note:
 - `implemented` is sent as `status='completed'`
 - `already_completed` is sent as `status='completed'` with `execution_outcome_label='already_completed'`
 - All execution outcomes require `gh_pr_url` evidence
-- Orchestrator verification is Gemini semantic validation of worker responses (latest response first)
+- Orchestrator verification uses a configurable validation model chain (Gemini and/or OpenRouter, tried in priority order)
 - Orchestrator flattens execution verifier metadata into `execution_*` fields on `result`
 - Memory usage is reported via `execution_memory_ids_used`, `execution_memory_ids_rejected`, `execution_memory_usage_summary`
+- Memory acknowledgment uses soft-warning approach — consistent triplet passes even if individual ack lines are missing
 - Worker owns GitHub execution (code/tests/CI/PR/review loop); PR descriptions include mandatory `Worker Type` and `Model` lines
 - `code-agent` owns deterministic Linear enforcement for successful execution callbacks (executed issue only)
 
@@ -299,8 +303,9 @@ Review Agent note:
 - Completed review is sent as `status='completed'`
 - Orchestrator flattens review verifier metadata into `review_*` fields on `result`
 - Review Agent does not push code changes — read-only PR review only
-- `reviewTypes` controls which review scopes are included: `code_quality`, `security`, `architecture`, `plan_review`
+- `reviewTypes` controls which review scopes are included: `code_quality`, `security`, `architecture`, `plan_review`, `test_quality`
 - `plan_review` mode cross-references implementation against the original plan document
+- `test_quality` mode provides comprehensive test quality analysis
 - `needs_remediation` signals whether a Remediation Agent should be dispatched
 
 Remediation Agent note:
@@ -389,6 +394,18 @@ interface AgentComplianceReport {
 }
 ```
 
+### StatusUpdatePayload (sent to code-agent via PATCH)
+
+```typescript
+interface StatusUpdatePayload {
+  taskId: string;
+  status: 'completed' | 'failed' | 'interrupted' | 'cancelled';
+  completedAt: string; // ISO 8601
+  error?: { code: string; message: string };
+  result?: { prUrl?: string; branch?: string; summary?: string };
+}
+```
+
 ---
 
 ## Communication Protocol
@@ -408,14 +425,15 @@ interface AgentComplianceReport {
 
 ### Outbound (orchestrator -> code-agent)
 
-| Method | Path                                     | Auth                       | Purpose                       |
-| ------ | ---------------------------------------- | -------------------------- | ----------------------------- |
-| POST   | `{webhookUrl}`                           | HMAC (X-Request-Signature) | Task completion callback      |
-| POST   | `/internal/logs`                         | HMAC + X-Internal-Auth     | Log chunk upload              |
-| POST   | `/internal/code/heartbeat`               | HMAC (X-Request-Signature) | Running task keepalive        |
-| POST   | `/internal/turn-metrics`                 | HMAC + X-Internal-Auth     | Per-task resource metrics     |
-| POST   | `/internal/webhooks/task-event`          | HMAC + X-Internal-Auth     | PR automation log events      |
-| GET    | `/internal/linear/issue-context/:id`     | X-Internal-Auth            | Linear issue context (proxy)  |
+| Method | Path                                     | Auth                       | Purpose                          |
+| ------ | ---------------------------------------- | -------------------------- | -------------------------------- |
+| POST   | `{webhookUrl}`                           | HMAC (X-Request-Signature) | Task completion callback         |
+| PATCH  | `/internal/code-tasks/:id/status`        | HMAC + X-Internal-Auth     | Redundant terminal status commit |
+| POST   | `/internal/logs`                         | HMAC + X-Internal-Auth     | Log chunk upload                 |
+| POST   | `/internal/code/heartbeat`               | HMAC (X-Request-Signature) | Running task keepalive           |
+| POST   | `/internal/turn-metrics`                 | HMAC + X-Internal-Auth     | Per-task resource metrics        |
+| POST   | `/internal/webhooks/task-event`          | HMAC + X-Internal-Auth     | PR automation log events         |
+| GET    | `/internal/linear/issue-context/:id`     | X-Internal-Auth            | Linear issue context (proxy)     |
 
 ### HMAC Signature Format
 
@@ -443,7 +461,7 @@ signature = HMAC-SHA256(webhookSecret, message)
 Headers: X-Request-Timestamp, X-Request-Signature, X-Internal-Auth
 ```
 
-**Outbound (turn-metrics):**
+**Outbound (turn-metrics, status-update):**
 
 ```
 message = "{timestamp}.{json_body}"
@@ -474,12 +492,12 @@ Headers: X-Request-Timestamp, X-Request-Signature, X-Internal-Auth
 6. Spawn a code-worker container for the selected runtime (2-minute creation timeout)
 7. Write system prompt to container stdin
 8. Stream logs to code-agent via LogForwarder
-9. Monitor container exit (30s polling)
+9. Monitor container exit (30s polling) with inactivity detection (10-minute silence kills and restarts up to 3 times)
 10. On exit: flush logs, check for PR via `gh pr list` + `gh pr checks`
-11. Detect fatal exit codes (137/139) from tail of raw logs — skip Gemini verification, trigger immediate retry
-12. Run completion verification (Gemini semantic validation with agent-specific Zod schemas)
+11. Detect fatal exit codes (137/139) from tail of raw logs — skip validation model calls, trigger immediate retry
+12. Run completion verification (configurable model chain with agent-specific Zod schemas; memory acknowledgment uses soft-warning approach)
 13. If verification **fails** and `attempt < maxAttempts`: resume session with follow-up prompt listing missing criteria
-14. If verification **passes**: run Agent Compliance Validation for execution tasks, collect turn metrics, send webhook
+14. If verification **passes**: run Agent Compliance Validation for execution tasks, collect turn metrics, commit terminal status via StatusUpdateClient, send webhook
 15. If max attempts reached without passing: send webhook with `TASK_COMPLETION_VERIFICATION_FAILED` error
 16. Clean up token refresher, log forwarder, and task timers
 17. If any queued messages arrived during execution: deliver them immediately as a new session
@@ -504,44 +522,48 @@ On startup, the orchestrator:
 
 | Threshold | Action                                     |
 | --------- | ------------------------------------------ |
-| 2h 55m    | Log warning                                |
-| 3h 0m     | Kill container, send `interrupted` webhook |
+| 10m idle  | Kill container, restart (up to 3 times)    |
+| 4h 55m    | Log warning                                |
+| 5h 0m     | Kill container, send `interrupted` webhook |
 
 ---
 
 ## Environment
 
-| Variable                                  | Required | Default                            |
-| ----------------------------------------- | -------- | ---------------------------------- |
-| `INTEXURAOS_REPOSITORY_URL`               | Yes      | -                                  |
-| `INTEXURAOS_CODE_AGENT_URL`               | Yes      | -                                  |
-| `INTEXURAOS_ORCHESTRATOR_SECRET`          | Yes      | -                                  |
-| `INTEXURAOS_PROJECT_ID`                   | Yes      | -                                  |
-| `INTEXURAOS_GITHUB_APP_ID`                | Yes      | -                                  |
-| `INTEXURAOS_GITHUB_INSTALLATION_ID`       | Yes      | -                                  |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`          | Yes      | -                                  |
-| `INTEXURAOS_LINEAR_API_KEY`               | Yes      | -                                  |
-| `INTEXURAOS_SENTRY_AUTH_TOKEN`            | Yes      | -                                  |
-| `INTEXURAOS_GEMINI_APP_API_KEY`           | Yes      | -                                  |
-| `INTEXURAOS_MINIMAX_APP_API_KEY`          | Yes      | -                                  |
-| `INTEXURAOS_DASHSCOPE_APP_API_KEY`        | Yes      | -                                  |
-| `INTEXURAOS_ZAI_APP_API_KEY`              | Yes      | -                                  |
-| `GOOGLE_APPLICATION_CREDENTIALS`          | Yes      | -                                  |
-| `INTEXURAOS_OPENROUTER_APP_API_KEY`       | No       | (empty — disables compliance)      |
-| `INTEXURAOS_COMPLIANCE_MODEL`             | No       | `xiaomi/mimo-v2-pro`               |
-| `INTEXURAOS_REPOSITORY_PATH`              | No       | `~/.code-orchestrator/repo`        |
-| `INTEXURAOS_WORKER_CAPACITY`              | No       | `2`                                |
-| `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`      | No       | `3`                                |
-| `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`   | No       | `1`                                |
-| `INTEXURAOS_CODE_WORKER_IMAGE`            | No       | (GCR Artifact Registry)            |
-| `INTEXURAOS_CODE_WORKER_FORENSICS`        | No       | `0`                                |
-| `INTEXURAOS_CODE_WORKER_FORENSICS_PATH`   | No       | `~/.code-orchestrator/forensics`   |
-| `INTEXURAOS_GIT_USER_NAME`                | No       | (host git config)                  |
-| `INTEXURAOS_GIT_USER_EMAIL`               | No       | (host git config)                  |
-| `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`       | No       | (Secret Manager)                   |
-| `KEEP_CONTAINERS_ALIVE`                   | No       | `0`                                |
-| `PORT`                                    | No       | `8199`                             |
-| `LOG_LEVEL`                               | No       | `info`                             |
+| Variable                                    | Required | Default                            |
+| ------------------------------------------- | -------- | ---------------------------------- |
+| `INTEXURAOS_REPOSITORY_URL`                 | Yes      | -                                  |
+| `INTEXURAOS_CODE_AGENT_URL`                 | Yes      | -                                  |
+| `INTEXURAOS_ORCHESTRATOR_SECRET`            | Yes      | -                                  |
+| `INTEXURAOS_PROJECT_ID`                     | Yes      | -                                  |
+| `INTEXURAOS_GITHUB_APP_ID`                  | Yes      | -                                  |
+| `INTEXURAOS_GITHUB_INSTALLATION_ID`         | Yes      | -                                  |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`            | Yes      | -                                  |
+| `INTEXURAOS_LINEAR_API_KEY`                 | Yes      | -                                  |
+| `INTEXURAOS_SENTRY_AUTH_TOKEN`              | Yes      | -                                  |
+| `INTEXURAOS_GEMINI_APP_API_KEY`             | Yes      | -                                  |
+| `INTEXURAOS_MINIMAX_APP_API_KEY`            | Yes      | -                                  |
+| `INTEXURAOS_MIMO_APP_API_KEY`               | Yes      | -                                  |
+| `INTEXURAOS_DASHSCOPE_APP_API_KEY`          | Yes      | -                                  |
+| `INTEXURAOS_ZAI_APP_API_KEY`                | Yes      | -                                  |
+| `INTEXURAOS_USAGE_WEBHOOK_URL`              | Yes      | -                                  |
+| `GOOGLE_APPLICATION_CREDENTIALS`            | Yes      | -                                  |
+| `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` | No       | (Gemini default)                   |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY`         | No       | (empty — disables compliance)      |
+| `INTEXURAOS_COMPLIANCE_MODEL`               | No       | `xiaomi/mimo-v2-pro`               |
+| `INTEXURAOS_REPOSITORY_PATH`                | No       | `~/.code-orchestrator/repo`        |
+| `INTEXURAOS_WORKER_CAPACITY`                | No       | `2`                                |
+| `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`        | No       | `3`                                |
+| `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`     | No       | `1`                                |
+| `INTEXURAOS_CODE_WORKER_IMAGE`              | No       | (GCR Artifact Registry)            |
+| `INTEXURAOS_CODE_WORKER_FORENSICS`          | No       | `0`                                |
+| `INTEXURAOS_CODE_WORKER_FORENSICS_PATH`     | No       | `~/.code-orchestrator/forensics`   |
+| `INTEXURAOS_GIT_USER_NAME`                  | No       | (host git config)                  |
+| `INTEXURAOS_GIT_USER_EMAIL`                 | No       | (host git config)                  |
+| `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`         | No       | (Secret Manager)                   |
+| `KEEP_CONTAINERS_ALIVE`                     | No       | `0`                                |
+| `PORT`                                      | No       | `8199`                             |
+| `LOG_LEVEL`                                 | No       | `info`                             |
 
 ---
 
@@ -558,9 +580,10 @@ On startup, the orchestrator:
 | `already_completed`                   | 409  | Task already finished (cannot cancel)                          |
 | `invalid_status`                      | 409  | Message sent to task with status that does not accept messages |
 | `invalid_agent_type`                  | 409  | Message sent to review/remediation task (not supported)        |
+| `session_expired`                     | 410  | Session has expired and cannot accept messages                 |
 | `NO_PR_CREATED`                       | -    | Task completed but no PR was found                             |
 | `TASK_COMPLETION_VERIFICATION_FAILED` | -    | Max attempts reached without passing completion verification   |
-| `TASK_COMPLETION_VERIFIER_FAILED`     | -    | Gemini verifier unreachable or returned invalid JSON           |
+| `TASK_COMPLETION_VERIFIER_FAILED`     | -    | All validation models unreachable or returned invalid JSON     |
 | `RESUME_ATTEMPT_FAILED`               | -    | Could not start a follow-up attempt container                  |
 | `SETUP_FAILED`                        | -    | Task setup failed (worktree creation, API key invalid, etc.)   |
 | `PLANNING_AGENT_UNCLEAR`              | -    | Planning agent could not produce a plan                        |
@@ -570,12 +593,14 @@ On startup, the orchestrator:
 ## Constraints
 
 - Maximum concurrent tasks: configurable (default 2, via `INTEXURAOS_WORKER_CAPACITY`)
-- Maximum task duration: 3 hours per attempt (hard timeout); multi-attempt tasks can run longer
+- Maximum task duration: 5 hours per attempt (hard timeout); multi-attempt tasks can run longer
 - Maximum completion attempts: configurable (default 3, via `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`)
+- Maximum inactivity restarts: 3 (10-minute silence threshold per restart)
 - Maximum message length for `/tasks/:id/message`: 20,000 characters
-- Maximum log size per task: 4 MB
+- Maximum log size per task: 8 MB
 - Log chunk size: 64 KB max
 - Webhook retry: 3 attempts with 5s/15s/45s delays
+- StatusUpdateClient retry: 3 attempts with 1s/3s/9s delays
 - Pending webhook TTL: 24 hours
 - Nonce cache TTL: 10 minutes
 - Timestamp tolerance: 5 minutes
@@ -587,14 +612,5 @@ On startup, the orchestrator:
 - Container creation timeout: 2 minutes
 - Turn metrics: non-fatal; zero values returned when cgroup path unavailable (macOS)
 - Completion verifier: required; verifier failure marks task `failed` (no false positives)
-- Container adoption timeout: 60 seconds on startup
-- Worker types: 10 (auto, opus, sonnet for Anthropic; minimax for MiniMax; glm, qwen, kimi for DashScope; codex, codex-xhigh for Codex; openrouter-free for OpenRouter)
-- Worker runtimes: 2 (claude, codex)
-- Agent Compliance Validation: requires OpenRouter API key; skipped when not configured
-- Agent Compliance Validator transcript limit: 720,000 characters
-- GitHub comment size limit: 65,536 characters (split across multiple comments if needed)
-- Container preservation: selective by agent type (execution and planning preserved; review, PR, and remediation cleaned up); one preserved container per PR
-- Linear issue context: fetched via code-agent proxy only
-- Evidence PR required for all execution outcomes and all planned outcomes (including SIMPLE tasks)
-- Review/remediation agent types reject `sendMessage()` with 409
-- Ask agent tasks skip PR resume preamble and prohibit `AskUserQuestion`
+- Memory acknowledgment: soft-warning when usage triplet is consistent; hard failure only for unaccounted memory IDs
+- Transcript size limit for compliance validation: 720,000 characters

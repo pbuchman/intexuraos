@@ -2,7 +2,7 @@
 
 ## Overview
 
-The orchestrator is a Fastify-based HTTP service that runs on local machines behind a Cloudflare Tunnel. It receives HMAC-signed task dispatch requests from code-agent, creates isolated git worktrees, spawns Docker containers running the shared code-worker runtime (Claude or Codex), streams logs back in real time, and delivers completion results via signed webhooks. It manages GitHub App installation tokens plus shared worker auth for Claude and Codex, persists state atomically to disk, and recovers interrupted tasks (including container adoption and pending resume recovery) on restart. After each worker attempt, an LLM-backed completion verifier (Gemini 2.5 Flash) evaluates whether the task met its agent-specific contract; failed verifications automatically trigger follow-up attempts up to a configurable limit. For execution tasks, an Agent Compliance Validator performs post-completion transcript analysis via OpenRouter — verifying claims, checking contract compliance, detecting anomalies, and posting a structured report on the PR. The Remediation Agent autonomously addresses review findings on existing PR branches. Execution memory from past tasks is injected into prompts to prevent repeated mistakes. The Ask Agent provides interactive code-aware Q&A sessions.
+The orchestrator is a Fastify-based HTTP service that runs on local machines behind a Cloudflare Tunnel. It receives HMAC-signed task dispatch requests from code-agent, creates isolated git worktrees, spawns Docker containers running the shared code-worker runtime (Claude or Codex), streams logs back in real time, and delivers completion results via signed webhooks and a redundant StatusUpdateClient. It manages GitHub App installation tokens plus shared worker auth for Claude and Codex, persists state atomically to disk, and recovers interrupted tasks (including container adoption and pending resume recovery) on restart. After each worker attempt, a configurable chain of validation models evaluates whether the task met its agent-specific contract; failed verifications automatically trigger follow-up attempts up to a configurable limit. For execution tasks, an Agent Compliance Validator performs post-completion transcript analysis via OpenRouter — verifying claims, checking contract compliance, detecting anomalies, and posting a structured report on the PR. The Remediation Agent autonomously addresses review findings on existing PR branches. Execution memory from past tasks is injected into prompts with a simplified verification pipeline. The Ask Agent provides interactive code-aware Q&A sessions. Inactivity detection kills unresponsive sessions after ten minutes of silence and auto-restarts them up to three times.
 
 ## Agent-Based Routing and Contracts
 
@@ -36,7 +36,7 @@ The orchestrator is a Fastify-based HTTP service that runs on local machines beh
 
 ### Review Agent types
 
-The Review Agent supports four review types, controlled by the `reviewTypes` field:
+The Review Agent supports five review types, controlled by the `reviewTypes` field:
 
 | Type           | Scope                                                                                                       |
 | -------------- | ----------------------------------------------------------------------------------------------------------- |
@@ -44,6 +44,7 @@ The Review Agent supports four review types, controlled by the `reviewTypes` fie
 | `security`     | Injection vulnerabilities, auth issues, secrets exposure, OWASP top 10                                      |
 | `architecture` | Separation of concerns, dependency direction, API design, scalability, coupling/cohesion                    |
 | `plan_review`  | Plan document validation — task decomposition, TDD discipline, file path accuracy, codebase cross-reference |
+| `test_quality` | Comprehensive test quality review — coverage gaps, assertion quality, edge cases, naming, anti-patterns     |
 
 ### Planning Agent webhook semantics
 
@@ -119,10 +120,11 @@ graph TB
             TD --> DP[DockerProvider<br/>dockerode SDK]
             TD --> LF[LogForwarder<br/>3s chunked upload]
             TD --> WC[WebhookClient<br/>HMAC-signed callbacks]
+            TD --> SUC[StatusUpdateClient<br/>direct PATCH status]
             TD --> SP[StatePersistence<br/>atomic JSON file]
             TD --> SYS[SystemPrompt<br/>6 agent types<br/>PromptBuilder versioned]
             TD --> TMC[TurnMetricsCollector<br/>cgroup + session JSONL]
-            TD --> CV[CompletionVerifier<br/>Gemini 2.5 Flash]
+            TD --> CV[CompletionVerifier<br/>configurable model chain]
             TD --> ACV[AgentComplianceValidator<br/>OpenRouter LLM]
 
             GTS[GitHubTokenService<br/>JWT + installation token]
@@ -169,6 +171,7 @@ graph TB
     TR --> GH
     LF -->|POST /internal/logs| CA
     WC -->|POST webhook| CA
+    SUC -->|PATCH /internal/code-tasks/:id/status| CA
     HB -->|POST /internal/code/heartbeat| CA
     TMC -->|POST /internal/turn-metrics| CA
     ACV -->|gh pr comment| GH
@@ -177,56 +180,58 @@ graph TB
 
 ## Recent Changes
 
-### v3.5.0 Release
+### v3.6.0 Release
 
-Key changes since v3.4.0: Codex runtime support as an execution backend, Remediation Agent with autonomous auto-improvement loop, Execution Memory Graph for cross-task learning, Ask Agent for interactive sessions, Agent Compliance Validator replacing the Deep Validator, agent dispatch refactored with `@worker` routing and container lifecycle, evidence PR required for all planned outcomes, openrouter-free worker type, startup validation and observability improvements, and numerous reliability fixes.
+Key changes since v3.5.0: Execution memory pipeline simplification (memory_acknowledgment downgraded to soft warning), robust memory_acknowledgment recovery for stalled code-review tasks, log cap raised to 8MB and task timeout extended to 5 hours, StatusUpdateClient for redundant terminal status delivery, Docker RFC3339 timestamp stripping fix, user default model for execution memory (replacing hardcoded Gemini), Gemini client mapped for user model standardization, configurable validation model chain, mimo-pro worker type, test_quality review scope, inactivity restart tracking, and `retriedFrom` field on task schema.
 
-### Codex Runtime Support (INT-1104, INT-1109, INT-1117, INT-1125, INT-1143, INT-1205, INT-1212)
+### Execution Memory Pipeline Simplification (INT-1403)
 
-The orchestrator now supports OpenAI Codex as an execution backend alongside Claude. Two Codex worker presets were added: `codex` (standard) and `codex-xhigh` (high effort). Codex uses ChatGPT device-auth rather than API keys, with auth managed through `CodexAuthManager` and `CodexAuthRefresher`. A dedicated Codex log processor handles streaming output formatting. Codex runtime state is preserved across cleanup cycles. The orchestrator validates Codex auth at startup and exposes it on the health endpoint.
+The memory_acknowledgment verification was downgraded from a hard failure to a soft warning. When the memory usage triplet (memory_ids_used, memory_ids_rejected, memory_usage_summary) is internally consistent — every injected memory ID appears in either the used or rejected list — but individual acknowledgment lines are missing, the verifier now emits a soft warning instead of triggering an auto-continue loop. This prevents memory reporting issues from stalling tasks that otherwise completed their work successfully. Inconsistent triplets (unaccounted memory IDs) remain hard failures.
 
-### Remediation Agent and Review Loop (INT-1087, INT-1103, INT-1116, INT-1119, INT-1130, INT-1132, INT-1139)
+### Memory Acknowledgment Verifier Recovery (INT-1411, INT-1415)
 
-A new `remediation` agent type addresses review findings autonomously. When a review identifies issues above a severity threshold, the Remediation Agent receives the review comments, implements fixes on the existing PR branch, runs CI, and decides whether a re-review is needed. The remediation prompt was mandated to use `/nitpick-nuker`. Messages are rejected for review/remediation agent types via `sendMessage()`. Container lifecycle was refactored with `@worker` routing — one preserved `pull_request` container per PR, selective container preservation by agent type.
+Fixed a regression where the memory_acknowledgment verifier was stalling code-review tasks. The auto-continue prompt was updated to actually fix memory_acknowledgment failures by including explicit guidance with the injected memory IDs and the expected acknowledgment block template. Recovery was made robust with three separate PRs addressing the stall, the prompt fix, and edge cases around memory acknowledgment pattern matching (accepting `[index] memoryId` format).
 
-### Execution Memory Graph (INT-1098, INT-1257)
+### Log Cap and Task Timeout Increase
 
-Execution memory is now injected into planning and review prompts (not just execution). The memory section includes mandatory acknowledgment — agents must explicitly list every memory they received before proceeding. Usage reporting tracks which memories were applied vs rejected. Memory types include `implementation_pattern`, `verification_pattern`, `pitfall_pattern`, `decomposition_pattern`, `planning_decision`, and `review_finding`. The review prompt captures review content for memory extraction.
+The log forwarding cap was raised from 4MB to 8MB per task to prevent log truncation on verbose builds. The task timeout was extended from 3 hours to 5 hours (warning at 4h55m, kill at 5h) to accommodate complex multi-step tasks.
 
-### Agent Compliance Validator (replaces Deep Validator)
+### StatusUpdateClient (INT-1413)
 
-The monolithic `ExecutionDeepValidator` was replaced by a modular `AgentComplianceValidator` that uses OpenRouter with configurable models (default: `xiaomi/mimo-v2-pro`). The validator reads session transcripts via `readSessionTranscript()` and `formatTranscript()`, builds a compliance prompt comparing agent claims against transcript evidence, parses the response against a Zod `AgentComplianceReportSchema`, and posts formatted PR comments via `gh pr comment`. The report covers claim verification, contract compliance, anomaly detection, and execution metrics.
+A new `StatusUpdateClient` commits terminal task status directly to code-agent via `PATCH /internal/code-tasks/:id/status` as a secondary delivery path alongside webhook-based completion. This provides redundancy when webhook delivery encounters transient network issues. The client uses the same HMAC signing scheme as the heartbeat manager, retries with exponential backoff (1s, 3s, 9s), and surfaces 4xx errors immediately without retry.
 
-### Ask Agent (INT-1293, INT-1294, INT-1295, INT-1308)
+### Docker RFC3339 Timestamp Stripping (INT-1411)
 
-A new `ask_agent` type provides interactive code-aware sessions. Ask Agent sessions skip the PR resume preamble, deliver messages directly (not wrapped in orchestrator context), check pending messages in the completion path, and prohibit `AskUserQuestion` in the prompt. The `linearIssueId` is intentionally omitted from the ask-agent prompt.
+Fixed the `stripDockerHeaders()` function in the log formatter to properly strip RFC3339 timestamps that Docker prepends to log output. Previously, timestamps in the format `2026-04-15T10:30:00.123456789Z` were not being removed, causing noisy log output.
 
-### Agent Dispatch Refactor (INT-1130)
+### User Default Model for Execution Memory (INT-1371)
 
-Agent dispatch was refactored with `@worker` routing and container lifecycle improvements. Key changes: preserved `pull_request` containers enforced to one per PR, review and remediation agent types reject `sendMessage()`, dispatch metadata endpoint added (`GET /internal/tasks/:id/dispatch-metadata`), and `prNumber` field forwarded in routes for container deduplication.
+The completion verifier now uses the user's configured default validation model chain instead of a hardcoded Gemini model for execution memory verification. This is controlled by `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS`, which accepts a comma-separated list of model IDs. Models prefixed with `or:` are routed through OpenRouter; unprefixed models use Gemini. The verifier tries each model in priority order, falling back to the next on failure.
 
-### Evidence PR Required for All Outcomes (INT-1279)
+### Gemini Client Usage Mapping (INT-1369)
 
-All execution outcomes — including tasks where the agent determines work was already completed — now require a `gh_pr_url` evidence field. The Gemini extraction prompt was updated to enforce this. SIMPLE planning tasks also require an evidence PR (a lightweight commit with a plan summary file).
+Mapped the Gemini client for user model standardization. The validation model clients now use `HttpWebhookUsageSink` for LLM usage reporting, sending usage data to code-agent via the usage webhook URL for cost tracking and analytics.
 
-### Worker Type Additions
+### Worker Type Addition: mimo-pro
 
-- `codex`: Standard Codex runtime with ChatGPT auth
-- `codex-xhigh`: High-effort Codex for complex tasks
-- `openrouter-free`: Zero-cost execution via OpenRouter (Qwen 3.6 Plus free tier, `disableExperimentalBetas: true`)
+Added `mimo-pro` worker type routing through Xiaomi MiMo's Anthropic-compatible API at `token-plan-sgp.xiaomimimo.com/anthropic` with model `mimo-v2-pro`. Uses a dedicated `MIMO_API_KEY` credential validated at startup.
+
+### Review Scope Addition: test_quality
+
+Added `test_quality` as a fifth review scope for the Review Agent. This scope provides comprehensive test quality analysis covering coverage gaps, assertion quality, edge case handling, test naming conventions, and anti-patterns. Configurable via the `reviewTypes` field on task submission.
+
+### Inactivity Restart Tracking
+
+Added `inactivityRestartCount` to the Task model, tracking lifetime inactivity restarts per task. The inactivity detector kills sessions after 10 minutes of no output and restarts them up to 3 times (via `MAX_INACTIVITY_RESTARTS`) before failing the task. The count is persisted to state and reported for observability.
 
 ### Other Notable Changes
 
-- Plan PR merge before execution dispatch removed (INT-1149)
-- Thinking effort set to `high` for opus workers (INT-1088)
-- V8 ignore blocks replaced with real tests across the codebase (INT-1071)
-- Restart failure fixed for expired worker containers — resume allowed when container expired but worktree exists (INT-1304)
-- Startup validation: port availability check, GCP credential validation, API key health checks at boot
-- Fatal exit code detection restricted to tail of raw logs (prevents false positives from mid-session crashes)
-- Development branch synced with origin after fetch in repo manager
-- Dead MCP config processing removed from worktree manager
-- Process-level timeout removed from Codex entrypoint
-- Linear MCP timeout contract enforced in orchestrator and code-worker
+- `retriedFrom` field declared in `CreateTaskRequestSchema` for retry chain tracking
+- Operational steps excluded from `needs_remediation` verification
+- LLM pricing removed from orchestrator validation model clients (migrated to HTTP usage sink)
+- LLM usage sinks migrated to HTTP webhook pattern (INT-1342)
+- Prompt type made required in `LlmGenerateClient` calls (INT-1392)
+- Worker container preservation on `TASK_EXIT_CODE_OVERRIDE`
 
 ## API Endpoints
 
@@ -235,7 +240,7 @@ All execution outcomes — including tasks where the agent determines work was a
 | POST   | `/tasks`               | HMAC signed | `CreateTaskRequest` (Zod-validated) | `202 { taskId, status: "accepted" }`                           |
 | GET    | `/tasks/:id`           | None        | -                                   | `200 Task` or `404`                                            |
 | DELETE | `/tasks/:id`           | None        | -                                   | `200 { taskId, status: "cancelled" }` or `404`/`409`           |
-| POST   | `/tasks/:id/message`   | HMAC signed | `{ message: string }`               | `200 SendMessageResult` or `404`/`409`                         |
+| POST   | `/tasks/:id/message`   | HMAC signed | `{ message: string }`               | `200 SendMessageResult` or `404`/`409`/`410`                   |
 | GET    | `/health`              | None        | -                                   | `200 { status, capacity, running, available, workerAuths }`    |
 | GET    | `/meta/worker-image`   | None        | -                                   | `200` image diagnostics or `{ error }` if unavailable          |
 | POST   | `/admin/shutdown`      | HMAC signed | -                                   | `200 { status: "shutting_down" }`                              |
@@ -258,7 +263,7 @@ Verification rejects requests with timestamps older than 5 minutes and replayed 
 ```typescript
 {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'mimo-pro' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
   prompt: string;
   repository?: string;
   baseBranch?: string;
@@ -270,13 +275,14 @@ Verification rejects requests with timestamps older than 5 minutes and replayed 
   webhookUrl: string;
   webhookSecret: string;
   actionId?: string;
+  retriedFrom?: string;
   agentType?: 'planning' | 'execution' | 'pull_request' | 'review' | 'remediation' | 'ask_agent';
   executionMemoryContext?: ExecutionMemoryPromptContext;
   trackingCommentId?: string;
   prNumber?: number;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
-  reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review')[];
+  reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review' | 'test_quality')[];
 }
 ```
 
@@ -296,6 +302,7 @@ Verification rejects requests with timestamps older than 5 minutes and replayed 
 - If the task is `completed`, `failed`, or `interrupted`: a new worker session is started with the message as the prompt (using `continueSession: true`)
 - If `agentType` is `review` or `remediation`: returns `409` (messages not supported)
 - If `agentType` is `ask_agent`: message delivered directly without PR resume preamble
+- If the session has expired: returns `410` (session expired)
 - Returns `409` if the task status does not allow messages (e.g., `cancelled`)
 
 ## Domain Model
@@ -307,7 +314,7 @@ stateDiagram-v2
     [*] --> running: submitTask()
     running --> completed: Container exit + verification passed
     running --> failed: Container exit + max attempts reached
-    running --> interrupted: 3h timeout
+    running --> interrupted: 5h timeout
     running --> cancelled: DELETE /tasks/:id
     completed --> running: sendMessage() resume
     failed --> running: sendMessage() resume
@@ -323,7 +330,7 @@ stateDiagram-v2
 ```typescript
 interface Task {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'mimo-pro' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
   runtime?: 'claude' | 'codex';
   runtimeSessionId?: string;
   prompt: string;
@@ -344,7 +351,7 @@ interface Task {
   prNumber?: number;
   continuationPrNumber?: number;
   continuationPrBranch?: string;
-  reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review')[];
+  reviewTypes?: ('code_quality' | 'security' | 'architecture' | 'plan_review' | 'test_quality')[];
   status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
   worktreePath: string;
   containerId: string;
@@ -357,6 +364,7 @@ interface Task {
   resumedAfterSuccess?: boolean;
   lastSuccessResult?: TaskResult;
   pendingResumeStart?: PendingResumeStart;
+  inactivityRestartCount?: number;
 }
 ```
 
@@ -420,16 +428,32 @@ The central coordinator. Manages the full task lifecycle:
 9. Token registration via `TokenRefresher`
 10. Log forwarding registration via `LogForwarder`
 11. Completion monitoring (30s polling interval) with activity heartbeat logging
-12. Timeout warning at 2h55m, hard kill at 3h
-13. On container exit: result extraction via `gh pr list` + `gh pr checks`, then completion verification via `CompletionVerifier`
-14. Fatal exit codes (137/139) — detected from tail of raw logs — skip Gemini verification and trigger immediate retry
-15. If verification fails and `attempt < maxAttempts`: resume the session with a targeted follow-up prompt (auto-continue loop)
-16. If verification passes: Agent Compliance Validation for execution tasks (transcript analysis, PR comment), then turn metrics collection via `TurnMetricsCollector`, then webhook delivery
-17. Queued messages (from `POST /tasks/:id/message` during execution) are delivered as the next session when verification passes
-18. `sendMessage()` for mid-task message injection and task resume after completion — ask_agent skips PR resume preamble
-19. `adoptTask()` for startup recovery re-attachment to running containers
-20. `recoverPendingResumeTask()` for recovering accepted resumes that were interrupted by a restart
-21. Pending messages flushed before teardown in ask-agent completion path
+12. Inactivity detection (10-minute silence threshold) — kills and restarts up to 3 times
+13. Timeout warning at 4h55m, hard kill at 5h
+14. On container exit: result extraction via `gh pr list` + `gh pr checks`, then completion verification via `CompletionVerifier`
+15. Fatal exit codes (137/139) — detected from tail of raw logs — skip validation model calls and trigger immediate retry
+16. If verification fails and `attempt < maxAttempts`: resume the session with a targeted follow-up prompt (auto-continue loop)
+17. Memory acknowledgment uses soft-warning approach: consistent triplet with missing individual acks produces a warning, not a hard failure
+18. If verification passes: Agent Compliance Validation for execution tasks (transcript analysis, PR comment), then turn metrics collection via `TurnMetricsCollector`, then terminal status commit via `StatusUpdateClient`, then webhook delivery
+19. Queued messages (from `POST /tasks/:id/message` during execution) are delivered as the next session when verification passes
+20. `sendMessage()` for mid-task message injection and task resume after completion — ask_agent skips PR resume preamble
+21. `adoptTask()` for startup recovery re-attachment to running containers
+22. `recoverPendingResumeTask()` for recovering accepted resumes that were interrupted by a restart
+23. Pending messages flushed before teardown in ask-agent completion path
+
+### CompletionVerifier
+
+LLM-backed task completion validation with configurable model chain:
+
+- Configurable via `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` (comma-separated, `or:` prefix for OpenRouter)
+- Tries each model in priority order, falling back to the next on failure
+- Six agent-specific Zod schemas: planning, execution, pull_request, review, remediation, ask_agent
+- Extracts structured metadata from the last 50 lines of worker output
+- Validates mandatory fields per agent type (PR URL, outcome labels, skill usage proofs)
+- Fatal exit codes (137/139) skip all model calls and trigger immediate retry
+- Evidence PR required for all execution outcomes including `already_completed`
+- Memory acknowledgment soft-warning: consistent triplet but missing individual acks produces a warning, not a blocking failure
+- Returns verdict with `passed`, `missingFields`, `softWarnings`, `verifierFailure`, `succeededModelName`, and extracted `agentData`
 
 ### AgentComplianceValidator (replaces ExecutionDeepValidator)
 
@@ -444,6 +468,17 @@ Performs post-completion transcript analysis for execution tasks:
 - Posts formatted PR comments via `gh pr comment` with severity indicators (Critical, Warning, Minor, Pass)
 - Uses `OrchestratorFileAuditSink` for LLM audit logging
 - Transcript size limit: 720,000 characters
+
+### StatusUpdateClient
+
+Commits terminal task status directly to code-agent as a redundant delivery path:
+
+- `PATCH /internal/code-tasks/:id/status` with HMAC signing (same scheme as heartbeat manager)
+- Headers: `X-Request-Timestamp`, `X-Request-Signature`, `X-Internal-Auth`
+- Retries with exponential backoff: 1s, 3s, 9s (3 retries total)
+- 4xx responses are non-retryable — surfaced immediately
+- 15-second request timeout per attempt
+- Payload includes `taskId`, `status`, `completedAt`, optional `error` and `result`
 
 ### DockerProvider
 
@@ -491,11 +526,12 @@ Streams container output to code-agent in near-real-time:
 - Receives log chunks via `appendChunk()` callback from Docker attach stream
 - Buffers content and flushes every 3 seconds or when buffer exceeds 64KB
 - Strips Docker multiplexed stream headers and ANSI escape codes via `stripDockerHeaders()`
+- Strips Docker RFC3339 timestamps from log lines
 - Strips heavyweight `tool_use_result` metadata from JSONL lines via `stripBulkMetadata()`
 - Prefixes each log line with a local timestamp (`HH:MM:ss.mmm`)
 - Sends up to 5 chunks per batch to `POST /internal/logs`
 - Signs payloads with HMAC-SHA256 using the task's webhook secret
-- Limits: 4MB total per task
+- Limits: 8MB total per task
 - Retries failed uploads 3 times with exponential backoff (1s, 2s, 4s)
 - `flushAndStop()` drains all remaining logs on container exit
 
@@ -581,50 +617,42 @@ Collects per-task resource and token metrics after completion:
 - Publishes metrics to code-agent via `POST /internal/turn-metrics`
 - Non-fatal: zero values on macOS (no cgroup exposure)
 
-### CompletionVerifier
-
-LLM-backed task completion validation (Gemini 2.5 Flash):
-
-- Six agent-specific Zod schemas: planning, execution, pull_request, review, remediation, ask_agent
-- Extracts structured metadata from the last 50 lines of worker output
-- Validates mandatory fields per agent type (PR URL, outcome labels, skill usage proofs)
-- Fatal exit codes (137/139) skip Gemini and trigger immediate retry
-- Evidence PR required for all execution outcomes including `already_completed`
-- Returns verdict with `passed`, `missingFields`, `verifierFailure`, and extracted `agentData`
-
 ## Configuration
 
-| Variable                                  | Required | Default                            |
-| ----------------------------------------- | -------- | ---------------------------------- |
-| `INTEXURAOS_REPOSITORY_URL`               | Yes      | -                                  |
-| `INTEXURAOS_CODE_AGENT_URL`               | Yes      | -                                  |
-| `INTEXURAOS_ORCHESTRATOR_SECRET`          | Yes      | -                                  |
-| `INTEXURAOS_PROJECT_ID`                   | Yes      | -                                  |
-| `INTEXURAOS_GITHUB_APP_ID`                | Yes      | -                                  |
-| `INTEXURAOS_GITHUB_INSTALLATION_ID`       | Yes      | -                                  |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`          | Yes      | -                                  |
-| `INTEXURAOS_LINEAR_API_KEY`               | Yes      | -                                  |
-| `INTEXURAOS_SENTRY_AUTH_TOKEN`            | Yes      | -                                  |
-| `INTEXURAOS_GEMINI_APP_API_KEY`           | Yes      | -                                  |
-| `INTEXURAOS_MINIMAX_APP_API_KEY`          | Yes      | -                                  |
-| `INTEXURAOS_DASHSCOPE_APP_API_KEY`        | Yes      | -                                  |
-| `INTEXURAOS_ZAI_APP_API_KEY`              | Yes      | -                                  |
-| `GOOGLE_APPLICATION_CREDENTIALS`          | Yes      | -                                  |
-| `INTEXURAOS_OPENROUTER_APP_API_KEY`       | No       | (empty — disables compliance)      |
-| `INTEXURAOS_COMPLIANCE_MODEL`             | No       | `xiaomi/mimo-v2-pro`               |
-| `INTEXURAOS_REPOSITORY_PATH`              | No       | `~/.code-orchestrator/repo`        |
-| `INTEXURAOS_WORKER_CAPACITY`              | No       | `2`                                |
-| `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`      | No       | `3`                                |
-| `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`   | No       | `1`                                |
-| `INTEXURAOS_CODE_WORKER_IMAGE`            | No       | (GCR Artifact Registry)            |
-| `INTEXURAOS_CODE_WORKER_FORENSICS`        | No       | `0`                                |
-| `INTEXURAOS_CODE_WORKER_FORENSICS_PATH`   | No       | `~/.code-orchestrator/forensics`   |
-| `INTEXURAOS_GIT_USER_NAME`                | No       | (host git config)                  |
-| `INTEXURAOS_GIT_USER_EMAIL`               | No       | (host git config)                  |
-| `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`       | No       | (Secret Manager)                   |
-| `KEEP_CONTAINERS_ALIVE`                   | No       | `0`                                |
-| `PORT`                                    | No       | `8199`                             |
-| `LOG_LEVEL`                               | No       | `info`                             |
+| Variable                                    | Required | Default                            |
+| ------------------------------------------- | -------- | ---------------------------------- |
+| `INTEXURAOS_REPOSITORY_URL`                 | Yes      | -                                  |
+| `INTEXURAOS_CODE_AGENT_URL`                 | Yes      | -                                  |
+| `INTEXURAOS_ORCHESTRATOR_SECRET`            | Yes      | -                                  |
+| `INTEXURAOS_PROJECT_ID`                     | Yes      | -                                  |
+| `INTEXURAOS_GITHUB_APP_ID`                  | Yes      | -                                  |
+| `INTEXURAOS_GITHUB_INSTALLATION_ID`         | Yes      | -                                  |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`            | Yes      | -                                  |
+| `INTEXURAOS_LINEAR_API_KEY`                 | Yes      | -                                  |
+| `INTEXURAOS_SENTRY_AUTH_TOKEN`              | Yes      | -                                  |
+| `INTEXURAOS_GEMINI_APP_API_KEY`             | Yes      | -                                  |
+| `INTEXURAOS_MINIMAX_APP_API_KEY`            | Yes      | -                                  |
+| `INTEXURAOS_MIMO_APP_API_KEY`               | Yes      | -                                  |
+| `INTEXURAOS_DASHSCOPE_APP_API_KEY`          | Yes      | -                                  |
+| `INTEXURAOS_ZAI_APP_API_KEY`                | Yes      | -                                  |
+| `INTEXURAOS_USAGE_WEBHOOK_URL`              | Yes      | -                                  |
+| `GOOGLE_APPLICATION_CREDENTIALS`            | Yes      | -                                  |
+| `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` | No       | (Gemini default)                   |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY`         | No       | (empty — disables compliance)      |
+| `INTEXURAOS_COMPLIANCE_MODEL`               | No       | `xiaomi/mimo-v2-pro`               |
+| `INTEXURAOS_REPOSITORY_PATH`                | No       | `~/.code-orchestrator/repo`        |
+| `INTEXURAOS_WORKER_CAPACITY`                | No       | `2`                                |
+| `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`        | No       | `3`                                |
+| `INTEXURAOS_PRESERVE_WORKER_CONTAINERS`     | No       | `1`                                |
+| `INTEXURAOS_CODE_WORKER_IMAGE`              | No       | (GCR Artifact Registry)            |
+| `INTEXURAOS_CODE_WORKER_FORENSICS`          | No       | `0`                                |
+| `INTEXURAOS_CODE_WORKER_FORENSICS_PATH`     | No       | `~/.code-orchestrator/forensics`   |
+| `INTEXURAOS_GIT_USER_NAME`                  | No       | (host git config)                  |
+| `INTEXURAOS_GIT_USER_EMAIL`                 | No       | (host git config)                  |
+| `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`         | No       | (Secret Manager)                   |
+| `KEEP_CONTAINERS_ALIVE`                     | No       | `0`                                |
+| `PORT`                                      | No       | `8199`                             |
+| `LOG_LEVEL`                                 | No       | `info`                             |
 
 ## Gotchas
 
@@ -634,10 +662,13 @@ LLM-backed task completion validation (Gemini 2.5 Flash):
 - **State file is a single JSON blob:** All tasks are stored in one file. Very high task volumes could cause write contention.
 - **Container preservation is selective:** Only execution and planning containers are preserved on completion. Review, pull request, and remediation containers are destroyed immediately. One preserved container per PR is enforced.
 - **macOS metrics are zero:** `TurnMetricsCollector` relies on cgroup v2. macOS Docker does not expose cgroup paths, so CPU and memory metrics are always zero.
-- **Compliance validation requires OpenRouter key:** Without `INTEXURAOS_OPENROUTER_APP_API_KEY`, the Agent Compliance Validator is not created and compliance reports are not posted on PRs. Completion verification (Gemini) still runs.
+- **Compliance validation requires OpenRouter key:** Without `INTEXURAOS_OPENROUTER_APP_API_KEY`, the Agent Compliance Validator is not created and compliance reports are not posted on PRs. Completion verification still runs.
 - **Ask Agent skips resume preamble:** When a completed ask_agent task is resumed via `sendMessage()`, the user's message is sent directly without the standard orchestrator context wrapper.
 - **Codex auth is separate:** Codex uses ChatGPT device-auth, managed independently from Claude OAuth. Both must be configured for their respective worker types to function.
 - **Fatal exit code detection reads tail only:** The orchestrator scans only the last portion of raw logs for fatal exit codes to prevent false positives from mid-session crash output.
+- **Memory acknowledgment is a soft warning:** Missing individual memory acknowledgment lines produce a soft warning (not a hard failure) when the usage triplet is consistent. Only inconsistent triplets (unaccounted memory IDs) trigger hard failures.
+- **Validation model fallback chain:** If the first model in the validation chain fails, the verifier tries the next. If all models fail, the task fails with `TASK_COMPLETION_VERIFIER_FAILED`.
+- **StatusUpdateClient is redundant:** The status update is sent in addition to the webhook — both deliver terminal status. If the PATCH fails but the webhook succeeds, the task still completes normally.
 
 ## File Structure
 
@@ -646,6 +677,8 @@ workers/orchestrator/src/
 ├── github/
 │   ├── octokit-client.ts
 │   └── token-service.ts
+├── scripts/
+│   └── view-metrics.ts
 ├── services/
 │   ├── isolation/
 │   │   ├── credential-monitor.ts
@@ -668,29 +701,33 @@ workers/orchestrator/src/
 │   │   ├── index.ts
 │   │   ├── registry.ts
 │   │   └── types.ts
+│   ├── activity-timeout-manager.ts
 │   ├── agent-compliance-validator.ts
 │   ├── api-key-validator.ts
 │   ├── compliance-report-schema.ts
 │   ├── completion-verifier.ts
 │   ├── deep-validator-helpers.ts
+│   ├── dispatch-metadata-client.ts
 │   ├── log-formatter.ts
 │   ├── log-forwarder.ts
-│   ├── orchestrator-audit-sink.ts
 │   ├── prompt-builder.ts
 │   ├── repo-manager.ts
 │   ├── sensitive-file-guard.ts
 │   ├── state-persistence.ts
+│   ├── status-update-client.ts
 │   ├── system-prompt.ts
 │   ├── task-dispatcher.ts
 │   ├── transcript-formatter.ts
 │   ├── transcript-reader.ts
 │   ├── turn-metrics-collector.ts
+│   ├── validation-model-clients.ts
 │   ├── webhook-client.ts
 │   └── worktree-manager.ts
 ├── types/
 │   ├── api.ts
 │   ├── config.ts
 │   ├── execution-memory.ts
+│   ├── index.ts
 │   ├── schemas.ts
 │   ├── state.ts
 │   └── task.ts

@@ -90,6 +90,7 @@ sequenceDiagram
 
 | Commit     | Description                                                    | Date       |
 | ---------- | -------------------------------------------------------------- | ---------- |
+| `c12cb8de` | Remove data-insights-agent vocabulary entry (service retired)  | 2026-04-13 |
 | `1d89a24a` | Address review feedback for v8-ignore test coverage            | 2026-03-09 |
 | `5a4f7131` | Add coverage for v8-ignore blocks in speechmatics adapter      | 2026-03-09 |
 | `44ea683a` | Release v3.2.0                                                 | 2026-03-07 |
@@ -99,7 +100,7 @@ sequenceDiagram
 | `07c3b5ec` | Address code review feedback                                   | 2026-03-06 |
 | `08e0f703` | Initial transcription worker service (INT-682)                 | 2026-03-06 |
 
-**Focus:** The service was created in a single feature commit and immediately refined through four refactoring commits addressing code review feedback. The codebase is new and stable.
+**Focus:** The v3.5.0 to v3.6.0 delta is a single vocabulary cleanup — the retired data-insights-agent was removed from the custom vocabulary list. The core transcription pipeline is unchanged.
 
 ## Event Schemas
 

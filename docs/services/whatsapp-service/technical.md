@@ -2,7 +2,7 @@
 
 ## Overview
 
-WhatsApp-service is the integration layer between WhatsApp Business API and IntexuraOS. It receives webhooks from Meta, validates signatures, stores messages in Firestore, downloads media to GCS, tracks outbound messages for reply correlation, and publishes events via Pub/Sub for async processing. Audio transcription is delegated to srt-service via event-driven architecture. Runs on Cloud Run with auto-scaling.
+WhatsApp-service is the integration layer between WhatsApp Business API and IntexuraOS. It receives webhooks from Meta, validates signatures, stores messages in Firestore, downloads media to GCS, tracks outbound messages for reply correlation, filters outbound deliveries by user notification preferences, and publishes events via Pub/Sub for async processing. Audio transcription is delegated to srt-service via event-driven architecture. Runs on Cloud Run with auto-scaling.
 
 ## Architecture
 
@@ -82,6 +82,34 @@ sequenceDiagram
     WS-->>-PS: Ack
 ```
 
+### Outbound Message Flow (with Notification Importance Filter)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Caller as Publishing Service
+    participant PS as Pub/Sub
+    participant WS as WhatsApp Service
+    participant FS as Firestore
+    participant WA as WhatsApp
+
+    Caller->>PS: Publish whatsapp.message.send (important?: boolean)
+    PS->>+WS: POST /internal/.../send-message
+
+    WS->>FS: Lookup phone number by userId
+    WS->>FS: Read notification preferences (notificationLevel)
+
+    alt level=all OR important=true
+        WS->>WA: Send message (text / interactive / CTA)
+        WA-->>WS: Return wamid
+        WS->>FS: Save OutboundMessage (wamid, correlationId)
+        WS-->>-PS: 200 OK
+    else level=important AND important is falsy
+        WS-->>PS: 200 OK (message dropped)
+        Note over WS: Logged as "Dropping non-important WhatsApp message per user preference"
+    end
+```
+
 ### Approval Reply Correlation
 
 ```mermaid
@@ -110,20 +138,32 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                                                       | Date       |
-| ---------- | --------------------------------------------------------------------------------- | ---------- |
-| `e93fe94f` | Exclude 429 from permanent error classification in send-message handler           | 2026-03-29 |
-| `9ef663f5` | Prevent Sentry quota exhaustion from WhatsApp message failures (INT-1172)         | 2026-03-29 |
-| `549c9698` | Enforce strict v8 ignore validation with blocker keyword checks                   | 2026-03-24 |
-| `613ac528` | Replace v8 ignore override blocks with real tests (INT-1072)                      | 2026-03-23 |
+| Commit     | Description                                                                 | Date       |
+| ---------- | --------------------------------------------------------------------------- | ---------- |
+| `63d174c0` | Cover savePreferences failure + v8-ignore for unreachable Zod branch        | 2026-04-21 |
+| `62d6d647` | Add GET/PUT /whatsapp/preferences endpoints for notification level          | 2026-04-21 |
+| `85a49b38` | Filter WhatsApp deliveries by notification importance level                 | 2026-04-20 |
+| `244ee42d` | Mirror important flag on internal SendMessageEvent                          | 2026-04-20 |
+| `e6e96ee7` | Wire NotificationPreferencesRepository into service container               | 2026-04-20 |
+| `19ec20d7` | Add Firestore notificationPreferencesRepository implementation              | 2026-04-20 |
+| `0a45e125` | Add NotificationPreferencesRepository port                                  | 2026-04-20 |
+| `f83ef671` | Add shouldDeliverMessage domain use case                                    | 2026-04-20 |
+| `0909adb4` | Add NotificationPreferences domain model                                    | 2026-04-20 |
+
+### Notification Importance Filter (INT-1418)
+
+Users can suppress low-priority WhatsApp notifications by setting their notification level to `important`. The feature spans:
+
+1. **Domain model:** `NotificationPreferences` with `notificationLevel: 'all' | 'important'`
+2. **Use case:** `shouldDeliverMessage()` — returns `true` when level is `all` or when the message is flagged `important`
+3. **Repository:** `NotificationPreferencesRepository` stores the level on the `whatsapp_user_mappings/{userId}` document (private `notificationLevel` field)
+4. **Endpoints:** `GET /whatsapp/preferences` and `PUT /whatsapp/preferences` for reading and updating the level
+5. **Send-message handler:** Before sending, reads the user's preference and drops non-important messages when level is `important`
+6. **Privacy contract:** The notification level is never returned by `/whatsapp/status`, never published on Pub/Sub, and never read by other services
 
 ### Sentry Quota Protection (INT-1172)
 
 WhatsApp API errors in `sender.ts` now use `SKIP_SENTRY_KEY` on all error log entries. This prevents expected transient failures (network timeouts, Meta API errors) from consuming Sentry quota. The fix applies to three paths: non-2xx API responses, request timeouts, and fetch exceptions. Additionally, HTTP 429 (rate limit) responses are excluded from the permanent error classification in the send-message Pub/Sub handler, ensuring they are retried via Pub/Sub instead of being silently acknowledged.
-
-### v8 Ignore Standardization (INT-1072)
-
-Replaced v8 ignore override blocks with real tests across code-agent and cross-service files, removing the need for the whatsapp-service entry in override configuration.
 
 ## API Endpoints
 
@@ -148,6 +188,8 @@ Replaced v8 ignore override blocks with real tests across code-agent and cross-s
 | POST   | `/whatsapp/verify/send`                    | Send phone verification code               | Bearer token |
 | POST   | `/whatsapp/verify/confirm`                 | Confirm verification code                  | Bearer token |
 | GET    | `/whatsapp/verify/status/:phone`           | Check phone verification status            | Bearer token |
+| GET    | `/whatsapp/preferences`                    | Get notification preferences               | Bearer token |
+| PUT    | `/whatsapp/preferences`                    | Update notification preferences            | Bearer token |
 
 ### Internal Endpoints
 
@@ -181,17 +223,25 @@ Replaced v8 ignore override blocks with real tests across code-agent and cross-s
 | `webhookEventId`   | `string`                           | Associated webhook event ID        |
 | `metadata`         | `WhatsAppMessageMetadata \         | undefined`                         | senderName, phoneNumberId |
 
+### NotificationPreferences
+
+| Field               | Type                        | Description                  |
+| ------------------- | --------------------------- | ---------------------------- |
+| `notificationLevel` | `'all' \                    | 'important'`                 | User's notification filter |
+
+Default: `all` (deliver every outbound message). When `important`, only messages with `important: true` on the `SendMessageEvent` are delivered. The preference is stored as a field on the `whatsapp_user_mappings/{userId}` document and is never exposed outside whatsapp-service.
+
 ### TranscriptionState
 
-| Field         | Type                             | Description               |
-| ------------- | -------------------------------- | ------------------------- |
-| `status`      | `'pending' \                     | 'processing' \            | 'completed' \ | 'failed'` | Transcription progress |
-| `jobId`       | `string \                        | undefined`                | Provider job ID |
-| `text`        | `string \                        | undefined`                | Full transcribed text |
-| `summary`     | `string \                        | undefined`                | AI-generated key points |
-| `error`       | `TranscriptionError \            | undefined`                | Error details if failed |
-| `startedAt`   | `string \                        | undefined`                | When processing started |
-| `completedAt` | `string \                        | undefined`                | When completed or failed |
+| Field         | Type                                                              | Description               |
+| ------------- | ----------------------------------------------------------------- | ------------------------- |
+| `status`      | `'pending' \                                                      | 'processing' \            | 'completed' \ | 'failed'` | Transcription progress |
+| `jobId`       | `string \                                                         | undefined`                | Provider job ID |
+| `text`        | `string \                                                         | undefined`                | Full transcribed text |
+| `summary`     | `string \                                                         | undefined`                | AI-generated key points |
+| `error`       | `TranscriptionError \                                             | undefined`                | Error details if failed |
+| `startedAt`   | `string \                                                         | undefined`                | When processing started |
+| `completedAt` | `string \                                                         | undefined`                | When completed or failed |
 
 ### OutboundMessage
 
@@ -209,29 +259,29 @@ Tracks sent messages for reply correlation. Uses wamid as document ID for effici
 
 Tracks phone number verification attempts with rate limiting and cooldown.
 
-| Field           | Type                                                     | Description                  |
-| --------------- | -------------------------------------------------------- | ---------------------------- |
-| `id`            | `string`                                                 | Unique verification ID       |
-| `userId`        | `string`                                                 | User requesting verification |
-| `phoneNumber`   | `string`                                                 | Phone number being verified  |
-| `code`          | `string`                                                 | 6-digit verification code    |
-| `attempts`      | `number`                                                 | Failed attempt count         |
-| `status`        | `'pending' \                                             | 'verified' \                 | 'expired' \ | 'max_attempts'` | Verification progress |
-| `createdAt`     | `string`                                                 | ISO 8601 creation time       |
-| `expiresAt`     | `number`                                                 | Unix timestamp (10 min TTL)  |
-| `lastAttemptAt` | `string \                                                | undefined`                   | Last failed attempt time |
-| `verifiedAt`    | `string \                                                | undefined`                   | When verification succeeded |
+| Field           | Type                                                         | Description                  |
+| --------------- | ------------------------------------------------------------ | ---------------------------- |
+| `id`            | `string`                                                     | Unique verification ID       |
+| `userId`        | `string`                                                     | User requesting verification |
+| `phoneNumber`   | `string`                                                     | Phone number being verified  |
+| `code`          | `string`                                                     | 6-digit verification code    |
+| `attempts`      | `number`                                                     | Failed attempt count         |
+| `status`        | `'pending' \                                                 | 'verified' \                 | 'expired' \ | 'max_attempts'` | Verification progress |
+| `createdAt`     | `string`                                                     | ISO 8601 creation time       |
+| `expiresAt`     | `number`                                                     | Unix timestamp (10 min TTL)  |
+| `lastAttemptAt` | `string \                                                    | undefined`                   | Last failed attempt time |
+| `verifiedAt`    | `string \                                                    | undefined`                   | When verification succeeded |
 
 ### WebhookEvent
 
-| Field            | Type                                                                     | Description                   |
-| ---------------- | ------------------------------------------------------------------------ | ----------------------------- |
-| `id`             | `string`                                                                 | Unique event ID               |
-| `payload`        | `unknown`                                                                | Raw webhook payload           |
-| `signatureValid` | `boolean`                                                                | Signature verification result |
-| `receivedAt`     | `string`                                                                 | ISO 8601 timestamp            |
-| `phoneNumberId`  | `string \                                                                | null`                         | WhatsApp phone number ID |
-| `status`         | `'pending' \                                                             | 'completed' \                 | 'failed' \ | 'ignored' \ | 'user_unmapped'` | Processing status |
+| Field            | Type                                                                                           | Description                   |
+| ---------------- | ---------------------------------------------------------------------------------------------- | ----------------------------- |
+| `id`             | `string`                                                                                       | Unique event ID               |
+| `payload`        | `unknown`                                                                                      | Raw webhook payload           |
+| `signatureValid` | `boolean`                                                                                      | Signature verification result |
+| `receivedAt`     | `string`                                                                                       | ISO 8601 timestamp            |
+| `phoneNumberId`  | `string \                                                                                      | null`                         | WhatsApp phone number ID |
+| `status`         | `'pending' \                                                                                   | 'completed' \                 | 'failed' \ | 'ignored' \ | 'user_unmapped'` | Processing status |
 
 ### UserMapping
 
@@ -281,17 +331,33 @@ interface ApprovalReplyEvent {
 }
 ```
 
+### SendMessageEvent Schema
+
+```typescript
+interface SendMessageEvent {
+  type: 'whatsapp.message.send';
+  userId: string;
+  message: string;
+  replyToMessageId?: string;
+  buttons?: WhatsAppInteractiveButton[];
+  ctaUrl?: { displayText: string; url: string };
+  important?: boolean;      // When true, delivery bypasses 'important'-only filter
+  correlationId: string;
+  timestamp: string;
+}
+```
+
 ## Dependencies
 
 ### Firestore Collections
 
-| Collection                     | Purpose                    | Owner            |
-| ------------------------------ | -------------------------- | ---------------- |
-| `whatsapp_messages`            | Message persistence        | whatsapp-service |
-| `whatsapp_webhook_events`      | Webhook event log          | whatsapp-service |
-| `whatsapp_user_mappings`       | Phone number mappings      | whatsapp-service |
-| `whatsapp_outbound_messages`   | Outbound message tracking  | whatsapp-service |
-| `whatsapp_phone_verifications` | Phone verification records | whatsapp-service |
+| Collection                     | Purpose                                                  | Owner            |
+| ------------------------------ | -------------------------------------------------------- | ---------------- |
+| `whatsapp_messages`            | Message persistence                                      | whatsapp-service |
+| `whatsapp_webhook_events`      | Webhook event log                                        | whatsapp-service |
+| `whatsapp_user_mappings`       | Phone number mappings + notification preferences         | whatsapp-service |
+| `whatsapp_outbound_messages`   | Outbound message tracking                                | whatsapp-service |
+| `whatsapp_phone_verifications` | Phone verification records                               | whatsapp-service |
 
 ### External APIs
 
@@ -342,6 +408,10 @@ Uses HMAC-SHA256 with app secret. Signature is in `X-Hub-Signature-256` header. 
 ### Async Webhook Processing Pattern
 
 The POST /whatsapp/webhooks handler returns 200 immediately after saving the event and publishing `whatsapp.webhook.process`. Heavy processing (media download, user lookup, Pub/Sub fan-out) happens asynchronously via the process-webhook internal endpoint. This avoids Meta's 20-second webhook timeout.
+
+### Notification Importance Filter (INT-1418)
+
+The send-message Pub/Sub handler reads the user's notification preferences before sending. If `notificationLevel` is `important` and the `SendMessageEvent.important` field is absent or `false`, the message is silently dropped with a 200 OK (acknowledged, not retried). The preference defaults to `all` when no stored preference exists or when the read fails — the service falls back to delivering in case of Firestore errors. The `notificationLevel` field is stored on the `whatsapp_user_mappings/{userId}` document alongside the phone mapping data but is owned exclusively by `NotificationPreferencesRepository`. The `GET /whatsapp/status` endpoint never surfaces this field.
 
 ### Reply Correlation Pattern
 
@@ -444,6 +514,7 @@ apps/whatsapp-service/src/
         eventPublisher.ts
         messageSender.ts              # sendTextMessage, sendInteractiveMessage, sendCtaUrlMessage
         outboundMessageRepository.ts
+        notificationPreferencesRepository.ts  # getPreferences, savePreferences
         repositories.ts               # PhoneVerificationRepository, WhatsAppMessageRepository
         whatsappCloudApi.ts           # markAsReadWithTyping
         linkPreviewFetcher.ts
@@ -455,10 +526,12 @@ apps/whatsapp-service/src/
         processImageMessage.ts        # Download + thumbnail + store image
         handleTranscriptionCompleted.ts  # Handle srt-service transcription result
         extractLinkPreviews.ts        # Open Graph metadata extraction
+        shouldDeliverMessage.ts       # Notification importance filter decision logic
       events/
-        events.ts                     # All event type definitions
+        events.ts                     # All event type definitions (SendMessageEvent.important)
       models/
         WhatsAppMessage.ts
+        NotificationPreferences.ts    # NotificationLevel, NotificationPreferences
         PhoneVerification.ts
         LinkPreview.ts
         error.ts
@@ -470,6 +543,7 @@ apps/whatsapp-service/src/
       userMappingRepository.ts
       outboundMessageRepository.ts
       phoneVerificationRepository.ts
+      notificationPreferencesRepository.ts  # Reads/writes notificationLevel on whatsapp_user_mappings
     gcs/
     whatsapp/
       cloudApiAdapter.ts              # markAsReadWithTyping
@@ -484,7 +558,8 @@ apps/whatsapp-service/src/
     messageRoutes.ts                  # GET /whatsapp/messages (list)
     messageMediaRoutes.ts             # GET media, GET thumbnail, DELETE message
     mappingRoutes.ts                  # Verification-gated connect
-    pubsubRoutes.ts                   # send-message (429 retry), media-cleanup, transcription-completed, process-webhook
+    preferencesRoutes.ts              # GET/PUT /whatsapp/preferences (INT-1418)
+    pubsubRoutes.ts                   # send-message (importance filter, 429 retry), media-cleanup, transcription-completed, process-webhook
     verificationRoutes.ts
     shared.ts                         # extractButtonResponse (button/button_reply fix)
     schemas.ts

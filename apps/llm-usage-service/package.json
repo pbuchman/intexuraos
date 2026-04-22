@@ -1,9 +1,11 @@
 {
   "name": "@intexuraos/llm-usage-service",
-  "version": "0.0.1",
+  "version": "3.6.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.0.0" },
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "build": "node ../../scripts/build-service.mjs llm-usage-service",
     "typecheck": "tsc --noEmit",

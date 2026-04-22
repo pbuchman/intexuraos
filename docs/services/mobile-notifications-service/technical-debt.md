@@ -1,7 +1,7 @@
 # Mobile Notifications Service — Technical Debt
 
-**Last Updated:** 2026-04-07
-**Analysis Run:** [2026-04-07 v3.5.0 documentation refresh](../../documentation-runs.md)
+**Last Updated:** 2026-04-22
+**Analysis Run:** [2026-04-22 v3.6.0 documentation refresh](../../documentation-runs.md)
 
 ---
 
@@ -9,22 +9,23 @@
 
 | Category    | Count | Severity |
 | ----------- | ----- | -------- |
-| Code Smells | 0     | —        |
+| Code Smells | 1     | Medium   |
 | Test Gaps   | 0     | —        |
 | Type Issues | 0     | —        |
 | TODOs       | 0     | —        |
-| **Total**   | **0** | —        |
+| **Total**   | **1** | —        |
 
 ---
 
 ## Future Plans
 
-1. **Push provider integration** — Direct FCM/APNs integration to push notifications back to devices (currently only stores for polling/internal queries)
-2. **iOS support** — Expand beyond Android/Tasker to iOS Shortcuts or native companion app
-3. **Rich notifications** — Support images, action buttons, and sound customization in webhook payloads
-4. **Scheduled delivery** — Time-based push scheduling for notification reminders
+1. **Firestore-backed digest subscriptions** — Replace the hard-coded `DIGEST_SUBSCRIPTIONS` array in `digestSubscriptions.ts` with a `notification_digest_subscriptions` Firestore collection and self-service subscription management endpoints (see INT-1382 code comment)
+2. **Push provider integration** — Direct FCM/APNs integration to push notifications back to devices (currently only stores for polling/internal queries)
+3. **iOS support** — Expand beyond Android/Tasker to iOS Shortcuts or native companion app
+4. **Rich notifications** — Support images, action buttons, and sound customization in webhook payloads
 5. **Batch operations** — Bulk notification management (bulk delete, bulk mark-as-read)
 6. **Notification categories** — AI-powered automatic categorization of notifications by type (chat, alert, transaction, etc.)
+7. **Configurable digest timezone** — Currently hard-coded to `Europe/Warsaw` (CET/CEST); support per-user timezone selection
 
 ---
 
@@ -36,7 +37,9 @@ _None identified._
 
 ### Medium Priority
 
-_None identified._
+| File                         | Issue                                                                                                    | Impact                                                                            |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `src/routes/digestRoutes.ts` | Single route file handles all digest endpoints (internal cron, internal run, user-facing CRUD, backfill) | Approaching SRP threshold; will become harder to navigate as digest features grow |
 
 ### Low Priority
 
@@ -64,7 +67,7 @@ _None found in codebase._
 
 ## SRP Violations
 
-_None identified. All route files are within the 300-line threshold._
+_None exceeding threshold currently, but `digestRoutes.ts` is the largest route file and should be monitored._
 
 ---
 
@@ -82,14 +85,18 @@ _None identified._
 
 ## Resolved Issues
 
-| Date       | Issue                                   | Resolution                                                                                    |
-| ---------- | --------------------------------------- | --------------------------------------------------------------------------------------------- |
-| 2026-03-24 | v8 ignore explanations lacked blockers  | Updated annotations with correct blocker keywords as part of platform-wide enforcement pass   |
-| 2026-03-11 | v8 ignore blocks in repositories/routes | Replaced with real tests for Firestore error paths; reduced to 10 directives across 4 files   |
-| 2026-02-01 | Response contract violations            | All routes migrated to standardized `reply.ok()` / `reply.fail()` contract                    |
-| 2026-02-01 | Direct pino() usage                     | Replaced with `createAppLogger()` from `@intexuraos/infra-sentry`                             |
-| 2026-02-01 | Inconsistent internal error format      | Internal routes now return `{ success, error: { code, message } }`                            |
-| 2026-02-02 | 100% branch coverage not enforced       | Added v8 ignore exemptions for TypeScript-only safety branches; strict enforcement now active |
+| Date       | Issue                                                        | Resolution                                                                                    |
+| ---------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| 2026-04-22 | 5-batch cap in title filter caused incomplete results        | Removed cap; title filter now iterates all matching batches (INT-1398)                        |
+| 2026-04-22 | Digest timestamp filter used milliseconds instead of seconds | Fixed to use seconds for postTimeSec field (INT-1412)                                         |
+| 2026-04-22 | Missing daily digest summaries from cron                     | Fixed run-yesterday endpoint dispatching (INT-1420)                                           |
+| 2026-04-22 | Digest LLM usage not reported                                | Restored HttpInternalAuthUsageSink with brand (INT-1421)                                      |
+| 2026-03-24 | v8 ignore explanations lacked blockers                       | Updated annotations with correct blocker keywords as part of platform-wide enforcement pass   |
+| 2026-03-11 | v8 ignore blocks in repositories/routes                      | Replaced with real tests for Firestore error paths; reduced to 10 directives across 4 files   |
+| 2026-02-01 | Response contract violations                                 | All routes migrated to standardized `reply.ok()` / `reply.fail()` contract                    |
+| 2026-02-01 | Direct pino() usage                                          | Replaced with `createAppLogger()` from `@intexuraos/infra-sentry`                             |
+| 2026-02-01 | Inconsistent internal error format                           | Internal routes now return `{ success, error: { code, message } }`                            |
+| 2026-02-02 | 100% branch coverage not enforced                            | Added v8 ignore exemptions for TypeScript-only safety branches; strict enforcement now active |
 
 ---
 

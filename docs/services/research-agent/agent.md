@@ -1,4 +1,4 @@
-# research-agent -- Agent Interface
+# research-agent — Agent Interface
 
 > **Machine-readable specification for AI agent integration**
 
@@ -219,7 +219,7 @@ interface ValidateInputOutput {
 
 **Auth:** Bearer JWT
 
-**When to use:** When research status is `awaiting_confirmation` -- one or more models failed while others succeeded.
+**When to use:** When research status is `awaiting_confirmation` — one or more models failed while others succeeded.
 
 **Input Schema:**
 
@@ -348,7 +348,7 @@ interface ServiceFeedback {
 
 - User must have LLM API keys configured in user-service for the selected models
 - OpenRouter models require an OpenRouter API key configured in user-service
-- Synthesis model API key must be present -- missing key causes immediate `failed` status
+- Synthesis model API key must be present — missing key causes immediate `failed` status
 - Notion export requires `POST /research/settings/notion` to be configured first
 
 ## Usage Patterns
@@ -395,7 +395,7 @@ interface ServiceFeedback {
 ### Pattern 5: OpenRouter Model Discovery
 
 ```
-1. GET /research/openrouter/models -> list of 14 curated models with pricing
+1. GET /research/openrouter/models -> list of 15 curated models with pricing
 2. Select models by id, prefix with 'or:' for selectedModels array
 3. POST /research with or:-prefixed model IDs alongside native models
 ```
@@ -417,17 +417,17 @@ interface ServiceFeedback {
 | ------------------------------------------ | ------------------ | ------------------------------------------------- | ----------------------------------------- |
 | `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | `research.process` | After `POST /research` or draft approved          | `researchId`, `userId`, `triggeredBy`     |
 | `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`         | `llm.call`         | Once per model during process-research            | `researchId`, `userId`, `model`, `prompt` |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | WhatsApp send      | On LLM failure or research completion             | notification payload                      |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | WhatsApp send      | On LLM failure or research completion             | notification payload (`important: true`)  |
 
 ## Dependencies
 
-| Service              | Why Needed                                            | Failure Behavior                               |
-| -------------------- | ----------------------------------------------------- | ---------------------------------------------- |
-| user-service         | Fetch API keys; report LLM success analytics          | Research fails if keys unavailable             |
-| app-settings-service | Load LLM pricing at startup                           | Service fails to start if unreachable          |
-| image-service        | Generate cover image for share page                   | Skipped with provider failover; graceful       |
-| notion-service       | Validate Notion page IDs; execute Notion export       | Export skipped if unavailable; fire-and-forget |
-| whatsapp-service     | Send completion and failure notifications via Pub/Sub | Notification dropped; research unaffected      |
-| OpenRouter API       | Route LLM calls; fetch live pricing catalog           | Call fails; pricing falls back to allowlist    |
-| Cloud Pub/Sub        | Fan-out LLM calls; trigger processing pipeline        | Research stuck in pending/processing if down   |
-| GCS                  | Upload shareable HTML page                            | Share URL absent from completed research       |
+| Service           | Why Needed                                            | Failure Behavior                               |
+| ----------------- | ----------------------------------------------------- | ---------------------------------------------- |
+| user-service      | Fetch API keys; report LLM success analytics          | Research fails if keys unavailable             |
+| llm-usage-service | Report LLM token usage and cost per call              | Usage not recorded; research unaffected        |
+| image-service     | Generate cover image for share page                   | Skipped with provider failover; graceful       |
+| notion-service    | Validate Notion page IDs; execute Notion export       | Export skipped if unavailable; fire-and-forget |
+| whatsapp-service  | Send completion and failure notifications via Pub/Sub | Notification dropped; research unaffected      |
+| OpenRouter API    | Route LLM calls; fetch live pricing catalog           | Call fails; pricing falls back to allowlist    |
+| Cloud Pub/Sub     | Fan-out LLM calls; trigger processing pipeline        | Research stuck in pending/processing if down   |
+| GCS               | Upload shareable HTML page                            | Share URL absent from completed research       |
