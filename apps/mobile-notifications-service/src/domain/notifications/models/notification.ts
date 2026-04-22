@@ -16,7 +16,7 @@ export interface Notification {
   title: string;
   /** Notification content/body */
   text: string;
-  /** Timestamp from the device (Unix milliseconds) */
+  /** Timestamp from the device (Unix seconds; Tasker webhook sends %TIMES). */
   timestamp: number;
   /** Post time string from device */
   postTime: string;

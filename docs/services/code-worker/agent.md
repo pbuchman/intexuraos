@@ -45,7 +45,7 @@ interface WorkerConfig {
     | 'codex-xhigh'
     | 'openrouter-free';
   runtimeOverride?: 'claude' | 'codex';
-  runtimeSessionId?: string;
+  runtimeSessionId?: string; // CLAUDE_SESSION_ID or CODEX_THREAD_ID — required when continueSession is true
   secrets: WorkerSecrets;
   gcpSaKeyPath: string;
   githubAppKeyPath: string;
@@ -149,7 +149,7 @@ interface WorkerTypeConfig {
 10. When `continueSession: true` is passed to `createWorker`, it restores a preserved container (via `preservedWorkers` map) or reconnects to an orphaned container by name (`code-worker-{taskId}`).
 11. The container syncs environment variables from GCP Secret Manager at startup via `scripts/sync-secrets.sh`. The orchestrator does not need to pre-sync secrets.
 12. Crash forensics are enabled by setting `WORKER_FORENSICS=1`. The forensics directory must be bind-mounted if the orchestrator needs to access artifacts after container destruction.
-13. **Codex resume requires `CODEX_THREAD_ID`.** When `WORKER_CONTINUE=1` is set for a Codex runtime attempt, the `CODEX_THREAD_ID` environment variable must also be set. Without it, the entrypoint exits with an error.
+13. **Both runtimes require session IDs for resume.** When `WORKER_CONTINUE=1` is set, Claude requires `CLAUDE_SESSION_ID` and Codex requires `CODEX_THREAD_ID`. Without the respective ID, the entrypoint exits with an error. Claude uses `--resume <sessionId>` (not `--continue`, which silently creates fresh sessions in `--print` mode).
 14. **Runtime selection is via `WORKER_RUNTIME`.** The entrypoint dispatches to `run_claude_attempt()` or `run_codex_attempt()` based on this env var. Default is `claude`.
 
 ---

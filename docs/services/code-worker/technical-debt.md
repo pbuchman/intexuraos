@@ -1,7 +1,7 @@
 # Code Worker — Technical Debt
 
-**Last Updated:** 2026-04-07
-**Analysis Run:** v3.5.0 documentation refresh (Codex runtime support, live streaming, worker type expansion)
+**Last Updated:** 2026-04-22
+**Analysis Run:** v3.6.0 documentation refresh (Claude resume fix — `--resume` replaces `--continue`)
 
 ---
 
@@ -121,6 +121,12 @@ No TODO, FIXME, or HACK comments found in the worker codebase.
 ---
 
 ## Resolved Issues
+
+### Claude Resume Silent Fresh Session (2026-04-10)
+
+**Issue:** The `--continue` flag in Claude's `--print` mode with `--system-prompt` override silently created a fresh session instead of resuming the prior one. Resume attempts appeared to work but lost all prior context.
+
+**Resolution:** Replaced `--continue` with `--resume "$CLAUDE_SESSION_ID"`, which is the only reliable mechanism for session resumption in this invocation shape. Added a fail-fast guard requiring `CLAUDE_SESSION_ID` when `WORKER_CONTINUE=1` — mirroring the existing Codex guard for `CODEX_THREAD_ID`.
 
 ### Codex Output Buffering (2026-04-04)
 

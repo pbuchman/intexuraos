@@ -67,10 +67,50 @@ export interface UsageLogParams {
 }
 
 /**
- * Sink contract for persisting usage events.
+ * Sink contract for persisting LLM usage events.
+ *
+ * `UsageSink` is an **abstract class with a private brand**, not a structural
+ * interface. This is deliberate: TypeScript's `private` modifier makes the
+ * type **nominal**, so an inline object literal like
+ * `{ log: () => Promise.resolve() }` — a bespoke no-op — is rejected at
+ * compile time ("Property '__usageSinkBrand' is missing"). Only classes that
+ * `extends UsageSink` inherit the brand and can be passed where a `UsageSink`
+ * is required.
+ *
+ * Every LLM call in the monorepo MUST report usage through one of the
+ * officially-sanctioned sinks:
+ *
+ * - Production services → {@link HttpInternalAuthUsageSink} (posts to
+ *   `llm-usage-service`).
+ * - Webhook-style integrations → {@link HttpWebhookUsageSink}.
+ * - Tests → {@link FakeUsageSink} (captures records for assertions).
+ * - CLI tools / scripts that genuinely opt out → {@link NoopUsageSink}.
+ *
+ * If you find yourself reaching for an inline no-op, you are bypassing
+ * observability. Use {@link NoopUsageSink} instead — its name is the audit
+ * trail, and code review has a fighting chance to notice.
  */
-export interface UsageSink {
-  log(params: UsageLogParams): Promise<void>;
+export abstract class UsageSink {
+  /**
+   * Nominal brand. The `private` modifier means external code cannot
+   * synthesise this field; subclasses inherit it and satisfy the type.
+   * Do not remove, rename, or duplicate on ad-hoc objects.
+   */
+  private readonly __usageSinkBrand = 'UsageSink' as const;
+
+  abstract log(params: UsageLogParams): Promise<void>;
+
+  /**
+   * Accessor exposed purely so the private brand field is referenced and
+   * TypeScript's `noUnusedLocals` flag does not strip it. Never call this
+   * outside of regression tests — it leaks the brand name and has no
+   * business purpose.
+   *
+   * @internal
+   */
+  get __brand(): 'UsageSink' {
+    return this.__usageSinkBrand;
+  }
 }
 
 /**
@@ -80,8 +120,8 @@ export interface UsageSink {
  * do not want usage tracking. No longer used as a silent default — every
  * LLM client construction must pass an explicit sink.
  */
-export class NoopUsageSink implements UsageSink {
-  log(): Promise<void> {
+export class NoopUsageSink extends UsageSink {
+  override log(): Promise<void> {
     return Promise.resolve();
   }
 }

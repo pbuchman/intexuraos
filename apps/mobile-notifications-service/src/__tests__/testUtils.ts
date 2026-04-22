@@ -1,7 +1,3 @@
-/**
- * Shared test utilities for mobile-notifications-service tests.
- * Provides JWT token generation and test setup helpers.
- */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
@@ -12,7 +8,8 @@ import {
   FakeNotificationRepository,
   FakeSignatureConnectionRepository,
 } from './fakes.js';
-import { resetServices, setServices } from '../services.js';
+import { resetServices } from '../services.js';
+import { setMockServices } from './helpers/mockServices.js';
 
 export const issuer = 'https://test-issuer.example.com/';
 export const audience = 'test-audience';
@@ -20,9 +17,6 @@ export const audience = 'test-audience';
 let jwksServer: FastifyInstance;
 let privateKey: jose.KeyLike;
 
-/**
- * Create a signed JWT token for tests.
- */
 export async function createToken(
   claims: Record<string, unknown>,
   options?: { expiresIn?: string }
@@ -42,9 +36,6 @@ export async function createToken(
   return await builder.sign(privateKey);
 }
 
-/**
- * Setup global JWKS server for all tests.
- */
 export async function setupJwksServer(): Promise<void> {
   const { publicKey, privateKey: privKey } = await jose.generateKeyPair('RS256');
   privateKey = privKey;
@@ -70,9 +61,6 @@ export async function setupJwksServer(): Promise<void> {
   }
 }
 
-/**
- * Teardown JWKS server.
- */
 export async function teardownJwksServer(): Promise<void> {
   await jwksServer.close();
   delete process.env['INTEXURAOS_AUTH_JWKS_URL'];
@@ -87,9 +75,6 @@ export interface TestContext {
   filtersRepo: FakeNotificationFiltersRepository;
 }
 
-/**
- * Setup test environment with mock services.
- */
 export function setupTestContext(): TestContext {
   const context: TestContext = {
     app: null as unknown as FastifyInstance,
@@ -111,7 +96,7 @@ export function setupTestContext(): TestContext {
     context.notificationRepo = new FakeNotificationRepository();
     context.filtersRepo = new FakeNotificationFiltersRepository();
 
-    setServices({
+    setMockServices({
       signatureConnectionRepository: context.signatureRepo,
       notificationRepository: context.notificationRepo,
       notificationFiltersRepository: context.filtersRepo,

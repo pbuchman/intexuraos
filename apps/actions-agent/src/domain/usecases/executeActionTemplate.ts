@@ -192,6 +192,7 @@ export function createExecuteActionTemplate(
         userId: action.userId,
         message: whatsappMessage,
         correlationId: `${config.correlationPrefix}-${actionId}`,
+        important: true,
       });
 
       if (!publishResult.ok) {

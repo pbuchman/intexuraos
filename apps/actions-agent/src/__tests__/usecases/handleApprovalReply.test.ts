@@ -140,6 +140,9 @@ describe('HandleApprovalReplyUseCase', () => {
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0]?.message).toContain('no longer available');
       expect(sentMessages[0]?.userId).toBe('user-1');
+      // INT-1418: action-not-found notifications must be flagged important so users
+      // opted into "important only" still see that their reply did not match any action.
+      expect(sentMessages[0]?.important).toBe(true);
     });
 
     it('cleans up orphaned approval message when action not found via wamid lookup', async () => {

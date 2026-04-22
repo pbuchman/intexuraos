@@ -1,5 +1,55 @@
 # Changelog
 
+## 3.6.0
+
+### Added
+
+- End-to-end WhatsApp group digest pipeline with AI-generated daily summaries (INT-1382)
+- Centralized LLM pricing into a single shared package, removing duplicated definitions across 9 services (INT-1387)
+- Notification importance level filter for WhatsApp messages (INT-1418)
+- Primary and fallback default LLM model selection with automatic retry (INT-1362)
+- Prompt type tracking through the full LLM call stack (INT-1390)
+- Task mode selector for explicit planning/execution choice (INT-1360)
+- Important flag for issue groups (INT-1383)
+- GitHub agent now inherits user default LLM model settings (INT-1389)
+- Dedicated status endpoint for robust task finalization (INT-1414)
+- PR triage processing via Pub/Sub push subscription (INT-1406)
+- Self-healing failure triage system for code tasks (INT-1375)
+- `gemini-3-flash-preview` to OpenRouter model allowlist (INT-1394)
+- Paid Gemma 4 31B IT model option (INT-1385)
+- Success/failure status column in LLM usage events table (INT-1374)
+- Battlefield as top-level navigation item (INT-1419)
+- Code Task Log filtering by Codex lines (INT-1402)
+- Notification message deduplication utility for digest pipeline (INT-1395)
+- Automatic `ready-to-merge` label on execution task completion (INT-1391)
+- Worker log filter with `[msg]` pattern support (INT-1393)
+
+### Changed
+
+- Code tasks now block on draft pull requests (INT-1345)
+- Digests moved to top-level sidebar item (INT-1416)
+- Renamed `claude-worker` build step to `code-worker` (INT-1368)
+- Usage-webhook gateway aligned with v2 schema (INT-1378)
+
+### Fixed
+
+- Missing daily mobile notification summaries silently dropped (INT-1420)
+- Digest timestamp filter using milliseconds instead of seconds (INT-1412)
+- Deployment pipeline failing on retired `data-insights-agent` (INT-1370)
+- Digest group filtering matching on slug instead of `groupTitlePrefix` (INT-1409)
+- LLM Usage 500 error on group-by Prompt Type (INT-1422)
+- Collapsing behavior for orchestrator and entrypoint log items (INT-1367)
+- Merge step firing for already-closed or merged PRs (INT-1380)
+
+### Improved
+
+- PWA resilience for Android HyperOS (INT-1376)
+- Execution memory pipeline simplified for reduced complexity (INT-1403)
+- Orchestrator memory acknowledgment recovery for interrupted tasks (INT-1415)
+- Orchestrator log cap raised to 8 MB, task timeout extended to 5 hours
+- Digest LLM usage reporting restored with `UsageSink` brand (INT-1421)
+- Mobile notifications filter batch cap removed (INT-1398)
+
 ## 3.5.0
 
 ### Added

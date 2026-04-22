@@ -543,6 +543,10 @@ describe('WhatsAppNotifier', () => {
       });
     });
 
+    // Note: notifyTaskComplete builds the publish params via a local variable
+    // (publishParams) so it is NOT modified for INT-1418 importance flagging.
+    // See apps/code-agent/src/infra/services/whatsappNotifierImpl.ts:140-150.
+
     it('returns error when notification fails', async () => {
       const task = createMockTask({
         result: createMockResult(),
@@ -588,6 +592,7 @@ describe('WhatsAppNotifier', () => {
           url: 'https://intexuraos.cloud/#/code-tasks/task-123',
         },
         correlationId: 'test-trace-id',
+        important: true,
       });
       // Should NOT have reply buttons
       const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
@@ -864,6 +869,7 @@ describe('WhatsAppNotifier', () => {
             },
           ],
           correlationId: 'trace-123',
+          important: true,
         })
       );
     });
@@ -1134,10 +1140,12 @@ describe('WhatsAppNotifier', () => {
       await notifier.notifyResumedTaskComplete('user-123', task);
 
       const publishCall = getPublishSendMessageMock().mock.calls[0];
-      const params = publishCall?.[0] as { userId: string; message: string };
+      const params = publishCall?.[0] as { userId: string; message: string; important?: boolean };
       expect(params.userId).toBe('user-123');
       expect(params.message).toContain('🔁');
       expect(params.message).toContain('Fix token refresh');
+      // INT-1418: resumed-task completion is marked important
+      expect(params.important).toBe(true);
     });
 
     it('includes PR URL in message and ctaUrl when present', async () => {

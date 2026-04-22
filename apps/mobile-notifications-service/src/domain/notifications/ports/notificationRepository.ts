@@ -22,6 +22,10 @@ export interface FilterOptions {
   source?: string[];
   app?: string[];
   title?: string;
+  /** Inclusive lower bound on notification `timestamp` (stored as milliseconds). Unit: seconds. */
+  postTimeSecFrom?: number;
+  /** Exclusive upper bound on notification `timestamp`. Unit: seconds. */
+  postTimeSecTo?: number;
 }
 
 /**

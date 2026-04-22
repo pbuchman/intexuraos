@@ -990,14 +990,64 @@ module "mobile_notifications_service" {
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/mobile-notifications-service:latest"
 
-  secrets = local.common_service_secrets
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_OPENROUTER_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENROUTER_APP_API_KEY"]
+  })
 
-  env_vars = local.common_service_env_vars
+  env_vars = merge(local.common_service_env_vars, {
+    INTEXURAOS_DIGEST_LLM_MODEL           = "or:google/gemini-3-flash-preview"
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_WEB_APP_URL                = "https://${var.web_app_domain}"
+  })
 
   depends_on = [
     module.artifact_registry,
     module.iam,
     module.secret_manager,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - WhatsApp Digest Yesterday (Daily at 01:00 UTC)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_run_service_iam_member" "scheduler_invokes_mobile_notifications_service" {
+  project  = var.project_id
+  location = var.region
+  service  = local.services.mobile_notifications_service.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
+
+  depends_on = [module.mobile_notifications_service]
+}
+
+resource "google_cloud_scheduler_job" "mobile_notifications_digest_yesterday" {
+  name        = "mobile-notifications-digest-yesterday-${var.environment}"
+  description = "Daily WhatsApp digest aggregation at 02:00 CET / 03:00 CEST"
+  schedule    = "0 1 * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.mobile_notifications_service.service_url}/internal/notifications/digest/run-yesterday"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.mobile_notifications_service.service_url
+    }
+  }
+
+  retry_config {
+    retry_count          = 3
+    min_backoff_duration = "30s"
+    max_backoff_duration = "300s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_mobile_notifications_service,
+    module.mobile_notifications_service,
   ]
 }
 
@@ -1441,6 +1491,7 @@ module "code_agent" {
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_SERVICE_URL                = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC     = "intexuraos-pr-triage-${var.environment}"
     INTEXURAOS_EXECUTION_MEMORY_ENABLED   = "true"
     INTEXURAOS_QUEUE_MAX_SIZE             = "50"
     INTEXURAOS_QUEUE_TTL_MINUTES          = "1440"
@@ -2015,6 +2066,38 @@ resource "google_cloud_scheduler_job" "merge_queue_tick" {
 
   retry_config {
     retry_count = 0
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_code_agent,
+    module.code_agent,
+  ]
+}
+
+resource "google_cloud_scheduler_job" "code_tasks_zombie_sweep" {
+  name        = "intexuraos-code-tasks-zombie-sweep-${var.environment}"
+  description = "Sweep stuck code tasks with stale lastHeartbeat and mark them interrupted"
+  schedule    = "*/5 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.code_agent.service_url}/internal/code/detect-zombies"
+    body        = base64encode("{}")
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.code_agent.service_url
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
   }
 
   depends_on = [

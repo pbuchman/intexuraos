@@ -1,8 +1,8 @@
 # Mobile Notifications Service — Tutorial
 
-> **Time:** 20–30 minutes
+> **Time:** 25-35 minutes
 > **Prerequisites:** Auth0 access token, Android device with Tasker or Automate
-> **You will learn:** How to pair a device, capture notifications, browse and filter them, and manage saved filters
+> **You will learn:** How to pair a device, capture notifications, browse and filter them, manage saved filters, and explore AI-generated digests
 
 ---
 
@@ -14,6 +14,8 @@ A working integration that:
 - Captures mobile notifications through a webhook pipeline
 - Lists and filters stored notifications
 - Creates and manages saved filter presets
+- Reads AI-generated WhatsApp group digests
+- Triggers a manual digest regeneration
 
 ---
 
@@ -291,7 +293,90 @@ Returns **204 No Content** on success (empty body).
 
 ---
 
-## Part 5: Delete a Notification (2 minutes)
+## Part 5: Explore Digests (5 minutes)
+
+If the digest pipeline is configured for your user and group, you can browse AI-generated daily summaries.
+
+### Step 5.1: List Digests for a Date Range
+
+```bash
+curl "http://localhost:8114/notifications/digests?groupKey=my-group&fromDate=2026-04-14&toDate=2026-04-21&limit=7" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Expected response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "summary": {
+          "date": "2026-04-21",
+          "groupKey": "my-group",
+          "messageCount": 142,
+          "headline": "Tournament rules finalized; new member introductions",
+          "bullets": [
+            "Admin posted updated tournament rules for the spring series",
+            "Three new members introduced themselves",
+            "Debate about catch-and-release policy continued from yesterday"
+          ],
+          "threads": [],
+          "moderatorPosts": [],
+          "openQuestions": [],
+          "activityOutliers": []
+        },
+        "generation": 1,
+        "generatedAt": "2026-04-22T06:00:00Z",
+        "modelId": "google/gemini-2.0-flash-001"
+      }
+    ]
+  }
+}
+```
+
+### Step 5.2: Get a Single Digest
+
+```bash
+curl "http://localhost:8114/notifications/digests/my-group/2026-04-21" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+Returns the full digest for that specific day, or 404 if none exists.
+
+### Step 5.3: Regenerate a Digest
+
+```bash
+curl -X POST "http://localhost:8114/notifications/digests/run" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "groupKey": "my-group",
+    "date": "2026-04-21"
+  }'
+```
+
+**Expected response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "summaryDocId": "user123_my-group_2026-04-21",
+    "generation": 2,
+    "messageCount": 142,
+    "modelId": "google/gemini-2.0-flash-001",
+    "regenerated": true
+  }
+}
+```
+
+The `generation` field increments on each regeneration. WhatsApp notifications are only sent on first generation.
+
+---
+
+## Part 6: Delete a Notification (2 minutes)
 
 ```bash
 curl -X DELETE "http://localhost:8114/mobile-notifications/firestore-doc-id" \
@@ -311,7 +396,7 @@ Returns 404 if not found, 403 if the notification belongs to another user.
 
 ---
 
-## Part 6: Handle Errors (3 minutes)
+## Part 7: Handle Errors (3 minutes)
 
 ### Missing Signature Header
 
@@ -347,6 +432,22 @@ curl -X POST http://localhost:8114/mobile-notifications/webhooks \
 }
 ```
 
+### No Digest Subscription
+
+Attempting to run a digest for a group you are not subscribed to:
+
+**Response (400):**
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "no digest subscription for groupKey=unknown-group"
+  }
+}
+```
+
 ---
 
 ## Response Format
@@ -369,6 +470,8 @@ All endpoints return a standardized response contract:
 | Empty filter options            | No notifications received yet; options auto-populate    |
 | Duplicate notification ignored  | Normal; `notification_id` deduplication is intentional  |
 | 403 on DELETE                   | You do not own that notification                        |
+| Digest 404                      | No digest exists for that group/date; run one first     |
+| Digest lockSkipped              | Another digest run is in progress; wait and retry       |
 
 ---
 
@@ -439,4 +542,5 @@ Now that you understand the basics:
 
 1. Configure Tasker or Automate on your Android device to forward notifications to the webhook endpoint
 2. Read the [Technical Reference](technical.md) for full API details and domain model documentation
-3. Explore the internal query endpoint for building data aggregation pipelines
+3. Explore the digest pipeline endpoints to browse AI-generated WhatsApp group summaries
+4. Check the internal query endpoint for building data aggregation pipelines

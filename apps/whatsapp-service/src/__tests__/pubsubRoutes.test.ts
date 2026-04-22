@@ -11,6 +11,7 @@ import {
   FakeLinkPreviewFetcherPort,
   FakeMediaStorage,
   FakeMessageSender,
+  FakeNotificationPreferencesRepository,
   FakeOutboundMessageRepository,
   FakePhoneVerificationRepository,
   FakeThumbnailGeneratorPort,
@@ -70,6 +71,7 @@ describe('Pub/Sub Routes', () => {
   let messageRepository: FakeWhatsAppMessageRepository;
   let userMappingRepository: FakeWhatsAppUserMappingRepository;
   let outboundMessageRepository: FakeOutboundMessageRepository;
+  let prefs: FakeNotificationPreferencesRepository;
 
   beforeEach(async () => {
     messageSender = new FakeMessageSender();
@@ -78,6 +80,7 @@ describe('Pub/Sub Routes', () => {
     userMappingRepository = new FakeWhatsAppUserMappingRepository();
 
     outboundMessageRepository = new FakeOutboundMessageRepository();
+    prefs = new FakeNotificationPreferencesRepository();
 
     setServices({
       webhookEventRepository: new FakeWhatsAppWebhookEventRepository(),
@@ -91,6 +94,7 @@ describe('Pub/Sub Routes', () => {
       linkPreviewFetcher: new FakeLinkPreviewFetcherPort(),
       outboundMessageRepository,
       phoneVerificationRepository: new FakePhoneVerificationRepository(),
+      notificationPreferencesRepository: prefs,
     });
 
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
@@ -768,6 +772,154 @@ describe('Pub/Sub Routes', () => {
       expect(saved).toHaveLength(1);
       expect(saved[0]?.correlationId).toBe('corr-save-ok');
       expect(saved[0]?.userId).toBe('user-save-ok');
+    });
+
+    describe('important filtering', () => {
+      it("delivers when level='all' and no important flag", async () => {
+        await userMappingRepository.saveMapping('user-all', ['+48111111111']);
+        // level defaults to 'all' on the fake
+
+        const body = createPubSubBody({
+          type: 'whatsapp.message.send',
+          userId: 'user-all',
+          message: 'Normal message',
+          correlationId: 'corr-all',
+          timestamp: new Date().toISOString(),
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/send-message',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: body,
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(messageSender.getSentMessages()).toHaveLength(1);
+      });
+
+      it("delivers when level='important' and important=true", async () => {
+        await userMappingRepository.saveMapping('user-imp-yes', ['+48222222222']);
+        prefs.setLevel('user-imp-yes', 'important');
+
+        const body = createPubSubBody({
+          type: 'whatsapp.message.send',
+          userId: 'user-imp-yes',
+          message: 'Critical alert',
+          important: true,
+          correlationId: 'corr-imp-yes',
+          timestamp: new Date().toISOString(),
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/send-message',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: body,
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(messageSender.getSentMessages()).toHaveLength(1);
+      });
+
+      it("drops when level='important' and important absent", async () => {
+        await userMappingRepository.saveMapping('user-imp-absent', ['+48333333333']);
+        prefs.setLevel('user-imp-absent', 'important');
+
+        const body = createPubSubBody({
+          type: 'whatsapp.message.send',
+          userId: 'user-imp-absent',
+          message: 'Noisy message',
+          correlationId: 'corr-imp-absent',
+          timestamp: new Date().toISOString(),
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/send-message',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: body,
+        });
+
+        expect(response.statusCode).toBe(200);
+        const responseBody = JSON.parse(response.body) as { success: boolean };
+        expect(responseBody.success).toBe(true);
+        expect(messageSender.getSentMessages()).toHaveLength(0);
+      });
+
+      it("drops when level='important' and important=false", async () => {
+        await userMappingRepository.saveMapping('user-imp-false', ['+48444444444']);
+        prefs.setLevel('user-imp-false', 'important');
+
+        const body = createPubSubBody({
+          type: 'whatsapp.message.send',
+          userId: 'user-imp-false',
+          message: 'Explicit not important',
+          important: false,
+          correlationId: 'corr-imp-false',
+          timestamp: new Date().toISOString(),
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/send-message',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: body,
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(messageSender.getSentMessages()).toHaveLength(0);
+      });
+
+      it('dropped message does not call outboundMessageRepository.save', async () => {
+        await userMappingRepository.saveMapping('user-no-save', ['+48555555555']);
+        prefs.setLevel('user-no-save', 'important');
+
+        const body = createPubSubBody({
+          type: 'whatsapp.message.send',
+          userId: 'user-no-save',
+          message: 'Drop me',
+          correlationId: 'corr-no-save',
+          timestamp: new Date().toISOString(),
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/send-message',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: body,
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(outboundMessageRepository.getMessages()).toHaveLength(0);
+      });
+
+      it('fails open: delivers when preferences read fails', async () => {
+        await userMappingRepository.saveMapping('user-pref-err', ['+48666666666']);
+        prefs.failNext({
+          code: 'PERSISTENCE_ERROR',
+          message: 'Simulated preferences read failure',
+        });
+
+        const body = createPubSubBody({
+          type: 'whatsapp.message.send',
+          userId: 'user-pref-err',
+          message: 'Fail-open delivery',
+          correlationId: 'corr-pref-err',
+          timestamp: new Date().toISOString(),
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/send-message',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: body,
+        });
+
+        expect(response.statusCode).toBe(200);
+        // Falls back to 'all' → delivers
+        expect(messageSender.getSentMessages()).toHaveLength(1);
+      });
     });
   });
 

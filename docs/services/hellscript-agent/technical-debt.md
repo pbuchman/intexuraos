@@ -1,7 +1,7 @@
 # Hellscript Agent — Technical Debt
 
-**Last Updated:** 2026-04-07
-**Analysis Run:** [2026-04-07 entry](../../documentation-runs.md)
+**Last Updated:** 2026-04-22
+**Analysis Run:** [2026-04-22 entry](../../documentation-runs.md)
 
 ---
 
@@ -15,7 +15,7 @@
 | TODOs       | 0     | ---      |
 | **Total**   | **0** | ---      |
 
-This service was introduced in v3.4.0 and extended with categorized writing configuration in v3.5.0. It has no accumulated technical debt. No `TODO`, `FIXME`, `HACK`, `any` type, `@ts-ignore`, or `@ts-expect-error` directives exist in the source code. The codebase went through multiple code review rounds before each merge.
+This service was introduced in v3.4.0, extended with categorized writing configuration in v3.5.0, and migrated to per-user LLM client resolution in v3.6.0. It has no accumulated technical debt. No `TODO`, `FIXME`, `HACK`, `any` type, `@ts-ignore`, or `@ts-expect-error` directives exist in the source code.
 
 ---
 
@@ -24,7 +24,7 @@ This service was introduced in v3.4.0 and extended with categorized writing conf
 - No TODO, FIXME, or HACK comments exist in the codebase
 - Potential areas for future development based on current architecture:
   - Export drafts to other formats (PDF, DOCX) beyond markdown
-  - Collaborative editing --- allowing multiple users to impose on a shared buffer
+  - Collaborative editing — allowing multiple users to impose on a shared buffer
   - Buffer archiving and deletion endpoints
   - Webhook/Pub/Sub integration for notifying other services when drafts are generated
   - Streaming draft generation for real-time feedback in the web UI
@@ -93,16 +93,18 @@ None.
 
 ## Resolved Issues
 
-| Date       | Issue                                              | Resolution                                                                                                           |
-| ---------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| 2026-03-22 | String-based error matching in repository layer    | Replaced with typed errors (`BufferNotFoundError`, `DraftGenerationError`, `SampleNotFoundError`, `MaxSamplesError`) |
-| 2026-03-22 | Phantom timeline entries on `category_required`    | Deferred event save until category is resolved                                                                       |
-| 2026-03-22 | Sequential Firestore reads during draft generation | Parallelized config, samples, and prior draft reads                                                                  |
+| Date       | Issue                                               | Resolution                                                                                                           |
+| ---------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| 2026-04-14 | Startup-scoped GeminiClient shared across all users | Replaced with per-user `LlmGenerateClient` via `UserServiceClient.getLlmClient()` (INT-1369)                         |
+| 2026-04-16 | Centralized LLM pricing logic in service            | Removed — pricing handled by `llm-usage-service` via `HttpInternalAuthUsageSink` (INT-1387)                          |
+| 2026-03-22 | String-based error matching in repository layer     | Replaced with typed errors (`BufferNotFoundError`, `DraftGenerationError`, `SampleNotFoundError`, `MaxSamplesError`) |
+| 2026-03-22 | Phantom timeline entries on `category_required`     | Deferred event save until category is resolved                                                                       |
+| 2026-03-22 | Sequential Firestore reads during draft generation  | Parallelized config, samples, and prior draft reads                                                                  |
 
 ---
 
 ## Related
 
-- [Features](features.md) --- User-facing documentation
-- [Technical](technical.md) --- Developer reference
+- [Features](features.md) — User-facing documentation
+- [Technical](technical.md) — Developer reference
 - [Documentation Run Log](../../documentation-runs.md)

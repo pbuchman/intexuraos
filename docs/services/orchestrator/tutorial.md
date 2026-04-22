@@ -134,7 +134,7 @@ Expected response:
   "capacity": 2,
   "running": 0,
   "available": 2,
-  "githubTokenExpiresAt": "2026-04-07T15:30:00.000Z",
+  "githubTokenExpiresAt": "2026-04-22T15:30:00.000Z",
   "workerAuths": {
     "claude": { "status": "active", "authMode": "oauth", "refreshSupported": true, "expiresInMinutes": 210, "subscriptionType": "max" },
     "codex": { "status": "active", "authMode": "chatgpt", "refreshSupported": true, "expiresInMinutes": 190 }
@@ -169,7 +169,7 @@ echo "X-Dispatch-Signature: ${SIGNATURE}"
 
 ### Step 2: Submit a task
 
-The `workerType` field controls which runtime/model preset handles the task. Valid types are `opus`, `auto`, `sonnet` (Anthropic), `minimax` (MiniMax), `glm`, `qwen`, `kimi` (Alibaba Cloud DashScope), `codex`, `codex-xhigh` (OpenAI Codex), and `openrouter-free` (zero-cost via OpenRouter).
+The `workerType` field controls which runtime/model preset handles the task. Valid types are `opus`, `auto`, `sonnet` (Anthropic), `minimax` (MiniMax), `mimo-pro` (Xiaomi MiMo), `glm`, `qwen`, `kimi` (Alibaba Cloud DashScope), `codex`, `codex-xhigh` (OpenAI Codex), and `openrouter-free` (zero-cost via OpenRouter).
 
 ```bash
 BODY='{
@@ -243,7 +243,7 @@ BODY='{
 
 ### Step 5: Submit an execution task with continuation PR
 
-When retrying a task, pass the existing PR details:
+When retrying a task, pass the existing PR details and optionally reference the original task:
 
 ```bash
 BODY='{
@@ -251,6 +251,7 @@ BODY='{
   "workerType": "opus",
   "prompt": "Continue implementation for INT-500",
   "agentType": "execution",
+  "retriedFrom": "original-task-001",
   "continuationPrNumber": 42,
   "continuationPrBranch": "task_abc123",
   "linearIssueId": "INT-500",
@@ -261,15 +262,15 @@ BODY='{
 }'
 ```
 
-### Step 6: Submit a review task with plan review
+### Step 6: Submit a review task with test quality review
 
 ```bash
 BODY='{
-  "taskId": "plan-review-001",
+  "taskId": "review-001",
   "workerType": "auto",
-  "prompt": "Review PR #42 — validate implementation against the approved plan",
+  "prompt": "Review PR #42 — validate implementation and test quality",
   "agentType": "review",
-  "reviewTypes": ["plan_review", "code_quality"],
+  "reviewTypes": ["code_quality", "test_quality", "plan_review"],
   "linearIssueId": "INT-500",
   "linearIssueLabels": [],
   "hasChildren": false,
@@ -277,6 +278,8 @@ BODY='{
   "webhookSecret": "test-secret-123"
 }'
 ```
+
+Available review types: `code_quality`, `security`, `architecture`, `plan_review`, `test_quality`.
 
 ### Step 7: Start an Ask Agent session
 
@@ -303,7 +306,25 @@ BODY='{"message": "How does cache invalidation work when a user updates their pr
 curl -X POST http://localhost:8199/tasks/ask-001/message ...
 ```
 
-### Step 8: Monitor the task
+### Step 8: Submit a task with mimo-pro
+
+For cost-effective execution via Xiaomi MiMo:
+
+```bash
+BODY='{
+  "taskId": "mimo-task-001",
+  "workerType": "mimo-pro",
+  "prompt": "Implement the feature described in INT-600",
+  "agentType": "execution",
+  "linearIssueId": "INT-600",
+  "linearIssueLabels": ["code-task"],
+  "hasChildren": false,
+  "webhookUrl": "http://localhost:3001/webhook",
+  "webhookSecret": "test-secret-123"
+}'
+```
+
+### Step 9: Monitor the task
 
 Check task status:
 
@@ -329,7 +350,7 @@ Check worker image info:
 curl http://localhost:8199/meta/worker-image | jq
 ```
 
-### Step 9: Send a message to a running task
+### Step 10: Send a message to a running task
 
 Messages can be sent to running, completed, or failed tasks. For running tasks, the message is queued and delivered when the current attempt finishes. For completed or failed tasks, the task is resumed with a new worker session.
 
@@ -348,7 +369,7 @@ curl -X POST http://localhost:8199/tasks/test-task-001/message \
 
 The message field supports up to 20,000 characters. Review and remediation tasks reject messages with `409`.
 
-### Step 10: Cancel a task
+### Step 11: Cancel a task
 
 ```bash
 curl -X DELETE http://localhost:8199/tasks/test-task-001
@@ -463,10 +484,11 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 | `Cannot find module '@intexuraos'`                | Packages not built                    | Run `pnpm build` at repository root                                                                                                               |
 | Turn metrics always zero                          | macOS host (no cgroup v2 exposure)    | Expected on macOS; metrics are non-fatal and show zeros                                                                                           |
 | `INTEXURAOS_GEMINI_APP_API_KEY not set`           | Missing required env var              | Add to `.envrc.local` and run `direnv allow`                                                                                                      |
-| `TASK_COMPLETION_VERIFIER_FAILED`                 | Gemini API unreachable                | Check network connectivity and Gemini API key validity                                                                                            |
+| `TASK_COMPLETION_VERIFIER_FAILED`                 | All validation models unreachable     | Check network connectivity and API keys for configured validation models                                                                          |
 | `503 docker_unavailable`                          | Docker daemon not responding          | Check Docker Desktop is running                                                                                                                   |
 | `503 auth_unavailable`                            | Worker auth not ready                 | Check `workerAuths` in health endpoint; run `claude login` or `codex-login.sh`                                                                    |
 | Container creation timeout                        | Docker pull or create taking too long | Check network for image pull; image pull has 15-minute timeout, container create has 2-minute timeout                                             |
 | Task adopted on restart but fails immediately     | Container state drift                 | Check Docker logs for the container before adoption                                                                                               |
 | No compliance report on PR                        | Missing OpenRouter API key            | Set `INTEXURAOS_OPENROUTER_APP_API_KEY` in `.envrc`                                                                                               |
 | `Port 8199 is already in use`                     | Another process on same port          | Find the process: `lsof -i :8199`; or use a different port: `export PORT=8200`                                                                    |
+| Task killed after 10 minutes of silence           | Inactivity detector triggered         | Expected behavior; session auto-restarts up to 3 times before failing                                                                             |

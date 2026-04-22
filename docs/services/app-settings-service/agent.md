@@ -4,52 +4,42 @@
 
 ## Identity
 
-| Attribute | Value                                                                                    |
-| --------- | ---------------------------------------------------------------------------------------- |
-| Name      | app-settings-service                                                                     |
-| Role      | Centralized LLM pricing configuration                                                    |
-| Goal      | Provide accurate, up-to-date pricing for all LLM models                                  |
+| Attribute | Value                                                      |
+| --------- | ---------------------------------------------------------- |
+| Name      | app-settings-service                                       |
+| Role      | Platform configuration scaffold (minimal after v3.6.0)     |
+| Goal      | Provide health check anchor for downstream service startup |
 
 ## Capabilities
 
-### Get LLM Pricing (Public)
+### Health Check
 
-**Endpoint:** `GET /settings/pricing`
+**Endpoint:** `GET /health`
 
-**When to use:** When a user or UI needs current pricing for all LLM providers to display costs or estimate charges before making API calls.
+**When to use:** When verifying the service and its infrastructure dependencies (Firestore, secrets) are operational. Five services poll this endpoint at startup.
 
 **Input Schema:**
 
 ```typescript
-// No request body. Requires Authorization header.
-// Headers: { Authorization: 'Bearer <jwt>' }
+// No request body or headers required
 ```
 
 **Output Schema:**
 
 ```typescript
-interface AllProvidersPricing {
-  google: ProviderPricing;
-  openai: ProviderPricing;
-  anthropic: ProviderPricing;
-  perplexity: ProviderPricing;
+interface HealthResponse {
+  status: 'ok' | 'degraded' | 'down';
+  serviceName: string;
+  version: string;
+  timestamp: string;
+  checks: HealthCheck[];
 }
 
-interface ProviderPricing {
-  provider: 'google' | 'openai' | 'anthropic' | 'perplexity';
-  models: Record<string, ModelPricing>;
-  updatedAt: string; // ISO date
-}
-
-interface ModelPricing {
-  inputPricePerMillion: number;
-  outputPricePerMillion: number;
-  cacheReadMultiplier?: number;
-  cacheWriteMultiplier?: number;
-  webSearchCostPerCall?: number;
-  groundingCostPerRequest?: number;
-  imagePricing?: Record<'1024x1024' | '1536x1024' | '1024x1536', number>;
-  useProviderCost?: boolean;
+interface HealthCheck {
+  name: string;
+  status: 'ok' | 'degraded' | 'down';
+  latencyMs: number;
+  details?: Record<string, unknown> | null;
 }
 ```
 
@@ -57,120 +47,89 @@ interface ModelPricing {
 
 ```json
 // Request
-// GET /settings/pricing
-// Authorization: Bearer eyJhbG...
+// GET /health
 
 // Response (200)
 {
-  "success": true,
-  "data": {
-    "google": {
-      "provider": "google",
-      "updatedAt": "2026-02-01T00:00:00Z",
-      "models": {
-        "gemini-2.5-flash": {
-          "inputPricePerMillion": 0.075,
-          "outputPricePerMillion": 0.30,
-          "groundingCostPerRequest": 0.0035
-        }
-      }
-    },
-    "openai": { "provider": "openai", "models": { "..." : "..." }, "updatedAt": "..." },
-    "anthropic": { "..." : "..." },
-    "perplexity": { "..." : "..." }
-  }
+  "status": "ok",
+  "serviceName": "app-settings-service",
+  "version": "0.0.4",
+  "timestamp": "2026-04-22T12:00:00.000Z",
+  "checks": [
+    { "name": "secrets", "status": "ok", "latencyMs": 0 },
+    { "name": "firestore", "status": "ok", "latencyMs": 15 }
+  ]
 }
 ```
 
-### Get LLM Pricing (Internal)
+### OpenAPI Specification
 
-**Endpoint:** `GET /internal/settings/pricing`
+**Endpoint:** `GET /openapi.json`
 
-**When to use:** When a service needs to load pricing at startup for its PricingContext. Uses internal auth, not Bearer tokens.
+**When to use:** When the cron-agent or api-docs-hub needs to discover this service's API contract.
 
-**Input Schema:**
+**Output Schema:**
 
 ```typescript
-// No request body. Requires X-Internal-Auth header.
-// Headers: { 'X-Internal-Auth': '<shared-secret>' }
-```
-
-**Output Schema:** Same as public pricing endpoint.
-
-**Example:**
-
-```json
-// Request
-// GET /internal/settings/pricing
-// X-Internal-Auth: <token>
-
-// Response (200)
-{
-  "success": true,
-  "data": {
-    "google": { "..." : "..." },
-    "openai": { "..." : "..." },
-    "anthropic": { "..." : "..." },
-    "perplexity": { "..." : "..." }
-  }
-}
+// Standard OpenAPI 3.1.1 JSON document
 ```
 
 ## Constraints
 
 **Do NOT:**
 
-- Call pricing endpoints without authentication (returns 401)
-- Expect write operations (service is read-only for pricing data)
+- Expect any business endpoints (pricing, usage costs) — all were removed in v3.6.0
+- Send Bearer or X-Internal-Auth headers to system endpoints (not required)
+- Rely on this service for LLM pricing — use `llm-usage-service` instead
 
 **Requires:**
 
-- Valid Bearer JWT token for public endpoints
-- Valid `X-Internal-Auth` header for internal endpoint
-- Firestore pricing data must be populated via migrations before service starts
+- Firestore connectivity for health check
+- `INTEXURAOS_INTERNAL_AUTH_TOKEN` secret present in environment
 
 ## Usage Patterns
 
-### Pattern 1: Service Startup Pricing Load
+### Pattern 1: Startup Health Polling (ecosystem.config.cjs)
 
 ```
-1. Call GET /internal/settings/pricing with X-Internal-Auth header
-2. Parse response.data into PricingContext
-3. Use PricingContext for cost calculation during LLM calls
+1. PM2 starts app-settings-service
+2. Downstream service polls GET /health every 1s (max 30s)
+3. When status === 'ok', downstream service starts
 ```
 
-### Pattern 2: Cost Preview Before LLM Call
+### Pattern 2: Service Catalog Discovery (cron-agent)
 
 ```
-1. Call GET /settings/pricing with Bearer token
-2. Lookup the target model in the appropriate provider
-3. Calculate: (inputTokens / 1_000_000) * inputPricePerMillion + (outputTokens / 1_000_000) * outputPricePerMillion
-4. Add groundingCostPerRequest or webSearchCostPerCall if applicable
-5. Display estimated cost to user before confirming the call
+1. cron-agent reads service catalog config
+2. Fetches GET /openapi.json for API contract
+3. allowedOperations is [] — no callable operations
 ```
 
 ## Error Handling
 
-| Error Code | Meaning                    | Recovery Action                                      |
-| ---------- | -------------------------- | ---------------------------------------------------- |
-| 401        | Unauthorized               | Refresh Bearer token or check internal auth header   |
-| 500        | Missing provider pricing   | Contact admin — Firestore pricing migration needed   |
+| Error Code | Meaning              | Recovery Action                           |
+| ---------- | -------------------- | ----------------------------------------- |
+| 200        | Healthy              | Proceed with downstream startup           |
+| 200        | Degraded (in body)   | Service running but Firestore unreachable |
+| 500        | Server error         | Retry with backoff                        |
 
 ## Dependencies
 
-| Service    | Why Needed                                      | Failure Behavior            |
-| ---------- | ----------------------------------------------- | --------------------------- |
-| Firestore  | Pricing config storage                          | 500 error on all endpoints  |
+| Service   | Why Needed                    | Failure Behavior                              |
+| --------- | ----------------------------- | --------------------------------------------- |
+| Firestore | Health check verification     | Health reports "degraded" or "down"           |
 
-## Provider Coverage
+## Dependents
 
-| Provider   | Models (14 total)                                                               |
-| ---------- | ------------------------------------------------------------------------------- |
-| Google     | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-2.5-flash-image      |
-| OpenAI     | gpt-5.4, gpt-4o-mini, o4-mini-deep-research, gpt-image-1                        |
-| Anthropic  | claude-opus-4-6, claude-sonnet-4-6, claude-3-5-haiku-20241022                   |
-| Perplexity | sonar, sonar-pro, sonar-deep-research                                           |
+| Service        | Dependency Type           |
+| -------------- | ------------------------- |
+| user-service   | Startup health polling    |
+| commands-agent | Startup health polling    |
+| actions-agent  | Startup health polling    |
+| research-agent | Startup health polling    |
+| todos-agent    | Startup health polling    |
+| cron-agent     | Service catalog (OpenAPI) |
 
 ---
 
-**Last updated:** 2026-04-07
+**Last updated:** 2026-04-22

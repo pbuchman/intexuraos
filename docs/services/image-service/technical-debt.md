@@ -1,6 +1,6 @@
 # Image Service — Technical Debt
 
-**Last Updated:** 2026-04-07
+**Last Updated:** 2026-04-22
 **Analysis Run:** [documentation-runs.md](../../documentation-runs.md)
 
 ---
@@ -9,14 +9,14 @@
 
 | Category            | Count | Severity |
 | ------------------- | ----- | -------- |
-| Code Smells         | 1     | Medium   |
+| Code Smells         | 0     | --       |
 | TODO/FIXME Comments | 0     | --       |
 | Test Coverage Gaps  | 0     | --       |
 | TypeScript Issues   | 0     | --       |
 | SRP Violations      | 0     | --       |
 | Code Duplicates     | 1     | Low      |
 | Deprecations        | 0     | --       |
-| **Total**           | **2** | --       |
+| **Total**           | **1** | --       |
 
 ---
 
@@ -43,14 +43,6 @@ The port-based architecture (`ImageGenerator` interface) makes adding new provid
 ---
 
 ## Code Smells
-
-### Medium Priority
-
-| File                             | Issue                  | Impact                                                                                                                                                                                                     |
-| -------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.ts` + `serviceFactory.ts` | Pricing model mismatch | `REQUIRED_MODELS` fetches pricing for `gemini-2.5-flash` and `gpt-4o-mini`, but prompt adapters use `gemini-2.5-pro` and `gpt-4.1`. Cost tracking may use incorrect per-token rates for prompt generation. |
-
-### Low Priority
 
 None detected.
 
@@ -120,6 +112,34 @@ No deprecated APIs or dependencies in use.
 ---
 
 ## Resolved Issues
+
+### 2026-04-22: v3.6.0 LLM Pricing Removal (INT-1387)
+
+**Issue:** `REQUIRED_MODELS` in `index.ts` fetched pricing for `gemini-2.5-flash` and `gpt-4o-mini`, but prompt adapters actually used `gemini-2.5-pro` and `gpt-4.1`. Cost tracking used incorrect per-token rates for prompt generation.
+
+**Resolution:**
+- All LLM pricing removed from image-service — `REQUIRED_MODELS`, `pricingContext`, `ModelPricing` fields in adapter configs all deleted
+- `initializeServices()` is now synchronous (no async pricing fetch)
+- Pricing is handled centrally in `llm-usage-service` via `HttpInternalAuthUsageSink`
+- The mismatch gotcha no longer applies
+
+### 2026-04-14: v3.6.0 Explicit Model in Prompt Generation (INT-1369)
+
+**Issue:** `GeminiPromptAdapter` defaulted to `Gemini25Pro` model when none was passed. `createPromptGenerator` did not accept a model parameter, making it impossible for the caller to control which model was used for pricing resolution.
+
+**Resolution:**
+- `createPromptGenerator` signature expanded with explicit `model: string` parameter
+- `GeminiPromptAdapter` `model` field is now required (no default)
+- Pricing resolved dynamically via `pricingContext.getPricing(model)` (later removed entirely in INT-1387)
+
+### 2026-04-11: v3.6.0 HTTP-Based Usage Sinks (INT-1342)
+
+**Issue:** LLM usage was tracked via direct Firestore writes using `UsageLogger`, which coupled services to Firestore schema and made it impossible to centralize usage data.
+
+**Resolution:**
+- All usage sinks migrated to `HttpInternalAuthUsageSink` — reports usage to `llm-usage-service` via HTTP
+- Each adapter branded with a `component` identifier (e.g., `gemini-prompt-adapter`, `openai-image-generator`)
+- `INTEXURAOS_LLM_USAGE_SERVICE_URL` added to `REQUIRED_ENV`
 
 ### 2026-03-25: v3.5.0 v8 Ignore Block Removal (INT-1072)
 

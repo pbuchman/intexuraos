@@ -27,6 +27,7 @@ import {
   Menu,
   MessageCircle,
   MessageSquare,
+  Newspaper,
   PenTool,
   Plus,
   Server,
@@ -34,6 +35,7 @@ import {
   Settings,
   Sparkles,
   StickyNote,
+  Swords,
   Timer,
   TrendingUp,
   X,
@@ -72,7 +74,6 @@ const hellscriptItems: NavItem[] = [
 ];
 
 const codeTasksItems: NavItem[] = [
-  { to: '/code-tasks', label: 'Battlefield', icon: List },
   { to: '/code-tasks/new', label: 'New Task', icon: Plus },
   { to: '/code-tasks/ask-agent', label: 'Ask Agent', icon: Bot },
   { to: '/code-tasks/dispatch-queue', label: 'Dispatch Queue', icon: Clock },
@@ -223,9 +224,9 @@ export function Sidebar(): React.JSX.Element {
     }
   }, [location.pathname]);
 
-  // Auto-expand code tasks when on code-tasks or merge-queue page
+  // Auto-expand code tasks when on code-tasks sub-pages (excludes Battlefield)
   useEffect(() => {
-    if (location.pathname.startsWith('/code-tasks')) {
+    if (location.pathname.startsWith('/code-tasks') && location.pathname !== '/code-tasks') {
       setIsCodeTasksOpen(true);
     }
   }, [location.pathname]);
@@ -367,6 +368,38 @@ export function Sidebar(): React.JSX.Element {
             {!isCollapsed ? <span>Inbox</span> : null}
           </NavLink>
 
+          {/* Battlefield - primary nav item */}
+          <NavLink
+            to="/code-tasks"
+            end
+            className={({ isActive }): string =>
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
+              }`
+            }
+          >
+            <Swords className="h-5 w-5 shrink-0" />
+            {!isCollapsed ? <span>Battlefield</span> : null}
+          </NavLink>
+
+          {/* Digests - primary nav item */}
+          <NavLink
+            to="/notifications/digests"
+            end
+            className={({ isActive }): string =>
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
+              }`
+            }
+          >
+            <Newspaper className="h-5 w-5 shrink-0" />
+            {!isCollapsed ? <span>Digests</span> : null}
+          </NavLink>
+
           {/* Hellscript section (collapsible) */}
           <div className="pt-2">
             <button
@@ -424,12 +457,12 @@ export function Sidebar(): React.JSX.Element {
             <button
               onClick={(): void => {
                 if (!isCodeTasksOpen) {
-                  void navigate(codeTasksItems[0]?.to ?? '/code-tasks');
+                  void navigate(codeTasksItems[0]?.to ?? '/code-tasks/new');
                 }
                 setIsCodeTasksOpen(!isCodeTasksOpen);
               }}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                location.pathname.startsWith('/code-tasks')
+                location.pathname.startsWith('/code-tasks') && location.pathname !== '/code-tasks'
                   ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
               }`}
@@ -454,7 +487,6 @@ export function Sidebar(): React.JSX.Element {
                   <NavLink
                     key={item.to}
                     to={item.to}
-                    end={item.to === '/code-tasks'}
                     className={({ isActive }): string =>
                       `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                         isActive

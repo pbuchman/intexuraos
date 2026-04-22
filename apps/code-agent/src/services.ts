@@ -8,7 +8,12 @@ import type { Logger } from 'pino';
 import type { Firestore } from '@google-cloud/firestore';
 import { ok, err, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
-import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import {
+  createWhatsAppSendPublisher,
+  type WhatsAppSendPublisher,
+  type PRTriagePublisher,
+  createPRTriagePublisher,
+} from '@intexuraos/infra-pubsub';
 import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
 import { createToolCallingClient } from '@intexuraos/llm-factory';
 import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
@@ -128,6 +133,7 @@ export interface ServiceContainer {
   eventDecisionRepo: EventDecisionRepository;
   dispatchRetryRepo: DispatchRetryRepository;
   unifiedEvaluator: UnifiedEvaluator;
+  prTriagePublisher: PRTriagePublisher;
   mergeConflictDetector: MergeConflictDetector;
   automationLog: AutomationLog;
   taskEnqueueService: TaskEnqueueService;
@@ -148,6 +154,7 @@ export interface ServiceConfig {
   firestoreProjectId: string;
   whatsappServiceUrl: string;
   whatsappSendTopic: string;
+  prTriageTopic: string;
   linearAgentUrl: string;
   actionsAgentUrl: string;
   webhookVerifySecret: string;
@@ -170,6 +177,17 @@ const isE2eMode = process.env['E2E_MODE'] === 'true';
 function createE2eWhatsAppPublisher(): WhatsAppSendPublisher {
   return {
     publishSendMessage(): ReturnType<WhatsAppSendPublisher['publishSendMessage']> {
+      return Promise.resolve(ok(undefined));
+    },
+  };
+}
+
+/**
+ * Create a no-op PR triage publisher for E2E testing.
+ */
+function createE2ePRTriagePublisher(): PRTriagePublisher {
+  return {
+    publishPRTriage(): ReturnType<PRTriagePublisher['publishPRTriage']> {
       return Promise.resolve(ok(undefined));
     },
   };
@@ -341,6 +359,14 @@ export function initServices(config: ServiceConfig): void {
         projectId: config.gcpProjectId,
         topicName: config.whatsappSendTopic,
         logger: createAppLogger({ name: 'whatsapp-publisher' }),
+      });
+
+  const prTriagePublisher = isE2eMode
+    ? createE2ePRTriagePublisher()
+    : createPRTriagePublisher({
+        projectId: config.gcpProjectId,
+        topicName: config.prTriageTopic,
+        logger: createAppLogger({ name: 'pr-triage-publisher' }),
       });
 
   const buildUsageSink = (component: string): HttpInternalAuthUsageSink =>
@@ -624,6 +650,7 @@ export function initServices(config: ServiceConfig): void {
     eventDecisionRepo,
     dispatchRetryRepo,
     unifiedEvaluator,
+    prTriagePublisher,
     mergeConflictDetector,
     automationLog,
     taskEnqueueService,

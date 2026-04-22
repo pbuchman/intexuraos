@@ -20,7 +20,7 @@
     },
     "whatsapp_user_mappings": {
       "owner": "whatsapp-service",
-      "description": "Phone number to user ID mappings for WhatsApp integration"
+      "description": "Phone number to user ID mappings for WhatsApp integration; also stores the per-user notificationLevel ('all' | 'important', default 'all') used by whatsapp-service to filter outbound messages (INT-1418)."
     },
     "whatsapp_webhook_events": {
       "owner": "whatsapp-service",
@@ -239,7 +239,15 @@
     },
     "notification_group_states": {
       "owner": "mobile-notifications-service",
-      "description": "Persistent state for one WhatsApp group per user, rewritten each digest run. Doc ID format: {userId}_{groupKey}."
+      "description": "Per-date snapshots of WhatsApp group state. Doc ID format: {userId}_{groupKey}_{YYYY-MM-DD}. Each daily run writes its own snapshot; 'current latest' = orderBy(date desc) limit 1."
+    },
+    "notification_digest_locks": {
+      "owner": "mobile-notifications-service",
+      "description": "Advisory locks serializing concurrent digest runs per (userId, groupKey). 5-minute TTL. Doc ID format: {userId}_{groupKey}."
+    },
+    "notification_digest_backfill_runs": {
+      "owner": "mobile-notifications-service",
+      "description": "Progress tracking for digest backfill runs. One doc per run; mutated as the HTTP-chain processes each day."
     }
   }
 }

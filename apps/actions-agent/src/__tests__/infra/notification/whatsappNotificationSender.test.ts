@@ -171,6 +171,7 @@ describe('createWhatsappNotificationSender', () => {
         userId: 'user-123',
         message: expectedMessage,
         correlationId: 'research-draft-ready-research-456',
+        important: true,
       });
     });
   });

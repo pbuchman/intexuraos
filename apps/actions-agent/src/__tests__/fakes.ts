@@ -375,6 +375,7 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
     replyToMessageId?: string;
     buttons?: import('@intexuraos/infra-pubsub').WhatsAppInteractiveButton[];
     ctaUrl?: { displayText: string; url: string };
+    important?: boolean;
   }[] = [];
   private failNext = false;
   private failError: PublishError | null = null;
@@ -398,6 +399,7 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
     replyToMessageId?: string;
     buttons?: import('@intexuraos/infra-pubsub').WhatsAppInteractiveButton[];
     ctaUrl?: { displayText: string; url: string };
+    important?: boolean;
     correlationId?: string;
   }): Promise<Result<void, PublishError>> {
     if (this.failNext) {
@@ -411,6 +413,7 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
       replyToMessageId?: string;
       buttons?: WhatsAppInteractiveButton[];
       ctaUrl?: { displayText: string; url: string };
+      important?: boolean;
     } = {
       userId: params.userId,
       message: params.message,
@@ -424,6 +427,9 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
     }
     if (params.ctaUrl !== undefined) {
       messageEntry.ctaUrl = params.ctaUrl;
+    }
+    if (params.important !== undefined) {
+      messageEntry.important = params.important;
     }
     this.sentMessages.push(messageEntry);
     return ok(undefined);

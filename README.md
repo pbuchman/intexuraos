@@ -8,7 +8,7 @@
     <img src="https://img.shields.io/badge/Coverage-100%25-success?style=flat-square&logo=codecov" alt="Coverage">
     <img src="https://img.shields.io/badge/TypeScript-5.7-blue?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
     <img src="https://img.shields.io/badge/AI_Models-14-purple?style=flat-square" alt="AI Models">
-    <img src="https://img.shields.io/badge/Components-52-orange?style=flat-square" alt="Components">
+    <img src="https://img.shields.io/badge/Components-51-orange?style=flat-square" alt="Components">
     <img src="https://img.shields.io/badge/Hooks-26-green?style=flat-square" alt="Hooks">
     <img src="https://img.shields.io/badge/CI_Scripts-27-green?style=flat-square" alt="CI Scripts">
     <img src="https://img.shields.io/badge/Infrastructure-Terraform-623CE4?style=flat-square&logo=terraform&logoColor=white" alt="Terraform">
@@ -315,9 +315,26 @@ You submit tasks while walking, while commuting, while thinking of something els
 ---
 
 <details>
-<summary><h2>What's New in v3.5.0</h2></summary>
+<summary><h2>What's New in v3.6.0</h2></summary>
 
 > See [CHANGELOG.md](CHANGELOG.md) for the complete history.
+
+#### v3.6.0
+
+| Improvement                         | Impact                                                                                        |
+| ----------------------------------- | --------------------------------------------------------------------------------------------- |
+| **WhatsApp Group Digests**          | End-to-end pipeline turns WhatsApp group messages into AI-generated daily digest summaries    |
+| **Centralized LLM Pricing**         | Single shared pricing package replaces duplicated definitions across 9 services               |
+| **Notification Importance Filter**  | Suppress low-priority WhatsApp notifications with an importance level filter                  |
+| **LLM Model Fallback**              | Primary and fallback default model selection with automatic retry when primary is unavailable |
+| **Prompt Type Tracking**            | End-to-end tracking through the LLM call stack shows which prompt drove each usage entry      |
+| **Task Mode Selector**              | Explicitly choose between planning and execution mode when starting a task                    |
+| **PWA Resilience**                  | Improved Progressive Web App stability on Android HyperOS                                     |
+| **Pub/Sub PR Triage**               | PR triage processing moved to Pub/Sub push so it no longer blocks the main request path       |
+| **Robust Task Finalization**        | Dedicated status endpoint ensures code tasks complete correctly instead of stalling           |
+| **Issue Group Importance**          | Mark issue groups as high-priority with an important flag                                     |
+| **Execution Memory Simplification** | Simplified pipeline reduces complexity and improves maintainability                           |
+| **Agent Model Inheritance**         | Code agent inherits user default LLM model settings instead of using hardcoded model          |
 
 #### v3.5.0
 

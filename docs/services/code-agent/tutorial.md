@@ -108,6 +108,20 @@ curl -X POST http://localhost:8128/code/submit \
   }'
 ```
 
+You can explicitly choose between planning and execution mode with the `taskMode` parameter:
+
+```bash
+# Skip design phase — go straight to implementation
+curl -X POST http://localhost:8128/code/submit \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-auth0-jwt>" \
+  -d '{
+    "prompt": "Fix the null check in parseConfig",
+    "workerType": "auto",
+    "taskMode": "execution"
+  }'
+```
+
 Expected response:
 
 ```json
@@ -492,6 +506,15 @@ curl "http://localhost:8128/code/issue-groups?status=needs-action&limit=5" \
 ```
 
 **Solution verification:** Each group includes `linearIssueId`, `aggregateStatus`, `taskCount`, and pipeline step data showing which phases have completed.
+
+You can also mark a group as important:
+
+```bash
+curl -X POST "http://localhost:8128/code/issue-groups/<groupKey>/important" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <jwt>" \
+  -d '{ "important": true }'
+```
 
 ### Exercise 4: Create a merge queue watch
 

@@ -54,7 +54,7 @@ You do not need an account to try it. Guest sessions use a platform-provided mod
 - **Command creation only** — The assistant can create commands but cannot edit or delete existing ones
 - **Bounded by published documentation** — Answers depend on what has been added to the knowledge base; newly written documentation requires a refresh before it appears in responses
 - **No user data access** — The assistant searches public documentation only; it cannot look up your personal data, tasks, or settings
-- **Guest rate limits** — Guest sessions are rate-limited to prevent abuse
+- **Guest rate limits** — Guest sessions are rate-limited to prevent abuse (100 messages per hour per session)
 - **General guidance fallback** — When documentation does not cover a topic, the assistant provides general guidance with a disclaimer rather than fabricating an answer
 
 ---

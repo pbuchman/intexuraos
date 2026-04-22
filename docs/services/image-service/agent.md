@@ -266,4 +266,4 @@ None. Image-service does not publish Pub/Sub events.
 
 ---
 
-**Last updated:** 2026-04-07
+**Last updated:** 2026-04-22

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Hellscript Agent is a voice-to-draft writing assistant that accumulates user utterances into a structured buffer, interprets intent via Gemini 2.5 Flash, and generates versioned markdown drafts. Runs on Cloud Run as a Fastify service (port 8131). Depends on Firestore for persistence and the `@intexuraos/infra-gemini` package for LLM access. Supports categorized writing configuration — style instructions and writing samples organized per platform (threads, linkedin, general).
+Hellscript Agent is a voice-to-draft writing assistant that accumulates user utterances into a structured buffer, interprets intent via LLM, and generates versioned markdown drafts. Runs on Cloud Run as a Fastify service (port 8131). Depends on Firestore for persistence and user-service for per-user LLM client resolution. Supports categorized writing configuration — style instructions and writing samples organized per platform (threads, linkedin, general).
 
 ## Architecture
 
@@ -22,7 +22,9 @@ graph TB
 
     subgraph "Dependencies"
         Firestore[(Firestore)]
-        Gemini[Gemini 2.5 Flash]
+        UserSvc[user-service]
+        Gemini[Gemini via UserServiceClient]
+        UsageSvc[llm-usage-service]
     end
 
     WebUI --> API
@@ -30,6 +32,8 @@ graph TB
     UC --> DS
     UC --> LLM
     UC --> Repo
+    API --> UserSvc
+    UserSvc --> Gemini
     Repo --> Firestore
     LLM --> Gemini
 
@@ -39,7 +43,7 @@ graph TB
 
     class API,UC,DS,LLM,Repo service
     class Firestore storage
-    class WebUI,Gemini external
+    class WebUI,Gemini,UserSvc,UsageSvc external
 ```
 
 ## Data Flow
@@ -49,16 +53,19 @@ sequenceDiagram
     autonumber
     participant User
     participant API as Hellscript Routes
+    participant UserSvc as user-service
     participant Interpreter as Intent Interpreter
     participant State as State Service
     participant DraftGen as Draft Generator
     participant Firestore
 
     User->>+API: POST /hellscript/impose
+    API->>UserSvc: getLlmClient(userId)
+    UserSvc-->>API: LlmGenerateClient
     API->>Firestore: Get buffer + state (single read)
     Firestore-->>API: Buffer with materialized state
     API->>+Interpreter: interpret(utterance, state)
-    Interpreter->>Interpreter: LLM call (Gemini)
+    Interpreter->>Interpreter: LLM call (via user's client)
     Interpreter-->>-API: InterpretedIntent
     alt intent is update_draft
         Note over API: Validate category (from request or intent)
@@ -70,7 +77,7 @@ sequenceDiagram
             API->>Firestore: Update state + eventCount
             API->>Firestore: Get config + samples + prior draft (parallel)
             API->>+DraftGen: generate(state, priorDraft, styleInstructions, samples, category)
-            DraftGen->>DraftGen: LLM call (Gemini)
+            DraftGen->>DraftGen: LLM call (via user's client)
             DraftGen-->>-API: Markdown draft
             API->>Firestore: Save draft version
             API->>Firestore: Update buffer draft info
@@ -86,6 +93,16 @@ sequenceDiagram
 ## Recent Changes
 
 Introduced in v3.4.0 (INT-1032). Major update in v3.5.0 with categorized writing configuration (INT-1064).
+
+| Commit      | Description                                                                  | Date       |
+| ----------- | ---------------------------------------------------------------------------- | ---------- |
+| `8aae64e4b` | Make `promptType` required in `LlmGenerateClient` calls (INT-1392)           | 2026-04-18 |
+| `a4f53cd70` | Remove centralized LLM pricing from this service (INT-1387)                  | 2026-04-16 |
+| `2f8388fdf` | Address final code review issues for Gemini client mapping (INT-1369)        | 2026-04-14 |
+| `ebee67901` | Replace startup `GeminiClient` with per-user `LlmGenerateClient` (INT-1369)  | 2026-04-14 |
+| `8b1211dc0` | Wire `HttpInternalAuthUsageSink` in all LLM calls (INT-1342)                 | 2026-04-10 |
+
+**v3.5.0 changes (previous):**
 
 | Commit      | Description                                                                  | Date       |
 | ----------- | ---------------------------------------------------------------------------- | ---------- |
@@ -155,11 +172,11 @@ Introduced in v3.4.0 (INT-1032). Major update in v3.5.0 with categorized writing
 
 ### InterpretedIntent
 
-| Field            | Type                      | Description                      |
-| ---------------- | ------------------------- | -------------------------------- |
-| `kind`           | `IntentKind`              | Intent type                      |
-| `payload`        | `Record<string, unknown>` | Intent-specific data             |
-| `fallbackReason` | `string \                 | undefined`                       | Why fallback was used (if any) |
+| Field            | Type                      | Description                    |
+| ---------------- | ------------------------- | ------------------------------ |
+| `kind`           | `IntentKind`              | Intent type                    |
+| `payload`        | `Record<string, unknown>` | Intent-specific data           |
+| `fallbackReason` | `string \                 | undefined`                     | Why fallback was used (if any) |
 
 **IntentKind Values:**
 
@@ -202,12 +219,12 @@ Union type: `'threads' | 'linkedin' | 'general'`
 
 ### WritingStyleConfig
 
-| Field       | Type             | Description                         |
-| ----------- | ---------------- | ----------------------------------- |
-| `threads`   | `string \        | null`                               | Style instructions for Threads |
-| `linkedin`  | `string \        | null`                               | Style instructions for LinkedIn |
-| `general`   | `string \        | null`                               | Style instructions for General |
-| `updatedAt` | `string`         | ISO 8601 timestamp                  |
+| Field       | Type             | Description                        |
+| ----------- | ---------------- | ---------------------------------- |
+| `threads`   | `string \        | null`                              | Style instructions for Threads |
+| `linkedin`  | `string \        | null`                              | Style instructions for LinkedIn |
+| `general`   | `string \        | null`                              | Style instructions for General |
+| `updatedAt` | `string`         | ISO 8601 timestamp                 |
 
 ### WritingSample
 
@@ -234,39 +251,49 @@ The materialized state is stored as an embedded field (`materializedState`) with
 
 ## Dependencies
 
+### Internal Services
+
+| Service           | Purpose                                            | Failure Mode                                                  |
+| ----------------- | -------------------------------------------------- | ------------------------------------------------------------- |
+| user-service      | Resolve per-user `LlmGenerateClient`               | Returns 500 — impose cannot proceed without LLM client        |
+| llm-usage-service | LLM usage tracking via `HttpInternalAuthUsageSink` | Non-blocking — usage tracking failure does not block requests |
+
 ### External Services
 
-| Service          | Purpose               | Failure Mode                                      |
-| ---------------- | --------------------- | ------------------------------------------------- |
-| Gemini 2.5 Flash | Intent interpretation | Falls back to `fallback_append` intent            |
-| Gemini 2.5 Flash | Draft generation      | Returns `DraftGenerationError`; no draft saved    |
+| Service   | Purpose               | Failure Mode                                      |
+| --------- | --------------------- | ------------------------------------------------- |
+| Gemini    | Intent interpretation | Falls back to `fallback_append` intent            |
+| Gemini    | Draft generation      | Returns `DraftGenerationError`; no draft saved    |
 
 ### Packages
 
-| Package                       | Purpose                       |
-| ----------------------------- | ----------------------------- |
-| `@intexuraos/infra-gemini`    | Gemini client                 |
-| `@intexuraos/llm-contract`    | LLM model constants           |
-| `@intexuraos/llm-prompts`     | PromptBuilder interface       |
-| `@intexuraos/common-core`     | Result types, Logger          |
-| `@intexuraos/common-http`     | Auth, logging, reply helpers  |
-| `@intexuraos/http-server`     | Health checks, env validation |
-| `@intexuraos/http-contracts`  | Shared JSON schemas           |
-| `@intexuraos/infra-firestore` | Firestore access              |
-| `@intexuraos/infra-sentry`    | Error tracking                |
+| Package                        | Purpose                                     |
+| ------------------------------ | ------------------------------------------- |
+| `@intexuraos/internal-clients` | UserServiceClient for LLM client resolution |
+| `@intexuraos/llm-factory`      | `LlmGenerateClient` interface               |
+| `@intexuraos/llm-pricing`      | `HttpInternalAuthUsageSink`                 |
+| `@intexuraos/llm-prompts`      | PromptBuilder interface                     |
+| `@intexuraos/common-core`      | Result types, Logger                        |
+| `@intexuraos/common-http`      | Auth, logging, reply helpers                |
+| `@intexuraos/http-server`      | Health checks, env validation               |
+| `@intexuraos/http-contracts`   | Shared JSON schemas                         |
+| `@intexuraos/infra-firestore`  | Firestore access                            |
+| `@intexuraos/infra-sentry`     | Error tracking                              |
 
 ## Configuration
 
-| Variable                         | Purpose                   | Required |
-| -------------------------------- | ------------------------- | -------- |
-| `INTEXURAOS_GCP_PROJECT_ID`      | GCP project               | Yes      |
-| `INTEXURAOS_AUTH_JWKS_URL`       | JWT verification URL      | Yes      |
-| `INTEXURAOS_AUTH_ISSUER`         | JWT issuer                | Yes      |
-| `INTEXURAOS_AUTH_AUDIENCE`       | JWT audience              | Yes      |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Internal service auth     | Yes      |
-| `INTEXURAOS_GEMINI_APP_API_KEY`  | Gemini API key            | Yes      |
-| `INTEXURAOS_SENTRY_DSN`          | Sentry error tracking DSN | Yes      |
-| `PORT`                           | HTTP port (default: 8131) | No       |
+| Variable                           | Purpose                                         | Required |
+| ---------------------------------- | ----------------------------------------------- | -------- |
+| `INTEXURAOS_GCP_PROJECT_ID`        | GCP project                                     | Yes      |
+| `INTEXURAOS_AUTH_JWKS_URL`         | JWT verification URL                            | Yes      |
+| `INTEXURAOS_AUTH_ISSUER`           | JWT issuer                                      | Yes      |
+| `INTEXURAOS_AUTH_AUDIENCE`         | JWT audience                                    | Yes      |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`   | Internal service auth                           | Yes      |
+| `INTEXURAOS_USER_SERVICE_URL`      | user-service base URL for LLM client resolution | Yes      |
+| `INTEXURAOS_LLM_USAGE_SERVICE_URL` | LLM usage tracking service URL                  | Yes      |
+| `INTEXURAOS_SENTRY_DSN`            | Sentry error tracking DSN                       | Yes      |
+| `INTEXURAOS_GEMINI_APP_API_KEY`    | Platform Gemini fallback key (optional)         | No       |
+| `PORT`                             | HTTP port (default: 8131)                       | No       |
 
 ## Prompts
 
@@ -281,6 +308,7 @@ Both prompts wrap untrusted user input in XML-style tags with injection defense 
 
 ## Gotchas
 
+- **Per-user LLM resolution:** LLM adapters (interpreter, draft generator) are created per-request using the authenticated user's model configuration via `UserServiceClient.getLlmClient()`. The service no longer holds a single shared Gemini client at startup.
 - The materialized state is stored as an embedded field on the buffer document, not as a separate Firestore document. A single read retrieves both buffer metadata and state.
 - Buffer titles are auto-derived from the first thought's text (truncated at 80 characters). There is no endpoint to set the title directly.
 - Event count and latest draft version info are cached on the buffer document to avoid reading all subcollection documents. These are updated during impose operations.
@@ -290,6 +318,7 @@ Both prompts wrap untrusted user input in XML-style tags with injection defense 
 - Maximum 5 writing samples per category per user. Attempting to exceed this returns a `CONFLICT` error.
 - Style instructions are stored per-category on a single user document using Firestore merge writes. Clearing a category sets its field to `null` rather than deleting the document.
 - XML tag escaping (`escapeXmlTags`) is applied to user content in the draft generation prompt to prevent prompt injection.
+- `INTEXURAOS_GEMINI_APP_API_KEY` is no longer in `REQUIRED_ENV` — it is optional. If unset, users without their own Gemini key cannot use the service. A warning is logged at startup when the key is missing.
 
 ## File Structure
 
@@ -345,6 +374,7 @@ apps/hellscript-agent/src/
 │   ├── fakeDraftGenerator.ts
 │   ├── fakeHellscriptRepository.ts
 │   ├── fakeIntentInterpreter.ts
+│   ├── fakeUserServiceClient.ts
 │   ├── fakeWritingConfigRepository.ts
 │   ├── firestoreHellscriptRepository.test.ts
 │   ├── firestoreWritingConfigRepository.test.ts

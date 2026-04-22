@@ -77,7 +77,7 @@ sequenceDiagram
     E->>R: Launch runtime (claude --print / codex exec)
     R-->>O: Stream JSON output (live)
     R->>GH: git push, gh pr create
-    Note over E,R: On WORKER_CONTINUE=1: Claude passes --continue, Codex passes exec resume <threadId>
+    Note over E,R: On WORKER_CONTINUE=1: Claude passes --resume <sessionId>, Codex passes exec resume <threadId>
     R-->>E: Exit code
     E->>E: Cleanup child processes (SIGTERM/SIGKILL)
     E-->>O: Return exit code
@@ -87,6 +87,7 @@ sequenceDiagram
 
 | Commit      | Description                                                               | Date       |
 | ----------- | ------------------------------------------------------------------------- | ---------- |
+| `b622a5ea`  | Use `--resume` with explicit session ID for Claude resumes                | 2026-04-10 |
 | `10d395d5`  | Add Codex streaming regression tests                                      | 2026-04-04 |
 | `3e06904a`  | Stream Codex output live instead of buffering to temp file                | 2026-04-04 |
 | `2ad29f77`  | Remove process-level timeout from Codex entrypoint                        | 2026-04-04 |
@@ -95,6 +96,10 @@ sequenceDiagram
 | `adbd37d2`  | Add Codex session automation parity evidence (INT-1108)                   | 2026-03-29 |
 | `19f7b8e4`  | Add codex-xhigh worker type preset for high-effort Codex tasks (INT-1109) | 2026-03-28 |
 | `1b525d1e`  | Generalize code worker auth and image naming (INT-1104)                   | 2026-03-27 |
+
+### Claude Resume Fix — `--resume` Replaces `--continue` (b622a5ea)
+
+Replaced the `--continue` flag with `--resume "$CLAUDE_SESSION_ID"` for Claude session resumption. The `--continue` flag in `--print` mode with `--system-prompt` override silently created a fresh session instead of resuming the prior one. The `--resume <id>` mechanism is the only reliable way to resume a Claude session in this invocation shape. Added a fail-fast guard requiring `CLAUDE_SESSION_ID` when `WORKER_CONTINUE=1` — mirroring the existing Codex guard that requires `CODEX_THREAD_ID`.
 
 ### Rename from claude-worker to code-worker (1b525d1e)
 
@@ -173,6 +178,7 @@ Network: `code-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquerade
 | `ANTHROPIC_API_KEY`                   | Orchestrator env | API key for Anthropic (opus/auto/sonnet types); omitted when shared credentials are used |
 | `ANTHROPIC_BASE_URL`                  | Worker type map  | API endpoint URL; omitted when shared credentials are used                               |
 | `ANTHROPIC_MODEL`                     | Worker type map  | Model override (set per worker type when defined)                                        |
+| `CLAUDE_SESSION_ID`                   | Orchestrator     | Session ID for resumed Claude attempts (required when `WORKER_CONTINUE=1`)               |
 | `CODEX_HOME`                          | Orchestrator     | `/home/claude/.codex` for Codex runtime                                                  |
 | `CODEX_SQLITE_HOME`                   | Orchestrator     | `/home/claude/.codex` for Codex thread persistence                                       |
 | `CODEX_THREAD_ID`                     | Orchestrator     | Thread ID for resumed Codex attempts (required when `WORKER_CONTINUE=1`)                 |
@@ -255,10 +261,10 @@ The `run-attempt` handler:
 4. Sets up git identity and GitHub token for this attempt
 5. If `WORKER_FORENSICS=1`: enables core dumps (`ulimit -c unlimited`), creates a timestamped forensics directory, and writes attempt metadata
 6. Invokes the runtime:
-   - **Claude:** `claude --print --verbose --output-format stream-json --dangerously-skip-permissions --system-prompt <content> < /secrets/user-prompt.txt`
+   - **Claude:** `claude --print --verbose --output-format stream-json --dangerously-skip-permissions --system-prompt <content> [--resume <sessionId>] < /secrets/user-prompt.txt`
    - **Codex:** Merges system + user prompts into a temp file, then `codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox [-c model_reasoning_effort=<effort>] - < /tmp/codex-prompt.*`
 7. If `WORKER_CONTINUE=1`:
-   - Claude: passes `--continue` to resume the previous session
+   - Claude: passes `--resume "$CLAUDE_SESSION_ID"` to resume the previous session (requires `CLAUDE_SESSION_ID` to be set)
    - Codex: passes `exec resume <CODEX_THREAD_ID>` (requires `CODEX_THREAD_ID` to be set)
 8. Codex output streams directly to stdout (live, not buffered)
 9. If forensics enabled and exit code is 139 (segfault): captures crash forensics (core dumps, GDB backtraces, debug logs, session state, shell snapshots)
@@ -479,7 +485,7 @@ workers/code-worker/
 
 **Readiness marker before run-attempt** — The `run-attempt` handler checks for `/tmp/worker-ready` and exits with error if it is missing. The orchestrator must wait for this marker before calling `docker exec run-attempt`, or the attempt will fail silently.
 
-**Codex resume requires thread ID** — When `WORKER_CONTINUE=1` is set for a Codex runtime attempt, the `CODEX_THREAD_ID` environment variable must also be set. Without it, the entrypoint exits with an error. Claude resume does not require a thread ID — it uses session state from the `.claude` directory.
+**Both runtimes require session IDs for resume** — When `WORKER_CONTINUE=1` is set, Claude requires `CLAUDE_SESSION_ID` and Codex requires `CODEX_THREAD_ID`. Without the respective ID, the entrypoint exits with an error. The previous `--continue` flag for Claude was replaced with `--resume <sessionId>` because `--continue` in `--print` mode with `--system-prompt` silently created fresh sessions instead of resuming.
 
 **Codex prompt delivery differs from Claude** — Claude receives the system prompt via `--system-prompt` argument and user prompt via stdin redirect. Codex receives both merged into a single temp file (`/tmp/codex-prompt.*`) with `[SYSTEM PROMPT]` and `[USER PROMPT]` markers, piped to `codex exec` via stdin.
 

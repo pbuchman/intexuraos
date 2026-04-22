@@ -151,6 +151,13 @@ export class FirestoreNotificationRepository implements NotificationRepository {
         if (options.filter?.app !== undefined && options.filter.app.length > 0) {
           query = query.where('app', 'in', options.filter.app);
         }
+        // Stored `timestamp` is Unix seconds (Tasker %TIMES), so compare directly.
+        if (options.filter?.postTimeSecFrom !== undefined) {
+          query = query.where('timestamp', '>=', options.filter.postTimeSecFrom);
+        }
+        if (options.filter?.postTimeSecTo !== undefined) {
+          query = query.where('timestamp', '<', options.filter.postTimeSecTo);
+        }
 
         query = query.orderBy('receivedAt', 'desc');
 

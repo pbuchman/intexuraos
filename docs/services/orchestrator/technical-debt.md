@@ -1,18 +1,18 @@
 # Orchestrator — Technical Debt
 
-**Last Updated:** 2026-04-07
-**Analysis Run:** [2026-04-07 — orchestrator v3.5.0](../../documentation-runs.md)
+**Last Updated:** 2026-04-22
+**Analysis Run:** [2026-04-22 — orchestrator v3.6.0](../../documentation-runs.md)
 
 ---
 
 ## Summary
 
-| Category            | Count  | Severity |
-| ------------------- | ------ | -------- |
-| TODO/FIXME Comments | 2      | Low      |
-| Architectural Gaps  | 4      | Medium   |
-| Missing Features    | 3      | Medium   |
-| **Total**           | **9**  | Medium   |
+| Category            | Count | Severity |
+| ------------------- | ----- | -------- |
+| TODO/FIXME Comments | 2     | Low      |
+| Architectural Gaps  | 4     | Medium   |
+| Missing Features    | 3     | Medium   |
+| **Total**           | **9** | Medium   |
 
 ---
 
@@ -20,7 +20,7 @@
 
 ### Multi-Machine Orchestration
 
-Distribute tasks across multiple macOS hosts or dev machines:
+Distribute tasks across multiple hosts or dev machines:
 
 1. Central task queue (Pub/Sub) instead of direct HTTP dispatch
 2. Orchestrator instances register with code-agent and pull tasks
@@ -127,9 +127,9 @@ The orchestrator runs on a single machine. State is stored in a local JSON file,
 
 **Severity:** Medium
 
-When Gemini is unavailable (network error, rate limit, API outage), all in-flight tasks fail with `TASK_COMPLETION_VERIFIER_FAILED`. There is no fallback to deterministic-only verification, no retry with backoff, and no way to temporarily disable the verifier for a task.
+When all validation models in the chain are unavailable (network error, rate limit, API outage), all in-flight tasks fail with `TASK_COMPLETION_VERIFIER_FAILED`. There is no fallback to deterministic-only verification, no retry with backoff, and no way to temporarily disable the verifier for a task. The configurable model chain mitigates this partially — if the first model fails, the verifier tries the next — but a complete API outage across all providers still causes cascading failures.
 
-**Recommended fix:** Add a circuit-breaker pattern: after N consecutive Gemini failures within a time window, fall back to deterministic-only verification and log a warning. Re-enable LLM verification after the circuit resets.
+**Recommended fix:** Add a circuit-breaker pattern: after N consecutive failures across all models within a time window, fall back to deterministic-only verification and log a warning. Re-enable LLM verification after the circuit resets.
 
 ---
 
@@ -153,7 +153,7 @@ When Gemini is unavailable (network error, rate limit, API outage), all in-fligh
 
 **Severity:** Medium
 
-The `retriedFrom` field exists on tasks, but retry logic lives entirely in code-agent. The orchestrator has no self-service retry capability (e.g., retrying a task that failed due to transient Docker issues).
+The `retriedFrom` field exists on tasks (now declared in the request schema), but retry logic lives entirely in code-agent. The orchestrator has no self-service retry capability (e.g., retrying a task that failed due to transient Docker issues).
 
 **Recommended fix:** Add a `POST /tasks/:id/retry` endpoint that creates a new task with the same parameters and `retriedFrom` pointing to the original.
 
@@ -179,40 +179,44 @@ Worktrees accumulate until manually cleaned or the stale threshold is exceeded. 
 
 ---
 
-## Recent Improvements (v3.5.0)
+## Recent Improvements (v3.6.0)
 
-The following items improved quality and capability since v3.4.0:
+The following items improved quality and capability since v3.5.0:
 
-- **Codex runtime support** — OpenAI Codex as a full execution backend with dedicated auth, log processing, and two worker presets (INT-1104, INT-1109, INT-1117)
-- **Remediation Agent** — Autonomous auto-improvement loop addressing review findings with cross-LLM verification (INT-1087, INT-1116, INT-1130)
-- **Execution Memory Graph** — Cross-task learning pipeline injecting patterns, pitfalls, and verified approaches into prompts (INT-1098, INT-1257)
-- **Ask Agent** — Interactive code-aware Q&A sessions without PR/Linear overhead (INT-1293, INT-1295, INT-1308)
-- **Agent Compliance Validator** — Replaced the monolithic Deep Validator with a modular OpenRouter-based compliance auditor
-- **Evidence PR for all outcomes** — All planned outcomes including SIMPLE tasks require an evidence PR (INT-1279)
-- **openrouter-free worker type** — Zero-cost execution via OpenRouter free tier
-- **Agent dispatch refactor** — `@worker` routing, one preserved container per PR, review/remediation message rejection (INT-1130)
-- **Startup validation improvements** — Port availability check, GCP credential validation, API key health checks (INT-1214)
-- **V8 ignore blocks replaced with tests** — Significant test coverage improvement across task-dispatcher and docker-provider (INT-1071)
-- **Expired container resume** — Resume allowed when container expired but worktree exists (INT-1304)
-- **Fatal exit code tail detection** — Restricted to tail of raw logs to prevent false positives
-- **Development branch sync** — Repo manager syncs local development branch with origin after fetch
-- **Dead MCP config removed** — Removed dead MCP config processing from worktree manager
+- **Execution memory pipeline simplification** — memory_acknowledgment downgraded to soft warning when the usage triplet is consistent, preventing memory reporting issues from stalling tasks (INT-1403)
+- **Robust memory_acknowledgment recovery** — Fixed regression stalling code-review tasks with three targeted PRs addressing the verifier stall, prompt fix, and pattern matching edge cases (INT-1411, INT-1415)
+- **Log cap raised to 8MB** — Prevents log truncation on verbose builds
+- **Task timeout extended to 5 hours** — Warning at 4h55m, kill at 5h, accommodating complex multi-step tasks
+- **StatusUpdateClient** — Redundant terminal status delivery via direct PATCH to code-agent alongside webhooks (INT-1413)
+- **Docker RFC3339 timestamp stripping** — Fixed log formatter to properly strip Docker-prepended RFC3339 timestamps (INT-1411)
+- **User default model for execution memory** — Configurable validation model chain replaces hardcoded Gemini (INT-1371)
+- **Gemini client usage mapping** — Validation model clients use HttpWebhookUsageSink for cost tracking (INT-1369)
+- **mimo-pro worker type** — Xiaomi MiMo as a new execution backend
+- **test_quality review scope** — Fifth review type covering test quality analysis
+- **Inactivity restart tracking** — `inactivityRestartCount` persisted for observability
+- **retriedFrom field** — Declared in CreateTaskRequestSchema for retry chain tracking
+- **LLM usage sinks migrated to HTTP** — Replaced direct pricing with HttpWebhookUsageSink (INT-1342)
 
 ---
 
 ## Resolved Issues
 
-| Date       | Issue                                     | Resolution                                                                 |
-| ---------- | ----------------------------------------- | -------------------------------------------------------------------------- |
-| 2026-04-07 | Deep Validator was monolithic             | Replaced with modular Agent Compliance Validator using OpenRouter          |
-| 2026-04-07 | No Codex runtime support                  | Full Codex backend with auth, log processing, two worker presets           |
-| 2026-04-07 | No review finding auto-remediation        | Remediation Agent autonomously addresses findings                          |
-| 2026-04-07 | No cross-task learning                    | Execution Memory Graph injects past patterns into prompts                  |
-| 2026-04-07 | Direct Linear GraphQL queries             | Removed — code-agent proxy is now the only path                            |
-| 2026-04-07 | No interactive sessions                   | Ask Agent provides code-aware Q&A without PR overhead                      |
-| 2026-04-07 | Container log persistence missing         | Session transcripts now read from JSONL files for compliance validation    |
-| 2026-03-22 | Review Agent lacked plan awareness        | Review Agent cross-references implementations against plan documents       |
-| 2026-03-22 | Linear fetched directly from orchestrator | Linear proxy via code-agent replaces direct GraphQL                        |
+| Date       | Issue                                     | Resolution                                                                        |
+| ---------- | ----------------------------------------- | --------------------------------------------------------------------------------- |
+| 2026-04-22 | Memory acknowledgment stalling tasks      | Downgraded to soft warning when usage triplet is consistent (INT-1403)            |
+| 2026-04-22 | Memory verifier regression on code-review | Fixed auto-continue prompt and pattern matching (INT-1411, INT-1415)              |
+| 2026-04-22 | Log truncation on verbose builds          | Raised log cap from 4MB to 8MB                                                    |
+| 2026-04-22 | Docker RFC3339 timestamps in logs         | Fixed stripDockerHeaders() to handle RFC3339 format (INT-1411)                    |
+| 2026-04-22 | Hardcoded Gemini for validation           | Configurable validation model chain via INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS |
+| 2026-04-07 | Deep Validator was monolithic             | Replaced with modular Agent Compliance Validator using OpenRouter                 |
+| 2026-04-07 | No Codex runtime support                  | Full Codex backend with auth, log processing, two worker presets                  |
+| 2026-04-07 | No review finding auto-remediation        | Remediation Agent autonomously addresses findings                                 |
+| 2026-04-07 | No cross-task learning                    | Execution Memory Graph injects past patterns into prompts                         |
+| 2026-04-07 | Direct Linear GraphQL queries             | Removed — code-agent proxy is now the only path                                   |
+| 2026-04-07 | No interactive sessions                   | Ask Agent provides code-aware Q&A without PR overhead                             |
+| 2026-04-07 | Container log persistence missing         | Session transcripts now read from JSONL files for compliance validation           |
+| 2026-03-22 | Review Agent lacked plan awareness        | Review Agent cross-references implementations against plan documents              |
+| 2026-03-22 | Linear fetched directly from orchestrator | Linear proxy via code-agent replaces direct GraphQL                               |
 
 ---
 

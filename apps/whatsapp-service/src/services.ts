@@ -5,6 +5,7 @@
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import {
   MessageRepositoryAdapter,
+  NotificationPreferencesRepositoryAdapter,
   PhoneVerificationRepositoryAdapter,
   UserMappingRepositoryAdapter,
   WebhookEventRepositoryAdapter,
@@ -18,6 +19,7 @@ import type {
   EventPublisherPort,
   LinkPreviewFetcherPort,
   MediaStoragePort,
+  NotificationPreferencesRepository,
   OutboundMessageRepository,
   PhoneVerificationRepository,
   ThumbnailGeneratorPort,
@@ -77,6 +79,7 @@ export interface ServiceContainer {
   messageRepository: WhatsAppMessageRepository;
   outboundMessageRepository: OutboundMessageRepository;
   phoneVerificationRepository: PhoneVerificationRepository;
+  notificationPreferencesRepository: NotificationPreferencesRepository;
   mediaStorage: MediaStoragePort;
   eventPublisher: EventPublisherPort;
   messageSender: WhatsAppMessageSender;
@@ -115,6 +118,7 @@ export function getServices(): ServiceContainer {
     messageRepository: new MessageRepositoryAdapter(),
     outboundMessageRepository: createOutboundMessageRepository(),
     phoneVerificationRepository: new PhoneVerificationRepositoryAdapter(),
+    notificationPreferencesRepository: new NotificationPreferencesRepositoryAdapter(),
     mediaStorage: new GcsMediaStorageAdapter(serviceConfig.mediaBucket),
     eventPublisher: new GcpPubSubPublisher(buildPubSubConfig(serviceConfig)),
     messageSender: new WhatsAppCloudApiSender(
