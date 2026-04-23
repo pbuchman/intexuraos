@@ -71,6 +71,17 @@ describe('classifyAttempt', () => {
     expect(classifyAttempt({ logs, exitCode: 0, durationMs: 60_000 })).toEqual({ outcome: 'ran' });
   });
 
+  it('returns ran when a TaskResult with prUrl is present, even if transcript signals are missing', () => {
+    expect(
+      classifyAttempt({
+        logs: '',
+        exitCode: 0,
+        durationMs: 60_000,
+        result: { prUrl: 'https://github.com/org/repo/pull/1', commits: 1, ciFailed: false },
+      })
+    ).toEqual({ outcome: 'ran' });
+  });
+
   it('firstErrorLine is truncated to 500 chars', () => {
     const longError = 'fatal: ' + 'x'.repeat(600);
     const logs = `[entrypoint] booting\n${longError}\n`;

@@ -28,10 +28,32 @@ export interface ClassifyAttemptInput {
   logs: string;
   exitCode: number | undefined; // @allow-undefined-type -- orchestrator tracks optional exit codes
   durationMs: number;
+  /**
+   * Optional structural subset of `TaskResult` from the dispatcher. When the
+   * dispatcher already has a successful result (non-empty `prUrl`), we treat
+   * the attempt as "ran" regardless of the log-shape heuristics — the worker
+   * objectively produced a PR, so any transcript-signal mismatch is noise.
+   */
+  result?: {
+    prUrl?: string | null | undefined; // @allow-undefined-type -- TaskResult.prUrl is optional/nullable
+    commits?: number;
+    ciFailed?: unknown;
+  };
 }
 
 export function classifyAttempt(input: ClassifyAttemptInput): AttemptClassification {
-  const { logs, exitCode, durationMs } = input;
+  const { logs, exitCode, durationMs, result } = input;
+
+  // Short-circuit: if the dispatcher already captured a successful TaskResult
+  // (non-empty `prUrl`), the attempt must be classified as "ran" regardless
+  // of transcript-signal heuristics. This guards against future log-shape
+  // drift where `getWorkerLogs()` output changes and the signals below go
+  // stale — the PR URL is the ground truth for "Claude produced output".
+  const prUrl = result?.prUrl;
+  if (prUrl !== undefined && prUrl !== null && prUrl !== '') {
+    return { outcome: 'ran' };
+  }
+
   const lines = logs.split('\n');
 
   // Detection signals for "Claude actually ran". The raw `getWorkerLogs()`
