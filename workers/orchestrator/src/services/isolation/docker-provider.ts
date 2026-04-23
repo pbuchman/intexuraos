@@ -15,17 +15,17 @@ import { DockerRegistry } from './docker-registry.js';
 import { DockerNetwork } from './docker-network.js';
 import { DockerVolume, PNPM_STORE_DIR_NAME, getHostUserInfo } from './docker-volume.js';
 import { DockerContainer } from './docker-container.js';
+import { createWorkerOrchestration, runAttemptInContainer } from './worker-create.js';
+import { runCleanupCycle as runLifecycleCleanup, performHealthCheck } from './worker-cleanup.js';
 import {
-  createWorkerOrchestration,
-  runAttemptInContainer,
-  runCleanupCycle as runLifecycleCleanup,
-  performHealthCheck,
   resolveForensicsSeccompProfilePath,
   resolveForensicsSeccompSecurityOpt,
-  type WorkerEntry,
-  type PreservedWorkerEntry,
-  type LifecycleProviderConfig,
-} from './worker-lifecycle.js';
+} from './worker-env.js';
+import type {
+  WorkerEntry,
+  PreservedWorkerEntry,
+  LifecycleProviderConfig,
+} from './worker-entry-types.js';
 import * as workerOps from './worker-ops.js';
 import {
   DEFAULT_DOCKER_PROVIDER_CONFIG,
@@ -68,7 +68,7 @@ export class DockerProvider implements IsolationProvider {
       imagePullPolicy: this.config.imagePullPolicy,
       gcpSaKeyPath: this.config.gcpSaKeyPath,
     });
-    this.network = new DockerNetwork(getDocker, logger, { networkName: this.config.networkName });
+    this.network = new DockerNetwork(getDocker, { networkName: this.config.networkName });
     this.volume = new DockerVolume(getDocker, logger, this.config);
     this.container = new DockerContainer(getDocker, logger);
   }
@@ -113,7 +113,7 @@ export class DockerProvider implements IsolationProvider {
   ): Promise<number> => this.container.waitForExecCompletion(taskId, execInstance, execStream);
 
   private getLifecycleConfig(): LifecycleProviderConfig {
-    return { ...this.config } as unknown as LifecycleProviderConfig;
+    return { ...this.config };
   }
 
   async listWorkerContainers(): Promise<DiscoveredContainer[]> {

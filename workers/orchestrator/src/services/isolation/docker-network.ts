@@ -1,5 +1,4 @@
 import type Docker from 'dockerode';
-import type { Logger } from '@intexuraos/common-core';
 
 export interface DockerNetworkConfig {
   networkName: string;
@@ -12,7 +11,6 @@ export interface DockerNetworkConfig {
 export class DockerNetwork {
   constructor(
     private readonly getDocker: () => Docker,
-    _logger: Logger,
     private readonly config: DockerNetworkConfig
   ) {}
 

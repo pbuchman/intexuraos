@@ -74,10 +74,8 @@ export class DockerVolume {
       ...(opts.labels !== undefined ? { Labels: opts.labels } : {}),
     });
     // Dockerode's createVolume response shape varies by version; be defensive.
-    /* v8 ignore start -- ts-type: narrowing VolumeInspectInfo | Volume union from dockerode typings @preserve */
     const mountPoint =
       (response as { Mountpoint?: string }).Mountpoint ?? `/var/lib/docker/volumes/${name}/_data`;
-    /* v8 ignore stop @preserve */
     return { name, mountPoint };
   }
 
