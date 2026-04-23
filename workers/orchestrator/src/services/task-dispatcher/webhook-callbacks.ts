@@ -10,6 +10,17 @@ import { parseRebaseResultOutput, parseContinuationPrOutput } from './prompts.js
 const execAsync = promisify(exec);
 
 /**
+ * Shape of the `exec` helper used inside `checkForResult`. Extracted as a type
+ * so tests can inject a fake implementation instead of relying on module-level
+ * `vi.mock('node:child_process')`, which is incompatible with the way the rest
+ * of this suite is wired.
+ */
+export type CheckForResultExec = (
+  command: string,
+  options: { cwd: string }
+) => Promise<{ stdout: string }>;
+
+/**
  * Best-effort webhook to code-agent when setup (worktree creation or worker
  * container start) fails. Swallows webhook errors so the caller can continue
  * the cleanup path.
@@ -190,13 +201,16 @@ export function enrichResultForResumedTask(
  * returns a TaskResult describing the produced branch/PR + optional rebase
  * outcome. Returns `undefined` when no PR is found or the git/gh calls fail.
  */
-export async function checkForResult(logger: Logger, task: Task): Promise<TaskResult | undefined> {
+export async function checkForResult(
+  logger: Logger,
+  task: Task,
+  exec: CheckForResultExec = execAsync
+): Promise<TaskResult | undefined> {
   try {
     const execOptions = { cwd: task.worktreePath };
 
-    /* v8 ignore start -- upstream: continuationPrNumber path requires a pull_request task with a PR number set; unit test fixtures cannot exercise continuationPrNumber workflows without active GitHub PR infrastructure @preserve */
     if (task.continuationPrNumber !== undefined) {
-      const { stdout: prOutput } = await execAsync(
+      const { stdout: prOutput } = await exec(
         `gh pr view ${String(task.continuationPrNumber)} --json url,number,headRefName,title,state,mergedAt --jq .`,
         execOptions
       );
@@ -212,7 +226,7 @@ export async function checkForResult(logger: Logger, task: Task): Promise<TaskRe
         String(pr.state).toUpperCase() === 'OPEN' &&
         (pr.mergedAt === null || pr.mergedAt === undefined)
       ) {
-        const { stdout: rebaseOutput } = await execAsync(
+        const { stdout: rebaseOutput } = await exec(
           'cat .rebase-result.json 2>/dev/null || echo "{}"',
           execOptions
         );
@@ -228,14 +242,13 @@ export async function checkForResult(logger: Logger, task: Task): Promise<TaskRe
 
       return undefined;
     }
-    /* v8 ignore stop @preserve */
 
     // Get current branch name from worktree
-    const { stdout: branchOutput } = await execAsync('git branch --show-current', execOptions);
+    const { stdout: branchOutput } = await exec('git branch --show-current', execOptions);
     const currentBranch = branchOutput.trim();
 
     // Check for pull requests on this branch
-    const { stdout: prOutput } = await execAsync(
+    const { stdout: prOutput } = await exec(
       `gh pr list --head "${currentBranch}" --json url,number,headRefName,title,commits --jq .`,
       execOptions
     );
@@ -260,7 +273,7 @@ export async function checkForResult(logger: Logger, task: Task): Promise<TaskRe
         : undefined;
 
       // Check for rebase result
-      const { stdout: rebaseOutput } = await execAsync(
+      const { stdout: rebaseOutput } = await exec(
         'cat .rebase-result.json 2>/dev/null || echo "{}"',
         execOptions
       );

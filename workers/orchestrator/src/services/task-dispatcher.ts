@@ -63,6 +63,8 @@ import {
   pickCompletionAgentType as pickCompletionAgentTypeFn,
   pickAgentLabel as pickAgentLabelFn,
   describeAgent as describeAgentFn,
+  resolveTaskRuntime as resolveTaskRuntimeFn,
+  getRuntimeDisplayName as getRuntimeDisplayNameFn,
 } from './task-dispatcher/lifecycle.js';
 import {
   clearTaskTimers as clearTaskTimersFn,
@@ -736,11 +738,11 @@ export class TaskDispatcher {
   }
 
   private resolveTaskRuntime(task: Task): WorkerRuntime {
-    return task.runtime ?? WORKER_TYPES[task.workerType].runtime;
+    return resolveTaskRuntimeFn(task);
   }
 
   private getRuntimeDisplayName(task: Task): string {
-    return this.resolveTaskRuntime(task) === 'codex' ? 'Codex' : 'Claude';
+    return getRuntimeDisplayNameFn(task);
   }
 
   private async saveTask(task: Task): Promise<void> {
