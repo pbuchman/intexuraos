@@ -59,6 +59,18 @@ describe('classifyAttempt', () => {
     expect(classifyAttempt({ logs, exitCode: 0, durationMs: 30_000 })).toEqual({ outcome: 'ran' });
   });
 
+  it('returns ran when logs contain a stream-JSON system init event (no [claude] prefix)', () => {
+    const logs =
+      '2026-04-23T20:38:46.971Z {"type":"system","subtype":"init","session_id":"abc","tools":[{"name":"Read"}],"model":"claude-sonnet-4-6"}\n';
+    expect(classifyAttempt({ logs, exitCode: 0, durationMs: 60_000 })).toEqual({ outcome: 'ran' });
+  });
+
+  it('returns ran when logs contain a stream-JSON assistant event alone', () => {
+    const logs =
+      '2026-04-23T20:39:06.934Z {"type":"assistant","message":{"content":[{"type":"text","text":"hello"}]}}\n';
+    expect(classifyAttempt({ logs, exitCode: 0, durationMs: 60_000 })).toEqual({ outcome: 'ran' });
+  });
+
   it('firstErrorLine is truncated to 500 chars', () => {
     const longError = 'fatal: ' + 'x'.repeat(600);
     const logs = `[entrypoint] booting\n${longError}\n`;
