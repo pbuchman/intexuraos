@@ -365,12 +365,12 @@ describe('askAgentPrompt', () => {
 });
 
 describe('prompt versions', () => {
-  it('reviewPrompt version is 10.0.0', () => {
-    expect(reviewPrompt.version).toBe('10.0.0');
+  it('reviewPrompt version is 10.0.1', () => {
+    expect(reviewPrompt.version).toBe('10.0.1');
   });
 
-  it('pullRequestPrompt version is 5.0.0', () => {
-    expect(pullRequestPrompt.version).toBe('5.0.0');
+  it('pullRequestPrompt version is 5.0.1', () => {
+    expect(pullRequestPrompt.version).toBe('5.0.1');
   });
 });
 
