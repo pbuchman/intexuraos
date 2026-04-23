@@ -95,8 +95,12 @@ function readCodeVersion(): string {
 /**
  * Sequential bootstrap. Throws on any fatal error; the top-level
  * `.catch` reports and exits.
+ *
+ * The body itself is unit-tested in `start.test.ts`, which mocks every
+ * bootstrap module plus `node:fs`, `pino`, and `node:child_process`.
+ * Only `createLogger` and `readCodeVersion` carry narrower v8 ignores
+ * because they wrap pino's transport worker and `execSync` respectively.
  */
-/* v8 ignore start -- module-init: bootstrap entry point cannot be unit-tested without real fs/pino/main; module invocation order verified in start.test.ts @preserve */
 export async function start(): Promise<void> {
   const home = homedir();
   const orchestratorDir = join(home, '.code-orchestrator');
@@ -185,7 +189,6 @@ export async function start(): Promise<void> {
     services.isolationProvider
   );
 }
-/* v8 ignore stop @preserve */
 
 // Top-level invocation is handled by `index.ts` so that unit tests can import
 // `start()` without the module performing side effects at load time.
