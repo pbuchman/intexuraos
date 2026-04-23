@@ -1924,10 +1924,6 @@ importers:
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
-    devDependencies:
-      '@intexuraos/internal-clients':
-        specifier: workspace:*
-        version: link:../internal-clients
 
   packages/llm-prompts:
     dependencies:
