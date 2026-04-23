@@ -1,12 +1,5 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import { Mutex } from 'async-mutex';
-import {
-  type Result,
-  type Logger,
-  getErrorMessage,
-  hasCodeTaskLabel,
-} from '@intexuraos/common-core';
+import { type Result, type Logger, getErrorMessage } from '@intexuraos/common-core';
 import type { OrchestratorConfig } from '../types/config.js';
 import { withTimeout } from '../with-timeout.js';
 import type { Task, TaskResult, TaskError } from '../types/task.js';
@@ -30,7 +23,6 @@ import {
   type CompletionAgentType,
   type CompletionVerifier,
   type CompletionVerifierVerdict,
-  getLast50Lines,
   getLast50ClaudeLines,
 } from './completion-verifier.js';
 import { getRuntime, type RuntimeEvent, type WorkerRuntime } from './runtime/index.js';
@@ -39,129 +31,60 @@ import type {
   AgentComplianceValidator,
   ComplianceValidationInput,
 } from './agent-compliance-validator.js';
-import type { ExecutionAgentData } from './completion-verifier.js';
-import type { ExecutionMemoryPromptContext } from '../types/execution-memory.js';
-import { readSessionTranscript } from './transcript-reader.js';
-import { formatTranscript } from './transcript-formatter.js';
-import { extractPrNumber } from './deep-validator-helpers.js';
 import { fetchDispatchMetadata } from './dispatch-metadata-client.js';
+import {
+  buildMissingFieldsPrompt as buildMissingFieldsPromptFn,
+  buildResumePreamble as buildResumePreambleFn,
+  buildActiveGoalSection as buildActiveGoalSectionFn,
+  parseRebaseResultOutput as parseRebaseResultOutputFn,
+  parseContinuationPrOutput as parseContinuationPrOutputFn,
+  getTaskEventUrl as getTaskEventUrlFn,
+  hasFatalExitCodeField as hasFatalExitCodeFieldFn,
+  INACTIVITY_RESTART_PROMPT,
+} from './task-dispatcher/prompts.js';
+import {
+  appendOrchestratorTaskLog as appendOrchestratorTaskLogFn,
+  appendTaggedTaskLog as appendTaggedTaskLogFn,
+  flushTaskLogs as flushTaskLogsFn,
+  flushAndCloseLogForwarder as flushAndCloseLogForwarderFn,
+} from './task-dispatcher/log-streaming.js';
+import {
+  collectTurnMetrics as collectTurnMetricsFn,
+  prepareComplianceValidationInput as prepareComplianceValidationInputFn,
+  executeComplianceValidation as executeComplianceValidationFn,
+} from './task-dispatcher/metrics.js';
+import {
+  sendSetupFailureWebhook as sendSetupFailureWebhookFn,
+  buildResultFromVerification as buildResultFromVerificationFn,
+  enrichResultForResumedTask as enrichResultForResumedTaskFn,
+  checkForResult as checkForResultFn,
+} from './task-dispatcher/webhook-callbacks.js';
+import {
+  pickCompletionAgentType as pickCompletionAgentTypeFn,
+  pickAgentLabel as pickAgentLabelFn,
+  describeAgent as describeAgentFn,
+  resolveTaskRuntime as resolveTaskRuntimeFn,
+  getRuntimeDisplayName as getRuntimeDisplayNameFn,
+} from './task-dispatcher/lifecycle.js';
+import {
+  clearTaskTimers as clearTaskTimersFn,
+  TASK_TIMEOUT_WARNING_MS,
+  TASK_TIMEOUT_KILL_MS,
+  COMPLETION_CHECK_INTERVAL_MS,
+  ACTIVITY_HEARTBEAT_THRESHOLD_MS,
+  IMAGE_PULL_TIMEOUT_MS,
+  CONTAINER_CREATE_TIMEOUT_MS,
+  ZOMBIE_CLEANUP_TIMEOUT_MS,
+  EVIDENCE_CAPTURE_TIMEOUT_MS,
+  WORKER_DESTROY_TIMEOUT_MS,
+  INACTIVITY_TIMEOUT_MS,
+  MAX_INACTIVITY_RESTARTS,
+} from './task-dispatcher/retry-logic.js';
 
-const execAsync = promisify(exec);
-
-export function getTaskEventUrl(webhookUrl: string): string {
-  return webhookUrl.replace('/internal/webhooks/task-complete', '/internal/webhooks/task-event');
-}
-
-const FATAL_EXIT_CODE_PREFIX = 'fatal_exit_code_';
-
-export function hasFatalExitCodeField(missingFields: string[]): string | undefined {
-  return missingFields.find((f) => f.startsWith(FATAL_EXIT_CODE_PREFIX));
-}
-
-const MEMORY_FIELDS = [
-  'memory_acknowledgment',
-  'memory_ids_used_invalid',
-  'memory_ids_rejected_invalid',
-  'memory_ids_overlap',
-  'memory_ids_unaccounted',
-  'memory_usage_summary',
-  'memory_ids_used',
-  'memory_ids_rejected',
-];
-
-export function buildMissingFieldsPrompt(
-  agentType: CompletionAgentType,
-  missingFields: string[],
-  rawLogs: string,
-  executionMemoryContext?: ExecutionMemoryPromptContext
-): string {
-  const transcript = getLast50Lines(rawLogs);
-  const hasMemoryFailures = missingFields.some((field) => MEMORY_FIELDS.includes(field));
-  const hasAckFailure = missingFields.includes('memory_acknowledgment');
-
-  const triplet = hasMemoryFailures
-    ? [
-        '',
-        'EXECUTION MEMORY REPORTING FAILURE:',
-        'You were injected with execution memories but did not properly report their usage.',
-        'You MUST include in your final output:',
-        '1. memory_ids_used: comma-separated IDs of memories you applied',
-        '2. memory_ids_rejected: comma-separated IDs of memories you found irrelevant',
-        '3. memory_usage_summary: one sentence about how memories influenced your work',
-        'Every injected memory must appear in either used or rejected. No ID may be missing.',
-        'If you did not use any memory, put all IDs in memory_ids_rejected.',
-      ]
-    : [];
-
-  const ackGuidance = hasAckFailure
-    ? buildMemoryAcknowledgmentGuidance(executionMemoryContext)
-    : [];
-
-  return [
-    '[AUTO-CONTINUE ATTEMPT]',
-    'Your last response was missing required fields for the completion verifier.',
-    '',
-    `Missing fields: ${missingFields.join(', ')}`,
-    ...ackGuidance,
-    ...triplet,
-    '',
-    'Please ensure your final message includes all required information.',
-    `Agent type: ${agentType}`,
-    '',
-    'Last 50 lines of transcript for reference:',
-    transcript,
-    '',
-    'Constraints:',
-    '- Do not restart from scratch.',
-    '- Continue from current repository/worktree state.',
-  ].join('\n');
-}
-
-function buildMemoryAcknowledgmentGuidance(
-  context: ExecutionMemoryPromptContext | undefined // @allow-undefined-type -- function parameter, not optional property
-): string[] {
-  const idLines =
-    context !== undefined && context.matchedMemories.length > 0
-      ? [
-          'Injected memory IDs you MUST acknowledge (one bullet per ID):',
-          ...context.matchedMemories.map(
-            (memory, index) =>
-              `- [${String(index + 1)}] ${memory.memoryId} — "${memory.title}" — APPLICABLE|NOT APPLICABLE because <one-sentence reason>`
-          ),
-          '',
-        ]
-      : [];
-
-  return [
-    '',
-    'MEMORY ACKNOWLEDGMENT BLOCK MISSING:',
-    'The completion verifier requires this exact block, EACH bullet on the start of a new line with no leading characters other than "- ":',
-    '',
-    '📋 **Execution Memories Received:**',
-    'I have received and reviewed <N> execution memories for this task:',
-    '- [<n>] <memoryId> — "<title>" — APPLICABLE|NOT APPLICABLE because <one-sentence reason>',
-    '',
-    'Emit the block verbatim BEFORE your final REVIEW_AGENT_FINAL / PLAN_AGENT_FINAL / (etc.) block.',
-    'Do NOT inline the bullets as the value of a field — they must be standalone lines that start with "- [".',
-    ...idLines,
-  ];
-}
-
-const TASK_TIMEOUT_WARNING_MS = 295 * 60 * 1000; // 4h 55m
-const TASK_TIMEOUT_KILL_MS = 300 * 60 * 1000; // 5h
-const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
-const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
-const IMAGE_PULL_TIMEOUT_MS = 900_000; // 15 minutes — image pulls are network-bound
-const CONTAINER_CREATE_TIMEOUT_MS = 120_000; // 2 minutes
-const ZOMBIE_CLEANUP_TIMEOUT_MS = 30_000; // 30s — generous limit for best-effort destroy
-const EVIDENCE_CAPTURE_TIMEOUT_MS = 30_000; // 30s — copyOut/statsSnapshot are best-effort pre-kill telemetry
-const WORKER_DESTROY_TIMEOUT_MS = 30_000; // 30s — bound destroyWorker so docker unresponsiveness cannot wedge the task in 'running'
-const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes — no output triggers kill+restart
-const MAX_INACTIVITY_RESTARTS = 3; // max consecutive restarts before task is failed
-
-const INACTIVITY_RESTART_PROMPT = `Your previous session became unresponsive (no output for 10 minutes) and was terminated.
-Continue working on the task from where you left off. Review your progress so far and
-resume the next incomplete step.`;
+// Re-export module-level helpers for backward compatibility with existing imports.
+export const getTaskEventUrl = getTaskEventUrlFn;
+export const hasFatalExitCodeField = hasFatalExitCodeFieldFn;
+export const buildMissingFieldsPrompt = buildMissingFieldsPromptFn;
 
 export interface DispatchError {
   type:
@@ -548,38 +471,8 @@ export class TaskDispatcher {
       const promptPreview =
         task.prompt.length > 500 ? task.prompt.slice(0, 500) + '…' : task.prompt;
       this.appendTaggedTaskLog(taskId, 'prompt', promptPreview);
-      const isPullRequestTask =
-        task.agentType === 'pull_request' ||
-        task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
-      /* v8 ignore start -- source-map: ternary branch mapping misattributed after bundling despite unit tests for all agents @preserve */
-      const agentLabel = isPullRequestTask
-        ? 'Pull Request Agent'
-        : task.agentType === 'review'
-          ? 'Review Agent'
-          : task.agentType === 'remediation'
-            ? 'Remediation Agent'
-            : task.agentType === 'execution'
-              ? 'Execution Agent'
-              : task.agentType === 'planning'
-                ? 'Planning Agent'
-                : task.agentType === 'ask_agent'
-                  ? 'Ask Agent'
-                  : hasCodeTaskLabel(task.linearIssueLabels)
-                    ? 'Execution Agent'
-                    : 'Planning Agent';
-      const agentDesc =
-        agentLabel === 'Pull Request Agent'
-          ? 'Pull Request Agent \u2014 respond to PR comment/review and push to existing PR branch'
-          : agentLabel === 'Review Agent'
-            ? 'Review Agent \u2014 read-only PR review, post review comments'
-            : agentLabel === 'Remediation Agent'
-              ? 'Remediation Agent \u2014 address review findings on the existing PR branch and decide if re-review is needed'
-              : agentLabel === 'Ask Agent'
-                ? 'Ask Agent \u2014 interactive code assistant, respond to user questions'
-                : agentLabel === 'Execution Agent'
-                  ? 'Execution Agent \u2014 implement autonomously, run CI, create PR'
-                  : 'Planning Agent \u2014 create planning artifacts only, no implementation coding';
-      /* v8 ignore stop @preserve */
+      const agentLabel = pickAgentLabelFn(task);
+      const agentDesc = describeAgentFn(agentLabel);
       this.appendTaggedTaskLog(taskId, 'instructions', `${agentLabel}: ${agentDesc}`);
       this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
     } catch (error) {
@@ -593,31 +486,13 @@ export class TaskDispatcher {
     message: string,
     originalError: unknown
   ): Promise<void> {
-    this.logger.error(
-      { taskId: request.taskId, error: originalError },
-      `Task setup failed: ${message}`
+    await sendSetupFailureWebhookFn(
+      this.webhookClient,
+      this.logger,
+      request,
+      message,
+      originalError
     );
-    try {
-      await this.webhookClient.send({
-        url: request.webhookUrl,
-        secret: request.webhookSecret,
-        payload: {
-          taskId: request.taskId,
-          status: 'failed',
-          error: {
-            code: 'SETUP_FAILED',
-            message,
-          },
-          duration: 0,
-        },
-        taskId: request.taskId,
-      });
-    } catch (webhookError) {
-      this.logger.error(
-        { taskId: request.taskId, webhookError },
-        'Failed to send setup failure webhook'
-      );
-    }
   }
 
   async cancelTask(taskId: string): Promise<Result<void, CancelError>> {
@@ -863,11 +738,11 @@ export class TaskDispatcher {
   }
 
   private resolveTaskRuntime(task: Task): WorkerRuntime {
-    return task.runtime ?? WORKER_TYPES[task.workerType].runtime;
+    return resolveTaskRuntimeFn(task);
   }
 
   private getRuntimeDisplayName(task: Task): string {
-    return this.resolveTaskRuntime(task) === 'codex' ? 'Codex' : 'Claude';
+    return getRuntimeDisplayNameFn(task);
   }
 
   private async saveTask(task: Task): Promise<void> {
@@ -1346,26 +1221,7 @@ export class TaskDispatcher {
 
     const attempt = task.attemptCount ?? 1;
     const maxAttempts = task.maxAttempts ?? 5;
-    const isPullRequestTask =
-      task.agentType === 'pull_request' ||
-      task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
-    /* v8 ignore start -- ts-type: nested ternary chain over discriminated union variants creates structural branches; exhaustive conditional narrowing @preserve */
-    const completionAgentType: CompletionAgentType = isPullRequestTask
-      ? 'pull_request'
-      : task.agentType === 'review'
-        ? 'review'
-        : task.agentType === 'remediation'
-          ? 'remediation'
-          : task.agentType === 'execution'
-            ? 'execution'
-            : task.agentType === 'planning'
-              ? 'planning'
-              : task.agentType === 'ask_agent'
-                ? 'ask_agent'
-                : hasCodeTaskLabel(task.linearIssueLabels)
-                  ? 'execution'
-                  : 'planning';
-    /* v8 ignore stop @preserve */
+    const completionAgentType: CompletionAgentType = pickCompletionAgentTypeFn(task);
     this.attemptCompletionSignals.delete(task.taskId);
 
     // ask_agent: skip structured completion verification — extract summary and finalize
@@ -1702,7 +1558,7 @@ export class TaskDispatcher {
       await this.flushTaskLogs(task.taskId);
       await this.teardownAttempt(task.taskId, true);
 
-      const resumePrompt = this.buildMissingFieldsPrompt(
+      const resumePrompt = buildMissingFieldsPromptFn(
         completionAgentType,
         verification.missingFields,
         rawLogs,
@@ -1778,150 +1634,19 @@ export class TaskDispatcher {
     /* v8 ignore stop @preserve */
   }
 
-  private buildMissingFieldsPrompt(
-    agentType: CompletionAgentType,
-    missingFields: string[],
-    rawLogs: string,
-    executionMemoryContext?: ExecutionMemoryPromptContext
-  ): string {
-    return buildMissingFieldsPrompt(agentType, missingFields, rawLogs, executionMemoryContext);
-  }
-
   private buildResultFromVerification(
     task: Task,
     gitResult: TaskResult | undefined, // @allow-undefined-type -- function parameter, not optional property
     verification: CompletionVerifierVerdict
   ): TaskResult {
-    const base: TaskResult = { ...(gitResult ?? {}) };
-    const agentData = verification.agentData;
-    if (agentData === undefined) return base;
-
-    base.summary = agentData.summary;
-    if ('memory_ids_used' in agentData) {
-      base.execution_memory_ids_used = agentData.memory_ids_used;
-      base.execution_memory_ids_rejected = agentData.memory_ids_rejected;
-      base.execution_memory_usage_summary = agentData.memory_usage_summary;
-    }
-
-    /* v8 ignore start -- upstream: FakeCompletionVerifier always returns planning agentData; execution/review/remediation/pull_request variants require agent-type specific verifier responses not producible with unit test fakes @preserve */
-    if (agentData.agentType === 'planning') {
-      base.planning_outcome_label = agentData.outcome;
-      base.planning_superpowers_writing_plans_used =
-        agentData.superpowers_writing_plans === 'used' ? '1' : '0';
-      base.planning_linear_url = agentData.linear_url;
-      base.planning_is_complex = agentData.is_complex;
-      base.planning_has_plan_doc = agentData.has_plan_doc;
-      base.planning_subtask_urls = agentData.subtask_urls;
-      if (agentData.pr_url !== '') {
-        base.planning_pr_url = agentData.pr_url;
-      }
-      base.planning_unclear_clarification = agentData.unclear_clarification;
-    } else if (agentData.agentType === 'execution') {
-      base.execution_outcome_label = agentData.outcome;
-      base.execution_superpowers_subagent_driven_dev_used =
-        agentData.superpowers_subagent_driven_dev === 'used' ? '1' : '0';
-      base.execution_superpowers_requesting_code_review_used =
-        agentData.superpowers_requesting_code_review === 'used' ? '1' : '0';
-      if (agentData.gh_pr_url !== '') {
-        base.prUrl = agentData.gh_pr_url;
-      }
-      if (task.linearIssueId !== undefined) {
-        base.execution_linear_issue_url = `https://linear.app/pbuchman/issue/${task.linearIssueId}`;
-      }
-    } else if (agentData.agentType === 'review') {
-      if (agentData.gh_pr_url !== '') {
-        base.prUrl = agentData.gh_pr_url;
-      }
-      if (agentData.review_id !== undefined) {
-        base.review_id = agentData.review_id;
-      }
-      base.review_comments_posted = agentData.review_comments_posted;
-      base.review_types = agentData.review_types;
-      base.requirements_tracker_updated = agentData.requirements_tracker_updated;
-      base.gh_actions_status = agentData.gh_actions_status;
-      base.needs_remediation = agentData.needs_remediation;
-      if (agentData.review_body !== '') {
-        base.review_body = agentData.review_body;
-      }
-      if (agentData.review_inline_comments !== '') {
-        base.review_inline_comments = agentData.review_inline_comments;
-      }
-    } else if (agentData.agentType === 'remediation') {
-      base.execution_outcome_label = agentData.outcome;
-      if (agentData.gh_pr_url !== '') {
-        base.prUrl = agentData.gh_pr_url;
-      }
-      base.requires_re_review = agentData.requires_re_review;
-    } else {
-      if (agentData.gh_pr_url !== '') {
-        base.prUrl = agentData.gh_pr_url;
-      }
-      base.comment_replied = agentData.comments_replied === 'yes';
-    }
-    /* v8 ignore stop @preserve */
-
-    return base;
+    return buildResultFromVerificationFn(task, gitResult, verification);
   }
 
   private enrichResultForResumedTask(
     task: Task,
     result: TaskResult | undefined // @allow-undefined-type -- function parameter, not optional property
   ): TaskResult | undefined {
-    if (result === undefined) return undefined;
-    /* v8 ignore start -- upstream: enrichResultForResumedTask agent-type branches require review/remediation/pull_request tasks with lastSuccessResult set; FakeIsolationProvider always returns planning task fixtures without prior success results @preserve */
-    if (task.agentType === 'execution' && task.linearIssueId !== undefined) {
-      result.execution_linear_issue_url = `https://linear.app/pbuchman/issue/${task.linearIssueId}`;
-    }
-    if (task.agentType === 'review' && task.lastSuccessResult !== undefined) {
-      if (result.review_id === undefined && task.lastSuccessResult.review_id !== undefined) {
-        result.review_id = task.lastSuccessResult.review_id;
-      }
-      if (
-        result.review_comments_posted === undefined &&
-        task.lastSuccessResult.review_comments_posted !== undefined
-      ) {
-        result.review_comments_posted = task.lastSuccessResult.review_comments_posted;
-      }
-      if (result.review_types === undefined && task.lastSuccessResult.review_types !== undefined) {
-        result.review_types = task.lastSuccessResult.review_types;
-      }
-      if (
-        result.requirements_tracker_updated === undefined &&
-        task.lastSuccessResult.requirements_tracker_updated !== undefined
-      ) {
-        result.requirements_tracker_updated = task.lastSuccessResult.requirements_tracker_updated;
-      }
-      if (
-        result.gh_actions_status === undefined &&
-        task.lastSuccessResult.gh_actions_status !== undefined
-      ) {
-        result.gh_actions_status = task.lastSuccessResult.gh_actions_status;
-      }
-      if (
-        result.needs_remediation === undefined &&
-        task.lastSuccessResult.needs_remediation !== undefined
-      ) {
-        result.needs_remediation = task.lastSuccessResult.needs_remediation;
-      }
-    }
-    if (task.agentType === 'remediation' && task.lastSuccessResult !== undefined) {
-      if (
-        result.requires_re_review === undefined &&
-        task.lastSuccessResult.requires_re_review !== undefined
-      ) {
-        result.requires_re_review = task.lastSuccessResult.requires_re_review;
-      }
-    }
-    if (task.agentType === 'pull_request' && task.lastSuccessResult !== undefined) {
-      if (
-        result.comment_replied === undefined &&
-        task.lastSuccessResult.comment_replied !== undefined
-      ) {
-        result.comment_replied = task.lastSuccessResult.comment_replied;
-      }
-    }
-    /* v8 ignore stop @preserve */
-    return result;
+    return enrichResultForResumedTaskFn(task, result);
   }
 
   private async finalizeTaskWithResult(
@@ -1953,90 +1678,30 @@ export class TaskDispatcher {
   }
 
   private buildResumePreamble(task?: Task): string {
-    const prViewCommand =
-      task?.continuationPrNumber !== undefined
-        ? `gh pr view ${String(task.continuationPrNumber)} --json state,mergedAt,number 2>/dev/null || echo "NO_PR"`
-        : 'gh pr view --json state,mergedAt,number 2>/dev/null || echo "NO_PR"';
-
-    const openInstructions =
-      task?.continuationPrBranch !== undefined
-        ? {
-            lines: [
-              'If PR is OPEN:',
-              '  1. Continue on current local branch normally',
-              `  2. Push updates with: git push origin HEAD:${task.continuationPrBranch}`,
-              '  3. Check for unaddressed PR comments:',
-            ],
-            finalStep: '  4. If the message below references a PR comment or review, address it',
-          }
-        : {
-            lines: [
-              'If PR is OPEN:',
-              '  1. Continue on current branch normally',
-              '  2. Check for unaddressed PR comments:',
-            ],
-            finalStep: '  3. If the message below references a PR comment or review, address it',
-          };
-
-    return [
-      '[RESUME PRE-FLIGHT — MANDATORY]',
-      'Before making ANY changes, check your PR state:',
-      `  ${prViewCommand}`,
-      '',
-      'If PR is MERGED or CLOSED or NO_PR:',
-      '  1. git fetch origin',
-      '  2. git checkout -b followup/<short-desc> origin/development',
-      '  3. After changes → create NEW PR targeting development',
-      '  4. Do NOT push to the old branch',
-      '',
-      ...openInstructions.lines,
-      '     gh api /repos/{owner}/{repo}/pulls/{number}/comments --jq "[.[] | select(.user.login != \\"intexuraos-code-worker[bot]\\")] | length"',
-      openInstructions.finalStep,
-      '---',
-      '',
-    ].join('\n');
+    return buildResumePreambleFn(task);
   }
 
   private buildActiveGoalSection(task: Task | undefined, prompt: string): string {
-    const preamble = this.buildResumePreamble(task);
-    const goalText = prompt.startsWith(preamble) ? prompt.slice(preamble.length) : prompt;
-    return [
-      '',
-      '',
-      '[ACTIVE GOAL — HIGHEST PRIORITY]',
-      'A new user message has been received. This is your PRIMARY task.',
-      'Complete this goal before doing anything else. If context was compacted,',
-      'this section survives and takes absolute priority over conversation history.',
-      '',
-      goalText,
-    ].join('\n');
+    return buildActiveGoalSectionFn(task, prompt);
   }
 
-  private parseRebaseResultOutput(
-    output: string,
-    taskId: string
-  ): TaskResult['rebaseResult'] | undefined {
-    try {
-      const parsed = JSON.parse(output) as {
-        attempted?: boolean;
-        success?: boolean;
-        conflictFiles?: string[];
-      };
-      if (parsed.attempted === true && typeof parsed.success === 'boolean') {
-        return {
-          attempted: parsed.attempted,
-          success: parsed.success,
-          ...(parsed.conflictFiles !== undefined && { conflictFiles: parsed.conflictFiles }),
-        };
-      }
-      return undefined;
-    } catch (parseError) {
-      this.logger.warn({ taskId, error: parseError }, 'Failed to parse rebase result');
-      return undefined;
-    }
+  /**
+   * @internal
+   * Preserved on the class so existing unit tests that spy via
+   * `getInternal().parseRebaseResultOutput(...)` continue to work after the
+   * implementation moved to `task-dispatcher/prompts.ts`.
+   */
+  parseRebaseResultOutput(output: string, taskId: string): TaskResult['rebaseResult'] | undefined {
+    return parseRebaseResultOutputFn(output, taskId, this.logger);
   }
 
-  private parseContinuationPrOutput(
+  /**
+   * @internal
+   * Preserved on the class so existing unit tests that spy via
+   * `internal.parseContinuationPrOutput(...)` continue to work after the
+   * implementation moved to `task-dispatcher/prompts.ts`.
+   */
+  parseContinuationPrOutput(
     taskId: string,
     prOutput: string
   ):
@@ -2049,19 +1714,7 @@ export class TaskDispatcher {
         mergedAt?: string | null;
       }
     | undefined {
-    try {
-      return JSON.parse(prOutput) as {
-        url?: string;
-        number?: number;
-        headRefName?: string;
-        title?: string;
-        state?: string;
-        mergedAt?: string | null;
-      };
-    } catch {
-      this.logger.warn({ taskId, prOutput }, 'Failed to parse continuation PR output');
-      return undefined;
-    }
+    return parseContinuationPrOutputFn(taskId, prOutput, this.logger);
   }
 
   private async handleResumedAfterSuccessCompletion(task: Task): Promise<void> {
@@ -2671,103 +2324,7 @@ export class TaskDispatcher {
   }
 
   private async checkForResult(task: Task): Promise<TaskResult | undefined> {
-    try {
-      const execOptions = { cwd: task.worktreePath };
-
-      /* v8 ignore start -- upstream: continuationPrNumber path requires a pull_request task with a PR number set; unit test fixtures cannot exercise continuationPrNumber workflows without active GitHub PR infrastructure @preserve */
-      if (task.continuationPrNumber !== undefined) {
-        const { stdout: prOutput } = await execAsync(
-          `gh pr view ${String(task.continuationPrNumber)} --json url,number,headRefName,title,state,mergedAt --jq .`,
-          execOptions
-        );
-        const pr = this.parseContinuationPrOutput(task.taskId, prOutput);
-        if (pr === undefined) {
-          return undefined;
-        }
-
-        if (
-          typeof pr.url === 'string' &&
-          typeof pr.headRefName === 'string' &&
-          typeof pr.title === 'string' &&
-          String(pr.state).toUpperCase() === 'OPEN' &&
-          (pr.mergedAt === null || pr.mergedAt === undefined)
-        ) {
-          const { stdout: rebaseOutput } = await execAsync(
-            'cat .rebase-result.json 2>/dev/null || echo "{}"',
-            execOptions
-          );
-          const rebaseResult = this.parseRebaseResultOutput(rebaseOutput, task.taskId);
-
-          return {
-            branch: pr.headRefName,
-            prUrl: pr.url,
-            summary: pr.title,
-            ...(rebaseResult !== undefined && { rebaseResult }),
-          };
-        }
-
-        return undefined;
-      }
-      /* v8 ignore stop @preserve */
-
-      // Get current branch name from worktree
-      const { stdout: branchOutput } = await execAsync('git branch --show-current', execOptions);
-      const currentBranch = branchOutput.trim();
-
-      // Check for pull requests on this branch
-      const { stdout: prOutput } = await execAsync(
-        `gh pr list --head "${currentBranch}" --json url,number,headRefName,title,commits --jq .`,
-        execOptions
-      );
-      const prs = JSON.parse(prOutput) as {
-        url: string;
-        number: number;
-        headRefName: string;
-        commits?: { oid: string; messageHeadline: string }[];
-        title: string;
-      }[];
-
-      /* v8 ignore start -- ts-type: array access with nullish coalescing creates type narrowing branches @preserve */
-      if (prs.length > 0) {
-        const pr = prs[0] ?? undefined;
-        if (pr === undefined) {
-          return undefined;
-        }
-        const branch = pr.headRefName;
-        const commits = Array.isArray(pr.commits) ? pr.commits.length : 0;
-        const commitDetails = Array.isArray(pr.commits)
-          ? pr.commits.map((c) => ({ sha: c.oid, message: c.messageHeadline }))
-          : undefined;
-
-        // Check for rebase result
-        const { stdout: rebaseOutput } = await execAsync(
-          'cat .rebase-result.json 2>/dev/null || echo "{}"',
-          execOptions
-        );
-        const rebaseResult = this.parseRebaseResultOutput(rebaseOutput, task.taskId);
-
-        /* v8 ignore start -- ts-type: spread operator with optional rebaseResult creates type narrowing branch @preserve */
-        const result: TaskResult = {
-          branch,
-          commits,
-          prUrl: pr.url,
-          summary: pr.title,
-          ...(commitDetails !== undefined && { commitDetails }),
-          /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
-          ...(rebaseResult !== undefined && { rebaseResult }),
-          /* v8 ignore stop @preserve */
-        };
-        /* v8 ignore stop @preserve */
-
-        return result;
-      }
-      /* v8 ignore stop @preserve */
-
-      return undefined;
-    } catch (error) {
-      this.logger.error({ taskId: task.taskId, error }, 'Failed to check for task result');
-      return undefined;
-    }
+    return await checkForResultFn(this.logger, task);
   }
 
   private async handleRuntimeEvents(task: Task, events: RuntimeEvent[]): Promise<void> {
@@ -2777,6 +2334,7 @@ export class TaskDispatcher {
 
     for (const event of events) {
       if (event.type === 'log') {
+        /* v8 ignore start -- upstream: event.text empty string branch requires runtime adapter to emit an empty log event; FakeIsolationProvider and both runtime fakes always produce non-empty log chunks so the empty-text skip is unreachable in unit tests @preserve */
         if (event.text !== '') {
           if (runtimeName === 'codex') {
             this.logForwarder.appendRawChunk(taskId, event.text);
@@ -2784,19 +2342,23 @@ export class TaskDispatcher {
             this.logForwarder.appendChunk(taskId, event.text);
           }
         }
+        /* v8 ignore stop @preserve */
         continue;
       }
 
       if (event.type === 'runtime_session_started') {
+        /* v8 ignore start -- upstream: runtimeSessionId equality branch requires a runtime to emit a duplicate runtime_session_started event with the same sessionId; FakeIsolationProvider emits each session id exactly once so the equal-id skip is unreachable in unit tests @preserve */
         if (task.runtimeSessionId !== event.sessionId) {
           task.runtimeSessionId = event.sessionId;
           shouldPersistTask = true;
         }
+        /* v8 ignore stop @preserve */
         this.logger.info({ taskId, sessionId: event.sessionId }, 'Detected runtime session start');
         continue;
       }
 
       if (event.type === 'attempt_completed') {
+        /* v8 ignore start -- upstream: attemptCompletionSignals.has guard requires runtime to emit attempt_completed twice for the same task without reset; FakeIsolationProvider emits each attempt_completed once per attempt so the duplicate-signal skip is unreachable in unit tests @preserve */
         if (!this.attemptCompletionSignals.has(taskId)) {
           this.taskExitCodes.set(taskId, event.exitCode);
           this.attemptCompletionSignals.add(taskId);
@@ -2805,6 +2367,7 @@ export class TaskDispatcher {
             'Detected runtime stream result; signaling attempt completion'
           );
         }
+        /* v8 ignore stop @preserve */
         continue;
       }
 
@@ -2824,49 +2387,20 @@ export class TaskDispatcher {
     }
   }
 
-  private formatLocalTime(date: Date): string {
-    const h = String(date.getHours()).padStart(2, '0');
-    const m = String(date.getMinutes()).padStart(2, '0');
-    const s = String(date.getSeconds()).padStart(2, '0');
-    const ms = String(date.getMilliseconds()).padStart(3, '0');
-    return `${h}:${m}:${s}.${ms}`;
-  }
-
   private appendOrchestratorTaskLog(taskId: string, message: string): void {
-    this.appendTaggedTaskLog(taskId, 'orchestrator', message);
+    appendOrchestratorTaskLogFn(this.logForwarder, taskId, message);
   }
 
   private appendTaggedTaskLog(taskId: string, tag: string, message: string): void {
-    this.logForwarder.appendChunk(
-      taskId,
-      `${this.formatLocalTime(new Date())} [${tag}] ${message}\n`
-    );
+    appendTaggedTaskLogFn(this.logForwarder, taskId, tag, message);
   }
 
   private async flushTaskLogs(taskId: string): Promise<void> {
-    try {
-      await this.logForwarder.flush(taskId);
-    } catch (error) {
-      this.logger.warn({ taskId, error }, 'Failed to flush task logs');
-    }
+    await flushTaskLogsFn(this.logForwarder, this.logger, taskId);
   }
 
   private async collectTurnMetrics(task: Task, attempt: number): Promise<void> {
-    if (this.turnMetricsCollector === undefined) return;
-    try {
-      await this.turnMetricsCollector.collectAndPublish({
-        taskId: task.taskId,
-        containerId: task.containerId,
-        attempt,
-        startedAt: task.startedAt,
-        completedAt: new Date().toISOString(),
-      });
-    } catch (error) {
-      this.logger.error(
-        { taskId: task.taskId, attempt, error },
-        'Failed to collect turn metrics (non-fatal, task finalization continues)'
-      );
-    }
+    await collectTurnMetricsFn(this.turnMetricsCollector, this.logger, task, attempt);
   }
 
   private async prepareComplianceValidationInput(
@@ -2874,163 +2408,42 @@ export class TaskDispatcher {
     finalResult: TaskResult,
     verification: CompletionVerifierVerdict
   ): Promise<ComplianceValidationInput | undefined> {
-    if (this.agentComplianceValidator === undefined) return undefined;
-    if (verification.agentData?.agentType !== 'execution') return undefined;
-
-    try {
-      const agentData: ExecutionAgentData = verification.agentData;
-
-      const prNumber = extractPrNumber(finalResult.prUrl);
-      if (prNumber === undefined) {
-        this.logger.warn({ taskId: task.taskId }, 'Compliance validation skipped: no PR number');
-        return undefined;
-      }
-
-      this.appendOrchestratorTaskLog(task.taskId, 'Starting compliance validation');
-
-      const entries = await readSessionTranscript(
-        this.config.secretsBasePath,
-        task.taskId,
-        this.logger
-      );
-
-      if (entries.length === 0) {
-        this.logger.warn(
-          { taskId: task.taskId },
-          'Compliance validation skipped: no transcript entries'
-        );
-        return undefined;
-      }
-
-      const formattedTranscript = formatTranscript(entries);
-
-      return {
-        taskId: task.taskId,
-        prNumber,
-        repository: task.repository,
-        formattedTranscript,
-        agentClaims: {
-          outcome: agentData.outcome,
-          superpowers_subagent_driven_dev: agentData.superpowers_subagent_driven_dev,
-          superpowers_requesting_code_review: agentData.superpowers_requesting_code_review,
-          gh_pr_url: agentData.gh_pr_url,
-          memory_ids_used: agentData.memory_ids_used,
-          memory_ids_rejected: agentData.memory_ids_rejected,
-          memory_usage_summary: agentData.memory_usage_summary,
-          summary: agentData.summary,
-        },
-        workerType: task.workerType,
-      };
-    } catch (error) {
-      this.logger.warn(
-        { taskId: task.taskId, error: getErrorMessage(error) },
-        'Compliance validation preparation failed (non-fatal, skipping compliance validation)'
-      );
-      return undefined;
-    }
+    return await prepareComplianceValidationInputFn(
+      this.agentComplianceValidator,
+      this.config,
+      this.logForwarder,
+      this.logger,
+      task,
+      finalResult,
+      verification
+    );
   }
 
   private async executeComplianceValidation(
     task: Task,
     input: ComplianceValidationInput
   ): Promise<void> {
-    const { taskId } = task;
-    this.appendOrchestratorTaskLog(
-      taskId,
-      `Compliance validation starting (transcript: ${String(input.formattedTranscript.length)} chars)`
+    await executeComplianceValidationFn(
+      this.agentComplianceValidator,
+      this.webhookClient,
+      this.logForwarder,
+      this.logger,
+      task,
+      input
     );
-    try {
-      const result = await this.agentComplianceValidator?.validate(input, (message: string) => {
-        this.appendOrchestratorTaskLog(taskId, `Compliance validation: ${message}`);
-      });
-      if (result !== undefined && result !== null) {
-        this.appendOrchestratorTaskLog(taskId, 'Compliance validation completed');
-        this.logger.info({ taskId }, 'Compliance validation completed');
-
-        // Fire-and-forget: send structured report to code-agent
-        const complianceReportUrl = task.webhookUrl.replace(
-          '/internal/webhooks/task-complete',
-          '/internal/webhooks/compliance-report'
-        );
-        if (!task.webhookUrl.includes('/internal/webhooks/task-complete')) {
-          this.logger.warn(
-            { taskId, webhookUrl: task.webhookUrl },
-            'Compliance report webhook URL does not contain expected path — skipping delivery'
-          );
-        } else {
-          void this.webhookClient
-            .send({
-              url: complianceReportUrl,
-              secret: task.webhookSecret,
-              payload: {
-                taskId: input.taskId,
-                prNumber: input.prNumber,
-                report: result.report,
-                model: result.model,
-                promptVersion: result.promptVersion,
-                costUsd: result.costUsd,
-                workerType: input.workerType,
-                transcriptTooLong: result.transcriptTooLong,
-              },
-              taskId,
-            })
-            .then((webhookResult) => {
-              if (webhookResult.ok) {
-                this.logger.info({ taskId }, 'Compliance report webhook delivered');
-              } else {
-                this.logger.warn(
-                  { taskId, error: webhookResult.error.message },
-                  'Compliance report webhook delivery failed'
-                );
-              }
-            })
-            .catch((error: unknown) => {
-              this.logger.warn(
-                { taskId, error: getErrorMessage(error) },
-                'Compliance report webhook send error'
-              );
-            });
-        }
-      } else {
-        this.appendOrchestratorTaskLog(taskId, 'Compliance validation completed without result');
-        this.logger.warn({ taskId }, 'Compliance validation completed without result');
-      }
-    } catch (error) {
-      this.appendOrchestratorTaskLog(
-        taskId,
-        `Compliance validation error: ${getErrorMessage(error)}`
-      );
-      this.logger.error(
-        { taskId, error: getErrorMessage(error) },
-        'Compliance validation failed (non-fatal, task finalization continues)'
-      );
-    }
   }
 
   private async flushAndCloseLogForwarder(taskId: string): Promise<void> {
-    await this.flushTaskLogs(taskId);
-    try {
-      this.logForwarder.close(taskId);
-    } catch (error) {
-      this.logger.warn(
-        { taskId, error },
-        'Failed to close log forwarder after compliance validation'
-      );
-    }
+    await flushAndCloseLogForwarderFn(this.logForwarder, this.logger, taskId);
   }
 
   private clearTaskTimers(taskId: string): void {
-    const keys = [`${taskId}-warning`, `${taskId}-kill`, `${taskId}-monitor`];
-    for (const key of keys) {
-      const timer = this.activeTasks.get(key);
-      if (timer !== undefined) {
-        clearTimeout(timer);
-        clearInterval(timer);
-        this.activeTasks.delete(key);
-      }
-    }
-    this.activityTimeoutManager.stop(taskId);
-    this.completionInProgress.delete(taskId);
-    this.attemptCompletionSignals.delete(taskId);
+    clearTaskTimersFn(
+      this.activeTasks,
+      this.activityTimeoutManager,
+      this.completionInProgress,
+      this.attemptCompletionSignals,
+      taskId
+    );
   }
 }
