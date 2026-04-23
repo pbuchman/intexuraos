@@ -93,32 +93,42 @@ Verify: the messages have `gcsPath`, `mediaType="audio"`, and a linked `webhookE
 
 - [ ] **Step 1: Write the failing test — publish failure must mark the event `failed`.**
 
+Use the existing typed in-memory fakes pattern (`FakeWhatsAppWebhookEventRepository`, `FakeWhatsAppMessageRepository`, `FakeEventPublisher`) already defined in `apps/whatsapp-service/src/__tests__/fakes.ts`. `FakeEventPublisher` already implements `publishAudioStored`; extend it with a `setPublishAudioStoredFailure(err)` helper (or equivalent) so tests can opt into failure. Avoid `as unknown as ConstructorParameters<…>` casts — they bypass the strict-mode guard that would otherwise catch a missing `eventPublisher` field once Task 2 Step 3 adds it to `ProcessAudioMessageDeps`.
+
 Add to `apps/whatsapp-service/src/__tests__/usecases/processAudioMessage.test.ts` (create if missing — pattern matches `processImageMessage.test.ts`):
 
 ```typescript
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok } from '@intexuraos/common-core';
+import { err } from '@intexuraos/common-core';
+import {
+  FakeEventPublisher,
+  FakeMediaStorage,
+  FakeWhatsAppCloudApi,
+  FakeWhatsAppMessageRepository,
+  FakeWhatsAppWebhookEventRepository,
+} from '../fakes.js';
+import type { EventPublisherPort } from '../../domain/whatsapp/ports/eventPublisher.js';
 import { ProcessAudioMessageUseCase } from '../../domain/whatsapp/usecases/processAudioMessage.js';
 
 describe('ProcessAudioMessageUseCase — audio-stored publish', () => {
   it('marks webhook event failed when publishAudioStored fails', async () => {
-    const updateEventStatus = vi.fn(async () => ok(undefined));
-    const deps = {
-      webhookEventRepository: { updateEventStatus },
-      messageRepository: { saveMessage: vi.fn(async () => ok({ id: 'msg-1' })) },
-      mediaStorage: { upload: vi.fn(async () => ok({ gcsPath: 'u/1/m-1.ogg' })) },
-      whatsappCloudApi: {
-        getMediaUrl: vi.fn(async () => ok({ url: 'https://example/audio' })),
-        downloadMedia: vi.fn(async () => ok(Buffer.from('abc'))),
-      },
-      eventPublisher: {
-        publishAudioStored: vi.fn(async () =>
-          err({ code: 'TOPIC_NOT_FOUND', message: 'Topic audio-stored-dev not found' })
-        ),
-      },
-    } as unknown as ConstructorParameters<typeof ProcessAudioMessageUseCase>[0];
+    const webhookEventRepository = new FakeWhatsAppWebhookEventRepository();
+    await webhookEventRepository.saveEvent({ eventId: 'evt-1', status: 'processing' /* … */ });
 
-    const usecase = new ProcessAudioMessageUseCase(deps);
+    const eventPublisher: Pick<EventPublisherPort, 'publishAudioStored'> = new FakeEventPublisher();
+    (eventPublisher as FakeEventPublisher).setPublishAudioStoredFailure({
+      code: 'TOPIC_NOT_FOUND',
+      message: 'Topic audio-stored-dev not found',
+    });
+
+    const usecase = new ProcessAudioMessageUseCase({
+      webhookEventRepository,
+      messageRepository: new FakeWhatsAppMessageRepository(),
+      mediaStorage: new FakeMediaStorage(),
+      whatsappCloudApi: new FakeWhatsAppCloudApi(),
+      eventPublisher,
+    });
+
     const result = await usecase.execute(
       {
         eventId: 'evt-1',
@@ -135,16 +145,14 @@ describe('ProcessAudioMessageUseCase — audio-stored publish', () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(updateEventStatus).toHaveBeenCalledWith(
-      'evt-1',
-      'failed',
-      expect.objectContaining({
-        failureDetails: expect.stringContaining('Topic audio-stored-dev not found'),
-      })
-    );
+    const stored = webhookEventRepository.getAll()[0];
+    expect(stored?.status).toBe('failed');
+    expect(stored?.failureDetails).toContain('Topic audio-stored-dev not found');
   });
 });
 ```
+
+If `FakeEventPublisher` does not yet expose a failure-injection hook for `publishAudioStored`, add one in this step (keeps the fake typed against `EventPublisherPort`; no casts).
 
 - [ ] **Step 2: Run the test to confirm it fails (use case does not publish yet).**
 
@@ -168,7 +176,7 @@ export interface ProcessAudioMessageDeps {
 }
 ```
 
-In `execute()`, replace the block at lines 230-242 with:
+In `execute()`, replace the block at lines 230-242 with (note: the original `logger.info('Audio message saved successfully')` happy-path observability log is preserved — just moved after the publish succeeds):
 
 ```typescript
 // Step 5: Publish audio.stored BEFORE marking webhook as completed.
@@ -195,6 +203,18 @@ if (!publishResult.ok) {
 
 // Step 6: Mark webhook event as completed only after publish succeeded.
 await webhookEventRepository.updateEventStatus(eventId, 'completed', {});
+
+// Preserve existing happy-path observability.
+logger.info(
+  {
+    event: 'audio_processed',
+    eventId,
+    userId,
+    messageId: saveResult.value.id,
+    gcsPath: uploadResult.value.gcsPath,
+  },
+  'Audio message saved successfully'
+);
 ```
 
 - [ ] **Step 4: Remove the now-duplicate publish block from `processWebhookEventUseCase.handleAudioMessage` (lines 433-454).**
@@ -310,11 +330,23 @@ it('throws when audioStoredTopic is undefined', () => {
 
 - [ ] **Step 3: Change `GcpPubSubPublisherConfig.audioStoredTopic` and `approvalReplyTopic` to required `string`.** Update the constructor to validate and throw if missing. Update call sites in `services.ts` so that `buildPubSubConfig` always passes these values (config module already marks them `REQUIRED_ENV`).
 
-- [ ] **Step 4: Change `publishToTopic` signature** to `topicName: string` (drop nullability). Add a new `publishToOptionalTopic(topicName: string | null, …)` used only by genuinely optional callers (`publishExtractLinkPreviews`, `publishCommandIngest` if we keep it optional — audit each call site).
+- [ ] **Step 4: Pre-migration audit — find every `publishToTopic(` caller across the entire codebase (not just `GcpPubSubPublisher`).**
 
-- [ ] **Step 5: Run `pnpm run ci:tracked`.** Expected: PASS.
+```bash
+# BasePubSubPublisher is the only nullable-topic surface; audit every subclass and call site.
+pnpm --silent exec rg -n "publishToTopic\\(" --type ts apps packages workers
+pnpm --silent exec rg -n "extends BasePubSubPublisher" --type ts apps packages workers
+```
 
-- [ ] **Step 6: Commit.**
+For each call site, determine whether the passed `topicName` expression can ever be `null`/`undefined`:
+- If the field is typed `string | null` (or the expression has optional-chaining/nullable fallback), it must be migrated to `publishToOptionalTopic` **before** the `publishToTopic` signature is narrowed — otherwise the build breaks.
+- Known non-`GcpPubSubPublisher` subclasses at time of writing: `apps/bookmarks-agent/src/infra/pubsub/enrichPublisher.ts` (`EnrichPublisherImpl` — stores `topicName: string | null`), plus subclasses in `apps/research-agent/`. Each must be either migrated to the optional variant or have its field tightened to `string`.
+
+- [ ] **Step 5: Change `publishToTopic` signature** to `topicName: string` (drop nullability). Add a new `publishToOptionalTopic(topicName: string | null, …)` used only by genuinely optional callers (`publishExtractLinkPreviews`, `publishCommandIngest` if we keep it optional — each confirmed via the Step 4 audit).
+
+- [ ] **Step 6: Run `pnpm run ci:tracked`.** Expected: PASS.
+
+- [ ] **Step 7: Commit.**
 
 ```bash
 git add packages/infra-pubsub apps/whatsapp-service
@@ -393,5 +425,5 @@ and confirm the transcription Cloud Function runs end-to-end.
 ## 8. Risks
 
 - Task 2 changes behavior: audio webhooks that previously silently succeeded will now mark the webhook event as `failed` when the publish path is broken. This is intentional (visibility) but will spike the `failed` count until the upstream config is corrected. Task 1 must run first so we know whether Task 3 is needed before Task 2 is deployed.
-- Task 4 is a type-narrowing change; if any caller in another app passes `undefined` for `audioStoredTopic` we will break their build. Grep for `GcpPubSubPublisher(` across `apps/` first.
+- Task 4 is a type-narrowing change; if any caller in another app stores a `string | null` topic name and passes it to `publishToTopic` we will break their build. The Task 4 pre-migration audit (Step 4) must grep every `publishToTopic(` call site and `extends BasePubSubPublisher` subclass across `apps/`, `packages/`, and `workers/` — not just `GcpPubSubPublisher(` constructors — and migrate nullable callers to `publishToOptionalTopic` before narrowing the signature. `apps/bookmarks-agent` and subclasses under `apps/research-agent` are known nullable call sites.
 - Task 5 touches Terraform and a Cloud Function redeploy — must be run by a human with prod access; the plan stops at proposing the change.
