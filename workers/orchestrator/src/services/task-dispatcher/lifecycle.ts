@@ -1,11 +1,8 @@
 import { hasCodeTaskLabel } from '@intexuraos/common-core';
-import { stripDockerHeaders } from '../log-formatter.js';
 import { WORKER_TYPES } from '../isolation/types.js';
-import { buildSystemPrompt } from '../system-prompt.js';
-import { type RuntimeEvent, type WorkerRuntime } from '../runtime/index.js';
+import { type WorkerRuntime } from '../runtime/index.js';
 import type { Task } from '../../types/task.js';
 import type { CompletionAgentType } from '../completion-verifier.js';
-import { hasFatalExitCodeField } from './prompts.js';
 
 /**
  * Resolves the runtime name ("claude" | "codex") for a task. Falls back to
@@ -126,6 +123,3 @@ export function pickAgentStatusLabel(agentType: string | undefined): string | un
   return agentStatusMap[agentType];
 }
 
-// Re-export the helpers used by the state-machine coordinator for convenience
-export { hasFatalExitCodeField, stripDockerHeaders, buildSystemPrompt };
-export type { RuntimeEvent };
