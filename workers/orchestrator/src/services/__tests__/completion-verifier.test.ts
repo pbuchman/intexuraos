@@ -1223,7 +1223,10 @@ describe('OrchestratorCompletionVerifier', () => {
         },
       });
       expect(result.passed).toBe(false);
-      expect(result.missingFields).toEqual(
+      // [INT-1461] memory-validation failures now route to telemetryMissingFields (non-blocking
+      // for optional-tier workers). The blocking deliverable contract is unaffected.
+      expect(result.missingFields).toEqual([]);
+      expect(result.telemetryMissingFields).toEqual(
         expect.arrayContaining([
           'memory_acknowledgment',
           'memory_ids_used_invalid',
@@ -1291,7 +1294,9 @@ describe('OrchestratorCompletionVerifier', () => {
         },
       });
       expect(result.passed).toBe(false);
-      expect(result.missingFields).toEqual(
+      // [INT-1461] memory-validation failures route to telemetryMissingFields.
+      expect(result.missingFields).toEqual([]);
+      expect(result.telemetryMissingFields).toEqual(
         expect.arrayContaining([
           'memory_ids_rejected_invalid',
           'memory_ids_overlap',
@@ -1461,7 +1466,9 @@ describe('OrchestratorCompletionVerifier', () => {
             superpowers_subagent_driven_dev: 'used',
             superpowers_requesting_code_review: 'used',
             gh_pr_url: 'https://github.com/org/repo/pull/1874',
-            memory_ids_used: '',
+            // [INT-1461] populate memory_ids_used with a stray id so detectEmptyMemoryFields
+            // falls through and validateMemoryReporting drives the assertion below.
+            memory_ids_used: 'mem_stray',
             memory_ids_rejected: '',
             memory_usage_summary: 'No memories applied.',
             summary: 'Reviewed PR.',
@@ -1503,14 +1510,18 @@ describe('OrchestratorCompletionVerifier', () => {
       });
 
       expect(result.passed).toBe(false);
-      expect(result.missingFields).toContain('memory_acknowledgment');
-      expect(result.missingFields).toContain('memory_ids_unaccounted');
+      // [INT-1461] memory-validation hard failures route to telemetryMissingFields, not missingFields.
+      expect(result.missingFields).toEqual([]);
+      expect(result.telemetryMissingFields).toContain('memory_acknowledgment');
+      expect(result.telemetryMissingFields).toContain('memory_ids_unaccounted');
     });
 
     it('end-to-end: prompt from buildMissingFieldsPrompt yields a compliant block that the verifier accepts', async () => {
       const { buildMissingFieldsPrompt } = await import('../task-dispatcher.js');
 
       // ---- Attempt 1: agent emits only the triplet with an *unaccounted* memory — hard failure ---
+      // [INT-1461] populate memory_ids_used with a stray id so detectEmptyMemoryFields skips
+      // and validateMemoryReporting drives the failure chain below.
       generateMock.mockResolvedValueOnce({
         ok: true,
         value: {
@@ -1519,7 +1530,7 @@ describe('OrchestratorCompletionVerifier', () => {
             superpowers_subagent_driven_dev: 'used',
             superpowers_requesting_code_review: 'used',
             gh_pr_url: 'https://github.com/org/repo/pull/1',
-            memory_ids_used: '',
+            memory_ids_used: 'mem_stray',
             memory_ids_rejected: '',
             memory_usage_summary: '',
             summary: 'Reviewed.',
@@ -1564,13 +1575,16 @@ describe('OrchestratorCompletionVerifier', () => {
         executionMemoryContext: memoryContext,
       });
       expect(attempt1.passed).toBe(false);
-      expect(attempt1.missingFields).toContain('memory_acknowledgment');
-      expect(attempt1.missingFields).toContain('memory_ids_unaccounted');
+      // [INT-1461] memory-validation hard failures live in telemetryMissingFields now.
+      expect(attempt1.missingFields).toEqual([]);
+      expect(attempt1.telemetryMissingFields).toContain('memory_acknowledgment');
+      expect(attempt1.telemetryMissingFields).toContain('memory_ids_unaccounted');
 
       // ---- buildMissingFieldsPrompt produces instructions for attempt 2 ---
+      // Mirror the dispatcher: pass the union of blocking and telemetry missing fields.
       const resumePrompt = buildMissingFieldsPrompt(
         'execution',
-        attempt1.missingFields,
+        [...attempt1.missingFields, ...attempt1.telemetryMissingFields],
         attempt1RawLogs,
         memoryContext
       );
@@ -2082,7 +2096,9 @@ describe('OrchestratorCompletionVerifier', () => {
       });
       expect(result.passed).toBe(false);
       expect(result.verifierFailure).toBe(false);
-      expect(result.missingFields).toEqual(['memory_ids_used', 'memory_ids_rejected']);
+      // [INT-1461] empty memory-id fields now route to telemetryMissingFields (non-blocking tier-optional).
+      expect(result.missingFields).toEqual([]);
+      expect(result.telemetryMissingFields).toEqual(['memory_ids_used', 'memory_ids_rejected']);
     });
 
     it('passes planning agent when only memory_ids_used is populated (rejected empty is acceptable)', async () => {
@@ -2184,7 +2200,9 @@ describe('OrchestratorCompletionVerifier', () => {
       });
       expect(result.passed).toBe(false);
       expect(result.verifierFailure).toBe(false);
-      expect(result.missingFields).toEqual(['memory_ids_used', 'memory_ids_rejected']);
+      // [INT-1461] empty memory-id fields route to telemetryMissingFields.
+      expect(result.missingFields).toEqual([]);
+      expect(result.telemetryMissingFields).toEqual(['memory_ids_used', 'memory_ids_rejected']);
     });
 
     it('fails review agent when memories were injected but both memory fields are empty', async () => {
@@ -2216,7 +2234,9 @@ describe('OrchestratorCompletionVerifier', () => {
       });
       expect(result.passed).toBe(false);
       expect(result.verifierFailure).toBe(false);
-      expect(result.missingFields).toEqual(['memory_ids_used', 'memory_ids_rejected']);
+      // [INT-1461] empty memory-id fields route to telemetryMissingFields.
+      expect(result.missingFields).toEqual([]);
+      expect(result.telemetryMissingFields).toEqual(['memory_ids_used', 'memory_ids_rejected']);
     });
 
     it('fails remediation agent when memories were injected but both memory fields are empty', async () => {
@@ -2247,7 +2267,9 @@ describe('OrchestratorCompletionVerifier', () => {
       });
       expect(result.passed).toBe(false);
       expect(result.verifierFailure).toBe(false);
-      expect(result.missingFields).toEqual(['memory_ids_used', 'memory_ids_rejected']);
+      // [INT-1461] empty memory-id fields route to telemetryMissingFields.
+      expect(result.missingFields).toEqual([]);
+      expect(result.telemetryMissingFields).toEqual(['memory_ids_used', 'memory_ids_rejected']);
     });
 
     it('skips memory field enforcement for non-execution agents when no memories were injected', async () => {
@@ -2314,10 +2336,13 @@ describe('OrchestratorCompletionVerifier', () => {
       expect(result.passed).toBe(true);
     });
 
-    it('does not apply non-execution memory field enforcement to execution agent (execution uses validateMemoryReporting directly)', async () => {
-      // The execution agent uses EXECUTION_SCHEMA which requires memory fields as z.string() (not optional),
-      // so Zod will already fail if they are missing. This test confirms the post-parse check does not
-      // double-run for execution agents (it only runs for non-execution agents).
+    it('[INT-1461] execution agent with empty memory fields routes memory_ids_used/rejected to telemetry', async () => {
+      // After INT-1461 the execution-agent short-circuit in detectEmptyMemoryFields was removed
+      // (EXECUTION_SCHEMA's memory fields are now optional, matching every other agent schema).
+      // So execution agents with both memory_ids_used and memory_ids_rejected blank now return
+      // early with those two field names in telemetryMissingFields, never reaching
+      // validateMemoryReporting. See the separate test cases where at least one memory_id is
+      // populated for coverage of the full triplet/ack validation chain.
       generateMock.mockResolvedValueOnce({
         ok: true,
         value: {
@@ -2344,17 +2369,9 @@ describe('OrchestratorCompletionVerifier', () => {
           '[claude] step 1\n[claude] step 2\n[claude] step 3\n[claude] step 4\n[claude] Execution done',
         executionMemoryContext: makeMemoryContext(['mem_500']),
       });
-      // Fails via validateMemoryReporting (memory_acknowledgment, memory_ids_unaccounted, memory_usage_summary),
-      // NOT via the new post-parse check (which is skipped for execution agents)
       expect(result.passed).toBe(false);
-      expect(result.missingFields).not.toEqual(['memory_ids_used', 'memory_ids_rejected']);
-      expect(result.missingFields).toEqual(
-        expect.arrayContaining([
-          'memory_acknowledgment',
-          'memory_ids_unaccounted',
-          'memory_usage_summary',
-        ])
-      );
+      expect(result.missingFields).toEqual([]);
+      expect(result.telemetryMissingFields).toEqual(['memory_ids_used', 'memory_ids_rejected']);
     });
   });
 
@@ -3221,5 +3238,64 @@ describe('OrchestratorCompletionVerifier.extractResumeSummary', () => {
 describe('getVerifierTaskId', () => {
   it('returns null when called outside any AsyncLocalStorage context', () => {
     expect(getVerifierTaskId()).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// [INT-1461] verdict routing — memory-validation failures land in telemetryMissingFields.
+// ---------------------------------------------------------------------------
+
+describe('[INT-1461] verdict routing — memory validation → telemetry bucket', () => {
+  it('emits memory_acknowledgment into telemetryMissingFields, not missingFields', async () => {
+    generateMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify({
+          gh_pr_url: 'https://github.com/org/repo/pull/42',
+          review_id: '123',
+          review_comments_posted: '2',
+          review_types: 'code_quality',
+          // Populate memory_ids to bypass detectEmptyMemoryFields so validateMemoryReporting
+          // runs. memory_ids_used references mem_other (not injected) → triggers
+          // memory_ids_used_invalid, memory_ids_unaccounted, and memory_acknowledgment (hard).
+          memory_ids_used: 'mem_other',
+          memory_ids_rejected: '',
+          memory_usage_summary: 'Used something.',
+          summary: 'Reviewed the PR.',
+        }),
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+      },
+    });
+    const verifier = createVerifier();
+    const transcript = Array.from({ length: 20 }, (_, i) => `[claude] line ${String(i + 1)}`).join(
+      '\n'
+    );
+    const verdict = await verifier.verify({
+      taskId: 't1',
+      attempt: 1,
+      maxAttempts: 3,
+      agentType: 'review',
+      rawLogs: transcript, // no "Execution Memories Received" block
+      executionMemoryContext: {
+        applicationId: 'app',
+        retrievalVersion: 'v1',
+        querySummary: 's',
+        matchedMemories: [
+          {
+            memoryId: 'mem_1',
+            title: 't',
+            memoryType: 'pitfall_pattern',
+            score: 0.9,
+            appliesWhen: 'x',
+            action: 'x',
+            avoid: 'x',
+            verification: 'x',
+          },
+        ],
+      },
+    });
+    expect(verdict.missingFields).toEqual([]);
+    expect(verdict.telemetryMissingFields).toContain('memory_acknowledgment');
+    expect(verdict.passed).toBe(false);
   });
 });
