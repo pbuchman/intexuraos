@@ -3140,6 +3140,33 @@ describe('DockerProvider', () => {
         'Container wait error'
       );
     });
+
+    it('does not overwrite status when worker is destroyed before wait resolves', async () => {
+      const nonManagedProvider = new TestableDockerProvider(
+        { managedAttemptsMode: false },
+        mockLogger,
+        mocks.mockDocker
+      );
+      const onComplete = vi.fn();
+
+      const handle = await nonManagedProvider.createWorker(createTestConfig({ onComplete }));
+      expect(handle.status).toBe('running');
+
+      // Remove the worker from the map BEFORE wait() resolves. This is the
+      // race we want to cover: the .then() callback runs but workers.get()
+      // returns undefined, so handle.status must not be overwritten.
+      await nonManagedProvider.destroyWorker('test-task-123');
+
+      // Simulate a pre-existing terminal status (e.g. set by waitForCompletion
+      // when a timeout fires) — the .then() must not clobber it.
+      handle.status = 'timeout';
+
+      mocks.resolveContainerWait({ StatusCode: 137 });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(handle.status).toBe('timeout');
+      expect(onComplete).toHaveBeenCalledWith(137);
+    });
   });
 
   describe('cleanup error handling', () => {
