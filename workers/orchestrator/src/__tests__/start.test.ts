@@ -1,0 +1,209 @@
+/**
+ * Integration smoke test for `start()` — verifies the happy-path bootstrap
+ * sequence invokes every module in the expected order.
+ *
+ * All bootstrap modules and the final `main()` call are mocked so that
+ * importing the start module does not perform any real I/O. The test
+ * drives the fully-wired `start()` function with a minimal env stub and
+ * asserts the call sequence.
+ */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Track invocation order across mocks.
+const callOrder: string[] = [];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bootstrap module mocks (hoisted by vitest.vi.mock)
+// ─────────────────────────────────────────────────────────────────────────────
+vi.mock('../bootstrap/env-config.js', () => ({
+  loadEnvConfig: vi.fn(() => {
+    callOrder.push('loadEnvConfig');
+    return {
+      repoUrl: 'https://example.com/repo.git',
+      codeAgentUrl: 'https://code-agent.test',
+      internalAuthToken: 'internal',
+      orchestratorSecret: 'secret',
+      usageWebhookUrl: 'https://usage.test',
+      githubAppId: '1',
+      githubInstallationId: '2',
+      projectId: 'proj',
+      gcpSaKeyPath: '/tmp/sa.json',
+      port: 19199,
+      capacity: 1,
+      completionMaxAttempts: 3,
+      validationModels: 'gemini-2.5-flash',
+      workerImage: 'image:latest',
+      keepContainersAlive: false,
+      workerForensicsMode: false,
+      preserveWorkerContainers: true,
+      linearApiKey: 'lin',
+      sentryAuthToken: 'sentry',
+      minimaxApiKey: 'm',
+      mimoApiKey: 'm',
+      dashscopeApiKey: 'd',
+      openRouterApiKey: '',
+      geminiApiKey: 'g',
+      logLevel: 'info',
+    };
+  }),
+}));
+
+vi.mock('../bootstrap/gcp-validator.js', () => ({
+  validateGcpCredentials: vi.fn(() => {
+    callOrder.push('validateGcpCredentials');
+  }),
+}));
+
+vi.mock('../bootstrap/port-checker.js', () => ({
+  ensurePortAvailable: vi.fn(async () => {
+    callOrder.push('ensurePortAvailable');
+  }),
+}));
+
+vi.mock('../bootstrap/secret-manager.js', () => ({
+  fetchGitHubKeys: vi.fn(() => {
+    callOrder.push('fetchGitHubKeys');
+    return 'PEM';
+  }),
+}));
+
+vi.mock('../bootstrap/api-key-validator.js', () => ({
+  validateWorkerApiKeys: vi.fn(async () => {
+    callOrder.push('validateWorkerApiKeys');
+  }),
+}));
+
+vi.mock('../bootstrap/git-identity.js', () => ({
+  readHostGitConfig: vi.fn(() => undefined),
+}));
+
+vi.mock('../bootstrap/service-wiring.js', () => ({
+  buildOrchestratorServices: vi.fn(async () => {
+    callOrder.push('buildOrchestratorServices');
+    return {
+      statePersistence: {},
+      tokenService: {},
+      webhookClient: {},
+      dispatcher: { getRunningTaskIds: (): readonly string[] => [] },
+      heartbeatManager: {},
+      workerAuthRegistry: {},
+      isolationProvider: {},
+    };
+  }),
+  startCredentialRefreshLoop: vi.fn(() => {
+    callOrder.push('startCredentialRefreshLoop');
+    return null;
+  }),
+}));
+
+vi.mock('../services/repo-manager.js', () => ({
+  ensureRepository: vi.fn(async () => {
+    callOrder.push('ensureRepository');
+  }),
+}));
+
+vi.mock('../main.js', () => ({
+  main: vi.fn(async () => {
+    callOrder.push('main');
+  }),
+}));
+
+// Mock file-system side effects in start.ts itself (mkdirSync, writeFileSync).
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return {
+    ...actual,
+    mkdirSync: vi.fn(() => undefined),
+    writeFileSync: vi.fn(() => undefined),
+  };
+});
+
+// Mock pino so no transport worker threads spawn.
+vi.mock('pino', () => {
+  const logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  };
+  const pino = vi.fn(() => logger);
+  return { default: pino };
+});
+
+// Skip the git `rev-parse HEAD` probe.
+vi.mock('node:child_process', async () => {
+  const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process');
+  return {
+    ...actual,
+    execSync: vi.fn(() => 'deadbeef'),
+  };
+});
+
+// Imports below pick up the hoisted mocks above.
+import { start } from '../start.js';
+import { loadEnvConfig } from '../bootstrap/env-config.js';
+import { validateGcpCredentials } from '../bootstrap/gcp-validator.js';
+import { ensurePortAvailable } from '../bootstrap/port-checker.js';
+import { fetchGitHubKeys } from '../bootstrap/secret-manager.js';
+import { validateWorkerApiKeys } from '../bootstrap/api-key-validator.js';
+import {
+  buildOrchestratorServices,
+  startCredentialRefreshLoop,
+} from '../bootstrap/service-wiring.js';
+import { ensureRepository } from '../services/repo-manager.js';
+import { main } from '../main.js';
+
+describe('start() — full bootstrap happy path', () => {
+  beforeEach(() => {
+    callOrder.length = 0;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('invokes every bootstrap module exactly once', async () => {
+    await start();
+
+    expect(loadEnvConfig).toHaveBeenCalledOnce();
+    expect(validateGcpCredentials).toHaveBeenCalledOnce();
+    expect(fetchGitHubKeys).toHaveBeenCalledOnce();
+    expect(ensurePortAvailable).toHaveBeenCalledOnce();
+    expect(ensureRepository).toHaveBeenCalledOnce();
+    expect(buildOrchestratorServices).toHaveBeenCalledOnce();
+    expect(validateWorkerApiKeys).toHaveBeenCalledOnce();
+    expect(startCredentialRefreshLoop).toHaveBeenCalledOnce();
+    expect(main).toHaveBeenCalledOnce();
+  });
+
+  it('invokes bootstrap modules in the documented order', async () => {
+    await start();
+
+    // Env first, then dependent infra checks, then service wiring,
+    // then live API-key validation, then the main loop.
+    expect(callOrder).toEqual([
+      'loadEnvConfig',
+      'validateGcpCredentials',
+      'fetchGitHubKeys',
+      'ensurePortAvailable',
+      'ensureRepository',
+      'buildOrchestratorServices',
+      'validateWorkerApiKeys',
+      'startCredentialRefreshLoop',
+      'main',
+    ]);
+  });
+
+  it('surfaces errors thrown by the env loader', async () => {
+    vi.mocked(loadEnvConfig).mockImplementationOnce(() => {
+      throw new Error('MISSING_VAR');
+    });
+    await expect(start()).rejects.toThrow('MISSING_VAR');
+  });
+
+  it('surfaces errors thrown by the port checker', async () => {
+    vi.mocked(ensurePortAvailable).mockRejectedValueOnce(new Error('Port 19199 is already in use'));
+    await expect(start()).rejects.toThrow(/Port 19199 is already in use/);
+  });
+});
