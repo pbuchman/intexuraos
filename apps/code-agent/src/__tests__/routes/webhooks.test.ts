@@ -5277,8 +5277,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(labelCalls).toHaveLength(0);
     });
 
-    describe('plan PR auto-merge on review pass', () => {
-      // Shared setup for auto-merge tests
+    describe('plan PR NOT merged on review pass', () => {
       async function createPlanningTaskWithPrUrl(traceId: string, prUrl: string): Promise<import('../../domain/models/codeTask.js').CodeTask> {
         const result = await codeTaskRepo.create({
           userId: 'user-123',
@@ -5322,84 +5321,11 @@ describe('POST /internal/webhooks/task-complete', () => {
         return result.value;
       }
 
-      it('auto-merges plan PR when plan review passes and planning_pr_url exists', async () => {
-        await createPlanningTaskWithPrUrl('trace_plan_merge_ok', 'https://github.com/pbuchman/intexuraos/pull/1654');
-        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_ok_review');
-
-        // Install fresh gitHubPRClient mock with mergePullRequest
-        const { gitHubPRClient: ghClient } = installPRNotificationServices();
-        vi.mocked(ghClient.getPullRequestStatus).mockResolvedValueOnce(
-          ok({ state: 'open' as const, mergedAt: null, headRef: 'plan/test' })
-        );
-        vi.mocked(ghClient.mergePullRequest).mockResolvedValueOnce(
-          ok({ sha: 'abc123', merged: true })
-        );
-
-        const payload = {
-          taskId: reviewTask.id,
-          status: 'completed' as const,
-          result: {
-            summary: 'Plan review passed',
-            review_comments_posted: '0',
-            review_types: 'plan-review',
-            needs_remediation: '0',
-            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
-          },
-        };
-
-        const response = await sendLabelPayload(payload);
-
-        expect(response.statusCode).toBe(200);
-        expect(ghClient.mergePullRequest).toHaveBeenCalledWith(
-          'ghp_test_token',
-          'pbuchman',
-          'intexuraos',
-          1654,
-          'merge',
-          expect.stringContaining('[plan]'),
-        );
-      });
-
-      it('succeeds even when plan PR auto-merge fails', async () => {
-        await createPlanningTaskWithPrUrl('trace_plan_merge_fail', 'https://github.com/pbuchman/intexuraos/pull/1654');
-        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_fail_review');
+      it('does NOT merge plan PR when plan review passes (plan PR stays open for user review comments)', async () => {
+        await createPlanningTaskWithPrUrl('trace_plan_no_automerge_pass', 'https://github.com/pbuchman/intexuraos/pull/1654');
+        const reviewTask = await createReviewTaskWithPr('trace_plan_no_automerge_pass_review');
 
         const { gitHubPRClient: ghClient } = installPRNotificationServices();
-        vi.mocked(ghClient.getPullRequestStatus).mockResolvedValueOnce(
-          ok({ state: 'open' as const, mergedAt: null, headRef: 'plan/test' })
-        );
-        vi.mocked(ghClient.mergePullRequest).mockResolvedValueOnce(
-          err({ code: 'API_ERROR' as const, message: 'Merge conflict' })
-        );
-
-        const payload = {
-          taskId: reviewTask.id,
-          status: 'completed' as const,
-          result: {
-            summary: 'Plan review passed',
-            review_comments_posted: '0',
-            review_types: 'plan-review',
-            needs_remediation: '0',
-            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
-          },
-        };
-
-        const response = await sendLabelPayload(payload);
-
-        // Webhook still succeeds — merge failure is best-effort
-        expect(response.statusCode).toBe(200);
-      });
-
-      it('skips plan PR merge when GitHub token is unavailable', async () => {
-        await createPlanningTaskWithPrUrl('trace_plan_merge_no_token', 'https://github.com/pbuchman/intexuraos/pull/1654');
-        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_no_token_review');
-
-        installPRNotificationServices();
-        // Override getOAuthToken to return an error (no token available)
-        const { userServiceClient: uc } = getServices();
-        vi.mocked(uc.getOAuthToken).mockResolvedValue(
-          err({ code: 'CONNECTION_NOT_FOUND' as const, message: 'Connection not found' })
-        );
 
         const payload = {
           taskId: reviewTask.id,
@@ -5416,58 +5342,14 @@ describe('POST /internal/webhooks/task-complete', () => {
         const response = await sendLabelPayload(payload);
 
         expect(response.statusCode).toBe(200);
-        // mergePullRequest should not have been called since we have no token
-        const { gitHubPRClient: ghClient } = getServices();
         expect(ghClient.mergePullRequest).not.toHaveBeenCalled();
       });
 
-      it('skips plan PR merge when planning task has no planning_pr_url', async () => {
-        const result = await codeTaskRepo.create({
-          userId: 'user-123',
-          prompt: 'Plan the task',
-          sanitizedPrompt: 'Plan the task',
-          systemPromptHash: 'plan-auto',
-          workerType: 'auto',
-          workerLocation: 'mac',
-          repository: 'pbuchman/intexuraos',
-          baseBranch: 'development',
-          traceId: 'trace_plan_merge_no_url',
-          prNumber: 1654,
-          webhookSecret: 'test-webhook-secret',
-          agentType: 'planning',
-          linearIssueId: 'INT-500',
-        });
-        if (!result.ok) throw new Error('Failed to create planning task');
-        // Update result to have empty planning_pr_url
-        await codeTaskRepo.update(result.value.id, { result: { planning_pr_url: '' } });
-        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_no_url_review');
+      it('does NOT merge plan PR when plan review requires remediation', async () => {
+        await createPlanningTaskWithPrUrl('trace_plan_no_automerge_remediation', 'https://github.com/pbuchman/intexuraos/pull/1654');
+        const reviewTask = await createReviewTaskWithPr('trace_plan_no_automerge_remediation_review');
 
-        installPRNotificationServices();
-
-        const payload = {
-          taskId: reviewTask.id,
-          status: 'completed' as const,
-          result: {
-            summary: 'Plan review passed',
-            review_comments_posted: '0',
-            review_types: 'plan-review',
-            needs_remediation: '0',
-            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
-          },
-        };
-
-        const response = await sendLabelPayload(payload);
-
-        expect(response.statusCode).toBe(200);
-        const { gitHubPRClient: ghClient } = getServices();
-        expect(ghClient.mergePullRequest).not.toHaveBeenCalled();
-      });
-
-      it('does NOT auto-merge plan PR when review requires remediation', async () => {
-        await createPlanningTaskWithPrUrl('trace_plan_merge_remediation', 'https://github.com/pbuchman/intexuraos/pull/1654');
-        const reviewTask = await createReviewTaskWithPr('trace_plan_merge_remediation_review');
-
-        installPRNotificationServices();
+        const { gitHubPRClient: ghClient } = installPRNotificationServices();
 
         const payload = {
           taskId: reviewTask.id,
@@ -5484,8 +5366,36 @@ describe('POST /internal/webhooks/task-complete', () => {
         const response = await sendLabelPayload(payload);
 
         expect(response.statusCode).toBe(200);
-        const { gitHubPRClient: ghClient } = getServices();
         expect(ghClient.mergePullRequest).not.toHaveBeenCalled();
+      });
+
+      it('does NOT add ready-to-merge label on plan review pass (plan PR is not ready to merge)', async () => {
+        await createPlanningTaskWithPrUrl('trace_plan_no_label', 'https://github.com/pbuchman/intexuraos/pull/1654');
+        const reviewTask = await createReviewTaskWithPr('trace_plan_no_label_review');
+
+        installPRNotificationServices();
+        const { linearAgentClient: lac } = getServices();
+        const updateSpy = vi.mocked(lac.updateIssueMetadata);
+
+        const payload = {
+          taskId: reviewTask.id,
+          status: 'completed' as const,
+          result: {
+            summary: 'Plan review passed',
+            review_comments_posted: '0',
+            review_types: 'plan-review',
+            needs_remediation: '0',
+            prUrl: 'https://github.com/pbuchman/intexuraos/pull/1654',
+          },
+        };
+
+        const response = await sendLabelPayload(payload);
+
+        expect(response.statusCode).toBe(200);
+        const readyToMergeCalls = updateSpy.mock.calls.filter(
+          (call) => Array.isArray(call[0].addLabels) && call[0].addLabels.includes('ready-to-merge'),
+        );
+        expect(readyToMergeCalls).toHaveLength(0);
       });
     });
 
