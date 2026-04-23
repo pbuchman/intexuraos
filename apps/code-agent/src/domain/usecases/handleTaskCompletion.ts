@@ -17,7 +17,38 @@
  * Route handlers call this function after internal auth + HMAC signature
  * validation succeed. The return shape drives the Fastify reply.
  */
-/* eslint-disable */
+/*
+ * Targeted ESLint suppressions for verbatim extraction from webhookRoutes.ts.
+ *
+ * The code inside this file is an as-is lift of the 1,700-line task-complete
+ * handler, preserved unchanged for safety (see INT-1431 PR description). The
+ * rules below are disabled at file-level only for patterns that are pervasive
+ * in the verbatim extraction:
+ *
+ *   - `strict-boolean-expressions` / `no-unnecessary-condition`: the original
+ *     handler used truthy checks on webhook payload strings/numbers that are
+ *     typed as `string | undefined` via the `result` record.
+ *   - `no-non-null-assertion`: a few places guard-set `let` variables and then
+ *     assert via `!` inside inner branches the guard proved non-null.
+ *   - `use-unknown-in-catch-callback-variable` / `no-unsafe-assignment`:
+ *     catch callbacks use `any` (returned by `.catch((err) => …)`).
+ *   - `prefer-optional-chain`: some nested null checks are written as
+ *     `a.ok && a.value !== null && a.value.field !== undefined`.
+ *   - `consistent-type-definitions`: TaskCompleteWebhookBody is a type alias
+ *     (matches the original verbatim shape).
+ *   - `eqeqeq`: one `==` comparison in a boolean coercion pattern.
+ *
+ * Follow-up (tracked in INT-1431 comments): fix individual occurrences and
+ * remove each rule from the list below. Do NOT reintroduce a blanket disable.
+ */
+/* eslint-disable @typescript-eslint/strict-boolean-expressions */
+/* eslint-disable @typescript-eslint/no-unnecessary-condition */
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
+/* eslint-disable @typescript-eslint/use-unknown-in-catch-callback-variable */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/prefer-optional-chain */
+/* eslint-disable @typescript-eslint/consistent-type-definitions */
+/* eslint-disable eqeqeq */
 import type { Logger } from '@intexuraos/common-core';
 import { getServices } from '../../services.js';
 import { loadConfig } from '../../config.js';

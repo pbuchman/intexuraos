@@ -100,6 +100,45 @@ describe('storeLogChunks', () => {
     }));
   });
 
+  it('warns and falls back to default formatter when task lookup fails on first delivery', async () => {
+    const storeBatchChunks = vi.fn().mockResolvedValue(ok(undefined));
+    const storeBatchLines = vi.fn().mockResolvedValue(ok(undefined));
+    const update = vi.fn();
+    const mirrorStatus = vi.fn();
+    const warn = vi.fn();
+
+    setServices({
+      logChunkRepo: { storeBatch: storeBatchChunks } as never,
+      logLineRepo: { storeBatch: storeBatchLines } as never,
+      codeTaskRepo: {
+        findById: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'missing' })),
+        update,
+      } as never,
+      statusMirrorService: { mirrorStatus } as never,
+    } as unknown as ServiceContainer);
+
+    const requestLog = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() } as never;
+    const result = await storeLogChunks(createMockLogger(), {
+      body: {
+        taskId: 't-missing',
+        chunks: [{ sequence: 1, content: 'plain', timestamp: new Date().toISOString() }],
+      },
+      requestLog,
+      traceId: 'trace-missing',
+      taskFormatterStates: new Map(),
+    });
+
+    expect(result.kind).toBe('received');
+    // No transition kicked off because the task could not be resolved
+    expect(update).not.toHaveBeenCalled();
+    expect(mirrorStatus).not.toHaveBeenCalled();
+    // Warning is logged so the issue is observable in production logs
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 't-missing' }),
+      'Could not resolve task for log-chunk delivery; proceeding with default formatter',
+    );
+  });
+
   it('returns fail with INTERNAL_ERROR when chunk storage fails', async () => {
     setServices({
       logChunkRepo: {

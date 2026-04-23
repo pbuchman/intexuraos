@@ -62,7 +62,6 @@ export async function storeLogChunks(
   // First log delivery for this task — task might still be dispatched.
   // Update to running and mirror to action.
   let formatterEntry = taskFormatterStates.get(taskId);
-  /* v8 ignore start -- test-infra: FakeFirestore cannot simulate stateful multi-request log delivery with dispatched task @preserve */
   if (formatterEntry === undefined) {
     const taskResult = await codeTaskRepo.findById(taskId);
     if (taskResult.ok && taskResult.value.status === 'dispatched') {
@@ -78,9 +77,13 @@ export async function storeLogChunks(
       const resolvedFormatterEntry = createTaskFormatterEntry(taskResult.value.workerType);
       formatterEntry = resolvedFormatterEntry;
       taskFormatterStates.set(taskId, resolvedFormatterEntry);
+    } else {
+      requestLog.warn(
+        { taskId, error: taskResult.error },
+        'Could not resolve task for log-chunk delivery; proceeding with default formatter',
+      );
     }
   }
-  /* v8 ignore stop @preserve */
 
   // Store chunks in Firestore subcollection
   const logChunks = chunks.map((chunk) => ({

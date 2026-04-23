@@ -57,6 +57,14 @@ describe('webhookHelpers', () => {
       process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
     });
 
+    afterEach(() => {
+      // Guard against the env var leaking into downstream tests: the outer
+      // `afterEach` above only calls `resetServices()` + `vi.restoreAllMocks()`
+      // and does not touch process.env. Deleting here keeps the rest of the
+      // suite and sibling files deterministic.
+      delete process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'];
+    });
+
     it('returns true for eligible execution agent with no existing status', () => {
       expect(shouldQueueExecutionMemoryPostRun({
         agentType: 'execution',
