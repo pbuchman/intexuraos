@@ -19,6 +19,7 @@ import {
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { getServices } from '../../services.js';
 import { processCodeAction } from '../../domain/usecases/processCodeAction.js';
+import { cancelTask, type CancelTaskErrorCode } from '../../domain/usecases/cancelTask.js';
 import { cancelTaskWithNonce } from '../../domain/usecases/cancelTaskWithNonce.js';
 import { retryTask } from '../../domain/usecases/retryTask.js';
 import { submitToExecutionAgent } from '../../domain/usecases/submitToExecutionAgent.js';
@@ -41,6 +42,14 @@ import type { CodeRoutesOptions } from './types.js';
 
 /** Terminal task statuses eligible for archival, rate-limit recording, etc. */
 const TERMINAL_STATUSES: readonly TaskStatus[] = ['planned', 'implemented', 'reviewed', 'failed', 'cancelled', 'interrupted'];
+
+/** Maps cancelTask domain error codes to public HTTP ErrorCode values. */
+const CANCEL_TASK_ERROR_CODE_MAP: Record<CancelTaskErrorCode, ErrorCode> = {
+  task_not_found: 'NOT_FOUND',
+  not_owner: 'FORBIDDEN',
+  task_not_cancellable: 'CONFLICT',
+  internal_error: 'INTERNAL_ERROR',
+};
 
 const logger = createAppLogger({ name: 'code-routes' });
 
@@ -2393,67 +2402,25 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         const userId = request.user?.userId ?? 'unknown-user';
         /* v8 ignore stop @preserve */
 
-        request.log.info({ userId, taskId }, 'Cancelling code task');
-
-        // Step 1: Fetch and validate task
-        const taskResult = await codeTaskRepo.findById(taskId);
-
-        if (!taskResult.ok) {
-          request.log.warn({ taskId, errorCode: taskResult.error.code }, 'Task not found for cancellation');
-          return await reply.fail('NOT_FOUND', 'Task not found');
-        }
-
-        const task = taskResult.value;
-
-        // Step 2: Verify ownership
-        if (task.userId !== userId) {
-          request.log.warn({ taskId, taskUserId: task.userId, requestUserId: userId }, 'Cancellation forbidden - not task owner');
-          return await reply.fail('FORBIDDEN', 'Not authorized to cancel this task');
-        }
-
-        // Step 3: Check task is cancellable
-        if (!['dispatched', 'running', 'queued'].includes(task.status)) {
-          request.log.info({ taskId, status: task.status }, 'Cannot cancel task - not in cancellable state');
-          return await reply.fail('CONFLICT', 'Task is not in a cancellable state');
-        }
-
-        // Step 4: Update Firestore status to cancelled (source of truth)
-        const updateResult = await codeTaskRepo.update(taskId, { status: 'cancelled' });
-
-        if (!updateResult.ok) {
-          request.log.error({ taskId, error: updateResult.error }, 'Failed to update task status to cancelled');
-          return await reply.fail('INTERNAL_ERROR', 'Failed to cancel task');
-        }
-
-        // Step 5: Notify worker to stop (best effort)
-        try {
-          // Fetch user's worker credentials for the cancellation request
-          const settingsResult = await workerSettingsRepo.getSettings(userId);
-          let workerCreds = undefined;
-          if (settingsResult.ok && settingsResult.value !== null) {
-            const settings = settingsResult.value;
-            const workerConfig = settings.workers.find((w) => w.name === task.workerLocation);
-            if (workerConfig?.enabled === true) {
-              workerCreds = {
-                url: workerConfig.url,
-                cfAccessClientId: workerConfig.cfAccessClientId,
-                cfAccessClientSecret: workerConfig.cfAccessClientSecret,
-              };
-            }
+        const result = await cancelTask(
+          {
+            logger: request.log,
+            codeTaskRepo,
+            taskDispatcher,
+            workerSettingsRepo,
+            statusMirrorService,
+          },
+          {
+            taskId,
+            userId,
+            traceId: extractOrGenerateTraceId(request.headers),
           }
-          await taskDispatcher.cancelOnWorker(taskId, task.workerLocation, workerCreds);
-        } catch (error) {
-          request.log.warn({ taskId, error }, 'Failed to notify worker of cancellation');
+        );
+
+        if (!result.ok) {
+          const errorCode = CANCEL_TASK_ERROR_CODE_MAP[result.error.code];
+          return await reply.fail(errorCode, result.error.message);
         }
-
-        // Step 6: Mirror cancelled status to action (non-fatal)
-        await statusMirrorService.mirrorStatus({
-          actionId: task.actionId,
-          taskStatus: 'cancelled',
-          traceId: extractOrGenerateTraceId(request.headers),
-        });
-
-        request.log.info({ taskId }, 'Code task cancelled successfully');
 
         return await reply.ok({ status: 'cancelled' });
       }
