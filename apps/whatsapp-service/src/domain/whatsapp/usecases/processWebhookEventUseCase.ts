@@ -413,6 +413,7 @@ export class ProcessWebhookEventUseCase {
       messageRepository,
       mediaStorage,
       whatsappCloudApi,
+      eventPublisher,
     });
 
     const result = await usecase.execute(
@@ -431,24 +432,6 @@ export class ProcessWebhookEventUseCase {
     );
 
     if (result.ok) {
-      // Publish audio stored event to Pub/Sub for async transcription by srt-service
-      const publishResult = await eventPublisher.publishAudioStored({
-        type: 'whatsapp.audio.stored',
-        userId,
-        messageId: result.value.messageId,
-        mediaId: result.value.mediaId,
-        gcsPath: result.value.gcsPath,
-        mimeType: result.value.mimeType,
-        timestamp: new Date().toISOString(),
-      });
-
-      if (!publishResult.ok) {
-        logger.error(
-          { error: publishResult.error, messageId: result.value.messageId },
-          'Failed to publish audio stored event'
-        );
-      }
-
       // Mark as read with typing indicator (shows user something is happening)
       await this.markAudioAsReadWithTyping(payload, savedEvent, whatsappCloudApi, logger);
     }
