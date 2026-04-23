@@ -248,14 +248,18 @@ describe('ProcessAudioMessageUseCase', () => {
       expect(events[0]?.failureDetails).toContain('Topic intexuraos-audio-stored-dev not found');
       expect(eventPublisher.getAudioStoredEvents()).toHaveLength(0);
     });
-    it('does not mark webhook event completed when publishAudioStored fails', async () => {
+    it('preserves saved message and uploaded media when publishAudioStored fails', async () => {
+      // Documents at-least-once semantics: the GCS upload and Firestore message
+      // row are NOT rolled back when the publish fails. A retried webhook will
+      // re-upload + re-save and produce a duplicate row — acceptable because the
+      // alternative (rollback) is unsafe across two systems without 2PC.
       webhookEventRepository.setEvent(createTestWebhookEvent());
       eventPublisher.setAudioStoredFailure('Topic intexuraos-audio-stored-dev not found');
       const input = createTestInput();
       await usecase.execute(input, logger);
-      const events = webhookEventRepository.getAll();
-      expect(events[0]?.status).toBe('failed');
-      expect(events[0]?.status).not.toBe('completed');
+      expect(messageRepository.getAll()).toHaveLength(1);
+      expect(mediaStorage.getAllFiles().size).toBe(1);
+      expect(eventPublisher.getAudioStoredEvents()).toHaveLength(0);
     });
   });
 });
