@@ -93,7 +93,7 @@ export async function fetchWithRetry(
       await deps.sleep(delayMs * (attempt + 1));
     }
   }
-  /* v8 ignore start -- ts-type: this conditional ternary exists only to satisfy TypeScript's control-flow analysis for the Promise<Response> return type; with retries >= 1 (all real callers), the for-loop above always returns on success or throws on the final retry, making the post-loop throw unreachable at runtime and thus not unit-testable @preserve */
+  /* v8 ignore start -- upstream: the `if (attempt === retries - 1) throw error` guard above guarantees the final retry always throws when retries >= 1 (all real callers use retries >= 3), so this post-loop throw is unreachable and cannot be driven by any test input @preserve */
   throw lastError instanceof Error ? lastError : new Error('fetchWithRetry: unreachable');
   /* v8 ignore stop @preserve */
 }
