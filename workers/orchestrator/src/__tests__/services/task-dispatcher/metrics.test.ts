@@ -2,9 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   collectTurnMetrics,
   executeComplianceValidation,
+  prepareComplianceValidationInput,
 } from '../../../services/task-dispatcher/metrics.js';
-import type { Task } from '../../../types/task.js';
+import type { Task, TaskResult } from '../../../types/task.js';
 import type { ComplianceValidationInput } from '../../../services/agent-compliance-validator.js';
+import type { OrchestratorConfig } from '../../../types/config.js';
+import type {
+  CompletionVerifierVerdict,
+  ExecutionAgentData,
+} from '../../../services/completion-verifier.js';
 
 const mockLogger = {
   info: vi.fn(),
@@ -74,6 +80,137 @@ describe('collectTurnMetrics', () => {
   });
 });
 
+describe('prepareComplianceValidationInput', () => {
+  const mockLogForwarder = {
+    appendChunk: vi.fn(),
+    appendRawChunk: vi.fn(),
+    flush: vi.fn(),
+    flushAndStop: vi.fn(),
+    registerTask: vi.fn(),
+    unregisterTask: vi.fn(),
+    close: vi.fn(),
+    getDroppedChunkCount: vi.fn().mockReturnValue(0),
+  };
+
+  const mockConfig = { secretsBasePath: '/tmp/secrets' } as OrchestratorConfig;
+  const mockResult = { prUrl: 'https://github.com/owner/repo/pull/42' } as TaskResult;
+
+  function makeExecutionVerdict(): CompletionVerifierVerdict {
+    return {
+      passed: true,
+      missingFields: [],
+      verifierFailure: false,
+      agentData: {
+        agentType: 'execution',
+        outcome: 'implemented',
+        superpowers_subagent_driven_dev: 'used',
+        superpowers_requesting_code_review: 'used',
+        gh_pr_url: 'https://github.com/owner/repo/pull/42',
+        memory_ids_used: '',
+        memory_ids_rejected: '',
+        memory_usage_summary: '',
+        summary: 'done',
+      } satisfies ExecutionAgentData,
+      trace: { attempts: [] } as unknown as CompletionVerifierVerdict['trace'],
+    };
+  }
+
+  beforeEach(() => {
+    mockLogger.info.mockReset();
+    mockLogger.warn.mockReset();
+    mockLogger.error.mockReset();
+  });
+
+  it('returns undefined when the validator is not configured (guard clause)', async () => {
+    const result = await prepareComplianceValidationInput(
+      undefined,
+      mockConfig,
+      mockLogForwarder as never,
+      mockLogger as never,
+      makeTask(),
+      mockResult,
+      makeExecutionVerdict()
+    );
+    expect(result).toBeUndefined();
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('returns undefined when agentData is missing (guard clause)', async () => {
+    const validator = { validate: vi.fn() };
+    const verdict: CompletionVerifierVerdict = {
+      passed: false,
+      missingFields: [],
+      verifierFailure: true,
+      trace: { attempts: [] } as unknown as CompletionVerifierVerdict['trace'],
+    };
+    const result = await prepareComplianceValidationInput(
+      validator as never,
+      mockConfig,
+      mockLogForwarder as never,
+      mockLogger as never,
+      makeTask(),
+      mockResult,
+      verdict
+    );
+    expect(result).toBeUndefined();
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('returns undefined when agent type is not execution (guard clause)', async () => {
+    const validator = { validate: vi.fn() };
+    const verdict: CompletionVerifierVerdict = {
+      passed: true,
+      missingFields: [],
+      verifierFailure: false,
+      agentData: {
+        agentType: 'planning',
+        outcome: 'planned',
+        superpowers_writing_plans: 'used',
+        linear_url: '',
+        is_complex: '0',
+        has_plan_doc: '0',
+        subtask_urls: '',
+        pr_url: '',
+        memory_ids_used: '',
+        memory_ids_rejected: '',
+        memory_usage_summary: '',
+        summary: '',
+        unclear_clarification: '',
+      },
+      trace: { attempts: [] } as unknown as CompletionVerifierVerdict['trace'],
+    };
+    const result = await prepareComplianceValidationInput(
+      validator as never,
+      mockConfig,
+      mockLogForwarder as never,
+      mockLogger as never,
+      makeTask(),
+      mockResult,
+      verdict
+    );
+    expect(result).toBeUndefined();
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('returns undefined when the PR number cannot be extracted (with warn log)', async () => {
+    const validator = { validate: vi.fn() };
+    const result = await prepareComplianceValidationInput(
+      validator as never,
+      mockConfig,
+      mockLogForwarder as never,
+      mockLogger as never,
+      makeTask(),
+      { prUrl: 'not-a-real-url' } as TaskResult,
+      makeExecutionVerdict()
+    );
+    expect(result).toBeUndefined();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task-1' }),
+      'Compliance validation skipped: no PR number'
+    );
+  });
+});
+
 describe('executeComplianceValidation', () => {
   const mockLogForwarder = {
     appendChunk: vi.fn(),
@@ -110,6 +247,15 @@ describe('executeComplianceValidation', () => {
     mockLogger.info.mockReset();
     mockLogger.warn.mockReset();
     mockLogger.error.mockReset();
+    mockLogForwarder.appendChunk.mockReset();
+    mockLogForwarder.appendRawChunk.mockReset();
+    mockLogForwarder.flush.mockReset();
+    mockLogForwarder.flushAndStop.mockReset();
+    mockLogForwarder.registerTask.mockReset();
+    mockLogForwarder.unregisterTask.mockReset();
+    mockLogForwarder.close.mockReset();
+    mockLogForwarder.getDroppedChunkCount.mockReset();
+    mockLogForwarder.getDroppedChunkCount.mockReturnValue(0);
   });
 
   it('skips the webhook when the task URL does not match the expected path', async () => {
