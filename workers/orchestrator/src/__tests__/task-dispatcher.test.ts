@@ -191,6 +191,8 @@ describe('TaskDispatcher', () => {
     createWorktree: vi.fn(async () => '/tmp/worktrees/test-task'),
     deleteWorktree: vi.fn(async () => ({ ok: true, value: undefined })),
     worktreeExists: vi.fn(async () => true),
+    isWorktreeRegistered: vi.fn(async () => true),
+    repairWorktree: vi.fn(async () => undefined),
   } as unknown as WorktreeManager;
 
   // Mock IsolationProvider
@@ -7334,6 +7336,119 @@ describe('TaskDispatcher', () => {
         expect(result.error.message).toBe('Task at max attempts');
       }
       expect(dispatcher.getRunningCount()).toBe(0);
+    });
+
+    // INT-1454: worktree rehydration on adoption
+    describe('worktree rehydration', () => {
+      it('should skip repair when worktree metadata is already registered', async () => {
+        vi.mocked(mockWorktreeManager.isWorktreeRegistered).mockResolvedValueOnce(true);
+        const task = createTask({ taskId: 'adopt-registered' });
+
+        const result = await dispatcher.adoptTask(task);
+
+        expect(result.ok).toBe(true);
+        expect(mockWorktreeManager.isWorktreeRegistered).toHaveBeenCalledWith('adopt-registered');
+        expect(mockWorktreeManager.repairWorktree).not.toHaveBeenCalled();
+        expect(mockIsolationProvider.createWorker).toHaveBeenCalled();
+      });
+
+      it('should repair worktree metadata when registration is missing and continue adoption', async () => {
+        vi.mocked(mockWorktreeManager.isWorktreeRegistered).mockResolvedValueOnce(false);
+        vi.mocked(mockWorktreeManager.repairWorktree).mockResolvedValueOnce(undefined);
+        const task = createTask({ taskId: 'adopt-needs-repair' });
+
+        const result = await dispatcher.adoptTask(task);
+
+        expect(result.ok).toBe(true);
+        expect(mockWorktreeManager.isWorktreeRegistered).toHaveBeenCalledWith('adopt-needs-repair');
+        expect(mockWorktreeManager.repairWorktree).toHaveBeenCalledWith('adopt-needs-repair');
+        expect(mockIsolationProvider.createWorker).toHaveBeenCalled();
+      });
+
+      it('should fail fast with WORKTREE_LOST when repair fails and finalize task', async () => {
+        vi.mocked(mockWorktreeManager.isWorktreeRegistered).mockResolvedValueOnce(false);
+        vi.mocked(mockWorktreeManager.repairWorktree).mockRejectedValueOnce(
+          new Error('path /tmp/worktrees/adopt-lost does not exist on disk')
+        );
+        const task = createTask({
+          taskId: 'adopt-lost',
+          worktreePath: '/tmp/worktrees/adopt-lost',
+        });
+
+        const result = await dispatcher.adoptTask(task);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.type).toBe('service_error');
+          expect(result.error.message).toContain('Worktree metadata missing and repair failed');
+          expect(result.error.message).toContain('/tmp/worktrees/adopt-lost');
+        }
+        // No worker should be started when the worktree cannot be repaired.
+        expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+        // Log forwarder must not be registered when adoption short-circuits
+        // on a lost worktree — nothing is going to emit on it.
+        expect(mockLogForwarder.registerTask).not.toHaveBeenCalled();
+        // Running count must be released so capacity is not permanently leaked.
+        expect(dispatcher.getRunningCount()).toBe(0);
+        // Task must be finalized as failed with the WORKTREE_LOST webhook error code.
+        expect(mockWebhookClient.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            payload: expect.objectContaining({
+              taskId: 'adopt-lost',
+              status: 'failed',
+              error: expect.objectContaining({
+                code: 'WORKTREE_LOST',
+                remediation: expect.objectContaining({
+                  action: 'contact_support',
+                  worktreePath: '/tmp/worktrees/adopt-lost',
+                }),
+              }),
+            }),
+          })
+        );
+      });
+
+      it('should fail adoption when isWorktreeRegistered throws, without starting worker', async () => {
+        vi.mocked(mockWorktreeManager.isWorktreeRegistered).mockRejectedValueOnce(
+          new Error('git exec blew up')
+        );
+        const task = createTask({ taskId: 'adopt-check-throws' });
+
+        const result = await dispatcher.adoptTask(task);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.type).toBe('service_error');
+          expect(result.error.message).toBe(
+            'Failed to check worktree registration for adopted task'
+          );
+        }
+        expect(mockWorktreeManager.repairWorktree).not.toHaveBeenCalled();
+        expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+        expect(dispatcher.getRunningCount()).toBe(0);
+      });
+
+      it('should wrap non-Error rejection from repairWorktree in a WORKTREE_LOST failure', async () => {
+        vi.mocked(mockWorktreeManager.isWorktreeRegistered).mockResolvedValueOnce(false);
+        // Reject with a non-Error value to exercise the `'Unknown error'` fallback
+        // branch when formatting the terminal WORKTREE_LOST message.
+        vi.mocked(mockWorktreeManager.repairWorktree).mockRejectedValueOnce('string-thrown');
+        const task = createTask({
+          taskId: 'adopt-non-error-throw',
+          worktreePath: '/tmp/worktrees/adopt-non-error-throw',
+        });
+
+        const result = await dispatcher.adoptTask(task);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.type).toBe('service_error');
+          expect(result.error.message).toContain('Unknown error');
+        }
+        expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+        // finalizeTask releases the reserved capacity slot.
+        expect(dispatcher.getRunningCount()).toBe(0);
+      });
     });
   });
 

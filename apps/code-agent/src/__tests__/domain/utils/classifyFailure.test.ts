@@ -102,4 +102,26 @@ describe('classifyFailure', () => {
     expect(classifyFailure({ code: 'TASK_RESUMED_HARD_ERROR', message: 'exit code: 137 after 429' }))
       .toBe('retry' satisfies FailureVerdict);
   });
+
+  // INT-1454: WORKTREE_LOST is terminal — orchestrator could not repair the
+  // worktree metadata and every `git` command in a subsequent attempt would
+  // exit 128. Silent infinite retries would burn attempts for no gain.
+  it('returns "fail" for WORKTREE_LOST even when orchestrator attaches a retry remediation', () => {
+    expect(
+      classifyFailure({
+        code: 'WORKTREE_LOST',
+        message: 'Worktree metadata missing and repair failed for /tmp/worktrees/task-x',
+        remediation: { action: 'retry' },
+      })
+    ).toBe('fail' satisfies FailureVerdict);
+  });
+
+  it('returns "fail" for WORKTREE_LOST without remediation', () => {
+    expect(
+      classifyFailure({
+        code: 'WORKTREE_LOST',
+        message: 'Worktree metadata missing and repair failed',
+      })
+    ).toBe('fail' satisfies FailureVerdict);
+  });
 });
