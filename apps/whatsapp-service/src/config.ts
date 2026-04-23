@@ -89,14 +89,16 @@ const configSchema = z.object({
 
   /**
    * Pub/Sub topic for audio stored events. Triggers srt-service to start transcription.
+   * Required: misconfiguration would silently break voice-message transcription.
    */
-  audioStoredTopic: z.string().optional(),
+  audioStoredTopic: z.string().min(1, 'INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC is required'),
 
   /**
    * Pub/Sub topic for approval reply events.
    * Triggers actions-agent to process approval/rejection.
+   * Required: misconfiguration would silently break the approval/rejection flow.
    */
-  approvalReplyTopic: z.string().optional(),
+  approvalReplyTopic: z.string().min(1, 'INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC is required'),
 
   /**
    * GCP project ID.
@@ -167,6 +169,8 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_WHATSAPP_MEDIA_BUCKET',
     'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC',
     'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION',
+    'INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC',
+    'INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC',
     'INTEXURAOS_GCP_PROJECT_ID',
     'INTEXURAOS_WEB_AGENT_URL',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',

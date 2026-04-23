@@ -12,6 +12,17 @@ vi.mock('@intexuraos/infra-pubsub', () => ({
     }
 
     async publishToTopic(
+      _topicName: string,
+      _data: unknown,
+      _attributes: Record<string, string>,
+      _description: string
+    ): Promise<
+      { ok: true; value: undefined } | { ok: false; error: { code: string; message: string } }
+    > {
+      return { ok: true, value: undefined };
+    }
+
+    async publishToOptionalTopic(
       topicName: string | null,
       _data: unknown,
       _attributes: Record<string, string>,

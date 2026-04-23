@@ -18,7 +18,7 @@ export class ActionEventPublisher extends BasePubSubPublisher implements EventPu
   async publishActionCreated(event: ActionCreatedEvent): Promise<Result<void, PublishError>> {
     const topicName = getActionsQueueTopic();
 
-    return await this.publishToTopic(
+    return await this.publishToOptionalTopic(
       topicName,
       event,
       { actionId: event.actionId, actionType: event.actionType },
