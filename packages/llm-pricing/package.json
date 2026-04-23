@@ -14,9 +14,6 @@
     "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*"
   },
-  "devDependencies": {
-    "@intexuraos/internal-clients": "workspace:*"
-  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint:local": "eslint src --max-warnings 0"
