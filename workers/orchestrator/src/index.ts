@@ -13,6 +13,7 @@ export * from './main.js';
 import { start } from './start.js';
 
 start().catch((error: unknown) => {
-  process.stderr.write(`Failed to start orchestrator: ${String(error)}\n`);
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`\n❌ PRECONDITION FAILED: ${message}\n\n`);
   process.exit(1);
 });
