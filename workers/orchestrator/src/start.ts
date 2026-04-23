@@ -743,7 +743,7 @@ async function bootstrap(): Promise<void> {
   // Parse ordered validation model list (shared by completion verifier + compliance validator).
   const validationModelsRaw = getOptionalEnv(
     'INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS',
-    'or:google/gemma-4-31b-it:free,or:google/gemma-4-31b-it,gemini-2.5-flash'
+    'or:google/gemma-4-31b-it,gemini-2.5-flash'
   );
   const validationModels = parseValidationModels(validationModelsRaw);
   const geminiApiKey = getRequiredEnv('INTEXURAOS_GEMINI_APP_API_KEY');
