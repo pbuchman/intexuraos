@@ -206,6 +206,83 @@ export class WorktreeManager {
     return existsSync(worktreePath);
   }
 
+  /**
+   * Check if the worktree for a given taskId is registered in the main repo's
+   * worktree metadata (`<repo>/.git/worktrees/<name>/`).
+   *
+   * Returns true when `git worktree list --porcelain` includes the expected
+   * worktree path. Returns false when the metadata directory is missing, which
+   * happens if the orchestrator restarts and something (git maintenance,
+   * external cleanup, systemd tmpfs) drops the `.git/worktrees/<taskId>/`
+   * directory while the worktree itself at `<base>/<taskId>/` survives.
+   *
+   * Design reference: INT-1454.
+   */
+  async isWorktreeRegistered(taskId: string): Promise<boolean> {
+    const worktreePath = join(this.config.worktreeBasePath, taskId);
+    try {
+      const { stdout } = await execAsync('git worktree list --porcelain', {
+        cwd: this.config.repositoryPath,
+      });
+      for (const line of stdout.split('\n')) {
+        if (line === `worktree ${worktreePath}`) {
+          return true;
+        }
+      }
+      return false;
+    } catch (error) {
+      this.logger.error(
+        { taskId, error },
+        'Failed to query git worktree list while checking registration'
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Repair a worktree whose on-disk path exists but whose metadata in
+   * `<repo>/.git/worktrees/<name>/` is missing. Delegates to
+   * `git worktree repair <path>`, which regenerates the metadata from the
+   * worktree's `.git` file (canonical git recovery for this situation).
+   *
+   * Throws if the worktree path does not exist on disk (nothing to repair —
+   * the task's work is genuinely lost) or if `git worktree repair` fails.
+   *
+   * Design reference: INT-1454.
+   */
+  async repairWorktree(taskId: string): Promise<void> {
+    await this.withGitLock(async () => {
+      const worktreePath = join(this.config.worktreeBasePath, taskId);
+
+      if (!existsSync(worktreePath)) {
+        throw new Error(
+          `Cannot repair worktree for task ${taskId}: path ${worktreePath} does not exist on disk`
+        );
+      }
+
+      this.logger.info(
+        { taskId, worktreePath },
+        'Worktree metadata missing on adoption, repairing'
+      );
+
+      try {
+        const { stderr } = await execAsync(`git worktree repair "${worktreePath}"`, {
+          cwd: this.config.repositoryPath,
+        });
+        // `git worktree repair` prints advisory messages to stderr on success
+        // (e.g. "repair: ..."); treat non-empty stderr as informational unless
+        // it contains a fatal marker.
+        if (stderr.includes('fatal:')) {
+          throw new Error(`git worktree repair reported fatal error: ${stderr.trim()}`);
+        }
+        this.logger.info({ taskId, worktreePath }, 'Worktree metadata repaired successfully');
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        throw new Error(`Failed to repair worktree for task ${taskId}: ${message}`);
+      }
+    });
+  }
+
   private async copySettingsLocal(worktreePath: string): Promise<void> {
     const targetPath = join(worktreePath, '.claude', 'settings.local.json');
 

@@ -479,6 +479,204 @@ describe('WorktreeManager', () => {
     });
   });
 
+  // INT-1454: worktree metadata rehydration helpers
+  describe('isWorktreeRegistered', () => {
+    it('should return true when worktree path appears in git worktree list --porcelain', async () => {
+      const registeredPath = join(worktreeBasePath, 'task-registered');
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command.includes('git worktree list')) {
+          return {
+            stdout: [
+              `worktree ${repoPath}`,
+              'HEAD abc',
+              'branch refs/heads/main',
+              '',
+              `worktree ${registeredPath}`,
+              'HEAD def',
+              'branch refs/heads/task-registered',
+            ].join('\n'),
+            stderr: '',
+          };
+        }
+        return { stdout: '', stderr: 'Preparing worktree' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      await expect(manager.isWorktreeRegistered('task-registered')).resolves.toBe(true);
+    });
+
+    it('should return false when worktree path is absent from porcelain output', async () => {
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command.includes('git worktree list')) {
+          return {
+            stdout: [`worktree ${repoPath}`, 'HEAD abc', 'branch refs/heads/main'].join('\n'),
+            stderr: '',
+          };
+        }
+        return { stdout: '', stderr: 'Preparing worktree' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      await expect(manager.isWorktreeRegistered('task-missing')).resolves.toBe(false);
+    });
+
+    it('should return false when git worktree list throws', async () => {
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command.includes('git worktree list')) {
+          throw new Error('git binary missing');
+        }
+        return { stdout: '', stderr: 'Preparing worktree' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      await expect(manager.isWorktreeRegistered('task-crash')).resolves.toBe(false);
+    });
+  });
+
+  describe('repairWorktree', () => {
+    it('should throw when the worktree path does not exist on disk', async () => {
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
+
+      await expect(manager.repairWorktree('never-existed')).rejects.toThrow(
+        /does not exist on disk/
+      );
+    });
+
+    it('should invoke git worktree repair with the worktree path and succeed on clean stderr', async () => {
+      const worktreePath = join(worktreeBasePath, 'task-repair-ok');
+      mkdirSync(worktreePath, { recursive: true });
+
+      let repairCommand: string | undefined;
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command.includes('git worktree repair')) {
+          repairCommand = command;
+          return { stdout: '', stderr: '' };
+        }
+        return { stdout: '', stderr: 'Preparing worktree' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      await manager.repairWorktree('task-repair-ok');
+
+      expect(repairCommand).toBeDefined();
+      expect(repairCommand).toContain(`git worktree repair "${worktreePath}"`);
+    });
+
+    it('should tolerate advisory stderr output from git worktree repair', async () => {
+      const worktreePath = join(worktreeBasePath, 'task-repair-advisory');
+      mkdirSync(worktreePath, { recursive: true });
+
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command.includes('git worktree repair')) {
+          return { stdout: '', stderr: `repair: fixing ${worktreePath}` };
+        }
+        return { stdout: '', stderr: 'Preparing worktree' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      // Should not throw — "repair:" prefix is advisory, not fatal.
+      await expect(manager.repairWorktree('task-repair-advisory')).resolves.toBeUndefined();
+    });
+
+    it('should throw when git worktree repair reports a fatal error on stderr', async () => {
+      const worktreePath = join(worktreeBasePath, 'task-repair-fatal');
+      mkdirSync(worktreePath, { recursive: true });
+
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command.includes('git worktree repair')) {
+          return { stdout: '', stderr: 'fatal: not a git repository' };
+        }
+        return { stdout: '', stderr: 'Preparing worktree' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      await expect(manager.repairWorktree('task-repair-fatal')).rejects.toThrow(
+        /Failed to repair worktree/
+      );
+    });
+
+    it('should throw when git worktree repair exec rejects', async () => {
+      const worktreePath = join(worktreeBasePath, 'task-repair-throws');
+      mkdirSync(worktreePath, { recursive: true });
+
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command.includes('git worktree repair')) {
+          throw new Error('exec boom');
+        }
+        return { stdout: '', stderr: 'Preparing worktree' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      await expect(manager.repairWorktree('task-repair-throws')).rejects.toThrow(
+        /Failed to repair worktree for task task-repair-throws: exec boom/
+      );
+    });
+
+    it('should throw a wrapped "Unknown error" when a non-Error value is thrown', async () => {
+      const worktreePath = join(worktreeBasePath, 'task-repair-nonerror');
+      mkdirSync(worktreePath, { recursive: true });
+
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command.includes('git worktree repair')) {
+          throw 'oops';
+        }
+        return { stdout: '', stderr: 'Preparing worktree' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      await expect(manager.repairWorktree('task-repair-nonerror')).rejects.toThrow(/Unknown error/);
+    });
+  });
+
   describe('list worktrees error handling', () => {
     it('should return empty array when git command fails', async () => {
       const WM = await loadWorktreeManager();

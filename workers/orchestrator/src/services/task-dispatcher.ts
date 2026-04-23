@@ -345,6 +345,94 @@ export class TaskDispatcher {
     return { ok: true, value: undefined };
   }
 
+  /**
+   * INT-1454: Ensure the git worktree metadata for an adopted task is present
+   * before starting a new worker container. If the metadata directory is
+   * missing but the worktree path exists on disk, delegate to
+   * `WorktreeManager.repairWorktree` (canonical `git worktree repair`).
+   *
+   * Returns `null` on success. Returns a `DispatchError` wrapping a
+   * terminal `WORKTREE_LOST` failure (and finalizes the task as failed) if
+   * the worktree metadata is missing and cannot be repaired — running
+   * additional attempts is pointless because every `git` command inside
+   * the container would exit 128.
+   */
+  private async rehydrateWorktreeForAdoption(
+    task: Task
+  ): Promise<Result<void, DispatchError> | null> {
+    let registered: boolean;
+    try {
+      registered = await this.worktreeManager.isWorktreeRegistered(task.taskId);
+    } catch (error) {
+      this.logger.error(
+        { taskId: task.taskId, error },
+        'Failed to check worktree registration during adoption'
+      );
+      // The registration check failed before we could do any cleanup. Release
+      // the capacity slot we reserved; adoptTask itself never gets a chance to.
+      // adoptTask guarantees runningCount was incremented before invoking this
+      // method, so an unconditional decrement is safe.
+      this.runningCount--;
+      return {
+        ok: false,
+        error: {
+          type: 'service_error',
+          message: 'Failed to check worktree registration for adopted task',
+          originalError: error,
+        },
+      };
+    }
+
+    if (registered) {
+      return null;
+    }
+
+    this.logger.warn(
+      { taskId: task.taskId, worktreePath: task.worktreePath },
+      'Worktree metadata missing on adoption, attempting repair'
+    );
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Worktree metadata missing on adoption, repairing: path=${task.worktreePath}`
+    );
+
+    try {
+      await this.worktreeManager.repairWorktree(task.taskId);
+      return null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(
+        { taskId: task.taskId, worktreePath: task.worktreePath, error },
+        'git worktree repair failed during adoption — marking task as WORKTREE_LOST'
+      );
+
+      const terminalError: TaskError = {
+        code: 'WORKTREE_LOST',
+        message: `Worktree metadata missing and repair failed for ${task.worktreePath}: ${message}`,
+        remediation: {
+          action: 'fix_code',
+          worktreePath: task.worktreePath,
+        },
+      };
+
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Terminal failure: WORKTREE_LOST (${terminalError.message})`
+      );
+
+      await this.finalizeTask(task, 'failed', { error: terminalError });
+
+      return {
+        ok: false,
+        error: {
+          type: 'service_error',
+          message: terminalError.message,
+          originalError: error,
+        },
+      };
+    }
+  }
+
   async adoptTask(task: Task): Promise<Result<void, DispatchError>> {
     const healthErr = this.checkDockerAvailability();
     if (healthErr !== null) return healthErr;
@@ -371,6 +459,15 @@ export class TaskDispatcher {
 
     if (!capacityCheck.ok) {
       return capacityCheck;
+    }
+
+    // INT-1454: Rehydrate worktree metadata before starting the container.
+    // On orchestrator restart, `<repo>/.git/worktrees/<taskId>/` can disappear
+    // while the bind-mounted worktree at `<base>/<taskId>/` survives. Without
+    // repair, every `git` command inside the container fails with exit 128.
+    const worktreeRehydrationError = await this.rehydrateWorktreeForAdoption(task);
+    if (worktreeRehydrationError !== null) {
+      return worktreeRehydrationError;
     }
 
     // Register with log forwarder
