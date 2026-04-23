@@ -133,9 +133,7 @@ export class DockerContainer {
                 { taskId },
                 'Exec process exited but stream still open — resolving via inspect fallback'
               );
-              /* v8 ignore start -- ts-type: FakeHttpClient cannot produce a null ExitCode from Docker.ExecInspectInfo @preserve */
               resolveWith(typeof info.ExitCode === 'number' ? info.ExitCode : 1);
-              /* v8 ignore stop @preserve */
             }
           })
           .catch(() => {
@@ -143,12 +141,10 @@ export class DockerContainer {
           });
       };
 
-      /* v8 ignore start -- async-timing: vi.useFakeTimers cannot deterministically capture the setInterval handle before resolveWith is declared in the same scope @preserve */
       const pollTimer = setInterval(onPollTick, EXEC_INSPECT_POLL_INTERVAL_MS);
-      /* v8 ignore stop @preserve */
 
       const resolveWith = (exitCode: number): void => {
-        /* v8 ignore start -- async-timing: double-resolution race guard cannot be triggered deterministically because stream end and poll timer fire in the same microtask queue @preserve */
+        /* v8 ignore start -- async-timing: both stream-end and poll-timer paths always call resolveWith exactly once per promise lifecycle; the `resolved` guard is a defensive no-op because the timer is cleared on first resolution before a second tick can fire, and emitting `end` more than once on the same stream is not possible in tests without also producing an overlapping poll — no test harness can produce a deterministic second-path resolution without racing vi's fake-timer queue against its microtask queue @preserve */
         if (resolved) return;
         /* v8 ignore stop @preserve */
         resolved = true;

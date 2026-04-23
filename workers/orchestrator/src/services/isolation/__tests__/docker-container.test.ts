@@ -141,4 +141,133 @@ describe('DockerContainer', () => {
     const list = await container.listDiscoveredContainers();
     expect(list).toHaveLength(0);
   });
+
+  describe('waitForExecCompletion', () => {
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const makeStream = (): any => {
+      const handlers: Record<string, ((arg?: unknown) => void)[]> = {};
+      const stream = {
+        on: (event: string, cb: (arg?: unknown) => void): any => {
+          handlers[event] = handlers[event] ?? [];
+          handlers[event].push(cb);
+          return stream;
+        },
+        resume: (): void => {
+          // no-op: test streams are manually driven via emit()
+        },
+        emit: (event: string, arg?: unknown): void => {
+          for (const cb of handlers[event] ?? []) cb(arg);
+        },
+      };
+      return stream;
+    };
+
+    it('resolves via stream end using exit code from inspect', async () => {
+      const execInstance = {
+        inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
+      };
+      const stream = makeStream();
+      const promise = container.waitForExecCompletion('task-1', execInstance as any, stream as any);
+      stream.emit('end');
+      expect(await promise).toBe(0);
+    });
+
+    it('defaults exit code to 1 when inspect returns no ExitCode on stream end', async () => {
+      const execInstance = {
+        inspect: vi.fn().mockResolvedValue({ Running: false }),
+      };
+      const stream = makeStream();
+      const promise = container.waitForExecCompletion('task-1', execInstance as any, stream as any);
+      stream.emit('end');
+      expect(await promise).toBe(1);
+    });
+
+    it('resolves to 1 when stream end inspect rejects', async () => {
+      const execInstance = {
+        inspect: vi.fn().mockRejectedValue(new Error('inspect failed')),
+      };
+      const stream = makeStream();
+      const promise = container.waitForExecCompletion('task-1', execInstance as any, stream as any);
+      stream.emit('end');
+      expect(await promise).toBe(1);
+    });
+
+    it('resolves to 1 when stream emits error', async () => {
+      const execInstance = { inspect: vi.fn() };
+      const stream = makeStream();
+      const promise = container.waitForExecCompletion('task-1', execInstance as any, stream as any);
+      stream.emit('error', new Error('boom'));
+      expect(await promise).toBe(1);
+    });
+
+    it('resolves via poll timer when exec exits but stream stays open', async () => {
+      vi.useFakeTimers();
+      try {
+        let inspectCall = 0;
+        const execInstance = {
+          inspect: vi.fn().mockImplementation(async () => {
+            inspectCall += 1;
+            // First tick: still running. Second tick: exited.
+            return inspectCall === 1
+              ? { Running: true, ExitCode: null }
+              : { Running: false, ExitCode: 42 };
+          }),
+        };
+        const stream = makeStream();
+        const promise = container.waitForExecCompletion(
+          'task-1',
+          execInstance as any,
+          stream as any
+        );
+
+        // First poll tick (Running: true)
+        await vi.advanceTimersByTimeAsync(5_000);
+        // Second poll tick (Running: false, ExitCode: 42)
+        await vi.advanceTimersByTimeAsync(5_000);
+
+        expect(await promise).toBe(42);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('defaults exit code to 1 when poll-path inspect returns non-number ExitCode', async () => {
+      vi.useFakeTimers();
+      try {
+        const execInstance = {
+          inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: null }),
+        };
+        const stream = makeStream();
+        const promise = container.waitForExecCompletion(
+          'task-1',
+          execInstance as any,
+          stream as any
+        );
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(await promise).toBe(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('resolves to 1 when poll-path inspect rejects', async () => {
+      vi.useFakeTimers();
+      try {
+        const execInstance = {
+          inspect: vi.fn().mockRejectedValue(new Error('inspect failed')),
+        };
+        const stream = makeStream();
+        const promise = container.waitForExecCompletion(
+          'task-1',
+          execInstance as any,
+          stream as any
+        );
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(await promise).toBe(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+  });
 });

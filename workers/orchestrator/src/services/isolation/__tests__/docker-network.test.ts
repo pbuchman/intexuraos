@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Logger } from '@intexuraos/common-core';
 import { DockerNetwork } from '../docker-network.js';
 
 interface MockNetwork {
@@ -22,13 +21,6 @@ function createMockDocker(): { mockDocker: MockDocker; mockNetwork: MockNetwork 
   return { mockDocker, mockNetwork };
 }
 
-const createMockLogger = (): Logger => ({
-  info: vi.fn() as unknown as Logger['info'],
-  warn: vi.fn() as unknown as Logger['warn'],
-  error: vi.fn() as unknown as Logger['error'],
-  debug: vi.fn() as unknown as Logger['debug'],
-});
-
 describe('DockerNetwork', () => {
   let mockDocker: MockDocker;
   let mockNetwork: MockNetwork;
@@ -42,7 +34,6 @@ describe('DockerNetwork', () => {
     network = new DockerNetwork(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       () => mockDocker as any,
-      createMockLogger(),
       { networkName: 'code-worker-net' }
     );
   });

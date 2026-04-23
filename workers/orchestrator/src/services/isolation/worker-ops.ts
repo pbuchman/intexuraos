@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { Logger } from '@intexuraos/common-core';
 import type { ContainerStatsSnapshot, ResourceUsage } from './types.js';
-import type { WorkerEntry } from './worker-lifecycle.js';
+import type { WorkerEntry } from './worker-entry-types.js';
 
 export async function getWorkerLogs(
   taskId: string,

@@ -1,7 +1,6 @@
 import type Docker from 'dockerode';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Logger } from '@intexuraos/common-core';
 import type { WorkerRuntime } from '../runtime/types.js';
 import type { WorkerConfig, WorkerHandle, WorkerType } from './types.js';
@@ -11,176 +10,12 @@ import type { DockerVolume } from './docker-volume.js';
 import type { DockerNetwork } from './docker-network.js';
 import type { DockerRegistry } from './docker-registry.js';
 import { getHostUserInfo } from './docker-volume.js';
-
-const LIFECYCLE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const FORENSICS_SECCOMP_PROFILE_FILENAME = 'code-worker-forensics-seccomp.json';
-
-export interface WorkerEntry {
-  containerId: string;
-  handle: WorkerHandle;
-  runtime: WorkerRuntime;
-  taskSecretsPath: string;
-  taskRuntimeHomePath: string;
-  attemptRunning: boolean;
-  attemptLogBuffer: string;
-  taskForensicsPath?: string;
-  logStream?: NodeJS.ReadableStream;
-}
-
-export interface PreservedWorkerEntry {
-  containerId: string;
-  taskId: string;
-  preservedAt: string;
-}
-
-export interface LifecycleProviderConfig {
-  imageName: string;
-  managedAttemptsMode: boolean;
-  workerReadyTimeoutMs?: number;
-  maxConcurrent: number;
-  sharedCredsPath?: string;
-  sharedCodexAuthPath?: string;
-  gitUserName?: string;
-  gitUserEmail?: string;
-  forensicsMode: boolean;
-}
-
-export interface BuildWorkerEnvInput {
-  taskId: string;
-  runtime: WorkerRuntime;
-  workerType: WorkerType;
-  config: WorkerConfig;
-  providerConfig: LifecycleProviderConfig;
-}
-
-export interface BuildWorkerEnvResult {
-  env: string[];
-  useSharedCreds: boolean;
-  useSharedCodexAuth: boolean;
-  keySuffix: string;
-}
-
-export function buildWorkerEnv(input: BuildWorkerEnvInput): BuildWorkerEnvResult {
-  const { taskId, runtime, workerType, config, providerConfig } = input;
-  const workerTypeConfig = WORKER_TYPES[workerType];
-  const apiKey =
-    workerTypeConfig.apiKeyEnvVar === undefined
-      ? ''
-      : config.secrets[workerTypeConfig.apiKeyEnvVar];
-
-  const useSharedCreds =
-    runtime === 'claude' &&
-    providerConfig.sharedCredsPath !== undefined &&
-    workerTypeConfig.apiKeyEnvVar === 'ANTHROPIC_API_KEY';
-  const useSharedCodexAuth =
-    runtime === 'codex' && providerConfig.sharedCodexAuthPath !== undefined;
-  const requiredApiKeyEnvVar = workerTypeConfig.apiKeyEnvVar;
-
-  if (runtime === 'claude') {
-    if (requiredApiKeyEnvVar === undefined) {
-      throw new Error(`Worker type '${workerType}' is missing API key configuration`);
-    }
-    if (apiKey === '') {
-      throw new Error(
-        `Worker type '${workerType}' requires ${requiredApiKeyEnvVar} but it is not configured`
-      );
-    }
-  }
-
-  if (runtime === 'codex' && !useSharedCodexAuth) {
-    throw new Error('Codex runtime requires sharedCodexAuthPath but it is not configured');
-  }
-
-  const env = [
-    `TASK_ID=${taskId}`,
-    `LINEAR_API_KEY=${config.secrets.LINEAR_API_KEY}`,
-    `SENTRY_AUTH_TOKEN=${config.secrets.SENTRY_AUTH_TOKEN}`,
-    `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
-    `WORKER_RUNTIME=${runtime}`,
-    'CODE_WORKER_MODE=1',
-    `WORKER_MANAGED_MODE=${providerConfig.managedAttemptsMode ? '1' : '0'}`,
-    `WORKER_CONTINUE=${config.continueSession === true ? '1' : '0'}`,
-  ];
-
-  if (runtime === 'claude') {
-    env.push('CLAUDE_PROJECT_DIR=/repo');
-    if (!useSharedCreds) {
-      env.push(`ANTHROPIC_API_KEY=${apiKey}`, `ANTHROPIC_BASE_URL=${workerTypeConfig.apiBaseUrl}`);
-    }
-    if (workerTypeConfig.model !== undefined) {
-      env.push(`ANTHROPIC_MODEL=${workerTypeConfig.model}`);
-    }
-    if (workerTypeConfig.effort !== undefined) {
-      env.push(`CLAUDE_CODE_EFFORT_LEVEL=${workerTypeConfig.effort}`);
-    }
-    if (workerTypeConfig.disableExperimentalBetas === true) {
-      env.push('CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1');
-    }
-  } else {
-    env.push('CODEX_HOME=/home/claude/.codex');
-    env.push('CODEX_SQLITE_HOME=/home/claude/.codex');
-    if (workerTypeConfig.effort !== undefined) {
-      env.push(`CODEX_REASONING_EFFORT=${workerTypeConfig.effort}`);
-    }
-  }
-
-  if (providerConfig.gitUserName !== undefined) {
-    env.push(`GIT_USER_NAME=${providerConfig.gitUserName}`);
-  }
-  if (providerConfig.gitUserEmail !== undefined) {
-    env.push(`GIT_USER_EMAIL=${providerConfig.gitUserEmail}`);
-  }
-  if (providerConfig.forensicsMode) {
-    env.push('WORKER_FORENSICS=1');
-    env.push('WORKER_FORENSICS_DIR=/var/crash');
-  }
-
-  const keySuffix =
-    runtime === 'codex'
-      ? 'shared-auth (auth.json)'
-      : useSharedCreds
-        ? 'shared-creds (.credentials.json)'
-        : apiKey.length > 4
-          ? '...' + apiKey.slice(-4)
-          : '****';
-
-  return { env, useSharedCreds, useSharedCodexAuth, keySuffix };
-}
-
-export function resolveForensicsSeccompProfilePath(logger: Logger): string | null {
-  const candidates = [
-    path.resolve(LIFECYCLE_DIR, '../../../seccomp', FORENSICS_SECCOMP_PROFILE_FILENAME),
-    path.resolve(process.cwd(), 'workers/orchestrator/seccomp', FORENSICS_SECCOMP_PROFILE_FILENAME),
-    path.resolve(process.cwd(), 'seccomp', FORENSICS_SECCOMP_PROFILE_FILENAME),
-  ];
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  logger.warn(
-    { candidates },
-    'Forensics seccomp profile not found; ptrace tools may fail under default seccomp'
-  );
-  return null;
-}
-
-export function resolveForensicsSeccompSecurityOpt(logger: Logger): string | null {
-  const profilePath = resolveForensicsSeccompProfilePath(logger);
-  if (profilePath === null) {
-    return null;
-  }
-  try {
-    const profileJson: unknown = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
-    return `seccomp=${JSON.stringify(profileJson)}`;
-  } catch (error) {
-    logger.warn(
-      { profilePath, error },
-      'Forensics seccomp profile is invalid; using Docker default seccomp'
-    );
-    return null;
-  }
-}
+import type {
+  WorkerEntry,
+  PreservedWorkerEntry,
+  LifecycleProviderConfig,
+} from './worker-entry-types.js';
+import { buildWorkerEnv, resolveForensicsSeccompSecurityOpt } from './worker-env.js';
 
 export function detectMainGitDir(worktreePath: string): string | null {
   const gitPath = path.join(worktreePath, '.git');
@@ -387,19 +222,26 @@ export interface CreateContainerSpecInput {
   taskForensicsPath: string | null;
   mainGitDir: string | null;
   resolvedImage: string;
+  pnpmStorePath: string;
   volume: DockerVolume;
   network: DockerNetwork;
   logger: Logger;
 }
 
 export interface CreateContainerSpecResult {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  spec: any;
+  spec: Docker.ContainerCreateOptions;
   useSharedCreds: boolean;
   useSharedCodexAuth: boolean;
   keySuffix: string;
 }
 
+/**
+ * Pure function: builds the Docker container spec for a worker. Callers are
+ * responsible for creating any host-side directories (e.g. the pnpm store)
+ * referenced in the returned binds before invoking docker.createContainer —
+ * this keeps side effects explicit and preserves log ordering (see
+ * createWorkerOrchestration).
+ */
 export function buildCreateContainerSpec(
   input: CreateContainerSpecInput
 ): CreateContainerSpecResult {
@@ -414,6 +256,7 @@ export function buildCreateContainerSpec(
     taskForensicsPath,
     mainGitDir,
     resolvedImage,
+    pnpmStorePath,
     worktreePath,
     volume,
     network,
@@ -428,8 +271,6 @@ export function buildCreateContainerSpec(
     providerConfig,
   });
 
-  const pnpmStorePath = volume.getPnpmStorePath();
-  fs.mkdirSync(pnpmStorePath, { recursive: true });
   const capAdd = providerConfig.forensicsMode ? ['NET_RAW', 'SYS_PTRACE'] : ['NET_RAW'];
   const forensicsSeccompSecurityOpt = providerConfig.forensicsMode
     ? resolveForensicsSeccompSecurityOpt(logger)
@@ -454,7 +295,7 @@ export function buildCreateContainerSpec(
     taskForensicsPath,
   });
 
-  const spec = {
+  const spec: Docker.ContainerCreateOptions = {
     Image: resolvedImage,
     name: `code-worker-${taskId}`,
     Env: env,
@@ -475,207 +316,6 @@ export function buildCreateContainerSpec(
   };
 
   return { spec, useSharedCreds, useSharedCodexAuth, keySuffix };
-}
-
-export interface RunCleanupCycleInput {
-  docker: Docker;
-  container: DockerContainer;
-  volume: DockerVolume;
-  workers: Map<string, WorkerEntry>;
-  preservedWorkers: Map<string, PreservedWorkerEntry>;
-  keepContainersAlive: boolean;
-  preservedMaxAgeMs: number;
-  logger: Logger;
-}
-
-export async function runCleanupCycle(input: RunCleanupCycleInput): Promise<void> {
-  const {
-    docker,
-    container,
-    volume,
-    workers,
-    preservedWorkers,
-    keepContainersAlive,
-    preservedMaxAgeMs,
-    logger,
-  } = input;
-  if (keepContainersAlive) return;
-
-  const now = Date.now();
-
-  try {
-    const containers = await docker.listContainers({
-      all: true,
-      filters: { name: ['code-worker-'] },
-    });
-
-    const containerMap = new Map<
-      string,
-      { containerId: string; state: string; createdAtMs: number }
-    >();
-
-    for (const c of containers) {
-      /* v8 ignore start -- ts-type: nullish coalescing on array access required by noUncheckedIndexedAccess @preserve */
-      const taskId = container.extractTaskIdFromContainerName(c.Names[0] ?? '');
-      /* v8 ignore stop @preserve */
-      if (taskId === null) {
-        logger.warn({ containerId: c.Id }, 'Container has no recognizable name, skipping');
-        continue;
-      }
-      containerMap.set(taskId, {
-        containerId: c.Id,
-        state: c.State,
-        createdAtMs: c.Created * 1000,
-      });
-    }
-
-    for (const [taskId, preserved] of Array.from(preservedWorkers.entries())) {
-      const preservedAtMs = Date.parse(preserved.preservedAt);
-      const isStale = Number.isNaN(preservedAtMs) || now - preservedAtMs > preservedMaxAgeMs;
-      if (!isStale) continue;
-
-      const containerInfo = containerMap.get(taskId);
-      preservedWorkers.delete(taskId);
-
-      if (containerInfo === undefined) {
-        await volume.removeTaskSecretsDirectory(taskId);
-        logger.info(
-          { taskId, containerId: preserved.containerId },
-          'Removed stale preserved worker metadata'
-        );
-        continue;
-      }
-      await removeDetachedContainer({
-        taskId,
-        containerId: containerInfo.containerId,
-        state: containerInfo.state,
-        docker,
-        container,
-        volume,
-        preservedWorkers,
-        logger,
-      });
-      containerMap.delete(taskId);
-    }
-
-    for (const [taskId, containerInfo] of containerMap) {
-      if (workers.has(taskId) || preservedWorkers.has(taskId)) continue;
-      if (now - containerInfo.createdAtMs <= preservedMaxAgeMs) continue;
-      await removeDetachedContainer({
-        taskId,
-        containerId: containerInfo.containerId,
-        state: containerInfo.state,
-        docker,
-        container,
-        volume,
-        preservedWorkers,
-        logger,
-      });
-    }
-  } catch (error) {
-    logger.warn({ error }, 'Failed to clean up stale worker containers');
-  }
-
-  await volume.cleanupOrphanedRuntimeState(
-    (taskId) => workers.has(taskId) || preservedWorkers.has(taskId)
-  );
-}
-
-interface RemoveDetachedInput {
-  taskId: string;
-  containerId: string;
-  state: string;
-  docker: Docker;
-  container: DockerContainer;
-  volume: DockerVolume;
-  preservedWorkers: Map<string, PreservedWorkerEntry>;
-  logger: Logger;
-}
-
-async function removeDetachedContainer(input: RemoveDetachedInput): Promise<void> {
-  const { taskId, containerId, state, docker, container, volume, preservedWorkers, logger } = input;
-  const shouldStopFirst = ['running', 'created', 'paused', 'restarting'].includes(state);
-  const c = docker.getContainer(containerId);
-  if (shouldStopFirst) {
-    try {
-      await c.stop({ t: 5 });
-    } catch (err: unknown) {
-      if (!container.isAlreadyStoppedError(err)) {
-        logger.warn({ taskId, containerId, error: err }, 'Failed to stop stale container');
-      }
-    }
-  }
-  try {
-    await c.remove({ force: true });
-  } catch (err: unknown) {
-    logger.warn({ taskId, containerId, error: err }, 'Failed to remove stale container');
-  }
-  preservedWorkers.delete(taskId);
-  await volume.removeTaskSecretsDirectory(taskId);
-  logger.info({ taskId, containerId, state }, 'Removed stale worker container');
-}
-
-export interface HealthCheckInput {
-  docker: Docker;
-  dockerPingTimeoutMs: number;
-  minDiskSpaceBytes: number;
-  prevDockerHealthy: boolean;
-  prevDiskHealthy: boolean;
-  logger: Logger;
-  pingWithTimeout: (p: Promise<unknown>, ms: number, msg: string) => Promise<unknown>;
-}
-
-export async function performHealthCheck(
-  input: HealthCheckInput
-): Promise<{ docker: boolean; disk: boolean }> {
-  const {
-    docker,
-    dockerPingTimeoutMs,
-    minDiskSpaceBytes,
-    prevDockerHealthy,
-    prevDiskHealthy,
-    logger,
-    pingWithTimeout,
-  } = input;
-
-  let dockerHealthy: boolean;
-  let diskHealthy: boolean;
-
-  try {
-    await pingWithTimeout(docker.ping(), dockerPingTimeoutMs, 'Docker ping timeout');
-    dockerHealthy = true;
-  } catch {
-    dockerHealthy = false;
-  }
-
-  try {
-    const stats = await fs.promises.statfs('/');
-    diskHealthy = stats.bavail * stats.bsize >= minDiskSpaceBytes;
-  } catch {
-    diskHealthy = false;
-  }
-
-  const minDiskSpaceGb = minDiskSpaceBytes / (1024 * 1024 * 1024);
-  if (prevDockerHealthy && !dockerHealthy) {
-    logger.warn(
-      { component: 'health-monitor' },
-      'Docker daemon became unhealthy — ping failed or timed out'
-    );
-  }
-  if (!prevDockerHealthy && dockerHealthy) {
-    logger.info({ component: 'health-monitor' }, 'Docker daemon is healthy again');
-  }
-  if (prevDiskHealthy && !diskHealthy) {
-    logger.warn(
-      { component: 'health-monitor' },
-      `Disk space critically low — below ${String(minDiskSpaceGb)}GB available`
-    );
-  }
-  if (!prevDiskHealthy && diskHealthy) {
-    logger.info({ component: 'health-monitor' }, 'Disk space is healthy again');
-  }
-
-  return { docker: dockerHealthy, disk: diskHealthy };
 }
 
 export interface ResumeInput {
@@ -863,7 +503,27 @@ export async function createWorkerOrchestration(
       config.resolvedImage ?? (await registry.pullAndResolveImage(taskId, requestedImage));
     logger.info({ taskId }, 'Container creation started');
 
-    const { spec, keySuffix } = buildCreateContainerSpec({
+    // Precompute the env so we know the keySuffix for the log line below.
+    const { keySuffix } = buildWorkerEnv({
+      taskId,
+      runtime,
+      workerType,
+      config,
+      providerConfig,
+    });
+
+    logger.info(
+      {},
+      `Creating worker container: taskId=${taskId} workerType=${workerType} runtime=${runtime} image=${resolvedImage} apiKey=${keySuffix} baseUrl=${WORKER_TYPES[workerType].apiBaseUrl} worktreePath=${worktreePath}`
+    );
+
+    // Create any host-side directories referenced by the container spec
+    // AFTER the "Creating worker container" log to preserve historical
+    // ordering: log → mkdir → spec → createContainer.
+    const pnpmStorePath = volume.getPnpmStorePath();
+    fs.mkdirSync(pnpmStorePath, { recursive: true });
+
+    const { spec } = buildCreateContainerSpec({
       taskId,
       runtime,
       worktreePath,
@@ -875,15 +535,11 @@ export async function createWorkerOrchestration(
       taskForensicsPath,
       mainGitDir,
       resolvedImage,
+      pnpmStorePath,
       volume,
       network,
       logger,
     });
-
-    logger.info(
-      {},
-      `Creating worker container: taskId=${taskId} workerType=${workerType} runtime=${runtime} image=${resolvedImage} apiKey=${keySuffix} baseUrl=${WORKER_TYPES[workerType].apiBaseUrl} worktreePath=${worktreePath}`
-    );
 
     dockerContainer = await container.createContainer(spec);
     await container.startContainer(dockerContainer);
