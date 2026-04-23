@@ -54,11 +54,17 @@ function makeTask(overrides: Partial<Task> = {}): Task {
   };
 }
 
-describe('sendSetupFailureWebhook', () => {
-  beforeEach(() => {
-    mockLogger.error.mockReset();
-  });
+// Reset all logger spy state between tests so call-history from one describe
+// block cannot leak into another.
+beforeEach(() => {
+  mockLogger.info.mockReset();
+  mockLogger.warn.mockReset();
+  mockLogger.error.mockReset();
+  mockLogger.debug.mockReset();
+  mockLogger.child.mockReset();
+});
 
+describe('sendSetupFailureWebhook', () => {
   it('posts a failed webhook with SETUP_FAILED code and duration 0', async () => {
     const webhook = createMockWebhookClient();
     const request = makeRequest();
@@ -144,6 +150,31 @@ describe('buildResultFromVerification', () => {
     expect(result.planning_pr_url).toBe('https://github.com/pr/1');
   });
 
+  it('records planning_superpowers_writing_plans_used="0" when not used and skips empty pr_url', () => {
+    const task = makeTask();
+    const verification = {
+      passed: true,
+      missingFields: [],
+      verifierFailure: false,
+      trace: { transcript: '' },
+      agentData: {
+        agentType: 'planning',
+        summary: 'Planned it',
+        outcome: 'planned',
+        superpowers_writing_plans: 'not_used',
+        linear_url: 'https://linear.app/x',
+        is_complex: false,
+        has_plan_doc: false,
+        subtask_urls: [],
+        pr_url: '',
+        unclear_clarification: 'why',
+      },
+    } as unknown as CompletionVerifierVerdict;
+    const result = buildResultFromVerification(task, undefined, verification);
+    expect(result.planning_superpowers_writing_plans_used).toBe('0');
+    expect(result.planning_pr_url).toBeUndefined();
+  });
+
   it('overlays execution agentData and injects the linear issue URL', () => {
     const task = makeTask({ linearIssueId: 'INT-123' });
     const verification = {
@@ -170,6 +201,168 @@ describe('buildResultFromVerification', () => {
     expect(result.execution_superpowers_requesting_code_review_used).toBe('0');
     expect(result.execution_linear_issue_url).toBe('https://linear.app/pbuchman/issue/INT-123');
     expect(result.execution_memory_ids_used).toBe('mem_a');
+  });
+
+  it('records execution flags as "0" when not used and skips empty gh_pr_url + missing linearIssueId', () => {
+    const task = makeTask(); // no linearIssueId
+    const verification = {
+      passed: true,
+      missingFields: [],
+      verifierFailure: false,
+      trace: { transcript: '' },
+      agentData: {
+        agentType: 'execution',
+        summary: 'Shipped',
+        outcome: 'failed',
+        superpowers_subagent_driven_dev: 'not_used',
+        superpowers_requesting_code_review: 'used',
+        gh_pr_url: '',
+      },
+    } as unknown as CompletionVerifierVerdict;
+    const result = buildResultFromVerification(task, undefined, verification);
+    expect(result.execution_superpowers_subagent_driven_dev_used).toBe('0');
+    expect(result.execution_superpowers_requesting_code_review_used).toBe('1');
+    expect(result.prUrl).toBeUndefined();
+    expect(result.execution_linear_issue_url).toBeUndefined();
+  });
+
+  it('overlays review agentData (PR url, ids, counters, optional bodies)', () => {
+    const task = makeTask();
+    const verification = {
+      passed: true,
+      missingFields: [],
+      verifierFailure: false,
+      trace: { transcript: '' },
+      agentData: {
+        agentType: 'review',
+        summary: 'Reviewed',
+        gh_pr_url: 'https://github.com/pr/42',
+        review_id: 'rev-1',
+        review_comments_posted: '3',
+        review_types: 'code,test',
+        requirements_tracker_updated: 'true',
+        gh_actions_status: 'success',
+        needs_remediation: '0',
+        review_body: 'looks good',
+        review_inline_comments: 'one inline',
+      },
+    } as unknown as CompletionVerifierVerdict;
+    const result = buildResultFromVerification(task, undefined, verification);
+    expect(result.prUrl).toBe('https://github.com/pr/42');
+    expect(result.review_id).toBe('rev-1');
+    expect(result.review_comments_posted).toBe('3');
+    expect(result.review_types).toBe('code,test');
+    expect(result.requirements_tracker_updated).toBe('true');
+    expect(result.gh_actions_status).toBe('success');
+    expect(result.needs_remediation).toBe('0');
+    expect(result.review_body).toBe('looks good');
+    expect(result.review_inline_comments).toBe('one inline');
+  });
+
+  it('skips empty optional review fields (gh_pr_url, review_body, review_inline_comments)', () => {
+    const task = makeTask();
+    const verification = {
+      passed: true,
+      missingFields: [],
+      verifierFailure: false,
+      trace: { transcript: '' },
+      agentData: {
+        agentType: 'review',
+        summary: 'Reviewed',
+        gh_pr_url: '',
+        review_comments_posted: '0',
+        review_types: 'code',
+        requirements_tracker_updated: 'false',
+        gh_actions_status: 'pending',
+        needs_remediation: '0',
+        review_body: '',
+        review_inline_comments: '',
+      },
+    } as unknown as CompletionVerifierVerdict;
+    const result = buildResultFromVerification(task, undefined, verification);
+    expect(result.prUrl).toBeUndefined();
+    expect(result.review_id).toBeUndefined();
+    expect(result.review_body).toBeUndefined();
+    expect(result.review_inline_comments).toBeUndefined();
+  });
+
+  it('overlays remediation agentData (PR url, outcome, requires_re_review)', () => {
+    const task = makeTask();
+    const verification = {
+      passed: true,
+      missingFields: [],
+      verifierFailure: false,
+      trace: { transcript: '' },
+      agentData: {
+        agentType: 'remediation',
+        summary: 'Remediated',
+        outcome: 'implemented',
+        gh_pr_url: 'https://github.com/pr/77',
+        requires_re_review: '1',
+      },
+    } as unknown as CompletionVerifierVerdict;
+    const result = buildResultFromVerification(task, undefined, verification);
+    expect(result.execution_outcome_label).toBe('implemented');
+    expect(result.prUrl).toBe('https://github.com/pr/77');
+    expect(result.requires_re_review).toBe('1');
+  });
+
+  it('skips empty gh_pr_url for remediation agentData', () => {
+    const task = makeTask();
+    const verification = {
+      passed: true,
+      missingFields: [],
+      verifierFailure: false,
+      trace: { transcript: '' },
+      agentData: {
+        agentType: 'remediation',
+        summary: 'Remediated',
+        outcome: 'already_completed',
+        gh_pr_url: '',
+        requires_re_review: '0',
+      },
+    } as unknown as CompletionVerifierVerdict;
+    const result = buildResultFromVerification(task, undefined, verification);
+    expect(result.prUrl).toBeUndefined();
+    expect(result.requires_re_review).toBe('0');
+  });
+
+  it('overlays pull_request agentData (PR url, comment_replied="yes")', () => {
+    const task = makeTask();
+    const verification = {
+      passed: true,
+      missingFields: [],
+      verifierFailure: false,
+      trace: { transcript: '' },
+      agentData: {
+        agentType: 'pull_request',
+        summary: 'Replied',
+        gh_pr_url: 'https://github.com/pr/55',
+        comments_replied: 'yes',
+      },
+    } as unknown as CompletionVerifierVerdict;
+    const result = buildResultFromVerification(task, undefined, verification);
+    expect(result.prUrl).toBe('https://github.com/pr/55');
+    expect(result.comment_replied).toBe(true);
+  });
+
+  it('treats non-"yes" comments_replied as false for pull_request agentData', () => {
+    const task = makeTask();
+    const verification = {
+      passed: true,
+      missingFields: [],
+      verifierFailure: false,
+      trace: { transcript: '' },
+      agentData: {
+        agentType: 'pull_request',
+        summary: 'No reply',
+        gh_pr_url: '',
+        comments_replied: 'no',
+      },
+    } as unknown as CompletionVerifierVerdict;
+    const result = buildResultFromVerification(task, undefined, verification);
+    expect(result.prUrl).toBeUndefined();
+    expect(result.comment_replied).toBe(false);
   });
 });
 
@@ -198,5 +391,70 @@ describe('enrichResultForResumedTask', () => {
     const result: TaskResult = {};
     const enriched = enrichResultForResumedTask(task, result);
     expect(enriched).toMatchObject(lastSuccessResult);
+  });
+
+  it('does not overwrite existing review fields when already populated', () => {
+    const lastSuccessResult: TaskResult = {
+      review_id: 'rev-old',
+      review_comments_posted: '1',
+      review_types: 'old',
+      requirements_tracker_updated: 'old',
+      gh_actions_status: 'old',
+      needs_remediation: 'old',
+    };
+    const task = makeTask({ agentType: 'review', lastSuccessResult });
+    const existing: TaskResult = {
+      review_id: 'rev-new',
+      review_comments_posted: '9',
+      review_types: 'new',
+      requirements_tracker_updated: 'new',
+      gh_actions_status: 'new',
+      needs_remediation: 'new',
+    };
+    const enriched = enrichResultForResumedTask(task, { ...existing });
+    expect(enriched).toMatchObject(existing);
+  });
+
+  it('backfills requires_re_review for remediation tasks from lastSuccessResult', () => {
+    const task = makeTask({
+      agentType: 'remediation',
+      lastSuccessResult: { requires_re_review: '1' },
+    });
+    const enriched = enrichResultForResumedTask(task, {});
+    expect(enriched?.requires_re_review).toBe('1');
+  });
+
+  it('does not overwrite an existing requires_re_review for remediation tasks', () => {
+    const task = makeTask({
+      agentType: 'remediation',
+      lastSuccessResult: { requires_re_review: '0' },
+    });
+    const enriched = enrichResultForResumedTask(task, { requires_re_review: '1' });
+    expect(enriched?.requires_re_review).toBe('1');
+  });
+
+  it('backfills comment_replied for pull_request tasks from lastSuccessResult', () => {
+    const task = makeTask({
+      agentType: 'pull_request',
+      lastSuccessResult: { comment_replied: true },
+    });
+    const enriched = enrichResultForResumedTask(task, {});
+    expect(enriched?.comment_replied).toBe(true);
+  });
+
+  it('does not overwrite an existing comment_replied for pull_request tasks', () => {
+    const task = makeTask({
+      agentType: 'pull_request',
+      lastSuccessResult: { comment_replied: false },
+    });
+    const enriched = enrichResultForResumedTask(task, { comment_replied: true });
+    expect(enriched?.comment_replied).toBe(true);
+  });
+
+  it('is a no-op when no agent-specific branch matches', () => {
+    const task = makeTask();
+    delete task.agentType;
+    const result: TaskResult = { branch: 'feature/x' };
+    expect(enrichResultForResumedTask(task, result)).toEqual({ branch: 'feature/x' });
   });
 });
