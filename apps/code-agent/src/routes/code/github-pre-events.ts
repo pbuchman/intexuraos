@@ -12,7 +12,7 @@ import { getServices } from '../../services.js';
 import type { JwtValidator } from '../codeRoutes.js';
 import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
 import type { RepositoryError } from '../../domain/repositories/gitHubPREventRepository.js';
-import { extractEventUrl } from './extractEventUrl.js';
+import { extractEventUrl } from '../../domain/utils/extractEventUrl.js';
 
 export interface CodeRoutesOptions {
   jwtValidator: JwtValidator;

@@ -66,7 +66,7 @@ import { createGitHubUsernameResolver } from './infra/services/gitHubUsernameRes
 import { CodeWorkerOutputRule, DraftPRRule, ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, CIFailureRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
 import { createWebhookDispatchService, type WebhookDispatchService, type CIFailureDispatchService } from './domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
-import { ALLOWED_BOTS, CODE_WORKER_BOTS } from './routes/webhooks/github.js';
+import { ALLOWED_BOTS, CODE_WORKER_BOTS } from './domain/constants/gitHubBots.js';
 import type { EventDecisionRepository } from './domain/repositories/eventDecisionRepository.js';
 import { createFirestoreEventDecisionRepository } from './infra/firestore/eventDecisionRepository.js';
 import type { DispatchRetryRepository } from './domain/repositories/dispatchRetryRepository.js';
