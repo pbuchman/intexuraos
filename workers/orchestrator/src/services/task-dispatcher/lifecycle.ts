@@ -20,9 +20,7 @@ export function resolveTaskRuntime(task: Task): WorkerRuntime {
  * orchestrator log lines.
  */
 export function getRuntimeDisplayName(task: Task): string {
-  /* v8 ignore start -- ts-type: nullish coalescing fallback for task.runtime; tests of getRuntimeDisplayName cover both branches but v8 coverage instrumentation misattributes the ?? branch in a re-exported module function after bundling @preserve */
   const name = task.runtime ?? WORKER_TYPES[task.workerType].runtime;
-  /* v8 ignore stop @preserve */
   return name === 'codex' ? 'Codex' : 'Claude';
 }
 
@@ -53,7 +51,6 @@ export function pickAgentLabel(task: Task): string {
   const isPullRequestTask =
     task.agentType === 'pull_request' ||
     task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
-  /* v8 ignore start -- source-map: ternary branch mapping misattributed after bundling despite unit tests for all agents @preserve */
   return isPullRequestTask
     ? 'Pull Request Agent'
     : task.agentType === 'review'
@@ -69,7 +66,6 @@ export function pickAgentLabel(task: Task): string {
               : hasCodeTaskLabel(task.linearIssueLabels)
                 ? 'Execution Agent'
                 : 'Planning Agent';
-  /* v8 ignore stop @preserve */
 }
 
 /**

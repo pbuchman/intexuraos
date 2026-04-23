@@ -50,6 +50,11 @@ describe('getRuntimeDisplayName', () => {
   it('returns "Claude" for claude runtime', () => {
     expect(getRuntimeDisplayName(makeTask({ runtime: 'claude' }))).toBe('Claude');
   });
+  it('falls back to the worker type runtime when task.runtime is absent', () => {
+    const task = makeTask();
+    delete task.runtime;
+    expect(getRuntimeDisplayName(task)).toBe('Claude');
+  });
 });
 
 describe('pickCompletionAgentType', () => {
@@ -94,13 +99,33 @@ describe('pickAgentLabel', () => {
     delete task.agentType;
     expect(pickAgentLabel(task)).toBe('Pull Request Agent');
   });
+  it('returns "Pull Request Agent" when agentType is pull_request', () => {
+    expect(pickAgentLabel(makeTask({ agentType: 'pull_request' }))).toBe('Pull Request Agent');
+  });
   it('returns "Review Agent" for review tasks', () => {
     expect(pickAgentLabel(makeTask({ agentType: 'review' }))).toBe('Review Agent');
+  });
+  it('returns "Remediation Agent" for remediation tasks', () => {
+    expect(pickAgentLabel(makeTask({ agentType: 'remediation' }))).toBe('Remediation Agent');
+  });
+  it('returns "Execution Agent" for execution tasks', () => {
+    expect(pickAgentLabel(makeTask({ agentType: 'execution' }))).toBe('Execution Agent');
+  });
+  it('returns "Planning Agent" for planning tasks', () => {
+    expect(pickAgentLabel(makeTask({ agentType: 'planning' }))).toBe('Planning Agent');
+  });
+  it('returns "Ask Agent" for ask_agent tasks', () => {
+    expect(pickAgentLabel(makeTask({ agentType: 'ask_agent' }))).toBe('Ask Agent');
   });
   it('returns "Execution Agent" for code-task-labeled tasks without agentType', () => {
     const task = makeTask({ linearIssueLabels: ['code-task'] });
     delete task.agentType;
     expect(pickAgentLabel(task)).toBe('Execution Agent');
+  });
+  it('falls back to "Planning Agent" when no agent signals are present', () => {
+    const task = makeTask();
+    delete task.agentType;
+    expect(pickAgentLabel(task)).toBe('Planning Agent');
   });
 });
 
