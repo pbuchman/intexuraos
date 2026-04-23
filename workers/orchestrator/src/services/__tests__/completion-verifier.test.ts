@@ -321,6 +321,53 @@ describe('EXECUTION_SCHEMA', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it('accepts outcome=failed with empty gh_pr_url and failure_reason', () => {
+    const result = EXECUTION_SCHEMA.safeParse({
+      outcome: 'failed',
+      superpowers_subagent_driven_dev: 'used',
+      superpowers_requesting_code_review: 'not used',
+      gh_pr_url: '',
+      failure_reason: 'rate_limited',
+      memory_ids_used: '',
+      memory_ids_rejected: '',
+      memory_usage_summary: '',
+      summary: 'Task interrupted by rate limit before completion.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts outcome=failed with empty gh_pr_url and empty failure_reason', () => {
+    const result = EXECUTION_SCHEMA.safeParse({
+      outcome: 'failed',
+      superpowers_subagent_driven_dev: 'used',
+      superpowers_requesting_code_review: 'not used',
+      gh_pr_url: '',
+      failure_reason: '',
+      memory_ids_used: '',
+      memory_ids_rejected: '',
+      memory_usage_summary: '',
+      summary: 'Task failed before completion.',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts failure_reason absent (defaults to empty string) for failed outcome', () => {
+    const result = EXECUTION_SCHEMA.safeParse({
+      outcome: 'failed',
+      superpowers_subagent_driven_dev: 'used',
+      superpowers_requesting_code_review: 'not used',
+      gh_pr_url: '',
+      memory_ids_used: '',
+      memory_ids_rejected: '',
+      memory_usage_summary: '',
+      summary: 'Task failed before completion.',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.failure_reason).toBe('');
+    }
+  });
 });
 
 describe('PULL_REQUEST_SCHEMA', () => {
@@ -649,10 +696,16 @@ describe('buildExecutionPrompt', () => {
     );
   });
 
-  it('marks gh_pr_url as REQUIRED for all outcomes', () => {
+  it('marks gh_pr_url as REQUIRED for successful execution outcomes', () => {
     const prompt = buildExecutionPrompt('exec-log');
-    expect(prompt).toContain('REQUIRED for all execution outcomes');
-    expect(prompt).not.toContain('"gh_pr_url":""');
+    expect(prompt).toContain('REQUIRED for all successful execution outcomes');
+  });
+
+  it('documents the failed outcome and allows empty gh_pr_url for it', () => {
+    const prompt = buildExecutionPrompt('exec-log');
+    expect(prompt).toContain('"failed"');
+    expect(prompt).toContain('failure_reason');
+    expect(prompt).toContain('rate_limited');
   });
 });
 
@@ -1103,6 +1156,7 @@ describe('OrchestratorCompletionVerifier', () => {
         superpowers_subagent_driven_dev: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: 'https://github.com/org/repo/pull/901',
+        failure_reason: '',
         memory_ids_used: 'mem_142,mem_155',
         memory_ids_rejected: 'mem_188',
         memory_usage_summary: 'Used route logging and coverage lessons.',

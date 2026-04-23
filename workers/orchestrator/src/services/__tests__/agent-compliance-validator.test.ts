@@ -49,6 +49,7 @@ const defaultClaims = {
   superpowers_subagent_driven_dev: 'used' as const,
   superpowers_requesting_code_review: 'used' as const,
   gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/1071',
+  failure_reason: '',
   memory_ids_used: '',
   memory_ids_rejected: '',
   memory_usage_summary: '',

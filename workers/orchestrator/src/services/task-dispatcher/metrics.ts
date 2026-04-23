@@ -89,6 +89,7 @@ export async function prepareComplianceValidationInput(
         superpowers_subagent_driven_dev: agentData.superpowers_subagent_driven_dev,
         superpowers_requesting_code_review: agentData.superpowers_requesting_code_review,
         gh_pr_url: agentData.gh_pr_url,
+        failure_reason: agentData.failure_reason,
         memory_ids_used: agentData.memory_ids_used,
         memory_ids_rejected: agentData.memory_ids_rejected,
         memory_usage_summary: agentData.memory_usage_summary,
