@@ -7,6 +7,7 @@ import {
 import type { ActionCreatedEvent } from '../../../domain/events/actionCreatedEvent.js';
 
 const mockPublishToTopic = vi.fn();
+const mockPublishToOptionalTopic = vi.fn();
 
 vi.mock('@intexuraos/infra-pubsub', () => ({
   BasePubSubPublisher: class {
@@ -17,7 +18,7 @@ vi.mock('@intexuraos/infra-pubsub', () => ({
     }
 
     async publishToTopic(
-      topicName: string | null,
+      topicName: string,
       data: unknown,
       attributes: Record<string, string>,
       _description: string
@@ -25,6 +26,17 @@ vi.mock('@intexuraos/infra-pubsub', () => ({
       { ok: true; value: undefined } | { ok: false; error: { code: string; message: string } }
     > {
       return mockPublishToTopic(topicName, data, attributes);
+    }
+
+    async publishToOptionalTopic(
+      topicName: string | null,
+      data: unknown,
+      attributes: Record<string, string>,
+      _description: string
+    ): Promise<
+      { ok: true; value: undefined } | { ok: false; error: { code: string; message: string } }
+    > {
+      return mockPublishToOptionalTopic(topicName, data, attributes);
     }
   },
 }));
@@ -34,7 +46,9 @@ describe('ActionEventPublisher', () => {
 
   beforeEach(() => {
     mockPublishToTopic.mockReset();
+    mockPublishToOptionalTopic.mockReset();
     mockPublishToTopic.mockResolvedValue({ ok: true, value: undefined });
+    mockPublishToOptionalTopic.mockResolvedValue({ ok: true, value: undefined });
     process.env['INTEXURAOS_PUBSUB_ACTIONS_QUEUE'] = 'test-actions-queue';
     publisher = new ActionEventPublisher({
       projectId: 'test-project',
@@ -66,7 +80,7 @@ describe('ActionEventPublisher', () => {
       const result = await publisher.publishActionCreated(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('test-actions-queue', event, {
+      expect(mockPublishToOptionalTopic).toHaveBeenCalledWith('test-actions-queue', event, {
         actionId: 'action-123',
         actionType: 'research',
       });
@@ -90,7 +104,7 @@ describe('ActionEventPublisher', () => {
       const result = await publisher.publishActionCreated(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('test-actions-queue', event, {
+      expect(mockPublishToOptionalTopic).toHaveBeenCalledWith('test-actions-queue', event, {
         actionId: 'action-123',
         actionType: 'todo',
       });
@@ -114,14 +128,14 @@ describe('ActionEventPublisher', () => {
       const result = await publisher.publishActionCreated(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('test-actions-queue', event, {
+      expect(mockPublishToOptionalTopic).toHaveBeenCalledWith('test-actions-queue', event, {
         actionId: 'action-123',
         actionType: 'note',
       });
     });
 
     it('returns error when publish fails', async () => {
-      mockPublishToTopic.mockResolvedValue({
+      mockPublishToOptionalTopic.mockResolvedValue({
         ok: false,
         error: { code: 'PUBLISH_FAILED', message: 'Pub/Sub unavailable' },
       });

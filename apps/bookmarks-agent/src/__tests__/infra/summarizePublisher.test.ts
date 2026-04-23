@@ -5,6 +5,9 @@ import {
 } from '../../infra/pubsub/summarizePublisher.js';
 import type { SummarizeBookmarkEvent } from '../../domain/ports/summarizePublisher.js';
 
+const mockPublishToTopic = vi.fn();
+const mockPublishToOptionalTopic = vi.fn();
+
 vi.mock('@intexuraos/infra-pubsub', () => ({
   BasePubSubPublisher: class {
     protected projectId: string;
@@ -14,17 +17,25 @@ vi.mock('@intexuraos/infra-pubsub', () => ({
     }
 
     async publishToTopic(
-      topicName: string | null,
-      _data: unknown,
-      _attributes: Record<string, string>,
+      topicName: string,
+      data: unknown,
+      attributes: Record<string, string>,
       _description: string
     ): Promise<
       { ok: true; value: undefined } | { ok: false; error: { code: string; message: string } }
     > {
-      if (topicName === null) {
-        return { ok: false, error: { code: 'NO_TOPIC', message: 'No topic configured' } };
-      }
-      return { ok: true, value: undefined };
+      return mockPublishToTopic(topicName, data, attributes);
+    }
+
+    async publishToOptionalTopic(
+      topicName: string | null,
+      data: unknown,
+      attributes: Record<string, string>,
+      _description: string
+    ): Promise<
+      { ok: true; value: undefined } | { ok: false; error: { code: string; message: string } }
+    > {
+      return mockPublishToOptionalTopic(topicName, data, attributes);
     }
   },
 }));
@@ -40,6 +51,17 @@ describe('createSummarizePublisher', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPublishToTopic.mockReset();
+    mockPublishToOptionalTopic.mockReset();
+    mockPublishToTopic.mockResolvedValue({ ok: true, value: undefined });
+    mockPublishToOptionalTopic.mockImplementation(
+      async (topicName: string | null) => {
+        if (topicName === null) {
+          return { ok: false, error: { code: 'NO_TOPIC', message: 'No topic configured' } };
+        }
+        return { ok: true, value: undefined };
+      }
+    );
     process.env = { ...originalEnv };
   });
 
@@ -58,7 +80,7 @@ describe('createSummarizePublisher', () => {
     expect(typeof publisher.publishSummarizeBookmark).toBe('function');
   });
 
-  it('publishes bookmark summarize event successfully', async () => {
+  it('publishes bookmark summarize event successfully via optional topic', async () => {
     const publisher = createSummarizePublisher({
       projectId: 'test-project',
       topicName: 'bookmark-summarize-topic',
@@ -68,6 +90,11 @@ describe('createSummarizePublisher', () => {
     const result = await publisher.publishSummarizeBookmark(event);
 
     expect(result.ok).toBe(true);
+    expect(mockPublishToOptionalTopic).toHaveBeenCalledWith('bookmark-summarize-topic', event, {
+      bookmarkId: 'bookmark-123',
+      userId: 'user-456',
+    });
+    expect(mockPublishToTopic).not.toHaveBeenCalled();
   });
 
   it('returns error when topic not configured', async () => {
@@ -83,5 +110,9 @@ describe('createSummarizePublisher', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('NO_TOPIC');
     }
+    expect(mockPublishToOptionalTopic).toHaveBeenCalledWith(null, event, {
+      bookmarkId: 'bookmark-123',
+      userId: 'user-456',
+    });
   });
 });

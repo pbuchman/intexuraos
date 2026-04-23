@@ -42,7 +42,7 @@ class PRTriagePublisherImpl extends BasePubSubPublisher implements PRTriagePubli
       timestamp: new Date().toISOString(),
     };
 
-    return await this.publishToTopic(
+    return await this.publishToOptionalTopic(
       this.topicName === '' ? null : this.topicName,
       event,
       {

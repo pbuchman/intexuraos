@@ -10,6 +10,7 @@ import {
   ProcessAudioMessageUseCase,
 } from '../../domain/whatsapp/index.js';
 import {
+  FakeEventPublisher,
   FakeMediaStorage,
   FakeWhatsAppCloudApiPort,
   FakeWhatsAppMessageRepository,
@@ -59,6 +60,7 @@ describe('ProcessAudioMessageUseCase', () => {
   let messageRepository: FakeWhatsAppMessageRepository;
   let mediaStorage: FakeMediaStorage;
   let whatsappCloudApi: FakeWhatsAppCloudApiPort;
+  let eventPublisher: FakeEventPublisher;
   let usecase: ProcessAudioMessageUseCase;
   let deps: ProcessAudioMessageDeps;
   let logger: ProcessAudioMessageLogger;
@@ -67,12 +69,14 @@ describe('ProcessAudioMessageUseCase', () => {
     messageRepository = new FakeWhatsAppMessageRepository();
     mediaStorage = new FakeMediaStorage();
     whatsappCloudApi = new FakeWhatsAppCloudApiPort();
+    eventPublisher = new FakeEventPublisher();
     logger = createTestLogger();
     deps = {
       webhookEventRepository,
       messageRepository,
       mediaStorage,
       whatsappCloudApi,
+      eventPublisher,
     };
     usecase = new ProcessAudioMessageUseCase(deps);
     whatsappCloudApi.setMediaUrl('audio-media-id-123', {
@@ -102,6 +106,19 @@ describe('ProcessAudioMessageUseCase', () => {
       expect(savedMessage?.userId).toBe('test-user-id');
       expect(savedMessage?.mediaType).toBe('audio');
       expect(savedMessage?.media?.mimeType).toBe('audio/ogg');
+
+      // Webhook event should be marked completed AFTER publish succeeds.
+      const events = webhookEventRepository.getAll();
+      expect(events[0]?.status).toBe('completed');
+
+      // Audio stored event should be published exactly once.
+      const audioStoredEvents = eventPublisher.getAudioStoredEvents();
+      expect(audioStoredEvents).toHaveLength(1);
+      expect(audioStoredEvents[0]?.type).toBe('whatsapp.audio.stored');
+      expect(audioStoredEvents[0]?.userId).toBe('test-user-id');
+      if (result.ok) {
+        expect(audioStoredEvents[0]?.messageId).toBe(result.value.messageId);
+      }
     });
     it('handles audio without sha256', async () => {
       webhookEventRepository.setEvent(createTestWebhookEvent());
@@ -213,6 +230,36 @@ describe('ProcessAudioMessageUseCase', () => {
       }
       const events = webhookEventRepository.getAll();
       expect(events[0]?.status).toBe('failed');
+    });
+  });
+  describe('audio-stored publish', () => {
+    it('marks webhook event failed when publishAudioStored fails', async () => {
+      webhookEventRepository.setEvent(createTestWebhookEvent());
+      eventPublisher.setAudioStoredFailure('Topic intexuraos-audio-stored-dev not found');
+      const input = createTestInput();
+      const result = await usecase.execute(input, logger);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Topic intexuraos-audio-stored-dev not found');
+      }
+      const events = webhookEventRepository.getAll();
+      expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.failureDetails).toContain('Topic intexuraos-audio-stored-dev not found');
+      expect(eventPublisher.getAudioStoredEvents()).toHaveLength(0);
+    });
+    it('preserves saved message and uploaded media when publishAudioStored fails', async () => {
+      // Documents at-least-once semantics: the GCS upload and Firestore message
+      // row are NOT rolled back when the publish fails. A retried webhook will
+      // re-upload + re-save and produce a duplicate row — acceptable because the
+      // alternative (rollback) is unsafe across two systems without 2PC.
+      webhookEventRepository.setEvent(createTestWebhookEvent());
+      eventPublisher.setAudioStoredFailure('Topic intexuraos-audio-stored-dev not found');
+      const input = createTestInput();
+      await usecase.execute(input, logger);
+      expect(messageRepository.getAll()).toHaveLength(1);
+      expect(mediaStorage.getAllFiles().size).toBe(1);
+      expect(eventPublisher.getAudioStoredEvents()).toHaveLength(0);
     });
   });
 });

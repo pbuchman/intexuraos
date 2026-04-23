@@ -106,6 +106,8 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     mediaBucket: config.mediaBucket,
     gcpProjectId: config.gcpProjectId,
     mediaCleanupTopic: config.mediaCleanupTopic,
+    audioStoredTopic: config.audioStoredTopic,
+    approvalReplyTopic: config.approvalReplyTopic,
     whatsappAccessToken: config.accessToken,
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
     webAgentUrl: config.webAgentUrl,
@@ -118,13 +120,6 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   if (config.webhookProcessTopic !== undefined) {
     (serviceConfig as { webhookProcessTopic?: string }).webhookProcessTopic =
       config.webhookProcessTopic;
-  }
-  if (config.audioStoredTopic !== undefined) {
-    (serviceConfig as { audioStoredTopic?: string }).audioStoredTopic = config.audioStoredTopic;
-  }
-  if (config.approvalReplyTopic !== undefined) {
-    (serviceConfig as { approvalReplyTopic?: string }).approvalReplyTopic =
-      config.approvalReplyTopic;
   }
   initServices(serviceConfig);
 
