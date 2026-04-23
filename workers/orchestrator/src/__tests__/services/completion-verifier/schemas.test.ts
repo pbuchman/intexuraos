@@ -115,3 +115,138 @@ describe('toAgentData', () => {
     expect(toAgentData('pull_request', parsed)).toEqual({ agentType: 'pull_request', ...parsed });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Schema refinement edge cases.
+// ---------------------------------------------------------------------------
+describe('PLANNING_SCHEMA refinement', () => {
+  const base = {
+    outcome: 'planned' as const,
+    superpowers_writing_plans: 'used' as const,
+    linear_url: 'https://linear.app/x/issue/X-1',
+    is_complex: '0' as const,
+    has_plan_doc: '0' as const,
+    subtask_urls: '',
+    pr_url: 'https://github.com/o/r/pull/1',
+    summary: 's',
+    unclear_clarification: '',
+  };
+
+  it('rejects outcome=planned with pr_url=""', () => {
+    const result = PLANNING_SCHEMA.safeParse({ ...base, pr_url: '' });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((i) => i.path.join('.') === 'pr_url')).toBe(true);
+    }
+  });
+
+  it('accepts outcome=unclear with pr_url=""', () => {
+    const result = PLANNING_SCHEMA.safeParse({
+      ...base,
+      outcome: 'unclear',
+      pr_url: '',
+      unclear_clarification: 'why unclear',
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('EXECUTION_SCHEMA refinement', () => {
+  const base = {
+    outcome: 'implemented' as const,
+    superpowers_subagent_driven_dev: 'used' as const,
+    superpowers_requesting_code_review: 'used' as const,
+    gh_pr_url: 'https://github.com/o/r/pull/1',
+    memory_ids_used: '',
+    memory_ids_rejected: '',
+    memory_usage_summary: '',
+    summary: 's',
+  };
+
+  it('rejects outcome=implemented with gh_pr_url=""', () => {
+    const result = EXECUTION_SCHEMA.safeParse({ ...base, gh_pr_url: '' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects outcome=already_completed with gh_pr_url=""', () => {
+    const result = EXECUTION_SCHEMA.safeParse({
+      ...base,
+      outcome: 'already_completed',
+      gh_pr_url: '',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('REMEDIATION_SCHEMA refinement', () => {
+  const base = {
+    outcome: 'implemented' as const,
+    gh_pr_url: 'https://github.com/o/r/pull/1',
+    memory_ids_used: '',
+    memory_ids_rejected: '',
+    memory_usage_summary: '',
+    requires_re_review: '1',
+    summary: 's',
+  };
+
+  it('rejects outcome=implemented with gh_pr_url=""', () => {
+    const result = REMEDIATION_SCHEMA.safeParse({ ...base, gh_pr_url: '' });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts outcome=already_completed with gh_pr_url=""', () => {
+    const result = REMEDIATION_SCHEMA.safeParse({
+      ...base,
+      outcome: 'already_completed',
+      gh_pr_url: '',
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('REVIEW_SCHEMA review_id preprocess', () => {
+  const base = {
+    gh_pr_url: 'https://github.com/o/r/pull/1',
+    review_comments_posted: '3',
+    review_types: 'code_quality',
+    memory_ids_used: '',
+    memory_ids_rejected: '',
+    memory_usage_summary: '',
+    requirements_tracker_updated: '',
+    gh_actions_status: '',
+    needs_remediation: '0',
+    review_body: '',
+    review_inline_comments: '',
+    summary: 's',
+  };
+
+  it('treats review_id="" as undefined (coerces empty string to omitted)', () => {
+    const result = REVIEW_SCHEMA.safeParse({ ...base, review_id: '' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.review_id).toBeUndefined();
+    }
+  });
+
+  it('rejects non-numeric review_id like "abc"', () => {
+    const result = REVIEW_SCHEMA.safeParse({ ...base, review_id: 'abc' });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts a numeric review_id like "123"', () => {
+    const result = REVIEW_SCHEMA.safeParse({ ...base, review_id: '123' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.review_id).toBe('123');
+    }
+  });
+
+  it('defaults needs_remediation to "1" when omitted', () => {
+    const { needs_remediation: _omit, ...without } = base;
+    const result = REVIEW_SCHEMA.safeParse(without);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.needs_remediation).toBe('1');
+    }
+  });
+});

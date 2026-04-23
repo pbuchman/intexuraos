@@ -2,7 +2,10 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import type { Logger } from '@intexuraos/common-core';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
-import { callVerificationLlm } from '../../../services/completion-verifier/llm-client.js';
+import {
+  callVerificationLlm,
+  generateResumeSummaryWithFallback,
+} from '../../../services/completion-verifier/llm-client.js';
 
 const loggerInfo = vi.fn();
 const loggerWarn = vi.fn();
@@ -157,6 +160,8 @@ describe('callVerificationLlm', () => {
     if (!result.ok) {
       expect(result.error.kind).toBe('all-failed');
       expect(result.error.content).toBe('');
+      // When no model ever produced content, modelName is empty string
+      expect(result.error.modelName).toBe('');
     }
   });
 
@@ -176,5 +181,99 @@ describe('callVerificationLlm', () => {
     if (!result.ok) {
       expect(result.error.kind).toBe('all-failed');
     }
+  });
+});
+
+describe('generateResumeSummaryWithFallback', () => {
+  it('returns primary success without touching fallbacks', async () => {
+    const fallbackGen = vi.fn();
+    const result = await generateResumeSummaryWithFallback({
+      primaryClient: fakeClient({ ok: true, content: '{"summary":"ok"}' }),
+      primaryModelName: 'primary',
+      fallbacks: [
+        {
+          client: { generate: fallbackGen } as unknown as LlmGenerateClient,
+          modelName: 'fallback-1',
+        },
+      ],
+      prompt: 'p',
+      taskId: 'task_1',
+      logger,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.modelName).toBe('primary');
+    expect(fallbackGen).not.toHaveBeenCalled();
+  });
+
+  it('tries fallbacks in order and returns first success', async () => {
+    const fallback1 = fakeClient({ ok: true, content: '{"summary":"from-f1"}' });
+    const fallback2Gen = vi.fn();
+    const result = await generateResumeSummaryWithFallback({
+      primaryClient: fakeClient({ ok: false, code: 'rate_limited' }),
+      primaryModelName: 'primary',
+      fallbacks: [
+        { client: fallback1, modelName: 'fallback-1' },
+        {
+          client: { generate: fallback2Gen } as unknown as LlmGenerateClient,
+          modelName: 'fallback-2',
+        },
+      ],
+      prompt: 'p',
+      taskId: 'task_1',
+      logger,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.modelName).toBe('fallback-1');
+    // fallback-2 must NOT have been called once fallback-1 succeeded
+    expect(fallback2Gen).not.toHaveBeenCalled();
+  });
+
+  it('falls through to fallback-2 when fallback-1 also fails', async () => {
+    const fallback1Gen = vi.fn().mockResolvedValue({ ok: false, error: { code: 'timeout' } });
+    const fallback2Gen = vi
+      .fn()
+      .mockResolvedValue({ ok: true, value: { content: '{"summary":"from-f2"}' } });
+    const result = await generateResumeSummaryWithFallback({
+      primaryClient: fakeClient({ ok: false, code: 'rate_limited' }),
+      primaryModelName: 'primary',
+      fallbacks: [
+        {
+          client: { generate: fallback1Gen } as unknown as LlmGenerateClient,
+          modelName: 'fallback-1',
+        },
+        {
+          client: { generate: fallback2Gen } as unknown as LlmGenerateClient,
+          modelName: 'fallback-2',
+        },
+      ],
+      prompt: 'p',
+      taskId: 'task_1',
+      logger,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.modelName).toBe('fallback-2');
+    // ORDER: fallback-1 is tried before fallback-2
+    expect(fallback1Gen).toHaveBeenCalledTimes(1);
+    expect(fallback2Gen).toHaveBeenCalledTimes(1);
+    expect(fallback1Gen.mock.invocationCallOrder[0]).toBeLessThan(
+      fallback2Gen.mock.invocationCallOrder[0] ?? Infinity
+    );
+  });
+
+  it('returns primary error (ok=false) and primary modelName when all models fail', async () => {
+    const result = await generateResumeSummaryWithFallback({
+      primaryClient: fakeClient({ ok: false, code: 'rate_limited' }),
+      primaryModelName: 'primary',
+      fallbacks: [
+        { client: fakeClient({ ok: false, code: 'timeout' }), modelName: 'fallback-1' },
+        { client: fakeClient({ ok: false, code: 'timeout' }), modelName: 'fallback-2' },
+      ],
+      prompt: 'p',
+      taskId: 'task_1',
+      logger,
+    });
+    expect(result.ok).toBe(false);
+    // Preserves the primary's error, and reports the primary model name
+    expect(result.modelName).toBe('primary');
   });
 });

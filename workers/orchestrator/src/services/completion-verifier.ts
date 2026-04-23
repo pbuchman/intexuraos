@@ -1,57 +1,24 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { Logger } from '@intexuraos/common-core';
+import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
-import type { ExecutionMemoryPromptContext } from '../types/execution-memory.js';
-import type {
-  CompletionAgentType,
-  PlanningAgentData,
-  ExecutionAgentData,
-  PullRequestAgentData,
-  ReviewAgentData,
-  RemediationAgentData,
-} from './completion-verifier/schemas.js';
-import {
-  runVerify,
-  runExtractResumeSummary,
-  countMeaningfulTranscriptLines,
-  detectFatalExitCode,
-  getLast50Lines,
-  getLast50ClaudeLines,
-  getLast20Lines,
-} from './completion-verifier/verify-runner.js';
+// prettier-ignore
+import { getSchemaForAgent, toAgentData, RESUME_SUMMARY_SCHEMA } from './completion-verifier/schemas.js';
+// prettier-ignore
+import { buildVerificationPrompt, buildResumeSummaryPrompt } from './completion-verifier/prompt-builder.js';
+// prettier-ignore
+import { callVerificationLlm, extractAndParseJson, generateResumeSummaryWithFallback } from './completion-verifier/llm-client.js';
+// prettier-ignore
+import { detectEmptyMemoryFields, validateMemoryReporting } from './completion-verifier/memory-validation.js';
+// prettier-ignore
+import { MIN_MEANINGFUL_TRANSCRIPT_LINES, countMeaningfulTranscriptLines, detectFatalExitCode, getLast20Lines, getLast50Lines } from './completion-verifier/transcript.js';
+// prettier-ignore
+import type { CompletionVerifier, CompletionVerifierClients, CompletionVerifierInput, CompletionVerifierVerdict } from './completion-verifier/types.js';
 
-export {
-  countMeaningfulTranscriptLines,
-  detectFatalExitCode,
-  getLast50Lines,
-  getLast50ClaudeLines,
-  getLast20Lines,
-};
+export * from './completion-verifier/schemas.js';
+export * from './completion-verifier/types.js';
+export * from './completion-verifier/transcript.js';
+export * from './completion-verifier/prompt-builder.js';
 export { buildMemoryAcknowledgmentPattern } from './completion-verifier/memory-validation.js';
-export {
-  PLANNING_SCHEMA,
-  EXECUTION_SCHEMA,
-  PULL_REQUEST_SCHEMA,
-  REVIEW_SCHEMA,
-  REMEDIATION_SCHEMA,
-  RESUME_SUMMARY_SCHEMA,
-} from './completion-verifier/schemas.js';
-export type {
-  CompletionAgentType,
-  PlanningAgentData,
-  ExecutionAgentData,
-  PullRequestAgentData,
-  ReviewAgentData,
-  RemediationAgentData,
-} from './completion-verifier/schemas.js';
-export {
-  buildPlanningPrompt,
-  buildExecutionPrompt,
-  buildPullRequestPrompt,
-  buildReviewPrompt,
-  buildRemediationPrompt,
-  buildResumeSummaryPrompt,
-} from './completion-verifier/prompt-builder.js';
 
 const verifierTaskIdStorage = new AsyncLocalStorage<string>();
 
@@ -60,64 +27,23 @@ export function getVerifierTaskId(): string | null {
   return verifierTaskIdStorage.getStore() ?? null;
 }
 
-export interface CompletionVerifierInput {
-  taskId: string;
-  attempt: number;
-  maxAttempts: number;
-  agentType: CompletionAgentType;
-  rawLogs: string;
-  /** Exit code of the worker process if known (Docker exit code). When set to
-   *  137 (SIGKILL) or 139 (SIGSEGV), verification short-circuits without
-   *  calling any LLM — used to catch cases where the entrypoint was killed
-   *  externally and never wrote its own exit-code line. */
-  lastExitCode?: number;
-  executionMemoryContext?: ExecutionMemoryPromptContext;
-}
-
-export interface CompletionVerifierTrace {
-  transcript: string;
-  prompt: string;
-  response: string;
-}
-
-export interface CompletionVerifierVerdict {
-  /** True when LLM extraction succeeded and all Zod fields were present — does NOT mean the agent completed its task. */
-  passed: boolean;
-  missingFields: string[];
-  verifierFailure: boolean;
-  agentData?:
-    | PlanningAgentData
-    | ExecutionAgentData
-    | PullRequestAgentData
-    | ReviewAgentData
-    | RemediationAgentData;
-  /** Model name that produced the response. Undefined when no model produced
-   *  content (all generate() calls failed) or when the short-circuit on
-   *  fatal exit codes fires before any model is called. */
-  succeededModelName?: string;
-  trace: CompletionVerifierTrace;
-}
-
-export interface CompletionVerifier {
-  verify(input: CompletionVerifierInput): Promise<CompletionVerifierVerdict>;
-  describe(): { enabled: boolean; provider?: string; model?: string };
-  extractResumeSummary(taskId: string, rawLogs: string): Promise<string | undefined>;
-}
-
-export interface CompletionVerifierClients {
-  primaryClient: LlmGenerateClient;
-  fallbackClients: LlmGenerateClient[];
-  /** Display name of primary model for logging (e.g. 'or:google/gemma-4-31b-it:free') */
-  primaryModelName: string;
-  /** Display names for each fallback client, in the same order as fallbackClients.
-   *  If omitted or shorter than fallbackClients, missing entries default to 'fallback-1', 'fallback-2', etc. */
-  fallbackModelNames?: string[];
+function failVerdict(
+  missingFields: string[],
+  trace: CompletionVerifierVerdict['trace'],
+  opts: { model?: string; verifierFailure?: boolean } = {}
+): CompletionVerifierVerdict {
+  return {
+    passed: false,
+    missingFields,
+    verifierFailure: opts.verifierFailure ?? false,
+    ...(opts.model !== undefined && { succeededModelName: opts.model }),
+    trace,
+  };
 }
 
 export class OrchestratorCompletionVerifier implements CompletionVerifier {
   private readonly primaryClient: LlmGenerateClient;
   private readonly primaryModelName: string;
-  /** Each fallback client paired with its display model name. */
   private readonly fallbacks: readonly { client: LlmGenerateClient; modelName: string }[];
 
   constructor(
@@ -126,10 +52,10 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
   ) {
     this.primaryClient = clients.primaryClient;
     this.primaryModelName = clients.primaryModelName;
-    const fallbackNames = clients.fallbackModelNames ?? [];
+    const names = clients.fallbackModelNames ?? [];
     this.fallbacks = clients.fallbackClients.map((client, i) => ({
       client,
-      modelName: fallbackNames[i] ?? `fallback-${String(i + 1)}`,
+      modelName: names[i] ?? `fallback-${String(i + 1)}`,
     }));
   }
 
@@ -138,31 +64,134 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
   }
 
   async verify(input: CompletionVerifierInput): Promise<CompletionVerifierVerdict> {
-    return await verifierTaskIdStorage.run(input.taskId, () =>
-      runVerify(
-        {
-          logger: this.logger,
-          primaryClient: this.primaryClient,
-          primaryModelName: this.primaryModelName,
-          fallbacks: this.fallbacks,
-        },
-        input
-      )
-    );
+    return await verifierTaskIdStorage.run(input.taskId, () => this.doVerify(input));
   }
 
   async extractResumeSummary(taskId: string, rawLogs: string): Promise<string | undefined> {
     return await verifierTaskIdStorage.run(taskId, () =>
-      runExtractResumeSummary(
-        {
-          logger: this.logger,
-          primaryClient: this.primaryClient,
-          primaryModelName: this.primaryModelName,
-          fallbacks: this.fallbacks,
-        },
-        taskId,
-        rawLogs
-      )
+      this.doExtractResumeSummary(taskId, rawLogs)
     );
+  }
+
+  private async doVerify(input: CompletionVerifierInput): Promise<CompletionVerifierVerdict> {
+    const { logger } = this;
+    const { taskId, attempt, agentType, rawLogs, executionMemoryContext } = input;
+    const transcript = getLast50Lines(rawLogs);
+    const emptyTrace = { transcript, prompt: '', response: '' };
+
+    const directExit =
+      input.lastExitCode === 137 || input.lastExitCode === 139 ? input.lastExitCode : undefined;
+    const fatalExit = directExit ?? detectFatalExitCode(rawLogs);
+    if (fatalExit !== undefined) {
+      const source = directExit !== undefined ? 'lastExitCode' : 'rawLogs';
+      // prettier-ignore
+      logger.warn({ taskId, attempt, agentType, exitCode: fatalExit, source }, 'Fatal exit code detected — skipping completion verification');
+      return failVerdict([`fatal_exit_code_${String(fatalExit)}`], emptyTrace);
+    }
+
+    const tLines = transcript.split('\n').filter((l) => l.trim() !== '');
+    const meaningfulLines = countMeaningfulTranscriptLines(tLines);
+    if (meaningfulLines < MIN_MEANINGFUL_TRANSCRIPT_LINES) {
+      // prettier-ignore
+      logger.warn({ taskId, attempt, agentType, meaningfulLines }, 'Completion verifier: transcript too short, refusing to call LLM');
+      return failVerdict(['transcript_too_short'], emptyTrace);
+    }
+
+    const prompt = buildVerificationPrompt(agentType, transcript);
+    /* v8 ignore start -- ts-type: nullish coalescing on array access required by noUncheckedIndexedAccess; transcript guard guarantees tLines.length >= MIN_MEANINGFUL_TRANSCRIPT_LINES @preserve */
+    const first = tLines[0] ?? '';
+    const last = tLines[tLines.length - 1] ?? '';
+    /* v8 ignore stop @preserve */
+    const transcriptSummary = `${first}\n  ... (${String(tLines.length - 2)} lines omitted) ...\n${last}`;
+    // prettier-ignore
+    logger.info({ taskId, attempt, maxAttempts: input.maxAttempts, agentType, model: this.primaryModelName, promptChars: prompt.length, transcript: transcriptSummary }, 'Completion verifier request');
+
+    // prettier-ignore
+    const llmResult = await callVerificationLlm({ models: [{ client: this.primaryClient, modelName: this.primaryModelName }, ...this.fallbacks], prompt, schema: getSchemaForAgent(agentType), logger, taskId, attempt });
+
+    if (!llmResult.ok) {
+      const trace = { transcript, prompt, response: llmResult.error.content };
+      if (llmResult.error.kind === 'schema-failed') {
+        const { modelName: model, missingFields } = llmResult.error;
+        // prettier-ignore
+        logger.error({ taskId, attempt, model, missingFields }, 'Completion verifier: all models failed schema validation');
+        return failVerdict(missingFields, trace, { model });
+      }
+      // prettier-ignore
+      logger.error({ taskId, attempt }, 'Completion verifier returned no response (all models failed)');
+      return failVerdict([], trace, { verifierFailure: true });
+    }
+
+    const { content: response, modelName: model, parsed } = llmResult.value; // @allow-result-access -- guarded by if (!llmResult.ok) early return above
+    const trace = { transcript, prompt, response };
+
+    const emptyMemoryFields = detectEmptyMemoryFields(agentType, executionMemoryContext, parsed);
+    if (emptyMemoryFields !== undefined) {
+      // prettier-ignore
+      logger.warn({ taskId, attempt, model, emptyMemoryFields }, 'Memory fields are empty despite memories being injected');
+      return failVerdict(emptyMemoryFields, trace, { model });
+    }
+
+    const agentData = toAgentData(agentType, parsed);
+    const memoryValidation =
+      executionMemoryContext !== undefined
+        ? validateMemoryReporting(rawLogs, executionMemoryContext, agentData)
+        : { failures: [], softWarnings: [] };
+    if (memoryValidation.softWarnings.length > 0) {
+      // prettier-ignore
+      logger.warn({ taskId, attempt, model, softWarnings: memoryValidation.softWarnings }, 'Completion verifier memory validation soft warning: triplet consistent, block missing');
+    }
+    if (memoryValidation.failures.length > 0) {
+      // prettier-ignore
+      logger.warn({ taskId, attempt, model, memoryValidationFailures: memoryValidation.failures }, 'Completion verifier memory validation failed');
+      return failVerdict(memoryValidation.failures, trace, { model });
+    }
+
+    logger.info({ taskId, attempt, model, agentData }, 'Completion verifier parsed verdict');
+    // prettier-ignore
+    return { passed: true, missingFields: [], verifierFailure: false, agentData, succeededModelName: model, trace };
+  }
+
+  private async doExtractResumeSummary(
+    taskId: string,
+    rawLogs: string
+  ): Promise<string | undefined> {
+    const { logger } = this;
+    const generated = await generateResumeSummaryWithFallback({
+      primaryClient: this.primaryClient,
+      primaryModelName: this.primaryModelName,
+      fallbacks: this.fallbacks,
+      prompt: buildResumeSummaryPrompt(getLast20Lines(rawLogs)),
+      taskId,
+      logger,
+    });
+    if (!generated.ok) {
+      logger.error(
+        { taskId, errorCode: generated.error.code },
+        'extractResumeSummary: LLM generate failed (all models)'
+      );
+      return undefined;
+    }
+    let rawJson: unknown;
+    try {
+      rawJson = extractAndParseJson(generated.value.content); // @allow-result-access -- guarded by if (!generated.ok) early return above
+    } catch (error) {
+      logger.error(
+        { taskId, error: getErrorMessage(error) },
+        'extractResumeSummary: JSON parse failed'
+      );
+      return undefined;
+    }
+    const parseResult = RESUME_SUMMARY_SCHEMA.safeParse(rawJson);
+    if (!parseResult.success) {
+      logger.error({ taskId }, 'extractResumeSummary: Zod validation failed');
+      return undefined;
+    }
+    const { summary } = parseResult.data;
+    logger.info(
+      { taskId, summaryLength: summary.length },
+      'extractResumeSummary: summary extracted'
+    );
+    return summary;
   }
 }
