@@ -18,6 +18,25 @@ export interface TaskVerificationRecord {
   createdAt: string;
 }
 
+/**
+ * Sub-reasons attached to a `WORKER_INFRA_FAILURE` TaskError (INT-1455).
+ * Kept as a literal union so producers (the attempt classifier) and
+ * consumers (orchestrator + downstream) can match exhaustively.
+ */
+export type InfraFailureSubReason =
+  | 'container_exit_before_session_init'
+  | 'entrypoint_failed'
+  | 'git_worktree_lost'
+  | 'image_pull_failed'
+  | 'duration_below_threshold'
+  | 'empty_transcript';
+
+export interface TaskInfraFailureRecord {
+  attempt: number;
+  subReason: InfraFailureSubReason;
+  createdAt: string;
+}
+
 export interface PendingResumeStart {
   prompt: string;
   acceptedAt: string;
@@ -79,6 +98,12 @@ export interface Task {
    * Verification history for each completed attempt.
    */
   verificationHistory?: TaskVerificationRecord[];
+  /**
+   * Records of attempts classified as WORKER_INFRA_FAILURE.
+   * Used to abort retries when the same sub-reason repeats across attempts
+   * (e.g. `git_worktree_lost` N vs N-1) — re-running Claude cannot fix infra.
+   */
+  taskInfraFailureHistory?: TaskInfraFailureRecord[];
   /**
    * Set when a completed task is resumed via sendMessage().
    * Gates loosened completion verification (exit code + runtime-reported hard error only).

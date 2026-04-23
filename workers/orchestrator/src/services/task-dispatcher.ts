@@ -80,6 +80,7 @@ import {
   INACTIVITY_TIMEOUT_MS,
   MAX_INACTIVITY_RESTARTS,
 } from './task-dispatcher/retry-logic.js';
+import { classifyAttempt, type AttemptClassification } from './task-dispatcher/classify-attempt.js';
 
 // Re-export module-level helpers for backward compatibility with existing imports.
 export const getTaskEventUrl = getTaskEventUrlFn;
@@ -139,6 +140,7 @@ export class TaskDispatcher {
   private readonly activeTasks = new Map<string, NodeJS.Timeout>();
   private readonly claudeErrors = new Map<string, string>();
   private readonly taskExitCodes = new Map<string, number>();
+  private readonly attemptStartedAt = new Map<string, number>();
   private readonly attemptCompletionSignals = new Set<string>();
   private readonly completionInProgress = new Set<string>();
   /** Task IDs whose handleInactivityRestart is currently mid-flight (after the
@@ -623,6 +625,7 @@ export class TaskDispatcher {
       this.isolation.tokenRefresher.unregisterTask(taskId);
       this.claudeErrors.delete(taskId);
       this.taskExitCodes.delete(taskId);
+      this.attemptStartedAt.delete(taskId);
       this.attemptCompletionSignals.delete(taskId);
       this.completionInProgress.delete(taskId);
       this.pendingMessages.delete(taskId);
@@ -762,6 +765,13 @@ export class TaskDispatcher {
       task.startedAt = new Date().toISOString();
       task.attemptCount = 1;
       task.verificationHistory = [];
+      // INT-1455: `taskInfraFailureHistory` is intentionally NOT reset on resume.
+      // When a user resumes a failed task that died on infra (e.g. image pull),
+      // and the resume fails the SAME way, the classifier's repeat-sub-reason
+      // check at finalizeAttemptAsInfraFailure flips the remediation copy to
+      // contact_support so log/UI triage clearly shows this isn't a flaky
+      // first-time failure. `verificationHistory`, by contrast, describes the
+      // old attempt's verifier verdict and is no longer relevant.
       task.pendingResumeStart = {
         prompt,
         acceptedAt: new Date().toISOString(),
@@ -1055,6 +1065,7 @@ export class TaskDispatcher {
           this.isolation.tokenRefresher.unregisterTask(taskId);
           this.claudeErrors.delete(taskId);
           this.taskExitCodes.delete(taskId);
+          this.attemptStartedAt.delete(taskId);
           this.attemptCompletionSignals.delete(taskId);
           this.completionInProgress.delete(taskId);
           this.lastOutputAt.delete(taskId);
@@ -1363,6 +1374,7 @@ export class TaskDispatcher {
           await this.saveTask(task);
           this.claudeErrors.delete(task.taskId);
           this.taskExitCodes.delete(task.taskId);
+          this.attemptStartedAt.delete(task.taskId);
           return;
         }
         this.appendOrchestratorTaskLog(
@@ -1411,6 +1423,30 @@ export class TaskDispatcher {
     }
     /* v8 ignore stop @preserve */
     const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
+
+    // INT-1455: Classify the attempt before calling the verifier. An attempt
+    // that never produced Claude output must not be graded as a broken
+    // transcript — that hides the real infra failure behind a policy-looking
+    // "missing memory fields" error.
+    const attemptStart = this.attemptStartedAt.get(task.taskId);
+    const attemptDurationMs =
+      attemptStart !== undefined ? Date.now() - attemptStart : Number.POSITIVE_INFINITY;
+    const classification: AttemptClassification = classifyAttempt({
+      logs: rawLogs,
+      exitCode,
+      durationMs: attemptDurationMs,
+    });
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      classification.outcome === 'ran'
+        ? `Attempt classified: ran=true`
+        : `Attempt classified: ran=false reason=${classification.subReason} exitCode=${String(exitCode)}`
+    );
+    if (classification.outcome === 'infra_failed') {
+      await this.finalizeAttemptAsInfraFailure(task, attempt, classification, result);
+      return;
+    }
+
     this.appendOrchestratorTaskLog(
       task.taskId,
       `Running completion verification: attempt=${String(attempt)}/${String(maxAttempts)}`
@@ -1587,6 +1623,7 @@ export class TaskDispatcher {
           await this.saveTask(task);
           this.claudeErrors.delete(task.taskId);
           this.taskExitCodes.delete(task.taskId);
+          this.attemptStartedAt.delete(task.taskId);
           return;
         }
         this.appendOrchestratorTaskLog(
@@ -1686,6 +1723,7 @@ export class TaskDispatcher {
         );
         this.claudeErrors.delete(task.taskId);
         this.taskExitCodes.delete(task.taskId);
+        this.attemptStartedAt.delete(task.taskId);
         return;
       }
 
@@ -1732,6 +1770,62 @@ export class TaskDispatcher {
       error,
     });
     /* v8 ignore stop @preserve */
+  }
+
+  /**
+   * INT-1455: Finalize an attempt classified as `infra_failed`. Skips the
+   * verifier entirely and writes a `WORKER_INFRA_FAILURE` TaskError. If the
+   * same sub-reason was observed on the previous attempt, mark the remediation
+   * action as contact_support so the code-agent classifier stops looping.
+   */
+  private async finalizeAttemptAsInfraFailure(
+    task: Task,
+    attempt: number,
+    classification: Extract<AttemptClassification, { outcome: 'infra_failed' }>,
+    result: TaskResult | undefined // @allow-undefined-type -- function parameter, not optional property
+  ): Promise<void> {
+    const { subReason, firstErrorLine } = classification;
+    const history = task.taskInfraFailureHistory ?? [];
+    const previous = history[history.length - 1];
+    const repeatedSubReason = previous?.subReason === subReason;
+
+    task.taskInfraFailureHistory = [
+      ...history,
+      { attempt, subReason, createdAt: new Date().toISOString() },
+    ];
+
+    if (repeatedSubReason) {
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Repeat infra failure (${subReason}) on attempt ${String(attempt)}; flipping remediation to contact_support`
+      );
+    }
+
+    // INT-1455: `remediation.action` is advisory for on-call/UI triage only.
+    // The code-agent classifyFailure() already returns 'fail' unconditionally
+    // for WORKER_INFRA_FAILURE (apps/code-agent/src/domain/utils/classifyFailure.ts),
+    // so neither 'retry' nor 'contact_support' here gates the automated retry
+    // loop. The flip exists so dashboards and webhook consumers can distinguish
+    // a first-time infra failure from a repeat of the same sub-reason after a
+    // user-driven resume.
+    const error: TaskError = {
+      code: 'WORKER_INFRA_FAILURE',
+      message: firstErrorLine,
+      remediation: repeatedSubReason
+        ? { action: 'contact_support', manualSteps: [`Repeat infra failure: ${subReason}`] }
+        : { action: 'retry', manualSteps: [`Infra failure: ${subReason}`] },
+    };
+
+    this.appendOrchestratorTaskLog(
+      task.taskId,
+      `Terminal failure: worker infra failure (${subReason})`
+    );
+    await this.flushTaskLogs(task.taskId);
+    await this.collectTurnMetrics(task, attempt);
+    await this.finalizeTask(task, 'failed', {
+      ...(result !== undefined && { result }),
+      error,
+    });
   }
 
   private buildResultFromVerification(
@@ -1931,6 +2025,7 @@ export class TaskDispatcher {
         await this.saveTask(task);
         this.claudeErrors.delete(task.taskId);
         this.taskExitCodes.delete(task.taskId);
+        this.attemptStartedAt.delete(task.taskId);
         return;
       }
       this.appendOrchestratorTaskLog(
@@ -2075,6 +2170,10 @@ export class TaskDispatcher {
     this.claudeErrors.delete(task.taskId);
     this.taskExitCodes.delete(task.taskId);
     this.lastOutputAt.set(task.taskId, Date.now());
+    // INT-1455: record attempt start time so the classifier can compute
+    // duration on completion. No matching delete() here — the immediate
+    // set() below replaces any stale value from a prior attempt.
+    this.attemptStartedAt.set(task.taskId, Date.now());
 
     // Store promise to enable zombie cleanup if timeout fires mid-creation.
     let createPromise: Promise<WorkerHandle> | undefined;
@@ -2280,6 +2379,7 @@ export class TaskDispatcher {
     this.isolation.tokenRefresher.unregisterTask(task.taskId);
     this.claudeErrors.delete(task.taskId);
     this.taskExitCodes.delete(task.taskId);
+    this.attemptStartedAt.delete(task.taskId);
     this.attemptCompletionSignals.delete(task.taskId);
     this.pendingMessages.delete(task.taskId);
     this.lastOutputAt.delete(task.taskId);
