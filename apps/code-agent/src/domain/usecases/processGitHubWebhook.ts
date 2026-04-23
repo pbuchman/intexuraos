@@ -29,12 +29,9 @@
  */
 
 import type { Logger } from 'pino';
+import type { Result } from '@intexuraos/common-core';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { getServices } from '../../services.js';
-// eslint-disable-next-line no-restricted-imports -- route-layer business logic extracted into this use case; signature verification lives in infra because it wraps node:crypto. Introducing a port wrapper for a pure function call would be pure ceremony.
-import { verifyGitHubSignature } from '../../infra/github-webhook-auth.js';
-// eslint-disable-next-line no-restricted-imports -- same refactor; parser is a pure function with no side effects. Wrapping it in a port would add indirection without testability benefits.
-import { parseGitHubWebhookEvent } from '../../infra/github-event-parser.js';
 import { extractEventUrl } from '../../routes/code/extractEventUrl.js';
 import { extractEventSummary } from '../../routes/code/extractEventSummary.js';
 import type { CreateGitHubPREventInput } from '../models/gitHubPREvent.js';
@@ -54,6 +51,12 @@ import { ALLOWED_BOTS } from '../constants/gitHubBots.js';
 import { resolvePrCloseSourceTimestamp } from '../utils/prCloseTimestamp.js';
 import type { GitHubWebhookBody } from '../models/gitHubWebhookHttp.js';
 
+export type VerifyGitHubSignature = (payload: Buffer, signature: string, secret: string) => boolean;
+export type ParseGitHubWebhookEvent = (
+  eventType: string,
+  payload: unknown,
+) => Result<CreateGitHubPREventInput | null, { code: 'INVALID_PAYLOAD'; message: string }>;
+
 export interface ProcessGitHubWebhookInput {
   rawBody: Buffer;
   signatureHeader: string | undefined;
@@ -62,6 +65,8 @@ export interface ProcessGitHubWebhookInput {
   body: GitHubWebhookBody;
   logger: Logger;
   webhookSecret: string;
+  verifySignature: VerifyGitHubSignature;
+  parseEvent: ParseGitHubWebhookEvent;
 }
 
 export type ProcessGitHubWebhookOk =
@@ -238,11 +243,9 @@ async function ensureDecisionAfterEvaluationFailure(input: {
   try {
     if (eventDecisionRepo.findByEventIds !== undefined) {
       const existingResult = await eventDecisionRepo.findByEventIds([input.auditEvent.id]);
-      /* v8 ignore start -- test-infra: FakeFirestore eventDecisionRepo always returns empty for dedup check @preserve */
-      if (existingResult.ok && existingResult.value.length > 0) {
+      if (existingResult.ok && existingResult.value.length > 0) { // @allow-result-access -- narrowed by existingResult.ok check
         return;
       }
-      /* v8 ignore stop @preserve */
     }
 
     await persistRouteDecision({
@@ -264,12 +267,22 @@ async function ensureDecisionAfterEvaluationFailure(input: {
 export async function processGitHubWebhook(
   input: ProcessGitHubWebhookInput,
 ): Promise<ProcessGitHubWebhookResult> {
-  const { rawBody, signatureHeader, eventType, deliveryId, body, logger, webhookSecret } = input;
+  const {
+    rawBody,
+    signatureHeader,
+    eventType,
+    deliveryId,
+    body,
+    logger,
+    webhookSecret,
+    verifySignature,
+    parseEvent,
+  } = input;
 
   if (
     signatureHeader === undefined
     || signatureHeader === ''
-    || !verifyGitHubSignature(rawBody, signatureHeader, webhookSecret)
+    || !verifySignature(rawBody, signatureHeader, webhookSecret)
   ) {
     const sigPreview = signatureHeader !== undefined && signatureHeader !== ''
       ? signatureHeader.slice(0, 20)
@@ -416,7 +429,7 @@ export async function processGitHubWebhook(
     return { ok: true, outcome: 'pong', message: 'pong' };
   }
 
-  const parseResult = parseGitHubWebhookEvent(eventType ?? '', body);
+  const parseResult = parseEvent(eventType ?? '', body);
 
   if (!parseResult.ok) {
     logger.warn({ error: parseResult.error }, 'Failed to parse GitHub webhook event'); // @allow-result-access -- narrowed by !parseResult.ok

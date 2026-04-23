@@ -17,6 +17,8 @@ import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
 import { loadConfig } from '../../config.js';
 import { processGitHubWebhook } from '../../domain/usecases/processGitHubWebhook.js';
+import { verifyGitHubSignature } from '../../infra/github-webhook-auth.js';
+import { parseGitHubWebhookEvent } from '../../infra/github-event-parser.js';
 import type { GitHubWebhookBody, GitHubWebhookHeaders } from '../../domain/models/gitHubWebhookHttp.js';
 
 export { ALLOWED_BOTS, CODE_WORKER_BOTS } from '../../domain/constants/gitHubBots.js';
@@ -73,6 +75,8 @@ export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
         body: request.body,
         logger,
         webhookSecret: config.githubWebhookSecret,
+        verifySignature: verifyGitHubSignature,
+        parseEvent: parseGitHubWebhookEvent,
       });
 
       if (!result.ok) {

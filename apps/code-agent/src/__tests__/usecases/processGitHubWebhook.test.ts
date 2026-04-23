@@ -12,8 +12,12 @@ import { ok, err } from '@intexuraos/common-core';
 import {
   processGitHubWebhook,
   type ProcessGitHubWebhookInput,
+  type VerifyGitHubSignature,
+  type ParseGitHubWebhookEvent,
 } from '../../domain/usecases/processGitHubWebhook.js';
 import type { GitHubPREvent } from '../../domain/models/gitHubPREvent.js';
+import { verifyGitHubSignature } from '../../infra/github-webhook-auth.js';
+import { parseGitHubWebhookEvent } from '../../infra/github-event-parser.js';
 import { createMockLogger } from '../helpers/mockLogger.js';
 import { setServices, resetServices, type ServiceContainer } from '../../services.js';
 
@@ -178,6 +182,9 @@ function buildPushBody(): Record<string, unknown> {
   };
 }
 
+const defaultVerifySignature: VerifyGitHubSignature = verifyGitHubSignature;
+const defaultParseEvent: ParseGitHubWebhookEvent = parseGitHubWebhookEvent;
+
 function runInput(partial: Partial<ProcessGitHubWebhookInput>): ProcessGitHubWebhookInput {
   const body = partial.body ?? buildPullRequestBody();
   const { rawBody, signatureHeader } = signPayload(body);
@@ -189,6 +196,8 @@ function runInput(partial: Partial<ProcessGitHubWebhookInput>): ProcessGitHubWeb
     body: body as never,
     logger: partial.logger ?? createMockLogger(),
     webhookSecret: partial.webhookSecret ?? WEBHOOK_SECRET,
+    verifySignature: partial.verifySignature ?? defaultVerifySignature,
+    parseEvent: partial.parseEvent ?? defaultParseEvent,
   };
 }
 
@@ -214,6 +223,8 @@ describe('processGitHubWebhook', () => {
       body: body as never,
       logger: createMockLogger(),
       webhookSecret: WEBHOOK_SECRET,
+      verifySignature: defaultVerifySignature,
+      parseEvent: defaultParseEvent,
     });
 
     expect(result.ok).toBe(false);
@@ -234,6 +245,8 @@ describe('processGitHubWebhook', () => {
       body: body as never,
       logger: createMockLogger(),
       webhookSecret: WEBHOOK_SECRET,
+      verifySignature: defaultVerifySignature,
+      parseEvent: defaultParseEvent,
     });
 
     expect(result.ok).toBe(false);
@@ -275,6 +288,8 @@ describe('processGitHubWebhook', () => {
       body: body as never,
       logger: createMockLogger(),
       webhookSecret: WEBHOOK_SECRET,
+      verifySignature: defaultVerifySignature,
+      parseEvent: defaultParseEvent,
     });
 
     expect(result.ok).toBe(true);
@@ -299,6 +314,8 @@ describe('processGitHubWebhook', () => {
       body: body as never,
       logger: createMockLogger(),
       webhookSecret: WEBHOOK_SECRET,
+      verifySignature: defaultVerifySignature,
+      parseEvent: defaultParseEvent,
     });
 
     expect(result.ok).toBe(true);
@@ -367,6 +384,61 @@ describe('processGitHubWebhook', () => {
     expect(mocks.unifiedEvaluator.evaluate).toHaveBeenCalledTimes(1);
   });
 
+  it('skips fallback decision persist when an existing decision is already recorded', async () => {
+    // Arrange: triage publish fails AND inline evaluator throws → triggers
+    // ensureDecisionAfterEvaluationFailure. Seed an existing decision so the
+    // dedup check (findByEventIds → non-empty) prevents a second persist.
+    mocks.prTriagePublisher.publishPRTriage.mockResolvedValueOnce(
+      err({ message: 'pub/sub unavailable' }),
+    );
+    mocks.unifiedEvaluator.evaluate.mockRejectedValueOnce(new Error('evaluator failure'));
+    mocks.eventDecisionRepo.findByEventIds.mockResolvedValueOnce(
+      ok([{ id: 'existing-decision-1', eventId: 'audit-1', decision: 'skip', reason: 'previously_recorded' }]),
+    );
+
+    const result = await processGitHubWebhook(runInput({}));
+
+    expect(result.ok).toBe(true);
+    // Wait for fire-and-forget fallback chain to settle
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(mocks.eventDecisionRepo.findByEventIds).toHaveBeenCalledWith(['audit-1']);
+    // The fallback must NOT record another decision because one already exists
+    const fallbackCalls = mocks.eventDecisionRepo.save.mock.calls.filter(
+      (call: unknown[]) => {
+        const arg = call[0] as { reason?: string } | undefined;
+        return arg?.reason?.startsWith('evaluation_failed') === true;
+      },
+    );
+    expect(fallbackCalls).toHaveLength(0);
+  });
+
+  it('persists a fallback decision when evaluation fails and no prior decision exists', async () => {
+    // Arrange: publish fails, inline evaluator throws, findByEventIds returns
+    // an empty array (default fake). The false-branch of the dedup check
+    // leads to persistRouteDecision with reason "evaluation_failed:*".
+    mocks.prTriagePublisher.publishPRTriage.mockResolvedValueOnce(
+      err({ message: 'pub/sub unavailable' }),
+    );
+    mocks.unifiedEvaluator.evaluate.mockRejectedValueOnce(new Error('evaluator failure'));
+
+    const result = await processGitHubWebhook(runInput({}));
+
+    expect(result.ok).toBe(true);
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(mocks.eventDecisionRepo.findByEventIds).toHaveBeenCalledWith(['audit-1']);
+    const fallbackCalls = mocks.eventDecisionRepo.save.mock.calls.filter(
+      (call: unknown[]) => {
+        const arg = call[0] as { reason?: string } | undefined;
+        return arg?.reason?.startsWith('evaluation_failed') === true;
+      },
+    );
+    expect(fallbackCalls.length).toBeGreaterThan(0);
+  });
+
   it('processes a valid push event and triggers merge-conflict detection', async () => {
     mocks.gitHubPREventRepo.save.mockResolvedValueOnce(
       ok(buildPREvent({ eventType: 'push', pullRequestNumber: 0, action: null })),
@@ -382,6 +454,8 @@ describe('processGitHubWebhook', () => {
       body: body as never,
       logger: createMockLogger(),
       webhookSecret: WEBHOOK_SECRET,
+      verifySignature: defaultVerifySignature,
+      parseEvent: defaultParseEvent,
     });
 
     expect(result.ok).toBe(true);
