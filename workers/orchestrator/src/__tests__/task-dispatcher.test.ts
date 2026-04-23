@@ -101,7 +101,9 @@ const createMockChildProcess = (): ChildProcess =>
   }) as unknown as ChildProcess;
 
 const planningFinalAssistantLog = (outcome: 'planned' | 'unclear'): string =>
-  JSON.stringify({
+  // INT-1455: [claude] prefix required so classifyAttempt treats the attempt
+  // as `ran` rather than `infra_failed` and the completion verifier runs.
+  `[claude] ${JSON.stringify({
     type: 'assistant',
     message: {
       content: [
@@ -114,16 +116,18 @@ const planningFinalAssistantLog = (outcome: 'planned' | 'unclear'): string =>
 - Planning issue: ${outcome === 'planned' ? 'https://linear.app/pbuchman/issue/INT-456' : ''}
 - Child issues: ${outcome === 'planned' ? '1' : '0'}
 - Plan doc:
-- Planning PR: 
+- Planning PR:
 - Clarification message: ${outcome === 'unclear' ? 'Need API contract details from user' : ''}
 - Summary: Planning completed`,
         },
       ],
     },
-  });
+  })}`;
 
 const executionFinalAssistantLog = (): string =>
-  JSON.stringify({
+  // INT-1455: [claude] prefix required so classifyAttempt treats the attempt
+  // as `ran` rather than `infra_failed` and the completion verifier runs.
+  `[claude] ${JSON.stringify({
     type: 'assistant',
     message: {
       content: [
@@ -137,7 +141,7 @@ const executionFinalAssistantLog = (): string =>
         },
       ],
     },
-  });
+  })}`;
 
 describe('TaskDispatcher', () => {
   // Mock config
@@ -207,7 +211,11 @@ describe('TaskDispatcher', () => {
     ),
     destroyWorker: vi.fn(async () => undefined),
     isWorkerRunning: vi.fn(async () => false),
-    getWorkerLogs: vi.fn(async () => ''),
+    // INT-1455: default log fixture must include a [claude] line so the new
+    // classifyAttempt() gate treats the attempt as `ran` and falls through to
+    // the completion verifier. Tests that simulate infra failures (empty logs
+    // + non-zero exit) override this via mockResolvedValueOnce('').
+    getWorkerLogs: vi.fn(async () => '[claude] Session init: id=test-session\n'),
     streamLogs: vi.fn(async () => undefined),
     waitForCompletion: vi.fn(async () => 0),
     getResourceUsage: vi.fn(async () => ({ cpuPercent: 0, memoryUsedMB: 0, memoryLimitMB: 0 })),
@@ -11499,6 +11507,200 @@ describe('TaskDispatcher', () => {
       expect(pullImageCall?.[0]).toBe('progress-test');
       expect(typeof pullImageCall?.[1]).toBe('function');
       vi.useRealTimers();
+    });
+  });
+
+  describe('WORKER_INFRA_FAILURE classification (INT-1455)', () => {
+    let infraDispatcher: TaskDispatcher;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      infraDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockStatusUpdateClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('finalizes attempt as WORKER_INFRA_FAILURE when exit!=0 and no Session init line', async () => {
+      // Empty Claude output — container exited before producing any [claude] lines.
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        '[entrypoint] starting run-attempt\nfatal: not a git repository: /repo/.git/worktrees/stale\n'
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'infra-fail-exit-128',
+        workerType: 'auto',
+        prompt: 'Code task',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+      };
+
+      await infraDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Simulate non-zero exit code on attempt completion. Use the same
+      // access pattern as the TASK_EXIT_CODE_OVERRIDE tests above: inject
+      // the exit code directly into the dispatcher's private map before
+      // advancing the completion monitor.
+      const internal = infraDispatcher as unknown as {
+        taskExitCodes: Map<string, number>;
+      };
+      internal.taskExitCodes.set('infra-fail-exit-128', 128);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await infraDispatcher.getTask('infra-fail-exit-128');
+      expect(task?.status).toBe('failed');
+      expect(task?.taskInfraFailureHistory?.[0]?.subReason).toBe(
+        'container_exit_before_session_init'
+      );
+
+      // Error code + message land in the webhook payload (Task itself does not
+      // persist the TaskError — see finalizeTask signature).
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'WORKER_INFRA_FAILURE',
+              message: expect.stringContaining('fatal: not a git repository'),
+            }),
+          }),
+        })
+      );
+    });
+
+    it('does not call the verifier when classification is infra_failed', async () => {
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        '[entrypoint] booting\nfatal: image pull failed\n'
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'infra-fail-no-verifier',
+        workerType: 'auto',
+        prompt: 'Code task',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+      };
+
+      const verifySpy = vi.mocked(singleAttemptCompletionControl.verifier.verify);
+      verifySpy.mockClear();
+
+      await infraDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const internal = infraDispatcher as unknown as {
+        taskExitCodes: Map<string, number>;
+      };
+      internal.taskExitCodes.set('infra-fail-no-verifier', 128);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(verifySpy).not.toHaveBeenCalled();
+    });
+
+    it('flips remediation to contact_support on repeated sub-reason and forwards a defined result', async () => {
+      // This test drives finalizeAttemptAsInfraFailure directly because the
+      // repeated-sub-reason branch only fires if the Task already carries
+      // taskInfraFailureHistory from a prior attempt. In production the
+      // history accumulates across attempts: a user-driven resume via
+      // sendMessage() intentionally leaves `taskInfraFailureHistory` in place
+      // (see the comment next to the `verificationHistory = []` reset in
+      // sendMessage), so the next infra failure sees the prior entry and
+      // flips remediation. The fake isolation harness cannot drive a full
+      // submit → fail → resume → fail-again cycle for infra failures, so we
+      // seed the history explicitly and invoke the private finalize path.
+      const existingTask: Task = {
+        taskId: 'repeat-infra-failure',
+        workerType: 'auto',
+        prompt: 'Code task',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        linearIssueLabels: ['code-task'],
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running',
+        worktreePath: '/tmp/repeat-infra-failure',
+        containerId: 'container-repeat',
+        startedAt: new Date().toISOString(),
+        attemptCount: 2,
+        maxAttempts: 3,
+        taskInfraFailureHistory: [
+          {
+            attempt: 1,
+            subReason: 'container_exit_before_session_init',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      };
+      await statePersistence.modify(async (s) => {
+        s.tasks[existingTask.taskId] = existingTask;
+      });
+
+      const internal = infraDispatcher as unknown as {
+        finalizeAttemptAsInfraFailure: (
+          task: Task,
+          attempt: number,
+          classification: {
+            outcome: 'infra_failed';
+            subReason: string;
+            firstErrorLine: string;
+          },
+          result: TaskResult | undefined // @allow-undefined-type -- mirrors private method signature
+        ) => Promise<void>;
+      };
+
+      const priorResult: TaskResult = { prUrl: 'https://github.com/x/y/pull/42' };
+
+      await internal.finalizeAttemptAsInfraFailure(
+        existingTask,
+        2,
+        {
+          outcome: 'infra_failed',
+          subReason: 'container_exit_before_session_init',
+          firstErrorLine: 'fatal: again',
+        },
+        priorResult
+      );
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'WORKER_INFRA_FAILURE',
+              remediation: expect.objectContaining({ action: 'contact_support' }),
+            }),
+            result: expect.objectContaining({
+              prUrl: 'https://github.com/x/y/pull/42',
+            }),
+          }),
+        })
+      );
+
+      const persisted = await infraDispatcher.getTask('repeat-infra-failure');
+      expect(persisted?.taskInfraFailureHistory).toHaveLength(2);
+      expect(persisted?.taskInfraFailureHistory?.[1]?.subReason).toBe(
+        'container_exit_before_session_init'
+      );
     });
   });
 });

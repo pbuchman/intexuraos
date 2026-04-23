@@ -122,4 +122,3 @@ export function pickAgentStatusLabel(agentType: string | undefined): string | un
   if (agentType === undefined) return undefined;
   return agentStatusMap[agentType];
 }
-
