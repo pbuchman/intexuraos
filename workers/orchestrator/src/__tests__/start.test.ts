@@ -216,4 +216,62 @@ describe('start() — full bootstrap happy path', () => {
     vi.mocked(ensurePortAvailable).mockRejectedValueOnce(new Error('Port 19199 is already in use'));
     await expect(start()).rejects.toThrow(/Port 19199 is already in use/);
   });
+
+  it('forwards env overrides for repoPath, private-key, and git identity', async () => {
+    // Drive the truthy arms of `env.repoPath ?? defaultRepoPath`,
+    // `env.githubPrivateKeyOverride !== undefined ? ... : {}`, and
+    // `env.gitUserNameOverride ?? readHostGitConfig(...)` /
+    // `env.gitUserEmailOverride ?? readHostGitConfig(...)` inside start().
+    // Without these, the default mock env leaves only the falsy arms covered.
+    vi.mocked(loadEnvConfig).mockReturnValueOnce({
+      repoUrl: 'https://example.com/repo.git',
+      repoPath: '/custom/repo',
+      codeAgentUrl: 'https://code-agent.test',
+      internalAuthToken: 'internal',
+      orchestratorSecret: 'secret',
+      usageWebhookUrl: 'https://usage.test',
+      githubAppId: '1',
+      githubInstallationId: '2',
+      projectId: 'proj',
+      gcpSaKeyPath: '/tmp/sa.json',
+      port: 19199,
+      capacity: 1,
+      completionMaxAttempts: 3,
+      validationModels: 'gemini-2.5-flash',
+      workerImage: 'image:latest',
+      keepContainersAlive: false,
+      workerForensicsMode: false,
+      preserveWorkerContainers: true,
+      githubPrivateKeyOverride: 'INLINE-PEM',
+      linearApiKey: 'lin',
+      sentryAuthToken: 'sentry',
+      minimaxApiKey: 'm',
+      mimoApiKey: 'm',
+      dashscopeApiKey: 'd',
+      openRouterApiKey: '',
+      geminiApiKey: 'g',
+      gitUserNameOverride: 'Test User',
+      gitUserEmailOverride: 'test@example.com',
+      logLevel: 'info',
+    });
+
+    await start();
+
+    // fetchGitHubKeys must receive the inline override so the truthy arm of
+    // the spread ternary runs.
+    expect(fetchGitHubKeys).toHaveBeenCalledWith(
+      expect.objectContaining({ override: 'INLINE-PEM' })
+    );
+
+    // With both git-identity env vars set, readHostGitConfig is never called.
+    const { readHostGitConfig } = await import('../bootstrap/git-identity.js');
+    expect(vi.mocked(readHostGitConfig)).not.toHaveBeenCalled();
+
+    // The custom repoPath overrides the default home-based path.
+    expect(ensureRepository).toHaveBeenCalledWith(
+      'https://example.com/repo.git',
+      '/custom/repo',
+      expect.anything()
+    );
+  });
 });
