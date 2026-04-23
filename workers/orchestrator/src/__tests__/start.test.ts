@@ -68,10 +68,14 @@ vi.mock('../bootstrap/secret-manager.js', () => ({
   }),
 }));
 
+// `validateWorkerApiKeys` is intentionally NOT pushed to `callOrder`.
+// `start.ts` fires it with `void` (non-blocking), so in production it runs
+// concurrently with `startCredentialRefreshLoop` and `main`. Pushing to
+// `callOrder` inside this mock would only record the synchronous prelude of
+// an async mock body and suggest a sequencing guarantee that does not exist.
+// Invocation is verified separately via `toHaveBeenCalledOnce()`.
 vi.mock('../bootstrap/api-key-validator.js', () => ({
-  validateWorkerApiKeys: vi.fn(async () => {
-    callOrder.push('validateWorkerApiKeys');
-  }),
+  validateWorkerApiKeys: vi.fn(async () => undefined),
 }));
 
 vi.mock('../bootstrap/git-identity.js', () => ({
@@ -180,8 +184,15 @@ describe('start() — full bootstrap happy path', () => {
   it('invokes bootstrap modules in the documented order', async () => {
     await start();
 
-    // Env first, then dependent infra checks, then service wiring,
-    // then live API-key validation, then the main loop.
+    // Env first, then dependent infra checks, then service wiring, then the
+    // credential refresh loop, then the main loop. `validateWorkerApiKeys` is
+    // intentionally omitted from this strict order: it is fired with `void`
+    // in `start.ts`, so in production it runs concurrently with
+    // `startCredentialRefreshLoop` and `main`. Including it here would only
+    // assert the synchronous side-effect of the mock (which happens to push
+    // to `callOrder` before its first await), giving false confidence about
+    // sequencing that is not guaranteed in the real implementation. Its
+    // invocation is separately verified via `toHaveBeenCalledOnce()` above.
     expect(callOrder).toEqual([
       'loadEnvConfig',
       'validateGcpCredentials',
@@ -189,7 +200,6 @@ describe('start() — full bootstrap happy path', () => {
       'ensurePortAvailable',
       'ensureRepository',
       'buildOrchestratorServices',
-      'validateWorkerApiKeys',
       'startCredentialRefreshLoop',
       'main',
     ]);

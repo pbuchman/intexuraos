@@ -1,11 +1,56 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { Logger } from 'pino';
 import {
   validateWorkerApiKey,
   keySuffix,
   extractErrorChain,
   fetchWithRetry,
+  logWorkerAuthStartupStatus,
+  validateWorkerApiKeys,
   type FetchWithRetryDeps,
 } from '../../bootstrap/api-key-validator.js';
+import type { WorkerAuthRegistry, WorkerAuthProvider } from '../../services/worker-auth/index.js';
+import type { WorkerAuthState, WorkerAuthStatus } from '../../services/worker-auth/types.js';
+
+type LogEntry = [level: 'info' | 'warn' | 'error' | 'debug', ...args: unknown[]];
+
+function makeLogger(): Logger & { calls: LogEntry[] } {
+  const calls: LogEntry[] = [];
+  const logger = {
+    info: (...args: unknown[]): number => calls.push(['info', ...args]),
+    warn: (...args: unknown[]): number => calls.push(['warn', ...args]),
+    error: (...args: unknown[]): number => calls.push(['error', ...args]),
+    debug: (...args: unknown[]): number => calls.push(['debug', ...args]),
+    calls,
+  };
+  return logger as unknown as Logger & { calls: LogEntry[] };
+}
+
+function makeState(
+  status: WorkerAuthStatus,
+  overrides: Partial<WorkerAuthState> = {}
+): WorkerAuthState {
+  return {
+    status,
+    authMode: null,
+    refreshSupported: true,
+    ...overrides,
+  };
+}
+
+/** Builds a minimal `WorkerAuthRegistry` fake with just the query methods we exercise. */
+function makeRegistry(states: {
+  claude?: WorkerAuthState;
+  codex?: WorkerAuthState;
+}): WorkerAuthRegistry {
+  const claude = states.claude ?? makeState('not_configured');
+  const codex = states.codex ?? makeState('not_configured');
+  return {
+    getStates: (): Record<WorkerAuthProvider, WorkerAuthState> => ({ claude, codex }),
+    getState: (provider: WorkerAuthProvider): WorkerAuthState =>
+      provider === 'claude' ? claude : codex,
+  } as unknown as WorkerAuthRegistry;
+}
 
 describe('validateWorkerApiKey', () => {
   it('accepts a non-empty key without throwing', () => {
@@ -141,5 +186,177 @@ describe('fetchWithRetry', () => {
 
     await fetchWithRetry('https://test', { signal: controller.signal }, 1, 10, deps);
     expect(capturedSignal).toBe(controller.signal);
+  });
+});
+
+describe('logWorkerAuthStartupStatus', () => {
+  it('logs info for claude when the claude state is active', () => {
+    const logger = makeLogger();
+    const registry = makeRegistry({
+      claude: makeState('active', {
+        expiresAt: '2030-01-01T00:00:00Z',
+        expiresInMinutes: 60,
+        subscriptionType: 'pro',
+      }),
+      codex: makeState('not_configured'),
+    });
+
+    logWorkerAuthStartupStatus(registry, logger);
+
+    const infoCalls = logger.calls.filter(([level]) => level === 'info');
+    expect(infoCalls).toHaveLength(1);
+    expect(infoCalls[0]?.[1]).toMatchObject({
+      expiresAt: '2030-01-01T00:00:00Z',
+      expiresInMinutes: 60,
+      subscriptionType: 'pro',
+    });
+    expect(infoCalls[0]?.[2]).toBe('Code worker auth active');
+  });
+
+  it('warns for claude when the claude state is not active', () => {
+    const logger = makeLogger();
+    const registry = makeRegistry({
+      claude: makeState('not_configured'),
+      codex: makeState('active', { authMode: 'oauth' }),
+    });
+
+    logWorkerAuthStartupStatus(registry, logger);
+
+    const claudeWarn = logger.calls.filter(
+      ([level, , message]) => level === 'warn' && message === 'Code worker auth not ready'
+    );
+    expect(claudeWarn).toHaveLength(1);
+  });
+
+  it('logs info for codex when the codex state is active', () => {
+    const logger = makeLogger();
+    const registry = makeRegistry({
+      claude: makeState('not_configured'),
+      codex: makeState('active', {
+        authMode: 'chatgpt',
+        expiresAt: '2030-01-01T00:00:00Z',
+        expiresInMinutes: 30,
+        lastRefreshAt: '2029-12-31T23:30:00Z',
+      }),
+    });
+
+    logWorkerAuthStartupStatus(registry, logger);
+
+    const codexInfo = logger.calls.filter(
+      ([level, , message]) => level === 'info' && message === 'Codex worker auth active'
+    );
+    expect(codexInfo).toHaveLength(1);
+    expect(codexInfo[0]?.[1]).toMatchObject({
+      authMode: 'chatgpt',
+      expiresAt: '2030-01-01T00:00:00Z',
+      expiresInMinutes: 30,
+      lastRefreshAt: '2029-12-31T23:30:00Z',
+    });
+  });
+
+  it('warns for codex when the codex state is not active', () => {
+    const logger = makeLogger();
+    const registry = makeRegistry({
+      claude: makeState('active'),
+      codex: makeState('expired'),
+    });
+
+    logWorkerAuthStartupStatus(registry, logger);
+
+    const codexWarn = logger.calls.filter(
+      ([level, , message]) => level === 'warn' && message === 'Codex worker auth not ready'
+    );
+    expect(codexWarn).toHaveLength(1);
+  });
+});
+
+describe('validateWorkerApiKeys — auth-state logging branches', () => {
+  // Empty third-party keys short-circuit the Promise.all before any network
+  // call, so these tests exercise only the auth-state logging branches.
+  const noKeys = {
+    minimaxKey: '',
+    mimoKey: '',
+    dashscopeKey: '',
+    openRouterKey: '',
+  };
+
+  it('logs info for claude when the claude state is active', async () => {
+    const logger = makeLogger();
+    const registry = makeRegistry({
+      claude: makeState('active', {
+        expiresInMinutes: 120,
+        subscriptionType: 'team',
+      }),
+      codex: makeState('not_configured'),
+    });
+
+    await validateWorkerApiKeys(registry, noKeys, logger);
+
+    const claudeInfo = logger.calls.filter(
+      ([level, , message]) =>
+        level === 'info' && message === 'Code worker auth validated — Claude-backed tasks ready'
+    );
+    expect(claudeInfo).toHaveLength(1);
+    expect(claudeInfo[0]?.[1]).toMatchObject({
+      expiresInMinutes: 120,
+      subscriptionType: 'team',
+    });
+  });
+
+  it('warns for claude when the claude state is not active', async () => {
+    const logger = makeLogger();
+    const registry = makeRegistry({
+      claude: makeState('refresh_failed'),
+      codex: makeState('active', { authMode: 'oauth' }),
+    });
+
+    await validateWorkerApiKeys(registry, noKeys, logger);
+
+    const claudeWarn = logger.calls.filter(
+      ([level, , message]) =>
+        level === 'warn' && message === 'Code worker auth not ready at startup'
+    );
+    expect(claudeWarn).toHaveLength(1);
+  });
+
+  it('logs info for codex when the codex state is active', async () => {
+    const logger = makeLogger();
+    const registry = makeRegistry({
+      claude: makeState('not_configured'),
+      codex: makeState('active', {
+        authMode: 'chatgpt',
+        expiresInMinutes: 45,
+        lastRefreshAt: '2030-01-01T00:00:00Z',
+      }),
+    });
+
+    await validateWorkerApiKeys(registry, noKeys, logger);
+
+    const codexInfo = logger.calls.filter(
+      ([level, , message]) =>
+        level === 'info' && message === 'Codex worker auth validated — Codex tasks ready'
+    );
+    expect(codexInfo).toHaveLength(1);
+    expect(codexInfo[0]?.[1]).toMatchObject({
+      authMode: 'chatgpt',
+      expiresInMinutes: 45,
+      lastRefreshAt: '2030-01-01T00:00:00Z',
+    });
+  });
+
+  it('warns for codex when the codex state is not active', async () => {
+    const logger = makeLogger();
+    const registry = makeRegistry({
+      claude: makeState('active'),
+      codex: makeState('invalid'),
+    });
+
+    await validateWorkerApiKeys(registry, noKeys, logger);
+
+    const codexWarn = logger.calls.filter(
+      ([level, , message]) =>
+        level === 'warn' && message === 'Codex worker auth not ready at startup'
+    );
+    expect(codexWarn).toHaveLength(1);
   });
 });
