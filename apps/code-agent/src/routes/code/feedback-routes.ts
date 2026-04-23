@@ -237,7 +237,7 @@ export const feedbackRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify
         return await reply.fail('INTERNAL_ERROR', 'Failed to process heartbeat');
       }
 
-      return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 2523
+      return await reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
     }
   );
 

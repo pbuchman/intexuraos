@@ -302,14 +302,14 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', error.message);
       }
 
-      request.log.info({ codeTaskId: result.value.codeTaskId }, 'Code action processed successfully'); // @allow-result-access -- .ok checked at line 461
+      request.log.info({ codeTaskId: result.value.codeTaskId }, 'Code action processed successfully'); // @allow-result-access -- narrowed by !result.ok guard above
 
       // Mirror dispatched status to action (non-fatal)
       try {
         await services.statusMirrorService.mirrorStatus({
           actionId: body.actionId,
           taskStatus: 'dispatched',
-          resourceUrl: result.value.resourceUrl, // @allow-result-access -- .ok checked at line 461
+          resourceUrl: result.value.resourceUrl, // @allow-result-access -- narrowed by !result.ok guard above
           traceId,
         });
       } catch (mirrorError) {
@@ -318,8 +318,8 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       return await reply.ok({
         status: 'submitted',
-        codeTaskId: result.value.codeTaskId, // @allow-result-access -- .ok checked at line 461
-        resourceUrl: result.value.resourceUrl, // @allow-result-access -- .ok checked at line 461
+        codeTaskId: result.value.codeTaskId, // @allow-result-access -- narrowed by !result.ok guard above
+        resourceUrl: result.value.resourceUrl, // @allow-result-access -- narrowed by !result.ok guard above
       });
     }
   );
@@ -600,12 +600,12 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', error.message);
       }
 
-      request.log.info({ codeTaskId: result.value.codeTaskId }, 'Internal code task created successfully'); // @allow-result-access -- .ok checked at line 958
+      request.log.info({ codeTaskId: result.value.codeTaskId }, 'Internal code task created successfully'); // @allow-result-access -- narrowed by !result.ok guard above
 
       return await reply.ok({
         status: 'submitted',
-        codeTaskId: result.value.codeTaskId, // @allow-result-access -- .ok checked at line 958
-        resourceUrl: result.value.resourceUrl, // @allow-result-access -- .ok checked at line 958
+        codeTaskId: result.value.codeTaskId, // @allow-result-access -- narrowed by !result.ok guard above
+        resourceUrl: result.value.resourceUrl, // @allow-result-access -- narrowed by !result.ok guard above
       });
     }
   );
@@ -921,9 +921,9 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      request.log.info({ count: result.value.length }, 'Zombie code tasks found'); // @allow-result-access -- .ok checked at line 986
+      request.log.info({ count: result.value.length }, 'Zombie code tasks found'); // @allow-result-access -- narrowed by !result.ok guard above
       return await reply.ok({
-        tasks: result.value.map(taskToApiResponse), // @allow-result-access -- .ok checked at line 986
+        tasks: result.value.map(taskToApiResponse), // @allow-result-access -- narrowed by !result.ok guard above
       });
     }
   );
@@ -1000,7 +1000,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         await deletePRTaskLock(getServices().firestore, lock.repository, lock.prNumber, request.log);
       }
 
-      return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 2594
+      return await reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
     }
   );
 
@@ -1446,14 +1446,14 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       request.log.info(
         {
-          tasksProcessed: result.value.tasksProcessed, // @allow-result-access -- .ok checked at line 3035
-          logsDeleted: result.value.logsDeleted, // @allow-result-access -- .ok checked at line 3035
-          durationMs: result.value.durationMs, // @allow-result-access -- .ok checked at line 3035
+          tasksProcessed: result.value.tasksProcessed, // @allow-result-access -- narrowed by !result.ok guard above
+          logsDeleted: result.value.logsDeleted, // @allow-result-access -- narrowed by !result.ok guard above
+          durationMs: result.value.durationMs, // @allow-result-access -- narrowed by !result.ok guard above
         },
         'Task log cleanup completed'
       );
 
-      return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 3035
+      return await reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
     }
   );
 
@@ -2099,7 +2099,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           return await reply.fail('INTERNAL_ERROR', getResult.error.message);
         }
 
-        const task = getResult.value; // @allow-result-access -- .ok checked at line 1703
+        const task = getResult.value; // @allow-result-access -- narrowed by !result.ok guard above
         const apiResponse = taskToApiResponse(task);
 
         let linearIssue: undefined | {

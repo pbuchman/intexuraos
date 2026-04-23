@@ -89,8 +89,8 @@ export const linearRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, 
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      request.log.info({ linearIssueId, hasActive: result.value.hasActive }, 'Active blocking code task check complete'); // @allow-result-access -- .ok checked at line 891
-      return await reply.ok(result.value); // @allow-result-access -- .ok checked at line 891
+      request.log.info({ linearIssueId, hasActive: result.value.hasActive }, 'Active blocking code task check complete'); // @allow-result-access -- narrowed by !result.ok guard above
+      return await reply.ok(result.value); // @allow-result-access -- narrowed by !result.ok guard above
     }
   );
 
