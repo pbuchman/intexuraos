@@ -6,15 +6,15 @@ import {
 } from '../../bootstrap/service-wiring.js';
 import type { WorkerAuthRegistry } from '../../services/worker-auth/index.js';
 
-type LogEntry = [level: string, data: unknown];
+type LogEntry = [level: 'info' | 'warn' | 'error' | 'debug', ...args: unknown[]];
 
 function makeLogger(): Logger & { calls: LogEntry[] } {
   const calls: LogEntry[] = [];
   const logger = {
-    info: (data: unknown): number => calls.push(['info', data]),
-    warn: (data: unknown): number => calls.push(['warn', data]),
-    error: (data: unknown): number => calls.push(['error', data]),
-    debug: (data: unknown): number => calls.push(['debug', data]),
+    info: (...args: unknown[]): number => calls.push(['info', ...args]),
+    warn: (...args: unknown[]): number => calls.push(['warn', ...args]),
+    error: (...args: unknown[]): number => calls.push(['error', ...args]),
+    debug: (...args: unknown[]): number => calls.push(['debug', ...args]),
     calls,
   };
   return logger as unknown as Logger & { calls: LogEntry[] };
