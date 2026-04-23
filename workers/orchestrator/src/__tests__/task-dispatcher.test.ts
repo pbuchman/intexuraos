@@ -338,6 +338,7 @@ describe('TaskDispatcher', () => {
         async (_input: unknown): Promise<VerifierMockResult> => ({
           passed: true,
           missingFields: [],
+          telemetryMissingFields: [],
           verifierFailure: false,
           trace: dummyTrace,
           agentData: {
@@ -1744,6 +1745,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
         missingFields: ['gh_pr_url'],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -1790,6 +1792,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -1843,6 +1846,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -1909,6 +1913,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -1967,6 +1972,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -2041,6 +2047,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -2091,6 +2098,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -2153,6 +2161,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -2200,6 +2209,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -2275,6 +2285,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
         missingFields: ['outcome'],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -2337,6 +2348,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -2382,6 +2394,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -2442,6 +2455,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -2502,6 +2516,7 @@ describe('TaskDispatcher', () => {
             agentData: undefined;
             passed: boolean;
             missingFields: string[];
+            telemetryMissingFields: [];
             verifierFailure: boolean;
             trace: { transcript: string; prompt: string; response: string };
           }
@@ -2513,6 +2528,7 @@ describe('TaskDispatcher', () => {
         agentData: undefined,
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -2542,6 +2558,7 @@ describe('TaskDispatcher', () => {
         },
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -2840,6 +2857,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -2891,6 +2909,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -3024,6 +3043,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -3187,12 +3207,14 @@ describe('TaskDispatcher', () => {
         .mockResolvedValueOnce({
           passed: false,
           missingFields: ['agent_final_block'],
+          telemetryMissingFields: [],
           verifierFailure: false,
           trace: dummyTrace,
         })
         .mockResolvedValueOnce({
           passed: true,
           missingFields: [],
+          telemetryMissingFields: [],
           verifierFailure: false,
           trace: dummyTrace,
           agentData: {
@@ -3299,6 +3321,7 @@ describe('TaskDispatcher', () => {
       const verify = vi.fn().mockResolvedValue({
         passed: false,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: true,
         trace: dummyTrace,
       });
@@ -3403,6 +3426,7 @@ describe('TaskDispatcher', () => {
       const verify = vi.fn().mockResolvedValue({
         passed: false,
         missingFields: ['some_field'],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -3548,6 +3572,7 @@ describe('TaskDispatcher', () => {
       const verify = vi.fn().mockResolvedValue({
         passed: false,
         missingFields: ['criteria_a'],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       });
@@ -3620,6 +3645,7 @@ describe('TaskDispatcher', () => {
         const verify = vi.fn().mockResolvedValue({
           passed: true,
           missingFields: [],
+          telemetryMissingFields: [],
           verifierFailure: false,
           trace: dummyTrace,
           agentData: {
@@ -3717,6 +3743,7 @@ describe('TaskDispatcher', () => {
         const verify = vi.fn().mockResolvedValue({
           passed: false,
           missingFields: ['fatal_exit_code_137'],
+          telemetryMissingFields: [],
           verifierFailure: false,
           trace: dummyTrace,
         });
@@ -3814,6 +3841,7 @@ describe('TaskDispatcher', () => {
             verify: vi.fn().mockResolvedValue({
               passed: true,
               missingFields: [],
+              telemetryMissingFields: [],
               verifierFailure: false,
               trace: dummyTrace,
             }),
@@ -3890,6 +3918,7 @@ describe('TaskDispatcher', () => {
             verify: vi.fn().mockResolvedValue({
               passed: true,
               missingFields: [],
+              telemetryMissingFields: [],
               verifierFailure: false,
               trace: dummyTrace,
             }),
@@ -3975,6 +4004,7 @@ describe('TaskDispatcher', () => {
             verify: vi.fn().mockResolvedValue({
               passed: true,
               missingFields: [],
+              telemetryMissingFields: [],
               verifierFailure: false,
               trace: dummyTrace,
             }),
@@ -4165,6 +4195,7 @@ describe('TaskDispatcher', () => {
             verify: vi.fn().mockResolvedValue({
               passed: true,
               missingFields: [],
+              telemetryMissingFields: [],
               verifierFailure: false,
               trace: dummyTrace,
             }),
@@ -4274,6 +4305,7 @@ describe('TaskDispatcher', () => {
             verify: vi.fn().mockResolvedValue({
               passed: true,
               missingFields: [],
+              telemetryMissingFields: [],
               verifierFailure: false,
               trace: dummyTrace,
             }),
@@ -4357,6 +4389,7 @@ describe('TaskDispatcher', () => {
             verify: vi.fn().mockResolvedValue({
               passed: true,
               missingFields: [],
+              telemetryMissingFields: [],
               verifierFailure: false,
               trace: dummyTrace,
             }),
@@ -4440,6 +4473,7 @@ describe('TaskDispatcher', () => {
             verify: vi.fn().mockResolvedValue({
               passed: true,
               missingFields: [],
+              telemetryMissingFields: [],
               verifierFailure: false,
               trace: dummyTrace,
             }),
@@ -4493,6 +4527,7 @@ describe('TaskDispatcher', () => {
       const verify = vi.fn().mockResolvedValue({
         passed: false,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: true,
         trace: dummyTrace,
       });
@@ -4619,6 +4654,7 @@ describe('TaskDispatcher', () => {
         const verify = vi.fn().mockResolvedValue({
           passed: false,
           missingFields: [`fatal_exit_code_${String(exitCode)}`],
+          telemetryMissingFields: [],
           verifierFailure: false,
           trace: dummyTrace,
         });
@@ -5028,6 +5064,7 @@ describe('TaskDispatcher', () => {
             verify: vi.fn().mockResolvedValue({
               passed: true,
               missingFields: [],
+              telemetryMissingFields: [],
               verifierFailure: false,
               trace: dummyTrace,
             }),
@@ -5402,6 +5439,7 @@ describe('TaskDispatcher', () => {
     const executionVerification: CompletionVerifierVerdict = {
       passed: true,
       missingFields: [],
+      telemetryMissingFields: [],
       verifierFailure: false,
       trace: dummyTrace,
       agentData: {
@@ -5661,6 +5699,7 @@ describe('TaskDispatcher', () => {
       const planningVerification: CompletionVerifierVerdict = {
         passed: true,
         missingFields: [],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -7360,12 +7399,14 @@ describe('TaskDispatcher', () => {
         .mockResolvedValueOnce({
           passed: false,
           missingFields: ['final_block'],
+          telemetryMissingFields: [],
           verifierFailure: false,
           trace: dummyTrace,
         })
         .mockResolvedValueOnce({
           passed: true,
           missingFields: [],
+          telemetryMissingFields: [],
           verifierFailure: false,
           trace: dummyTrace,
           agentData: {
@@ -10885,6 +10926,7 @@ describe('TaskDispatcher', () => {
       const raceVerify = vi.fn(async () => ({
         passed: true,
         missingFields: [] as string[],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
         agentData: {
@@ -10971,6 +11013,7 @@ describe('TaskDispatcher', () => {
       const exitCodeVerify = vi.fn(async () => ({
         passed: false,
         missingFields: ['fatal_exit_code_137'],
+        telemetryMissingFields: [],
         verifierFailure: false,
         trace: dummyTrace,
       }));

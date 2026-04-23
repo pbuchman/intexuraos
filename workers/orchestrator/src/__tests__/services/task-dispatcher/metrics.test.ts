@@ -99,6 +99,7 @@ describe('prepareComplianceValidationInput', () => {
     return {
       passed: true,
       missingFields: [],
+      telemetryMissingFields: [],
       verifierFailure: false,
       agentData: {
         agentType: 'execution',
@@ -141,6 +142,7 @@ describe('prepareComplianceValidationInput', () => {
     const verdict: CompletionVerifierVerdict = {
       passed: false,
       missingFields: [],
+      telemetryMissingFields: [],
       verifierFailure: true,
       trace: { attempts: [] } as unknown as CompletionVerifierVerdict['trace'],
     };
@@ -162,6 +164,7 @@ describe('prepareComplianceValidationInput', () => {
     const verdict: CompletionVerifierVerdict = {
       passed: true,
       missingFields: [],
+      telemetryMissingFields: [],
       verifierFailure: false,
       agentData: {
         agentType: 'planning',
