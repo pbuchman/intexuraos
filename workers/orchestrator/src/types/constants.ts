@@ -36,5 +36,4 @@ export const DEFAULT_WORKER_IMAGE =
  * Default ordered list of validation models used by the completion verifier and
  * compliance validator. Override: `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS`.
  */
-export const DEFAULT_VALIDATION_MODELS =
-  'or:google/gemma-4-31b-it,gemini-2.5-flash';
+export const DEFAULT_VALIDATION_MODELS = 'or:google/gemma-4-31b-it,gemini-2.5-flash';

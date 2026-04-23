@@ -11616,6 +11616,87 @@ describe('TaskDispatcher', () => {
 
       expect(verifySpy).not.toHaveBeenCalled();
     });
+
+    it('flips remediation to contact_support on repeated sub-reason and forwards a defined result', async () => {
+      // This test drives finalizeAttemptAsInfraFailure directly because the
+      // repeated-sub-reason branch only fires if the Task already carries
+      // taskInfraFailureHistory from a prior attempt. In production the
+      // history accumulates across attempts; in the fake isolation harness
+      // we seed the history explicitly and invoke the private finalize path.
+      const existingTask: Task = {
+        taskId: 'repeat-infra-failure',
+        workerType: 'auto',
+        prompt: 'Code task',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        linearIssueLabels: ['code-task'],
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running',
+        worktreePath: '/tmp/repeat-infra-failure',
+        containerId: 'container-repeat',
+        startedAt: new Date().toISOString(),
+        attemptCount: 2,
+        maxAttempts: 3,
+        taskInfraFailureHistory: [
+          {
+            attempt: 1,
+            subReason: 'container_exit_before_session_init',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      };
+      await statePersistence.modify(async (s) => {
+        s.tasks[existingTask.taskId] = existingTask;
+      });
+
+      const internal = infraDispatcher as unknown as {
+        finalizeAttemptAsInfraFailure: (
+          task: Task,
+          attempt: number,
+          classification: {
+            outcome: 'infra_failed';
+            subReason: string;
+            firstErrorLine: string;
+          },
+          result: TaskResult | undefined // @allow-undefined-type -- mirrors private method signature
+        ) => Promise<void>;
+      };
+
+      const priorResult: TaskResult = { prUrl: 'https://github.com/x/y/pull/42' };
+
+      await internal.finalizeAttemptAsInfraFailure(
+        existingTask,
+        2,
+        {
+          outcome: 'infra_failed',
+          subReason: 'container_exit_before_session_init',
+          firstErrorLine: 'fatal: again',
+        },
+        priorResult
+      );
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'WORKER_INFRA_FAILURE',
+              remediation: expect.objectContaining({ action: 'contact_support' }),
+            }),
+            result: expect.objectContaining({
+              prUrl: 'https://github.com/x/y/pull/42',
+            }),
+          }),
+        })
+      );
+
+      const persisted = await infraDispatcher.getTask('repeat-infra-failure');
+      expect(persisted?.taskInfraFailureHistory).toHaveLength(2);
+      expect(persisted?.taskInfraFailureHistory?.[1]?.subReason).toBe(
+        'container_exit_before_session_init'
+      );
+    });
   });
 });
 
