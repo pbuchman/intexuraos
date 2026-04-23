@@ -37,4 +37,4 @@ export const DEFAULT_WORKER_IMAGE =
  * compliance validator. Override: `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS`.
  */
 export const DEFAULT_VALIDATION_MODELS =
-  'or:google/gemma-4-31b-it:free,or:google/gemma-4-31b-it,gemini-2.5-flash';
+  'or:google/gemma-4-31b-it,gemini-2.5-flash';
