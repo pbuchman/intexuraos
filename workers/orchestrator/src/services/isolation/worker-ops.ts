@@ -105,9 +105,7 @@ export async function copyOut(
   srcPath: string,
   destPath: string
 ): Promise<void> {
-  /* v8 ignore start -- ts-type: Map.get() returns T | undefined; unit test cannot reach this branch because copyOut is only invoked from handleInactivityRestart where the worker !== undefined invariant always holds @preserve */
   if (worker === undefined) throw new Error(`Worker ${taskId} not found`);
-  /* v8 ignore stop @preserve */
   const container = docker.getContainer(worker.containerId);
   const [tarStream] = await Promise.all([
     container.getArchive({ path: srcPath }),
@@ -245,9 +243,7 @@ export async function statsSnapshot(
   worker: WorkerEntry | undefined,
   docker: Docker
 ): Promise<ContainerStatsSnapshot | null> {
-  /* v8 ignore start -- ts-type: Map.get() returns T | undefined; unit test cannot reach this branch because statsSnapshot is only invoked from handleInactivityRestart where the worker !== undefined invariant always holds @preserve */
   if (worker === undefined) return null;
-  /* v8 ignore stop @preserve */
   const stats = await docker.getContainer(worker.containerId).stats({ stream: false });
   return {
     cpuTotalUsage: stats.cpu_stats.cpu_usage.total_usage,
