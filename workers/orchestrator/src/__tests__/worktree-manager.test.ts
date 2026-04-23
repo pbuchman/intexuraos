@@ -511,6 +511,64 @@ describe('WorktreeManager', () => {
       await expect(manager.isWorktreeRegistered('task-registered')).resolves.toBe(true);
     });
 
+    it('should return false when only a sibling-prefix path is registered (strict equality)', async () => {
+      // Guards against a regression to startsWith matching, which would
+      // match `<worktreePath>-sibling` as the target worktree.
+      const registeredPath = `${join(worktreeBasePath, 'task-sibling')}-sibling`;
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command.includes('git worktree list')) {
+          return {
+            stdout: [
+              `worktree ${repoPath}`,
+              'HEAD abc',
+              'branch refs/heads/main',
+              '',
+              `worktree ${registeredPath}`,
+              'HEAD def',
+              'branch refs/heads/task-sibling-sibling',
+            ].join('\n'),
+            stderr: '',
+          };
+        }
+        return { stdout: '', stderr: 'Preparing worktree' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      await expect(manager.isWorktreeRegistered('task-sibling')).resolves.toBe(false);
+    });
+
+    it('should tolerate trailing whitespace on the worktree line', async () => {
+      const registeredPath = join(worktreeBasePath, 'task-trailing');
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command.includes('git worktree list')) {
+          return {
+            stdout: [
+              `worktree ${registeredPath}   `,
+              'HEAD abc',
+              'branch refs/heads/task-trailing',
+            ].join('\n'),
+            stderr: '',
+          };
+        }
+        return { stdout: '', stderr: 'Preparing worktree' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      await expect(manager.isWorktreeRegistered('task-trailing')).resolves.toBe(true);
+    });
+
     it('should return false when worktree path is absent from porcelain output', async () => {
       mockExecAsyncImpl = async (
         command: string,
@@ -574,6 +632,9 @@ describe('WorktreeManager', () => {
           repairCommand = command;
           return { stdout: '', stderr: '' };
         }
+        if (command.includes('symbolic-ref')) {
+          return { stdout: 'refs/heads/task-repair-ok\n', stderr: '' };
+        }
         return { stdout: '', stderr: 'Preparing worktree' };
       };
 
@@ -598,6 +659,9 @@ describe('WorktreeManager', () => {
         if (command.includes('git worktree repair')) {
           return { stdout: '', stderr: `repair: fixing ${worktreePath}` };
         }
+        if (command.includes('symbolic-ref')) {
+          return { stdout: 'refs/heads/task-repair-advisory\n', stderr: '' };
+        }
         return { stdout: '', stderr: 'Preparing worktree' };
       };
 
@@ -607,6 +671,43 @@ describe('WorktreeManager', () => {
 
       // Should not throw — "repair:" prefix is advisory, not fatal.
       await expect(manager.repairWorktree('task-repair-advisory')).resolves.toBeUndefined();
+    });
+
+    it('should warn but succeed when the post-repair worktree is HEAD-detached', async () => {
+      const worktreePath = join(worktreeBasePath, 'task-repair-detached');
+      mkdirSync(worktreePath, { recursive: true });
+
+      const warnSpy = vi.fn();
+      const spyLogger: Logger = {
+        info: () => undefined,
+        warn: warnSpy,
+        error: () => undefined,
+        debug: () => undefined,
+      };
+
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command.includes('git worktree repair')) {
+          return { stdout: '', stderr: '' };
+        }
+        if (command.includes('symbolic-ref')) {
+          // git exits non-zero when HEAD is detached.
+          throw new Error('fatal: ref HEAD is not a symbolic ref');
+        }
+        return { stdout: '', stderr: 'Preparing worktree' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, spyLogger);
+
+      await expect(manager.repairWorktree('task-repair-detached')).resolves.toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-repair-detached', worktreePath }),
+        expect.stringContaining('HEAD-detached')
+      );
     });
 
     it('should throw when git worktree repair reports a fatal error on stderr', async () => {

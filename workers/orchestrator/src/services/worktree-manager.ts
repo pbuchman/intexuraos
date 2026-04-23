@@ -224,8 +224,11 @@ export class WorktreeManager {
       const { stdout } = await execAsync('git worktree list --porcelain', {
         cwd: this.config.repositoryPath,
       });
+      // Strict equality (not startsWith) so a sibling path like
+      // `${worktreePath}-sibling` cannot false-positive as the same entry.
+      // Trim trailing whitespace defensively in case git ever emits any.
       for (const line of stdout.split('\n')) {
-        if (line === `worktree ${worktreePath}`) {
+        if (line.trimEnd() === `worktree ${worktreePath}`) {
           return true;
         }
       }
@@ -279,6 +282,26 @@ export class WorktreeManager {
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         throw new Error(`Failed to repair worktree for task ${taskId}: ${message}`);
+      }
+
+      // Diagnostic: log the post-repair HEAD state. `git worktree repair`
+      // regenerates the metadata from the worktree's `.git` file, but if
+      // the local branch ref was also lost, the worktree ends up
+      // HEAD-detached and subsequent commits/pushes by the agent fail
+      // silently. Surface the state so these cases are visible in logs.
+      try {
+        const { stdout } = await execAsync(`git -C "${worktreePath}" symbolic-ref --quiet HEAD`);
+        const branchRef = stdout.trim();
+        this.logger.info(
+          { taskId, worktreePath, branchRef },
+          'Post-repair HEAD state (attached branch)'
+        );
+      } catch {
+        // symbolic-ref exits non-zero on detached HEAD — this is informational.
+        this.logger.warn(
+          { taskId, worktreePath },
+          'Post-repair worktree is HEAD-detached; commits from the agent may fail until a branch is checked out'
+        );
       }
     });
   }
