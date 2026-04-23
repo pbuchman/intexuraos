@@ -49,15 +49,14 @@ export async function storeLogChunks(
   logger: Logger,
   input: StoreLogChunksInput,
 ): Promise<StoreLogChunksResult> {
-  // `logger` is the caller-provided logger for use-case-level messages; the
-  // route-scoped `requestLog` is used for request-context logs (preserves
-  // pre-existing log lines exactly).
-  void logger;
-
+  // `logger` is the use-case-scoped logger; the route-scoped `requestLog`
+  // is kept for per-request context logs (preserves pre-existing log shape
+  // exactly).
   const { body, requestLog, traceId, taskFormatterStates } = input;
   const { logChunkRepo, logLineRepo, codeTaskRepo, statusMirrorService } = getServices();
   const { taskId, chunks } = body;
 
+  logger.debug({ taskId, count: chunks.length }, 'storeLogChunks: processing batch');
   requestLog.debug({ taskId, count: chunks.length }, 'Storing log chunks');
 
   // First log delivery for this task — task might still be dispatched.
@@ -142,11 +141,13 @@ export async function recordTurnMetrics(
   logger: Logger,
   input: RecordTurnMetricsInput,
 ): Promise<RecordTurnMetricsResult> {
-  void logger;
-
-  const { body, requestLog } = input;
+  const { body: metrics, requestLog } = input;
   const { turnMetricsRepo, logLineRepo } = getServices();
-  const metrics = body;
+
+  logger.debug(
+    { taskId: metrics.taskId, attempt: metrics.attempt },
+    'recordTurnMetrics: processing',
+  );
 
   const storeResult = await turnMetricsRepo.store(metrics.taskId, metrics.attempt, metrics);
 

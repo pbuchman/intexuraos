@@ -18,17 +18,18 @@ import {
   handleTaskCompletion,
   type TaskCompleteWebhookBody,
 } from '../domain/usecases/handleTaskCompletion.js';
-import { storeLogChunks, recordTurnMetrics } from '../domain/usecases/recordTaskEvent.js';
+import {
+  storeLogChunks,
+  recordTurnMetrics,
+  type StoreLogChunksBody,
+} from '../domain/usecases/recordTaskEvent.js';
 import {
   taskCompleteWebhookSchema,
   logChunkUploadSchema,
   turnMetricsUploadSchema,
 } from './webhookRouteSchemas.js';
 
-interface LogChunkUploadBody {
-  taskId: string;
-  chunks: { sequence: number; content: string; timestamp: string }[];
-}
+type LogChunkUploadBody = StoreLogChunksBody;
 
 /**
  * Resolve the per-task webhook secret from Firestore for HMAC signature
