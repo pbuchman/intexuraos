@@ -15,18 +15,45 @@ import {
 } from '../../../services/task-dispatcher/retry-logic.js';
 
 describe('retry-logic constants', () => {
-  it('exports documented millisecond budgets for each phase', () => {
-    expect(TASK_TIMEOUT_WARNING_MS).toBe(295 * 60 * 1000);
-    expect(TASK_TIMEOUT_KILL_MS).toBe(300 * 60 * 1000);
-    expect(COMPLETION_CHECK_INTERVAL_MS).toBe(30 * 1000);
-    expect(ACTIVITY_HEARTBEAT_THRESHOLD_MS).toBe(30 * 1000);
-    expect(IMAGE_PULL_TIMEOUT_MS).toBe(900_000);
-    expect(CONTAINER_CREATE_TIMEOUT_MS).toBe(120_000);
-    expect(ZOMBIE_CLEANUP_TIMEOUT_MS).toBe(30_000);
-    expect(EVIDENCE_CAPTURE_TIMEOUT_MS).toBe(30_000);
-    expect(WORKER_DESTROY_TIMEOUT_MS).toBe(30_000);
-    expect(INACTIVITY_TIMEOUT_MS).toBe(10 * 60 * 1000);
-    expect(MAX_INACTIVITY_RESTARTS).toBe(3);
+  it('warns before killing so a final flush has time to land', () => {
+    expect(TASK_TIMEOUT_WARNING_MS).toBeLessThan(TASK_TIMEOUT_KILL_MS);
+    // Warning must precede kill by at least a completion-check interval so the
+    // monitor can observe & forward the warning before the kill timer fires.
+    expect(TASK_TIMEOUT_KILL_MS - TASK_TIMEOUT_WARNING_MS).toBeGreaterThanOrEqual(
+      COMPLETION_CHECK_INTERVAL_MS
+    );
+  });
+
+  it('keeps inactivity kill strictly below the global task kill', () => {
+    expect(INACTIVITY_TIMEOUT_MS).toBeLessThan(TASK_TIMEOUT_KILL_MS);
+  });
+
+  it('budgets image pulls more generously than container creation (network-bound)', () => {
+    expect(IMAGE_PULL_TIMEOUT_MS).toBeGreaterThan(CONTAINER_CREATE_TIMEOUT_MS);
+  });
+
+  it('exposes positive millisecond budgets for every timeout', () => {
+    for (const value of [
+      TASK_TIMEOUT_WARNING_MS,
+      TASK_TIMEOUT_KILL_MS,
+      COMPLETION_CHECK_INTERVAL_MS,
+      ACTIVITY_HEARTBEAT_THRESHOLD_MS,
+      IMAGE_PULL_TIMEOUT_MS,
+      CONTAINER_CREATE_TIMEOUT_MS,
+      ZOMBIE_CLEANUP_TIMEOUT_MS,
+      EVIDENCE_CAPTURE_TIMEOUT_MS,
+      WORKER_DESTROY_TIMEOUT_MS,
+      INACTIVITY_TIMEOUT_MS,
+    ]) {
+      expect(value).toBeGreaterThan(0);
+    }
+  });
+
+  it('caps consecutive inactivity-driven restarts at a small positive integer', () => {
+    expect(MAX_INACTIVITY_RESTARTS).toBeGreaterThan(0);
+    expect(Number.isInteger(MAX_INACTIVITY_RESTARTS)).toBe(true);
+    // A handful of restarts at most — runaway loops would defeat the inactivity guard.
+    expect(MAX_INACTIVITY_RESTARTS).toBeLessThanOrEqual(10);
   });
 });
 

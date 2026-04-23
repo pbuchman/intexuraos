@@ -105,13 +105,21 @@ describe('pickAgentLabel', () => {
 });
 
 describe('describeAgent', () => {
-  it('returns an agent-specific tagline for each label', () => {
-    expect(describeAgent('Pull Request Agent')).toContain('PR comment');
-    expect(describeAgent('Review Agent')).toContain('read-only');
-    expect(describeAgent('Remediation Agent')).toContain('review findings');
-    expect(describeAgent('Ask Agent')).toContain('interactive');
-    expect(describeAgent('Execution Agent')).toContain('implement autonomously');
-    expect(describeAgent('Planning Agent')).toContain('planning artifacts');
+  it.each([
+    ['Pull Request Agent', 'PR comment'],
+    ['Review Agent', 'read-only'],
+    ['Remediation Agent', 'review findings'],
+    ['Ask Agent', 'interactive'],
+    ['Execution Agent', 'implement autonomously'],
+    ['Planning Agent', 'planning artifacts'],
+  ])('returns the %s tagline containing %j', (label, expectedSubstring) => {
+    expect(describeAgent(label)).toContain(expectedSubstring);
+  });
+
+  it('falls through to the Planning Agent description for unknown labels', () => {
+    expect(describeAgent('Mystery Agent')).toBe(
+      'Planning Agent — create planning artifacts only, no implementation coding'
+    );
   });
 });
 

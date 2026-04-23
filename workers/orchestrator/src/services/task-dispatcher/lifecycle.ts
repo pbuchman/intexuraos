@@ -35,7 +35,6 @@ export function pickCompletionAgentType(task: Task): CompletionAgentType {
   const isPullRequestTask =
     task.agentType === 'pull_request' ||
     task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
-  /* v8 ignore start -- ts-type: nested ternary chain over discriminated union variants creates structural branches; exhaustive conditional narrowing @preserve */
   if (isPullRequestTask) return 'pull_request';
   if (task.agentType === 'review') return 'review';
   if (task.agentType === 'remediation') return 'remediation';
@@ -43,7 +42,6 @@ export function pickCompletionAgentType(task: Task): CompletionAgentType {
   if (task.agentType === 'planning') return 'planning';
   if (task.agentType === 'ask_agent') return 'ask_agent';
   return hasCodeTaskLabel(task.linearIssueLabels) ? 'execution' : 'planning';
-  /* v8 ignore stop @preserve */
 }
 
 /**

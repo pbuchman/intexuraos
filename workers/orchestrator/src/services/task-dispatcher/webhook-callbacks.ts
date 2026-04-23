@@ -63,7 +63,6 @@ export function buildResultFromVerification(
     base.execution_memory_usage_summary = agentData.memory_usage_summary;
   }
 
-  /* v8 ignore start -- upstream: FakeCompletionVerifier always returns planning agentData; execution/review/remediation/pull_request variants require agent-type specific verifier responses not producible with unit test fakes @preserve */
   if (agentData.agentType === 'planning') {
     base.planning_outcome_label = agentData.outcome;
     base.planning_superpowers_writing_plans_used =
@@ -118,7 +117,6 @@ export function buildResultFromVerification(
     }
     base.comment_replied = agentData.comments_replied === 'yes';
   }
-  /* v8 ignore stop @preserve */
 
   return base;
 }
@@ -133,7 +131,6 @@ export function enrichResultForResumedTask(
   result: TaskResult | undefined // @allow-undefined-type -- function parameter, not optional property
 ): TaskResult | undefined {
   if (result === undefined) return undefined;
-  /* v8 ignore start -- upstream: enrichResultForResumedTask agent-type branches require review/remediation/pull_request tasks with lastSuccessResult set; FakeIsolationProvider always returns planning task fixtures without prior success results @preserve */
   if (task.agentType === 'execution' && task.linearIssueId !== undefined) {
     result.execution_linear_issue_url = `https://linear.app/pbuchman/issue/${task.linearIssueId}`;
   }
@@ -185,7 +182,6 @@ export function enrichResultForResumedTask(
       result.comment_replied = task.lastSuccessResult.comment_replied;
     }
   }
-  /* v8 ignore stop @preserve */
   return result;
 }
 
