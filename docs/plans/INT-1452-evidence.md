@@ -61,7 +61,7 @@ Translated:
 3. **Test first (notifyTaskComplete):** Modify the "sends notification with correlationId from traceId" test so the expected payload includes `important: true`. Run — it should fail (current code omits the flag).
 4. **Implementation:** Add `important: true` to the `publishParams` object in `notifyTaskComplete`. Run the test again — it passes.
 5. **Cleanup:** Remove the now-stale comment in `whatsappNotifier.test.ts` lines 546-548.
-6. **Full suite:** `pnpm run verify:workspace:tracked -- code-agent` and `pnpm run ci:tracked` to confirm coverage and CI pass.
+6. **Full suite:** `pnpm run verify:workspace:tracked code-agent` and `pnpm run ci:tracked` to confirm coverage and CI pass.
 
 ## Endpoint Changes
 
@@ -78,9 +78,13 @@ Per execution-memory guidance (mem_95dff382), complex state-dependent classifica
 
 `notifyTaskResumed` currently fires `important: true`. The user's request explicitly says "all the others stay as they are", and resume is distinct from start (it signals the agent picked up a session after interruption, which aligns with mem_9fc64e87 — resumed-task events are high-importance). Therefore `notifyTaskResumed` is **not** changed.
 
+## Design Tradeoff: Interactive Button vs. User Intent on `notifyTaskStarted`
+
+`notifyTaskStarted` attaches an interactive "Cancel" button to its WhatsApp message. Project convention (mem_ead942e6) marks interactive-button notifications as `important: true` because they request immediate user action. This plan intentionally overrides that convention in favor of the user's explicit intent: task start is not an actionable user moment, so dropping `important: true` reduces notification noise even though a cancel button is still offered. The cancel affordance remains available in the message itself; removing `important: true` only changes the delivery channel's interruption level, not the button's functionality.
+
 ## Verification
 
-- `pnpm run verify:workspace:tracked -- code-agent` passes.
+- `pnpm run verify:workspace:tracked code-agent` passes. (No `--` separator — the `validate-verify-workspace.sh` hook blocks that form.)
 - `pnpm run ci:tracked` passes from repo root.
 - Branch coverage remains ≥ required threshold.
 
