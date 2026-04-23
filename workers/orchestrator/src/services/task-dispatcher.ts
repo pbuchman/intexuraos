@@ -1605,7 +1605,7 @@ export class TaskDispatcher {
         };
         this.appendOrchestratorTaskLog(
           task.taskId,
-          'Execution agent reported failed outcome; treating as terminal failure'
+          `Execution agent reported failed outcome: ${error.message}`
         );
         await this.flushTaskLogs(task.taskId);
         await this.collectTurnMetrics(task, attempt);
