@@ -1435,6 +1435,7 @@ export class TaskDispatcher {
       logs: rawLogs,
       exitCode,
       durationMs: attemptDurationMs,
+      ...(result !== undefined ? { result } : {}),
     });
     this.appendOrchestratorTaskLog(
       task.taskId,
