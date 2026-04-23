@@ -101,7 +101,9 @@ const createMockChildProcess = (): ChildProcess =>
   }) as unknown as ChildProcess;
 
 const planningFinalAssistantLog = (outcome: 'planned' | 'unclear'): string =>
-  JSON.stringify({
+  // INT-1455: [claude] prefix required so classifyAttempt treats the attempt
+  // as `ran` rather than `infra_failed` and the completion verifier runs.
+  `[claude] ${JSON.stringify({
     type: 'assistant',
     message: {
       content: [
@@ -114,16 +116,18 @@ const planningFinalAssistantLog = (outcome: 'planned' | 'unclear'): string =>
 - Planning issue: ${outcome === 'planned' ? 'https://linear.app/pbuchman/issue/INT-456' : ''}
 - Child issues: ${outcome === 'planned' ? '1' : '0'}
 - Plan doc:
-- Planning PR: 
+- Planning PR:
 - Clarification message: ${outcome === 'unclear' ? 'Need API contract details from user' : ''}
 - Summary: Planning completed`,
         },
       ],
     },
-  });
+  })}`;
 
 const executionFinalAssistantLog = (): string =>
-  JSON.stringify({
+  // INT-1455: [claude] prefix required so classifyAttempt treats the attempt
+  // as `ran` rather than `infra_failed` and the completion verifier runs.
+  `[claude] ${JSON.stringify({
     type: 'assistant',
     message: {
       content: [
@@ -137,7 +141,7 @@ const executionFinalAssistantLog = (): string =>
         },
       ],
     },
-  });
+  })}`;
 
 describe('TaskDispatcher', () => {
   // Mock config
@@ -207,7 +211,11 @@ describe('TaskDispatcher', () => {
     ),
     destroyWorker: vi.fn(async () => undefined),
     isWorkerRunning: vi.fn(async () => false),
-    getWorkerLogs: vi.fn(async () => ''),
+    // INT-1455: default log fixture must include a [claude] line so the new
+    // classifyAttempt() gate treats the attempt as `ran` and falls through to
+    // the completion verifier. Tests that simulate infra failures (empty logs
+    // + non-zero exit) override this via mockResolvedValueOnce('').
+    getWorkerLogs: vi.fn(async () => '[claude] Session init: id=test-session\n'),
     streamLogs: vi.fn(async () => undefined),
     waitForCompletion: vi.fn(async () => 0),
     getResourceUsage: vi.fn(async () => ({ cpuPercent: 0, memoryUsedMB: 0, memoryLimitMB: 0 })),
