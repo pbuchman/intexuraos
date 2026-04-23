@@ -7385,6 +7385,9 @@ describe('TaskDispatcher', () => {
         }
         // No worker should be started when the worktree cannot be repaired.
         expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
+        // Log forwarder must not be registered when adoption short-circuits
+        // on a lost worktree — nothing is going to emit on it.
+        expect(mockLogForwarder.registerTask).not.toHaveBeenCalled();
         // Running count must be released so capacity is not permanently leaked.
         expect(dispatcher.getRunningCount()).toBe(0);
         // Task must be finalized as failed with the WORKTREE_LOST webhook error code.
@@ -7396,7 +7399,7 @@ describe('TaskDispatcher', () => {
               error: expect.objectContaining({
                 code: 'WORKTREE_LOST',
                 remediation: expect.objectContaining({
-                  action: 'fix_code',
+                  action: 'contact_support',
                   worktreePath: '/tmp/worktrees/adopt-lost',
                 }),
               }),

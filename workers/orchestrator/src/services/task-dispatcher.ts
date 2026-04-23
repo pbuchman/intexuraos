@@ -409,8 +409,11 @@ export class TaskDispatcher {
       const terminalError: TaskError = {
         code: 'WORKTREE_LOST',
         message: `Worktree metadata missing and repair failed for ${task.worktreePath}: ${message}`,
+        // The failure is infrastructural (orchestrator host lost git
+        // metadata), not something the user can fix in their code. Signal
+        // contact_support so remediation does not present a code-edit path.
         remediation: {
-          action: 'fix_code',
+          action: 'contact_support',
           worktreePath: task.worktreePath,
         },
       };
