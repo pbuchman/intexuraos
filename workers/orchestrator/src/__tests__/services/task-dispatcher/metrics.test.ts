@@ -106,6 +106,7 @@ describe('prepareComplianceValidationInput', () => {
         superpowers_subagent_driven_dev: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: 'https://github.com/owner/repo/pull/42',
+        failure_reason: '',
         memory_ids_used: '',
         memory_ids_rejected: '',
         memory_usage_summary: '',

@@ -26,10 +26,11 @@ export interface PlanningAgentData {
 
 export interface ExecutionAgentData {
   agentType: 'execution';
-  outcome: 'implemented' | 'already_completed';
+  outcome: 'implemented' | 'already_completed' | 'failed';
   superpowers_subagent_driven_dev: 'used' | 'not used';
   superpowers_requesting_code_review: 'used' | 'not used';
   gh_pr_url: string;
+  failure_reason: string;
   memory_ids_used: string;
   memory_ids_rejected: string;
   memory_usage_summary: string;
@@ -97,17 +98,18 @@ export const PLANNING_SCHEMA = z
 
 export const EXECUTION_SCHEMA = z
   .object({
-    outcome: z.enum(['implemented', 'already_completed']),
+    outcome: z.enum(['implemented', 'already_completed', 'failed']),
     superpowers_subagent_driven_dev: z.enum(['used', 'not used']),
     superpowers_requesting_code_review: z.enum(['used', 'not used']),
     gh_pr_url: z.string(),
+    failure_reason: z.string().optional().default(''),
     memory_ids_used: z.string(),
     memory_ids_rejected: z.string(),
     memory_usage_summary: z.string(),
     summary: z.string(),
   })
-  .refine((data) => data.gh_pr_url !== '', {
-    message: 'gh_pr_url is required for all execution outcomes',
+  .refine((data) => data.outcome === 'failed' || data.gh_pr_url !== '', {
+    message: 'gh_pr_url is required for successful execution outcomes',
     path: ['gh_pr_url'],
   });
 
