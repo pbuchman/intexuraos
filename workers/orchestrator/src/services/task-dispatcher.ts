@@ -1478,14 +1478,12 @@ export class TaskDispatcher {
         `Missing fields: ${verification.missingFields.join(' | ')}`
       );
     }
-    /* v8 ignore start -- upstream: FakeCompletionVerifier fixtures in task-dispatcher.test.ts always return telemetryMissingFields=[] and cannot seed a populated list — the field-routing that produces it is covered by completion-verifier.test.ts @preserve */
     if (verification.telemetryMissingFields.length > 0) {
       this.appendOrchestratorTaskLog(
         task.taskId,
         `Telemetry missing: ${verification.telemetryMissingFields.join(' | ')}`
       );
     }
-    /* v8 ignore stop @preserve */
     const transcriptLines = verification.trace.transcript
       .split('\n')
       .filter((l) => l.trim() !== '');
@@ -1665,7 +1663,6 @@ export class TaskDispatcher {
         return;
       }
 
-      /* v8 ignore start -- upstream: tier=optional telemetry-accept path requires a worker with telemetryExpectation='optional' AND a verdict with populated telemetryMissingFields; dispatcher fake fixtures always use tier=required workers and cannot drive this branch — the policy itself is covered by decide-outcome.test.ts @preserve */
       if (outcome.telemetryAccepted) {
         this.appendOrchestratorTaskLog(
           task.taskId,
@@ -1680,12 +1677,13 @@ export class TaskDispatcher {
           },
           'Accepting task despite missing telemetry (optional tier)'
         );
+        /* v8 ignore start -- ts-type: Array.at(-1) return type is T|undefined; we unconditionally pushed to verificationHistory above so lastVerification is always defined here — the undefined arm is unreachable @preserve */
         const lastVerification = task.verificationHistory.at(-1);
         if (lastVerification !== undefined) {
           lastVerification.telemetryAccepted = true;
         }
+        /* v8 ignore stop @preserve */
       }
-      /* v8 ignore stop @preserve */
 
       /* v8 ignore start -- upstream: pending messages delivery path requires sendMessage called on a completing task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
       const pendingQueue = this.pendingMessages.get(task.taskId);
@@ -1723,14 +1721,12 @@ export class TaskDispatcher {
       }
       /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- upstream: telemetryAccepted=true arm requires a tier=optional fixture which dispatcher fakes cannot produce; same unreachable condition as the enclosing gate — exercised by decide-outcome.test.ts @preserve */
       this.appendOrchestratorTaskLog(
         task.taskId,
         outcome.telemetryAccepted
           ? 'Completion accepted (telemetry incomplete, tier=optional)'
           : 'Completion verification passed'
       );
-      /* v8 ignore stop @preserve */
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
       const finalResult = this.buildResultFromVerification(task, result, verification);
