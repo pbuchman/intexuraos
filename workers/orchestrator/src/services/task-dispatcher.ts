@@ -1575,6 +1575,49 @@ export class TaskDispatcher {
 
     // Verification passed
     if (verification.passed && verification.agentData !== undefined) {
+      // Execution agent explicitly reported a failed outcome — treat as terminal
+      // runtime failure. The verifier successfully parsed the transcript and
+      // determined the task failed (e.g., rate-limited, exited mid-work), so
+      // surface that verdict instead of falling through to the generic paths.
+      if (
+        verification.agentData.agentType === 'execution' &&
+        verification.agentData.outcome === 'failed'
+      ) {
+        const runtimeName = this.getRuntimeDisplayName(task);
+        const claudeError = this.claudeErrors.get(task.taskId);
+        const failureReason = verification.agentData.failure_reason;
+        const nonZeroExit = typeof exitCode === 'number' && exitCode !== 0;
+        const prefixParts: string[] = [];
+        if (nonZeroExit) {
+          prefixParts.push(`Non-zero exit code: ${String(exitCode)}`);
+        }
+        if (claudeError !== undefined) {
+          prefixParts.push(`${runtimeName} error: ${claudeError}`);
+        }
+        const baseMessage =
+          prefixParts.length > 0
+            ? `${prefixParts.join('; ')}; Execution agent reported task failed`
+            : 'Execution agent reported task failed';
+        const message =
+          failureReason !== '' ? `${baseMessage} (reason: ${failureReason})` : baseMessage;
+        const error: TaskError = {
+          code: 'TASK_RUNTIME_HARD_ERROR',
+          message,
+          remediation: { action: 'retry' },
+        };
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          'Execution agent reported failed outcome; treating as terminal failure'
+        );
+        await this.flushTaskLogs(task.taskId);
+        await this.collectTurnMetrics(task, attempt);
+        await this.finalizeTask(task, 'failed', {
+          ...(result !== undefined && { result }),
+          error,
+        });
+        return;
+      }
+
       // Non-zero exit code overrides verifier passed decision
       if (exitCode !== undefined && exitCode !== 0) {
         this.appendOrchestratorTaskLog(
@@ -1675,6 +1718,29 @@ export class TaskDispatcher {
         message: `Worker process killed by signal: ${fatalField}`,
         remediation: { action: 'retry' },
       };
+      await this.finalizeTask(task, 'failed', {
+        ...(result !== undefined && { result }),
+        error,
+      });
+      return;
+    }
+
+    // Runtime hard error: non-zero exit code + runtime-reported error message.
+    // This covers the incident case where the verifier rejects a transcript as
+    // schema-invalid, but the runtime already emitted a concrete hard failure
+    // (e.g. Claude rate limit). Surface the runtime reason instead of the
+    // generic completion-verification failure.
+    const claudeErrorForHardFailure = this.claudeErrors.get(task.taskId);
+    if (typeof exitCode === 'number' && exitCode !== 0 && claudeErrorForHardFailure !== undefined) {
+      const runtimeName = this.getRuntimeDisplayName(task);
+      const error: TaskError = {
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: `Non-zero exit code: ${String(exitCode)}; ${runtimeName} error: ${claudeErrorForHardFailure}`,
+        remediation: { action: 'retry' },
+      };
+      this.appendOrchestratorTaskLog(task.taskId, `Runtime hard error: ${error.message}`);
+      await this.flushTaskLogs(task.taskId);
+      await this.collectTurnMetrics(task, attempt);
       await this.finalizeTask(task, 'failed', {
         ...(result !== undefined && { result }),
         error,
