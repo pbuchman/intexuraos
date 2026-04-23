@@ -128,6 +128,7 @@ describe('WhatsAppNotifier', () => {
           message: expect.stringContaining('✅ Fix login bug'),
           ctaUrl: { displayText: 'View Pull Request', url: 'https://github.com/pbuchman/intexuraos/pull/123' },
           correlationId: 'trace-123',
+          important: true,
         })
       );
 
