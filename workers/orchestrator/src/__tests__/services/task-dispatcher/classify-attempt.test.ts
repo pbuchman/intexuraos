@@ -59,6 +59,58 @@ describe('classifyAttempt', () => {
     expect(classifyAttempt({ logs, exitCode: 0, durationMs: 30_000 })).toEqual({ outcome: 'ran' });
   });
 
+  it('returns ran when logs contain a stream-JSON system init event (no [claude] prefix)', () => {
+    const logs =
+      '2026-04-23T20:38:46.971Z {"type":"system","subtype":"init","session_id":"abc","tools":[{"name":"Read"}],"model":"claude-sonnet-4-6"}\n';
+    expect(classifyAttempt({ logs, exitCode: 0, durationMs: 60_000 })).toEqual({ outcome: 'ran' });
+  });
+
+  it('returns ran when logs contain a stream-JSON assistant event alone', () => {
+    const logs =
+      '2026-04-23T20:39:06.934Z {"type":"assistant","message":{"content":[{"type":"text","text":"hello"}]}}\n';
+    expect(classifyAttempt({ logs, exitCode: 0, durationMs: 60_000 })).toEqual({ outcome: 'ran' });
+  });
+
+  it('returns ran when a TaskResult with prUrl is present, even if transcript signals are missing', () => {
+    expect(
+      classifyAttempt({
+        logs: '',
+        exitCode: 0,
+        durationMs: 60_000,
+        result: { prUrl: 'https://github.com/org/repo/pull/1' },
+      })
+    ).toEqual({ outcome: 'ran' });
+  });
+
+  it('does not short-circuit when result.prUrl is null — falls through to heuristics', () => {
+    const res = classifyAttempt({
+      logs: '',
+      exitCode: 0,
+      durationMs: 1_000,
+      result: { prUrl: null },
+    });
+    expect(res.outcome).toBe('infra_failed');
+    if (res.outcome !== 'infra_failed') throw new Error('type narrowing');
+    expect(res.subReason).toBe('duration_below_threshold');
+  });
+
+  it("does not short-circuit when result.prUrl is '' — falls through to heuristics", () => {
+    const res = classifyAttempt({
+      logs: '',
+      exitCode: 0,
+      durationMs: 1_000,
+      result: { prUrl: '' },
+    });
+    expect(res.outcome).toBe('infra_failed');
+    if (res.outcome !== 'infra_failed') throw new Error('type narrowing');
+    expect(res.subReason).toBe('duration_below_threshold');
+  });
+
+  it('returns ran when a tool_use stream-JSON event is present without any other Claude signals', () => {
+    const logs = '{"type":"tool_use","id":"abc","name":"Read","input":{}}';
+    expect(classifyAttempt({ logs, exitCode: 0, durationMs: 30_000 })).toEqual({ outcome: 'ran' });
+  });
+
   it('firstErrorLine is truncated to 500 chars', () => {
     const longError = 'fatal: ' + 'x'.repeat(600);
     const logs = `[entrypoint] booting\n${longError}\n`;

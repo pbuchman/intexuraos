@@ -28,25 +28,56 @@ export interface ClassifyAttemptInput {
   logs: string;
   exitCode: number | undefined; // @allow-undefined-type -- orchestrator tracks optional exit codes
   durationMs: number;
+  /**
+   * Optional structural subset of `TaskResult` from the dispatcher. When the
+   * dispatcher already has a successful result (non-empty `prUrl`), we treat
+   * the attempt as "ran" regardless of the log-shape heuristics — the worker
+   * objectively produced a PR, so any transcript-signal mismatch is noise.
+   */
+  result?: {
+    prUrl?: string | null | undefined; // @allow-undefined-type -- TaskResult.prUrl is optional/nullable
+  };
 }
 
 export function classifyAttempt(input: ClassifyAttemptInput): AttemptClassification {
-  const { logs, exitCode, durationMs } = input;
+  const { logs, exitCode, durationMs, result } = input;
+
+  // Short-circuit: if the dispatcher already captured a successful TaskResult
+  // (non-empty `prUrl`), the attempt must be classified as "ran" regardless
+  // of transcript-signal heuristics. This guards against future log-shape
+  // drift where `getWorkerLogs()` output changes and the signals below go
+  // stale — the PR URL is the ground truth for "Claude produced output".
+  const prUrl = result?.prUrl;
+  if (prUrl !== undefined && prUrl !== null && prUrl !== '') {
+    return { outcome: 'ran' };
+  }
+
   const lines = logs.split('\n');
 
-  // `hasSessionInit` is the load-bearing signal. It uses `includes` (not
-  // `startsWith`) because Docker container logs can carry an RFC3339
-  // timestamp prefix (`2026-04-23T... [claude] Session init: ...`) that the
-  // attempt-buffer portion of the merged stream does not. The `startsWith`
-  // checks below catch untimestamped lines emitted directly by the runtime
-  // log processor (attemptLogBuffer), as a belt-and-suspenders fallback.
+  // Detection signals for "Claude actually ran". The raw `getWorkerLogs()`
+  // stream returned by `isolation/worker-ops` is (a) Docker container stdout
+  // with RFC3339 timestamps and (b) the orchestrator's `attemptLogBuffer` —
+  // which is the raw stdout of `claude --print --output-format stream-json`.
+  // Neither source contains the `[claude]`/`[tool]` prefixes; those are added
+  // by the in-process `claude-log-processor` and pushed to Firestore AFTER
+  // `getWorkerLogs()` has already returned. So the load-bearing signals here
+  // are `hasStreamJsonInit` and `hasAssistantEvent`, which detect the raw
+  // stream-JSON events the container actually emits. The `[claude]`/`[tool]`
+  // checks remain as belt-and-suspenders in case formatted output ever leaks
+  // back into `getWorkerLogs()` (e.g. if attemptLogBuffer wiring changes).
   const hasSessionInit = lines.some((line) => line.includes('[claude] Session init'));
   const hasClaudeOrToolLine = lines.some((line) => {
     const trimmed = line.trimStart();
     return trimmed.startsWith('[claude]') || trimmed.startsWith('[tool]');
   });
+  const hasStreamJsonInit = lines.some(
+    (line) => line.includes('"type":"system"') && line.includes('"subtype":"init"')
+  );
+  const hasAssistantEvent = lines.some(
+    (line) => line.includes('"type":"assistant"') || line.includes('"type":"tool_use"')
+  );
 
-  if (hasSessionInit || hasClaudeOrToolLine) {
+  if (hasSessionInit || hasClaudeOrToolLine || hasStreamJsonInit || hasAssistantEvent) {
     return { outcome: 'ran' };
   }
 
