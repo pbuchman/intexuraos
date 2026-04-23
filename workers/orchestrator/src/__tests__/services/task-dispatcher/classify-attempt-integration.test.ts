@@ -16,8 +16,8 @@ const realisticRawLogs = [
 
 describe('classifyAttempt — realistic production logs', () => {
   it('classifies a successful attempt as ran when logs contain stream-JSON init event', () => {
-    expect(
-      classifyAttempt({ logs: realisticRawLogs, exitCode: 0, durationMs: 60_000 })
-    ).toEqual({ outcome: 'ran' });
+    expect(classifyAttempt({ logs: realisticRawLogs, exitCode: 0, durationMs: 60_000 })).toEqual({
+      outcome: 'ran',
+    });
   });
 });
