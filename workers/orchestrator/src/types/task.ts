@@ -18,6 +18,12 @@ export interface TaskVerificationRecord {
   createdAt: string;
 }
 
+export interface TaskInfraFailureRecord {
+  attempt: number;
+  subReason: string;
+  createdAt: string;
+}
+
 export interface PendingResumeStart {
   prompt: string;
   acceptedAt: string;
@@ -79,6 +85,12 @@ export interface Task {
    * Verification history for each completed attempt.
    */
   verificationHistory?: TaskVerificationRecord[];
+  /**
+   * Records of attempts classified as WORKER_INFRA_FAILURE.
+   * Used to abort retries when the same sub-reason repeats across attempts
+   * (e.g. `git_worktree_lost` N vs N-1) — re-running Claude cannot fix infra.
+   */
+  taskInfraFailureHistory?: TaskInfraFailureRecord[];
   /**
    * Set when a completed task is resumed via sendMessage().
    * Gates loosened completion verification (exit code + runtime-reported hard error only).
