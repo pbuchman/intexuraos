@@ -2512,6 +2512,13 @@ describe('TaskDispatcher', () => {
       // reports passed=false ONLY because the memory-acknowledgment block is missing AND
       // agentData is populated (i.e. the primary deliverable is valid), the dispatcher must
       // finalize the task as completed (not retry, not fail) with telemetryAccepted=true.
+      //
+      // Scope note: this test exercises the dispatcher's tier=optional acceptance policy
+      // given an already-well-formed verdict. The regression that agentData actually flows
+      // through the completion-verifier's memory-failure return sites is guarded by the
+      // unit tests in completion-verifier.test.ts ("emits memory_acknowledgment into
+      // telemetryMissingFields" and "populates agentData on detectEmptyMemoryFields
+      // failure").
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
         missingFields: [],
