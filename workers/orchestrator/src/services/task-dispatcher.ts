@@ -81,6 +81,7 @@ import {
   MAX_INACTIVITY_RESTARTS,
 } from './task-dispatcher/retry-logic.js';
 import { classifyAttempt, type AttemptClassification } from './task-dispatcher/classify-attempt.js';
+import { buildRuntimeHardErrorMessage } from './task-dispatcher/error-messages.js';
 
 // Re-export module-level helpers for backward compatibility with existing imports.
 export const getTaskEventUrl = getTaskEventUrlFn;
@@ -1586,17 +1587,14 @@ export class TaskDispatcher {
         const runtimeName = this.getRuntimeDisplayName(task);
         const claudeError = this.claudeErrors.get(task.taskId);
         const failureReason = verification.agentData.failure_reason;
-        const nonZeroExit = typeof exitCode === 'number' && exitCode !== 0;
-        const prefixParts: string[] = [];
-        if (nonZeroExit) {
-          prefixParts.push(`Non-zero exit code: ${String(exitCode)}`);
-        }
-        if (claudeError !== undefined) {
-          prefixParts.push(`${runtimeName} error: ${claudeError}`);
-        }
+        const runtimePrefix = buildRuntimeHardErrorMessage({
+          exitCode,
+          claudeError,
+          runtimeName,
+        });
         const baseMessage =
-          prefixParts.length > 0
-            ? `${prefixParts.join('; ')}; Execution agent reported task failed`
+          runtimePrefix !== ''
+            ? `${runtimePrefix}; Execution agent reported task failed`
             : 'Execution agent reported task failed';
         const message =
           failureReason !== '' ? `${baseMessage} (reason: ${failureReason})` : baseMessage;
@@ -1731,11 +1729,21 @@ export class TaskDispatcher {
     // (e.g. Claude rate limit). Surface the runtime reason instead of the
     // generic completion-verification failure.
     const claudeErrorForHardFailure = this.claudeErrors.get(task.taskId);
-    if (typeof exitCode === 'number' && exitCode !== 0 && claudeErrorForHardFailure !== undefined) {
+    if (
+      typeof exitCode === 'number' &&
+      exitCode !== 0 &&
+      claudeErrorForHardFailure !== undefined &&
+      claudeErrorForHardFailure !== ''
+    ) {
       const runtimeName = this.getRuntimeDisplayName(task);
+      const message = buildRuntimeHardErrorMessage({
+        exitCode,
+        claudeError: claudeErrorForHardFailure,
+        runtimeName,
+      });
       const error: TaskError = {
         code: 'TASK_RUNTIME_HARD_ERROR',
-        message: `Non-zero exit code: ${String(exitCode)}; ${runtimeName} error: ${claudeErrorForHardFailure}`,
+        message,
         remediation: { action: 'retry' },
       };
       this.appendOrchestratorTaskLog(task.taskId, `Runtime hard error: ${error.message}`);
@@ -2039,12 +2047,7 @@ export class TaskDispatcher {
     if (hasHardError) {
       const error: TaskError = {
         code: 'TASK_RESUMED_HARD_ERROR',
-        message: [
-          ...(typeof exitCode === 'number' && exitCode !== 0
-            ? [`Non-zero exit code: ${String(exitCode)}`]
-            : []),
-          ...(claudeError !== undefined ? [`${runtimeName} error: ${claudeError}`] : []),
-        ].join('; '),
+        message: buildRuntimeHardErrorMessage({ exitCode, claudeError, runtimeName }),
         remediation: { action: 'retry' },
       };
 
