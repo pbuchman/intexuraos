@@ -10,16 +10,12 @@ const sessionInit =
 describe('classifyAttempt', () => {
   it('returns "ran" when Claude emitted a Session init line (exit 0)', () => {
     const logs = `${sessionInit}\n[claude] Hello world\n`;
-    expect(
-      classifyAttempt({ logs, exitCode: 0, durationMs: 60_000 })
-    ).toEqual({ outcome: 'ran' });
+    expect(classifyAttempt({ logs, exitCode: 0, durationMs: 60_000 })).toEqual({ outcome: 'ran' });
   });
 
   it('returns "ran" when Claude emitted a Session init line even with non-zero exit', () => {
     const logs = `${sessionInit}\n[claude] partial output\n`;
-    expect(
-      classifyAttempt({ logs, exitCode: 1, durationMs: 60_000 })
-    ).toEqual({ outcome: 'ran' });
+    expect(classifyAttempt({ logs, exitCode: 1, durationMs: 60_000 })).toEqual({ outcome: 'ran' });
   });
 
   it('returns infra_failed with container_exit_before_session_init when exitCode != 0 and no Session init', () => {
@@ -60,9 +56,7 @@ describe('classifyAttempt', () => {
 
   it('returns ran when a [tool] line appears (no session init, but Claude is producing tool events)', () => {
     const logs = '[tool] Read file=/repo/README.md\n';
-    expect(
-      classifyAttempt({ logs, exitCode: 0, durationMs: 30_000 })
-    ).toEqual({ outcome: 'ran' });
+    expect(classifyAttempt({ logs, exitCode: 0, durationMs: 30_000 })).toEqual({ outcome: 'ran' });
   });
 
   it('firstErrorLine is truncated to 500 chars', () => {
@@ -71,7 +65,7 @@ describe('classifyAttempt', () => {
     const result = classifyAttempt({ logs, exitCode: 128, durationMs: 1_000 });
     expect(result.outcome).toBe('infra_failed');
     if (result.outcome !== 'infra_failed') throw new Error('type narrowing');
-    expect((result.firstErrorLine).length).toBeLessThanOrEqual(500);
+    expect(result.firstErrorLine.length).toBeLessThanOrEqual(500);
     expect(result.firstErrorLine).toContain('fatal: ');
   });
 

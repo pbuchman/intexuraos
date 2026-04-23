@@ -80,10 +80,7 @@ import {
   INACTIVITY_TIMEOUT_MS,
   MAX_INACTIVITY_RESTARTS,
 } from './task-dispatcher/retry-logic.js';
-import {
-  classifyAttempt,
-  type AttemptClassification,
-} from './task-dispatcher/classify-attempt.js';
+import { classifyAttempt, type AttemptClassification } from './task-dispatcher/classify-attempt.js';
 
 // Re-export module-level helpers for backward compatibility with existing imports.
 export const getTaskEventUrl = getTaskEventUrlFn;
@@ -1436,7 +1433,7 @@ export class TaskDispatcher {
       task.taskId,
       classification.outcome === 'ran'
         ? `Attempt classified: ran=true`
-        : `Attempt classified: ran=false reason=${classification.subReason} exitCode=${String(exitCode ?? 'unknown')}`
+        : `Attempt classified: ran=false reason=${classification.subReason} exitCode=${String(exitCode)}`
     );
     if (classification.outcome === 'infra_failed') {
       await this.finalizeAttemptAsInfraFailure(task, attempt, classification, result);
