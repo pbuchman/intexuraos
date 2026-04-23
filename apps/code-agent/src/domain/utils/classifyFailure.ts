@@ -39,6 +39,14 @@ export function classifyFailure(error: TaskError): FailureVerdict {
     return 'fail';
   }
 
+  // INT-1455: Worker infra failure — the container exited before Claude ever
+  // ran (git worktree lost, entrypoint crash, image pull failure, etc.).
+  // Re-dispatching Claude cannot fix infra; surface it as terminal so users
+  // see the real cause instead of a policy-looking "missing fields" message.
+  if (errorCode === 'WORKER_INFRA_FAILURE') {
+    return 'fail';
+  }
+
   // Infrastructure — always retry
   if (INFRA_RETRY_CODES.has(errorCode)) {
     return 'retry';

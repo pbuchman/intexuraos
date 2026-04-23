@@ -124,4 +124,26 @@ describe('classifyFailure', () => {
       })
     ).toBe('fail' satisfies FailureVerdict);
   });
+
+  // INT-1455: WORKER_INFRA_FAILURE is terminal — the verifier was skipped
+  // because the attempt never produced a Claude transcript. Re-running Claude
+  // cannot fix container/entrypoint failures.
+  it('returns "fail" for WORKER_INFRA_FAILURE even when orchestrator attaches a retry remediation', () => {
+    expect(
+      classifyFailure({
+        code: 'WORKER_INFRA_FAILURE',
+        message: 'fatal: not a git repository',
+        remediation: { action: 'retry' },
+      })
+    ).toBe('fail' satisfies FailureVerdict);
+  });
+
+  it('returns "fail" for WORKER_INFRA_FAILURE without remediation', () => {
+    expect(
+      classifyFailure({
+        code: 'WORKER_INFRA_FAILURE',
+        message: 'fatal: not a git repository',
+      })
+    ).toBe('fail' satisfies FailureVerdict);
+  });
 });
