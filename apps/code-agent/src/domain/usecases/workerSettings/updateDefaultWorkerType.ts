@@ -16,7 +16,7 @@ import type {
   DefaultWorkerTypeField,
   WorkerSettingsRepository,
 } from '../../ports/workerSettingsRepository.js';
-import type { UseCaseLogger } from './testWorkerConnectivity.js';
+import type { UseCaseLogger } from '../../ports/useCaseLogger.js';
 
 export interface UpdateDefaultWorkerTypeDeps {
   workerSettingsRepo: WorkerSettingsRepository;

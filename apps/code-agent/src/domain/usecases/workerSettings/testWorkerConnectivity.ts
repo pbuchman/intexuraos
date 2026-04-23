@@ -10,16 +10,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import type { WorkerSettingsRepository } from '../../ports/workerSettingsRepository.js';
-
-/**
- * Minimal logger interface used by the use case. Both `pino.Logger` and
- * Fastify's `request.log` satisfy it, so callers can pass either.
- */
-export interface UseCaseLogger {
-  info(obj: object, msg?: string): void;
-  warn(obj: object, msg?: string): void;
-  error(obj: object, msg?: string): void;
-}
+import type { UseCaseLogger } from '../../ports/useCaseLogger.js';
 
 /**
  * Health check timeout in milliseconds.
