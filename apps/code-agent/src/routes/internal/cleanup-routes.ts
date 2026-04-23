@@ -11,7 +11,7 @@ import { loadConfig } from '../../config.js';
 import {
   ARCHIVE_STALE_GROUPS_SCHEMA,
   AUTO_ARCHIVE_MERGED_TASKS_SCHEMA,
-  PROCESS_EXECUTION_MEMORY_SCHEMA,
+  PROCESS_EXECUTION_MEMORY_BACKLOG_SCHEMA,
   PRUNE_STALE_EXECUTION_MEMORY_SCHEMA,
   RECONCILE_MERGE_CONFLICTS_SCHEMA,
   SWEEP_ERRORED_EXECUTION_MEMORY_SCHEMA,
@@ -57,7 +57,7 @@ export const cleanupRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   fastify.post<{ Body: { limit?: number } | null }>(
     '/internal/execution-memory/process',
-    { schema: PROCESS_EXECUTION_MEMORY_SCHEMA },
+    { schema: PROCESS_EXECUTION_MEMORY_BACKLOG_SCHEMA },
     async (request, reply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/execution-memory/process',

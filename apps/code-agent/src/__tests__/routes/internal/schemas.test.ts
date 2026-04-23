@@ -13,14 +13,14 @@ import Fastify from 'fastify';
 import {
   ARCHIVE_STALE_GROUPS_SCHEMA,
   AUTO_ARCHIVE_MERGED_TASKS_SCHEMA,
-  PROCESS_EXECUTION_MEMORY_SCHEMA,
+  PROCESS_EXECUTION_MEMORY_BACKLOG_SCHEMA,
   PRUNE_STALE_EXECUTION_MEMORY_SCHEMA,
 } from '../../../routes/internal/schemas.js';
 
 describe('internal route schemas', () => {
-  it('PROCESS_EXECUTION_MEMORY_SCHEMA rejects limit out of range', async () => {
+  it('PROCESS_EXECUTION_MEMORY_BACKLOG_SCHEMA rejects limit out of range', async () => {
     const app = Fastify();
-    app.post('/t', { schema: { body: PROCESS_EXECUTION_MEMORY_SCHEMA.body } }, async () => ({ ok: true }));
+    app.post('/t', { schema: { body: PROCESS_EXECUTION_MEMORY_BACKLOG_SCHEMA.body } }, async () => ({ ok: true }));
 
     const response = await app.inject({
       method: 'POST',
@@ -32,9 +32,9 @@ describe('internal route schemas', () => {
     await app.close();
   });
 
-  it('PROCESS_EXECUTION_MEMORY_SCHEMA rejects non-numeric limit', async () => {
+  it('PROCESS_EXECUTION_MEMORY_BACKLOG_SCHEMA rejects non-numeric limit', async () => {
     const app = Fastify();
-    app.post('/t', { schema: { body: PROCESS_EXECUTION_MEMORY_SCHEMA.body } }, async () => ({ ok: true }));
+    app.post('/t', { schema: { body: PROCESS_EXECUTION_MEMORY_BACKLOG_SCHEMA.body } }, async () => ({ ok: true }));
 
     const response = await app.inject({
       method: 'POST',

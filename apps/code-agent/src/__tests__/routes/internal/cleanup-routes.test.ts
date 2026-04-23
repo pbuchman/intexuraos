@@ -16,17 +16,19 @@ import { getServices, resetServices, setServices } from '../../../services.js';
 import { resetFirestore } from '@intexuraos/infra-firestore';
 import { setupTestServices } from '../../helpers/mockServices.js';
 
-const processExecutionMemoryBacklogMock = vi.fn();
-const sweepErroredApplicationsMock = vi.fn();
 const pruneStaleMemoriesMock = vi.fn();
 
+// `vi.mock` replaces the whole module, so the factory must return every export
+// that any route in the sub-plugin imports — otherwise those imports resolve to
+// `undefined`. These tests only drive the `pruneStaleMemories` path; the other
+// two exports are stubbed to no-op spies so the module surface stays complete.
 vi.mock('../../../domain/usecases/processExecutionMemoryBacklog.js', (): {
   processExecutionMemoryBacklog: (input: unknown) => unknown;
   sweepErroredApplications: (input: unknown) => unknown;
   pruneStaleMemories: (deps: unknown, options: unknown) => unknown;
 } => ({
-  processExecutionMemoryBacklog: (input: unknown): unknown => processExecutionMemoryBacklogMock(input),
-  sweepErroredApplications: (input: unknown): unknown => sweepErroredApplicationsMock(input),
+  processExecutionMemoryBacklog: (): unknown => undefined,
+  sweepErroredApplications: (): unknown => undefined,
   pruneStaleMemories: (deps: unknown, options: unknown): unknown => pruneStaleMemoriesMock(deps, options),
 }));
 
