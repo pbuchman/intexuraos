@@ -18,9 +18,22 @@ export interface TaskVerificationRecord {
   createdAt: string;
 }
 
+/**
+ * Sub-reasons attached to a `WORKER_INFRA_FAILURE` TaskError (INT-1455).
+ * Kept as a literal union so producers (the attempt classifier) and
+ * consumers (orchestrator + downstream) can match exhaustively.
+ */
+export type InfraFailureSubReason =
+  | 'container_exit_before_session_init'
+  | 'entrypoint_failed'
+  | 'git_worktree_lost'
+  | 'image_pull_failed'
+  | 'duration_below_threshold'
+  | 'empty_transcript';
+
 export interface TaskInfraFailureRecord {
   attempt: number;
-  subReason: string;
+  subReason: InfraFailureSubReason;
   createdAt: string;
 }
 
