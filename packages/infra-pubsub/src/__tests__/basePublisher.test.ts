@@ -24,11 +24,19 @@ vi.mock('@google-cloud/pubsub', () => {
 
 class TestPublisher extends BasePubSubPublisher {
   async publish(
-    topicName: string | null,
+    topicName: string,
     event: unknown,
     context: PublishContext
   ): Promise<Result<void, PublishError>> {
     return await this.publishToTopic(topicName, event, context, 'test event');
+  }
+
+  async publishOptional(
+    topicName: string | null,
+    event: unknown,
+    context: PublishContext
+  ): Promise<Result<void, PublishError>> {
+    return await this.publishToOptionalTopic(topicName, event, context, 'test optional event');
   }
 }
 
@@ -52,13 +60,6 @@ describe('BasePubSubPublisher', () => {
 
       expect(result.ok).toBe(true);
       expect(mockPublishMessage).toHaveBeenCalledTimes(1);
-    });
-
-    it('skips publishing when topic is null', async () => {
-      const result = await publisher.publish(null, { data: 'test' }, { id: '123' });
-
-      expect(result.ok).toBe(true);
-      expect(mockPublishMessage).not.toHaveBeenCalled();
     });
 
     it('caches topic references', async () => {
@@ -104,6 +105,26 @@ describe('BasePubSubPublisher', () => {
         expect(result.error.code).toBe('PUBLISH_FAILED');
         expect(result.error.message).toContain('Connection timeout');
       }
+    });
+  });
+
+  describe('publishToOptionalTopic', () => {
+    it('skips publishing when topic is null', async () => {
+      const result = await publisher.publishOptional(null, { data: 'test' }, { id: '123' });
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishMessage).not.toHaveBeenCalled();
+    });
+
+    it('publishes when topic is provided', async () => {
+      const result = await publisher.publishOptional(
+        'optional-topic',
+        { data: 'test' },
+        { id: '456' }
+      );
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishMessage).toHaveBeenCalledTimes(1);
     });
   });
 });

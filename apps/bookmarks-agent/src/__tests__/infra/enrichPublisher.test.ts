@@ -5,6 +5,9 @@ import {
   type EnrichBookmarkEvent,
 } from '../../infra/pubsub/enrichPublisher.js';
 
+const mockPublishToTopic = vi.fn();
+const mockPublishToOptionalTopic = vi.fn();
+
 vi.mock('@intexuraos/infra-pubsub', () => ({
   BasePubSubPublisher: class {
     protected projectId: string;
@@ -14,17 +17,25 @@ vi.mock('@intexuraos/infra-pubsub', () => ({
     }
 
     async publishToTopic(
-      topicName: string | null,
-      _data: unknown,
-      _attributes: Record<string, string>,
+      topicName: string,
+      data: unknown,
+      attributes: Record<string, string>,
       _description: string
     ): Promise<
       { ok: true; value: undefined } | { ok: false; error: { code: string; message: string } }
     > {
-      if (topicName === null) {
-        return { ok: false, error: { code: 'NO_TOPIC', message: 'No topic configured' } };
-      }
-      return { ok: true, value: undefined };
+      return mockPublishToTopic(topicName, data, attributes);
+    }
+
+    async publishToOptionalTopic(
+      topicName: string | null,
+      data: unknown,
+      attributes: Record<string, string>,
+      _description: string
+    ): Promise<
+      { ok: true; value: undefined } | { ok: false; error: { code: string; message: string } }
+    > {
+      return mockPublishToOptionalTopic(topicName, data, attributes);
     }
   },
 }));
@@ -41,6 +52,17 @@ describe('createEnrichPublisher', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPublishToTopic.mockReset();
+    mockPublishToOptionalTopic.mockReset();
+    mockPublishToTopic.mockResolvedValue({ ok: true, value: undefined });
+    mockPublishToOptionalTopic.mockImplementation(
+      async (topicName: string | null) => {
+        if (topicName === null) {
+          return { ok: false, error: { code: 'NO_TOPIC', message: 'No topic configured' } };
+        }
+        return { ok: true, value: undefined };
+      }
+    );
     process.env = { ...originalEnv };
   });
 
@@ -59,7 +81,7 @@ describe('createEnrichPublisher', () => {
     expect(typeof publisher.publishEnrichBookmark).toBe('function');
   });
 
-  it('publishes bookmark enrich event successfully', async () => {
+  it('publishes bookmark enrich event successfully via optional topic', async () => {
     const publisher = createEnrichPublisher({
       projectId: 'test-project',
       topicName: 'bookmark-enrich-topic',
@@ -69,6 +91,11 @@ describe('createEnrichPublisher', () => {
     const result = await publisher.publishEnrichBookmark(event);
 
     expect(result.ok).toBe(true);
+    expect(mockPublishToOptionalTopic).toHaveBeenCalledWith('bookmark-enrich-topic', event, {
+      bookmarkId: 'bookmark-123',
+      userId: 'user-456',
+    });
+    expect(mockPublishToTopic).not.toHaveBeenCalled();
   });
 
   it('returns error when topic not configured', async () => {
@@ -84,5 +111,9 @@ describe('createEnrichPublisher', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('NO_TOPIC');
     }
+    expect(mockPublishToOptionalTopic).toHaveBeenCalledWith(null, event, {
+      bookmarkId: 'bookmark-123',
+      userId: 'user-456',
+    });
   });
 });

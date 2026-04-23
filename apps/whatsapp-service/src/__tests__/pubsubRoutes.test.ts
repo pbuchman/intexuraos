@@ -33,6 +33,8 @@ const testConfig: Config = {
   mediaBucket: 'test-media-bucket',
   mediaCleanupTopic: 'test-media-cleanup',
   mediaCleanupSubscription: 'test-media-cleanup-sub',
+  audioStoredTopic: 'test-audio-stored',
+  approvalReplyTopic: 'test-approval-reply',
   gcpProjectId: 'test-project',
   webAgentUrl: 'https://web-agent.example.com',
   internalAuthToken: INTERNAL_AUTH_TOKEN,
