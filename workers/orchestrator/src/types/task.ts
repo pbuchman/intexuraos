@@ -146,7 +146,7 @@ export interface TaskResult {
   planning_subtask_urls?: string;
   planning_pr_url?: string;
   planning_unclear_clarification?: string;
-  execution_outcome_label?: 'implemented' | 'already_completed';
+  execution_outcome_label?: 'implemented' | 'already_completed' | 'failed';
   execution_superpowers_subagent_driven_dev_used?: '0' | '1';
   execution_superpowers_requesting_code_review_used?: '0' | '1';
   execution_memory_ids_used?: string;
