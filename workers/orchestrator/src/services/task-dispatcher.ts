@@ -154,6 +154,8 @@ const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
 const IMAGE_PULL_TIMEOUT_MS = 900_000; // 15 minutes — image pulls are network-bound
 const CONTAINER_CREATE_TIMEOUT_MS = 120_000; // 2 minutes
 const ZOMBIE_CLEANUP_TIMEOUT_MS = 30_000; // 30s — generous limit for best-effort destroy
+const EVIDENCE_CAPTURE_TIMEOUT_MS = 30_000; // 30s — copyOut/statsSnapshot are best-effort pre-kill telemetry
+const WORKER_DESTROY_TIMEOUT_MS = 30_000; // 30s — bound destroyWorker so docker unresponsiveness cannot wedge the task in 'running'
 const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes — no output triggers kill+restart
 const MAX_INACTIVITY_RESTARTS = 3; // max consecutive restarts before task is failed
 
@@ -1050,8 +1052,21 @@ export class TaskDispatcher {
           // Stop inactivity timeout early to prevent restart during hard kill
           this.activityTimeoutManager.stop(taskId);
 
-          // Kill Docker container
-          await this.isolation.provider.destroyWorker(taskId);
+          // Kill Docker container. Bound by WORKER_DESTROY_TIMEOUT_MS so an
+          // unresponsive docker daemon cannot wedge this callback and leave
+          // the task in 'running' status indefinitely.
+          try {
+            await withTimeout(
+              this.isolation.provider.destroyWorker(taskId),
+              WORKER_DESTROY_TIMEOUT_MS,
+              `destroyWorker timed out after ${String(WORKER_DESTROY_TIMEOUT_MS / 1000)}s`
+            );
+          } catch (destroyError) {
+            this.logger.error(
+              { taskId, error: destroyError },
+              'Failed to destroy worker during timeout kill'
+            );
+          }
 
           try {
             await this.logForwarder.flushAndStop(taskId);
@@ -1176,9 +1191,20 @@ export class TaskDispatcher {
     );
 
     const evidenceDir = `/var/log/orchestrator/inactivity-evidence/${taskId}/`;
+    // Bound each best-effort docker call by EVIDENCE_CAPTURE_TIMEOUT_MS so a
+    // stalled container (e.g. already-exited with orphaned state) cannot wedge
+    // the restart path.
     const [copyResult, statsResult] = await Promise.allSettled([
-      this.isolation.provider.copyOut(taskId, '/tmp', evidenceDir),
-      this.isolation.provider.statsSnapshot(taskId),
+      withTimeout(
+        this.isolation.provider.copyOut(taskId, '/tmp', evidenceDir),
+        EVIDENCE_CAPTURE_TIMEOUT_MS,
+        `copyOut timed out after ${String(EVIDENCE_CAPTURE_TIMEOUT_MS / 1000)}s`
+      ),
+      withTimeout(
+        this.isolation.provider.statsSnapshot(taskId),
+        EVIDENCE_CAPTURE_TIMEOUT_MS,
+        `statsSnapshot timed out after ${String(EVIDENCE_CAPTURE_TIMEOUT_MS / 1000)}s`
+      ),
     ]);
     if (copyResult.status === 'rejected') {
       this.logger.warn(
@@ -1196,7 +1222,11 @@ export class TaskDispatcher {
     }
 
     try {
-      await this.isolation.provider.destroyWorker(taskId);
+      await withTimeout(
+        this.isolation.provider.destroyWorker(taskId),
+        WORKER_DESTROY_TIMEOUT_MS,
+        `destroyWorker timed out after ${String(WORKER_DESTROY_TIMEOUT_MS / 1000)}s`
+      );
     } catch (destroyError) {
       this.logger.warn(
         { taskId, error: destroyError },
