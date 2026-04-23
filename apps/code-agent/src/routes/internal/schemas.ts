@@ -49,9 +49,6 @@ export const notFoundResponseSchema = <D extends string>(description: D) => ({
   required: ['success', 'error'],
 }) as const;
 
-/** Default NOT_FOUND envelope for endpoints without an entity-specific label. */
-export const NOT_FOUND_RESPONSE_SCHEMA = notFoundResponseSchema('Resource not found');
-
 export const INTERNAL_ERROR_RESPONSE_SCHEMA = {
   description: 'Internal server error',
   type: 'object',
