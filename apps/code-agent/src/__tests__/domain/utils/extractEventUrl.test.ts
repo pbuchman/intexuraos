@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractEventUrl } from '../../../routes/code/extractEventUrl.js';
+import { extractEventUrl } from '../../../domain/utils/extractEventUrl.js';
 
 describe('extractEventUrl', () => {
   describe('issue_comment', () => {

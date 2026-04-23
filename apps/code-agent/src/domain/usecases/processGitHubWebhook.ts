@@ -32,8 +32,8 @@ import type { Logger } from 'pino';
 import type { Result } from '@intexuraos/common-core';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { getServices } from '../../services.js';
-import { extractEventUrl } from '../../routes/code/extractEventUrl.js';
-import { extractEventSummary } from '../../routes/code/extractEventSummary.js';
+import { extractEventUrl } from '../utils/extractEventUrl.js';
+import { extractEventSummary } from '../utils/extractEventSummary.js';
 import type { CreateGitHubPREventInput } from '../models/gitHubPREvent.js';
 import type { UpsertGitHubPRSummaryInput } from '../models/gitHubPRSummary.js';
 import {
