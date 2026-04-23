@@ -1,700 +1,88 @@
 /**
  * GitHub webhook route handler.
  *
- * Receives GitHub webhook events for pull requests.
- * Validates signatures using HMAC-SHA256.
- * Stores events in Firestore for historical queries.
+ * Thin HTTP adapter: parses the incoming Fastify request, delegates all
+ * business logic to the `processGitHubWebhook` use case, and maps the
+ * discriminated result back to an HTTP response. All processing logic,
+ * signature verification, audit persistence, idempotency, triage publishing
+ * and close/push side effects live in the use case.
+ *
+ * Re-exports `ALLOWED_BOTS`, `CODE_WORKER_BOTS`, `resolvePrCloseSourceTimestamp`,
+ * `GitHubWebhookBody`, and `GitHubWebhookHeaders` from their new canonical
+ * homes in `domain/` so existing callers keep working.
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { getErrorMessage } from '@intexuraos/common-core';
 import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
-import { verifyGitHubSignature } from '../../infra/github-webhook-auth.js';
 import { loadConfig } from '../../config.js';
-import { resolveLoginForTaskCreation } from '../../domain/services/gitHubDispatchService.js';
-import {
-  parseGitHubWebhookEvent,
-} from '../../infra/github-event-parser.js';
-import { extractEventUrl } from '../code/extractEventUrl.js';
-import { extractEventSummary } from '../code/extractEventSummary.js';
-import type { CreateGitHubPREventInput } from '../../domain/models/gitHubPREvent.js';
-import type { UpsertGitHubPRSummaryInput } from '../../domain/models/gitHubPRSummary.js';
-import {
-  toGitHubWebhookAction,
-  toGitHubWebhookEventType,
-} from '../../domain/models/gitHubWebhookTypes.js';
-import type {
-  GitHubWebhookAuditEvent,
-  GitHubWebhookNormalizationStatus,
-} from '../../domain/models/gitHubWebhookAuditEvent.js';
-import { handlePrClose } from '../../domain/usecases/handlePrClose.js';
-import type { GitHubEventLogEntry } from '../../domain/models/gitHubEventLogEntry.js';
+import { processGitHubWebhook } from '../../domain/usecases/processGitHubWebhook.js';
+import type { GitHubWebhookBody, GitHubWebhookHeaders } from '../../domain/models/gitHubWebhookHttp.js';
 
-export const ALLOWED_BOTS = new Set([
-  'claude[bot]',
-  'chatgpt-codex-connector[bot]',
-  'intexuraos-code-worker[bot]',
-]);
+export { ALLOWED_BOTS, CODE_WORKER_BOTS } from '../../domain/constants/gitHubBots.js';
+export { resolvePrCloseSourceTimestamp } from '../../domain/utils/prCloseTimestamp.js';
+export type { GitHubWebhookBody, GitHubWebhookHeaders } from '../../domain/models/gitHubWebhookHttp.js';
 
-export const CODE_WORKER_BOTS = new Set([
-  'intexuraos-code-worker[bot]',
-]);
-
-export interface GitHubWebhookHeaders {
-  'x-hub-signature-256': string;
-  'x-github-event': string;
-}
-
-export interface GitHubWebhookBody {
-  action?: string;
-  repository?: {
-    id: number;
-    name: string;
-    full_name: string;
-    owner: {
-      login: string;
-      id: number;
-    };
-  };
-  pull_request?: {
-    id: number;
-    number: number;
-    title?: string;
-    body?: string | null;
-    state?: string;
-    closed_at?: string | null;
-    merged_at?: string | null;
-  };
-  sender?: {
-    login: string;
-    id: number;
-    type?: string;
-  };
-}
-
-export function resolvePrCloseSourceTimestamp(params: {
-  closedAt: string | null | undefined;
-  mergedAt: Date | null;
-}): string {
-  if (typeof params.closedAt === 'string') {
-    return params.closedAt;
-  }
-  if (params.mergedAt instanceof Date) {
-    return params.mergedAt.toISOString();
-  }
-  return new Date().toISOString();
-}
-
-function extractRepositoryDetails(body: GitHubWebhookBody): {
-  repository: string | null;
-  repositoryId: number | null;
-} {
-  const repository = body.repository;
-  if (repository === undefined) {
-    return { repository: null, repositoryId: null };
-  }
-
-  return {
-    repository: repository.full_name,
-    repositoryId: repository.id,
-  };
-}
-
-function extractPullRequestDetails(body: GitHubWebhookBody): {
-  pullRequestNumber: number | null;
-  pullRequestId: number | null;
-} {
-  const pullRequest = body.pull_request;
-  if (pullRequest === undefined) {
-    return { pullRequestNumber: null, pullRequestId: null };
-  }
-
-  return {
-    pullRequestNumber: pullRequest.number,
-    pullRequestId: pullRequest.id,
-  };
-}
-
-function extractSenderDetails(body: GitHubWebhookBody): {
-  senderLogin: string | null;
-  senderId: number | null;
-  senderType: string | null;
-} {
-  const sender = body.sender;
-  if (sender === undefined) {
-    return { senderLogin: null, senderId: null, senderType: null };
-  }
-
-  return {
-    senderLogin: sender.login,
-    senderId: sender.id,
-    senderType: sender.type ?? null,
-  };
-}
-
-function shouldProcessNormalizedRepository(repository: string): boolean {
-  return repository.startsWith('intexuraos/') || repository.endsWith('/intexuraos');
-}
-
-async function persistRouteDecision(input: {
-  auditEvent: GitHubWebhookAuditEvent;
-  pendingEntry: GitHubEventLogEntry;
-  reason: string;
-  normalizationStatus: GitHubWebhookNormalizationStatus;
-  logger: ReturnType<typeof getServices>['logger'];
-  decisionLatencyMs: number;
-}): Promise<boolean> {
-  const { eventDecisionRepo, gitHubEventLogEntryRepo, gitHubWebhookAuditEventRepo } = getServices();
-
-  const decisionResult = await eventDecisionRepo.save({
-    eventId: input.auditEvent.id,
-    repository: input.auditEvent.repository,
-    pullRequestNumber: input.auditEvent.pullRequestNumber,
-    eventType: input.auditEvent.eventType,
-    eventAction: input.auditEvent.action ?? 'unknown',
-    senderLogin: input.auditEvent.senderLogin,
-    decidedBy: 'webhook_route',
-    decision: 'skip',
-    reason: input.reason,
-    decisionLatencyMs: input.decisionLatencyMs,
-  });
-
-  if (!decisionResult.ok) {
-    input.logger.error(
-      { error: decisionResult.error, eventId: input.auditEvent.id, reason: input.reason },
-      'Failed to save route-level GitHub event decision'
-    );
-    return false;
-  }
-
-  if (gitHubEventLogEntryRepo === undefined) {
-    input.logger.error({ eventId: input.auditEvent.id }, 'GitHub event log entry repository not configured');
-    return false;
-  }
-
-  const completeResult = await gitHubEventLogEntryRepo.complete({
-    id: input.pendingEntry.id,
-    decisionId: decisionResult.value.id,
-    decisionState: 'completed',
-    decisionOutcome: 'skip',
-    updatedAt: new Date(),
-    rowVersion: input.pendingEntry.rowVersion + 1,
-  });
-
-  if (!completeResult.ok) {
-    input.logger.error(
-      { error: completeResult.error, eventId: input.auditEvent.id, reason: input.reason },
-      'Failed to complete GitHub event log entry'
-    );
-    return false;
-  }
-
-  if (gitHubWebhookAuditEventRepo !== undefined) {
-    const auditStatusResult = await gitHubWebhookAuditEventRepo.updateNormalizationStatus({
-      id: input.auditEvent.id,
-      normalizationStatus: input.normalizationStatus,
-    });
-    if (!auditStatusResult.ok) {
-      input.logger.warn(
-        {
-          error: auditStatusResult.error,
-          eventId: input.auditEvent.id,
-          normalizationStatus: input.normalizationStatus,
-        },
-        'Failed to update GitHub webhook audit normalization status'
-      );
-    }
-  }
-
-  return true;
-}
-
-async function updateAuditNormalizationStatus(input: {
-  auditEventId: string;
-  normalizationStatus: GitHubWebhookNormalizationStatus;
-  logger: ReturnType<typeof getServices>['logger'];
-}): Promise<void> {
-  const { gitHubWebhookAuditEventRepo } = getServices();
-
-  if (gitHubWebhookAuditEventRepo === undefined) {
-    return;
-  }
-
-  const result = await gitHubWebhookAuditEventRepo.updateNormalizationStatus({
-    id: input.auditEventId,
-    normalizationStatus: input.normalizationStatus,
-  });
-  if (!result.ok) {
-    input.logger.warn(
-      { error: result.error, eventId: input.auditEventId, normalizationStatus: input.normalizationStatus },
-      'Failed to update GitHub webhook audit normalization status'
-    );
-  }
-}
-
-async function ensureDecisionAfterEvaluationFailure(input: {
-  auditEvent: GitHubWebhookAuditEvent;
-  pendingEntry: GitHubEventLogEntry;
-  logger: ReturnType<typeof getServices>['logger'];
-  errorMessage: string;
-}): Promise<void> {
-  const { eventDecisionRepo } = getServices();
-
-  try {
-    if (eventDecisionRepo.findByEventIds !== undefined) {
-      const existingResult = await eventDecisionRepo.findByEventIds([input.auditEvent.id]);
-      /* v8 ignore start -- test-infra: FakeFirestore eventDecisionRepo always returns empty for dedup check @preserve */
-      if (existingResult.ok && existingResult.value.length > 0) {
-        return;
-      }
-      /* v8 ignore stop @preserve */
-    }
-
-    await persistRouteDecision({
-      auditEvent: input.auditEvent,
-      pendingEntry: input.pendingEntry,
-      logger: input.logger,
-      reason: `evaluation_failed:${input.errorMessage}`,
-      normalizationStatus: 'failed',
-      decisionLatencyMs: 0,
-    });
-  } catch (error) {
-    input.logger.error(
-      { eventId: input.auditEvent.id, error },
-      'Failed to persist fallback decision after evaluation failure'
-    );
-  }
-}
-
-export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) => {
-  // POST /webhooks/github - Receive GitHub webhook events
-  fastify.post<{
-    Headers: GitHubWebhookHeaders;
-    Body: GitHubWebhookBody;
-  }>(
-    '/webhooks/github',
-    {
-      schema: {
-        operationId: 'githubWebhook',
-        summary: 'Receive GitHub webhook events',
-        description: 'Receives and processes GitHub webhook events for pull requests. Requires HMAC-SHA256 signature.',
-        tags: ['webhooks', 'github'],
-        response: {
-          200: {
-            description: 'Event processed successfully',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean' },
-              data: {
-                type: 'object',
-                properties: {
-                  message: { type: 'string' },
-                },
-              },
-            },
-          },
-          401: {
-            description: 'Invalid signature',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean' },
-              error: {
-                type: 'object',
-                properties: {
-                  code: { type: 'string' },
-                  message: { type: 'string' },
-                },
-              },
-            },
-          },
+const webhookResponseSchema = {
+  operationId: 'githubWebhook',
+  summary: 'Receive GitHub webhook events',
+  description: 'Receives and processes GitHub webhook events for pull requests. Requires HMAC-SHA256 signature.',
+  tags: ['webhooks', 'github'],
+  response: {
+    200: {
+      description: 'Event processed successfully',
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        data: { type: 'object', properties: { message: { type: 'string' } } },
+      },
+    },
+    401: {
+      description: 'Invalid signature',
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        error: {
+          type: 'object',
+          properties: { code: { type: 'string' }, message: { type: 'string' } },
         },
       },
     },
+  },
+} as const;
+
+export const githubWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) => {
+  fastify.post<{ Headers: GitHubWebhookHeaders; Body: GitHubWebhookBody }>(
+    '/webhooks/github',
+    { schema: webhookResponseSchema },
     async (
       request: FastifyRequest<{ Headers: GitHubWebhookHeaders; Body: GitHubWebhookBody }>,
-      reply: FastifyReply
+      reply: FastifyReply,
     ) => {
-      logIncomingRequest(request, {
-        message: 'Received GitHub webhook event',
-      });
+      logIncomingRequest(request, { message: 'Received GitHub webhook event' });
 
-      // Get GitHub webhook secret from config
       const config = loadConfig();
-      const {
-        gitHubPREventRepo,
-        gitHubPRSummaryRepo,
-        gitHubWebhookAuditEventRepo,
-        gitHubEventLogEntryRepo,
-        automationLog,
-        userServiceClient,
+      const { logger } = getServices();
+      const deliveryHeader = request.headers['x-github-delivery'];
+
+      const result = await processGitHubWebhook({
+        rawBody: Buffer.from(JSON.stringify(request.body), 'utf-8'),
+        signatureHeader: request.headers['x-hub-signature-256'],
+        eventType: request.headers['x-github-event'],
+        deliveryId: typeof deliveryHeader === 'string' ? deliveryHeader : undefined,
+        body: request.body,
         logger,
-      } = getServices();
-
-      const signatureHeader = request.headers['x-hub-signature-256'];
-      const eventType = request.headers['x-github-event'];
-      const deliveryId = request.headers['x-github-delivery'];
-
-      // Get raw request body for signature verification
-      // Fastify parses JSON, so we need to get the raw body
-      const rawBody = Buffer.from(JSON.stringify(request.body), 'utf-8');
-
-      // Verify signature
-      if (!signatureHeader || !verifyGitHubSignature(rawBody, signatureHeader, config.githubWebhookSecret)) {
-        // Log only the first 20 chars of signature for security (or undefined if missing)
-        const sigPreview = signatureHeader ? signatureHeader.slice(0, 20) : undefined;
-        logger.warn({ signature: sigPreview }, 'Invalid GitHub webhook signature');
-        return await reply.fail('UNAUTHORIZED', 'Invalid webhook signature');
-      }
-
-      logger.debug(
-        { eventType, hasSignature: !!signatureHeader },
-        'GitHub webhook signature verified'
-      );
-
-      if (gitHubWebhookAuditEventRepo === undefined || gitHubEventLogEntryRepo === undefined) {
-        logger.error('GitHub webhook audit repositories are not configured');
-        return await reply.fail('INTERNAL_ERROR', 'GitHub event logging is not configured');
-      }
-
-      const authPassedAt = new Date();
-      const webhookEventType = toGitHubWebhookEventType(eventType);
-      const webhookAction = toGitHubWebhookAction(request.body.action);
-      const repositoryDetails = extractRepositoryDetails(request.body);
-      const pullRequestDetails = extractPullRequestDetails(request.body);
-      const senderDetails = extractSenderDetails(request.body);
-
-      const auditResult = await gitHubWebhookAuditEventRepo.save({
-        deliveryId: typeof deliveryId === 'string' ? deliveryId : null,
-        githubEventName: typeof eventType === 'string' ? eventType : 'unknown',
-        eventType: webhookEventType,
-        action: webhookAction,
-        repository: repositoryDetails.repository,
-        repositoryId: repositoryDetails.repositoryId,
-        pullRequestNumber: pullRequestDetails.pullRequestNumber,
-        pullRequestId: pullRequestDetails.pullRequestId,
-        senderLogin: senderDetails.senderLogin,
-        senderId: senderDetails.senderId,
-        senderType: senderDetails.senderType,
-        authPassedAt,
-        receivedAt: authPassedAt,
-        normalizationStatus: 'pending',
-        payload: request.body,
+        webhookSecret: config.githubWebhookSecret,
       });
 
-      if (!auditResult.ok) {
-        logger.error({ error: auditResult.error }, 'Failed to save auth-passed GitHub audit event');
-        return await reply.fail('INTERNAL_ERROR', 'Failed to persist GitHub event audit');
-      }
-
-      const pendingLogEntryResult = await gitHubEventLogEntryRepo.createPending({
-        id: auditResult.value.id,
-        githubEventName: typeof eventType === 'string' ? eventType : 'unknown',
-        eventType: webhookEventType,
-        action: webhookAction,
-        repository: repositoryDetails.repository,
-        pullRequestNumber: pullRequestDetails.pullRequestNumber,
-        authPassedAt,
-        updatedAt: authPassedAt,
-        decisionState: 'pending',
-        decisionOutcome: null,
-        rowVersion: 1,
-      });
-
-      if (!pendingLogEntryResult.ok) {
-        logger.error({ error: pendingLogEntryResult.error }, 'Failed to create pending GitHub event log entry');
-        return await reply.fail('INTERNAL_ERROR', 'Failed to persist GitHub event log entry');
-      }
-
-      // Best-effort: record webhook_received in the automation log when we have PR context
-      if (repositoryDetails.repository !== null && pullRequestDetails.pullRequestNumber !== null && pullRequestDetails.pullRequestNumber !== 0) {
-        /* v8 ignore start -- ts-type: typeof string check ?? fallback for already-validated header @preserve */
-        const resolvedDeliveryId = typeof deliveryId === 'string' ? deliveryId : 'unknown';
-        const resolvedEventType = typeof eventType === 'string' ? eventType : 'unknown';
-        /* v8 ignore stop @preserve */
-        const eventUrl = extractEventUrl(resolvedEventType, request.body);
-        const eventSummary = extractEventSummary(resolvedEventType, request.body);
-        const webhookReceivedRepo = repositoryDetails.repository;
-        const webhookReceivedPrNumber = pullRequestDetails.pullRequestNumber;
-        void (async (): Promise<void> => {
-          // Resolve sender login → platform userId so the automation log can post PR comments
-          let tokenUserId: string | undefined;
-          if (senderDetails.senderLogin !== null) {
-            try {
-              const login = resolveLoginForTaskCreation(senderDetails.senderLogin, webhookReceivedRepo, ALLOWED_BOTS);
-              const userResult = await userServiceClient.resolveGitHubUsername(login);
-              if (userResult.ok) {
-                const resolvedUser = userResult.value; // @allow-result-access -- narrowed by userResult.ok
-                if (resolvedUser !== null) {
-                  tokenUserId = resolvedUser.userId;
-                }
-              }
-            } catch {
-              // Best-effort — userId resolution failure must not block automation logging
-            }
-          }
-          await automationLog.record(
-            { repository: webhookReceivedRepo, prNumber: webhookReceivedPrNumber },
-            {
-              type: 'webhook_received',
-              eventType: resolvedEventType,
-              /* v8 ignore start -- ts-type: action ?? and sender ?? fallbacks for optional webhook fields @preserve */
-              action: request.body.action ?? 'unknown',
-              sender: senderDetails.senderLogin ?? 'unknown',
-              deliveryId: resolvedDeliveryId,
-              ...(eventUrl !== null ? { eventUrl } : {}),
-              ...(eventSummary !== null ? { summary: eventSummary } : {}),
-              /* v8 ignore stop @preserve */
-            },
-            tokenUserId,
-          );
-        })()
-        .catch((recordErr: unknown) => {
-          logger.warn({ error: getErrorMessage(recordErr) }, 'Failed to record webhook_received in automation log');
-        });
-      }
-
-      // Handle ping event (GitHub test)
-      if (eventType === 'ping') {
-        logger.info('Received GitHub ping event');
-        const saved = await persistRouteDecision({
-          auditEvent: auditResult.value,
-          pendingEntry: pendingLogEntryResult.value,
-          reason: 'ping_event',
-          normalizationStatus: 'ignored',
-          logger,
-          decisionLatencyMs: Date.now() - authPassedAt.getTime(),
-        });
-        if (!saved) {
-          return await reply.fail('INTERNAL_ERROR', 'Failed to persist GitHub event decision');
+      if (!result.ok) {
+        if (result.reason === 'invalid_signature') {
+          return await reply.fail('UNAUTHORIZED', result.message);
         }
-        return await reply.ok({ message: 'pong' });
+        return await reply.fail('INTERNAL_ERROR', result.message);
       }
-
-      // Parse the event
-      const parseResult = parseGitHubWebhookEvent(eventType, request.body);
-
-      if (!parseResult.ok) {
-        logger.warn({ error: parseResult.error }, 'Failed to parse GitHub webhook event'); // @allow-result-access -- narrowed by !parseResult.ok
-        const saved = await persistRouteDecision({
-          auditEvent: auditResult.value,
-          pendingEntry: pendingLogEntryResult.value,
-          reason: 'invalid_payload',
-          normalizationStatus: 'invalid',
-          logger,
-          decisionLatencyMs: Date.now() - authPassedAt.getTime(),
-        });
-        if (!saved) {
-          return await reply.fail('INTERNAL_ERROR', 'Failed to persist GitHub event decision');
-        }
-        return await reply.ok({ message: 'acknowledged' });
-      }
-
-      const parsedEvent = parseResult.value; // @allow-result-access -- narrowed by !parseResult.ok
-
-      // Null means event type is not stored (e.g., unknown events)
-      if (parsedEvent === null) {
-        logger.info({ eventType }, 'Unhandled GitHub event type, acknowledging');
-        const saved = await persistRouteDecision({
-          auditEvent: auditResult.value,
-          pendingEntry: pendingLogEntryResult.value,
-          reason: 'unsupported_event',
-          normalizationStatus: 'unsupported',
-          logger,
-          decisionLatencyMs: Date.now() - authPassedAt.getTime(),
-        });
-        if (!saved) {
-          return await reply.fail('INTERNAL_ERROR', 'Failed to persist GitHub event decision');
-        }
-        return await reply.ok({ message: 'acknowledged' });
-      }
-
-      if (!shouldProcessNormalizedRepository(parsedEvent.repository)) {
-        logger.info(
-          { repository: parsedEvent.repository },
-          'Ignoring event from non-IntexuraOS repository'
-        );
-        if (parsedEvent.pullRequestNumber !== 0) {
-          void automationLog.record(
-            { repository: parsedEvent.repository, prNumber: parsedEvent.pullRequestNumber },
-            { type: 'skipped', decidedBy: 'webhook_route', reason: 'repository_out_of_scope' },
-          ).catch((recordErr: unknown) => {
-            logger.warn({ error: getErrorMessage(recordErr) }, 'Failed to record skipped event in automation log');
-          });
-        }
-        const saved = await persistRouteDecision({
-          auditEvent: auditResult.value,
-          pendingEntry: pendingLogEntryResult.value,
-          reason: 'repository_out_of_scope',
-          normalizationStatus: 'ignored',
-          logger,
-          decisionLatencyMs: Date.now() - authPassedAt.getTime(),
-        });
-        if (!saved) {
-          return await reply.fail('INTERNAL_ERROR', 'Failed to persist GitHub event decision');
-        }
-        return await reply.ok({ message: 'ignored' });
-      }
-
-      // Enrich with X-GitHub-Delivery header for deduplication
-      const eventWithDeliveryId: CreateGitHubPREventInput = {
-        ...parsedEvent,
-        auditEventId: auditResult.value.id,
-        deliveryId: typeof deliveryId === 'string' ? deliveryId : null,
-      };
-
-      // Save to Firestore
-      const saveResult = await gitHubPREventRepo.save(eventWithDeliveryId);
-
-      if (!saveResult.ok) {
-        if (saveResult.error.code === 'DUPLICATE_EVENT') { // @allow-result-access -- narrowed by !saveResult.ok
-          logger.debug({ deliveryId }, 'Duplicate webhook delivery, skipping evaluation');
-          if (parsedEvent.pullRequestNumber !== 0) {
-            void automationLog.record(
-              { repository: parsedEvent.repository, prNumber: parsedEvent.pullRequestNumber },
-              { type: 'skipped', decidedBy: 'webhook_route', reason: 'duplicate_delivery' },
-            ).catch((recordErr: unknown) => {
-              logger.warn({ error: getErrorMessage(recordErr) }, 'Failed to record skipped event in automation log');
-            });
-          }
-          const saved = await persistRouteDecision({
-            auditEvent: auditResult.value,
-            pendingEntry: pendingLogEntryResult.value,
-            reason: 'duplicate_delivery',
-            normalizationStatus: 'duplicate',
-            logger,
-            decisionLatencyMs: Date.now() - authPassedAt.getTime(),
-          });
-          if (!saved) {
-            return await reply.fail('INTERNAL_ERROR', 'Failed to persist GitHub event decision');
-          }
-          return await reply.ok({ message: 'duplicate' });
-        }
-        logger.error({ error: saveResult.error }, 'Failed to save GitHub PR event'); // @allow-result-access -- narrowed by !saveResult.ok
-        /* v8 ignore start -- upstream: FakeFirestore PR events save never returns err() so this path is unreachable @preserve */
-        if (parsedEvent.pullRequestNumber !== 0) {
-        /* v8 ignore stop @preserve */
-          void automationLog.record(
-            { repository: parsedEvent.repository, prNumber: parsedEvent.pullRequestNumber },
-            { type: 'skipped', decidedBy: 'webhook_route', reason: 'normalized_event_save_failed' },
-          ).catch((recordErr: unknown) => {
-            logger.warn({ error: getErrorMessage(recordErr) }, 'Failed to record skipped event in automation log');
-          });
-        }
-        const saved = await persistRouteDecision({
-          auditEvent: auditResult.value,
-          pendingEntry: pendingLogEntryResult.value,
-          reason: 'normalized_event_save_failed',
-          normalizationStatus: 'failed',
-          logger,
-          decisionLatencyMs: Date.now() - authPassedAt.getTime(),
-        });
-        if (!saved) {
-          return await reply.fail('INTERNAL_ERROR', 'Failed to persist GitHub event decision');
-        }
-        return await reply.ok({ message: 'acknowledged' });
-      }
-
-      const savedEvent = saveResult.value; // @allow-result-access -- narrowed by !saveResult.ok above
-      await updateAuditNormalizationStatus({
-        auditEventId: auditResult.value.id,
-        normalizationStatus: 'normalized',
-        logger,
-      });
-
-      // Upsert PR summary — skip push/ping events (pullRequestNumber === 0)
-      if (parsedEvent.pullRequestNumber !== 0) {
-        const summaryInput: UpsertGitHubPRSummaryInput = {
-          repository: parsedEvent.repository,
-          pullRequestNumber: parsedEvent.pullRequestNumber,
-          lastActivityAt: parsedEvent.createdAt,
-          firstSeenAt: parsedEvent.createdAt,
-          ...(parsedEvent.eventType === 'pull_request' && {
-            title: parsedEvent.title,
-            state: parsedEvent.state,
-            mergedAt: parsedEvent.mergedAt ?? null,
-            baseBranch: parsedEvent.baseBranch,
-            authorLogin: parsedEvent.prAuthorLogin,
-          }),
-        };
-        const summaryResult = await gitHubPRSummaryRepo.upsert(summaryInput);
-        if (!summaryResult.ok) {
-          logger.warn({ error: summaryResult.error.message }, 'Failed to upsert PR summary'); // @allow-result-access -- narrowed by !summaryResult.ok
-        }
-      }
-
-      logger.info(
-        {
-          eventId: savedEvent.id,
-          eventType: parsedEvent.eventType,
-          repository: parsedEvent.repository,
-          pullRequestNumber: parsedEvent.pullRequestNumber,
-        },
-        'GitHub PR event saved'
-      );
-
-      const { prTriagePublisher } = getServices();
-
-      // Decouple triage from the webhook request lifetime: publish a PRTriageEvent
-      // to Pub/Sub, delivered as a push to /internal/code/pubsub/pr-triage. The
-      // push handler awaits unifiedEvaluator.evaluate(...) inside its own request,
-      // so Cloud Run's CPU throttling and revision rollovers cannot drop triage
-      // work mid-flight.
-      const publishResult = await prTriagePublisher.publishPRTriage({
-        eventId: savedEvent.id,
-        repository: parsedEvent.repository,
-        pullRequestNumber: parsedEvent.pullRequestNumber,
-        correlationId: savedEvent.id,
-      });
-
-      if (!publishResult.ok) {
-        logger.error(
-          { error: publishResult.error, eventId: savedEvent.id }, // @allow-result-access -- narrowed by !publishResult.ok
-          'Failed to publish PR triage event — falling back to inline evaluator'
-        );
-        const { unifiedEvaluator } = getServices();
-        void unifiedEvaluator.evaluate(savedEvent, logger).catch((evalErr: unknown) => {
-          logger.error({ evalErr }, 'Unhandled error in unified evaluator (fallback path)');
-          void ensureDecisionAfterEvaluationFailure({
-            auditEvent: auditResult.value,
-            pendingEntry: pendingLogEntryResult.value,
-            logger,
-            errorMessage: getErrorMessage(evalErr, 'unknown_evaluation_error'),
-          });
-        });
-      }
-
-      // Transition Linear issues on PR close (merge → QA + remove label; close → remove label only)
-      if (parsedEvent.eventType === 'pull_request' && parsedEvent.action === 'closed') {
-        const { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, groupSummaryRepo } = getServices();
-        const closedAt = request.body.pull_request?.closed_at;
-        void handlePrClose(
-          { codeTaskRepo, linearIssueService, userServiceClient, taskDispatcher, workerSettingsRepo, groupSummaryRepo: groupSummaryRepo as NonNullable<typeof groupSummaryRepo>, logger },
-          {
-            repository: parsedEvent.repository,
-            prNumber: parsedEvent.pullRequestNumber,
-            prBody: parsedEvent.body,
-            prTitle: parsedEvent.title,
-            prAuthorLogin: parsedEvent.prAuthorLogin,
-            senderLogin: parsedEvent.senderLogin,
-            isMerged: parsedEvent.mergedAt !== null,
-            sourceTimestamp: resolvePrCloseSourceTimestamp({ closedAt, mergedAt: parsedEvent.mergedAt }),
-          },
-        ).catch((closeErr: unknown) => {
-          logger.error({ closeErr }, 'Unhandled error in handlePrClose');
-        });
-      }
-
-      // INT-1049: Trigger merge-conflict detection on push events
-      if (parsedEvent.eventType === 'push') {
-        const { mergeConflictDetector } = getServices();
-        void mergeConflictDetector.detectOnPush(savedEvent, logger).catch((pushErr: unknown) => {
-          logger.error({ pushErr }, 'Unhandled error in detectOnPush');
-        });
-      }
-
-      return await reply.ok({ message: 'processed' });
-    }
+      return await reply.ok({ message: result.message });
+    },
   );
 
   done();
