@@ -11621,8 +11621,13 @@ describe('TaskDispatcher', () => {
       // This test drives finalizeAttemptAsInfraFailure directly because the
       // repeated-sub-reason branch only fires if the Task already carries
       // taskInfraFailureHistory from a prior attempt. In production the
-      // history accumulates across attempts; in the fake isolation harness
-      // we seed the history explicitly and invoke the private finalize path.
+      // history accumulates across attempts: a user-driven resume via
+      // sendMessage() intentionally leaves `taskInfraFailureHistory` in place
+      // (see the comment next to the `verificationHistory = []` reset in
+      // sendMessage), so the next infra failure sees the prior entry and
+      // flips remediation. The fake isolation harness cannot drive a full
+      // submit → fail → resume → fail-again cycle for infra failures, so we
+      // seed the history explicitly and invoke the private finalize path.
       const existingTask: Task = {
         taskId: 'repeat-infra-failure',
         workerType: 'auto',

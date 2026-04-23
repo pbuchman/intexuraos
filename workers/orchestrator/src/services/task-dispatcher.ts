@@ -765,6 +765,13 @@ export class TaskDispatcher {
       task.startedAt = new Date().toISOString();
       task.attemptCount = 1;
       task.verificationHistory = [];
+      // INT-1455: `taskInfraFailureHistory` is intentionally NOT reset on resume.
+      // When a user resumes a failed task that died on infra (e.g. image pull),
+      // and the resume fails the SAME way, the classifier's repeat-sub-reason
+      // check at finalizeAttemptAsInfraFailure flips the remediation copy to
+      // contact_support so log/UI triage clearly shows this isn't a flaky
+      // first-time failure. `verificationHistory`, by contrast, describes the
+      // old attempt's verifier verdict and is no longer relevant.
       task.pendingResumeStart = {
         prompt,
         acceptedAt: new Date().toISOString(),
@@ -1790,10 +1797,17 @@ export class TaskDispatcher {
     if (repeatedSubReason) {
       this.appendOrchestratorTaskLog(
         task.taskId,
-        `Repeat infra failure (${subReason}) on attempt ${String(attempt)}; aborting retries`
+        `Repeat infra failure (${subReason}) on attempt ${String(attempt)}; flipping remediation to contact_support`
       );
     }
 
+    // INT-1455: `remediation.action` is advisory for on-call/UI triage only.
+    // The code-agent classifyFailure() already returns 'fail' unconditionally
+    // for WORKER_INFRA_FAILURE (apps/code-agent/src/domain/utils/classifyFailure.ts),
+    // so neither 'retry' nor 'contact_support' here gates the automated retry
+    // loop. The flip exists so dashboards and webhook consumers can distinguish
+    // a first-time infra failure from a repeat of the same sub-reason after a
+    // user-driven resume.
     const error: TaskError = {
       code: 'WORKER_INFRA_FAILURE',
       message: firstErrorLine,
@@ -2155,8 +2169,10 @@ export class TaskDispatcher {
 
     this.claudeErrors.delete(task.taskId);
     this.taskExitCodes.delete(task.taskId);
-    this.attemptStartedAt.delete(task.taskId);
     this.lastOutputAt.set(task.taskId, Date.now());
+    // INT-1455: record attempt start time so the classifier can compute
+    // duration on completion. No matching delete() here — the immediate
+    // set() below replaces any stale value from a prior attempt.
     this.attemptStartedAt.set(task.taskId, Date.now());
 
     // Store promise to enable zombie cleanup if timeout fires mid-creation.
