@@ -590,13 +590,14 @@ export async function createWorkerOrchestration(
     } else {
       dockerContainer
         .wait()
-        .then(async (data) => {
+        .then((data) => {
+          // Re-lookup the worker: if it was destroyed (removed from `workers`) or
+          // preserved before `wait()` resolved, the handle may have been updated
+          // to a terminal status like 'timeout' and must not be overwritten here.
           const worker = workers.get(taskId);
-          /* v8 ignore start -- ts-type: Map.get() null check after container lifecycle @preserve */
           if (worker !== undefined) {
             worker.handle.status = data.StatusCode === 0 ? 'completed' : 'failed';
           }
-          /* v8 ignore stop @preserve */
           config.onComplete?.(data.StatusCode);
         })
         .catch((err: unknown) => {
