@@ -156,6 +156,164 @@ describe('handleTaskCompletion', () => {
     });
   });
 
+  describe('completed path — execution agent (memory queued + automation logged)', () => {
+    const ORIGINAL_EXECUTION_MEMORY_ENABLED =
+      process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'];
+
+    afterEach(() => {
+      // Restore the prior value so the env var does not leak into downstream
+      // tests. `resetServices()` in the outer afterEach does not touch env.
+      if (ORIGINAL_EXECUTION_MEMORY_ENABLED === undefined) {
+        delete process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'];
+      } else {
+        process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = ORIGINAL_EXECUTION_MEMORY_ENABLED;
+      }
+    });
+
+    it('queues the execution-memory post-run block and records metrics when an execution task completes (already_completed outcome)', async () => {
+      // Turn on memory queueing for the duration of this test.
+      process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] = 'true';
+
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const mirrorStatus = vi.fn().mockResolvedValue(undefined);
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+      const validateIssue = vi.fn().mockResolvedValue(ok({
+        id: 'linear-uuid', identifier: 'INT-1', title: 't', url: 'u',
+        labels: [], childCount: 0, parentId: null,
+      }));
+      const addComment = vi.fn().mockResolvedValue(ok({ commentId: 'c-1' }));
+      const updateIssueState = vi.fn().mockResolvedValue(ok(undefined));
+      const updateIssueMetadata = vi.fn().mockResolvedValue(ok({ droppedLabels: [] }));
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'execution',
+            linearIssueId: 'INT-1',
+            actionId: 'act-1',
+            // No prNumber → cleanupLockIfPR + triggerDrainForPR short-circuit.
+          })),
+          update,
+        } as never,
+        statusMirrorService: { mirrorStatus } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        linearAgentClient: {
+          validateIssue, addComment, updateIssueState, updateIssueMetadata,
+        } as never,
+        linearIssueService: { markInReview: vi.fn().mockResolvedValue(undefined) } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-done',
+        status: 'completed',
+        result: {
+          execution_outcome_label: 'already_completed',
+          prUrl: 'https://github.com/a/b/pull/9',
+          summary: 'Work done previously',
+        },
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      // Memory queued: the update must include the `executionMemoryPostRun` block
+      // with `status: 'pending'` so the post-run memory worker will pick it up.
+      expect(update).toHaveBeenCalledWith(
+        't-done',
+        expect.objectContaining({
+          status: 'implemented',
+          executionMemoryPostRun: expect.objectContaining({
+            status: 'pending',
+            attempts: 0,
+            generatedMemoryIds: [],
+          }),
+          callbackReceived: true,
+        }),
+      );
+      // Automation/observability: metrics emitted + whatsapp notified.
+      expect(incrementTasksCompleted).toHaveBeenCalledWith('claude-opus', 'implemented');
+      expect(notifyTaskComplete).toHaveBeenCalled();
+      expect(mirrorStatus).toHaveBeenCalledWith(expect.objectContaining({
+        taskStatus: 'implemented',
+      }));
+    });
+  });
+
+  describe('completed path — review agent (remediation decision recorded)', () => {
+    it('records a required remediation decision when a review completes with needs_remediation=1', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const automationRecord = vi.fn().mockResolvedValue(undefined);
+      const mirrorStatus = vi.fn().mockResolvedValue(undefined);
+      const notifyTaskComplete = vi.fn().mockResolvedValue(ok(undefined));
+      const incrementTasksCompleted = vi.fn().mockResolvedValue(undefined);
+      const recordTaskDuration = vi.fn().mockResolvedValue(undefined);
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'review',
+            linearIssueId: 'INT-1',
+            actionId: 'act-2',
+            // No prNumber on the task — prNumber is resolved from prUrl in result.
+          })),
+          update,
+          findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+        } as never,
+        statusMirrorService: { mirrorStatus } as never,
+        whatsappNotifier: { notifyTaskComplete } as never,
+        metricsClient: { incrementTasksCompleted, recordTaskDuration } as never,
+        automationLog: { record: automationRecord } as never,
+        linearIssueService: {
+          removeLabel: vi.fn().mockResolvedValue(undefined),
+          markInReview: vi.fn().mockResolvedValue(undefined),
+        } as never,
+        logger: createMockLogger() as never,
+        // No createRemediationTaskFn → the branch that records the decision
+        // without a taskId is exercised.
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-review',
+        status: 'completed',
+        result: {
+          review_id: 'rev-1',
+          review_comments_posted: '1',
+          review_types: 'code_quality',
+          prUrl: 'https://github.com/a/b/pull/42',
+          needs_remediation: '1',
+        },
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      // Remediation decision: the review raised needs_remediation=1, so an
+      // automation log MUST be recorded with required=true and signal='1'.
+      // The review agent does not currently carry a prNumber on the task
+      // record; the helper resolves it from result.prUrl.
+      const remediationCall = automationRecord.mock.calls.find((call) => {
+        const event = call[1] as { type?: string; required?: boolean; signal?: string };
+        return event.type === 'remediation_decision' && event.required === true;
+      });
+      expect(remediationCall).toBeDefined();
+      expect(remediationCall?.[1]).toMatchObject({
+        type: 'remediation_decision',
+        required: true,
+        signal: '1',
+        source: 'review_result',
+      });
+      expect(remediationCall?.[0]).toMatchObject({ repository: 'a/b', prNumber: 42 });
+    });
+  });
+
   describe('failed path', () => {
     it('returns received for a failed status with permanent_failure triage', async () => {
       const update = vi.fn().mockResolvedValue(ok(undefined));
