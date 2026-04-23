@@ -111,7 +111,9 @@ describe('runCredentialRefreshTick', () => {
     });
 
     runCredentialRefreshTick(registry, () => [], logger);
-    // Flush the rejected-promise handler.
+    // Flush the `void promise.catch(...)` handler registered by
+    // runCredentialRefreshTick so the `logger.error` side-effect becomes
+    // observable before we assert on it. Do not remove this line.
     await new Promise((resolve) => setImmediate(resolve));
 
     const errorCalls = logger.calls.filter(([level]) => level === 'error');

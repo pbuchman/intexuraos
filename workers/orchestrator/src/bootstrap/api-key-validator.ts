@@ -176,7 +176,6 @@ export async function validateThirdPartyApiKey(
 /* v8 ignore stop @preserve */
 
 /** Logs the initial state of claude/codex worker auth at startup. */
-/* v8 ignore start -- module-init: bootstrap log-only helper cannot be unit-tested without synthesizing the full WorkerAuthRegistry state machine; sequencing guaranteed via start.test.ts spy @preserve */
 export function logWorkerAuthStartupStatus(
   workerAuthRegistry: WorkerAuthRegistry,
   logger: Logger
@@ -212,7 +211,6 @@ export function logWorkerAuthStartupStatus(
     logger.warn({ state: codexState }, 'Codex worker auth not ready');
   }
 }
-/* v8 ignore stop @preserve */
 
 /** Third-party keys validated at startup (live network requests). */
 export interface WorkerApiKeysForValidation {
@@ -229,7 +227,6 @@ export interface WorkerApiKeysForValidation {
  *
  * Never throws — a failed upstream request warns and returns.
  */
-/* v8 ignore start -- module-init: bootstrap orchestration of live upstream probes cannot be unit-tested without real HTTP sockets; invocation verified via start.test.ts sequencing spy @preserve */
 export async function validateWorkerApiKeys(
   workerAuthRegistry: WorkerAuthRegistry,
   keys: WorkerApiKeysForValidation,
@@ -264,6 +261,7 @@ export async function validateWorkerApiKeys(
 
   // Validate all third-party API keys in parallel.
   // GLM, Qwen, and Kimi all use the same DashScope API key — validate once via qwen.
+  /* v8 ignore start -- module-init: validateThirdPartyApiKey fan-out issues live HTTPS probes that cannot be exercised without real sockets; the inner function carries its own ignore and the per-key empty-guard branches short-circuit during unit tests before any network call @preserve */
   await Promise.all([
     keys.minimaxKey !== ''
       ? validateThirdPartyApiKey('minimax', keys.minimaxKey, logger)
@@ -278,5 +276,5 @@ export async function validateWorkerApiKeys(
       ? validateThirdPartyApiKey('openrouter-free', keys.openRouterKey, logger)
       : Promise.resolve(),
   ]);
+  /* v8 ignore stop @preserve */
 }
-/* v8 ignore stop @preserve */
