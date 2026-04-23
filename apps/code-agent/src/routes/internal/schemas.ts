@@ -27,8 +27,13 @@ export const UNAUTHORIZED_RESPONSE_SCHEMA = {
   required: ['success', 'error'],
 } as const;
 
-export const NOT_FOUND_RESPONSE_SCHEMA = {
-  description: 'Resource not found',
+/**
+ * Build a NOT_FOUND response envelope with an endpoint-specific description.
+ * All other fields are identical across callers — only the OpenAPI doc string
+ * varies so the generated schema reads naturally per endpoint.
+ */
+export const notFoundResponseSchema = <D extends string>(description: D) => ({
+  description,
   type: 'object',
   properties: {
     success: { type: 'boolean', enum: [false] },
@@ -42,7 +47,10 @@ export const NOT_FOUND_RESPONSE_SCHEMA = {
     },
   },
   required: ['success', 'error'],
-} as const;
+}) as const;
+
+/** Default NOT_FOUND envelope for endpoints without an entity-specific label. */
+export const NOT_FOUND_RESPONSE_SCHEMA = notFoundResponseSchema('Resource not found');
 
 export const INTERNAL_ERROR_RESPONSE_SCHEMA = {
   description: 'Internal server error',
@@ -107,7 +115,7 @@ export const RECONCILE_MERGE_CONFLICTS_SCHEMA = {
   },
 } as const;
 
-export const PROCESS_EXECUTION_MEMORY_SCHEMA = {
+export const PROCESS_EXECUTION_MEMORY_BACKLOG_SCHEMA = {
   operationId: 'processExecutionMemoryBacklog',
   summary: 'Process pending execution-memory post-run work',
   description:
@@ -347,7 +355,7 @@ export const GET_TASK_DISPATCH_METADATA_SCHEMA = {
       ],
     },
     401: UNAUTHORIZED_RESPONSE_SCHEMA,
-    404: NOT_FOUND_RESPONSE_SCHEMA,
+    404: notFoundResponseSchema('Task not found'),
   },
 } as const;
 
@@ -393,7 +401,7 @@ export const GET_LINEAR_ISSUE_CONTEXT_SCHEMA = {
       required: ['description', 'comments', 'planDocumentPath'],
     },
     401: UNAUTHORIZED_RESPONSE_SCHEMA,
-    404: NOT_FOUND_RESPONSE_SCHEMA,
+    404: notFoundResponseSchema('Issue not found'),
     502: DOWNSTREAM_ERROR_RESPONSE_SCHEMA,
   },
 } as const;
