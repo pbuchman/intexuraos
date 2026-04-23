@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GcpPubSubPublisher } from '../../infra/pubsub/index.js';
 
 const mockPublishToTopic = vi.fn();
+const mockPublishToOptionalTopic = vi.fn();
 
 vi.mock('@intexuraos/infra-pubsub', () => ({
   BasePubSubPublisher: class {
@@ -17,7 +18,7 @@ vi.mock('@intexuraos/infra-pubsub', () => ({
     }
 
     async publishToTopic(
-      topicName: string | null,
+      topicName: string,
       data: unknown,
       attributes: Record<string, string>,
       _description: string
@@ -25,6 +26,17 @@ vi.mock('@intexuraos/infra-pubsub', () => ({
       { ok: true; value: undefined } | { ok: false; error: { code: string; message: string } }
     > {
       return mockPublishToTopic(topicName, data, attributes);
+    }
+
+    async publishToOptionalTopic(
+      topicName: string | null,
+      data: unknown,
+      attributes: Record<string, string>,
+      _description: string
+    ): Promise<
+      { ok: true; value: undefined } | { ok: false; error: { code: string; message: string } }
+    > {
+      return mockPublishToOptionalTopic(topicName, data, attributes);
     }
   },
 }));
@@ -34,16 +46,48 @@ describe('GcpPubSubPublisher', () => {
 
   beforeEach(() => {
     mockPublishToTopic.mockReset();
+    mockPublishToOptionalTopic.mockReset();
     mockPublishToTopic.mockResolvedValue({ ok: true, value: undefined });
+    mockPublishToOptionalTopic.mockResolvedValue({ ok: true, value: undefined });
     publisher = new GcpPubSubPublisher({
       projectId: 'test-project',
       mediaCleanupTopic: 'media-cleanup-topic',
+      audioStoredTopic: 'audio-stored-topic',
+      approvalReplyTopic: 'approval-reply-topic',
       logger: pino({ name: 'test', level: 'silent' }),
     });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('constructor', () => {
+    it('throws when audioStoredTopic is missing', () => {
+      expect(
+        () =>
+          new GcpPubSubPublisher({
+            projectId: 'test-project',
+            mediaCleanupTopic: 'media-cleanup-topic',
+            approvalReplyTopic: 'approval-reply-topic',
+            logger: pino({ name: 'test', level: 'silent' }),
+            // Cast: testing the runtime guard for callers that bypass the type system
+          } as unknown as ConstructorParameters<typeof GcpPubSubPublisher>[0])
+      ).toThrow('audioStoredTopic is required');
+    });
+
+    it('throws when approvalReplyTopic is missing', () => {
+      expect(
+        () =>
+          new GcpPubSubPublisher({
+            projectId: 'test-project',
+            mediaCleanupTopic: 'media-cleanup-topic',
+            audioStoredTopic: 'audio-stored-topic',
+            logger: pino({ name: 'test', level: 'silent' }),
+            // Cast: testing the runtime guard for callers that bypass the type system
+          } as unknown as ConstructorParameters<typeof GcpPubSubPublisher>[0])
+      ).toThrow('approvalReplyTopic is required');
+    });
   });
 
   describe('publishMediaCleanup', () => {
@@ -100,13 +144,17 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisher.publishCommandIngest(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith(null, event, { externalId: 'wamid.abc' });
+      expect(mockPublishToOptionalTopic).toHaveBeenCalledWith(null, event, {
+        externalId: 'wamid.abc',
+      });
     });
 
     it('publishes event when topic is configured', async () => {
       const publisherWithTopic = new GcpPubSubPublisher({
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
+        audioStoredTopic: 'audio-stored-topic',
+        approvalReplyTopic: 'approval-reply-topic',
         commandsIngestTopic: 'commands-ingest-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
@@ -123,7 +171,7 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisherWithTopic.publishCommandIngest(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('commands-ingest-topic', event, {
+      expect(mockPublishToOptionalTopic).toHaveBeenCalledWith('commands-ingest-topic', event, {
         externalId: 'wamid.voice123',
       });
     });
@@ -132,10 +180,12 @@ describe('GcpPubSubPublisher', () => {
       const publisherWithTopic = new GcpPubSubPublisher({
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
+        audioStoredTopic: 'audio-stored-topic',
+        approvalReplyTopic: 'approval-reply-topic',
         commandsIngestTopic: 'commands-ingest-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
-      mockPublishToTopic.mockResolvedValue({
+      mockPublishToOptionalTopic.mockResolvedValue({
         ok: false,
         error: { code: 'PUBLISH_FAILED', message: 'Topic unavailable' },
       });
@@ -170,13 +220,17 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisher.publishWebhookProcess(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith(null, event, { eventId: 'event-123' });
+      expect(mockPublishToOptionalTopic).toHaveBeenCalledWith(null, event, {
+        eventId: 'event-123',
+      });
     });
 
     it('publishes event when topic is configured', async () => {
       const publisherWithTopic = new GcpPubSubPublisher({
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
+        audioStoredTopic: 'audio-stored-topic',
+        approvalReplyTopic: 'approval-reply-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
@@ -192,7 +246,7 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisherWithTopic.publishWebhookProcess(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('webhook-process-topic', event, {
+      expect(mockPublishToOptionalTopic).toHaveBeenCalledWith('webhook-process-topic', event, {
         eventId: 'event-123',
       });
     });
@@ -201,10 +255,12 @@ describe('GcpPubSubPublisher', () => {
       const publisherWithTopic = new GcpPubSubPublisher({
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
+        audioStoredTopic: 'audio-stored-topic',
+        approvalReplyTopic: 'approval-reply-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
-      mockPublishToTopic.mockResolvedValue({
+      mockPublishToOptionalTopic.mockResolvedValue({
         ok: false,
         error: { code: 'PUBLISH_FAILED', message: 'Connection failed' },
       });
@@ -226,7 +282,7 @@ describe('GcpPubSubPublisher', () => {
   });
 
   describe('publishAudioStored', () => {
-    it('skips publish when topic is not configured', async () => {
+    it('publishes event when topic is configured', async () => {
       const event = {
         type: 'whatsapp.audio.stored' as const,
         messageId: 'msg-123',
@@ -240,48 +296,18 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisher.publishAudioStored(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith(null, event, { messageId: 'msg-123' });
-    });
-
-    it('publishes event when topic is configured', async () => {
-      const publisherWithTopic = new GcpPubSubPublisher({
-        projectId: 'test-project',
-        mediaCleanupTopic: 'media-cleanup-topic',
-        audioStoredTopic: 'audio-stored-topic',
-        logger: pino({ name: 'test', level: 'silent' }),
-      });
-
-      const event = {
-        type: 'whatsapp.audio.stored' as const,
-        messageId: 'msg-123',
-        userId: 'user-456',
-        mediaId: 'media-789',
-        gcsPath: 'path/to/audio.ogg',
-        mimeType: 'audio/ogg',
-        timestamp: new Date().toISOString(),
-      };
-
-      const result = await publisherWithTopic.publishAudioStored(event);
-
-      expect(result.ok).toBe(true);
       expect(mockPublishToTopic).toHaveBeenCalledWith('audio-stored-topic', event, {
         messageId: 'msg-123',
       });
     });
 
     it('returns error when publish fails', async () => {
-      const publisherWithTopic = new GcpPubSubPublisher({
-        projectId: 'test-project',
-        mediaCleanupTopic: 'media-cleanup-topic',
-        audioStoredTopic: 'audio-stored-topic',
-        logger: pino({ name: 'test', level: 'silent' }),
-      });
       mockPublishToTopic.mockResolvedValue({
         ok: false,
         error: { code: 'PUBLISH_FAILED', message: 'Publish timeout' },
       });
 
-      const result = await publisherWithTopic.publishAudioStored({
+      const result = await publisher.publishAudioStored({
         type: 'whatsapp.audio.stored',
         messageId: 'msg-fail',
         userId: 'user-456',
@@ -299,6 +325,25 @@ describe('GcpPubSubPublisher', () => {
     });
   });
 
+  describe('publishApprovalReply', () => {
+    it('publishes event when topic is configured', async () => {
+      const event = {
+        type: 'action.approval.reply' as const,
+        replyToWamid: 'wamid.reply123',
+        replyText: 'yes',
+        userId: 'user-456',
+        timestamp: new Date().toISOString(),
+      };
+
+      const result = await publisher.publishApprovalReply(event);
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishToTopic).toHaveBeenCalledWith('approval-reply-topic', event, {
+        replyToWamid: 'wamid.reply123',
+      });
+    });
+  });
+
   describe('publishExtractLinkPreviews', () => {
     it('skips publish when topic is not configured', async () => {
       const event = {
@@ -311,13 +356,17 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisher.publishExtractLinkPreviews(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith(null, event, { messageId: 'msg-123' });
+      expect(mockPublishToOptionalTopic).toHaveBeenCalledWith(null, event, {
+        messageId: 'msg-123',
+      });
     });
 
     it('publishes event when topic is configured', async () => {
       const publisherWithTopic = new GcpPubSubPublisher({
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
+        audioStoredTopic: 'audio-stored-topic',
+        approvalReplyTopic: 'approval-reply-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
@@ -332,7 +381,7 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisherWithTopic.publishExtractLinkPreviews(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('webhook-process-topic', event, {
+      expect(mockPublishToOptionalTopic).toHaveBeenCalledWith('webhook-process-topic', event, {
         messageId: 'msg-123',
       });
     });
@@ -341,10 +390,12 @@ describe('GcpPubSubPublisher', () => {
       const publisherWithTopic = new GcpPubSubPublisher({
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
+        audioStoredTopic: 'audio-stored-topic',
+        approvalReplyTopic: 'approval-reply-topic',
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
-      mockPublishToTopic.mockResolvedValue({
+      mockPublishToOptionalTopic.mockResolvedValue({
         ok: false,
         error: { code: 'PUBLISH_FAILED', message: 'Network error' },
       });

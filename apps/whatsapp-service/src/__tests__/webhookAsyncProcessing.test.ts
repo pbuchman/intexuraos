@@ -629,7 +629,7 @@ describe('Webhook async processing', () => {
     });
 
 
-    it('handles publishAudioStored failure gracefully', async () => {
+    it('marks webhook event failed when publishAudioStored fails', async () => {
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
 
@@ -667,10 +667,12 @@ describe('Webhook async processing', () => {
 
       await triggerWebhookProcessing();
 
-      // Event should still be marked completed (failure is logged, not thrown)
+      // Publish failure must surface as a hard webhook failure so the event
+      // is not silently dropped.
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      expect(events[0]?.status).toBe('completed');
+      expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.failureDetails).toContain('Simulated Pub/Sub failure');
 
       // Pub/Sub failed, so no audio stored events
       expect(ctx.eventPublisher.getAudioStoredEvents().length).toBe(0);
