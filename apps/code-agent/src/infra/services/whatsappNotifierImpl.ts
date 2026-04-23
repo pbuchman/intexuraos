@@ -142,6 +142,7 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
         message,
         ctaUrl: buildCtaUrl(task),
         correlationId: task.traceId,
+        important: true,
       };
       if (prUrl !== undefined && prUrl.length > 0) {
         publishParams.ctaUrl = { displayText: 'View Pull Request', url: prUrl };
@@ -212,7 +213,6 @@ export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsApp
         buttons,
         ctaUrl: { displayText: 'View Progress', url: buildTaskUrl(task.id) },
         correlationId: task.traceId,
-        important: true,
       });
 
       if (!result.ok) {

@@ -540,12 +540,9 @@ describe('WhatsAppNotifier', () => {
           displayText: 'View Progress',
           url: 'https://intexuraos.cloud/#/code-tasks/task-123',
         },
+        important: true,
       });
     });
-
-    // Note: notifyTaskComplete builds the publish params via a local variable
-    // (publishParams) so it is NOT modified for INT-1418 importance flagging.
-    // See apps/code-agent/src/infra/services/whatsappNotifierImpl.ts:140-150.
 
     it('returns error when notification fails', async () => {
       const task = createMockTask({
@@ -645,6 +642,9 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.message).not.toContain('Repository:');
       expect(callArgs.message).not.toContain('Branch:');
       expect(callArgs.correlationId).toBe('test-trace-id');
+      // Task start is not an actionable user moment; the `important` flag
+      // MUST NOT be set so the delivery channel does not interrupt the user.
+      expect(callArgs.important).toBeUndefined();
     });
 
     it('sends notification with Cancel and View buttons when cancelNonce is set', async () => {
