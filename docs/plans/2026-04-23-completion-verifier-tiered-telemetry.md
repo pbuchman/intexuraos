@@ -1,20 +1,37 @@
-# Tiered Completion Verification — Split Deliverable vs Telemetry
+# Completion Verification — Decouple Deliverable from Telemetry
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stop failing code tasks when the only thing missing is the memory-acknowledgment telemetry block, while keeping the existing strict verification for Opus/Sonnet workers unchanged.
+**Goal:** Stop failing code tasks when the only thing missing is the memory-acknowledgment telemetry block. Telemetry presence is observability data; it does not reflect on whether the task's deliverable was produced, so it must not gate task completion.
 
-**Architecture:** The orchestrator's `CompletionVerifier` currently returns a single `missingFields: string[]` that mixes two unrelated concerns: (a) deliverable fields required by the task contract (e.g. `gh_pr_url`, `review_comments_posted`) and (b) memory-acknowledgment telemetry fields (e.g. `memory_acknowledgment`, `memory_ids_unaccounted`). Both are treated as blocking, so a task that posted a valid PR review but forgot the telemetry block is retried 3× and marked `failed`. This plan (1) splits the verdict into `missingFields` (blocking — deliverable) and `telemetryMissingFields` (non-blocking — memory), (2) adds `telemetryExpectation: 'required' | 'optional'` per worker type, and (3) extracts the retry/accept/fail policy into a **pure function** `decideCompletionOutcome(verdict, tier, exitCode)` — so the policy is unit-testable without building a dispatcher test harness (none exists today: `task-dispatcher.test.ts` is 176 lines of pure-function tests only).
+**Architecture:** The orchestrator's `CompletionVerifier` currently returns a single `missingFields: string[]` that mixes (a) deliverable contract fields (e.g. `gh_pr_url`, `review_comments_posted`) and (b) memory-acknowledgment telemetry fields (e.g. `memory_acknowledgment`, `memory_ids_unaccounted`). The orchestrator retries the worker up to 3× if either is missing, then marks the task `failed`. This plan (1) splits the verdict into `missingFields` (deliverable — still blocking) and `telemetryGaps` (observability — never blocking), (2) extracts the retry/accept/fail policy into a **pure function** `decideCompletionOutcome(verdict, exitCode, attempt, maxAttempts)` that is worker-agnostic, and (3) rewires the dispatcher to accept any task whose deliverable is intact regardless of telemetry. No per-worker tiers, no capability judgments, no hard-coded assumptions about which LLMs can emit the ceremony. Telemetry gaps are logged as warnings and persisted to `verificationHistory` for observability, but they never trigger retry or failure.
 
-**Tech Stack:** TypeScript (strict mode), Zod, Vitest. No new dependencies, no Firestore migration (new `verificationHistory` fields are optional), no webhook shape change.
+**Design principle:** Worker identity is irrelevant to the policy. A Sonnet-grade worker that forgets the memory ack for orchestrator reasons (e.g. premature verifier run on partial output — see motivating example below) and a glm-grade worker that forgets it for capability reasons both produced a valid deliverable; both succeed. As models evolve, no plan update is needed.
+
+**Tech Stack:** TypeScript (strict mode), Zod, Vitest. No new dependencies, no Firestore migration (new `verificationHistory` fields are optional), no webhook shape change, no `WORKER_TYPES` config change.
 
 **Endpoint Changes:** None. No HTTP endpoints modified, created, removed, or unchanged — this is purely internal orchestrator logic.
 
 **Non-goals / out of scope:**
-- No worker prompt changes (system prompt keeps asking for memory ack).
-- No downstream code-agent changes. Memory-effectiveness scoring downstream may treat tier=optional accepted tasks as "zero memories used" (same shape as "worker rejected all memories"). Acceptable skew — filed as follow-up tech debt, not in this plan.
-- No coverage for `handleResumedAfterSuccessCompletion` — that's a separate code path (`task-dispatcher.ts:2037`) invoked from `handleTaskCompletion:1312` BEFORE the lines we're modifying, so resumed-after-success tasks are unaffected.
-- **Compliance validation is intentionally NOT run for tier=optional accepted execution tasks.** Reason: compliance checks superpowers usage and workflow discipline, which weak models will have skipped for the same reasons they skipped telemetry — running compliance would produce false failures. Documented explicitly in the new branch; log line indicates the skip.
+- No worker prompt changes (system prompt still asks for memory ack — workers that can emit it should continue doing so).
+- No downstream code-agent changes. Memory-effectiveness scoring downstream may see more "no memory signal" records (empty `execution_memory_ids_used`) than before. The distinction between "rejected all memories" and "skipped telemetry" is recoverable via `verificationHistory[n].telemetryGaps` — if and when a downstream consumer cares, it reads that field. Not addressed in this change.
+- No coverage for `handleResumedAfterSuccessCompletion` — that's a separate code path (`task-dispatcher.ts:2037`) invoked from `handleTaskCompletion:1312` BEFORE the lines we're modifying; resumed-after-success tasks are unaffected.
+- Compliance validation behavior is unchanged: it continues to run for execution agents on successful verification, exactly as today. Since we no longer fail tasks for missing telemetry, every successful execution task runs compliance (including former glm-grade failures that now succeed).
+
+**Behavior changes introduced by this plan (disclosed up-front):**
+
+1. **Opus/Sonnet/auto tasks that skip the memory-ack ceremony now succeed.** Previously retried 3× and failed terminally. This is the core goal, but worth flagging: any downstream watching "task failed with memory_acknowledgment missing" will see those failures drop. Verification step (Task 10) checks the terraform/monitoring tree for alerts that key off this message.
+2. **Exit-code override becomes unconditional.** Current code (`task-dispatcher.ts:1557`) applies the override ONLY inside the `verification.passed` branch. Under `decideCompletionOutcome` rule 3, it fires for every non-zero exit regardless of verdict shape. Practical effect: a worker that produced no `gh_pr_url` AND crashed with exit=1 previously got retried; now it fails immediately with `TASK_EXIT_CODE_OVERRIDE`. Correct semantics (don't retry a crashed container for missing fields), but different from today. Covered by a dedicated test in Task 7.
+3. **Compliance validator will post PR comments on tasks that previously didn't reach it.** The validator (`agent-compliance-validator.ts:540-576`) runs on every successful execution task and posts a PR comment when superpowers usage is missing. Tasks that previously failed at the telemetry gate never got these comments; now they will. No task failures result — compliance comments are non-fatal — but expect increased PR-comment noise from the compliance validator for weak-model execution tasks. If noise becomes a problem, the compliance validator itself can be tuned; not addressed here.
+
+## Motivating examples
+
+| Task                                        | Worker             | What happened                                         | Why current orchestrator fails it                                                                                                                       | Why this plan fixes it                                                                                                |
+| ------------------------------------------- | ------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `task_1dbe9147-4164-4b0c-aaef-39aa90e1f433` | `glm` (review)     | Posted review #4162575153, `result.prUrl` populated   | Missing `memory_acknowledgment` after 3 retries                                                                                                         | Deliverable (`gh_pr_url`) present → accept, log telemetry gap                                                         |
+| `task_28f5349a-ab4e-4165-8598-c6b897d57531` | `auto` (execution) | Created PR #1906 with correct final block at 15:36:27 | Orchestrator closed the attempt window at 15:25:18 (inactivity-restart), verifier ran on partial output at 15:25:20 before the memory block was emitted | Deliverable (`gh_pr_url`) present in partial output → accept; the ceremony arrives later but no longer gates the task |
+
+Full plan document (committed to the repo): `docs/plans/2026-04-23-completion-verifier-tiered-telemetry.md`.
 
 ---
 
@@ -22,16 +39,19 @@
 
 ### Modified Files
 
-| File                                                                         | Responsibility of change                                                                                                                                                                                                                                        |
-| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workers/orchestrator/src/services/completion-verifier.ts`                   | Split `CompletionVerifierVerdict` into `missingFields` (blocking) + `telemetryMissingFields`. Route memory-validation failures into telemetry. Relax `EXECUTION_SCHEMA` memory fields to optional. Export helpers `isTelemetryField`, `partitionMissingFields`. |
-| `workers/orchestrator/src/services/isolation/types.ts`                       | Add `telemetryExpectation: 'required' \                                                                                                                                                                                                                         | 'optional'` to `WorkerTypeConfig`, populate every entry. |
-| `workers/orchestrator/src/services/completion-outcome.ts`                    | **NEW FILE.** Pure function `decideCompletionOutcome(verdict, tier, exitCode)` returning a discriminated-union `CompletionOutcome`. This is the unit-testable policy layer.                                                                                     |
-| `workers/orchestrator/src/services/task-dispatcher.ts`                       | Refactor `handleTaskCompletion` lines 1432–1748 to delegate retry/accept/fail decisions to `decideCompletionOutcome`. Thin wiring only.                                                                                                                         |
-| `workers/orchestrator/src/types/task.ts`                                     | Extend `TaskVerificationRecord` with `telemetryMissingFields?: string[]` and `telemetryAccepted?: boolean`.                                                                                                                                                     |
-| `workers/orchestrator/src/services/__tests__/completion-verifier.test.ts`    | Tests for split verdict and helpers. Update existing tests that asserted memory-fields in `missingFields`.                                                                                                                                                      |
-| `workers/orchestrator/src/services/__tests__/completion-outcome.test.ts`     | **NEW FILE.** Exhaustive unit tests for `decideCompletionOutcome`.                                                                                                                                                                                              |
-| `workers/orchestrator/src/services/isolation/__tests__/worker-types.test.ts` | **NEW FILE.** Assert every worker type declares `telemetryExpectation`.                                                                                                                                                                                         |
+| File                                                                      | Responsibility of change                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workers/orchestrator/src/services/completion-verifier.ts`                | Split `CompletionVerifierVerdict` into `missingFields` (blocking deliverable) + `telemetryGaps` (observability-only). Route memory-validation failures into `telemetryGaps`. Relax `EXECUTION_SCHEMA` memory fields to optional. Export helpers `isTelemetryField`, `partitionMissingFields`. |
+| `workers/orchestrator/src/services/completion-outcome.ts`                 | **NEW FILE.** Pure function `decideCompletionOutcome(verdict, exitCode, attempt, maxAttempts)` returning a discriminated-union `CompletionOutcome`. Worker-agnostic — no tier parameter.                                                                                                      |
+| `workers/orchestrator/src/services/task-dispatcher.ts`                    | Refactor `handleTaskCompletion` lines 1432–1748 to delegate retry/accept/fail decisions to `decideCompletionOutcome`. Thin wiring only.                                                                                                                                                       |
+| `workers/orchestrator/src/types/task.ts`                                  | Extend `TaskVerificationRecord` with `telemetryGaps?: string[]`.                                                                                                                                                                                                                              |
+| `workers/orchestrator/src/services/__tests__/completion-verifier.test.ts` | Tests for split verdict and helpers. Update existing tests that asserted memory-fields in `missingFields`.                                                                                                                                                                                    |
+| `workers/orchestrator/src/services/__tests__/completion-outcome.test.ts`  | **NEW FILE.** Exhaustive unit tests for `decideCompletionOutcome`.                                                                                                                                                                                                                            |
+
+### Explicitly NOT modified
+
+- `workers/orchestrator/src/services/isolation/types.ts` — no `WorkerTypeConfig` changes. The decision is worker-agnostic.
+- `packages/common-core/src/codeTaskWorkerTypes.ts` — unchanged.
 
 ---
 
@@ -48,16 +68,16 @@ Add to `workers/orchestrator/src/services/__tests__/completion-verifier.test.ts`
 import type { CompletionVerifierVerdict } from '../completion-verifier.js';
 
 describe('verdict telemetry split', () => {
-  it('exposes telemetryMissingFields alongside missingFields', () => {
+  it('exposes telemetryGaps alongside missingFields', () => {
     const verdict: CompletionVerifierVerdict = {
       passed: false,
       missingFields: ['gh_pr_url'],
-      telemetryMissingFields: ['memory_acknowledgment'],
+      telemetryGaps: ['memory_acknowledgment'],
       verifierFailure: false,
       trace: { transcript: '', prompt: '', response: '' },
     };
     expect(verdict.missingFields).toEqual(['gh_pr_url']);
-    expect(verdict.telemetryMissingFields).toEqual(['memory_acknowledgment']);
+    expect(verdict.telemetryGaps).toEqual(['memory_acknowledgment']);
   });
 });
 ```
@@ -69,7 +89,7 @@ describe('verdict telemetry split', () => {
 ```bash
 pnpm --filter @intexuraos/orchestrator test -- completion-verifier.test.ts -t 'verdict telemetry split'
 ```
-Expected: TypeScript compile error "Property 'telemetryMissingFields' does not exist on type 'CompletionVerifierVerdict'".
+Expected: TypeScript compile error "Property 'telemetryGaps' does not exist on type 'CompletionVerifierVerdict'".
 
 - [ ] **Step 3: Add the field to the interface**
 
@@ -77,12 +97,12 @@ In `completion-verifier.ts` at the `CompletionVerifierVerdict` interface (line 4
 
 ```ts
 export interface CompletionVerifierVerdict {
-  /** True when all blocking AND telemetry fields are present. */
+  /** True when all blocking deliverable fields are present AND no telemetry gaps exist. */
   passed: boolean;
-  /** Blocking fields — deliverable contract (e.g. gh_pr_url, review_comments_posted). Non-empty → task cannot succeed regardless of worker tier. */
+  /** Blocking deliverable fields — (e.g. gh_pr_url, review_comments_posted). Non-empty → task cannot succeed. */
   missingFields: string[];
-  /** Telemetry fields — memory acknowledgment / reporting. Non-empty → task may still succeed when worker tier is 'optional'. */
-  telemetryMissingFields: string[];
+  /** Observability-only memory-telemetry gaps. Logged; NEVER triggers retry or failure. */
+  telemetryGaps: string[];
   verifierFailure: boolean;
   agentData?:
     | PlanningAgentData
@@ -106,7 +126,7 @@ Expected: PASS.
 
 ```bash
 git add workers/orchestrator/src/services/completion-verifier.ts workers/orchestrator/src/services/__tests__/completion-verifier.test.ts
-git commit -m "feat(orchestrator): add telemetryMissingFields to CompletionVerifierVerdict"
+git commit -m "feat(orchestrator): add telemetryGaps field to CompletionVerifierVerdict"
 ```
 
 ---
@@ -182,7 +202,7 @@ Expected: FAIL — not exported.
 In `completion-verifier.ts`, after the schema exports (around line 228, before `RESUME_SUMMARY_SCHEMA`):
 
 ```ts
-/** Field names that represent memory-acknowledgment telemetry, not deliverable contract. */
+/** Field names that represent memory-acknowledgment telemetry (observability), not deliverable contract. */
 const TELEMETRY_FIELD_NAMES: ReadonlySet<string> = new Set([
   'memory_acknowledgment',
   'memory_ids_used',
@@ -237,7 +257,7 @@ git commit -m "feat(orchestrator): add isTelemetryField and partitionMissingFiel
 ## Task 3: Enumerate existing tests that will break
 
 **Files:**
-- None modified. This is pure investigation to de-risk Tasks 4–5.
+- None modified. Pure investigation to de-risk Tasks 4–5.
 
 - [ ] **Step 1: Find tests that assert memory fields are in `missingFields`**
 
@@ -257,26 +277,30 @@ rg -n "EXECUTION_SCHEMA|execution.*memory_ids_used|execution agent.*memor" worke
 rg -n "agentType.*execution.*memor|memory.*execution" workers/orchestrator/src/services/__tests__/completion-verifier.test.ts
 ```
 
-- [ ] **Step 4: Write the list into a temporary note at the top of the test file**
+- [ ] **Step 4: Find dispatcher tests that assert retry-on-telemetry-missing**
 
-Prepend this block comment to `completion-verifier.test.ts` so the next step knows which tests to update:
+```bash
+rg -n "memory_acknowledgment|memory_ids_unaccounted|memory_usage_summary" workers/orchestrator/src/services/__tests__/
+```
+
+- [ ] **Step 5: Write the list into a temporary note at the top of `completion-verifier.test.ts`**
 
 ```ts
 /*
  * Migration list (remove when all updated):
- * Tests expected to move memory-field assertions from missingFields → telemetryMissingFields:
+ * Tests expected to move memory-field assertions from missingFields → telemetryGaps:
  *   - <line>: <test name>
  *   - <line>: <test name>
- *   ...
  * Tests expected to break on EXECUTION_SCHEMA relaxation:
  *   - <line>: <test name>
- *   ...
+ * Tests that asserted "retry on telemetry-missing" — need to flip to "accept on telemetry-missing":
+ *   - <line>: <test name>
  */
 ```
 
-Fill in from Steps 1–3. This block is deleted at the end of Task 5.
+Fill in from Steps 1–4. This block is deleted at the end of Task 5.
 
-- [ ] **Step 5: Commit the investigation note**
+- [ ] **Step 6: Commit the investigation note**
 
 ```bash
 git add workers/orchestrator/src/services/__tests__/completion-verifier.test.ts
@@ -285,7 +309,7 @@ git commit -m "docs(orchestrator): enumerate tests affected by verdict-split ref
 
 ---
 
-## Task 4: Route memory-validation failures into telemetry bucket
+## Task 4: Route memory-validation failures into telemetryGaps
 
 **Files:**
 - Modify: `workers/orchestrator/src/services/completion-verifier.ts` at every `return` inside `doVerify` (around lines 675, 695, 815, 830, 870, 906, 925).
@@ -295,10 +319,8 @@ git commit -m "docs(orchestrator): enumerate tests affected by verdict-split ref
 Append to `completion-verifier.test.ts`:
 
 ```ts
-describe('memory validation routes into telemetryMissingFields', () => {
-  it('emits memory_acknowledgment into telemetryMissingFields, not missingFields', async () => {
-    // Mirror the existing fake LlmGenerateClient pattern already used in this file.
-    // See existing "describe('OrchestratorCompletionVerifier', ...)" block for the helper.
+describe('memory validation routes into telemetryGaps', () => {
+  it('emits memory_acknowledgment into telemetryGaps, not missingFields', async () => {
     const verifier = makeVerifierWithJsonResponse({
       gh_pr_url: 'https://github.com/o/r/pull/1',
       review_id: '123',
@@ -324,7 +346,7 @@ describe('memory validation routes into telemetryMissingFields', () => {
       executionMemoryContext: makeMemoryContext(['mem_1']),
     });
     expect(verdict.missingFields).toEqual([]);
-    expect(verdict.telemetryMissingFields).toContain('memory_acknowledgment');
+    expect(verdict.telemetryGaps).toContain('memory_acknowledgment');
     expect(verdict.passed).toBe(false);
   });
 });
@@ -335,11 +357,11 @@ describe('memory validation routes into telemetryMissingFields', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-pnpm --filter @intexuraos/orchestrator test -- completion-verifier.test.ts -t 'memory validation routes into telemetryMissingFields'
+pnpm --filter @intexuraos/orchestrator test -- completion-verifier.test.ts -t 'memory validation routes into telemetryGaps'
 ```
-Expected: FAIL — `memory_acknowledgment` appears in `missingFields`, not `telemetryMissingFields`.
+Expected: FAIL — `memory_acknowledgment` appears in `missingFields`, not `telemetryGaps`.
 
-- [ ] **Step 3: Update every `return` inside `doVerify` to include `telemetryMissingFields`**
+- [ ] **Step 3: Update every `return` inside `doVerify`**
 
 In `completion-verifier.ts`, the function `doVerify` (starts line 658) has 7 return sites. Update each.
 
@@ -348,7 +370,7 @@ In `completion-verifier.ts`, the function `doVerify` (starts line 658) has 7 ret
 return {
   passed: false,
   missingFields: [`fatal_exit_code_${String(fatalExitCode)}`],
-  telemetryMissingFields: [],
+  telemetryGaps: [],
   verifierFailure: false,
   trace: { transcript, prompt: '', response: '' },
 };
@@ -359,7 +381,7 @@ return {
 return {
   passed: false,
   missingFields: ['transcript_too_short'],
-  telemetryMissingFields: [],
+  telemetryGaps: [],
   verifierFailure: false,
   trace: { transcript, prompt: '', response: '' },
 };
@@ -376,14 +398,14 @@ if (parseResult !== undefined) {
       attempt: input.attempt,
       model: succeededModelName,
       missingFields: parts.blocking,
-      telemetryMissingFields: parts.telemetry,
+      telemetryGaps: parts.telemetry,
     },
     'Completion verifier: all models failed schema validation'
   );
   return {
     passed: false,
     missingFields: parts.blocking,
-    telemetryMissingFields: parts.telemetry,
+    telemetryGaps: parts.telemetry,
     verifierFailure: false,
     succeededModelName,
     trace: { transcript, prompt, response: lastGeneratedContent },
@@ -396,11 +418,30 @@ if (parseResult !== undefined) {
 return {
   passed: false,
   missingFields: [],
-  telemetryMissingFields: [],
+  telemetryGaps: [],
   verifierFailure: true,
   trace: { transcript, prompt, response: lastGeneratedContent },
 };
 ```
+
+**Hoist `agentData` declaration — REQUIRED before the next two returns.**
+
+`const agentData = toAgentData(input.agentType, parseResult.data)` is currently at line 878 — AFTER the empty-memory-fields check at line 868. The new returns below reference `agentData`, so without hoisting, TypeScript fails with "Cannot find name 'agentData'". Move the declaration up so it sits immediately after the `if (!parseResult?.success) { ... }` block closes (around line 838), BEFORE the `hasInjectedMemories` declaration:
+
+```ts
+if (!parseResult?.success) {
+  // ... existing returns ...
+}
+
+// Hoisted from line 878 so the empty-memory-fields and memoryValidation returns below can include agentData.
+const agentData = toAgentData(input.agentType, parseResult.data);
+
+const hasInjectedMemories =
+  input.executionMemoryContext !== undefined &&
+  input.executionMemoryContext.matchedMemories.length > 0;
+```
+
+Then **delete** the duplicate declaration at the old line 878.
 
 **"Empty memory fields" post-parse check (line ~868) — route to telemetry:**
 ```ts
@@ -418,13 +459,16 @@ if (usedVal.trim() === '' && rejectedVal.trim() === '') {
   return {
     passed: false,
     missingFields: [],
-    telemetryMissingFields: emptyMemoryFields,
+    telemetryGaps: emptyMemoryFields,
     verifierFailure: false,
     succeededModelName,
+    agentData,
     trace: { transcript, prompt, response: lastGeneratedContent },
   };
 }
 ```
+
+Note: include `agentData` in this return so the dispatcher can still accept the task (deliverable present, only telemetry missing).
 
 **`validateMemoryReporting` failures (line ~906) — route to telemetry:**
 ```ts
@@ -441,20 +485,23 @@ if (memoryValidation.failures.length > 0) {
   return {
     passed: false,
     missingFields: [],
-    telemetryMissingFields: memoryValidation.failures,
+    telemetryGaps: memoryValidation.failures,
     verifierFailure: false,
     succeededModelName,
+    agentData,
     trace: { transcript, prompt, response: lastGeneratedContent },
   };
 }
 ```
+
+Note: also include `agentData` here for the same reason.
 
 **Success (line ~925):**
 ```ts
 return {
   passed: true,
   missingFields: [],
-  telemetryMissingFields: [],
+  telemetryGaps: [],
   verifierFailure: false,
   agentData,
   succeededModelName,
@@ -465,15 +512,15 @@ return {
 - [ ] **Step 4: Run the new test**
 
 ```bash
-pnpm --filter @intexuraos/orchestrator test -- completion-verifier.test.ts -t 'memory validation routes into telemetryMissingFields'
+pnpm --filter @intexuraos/orchestrator test -- completion-verifier.test.ts -t 'memory validation routes into telemetryGaps'
 ```
 Expected: PASS.
 
 - [ ] **Step 5: Migrate existing tests per Task 3's list**
 
 For each test enumerated in Task 3's migration note:
-- If the test asserted `missingFields` contained `memory_*` field names → change to assert against `telemetryMissingFields`.
-- If the test asserted the verdict's `missingFields` is `[]` after memory validation → update to also check `telemetryMissingFields`.
+- If the test asserted `missingFields` contained `memory_*` field names → change to assert against `telemetryGaps`.
+- If the test asserted the verdict's `missingFields` is `[]` after memory validation → update to also check `telemetryGaps`.
 
 - [ ] **Step 6: Run the full verifier suite**
 
@@ -486,7 +533,7 @@ Expected: PASS. Fix any remaining failures with a per-test edit.
 
 ```bash
 git add workers/orchestrator/src/services/completion-verifier.ts workers/orchestrator/src/services/__tests__/completion-verifier.test.ts
-git commit -m "refactor(orchestrator): route memory validation failures into telemetryMissingFields"
+git commit -m "refactor(orchestrator): route memory validation failures into telemetryGaps"
 ```
 
 ---
@@ -557,7 +604,7 @@ export const EXECUTION_SCHEMA = z
   });
 ```
 
-Note for reviewer: this brings `EXECUTION_SCHEMA` into parity with every other schema (planning/pull_request/review/remediation already use `.optional().default('')` for these fields — see lines 153–155, 184–186, 200–202, 219–221).
+Brings `EXECUTION_SCHEMA` into parity with every other schema (planning/pull_request/review/remediation already use `.optional().default('')` for these fields — see lines 153–155, 184–186, 200–202, 219–221).
 
 - [ ] **Step 4: Remove the execution-agent guard**
 
@@ -570,7 +617,7 @@ Change to:
 if (hasInjectedMemories) {
 ```
 
-This runs the "empty memory fields" check for execution agents too, now that the Zod schema no longer enforces them. The empty-fields return already routes to `telemetryMissingFields` (Task 4 step 3).
+This runs the "empty memory fields" check for execution agents too, now that the Zod schema no longer enforces them. The empty-fields return routes to `telemetryGaps` (Task 4 step 3).
 
 - [ ] **Step 5: Run tests**
 
@@ -581,7 +628,7 @@ Expected: PASS. Apply remaining migrations from Task 3's list for execution-agen
 
 - [ ] **Step 6: Remove the migration note**
 
-Delete the comment block added in Task 3 step 4.
+Delete the comment block added in Task 3 step 5.
 
 - [ ] **Step 7: Commit**
 
@@ -592,185 +639,7 @@ git commit -m "refactor(orchestrator): relax EXECUTION_SCHEMA memory fields to o
 
 ---
 
-## Task 6: Add telemetryExpectation to WorkerTypeConfig
-
-**Files:**
-- Modify: `workers/orchestrator/src/services/isolation/types.ts`
-- Create: `workers/orchestrator/src/services/isolation/__tests__/worker-types.test.ts`
-
-- [ ] **Step 1: Failing test**
-
-Create `workers/orchestrator/src/services/isolation/__tests__/worker-types.test.ts`:
-
-```ts
-import { describe, it, expect } from 'vitest';
-import { WORKER_TYPES } from '../types.js';
-
-describe('WORKER_TYPES telemetryExpectation', () => {
-  it('every worker type declares telemetryExpectation', () => {
-    for (const [name, config] of Object.entries(WORKER_TYPES)) {
-      expect(
-        config.telemetryExpectation,
-        `${name} missing telemetryExpectation`
-      ).toMatch(/^(required|optional)$/);
-    }
-  });
-
-  it('opus, sonnet, and auto are required', () => {
-    expect(WORKER_TYPES.opus.telemetryExpectation).toBe('required');
-    expect(WORKER_TYPES.sonnet.telemetryExpectation).toBe('required');
-    expect(WORKER_TYPES.auto.telemetryExpectation).toBe('required');
-  });
-
-  it('weaker models are optional', () => {
-    expect(WORKER_TYPES.glm.telemetryExpectation).toBe('optional');
-    expect(WORKER_TYPES.qwen.telemetryExpectation).toBe('optional');
-    expect(WORKER_TYPES.kimi.telemetryExpectation).toBe('optional');
-    expect(WORKER_TYPES.minimax.telemetryExpectation).toBe('optional');
-    expect(WORKER_TYPES['mimo-pro'].telemetryExpectation).toBe('optional');
-    expect(WORKER_TYPES['openrouter-free'].telemetryExpectation).toBe('optional');
-    expect(WORKER_TYPES.codex.telemetryExpectation).toBe('optional');
-    expect(WORKER_TYPES['codex-xhigh'].telemetryExpectation).toBe('optional');
-  });
-});
-```
-
-- [ ] **Step 2: Run to verify fails**
-
-```bash
-pnpm --filter @intexuraos/orchestrator test -- worker-types.test.ts
-```
-Expected: FAIL — property doesn't exist (TypeScript error).
-
-- [ ] **Step 3: Extend the interface**
-
-In `workers/orchestrator/src/services/isolation/types.ts`:
-
-```ts
-export interface WorkerTypeConfig {
-  runtime: WorkerRuntime;
-  apiBaseUrl: string;
-  apiKeyEnvVar?:
-    | 'ANTHROPIC_API_KEY'
-    | 'MINIMAX_API_KEY'
-    | 'MIMO_API_KEY'
-    | 'DASHSCOPE_API_KEY'
-    | 'OPENROUTER_API_KEY';
-  model?: string;
-  effort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh';
-  disableExperimentalBetas?: boolean;
-  /**
-   * Whether this worker tier is expected to emit the full memory-acknowledgment
-   * telemetry block. 'required' → missing telemetry triggers retry/terminal-fail
-   * (Opus/Sonnet-grade). 'optional' → missing telemetry is logged as a warning
-   * but does not block task completion (weaker/cheaper models).
-   */
-  telemetryExpectation: 'required' | 'optional';
-}
-```
-
-- [ ] **Step 4: Populate every entry**
-
-Replace the `WORKER_TYPES` object:
-
-```ts
-export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
-  auto: {
-    runtime: 'claude',
-    apiBaseUrl: 'https://api.anthropic.com',
-    apiKeyEnvVar: 'ANTHROPIC_API_KEY',
-    telemetryExpectation: 'required',
-  },
-  opus: {
-    runtime: 'claude',
-    apiBaseUrl: 'https://api.anthropic.com',
-    apiKeyEnvVar: 'ANTHROPIC_API_KEY',
-    model: 'opus',
-    effort: 'high',
-    telemetryExpectation: 'required',
-  },
-  sonnet: {
-    runtime: 'claude',
-    apiBaseUrl: 'https://api.anthropic.com',
-    apiKeyEnvVar: 'ANTHROPIC_API_KEY',
-    model: 'sonnet',
-    telemetryExpectation: 'required',
-  },
-  minimax: {
-    runtime: 'claude',
-    apiBaseUrl: 'https://api.minimax.io/anthropic',
-    apiKeyEnvVar: 'MINIMAX_API_KEY',
-    model: 'MiniMax-M2.7',
-    telemetryExpectation: 'optional',
-  },
-  'mimo-pro': {
-    runtime: 'claude',
-    apiBaseUrl: 'https://token-plan-sgp.xiaomimimo.com/anthropic',
-    apiKeyEnvVar: 'MIMO_API_KEY',
-    model: 'mimo-v2-pro',
-    telemetryExpectation: 'optional',
-  },
-  glm: {
-    runtime: 'claude',
-    apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
-    apiKeyEnvVar: 'DASHSCOPE_API_KEY',
-    model: 'glm-5',
-    telemetryExpectation: 'optional',
-  },
-  qwen: {
-    runtime: 'claude',
-    apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
-    apiKeyEnvVar: 'DASHSCOPE_API_KEY',
-    model: 'qwen3.5-plus',
-    telemetryExpectation: 'optional',
-  },
-  kimi: {
-    runtime: 'claude',
-    apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
-    apiKeyEnvVar: 'DASHSCOPE_API_KEY',
-    model: 'kimi-k2.5',
-    telemetryExpectation: 'optional',
-  },
-  codex: {
-    runtime: 'codex',
-    apiBaseUrl: 'https://api.openai.com',
-    telemetryExpectation: 'optional',
-  },
-  'codex-xhigh': {
-    runtime: 'codex',
-    apiBaseUrl: 'https://api.openai.com',
-    effort: 'xhigh',
-    telemetryExpectation: 'optional',
-  },
-  'openrouter-free': {
-    runtime: 'claude',
-    apiBaseUrl: 'https://openrouter.ai/api',
-    apiKeyEnvVar: 'OPENROUTER_API_KEY',
-    model: 'google/gemma-4-31b-it:free',
-    effort: 'high',
-    disableExperimentalBetas: true,
-    telemetryExpectation: 'optional',
-  },
-};
-```
-
-- [ ] **Step 5: Run tests**
-
-```bash
-pnpm --filter @intexuraos/orchestrator test -- worker-types.test.ts
-```
-Expected: PASS.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add workers/orchestrator/src/services/isolation/types.ts workers/orchestrator/src/services/isolation/__tests__/worker-types.test.ts
-git commit -m "feat(orchestrator): add telemetryExpectation per worker type"
-```
-
----
-
-## Task 7: Extend TaskVerificationRecord
+## Task 6: Extend TaskVerificationRecord
 
 **Files:**
 - Modify: `workers/orchestrator/src/types/task.ts` lines 13–19.
@@ -782,10 +651,8 @@ export interface TaskVerificationRecord {
   attempt: number;
   passed: boolean;
   missingFields: string[];
-  /** Memory-telemetry fields missing at this attempt. Separate from missingFields because they may be non-blocking for optional-tier workers. Absent in records written before the tiered-telemetry change. */
-  telemetryMissingFields?: string[];
-  /** True when this attempt was accepted despite missing telemetry (tier=optional). Absent or false otherwise. */
-  telemetryAccepted?: boolean;
+  /** Memory-telemetry gaps at this attempt. Observability-only — never caused this attempt to fail. Absent in records written before this change. */
+  telemetryGaps?: string[];
   verifierFailure: boolean;
   createdAt: string;
 }
@@ -796,24 +663,24 @@ export interface TaskVerificationRecord {
 ```bash
 pnpm --filter @intexuraos/orchestrator typecheck
 ```
-Expected: PASS (new fields are optional).
+Expected: PASS (new field is optional).
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add workers/orchestrator/src/types/task.ts
-git commit -m "feat(orchestrator): extend TaskVerificationRecord with telemetry fields"
+git commit -m "feat(orchestrator): extend TaskVerificationRecord with telemetryGaps"
 ```
 
 ---
 
-## Task 8: Extract `decideCompletionOutcome` pure helper
+## Task 7: Extract `decideCompletionOutcome` pure helper
 
 **Files:**
 - Create: `workers/orchestrator/src/services/completion-outcome.ts`
 - Create: `workers/orchestrator/src/services/__tests__/completion-outcome.test.ts`
 
-This is the unit-testable policy layer. Every retry/accept/fail decision goes through this function. The dispatcher (Task 9) just dispatches on the returned discriminated union.
+Worker-agnostic policy. No `tier` parameter, no `workerType`, no capability assumptions.
 
 - [ ] **Step 1: Failing test — define the contract**
 
@@ -830,7 +697,7 @@ function baseVerdict(
   return {
     passed: false,
     missingFields: [],
-    telemetryMissingFields: [],
+    telemetryGaps: [],
     verifierFailure: false,
     trace: { transcript: '', prompt: '', response: '' },
     ...overrides,
@@ -838,170 +705,32 @@ function baseVerdict(
 }
 
 describe('decideCompletionOutcome', () => {
-  describe('success paths', () => {
-    it('accept when verifier passed and exit code is 0', () => {
+  describe('verifier failure (all LLMs down)', () => {
+    it('retry-verifier when attempts remain', () => {
       const out = decideCompletionOutcome({
-        verdict: baseVerdict({
-          passed: true,
-          agentData: { agentType: 'review' } as never,
-        }),
-        tier: 'required',
-        exitCode: 0,
-      });
-      expect(out).toEqual({ kind: 'accept', telemetryAccepted: false });
-    });
-
-    it('accept when passed and exit code undefined', () => {
-      const out = decideCompletionOutcome({
-        verdict: baseVerdict({ passed: true, agentData: {} as never }),
-        tier: 'optional',
-        exitCode: undefined,
-      });
-      expect(out.kind).toBe('accept');
-    });
-  });
-
-  describe('tier=optional telemetry-only missing', () => {
-    it('accept and flag telemetryAccepted when only telemetry missing and exit code 0', () => {
-      const out = decideCompletionOutcome({
-        verdict: baseVerdict({
-          missingFields: [],
-          telemetryMissingFields: ['memory_acknowledgment'],
-          agentData: { agentType: 'review' } as never,
-        }),
-        tier: 'optional',
-        exitCode: 0,
-      });
-      expect(out).toEqual({ kind: 'accept', telemetryAccepted: true });
-    });
-
-    it('accept when exit code undefined (no worker exit info)', () => {
-      const out = decideCompletionOutcome({
-        verdict: baseVerdict({
-          telemetryMissingFields: ['memory_acknowledgment'],
-          agentData: {} as never,
-        }),
-        tier: 'optional',
-        exitCode: undefined,
-      });
-      expect(out.kind).toBe('accept');
-    });
-
-    it('fail-exit-override when exit code non-zero, even if verdict is telemetry-only', () => {
-      const out = decideCompletionOutcome({
-        verdict: baseVerdict({
-          telemetryMissingFields: ['memory_acknowledgment'],
-          agentData: {} as never,
-        }),
-        tier: 'optional',
-        exitCode: 1,
-      });
-      expect(out.kind).toBe('fail-exit-override');
-      if (out.kind === 'fail-exit-override') {
-        expect(out.exitCode).toBe(1);
-      }
-    });
-
-    it('does NOT accept if agentData missing (nothing to build a result from)', () => {
-      const out = decideCompletionOutcome({
-        verdict: baseVerdict({
-          telemetryMissingFields: ['memory_acknowledgment'],
-          agentData: undefined,
-        }),
-        tier: 'optional',
-        exitCode: 0,
-      });
-      expect(out.kind).not.toBe('accept');
-    });
-  });
-
-  describe('tier=required telemetry-only missing', () => {
-    it('retry with union missing fields when attempts remain', () => {
-      const out = decideCompletionOutcome({
-        verdict: baseVerdict({
-          telemetryMissingFields: ['memory_acknowledgment'],
-          agentData: {} as never,
-        }),
-        tier: 'required',
+        verdict: baseVerdict({ verifierFailure: true }),
         exitCode: 0,
         attempt: 1,
         maxAttempts: 3,
       });
-      expect(out.kind).toBe('retry');
-      if (out.kind === 'retry') {
-        expect(out.missingFields).toEqual(['memory_acknowledgment']);
-      }
+      expect(out.kind).toBe('retry-verifier');
     });
 
-    it('terminal failure when out of attempts', () => {
+    it('fail-verifier when out of attempts', () => {
       const out = decideCompletionOutcome({
-        verdict: baseVerdict({
-          telemetryMissingFields: ['memory_acknowledgment'],
-        }),
-        tier: 'required',
+        verdict: baseVerdict({ verifierFailure: true }),
         exitCode: 0,
         attempt: 3,
         maxAttempts: 3,
       });
-      expect(out.kind).toBe('fail');
-    });
-  });
-
-  describe('blocking missing (any tier)', () => {
-    it('retry when blocking present and attempts remain, tier=optional', () => {
-      const out = decideCompletionOutcome({
-        verdict: baseVerdict({
-          missingFields: ['gh_pr_url'],
-        }),
-        tier: 'optional',
-        exitCode: 0,
-        attempt: 1,
-        maxAttempts: 3,
-      });
-      expect(out.kind).toBe('retry');
-      if (out.kind === 'retry') {
-        expect(out.missingFields).toEqual(['gh_pr_url']);
-      }
-    });
-
-    it('retry with union when both blocking and telemetry present', () => {
-      const out = decideCompletionOutcome({
-        verdict: baseVerdict({
-          missingFields: ['gh_pr_url'],
-          telemetryMissingFields: ['memory_acknowledgment'],
-        }),
-        tier: 'required',
-        exitCode: 0,
-        attempt: 1,
-        maxAttempts: 3,
-      });
-      expect(out.kind).toBe('retry');
-      if (out.kind === 'retry') {
-        expect(out.missingFields).toEqual(['gh_pr_url', 'memory_acknowledgment']);
-      }
-    });
-
-    it('terminal fail when out of attempts and blocking missing', () => {
-      const out = decideCompletionOutcome({
-        verdict: baseVerdict({
-          missingFields: ['gh_pr_url'],
-        }),
-        tier: 'optional',
-        exitCode: 0,
-        attempt: 3,
-        maxAttempts: 3,
-      });
-      expect(out.kind).toBe('fail');
+      expect(out.kind).toBe('fail-verifier');
     });
   });
 
   describe('fatal exit codes', () => {
-    it('fail without retry when missingFields contains fatal_exit_code_137', () => {
+    it('fail without retry for fatal_exit_code_137', () => {
       const out = decideCompletionOutcome({
-        verdict: baseVerdict({
-          missingFields: ['fatal_exit_code_137'],
-        }),
-        tier: 'optional',
+        verdict: baseVerdict({ missingFields: ['fatal_exit_code_137'] }),
         exitCode: undefined,
         attempt: 1,
         maxAttempts: 3,
@@ -1014,51 +743,168 @@ describe('decideCompletionOutcome', () => {
 
     it('fail without retry for fatal_exit_code_139', () => {
       const out = decideCompletionOutcome({
-        verdict: baseVerdict({
-          missingFields: ['fatal_exit_code_139'],
-        }),
-        tier: 'required',
+        verdict: baseVerdict({ missingFields: ['fatal_exit_code_139'] }),
         exitCode: undefined,
       });
       expect(out.kind).toBe('fail-fatal-exit');
     });
   });
 
-  describe('verifier failure (all LLMs down)', () => {
-    it('retry-verifier when attempts remain', () => {
-      const out = decideCompletionOutcome({
-        verdict: baseVerdict({ verifierFailure: true }),
-        tier: 'required',
-        exitCode: 0,
-        attempt: 1,
-        maxAttempts: 3,
-      });
-      expect(out.kind).toBe('retry-verifier');
-    });
-
-    it('fail-verifier when out of attempts', () => {
-      const out = decideCompletionOutcome({
-        verdict: baseVerdict({ verifierFailure: true }),
-        tier: 'required',
-        exitCode: 0,
-        attempt: 3,
-        maxAttempts: 3,
-      });
-      expect(out.kind).toBe('fail-verifier');
-    });
-  });
-
   describe('exit-code override', () => {
-    it('fail-exit-override when verdict passed but exit code non-zero', () => {
+    it('fail-exit-override when exit code non-zero, regardless of verdict shape', () => {
       const out = decideCompletionOutcome({
         verdict: baseVerdict({ passed: true, agentData: {} as never }),
-        tier: 'required',
         exitCode: 1,
       });
       expect(out.kind).toBe('fail-exit-override');
       if (out.kind === 'fail-exit-override') {
         expect(out.exitCode).toBe(1);
       }
+    });
+
+    it('fail-exit-override even if verdict has agentData and no blocking missing', () => {
+      const out = decideCompletionOutcome({
+        verdict: baseVerdict({
+          telemetryGaps: ['memory_acknowledgment'],
+          agentData: {} as never,
+        }),
+        exitCode: 1,
+      });
+      expect(out.kind).toBe('fail-exit-override');
+    });
+
+    it('fail-exit-override takes precedence over retry when blocking missing AND non-zero exit', () => {
+      // Behavior change from v2: under the old flow, exit-code override ran INSIDE the
+      // verification.passed branch only. Now it fires unconditionally (rule 3 before
+      // blocking-retry rule 5) because a crashed container should not be retried for
+      // missing fields when the crash is the root cause.
+      const out = decideCompletionOutcome({
+        verdict: baseVerdict({ missingFields: ['gh_pr_url'] }),
+        exitCode: 1,
+        attempt: 1,
+        maxAttempts: 3,
+      });
+      expect(out.kind).toBe('fail-exit-override');
+    });
+
+    it('fatal exit takes precedence over exit-code override when both apply', () => {
+      // fatal_exit_code_137 is the strongest signal — terminal, no retry, no exit-code
+      // override path. Rule 2 must fire before rule 3.
+      const out = decideCompletionOutcome({
+        verdict: baseVerdict({ missingFields: ['fatal_exit_code_137'] }),
+        exitCode: 137,
+      });
+      expect(out.kind).toBe('fail-fatal-exit');
+    });
+  });
+
+  describe('accept paths', () => {
+    it('accept when verifier passed, exit 0', () => {
+      const out = decideCompletionOutcome({
+        verdict: baseVerdict({ passed: true, agentData: { agentType: 'review' } as never }),
+        exitCode: 0,
+      });
+      expect(out.kind).toBe('accept');
+      if (out.kind === 'accept') {
+        expect(out.telemetryGaps).toEqual([]);
+      }
+    });
+
+    it('accept when agentData present and no blocking missing, even if telemetry gaps exist', () => {
+      const out = decideCompletionOutcome({
+        verdict: baseVerdict({
+          missingFields: [],
+          telemetryGaps: ['memory_acknowledgment', 'memory_ids_unaccounted'],
+          agentData: { agentType: 'execution' } as never,
+        }),
+        exitCode: 0,
+      });
+      expect(out.kind).toBe('accept');
+      if (out.kind === 'accept') {
+        expect(out.telemetryGaps).toEqual(['memory_acknowledgment', 'memory_ids_unaccounted']);
+      }
+    });
+
+    it('accept when exit code undefined and deliverable present', () => {
+      const out = decideCompletionOutcome({
+        verdict: baseVerdict({
+          telemetryGaps: ['memory_acknowledgment'],
+          agentData: {} as never,
+        }),
+        exitCode: undefined,
+      });
+      expect(out.kind).toBe('accept');
+    });
+  });
+
+  describe('blocking missing → retry or fail', () => {
+    it('retry when blocking present and attempts remain', () => {
+      const out = decideCompletionOutcome({
+        verdict: baseVerdict({ missingFields: ['gh_pr_url'] }),
+        exitCode: 0,
+        attempt: 1,
+        maxAttempts: 3,
+      });
+      expect(out.kind).toBe('retry');
+      if (out.kind === 'retry') {
+        expect(out.missingFields).toEqual(['gh_pr_url']);
+      }
+    });
+
+    it('retry prompt includes telemetry gaps alongside blocking when both present', () => {
+      const out = decideCompletionOutcome({
+        verdict: baseVerdict({
+          missingFields: ['gh_pr_url'],
+          telemetryGaps: ['memory_acknowledgment'],
+        }),
+        exitCode: 0,
+        attempt: 1,
+        maxAttempts: 3,
+      });
+      expect(out.kind).toBe('retry');
+      if (out.kind === 'retry') {
+        expect(out.missingFields).toEqual(['gh_pr_url', 'memory_acknowledgment']);
+      }
+    });
+
+    it('terminal fail when blocking missing and attempts exhausted', () => {
+      const out = decideCompletionOutcome({
+        verdict: baseVerdict({ missingFields: ['gh_pr_url'] }),
+        exitCode: 0,
+        attempt: 3,
+        maxAttempts: 3,
+      });
+      expect(out.kind).toBe('fail');
+    });
+  });
+
+  describe('telemetry-only never triggers retry or fail', () => {
+    it('does NOT retry when only telemetry gaps exist and agentData present', () => {
+      const out = decideCompletionOutcome({
+        verdict: baseVerdict({
+          telemetryGaps: ['memory_acknowledgment'],
+          agentData: {} as never,
+        }),
+        exitCode: 0,
+        attempt: 1,
+        maxAttempts: 3,
+      });
+      expect(out.kind).toBe('accept');
+    });
+
+    it('fails when telemetry gaps exist but no agentData (worker produced nothing parsable)', () => {
+      // This edge case: telemetry gaps set but no agentData — we have no deliverable.
+      // Retry, don't accept.
+      const out = decideCompletionOutcome({
+        verdict: baseVerdict({
+          telemetryGaps: ['memory_acknowledgment'],
+          agentData: undefined,
+        }),
+        exitCode: 0,
+        attempt: 1,
+        maxAttempts: 3,
+      });
+      expect(out.kind).toBe('retry');
     });
   });
 });
@@ -1078,11 +924,8 @@ Create `workers/orchestrator/src/services/completion-outcome.ts`:
 ```ts
 import type { CompletionVerifierVerdict } from './completion-verifier.js';
 
-export type TelemetryExpectation = 'required' | 'optional';
-
 export interface CompletionOutcomeInput {
   verdict: CompletionVerifierVerdict;
-  tier: TelemetryExpectation;
   /** Worker Docker exit code if known. undefined → no exit info. */
   exitCode: number | undefined;
   /** Current attempt (1-indexed). Defaults to 1 for decision-only tests. */
@@ -1092,7 +935,7 @@ export interface CompletionOutcomeInput {
 }
 
 export type CompletionOutcome =
-  | { kind: 'accept'; telemetryAccepted: boolean }
+  | { kind: 'accept'; telemetryGaps: string[] }
   | { kind: 'retry'; missingFields: string[] }
   | { kind: 'retry-verifier' }
   | { kind: 'fail'; missingFields: string[] }
@@ -1108,16 +951,18 @@ function findFatalExitField(missingFields: readonly string[]): string | undefine
 }
 
 /**
- * Pure policy function. Given a verdict, worker tier, and exit code, decides what the
- * dispatcher should do next. No side effects — the dispatcher reads the outcome and
- * performs the effect (retry / finalize / log).
+ * Pure, worker-agnostic policy function. Given a verdict and exit code, decides
+ * what the dispatcher should do next. No side effects — the dispatcher reads the
+ * outcome and performs the effect (retry / finalize / log). Worker identity does
+ * not enter the policy: telemetry gaps are observability only and never block
+ * acceptance when a deliverable (agentData) is present.
  */
 export function decideCompletionOutcome(input: CompletionOutcomeInput): CompletionOutcome {
-  const { verdict, tier, exitCode } = input;
+  const { verdict, exitCode } = input;
   const attempt = input.attempt ?? 1;
   const maxAttempts = input.maxAttempts ?? 3;
 
-  // 1. Verifier failure (all validation LLMs down) — retry verifier only, don't rerun worker.
+  // 1. Verifier failure (all validation LLMs down) — retry verifier, don't rerun worker.
   if (verdict.verifierFailure) {
     if (attempt < maxAttempts) {
       return { kind: 'retry-verifier' };
@@ -1131,30 +976,23 @@ export function decideCompletionOutcome(input: CompletionOutcomeInput): Completi
     return { kind: 'fail-fatal-exit', field: fatalField };
   }
 
-  // 3. Exit-code override: a non-zero exit overrides any claim of success.
-  //    Applies whether or not the verdict otherwise looks clean.
+  // 3. Non-zero exit code overrides any claim of success. A crashed container is a failure
+  //    regardless of verdict shape.
   if (exitCode !== undefined && exitCode !== 0) {
     return { kind: 'fail-exit-override', exitCode };
   }
 
-  // 4. Verifier passed and agentData present → accept.
-  if (verdict.passed && verdict.agentData !== undefined) {
-    return { kind: 'accept', telemetryAccepted: false };
+  // 4. Deliverable present AND no blocking fields missing → accept, regardless of telemetry.
+  //    Telemetry gaps are recorded for observability but never block.
+  if (verdict.missingFields.length === 0 && verdict.agentData !== undefined) {
+    return { kind: 'accept', telemetryGaps: [...verdict.telemetryGaps] };
   }
 
-  // 5. Only telemetry missing + tier=optional + agentData present → accept with flag.
-  const blockingMissing = verdict.missingFields;
-  const telemetryMissing = verdict.telemetryMissingFields;
-  const onlyTelemetry =
-    blockingMissing.length === 0 &&
-    telemetryMissing.length > 0 &&
-    verdict.agentData !== undefined;
-  if (onlyTelemetry && tier === 'optional') {
-    return { kind: 'accept', telemetryAccepted: true };
-  }
-
-  // 6. Anything missing (blocking, telemetry, or both) — retry or fail based on attempts.
-  const allMissing = [...blockingMissing, ...telemetryMissing];
+  // 5. Missing fields (blocking, telemetry, or both) and no deliverable → retry or fail.
+  //    The retry prompt receives the union so the worker gets guidance on everything that's
+  //    off. Telemetry missing alone WITHOUT agentData means the worker produced nothing we
+  //    can accept — still retry.
+  const allMissing = [...verdict.missingFields, ...verdict.telemetryGaps];
   if (allMissing.length > 0) {
     if (attempt < maxAttempts) {
       return { kind: 'retry', missingFields: allMissing };
@@ -1162,8 +1000,7 @@ export function decideCompletionOutcome(input: CompletionOutcomeInput): Completi
     return { kind: 'fail', missingFields: allMissing };
   }
 
-  // 7. Fallback: passed is false but no missing fields and no agentData (shouldn't happen with
-  //    a correct verifier; treat as a generic fail).
+  // 6. Fallback: no missing fields, no agentData (shouldn't happen with a correct verifier).
   return { kind: 'fail', missingFields: [] };
 }
 ```
@@ -1179,22 +1016,23 @@ Expected: PASS all cases.
 
 ```bash
 git add workers/orchestrator/src/services/completion-outcome.ts workers/orchestrator/src/services/__tests__/completion-outcome.test.ts
-git commit -m "feat(orchestrator): add decideCompletionOutcome pure policy helper"
+git commit -m "feat(orchestrator): add decideCompletionOutcome worker-agnostic policy helper"
 ```
 
 ---
 
-## Task 9: Wire `decideCompletionOutcome` into the dispatcher
+## Task 8: Wire `decideCompletionOutcome` into the dispatcher
 
 **Files:**
 - Modify: `workers/orchestrator/src/services/task-dispatcher.ts` lines 1432–1748 (the post-verification block in `handleTaskCompletion`).
 
-This is where the plan meets the dispatcher. The strategy: **keep all the side-effectful steps (logging, persistence, worker restart, webhooks) but replace the decision tree with a single `decideCompletionOutcome` call plus a switch on the outcome kind**. We deliberately do NOT add a new test harness here — the policy is covered by Task 8's unit tests.
+Thin wiring only. Policy is covered by Task 7's unit tests.
 
-- [ ] **Step 1: Add imports at the top of `task-dispatcher.ts`**
+- [ ] **Step 1: Add import**
+
+At the top of `task-dispatcher.ts`:
 
 ```ts
-import { WORKER_TYPES } from './isolation/types.js';
 import { decideCompletionOutcome, type CompletionOutcome } from './completion-outcome.js';
 ```
 
@@ -1217,10 +1055,10 @@ if (verification.missingFields.length > 0) {
     `Missing fields: ${verification.missingFields.join(' | ')}`
   );
 }
-if (verification.telemetryMissingFields.length > 0) {
+if (verification.telemetryGaps.length > 0) {
   this.appendOrchestratorTaskLog(
     task.taskId,
-    `Telemetry missing: ${verification.telemetryMissingFields.join(' | ')}`
+    `Telemetry gaps: ${verification.telemetryGaps.join(' | ')}`
   );
 }
 ```
@@ -1248,7 +1086,7 @@ task.verificationHistory = [
     attempt,
     passed: verification.passed,
     missingFields: verification.missingFields,
-    telemetryMissingFields: verification.telemetryMissingFields,
+    telemetryGaps: verification.telemetryGaps,
     verifierFailure: verification.verifierFailure,
     createdAt: new Date().toISOString(),
   },
@@ -1257,7 +1095,7 @@ task.verificationHistory = [
 
 - [ ] **Step 4: Update the second verificationHistory push at line ~1510**
 
-Inside the `if (verification.verifierFailure)` block, the retry-verifier path. Locate:
+Inside the `if (verification.verifierFailure)` block (retry-verifier path):
 ```ts
 task.verificationHistory = [
   ...(task.verificationHistory ?? []),
@@ -1265,20 +1103,7 @@ task.verificationHistory = [
     attempt: attempt + 1,
     passed: retryVerification.passed,
     missingFields: retryVerification.missingFields,
-    verifierFailure: retryVerification.verifierFailure,
-    createdAt: new Date().toISOString(),
-  },
-];
-```
-Replace with:
-```ts
-task.verificationHistory = [
-  ...(task.verificationHistory ?? []),
-  {
-    attempt: attempt + 1,
-    passed: retryVerification.passed,
-    missingFields: retryVerification.missingFields,
-    telemetryMissingFields: retryVerification.telemetryMissingFields,
+    telemetryGaps: retryVerification.telemetryGaps,
     verifierFailure: retryVerification.verifierFailure,
     createdAt: new Date().toISOString(),
   },
@@ -1290,10 +1115,8 @@ task.verificationHistory = [
 The large block spanning `if (verification.verifierFailure) { ... }` through the terminal-failure block is the decision tree. Replace it with a call to `decideCompletionOutcome` and a switch on the kind. Paste the following **right after** the updated first `task.verificationHistory = [...]` block (step 3 above):
 
 ```ts
-const tier = WORKER_TYPES[task.workerType].telemetryExpectation;
 const outcome: CompletionOutcome = decideCompletionOutcome({
   verdict: verification,
-  tier,
   exitCode,
   attempt,
   maxAttempts,
@@ -1301,30 +1124,19 @@ const outcome: CompletionOutcome = decideCompletionOutcome({
 
 switch (outcome.kind) {
   case 'accept': {
-    // Non-zero exit-code override is handled by decideCompletionOutcome (fail-exit-override).
-    // By the time we reach 'accept', exit code is 0 or undefined.
-
-    if (outcome.telemetryAccepted) {
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Telemetry incomplete but accepted (worker=${task.workerType} tier=optional): ${verification.telemetryMissingFields.join(', ')}`
-      );
+    if (outcome.telemetryGaps.length > 0) {
       this.logger.warn(
         {
           taskId: task.taskId,
           attempt,
           workerType: task.workerType,
-          telemetryMissingFields: verification.telemetryMissingFields,
+          telemetryGaps: outcome.telemetryGaps,
         },
-        'Accepting task despite missing telemetry (optional tier)'
+        'Task accepted with telemetry gaps (observability-only)'
       );
-      const last = task.verificationHistory?.at(-1);
-      if (last !== undefined) {
-        last.telemetryAccepted = true;
-      }
     }
 
-    // Pending messages delivery — original logic from line 1578 block.
+    // Pending messages delivery (original logic from line 1578 block).
     /* v8 ignore start -- upstream: pending messages delivery path requires sendMessage called on a completing task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
     const pendingQueue = this.pendingMessages.get(task.taskId);
     if (pendingQueue !== undefined && pendingQueue.length > 0) {
@@ -1362,33 +1174,24 @@ switch (outcome.kind) {
 
     this.appendOrchestratorTaskLog(
       task.taskId,
-      outcome.telemetryAccepted
-        ? 'Completion accepted (telemetry incomplete, tier=optional)'
+      outcome.telemetryGaps.length > 0
+        ? `Completion accepted (telemetry gaps: ${outcome.telemetryGaps.join(', ')})`
         : 'Completion verification passed'
     );
     await this.flushTaskLogs(task.taskId);
     await this.collectTurnMetrics(task, attempt);
     const finalResult = this.buildResultFromVerification(task, result, verification);
 
-    // Compliance validation: only for fully-passing execution tasks. Tier=optional accepted
-    // tasks skip compliance because weak models that skipped telemetry will also have skipped
-    // superpowers usage — running compliance would produce false failures.
+    // Compliance validation: unchanged — runs for every successful execution task. We no
+    // longer fail tasks for missing telemetry, so every task reaching here has produced
+    // a valid deliverable and should be compliance-checked normally.
     /* v8 ignore start -- source-map: void fire-and-forget compliance validation branches misattributed by v8; detached promise created by void expression not tracked by coverage instrumentation @preserve */
     let complianceInput: ComplianceValidationInput | undefined;
-    if (
-      !outcome.telemetryAccepted &&
-      completionAgentType === 'execution' &&
-      this.agentComplianceValidator !== undefined
-    ) {
+    if (completionAgentType === 'execution' && this.agentComplianceValidator !== undefined) {
       complianceInput = await this.prepareComplianceValidationInput(
         task,
         finalResult,
         verification
-      );
-    } else if (outcome.telemetryAccepted && completionAgentType === 'execution') {
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        'Skipping compliance validation for tier=optional accepted execution task'
       );
     }
 
@@ -1426,7 +1229,7 @@ switch (outcome.kind) {
         attempt: attempt + 1,
         passed: retryVerification.passed,
         missingFields: retryVerification.missingFields,
-        telemetryMissingFields: retryVerification.telemetryMissingFields,
+        telemetryGaps: retryVerification.telemetryGaps,
         verifierFailure: retryVerification.verifierFailure,
         createdAt: new Date().toISOString(),
       },
@@ -1441,8 +1244,6 @@ switch (outcome.kind) {
       await this.finalizeTaskWithResult(task, completionAgentType, finalResult);
       return;
     }
-    // Fall through to fail-verifier handling by re-deciding with the new verdict.
-    // Simpler: fail directly since we've exhausted verifier retry.
     const error: TaskError = {
       code: 'TASK_COMPLETION_VERIFIER_FAILED',
       message: 'Completion verifier unavailable (all validation models failed)',
@@ -1622,21 +1423,21 @@ switch (outcome.kind) {
 }
 ```
 
-After pasting, **delete** the entire old decision block — everything from the old `if (verification.verifierFailure) { ... }` through the old terminal-failure block (former lines 1491–1748 approximately). The switch now handles every case.
+After pasting, **delete** the entire old decision block — everything from the old `if (verification.verifierFailure) { ... }` through the old terminal-failure block (former lines 1491–1748 approximately). The switch handles every case.
 
 - [ ] **Step 6: Typecheck**
 
 ```bash
 pnpm --filter @intexuraos/orchestrator typecheck
 ```
-Expected: PASS. Fix any imports or unused variables. In particular, `hasFatalExitCodeField` is no longer called here — remove the import if it becomes unused (check with `rg -n "hasFatalExitCodeField" workers/orchestrator/src/services/task-dispatcher.ts`).
+Expected: PASS. Fix any imports or unused variables. `hasFatalExitCodeField` is no longer called here — remove the import if it becomes unused.
 
 - [ ] **Step 7: Run the full orchestrator test suite**
 
 ```bash
 pnpm --filter @intexuraos/orchestrator test
 ```
-Expected: all tests pass. If the existing `task-dispatcher.test.ts` tests break (they test `buildMissingFieldsPrompt` only, so unlikely), debug and fix per test.
+Expected: all tests pass.
 
 - [ ] **Step 8: Commit**
 
@@ -1647,53 +1448,54 @@ git commit -m "refactor(orchestrator): dispatch completion decisions through dec
 
 ---
 
-## Task 10: Documentation
+## Task 9: Documentation
 
 **Files:**
-- Create: `.claude/reference/orchestrator-completion-tiers.md`
+- Create: `.claude/reference/orchestrator-completion-policy.md`
 
 - [ ] **Step 1: Write the reference note**
 
-Create `.claude/reference/orchestrator-completion-tiers.md`:
-
 ```markdown
-# Orchestrator Completion Verification — Tiered Telemetry
+# Orchestrator Completion Verification — Policy
 
 The orchestrator's `CompletionVerifier` splits missing-field failures into two categories:
 
-- **Blocking (`missingFields`)** — deliverable contract fields (e.g. `gh_pr_url`, `review_comments_posted`, `tracking_comment_id`). Missing these always fails the task regardless of worker.
-- **Telemetry (`telemetryMissingFields`)** — memory-acknowledgment fields (`memory_acknowledgment`, `memory_ids_*`, `memory_usage_summary`). These exist to measure memory-effectiveness; their absence should not fail an otherwise-valid task when the worker is known to be weaker.
+- **Blocking (`missingFields`)** — deliverable contract fields (e.g. `gh_pr_url`, `review_comments_posted`, `tracking_comment_id`). Missing these triggers retry (up to 3 attempts) then terminal failure.
+- **Telemetry gaps (`telemetryGaps`)** — memory-acknowledgment fields (`memory_acknowledgment`, `memory_ids_*`, `memory_usage_summary`). These exist to measure memory-effectiveness. They are **observability data only** — never block task completion.
 
-Each worker type in `workers/orchestrator/src/services/isolation/types.ts:WORKER_TYPES` declares `telemetryExpectation`:
+### Policy is worker-agnostic
 
-| Tier       | Workers                                                                                 | Behavior on telemetry-only failure                                                             |
-| ---------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `required` | `auto`, `opus`, `sonnet`                                                                | Retry with full missing-fields prompt. Terminal fail after 3 attempts.                         |
-| `optional` | `glm`, `qwen`, `kimi`, `minimax`, `mimo-pro`, `codex`, `codex-xhigh`, `openrouter-free` | Accept as completed with a `warn` log line. `verificationHistory[n].telemetryAccepted = true`. |
+The retry/accept/fail decision lives in `workers/orchestrator/src/services/completion-outcome.ts:decideCompletionOutcome`. It takes the verdict, exit code, and attempt counters — **not** the worker type. Any worker that produced a valid deliverable (`agentData` present, no blocking fields missing) is accepted, regardless of which LLM ran.
 
-### Policy helper
+Rationale: telemetry gaps arise from many causes — model capability, orchestrator-side issues (premature verifier runs on partial output), session restarts, prompt drift. None of these reflect on whether the worker produced its deliverable. Treating telemetry as a blocking requirement means tasks fail for reasons unrelated to their actual outcome.
 
-All retry/accept/fail decisions flow through `decideCompletionOutcome(verdict, tier, exitCode)` in `workers/orchestrator/src/services/completion-outcome.ts`. This is a pure function — test it in `completion-outcome.test.ts`, not in dispatcher tests.
+### Policy rules (evaluated in order)
 
-### Compliance validation
+1. `verdict.verifierFailure` (all validation LLMs down) → retry verifier / fail-verifier.
+2. `missingFields` contains a `fatal_exit_code_*` → terminal fail.
+3. `exitCode !== 0 && exitCode !== undefined` → exit-code override, fail.
+4. `agentData` present AND `missingFields.length === 0` → **accept**, even if telemetry gaps exist.
+5. Any missing (blocking, telemetry, or both) AND no acceptable deliverable → retry with union (or fail when attempts exhausted).
 
-Compliance validation (superpowers-usage check for execution tasks at `task-dispatcher.ts:prepareComplianceValidationInput`) runs **only for tier=required accepted tasks**. Tier=optional accepted tasks skip compliance because weak models that skipped telemetry will also have skipped the disciplines compliance checks for, producing false failures.
+### Observability
 
-### Observability note
+Each `verificationHistory[n]` record persists:
+- `missingFields` — fields that triggered blocking behavior.
+- `telemetryGaps?` — memory fields missing at this attempt. Absent in pre-change records.
 
-Tier=optional accepted tasks emit empty/missing `execution_memory_ids_used` etc. in their `TaskResult`. Downstream memory-effectiveness scoring may read these as "zero memories used" — indistinguishable from "worker rejected all memories." Filed as follow-up tech debt; not addressed in this change.
+Downstream memory-effectiveness scoring can distinguish "worker actively rejected all memories" (empty `memory_ids_used`, `telemetryGaps === []`) from "worker skipped telemetry" (empty `memory_ids_used`, `telemetryGaps` includes `memory_acknowledgment`). Filed as follow-up tech debt — current downstream conflates both cases.
 ```
 
 - [ ] **Step 2: Commit**
 
 ```bash
-git add .claude/reference/orchestrator-completion-tiers.md
-git commit -m "docs: add orchestrator completion tiers reference"
+git add .claude/reference/orchestrator-completion-policy.md
+git commit -m "docs: add orchestrator completion policy reference"
 ```
 
 ---
 
-## Task 11: Full verification
+## Task 10: Full verification
 
 **Files:**
 - None modified — this is verification.
@@ -1723,9 +1525,20 @@ Expected: PASS.
 
 Any coverage regression: add a test (preferred) or a `/* v8 ignore <category> -- <testing blocker reason> @preserve */`. Never edit `vitest.config.ts` exclusions.
 
+- [ ] **Step 5: Audit monitoring/alerting configs for "memory_acknowledgment" keys**
+
+The plan drops the "task failed with memory_acknowledgment missing" failure class. Verify no alerting rule depends on that message:
+
+```bash
+rg -n "memory_acknowledgment|memory_ids_unaccounted|memory_usage_summary" terraform/ .github/ .claude/ 2>&1 | rg -v "^docs/|^workers/orchestrator/src/"
+rg -n "TASK_COMPLETION_VERIFICATION_FAILED" terraform/ .github/ 2>&1
+```
+
+If either command returns a hit in a monitoring/alerting config (Dash0 alert rule, Sentry filter, GitHub workflow), update it to either (a) stop keying off the memory failure class, or (b) key off `verificationHistory[n].telemetryGaps` instead. If no hits: note "no monitoring dependency found" in the PR body.
+
 ---
 
-## Task 12: Pull request
+## Task 11: Pull request
 
 **Files:**
 - None modified.
@@ -1735,29 +1548,40 @@ Any coverage regression: add a test (preferred) or a `/* v8 ignore <category> --
 ```bash
 gh pr status
 ```
-Branch must be `feature/INT-<id>-<slug>` (never commit to `main` or `development`). Ask the user for the Linear issue ID before opening the PR — do not invent one.
+Branch must be `feature/INT-<id>-<slug>`. Never commit to `main` or `development`.
 
-- [ ] **Step 2: Open the PR** (replace `<INT-ID>` with the actual ID from the user)
+- [ ] **Step 2: Open the PR** (replace `<INT-ID>` with the actual ID)
 
 ```bash
-gh pr create --title "feat(orchestrator): tiered telemetry acceptance (<INT-ID>)" --body "$(cat <<'EOF'
+gh pr create --title "feat(orchestrator): decouple deliverable from telemetry in completion verification (<INT-ID>)" --body "$(cat <<'EOF'
 ## Summary
-- Split `CompletionVerifierVerdict.missingFields` into blocking (deliverable) vs `telemetryMissingFields` (memory acknowledgment).
-- Add `telemetryExpectation: 'required' | 'optional'` per worker type — `required` for opus/sonnet/auto (preserves existing behavior), `optional` for glm/qwen/kimi/minimax/mimo-pro/codex/openrouter-free.
-- Extract policy into pure `decideCompletionOutcome(verdict, tier, exitCode)` — dispatcher is now a thin switch over the outcome kind.
-- Dispatcher accepts a task as completed when only telemetry is missing and the worker's tier is `optional`, with `verificationHistory[n].telemetryAccepted = true`.
-- Tier=optional accepted execution tasks skip compliance validation (weak models skipping telemetry will also have skipped superpowers checks — compliance would produce false failures).
-- Tier=required behavior is preserved bit-for-bit: telemetry-only failures retry with the union (blocking + telemetry) passed to `buildMissingFieldsPrompt`.
+- Split `CompletionVerifierVerdict.missingFields` into blocking (deliverable) vs `telemetryGaps` (observability). Memory-acknowledgment fields now flow into `telemetryGaps`, never block task completion.
+- Extract policy into pure `decideCompletionOutcome(verdict, exitCode, attempt, maxAttempts)` — **worker-agnostic**. No `workerType` input, no capability assumptions, no per-model configuration. Policy is a single set of rules that applies uniformly to every worker.
+- Dispatcher accepts any task whose deliverable is intact (`agentData` present, no blocking fields missing) regardless of telemetry. Retry continues to fire for blocking missing fields; compliance validation runs unchanged for successful execution tasks.
+- `EXECUTION_SCHEMA` relaxed: memory fields become `.optional().default('')` — parity with every other schema.
 
 ## Why
-Weak models (glm-5 etc.) successfully complete review tasks (PR review posted, result populated) but fail the strict memory-acknowledgment block 3× and get marked `failed`. Example: task_1dbe9147-4164-4b0c-aaef-39aa90e1f433 posted a valid review, then failed after 3 attempts for missing `memory_acknowledgment`.
+Telemetry presence/absence doesn't reflect on whether the deliverable was produced. Worker identity shouldn't either. As LLMs evolve, hard-coded per-worker assumptions rot. This design generalizes by dropping those assumptions entirely.
+
+Motivating examples:
+- `task_1dbe9147-4164-4b0c-aaef-39aa90e1f433` (glm, review): posted review #4162575153 but failed for missing `memory_acknowledgment`. Now accepts.
+- `task_28f5349a-ab4e-4165-8598-c6b897d57531` (auto / Sonnet, execution): created PR #1906 with correct final block, but orchestrator closed the attempt window early and verifier ran on partial output. Now accepts (the deliverable — `gh_pr_url` — was in the partial output).
+
+## Behavior changes vs current
+1. Opus/Sonnet/auto tasks that skip the memory-ack ceremony now succeed (previously: 3-attempt retry + terminal fail).
+2. Exit-code override fires for any non-zero exit, not only inside the `verification.passed` branch. A worker that crashed AND produced no `gh_pr_url` now fails immediately with `TASK_EXIT_CODE_OVERRIDE` instead of retrying.
+3. Compliance validator posts PR comments on tasks that previously failed at the telemetry gate. Non-fatal; expect increased compliance PR-comment noise for weak-model execution tasks.
+
+No monitoring/alerting dependencies on the dropped failure class (verified via Task 10 Step 5 grep).
 
 ## Test plan
 - [ ] `pnpm --filter @intexuraos/orchestrator test` — all tests pass including new `completion-outcome.test.ts` suite
 - [ ] `pnpm run verify:workspace:tracked orchestrator`
 - [ ] `pnpm run ci:tracked`
-- [ ] Manual: dispatch a glm review task in dev that forgets memory ack → verify `status=completed` in Firestore `code_tasks` doc; verify `verificationHistory[n].telemetryAccepted=true`; verify orchestrator log shows "Telemetry incomplete but accepted".
-- [ ] Manual: dispatch an Opus task that forgets memory ack → verify existing 3-attempt retry behavior unchanged.
+- [ ] Manual: dispatch a glm review task that skips memory ack → `status=completed`, `verificationHistory[n].telemetryGaps` includes the gaps.
+- [ ] Manual: dispatch an Opus task that skips memory ack → also accepts (was previously a 3-attempt retry + terminal failure).
+- [ ] Manual: dispatch a task where the worker fails to produce `gh_pr_url` → still retries up to 3 attempts, still fails terminally.
+- [ ] Manual: dispatch a task that crashes with exit=1 without producing `gh_pr_url` → fails immediately with `TASK_EXIT_CODE_OVERRIDE`, does NOT retry.
 
 Fixes <INT-ID>
 EOF
@@ -1768,37 +1592,51 @@ EOF
 
 ## Self-Review Checklist (post-rewrite)
 
-1. **Spec coverage:**
-   - ✅ Split verification into two gates — Tasks 1, 4 (verdict + memory-validation routing).
-   - ✅ Per-worker-type `telemetryExpectation` — Task 6.
-   - ✅ Tier=required preserves current behavior — Task 8 unit tests cover telemetry-only retry (uses union). Task 9 wiring preserves all original side effects.
-   - ✅ Tier=optional accepts on telemetry-only — Task 8 tests `onlyTelemetry + tier=optional + exit=0 → accept`.
-   - ✅ Observability via `verificationHistory` — Tasks 7 + 9.
-   - ✅ Non-zero exit code override applies BEFORE tier=optional accept — Task 8 explicit test `fail-exit-override when exit code non-zero, even if verdict is telemetry-only`.
-   - ✅ Compliance validator intentionally skipped for tier=optional accepted execution — Task 9 step 5 + Task 10 docs.
-   - ✅ Fatal exit codes (137/139) route to blocking — Task 4 step 3 + Task 8 explicit test.
+1. **Design principle holds end-to-end:**
+   - ✅ Worker identity does not enter `decideCompletionOutcome` (no `tier`, no `workerType`).
+   - ✅ Telemetry gaps never block acceptance — only blocking deliverable fields do.
+   - ✅ No `WORKER_TYPES` config change — the plan is robust to LLM evolution by construction.
 
-2. **Placeholder scan:** All `<INT-ID>` placeholders are flagged with "ask the user" — acceptable. No TBD/TODO/"similar to Task N"/"handle edge cases" phrases.
+2. **Spec coverage:**
+   - ✅ Verdict split — Tasks 1, 4.
+   - ✅ Memory failures → telemetry bucket — Task 4.
+   - ✅ EXECUTION_SCHEMA parity — Task 5.
+   - ✅ Universal policy — Task 7 (no tier parameter).
+   - ✅ Observability via `verificationHistory.telemetryGaps` — Tasks 6, 8.
+   - ✅ Non-zero exit code override — Task 7 rule 3 + explicit test.
+   - ✅ Fatal exit codes — Task 4 step 3 + Task 7 explicit test.
+   - ✅ Compliance validation for execution agents unchanged.
 
-3. **Type consistency:**
-   - `CompletionVerifierVerdict.telemetryMissingFields` — defined Task 1, written by Task 4, read by Task 8/9.
-   - `TaskVerificationRecord.{telemetryMissingFields, telemetryAccepted}` — defined Task 7, written Task 9 steps 3/4/5.
-   - `WorkerTypeConfig.telemetryExpectation` — defined Task 6, read Task 9 step 5.
-   - `CompletionOutcome` discriminated union — defined Task 8, consumed Task 9 step 5 switch.
+3. **Placeholder scan:** `<INT-ID>` in Task 11 is flagged for user input. No TBD/TODO/"handle edge cases"/"similar to Task N".
+
+4. **Type consistency:**
+   - `CompletionVerifierVerdict.telemetryGaps` — defined Task 1, written Task 4, read Task 7/8.
+   - `TaskVerificationRecord.telemetryGaps` — defined Task 6, written Task 8 steps 3/4.
+   - `CompletionOutcome` discriminated union — defined Task 7, consumed Task 8 step 5 switch.
    - `isTelemetryField`, `partitionMissingFields` — defined Task 2, consumed Task 4 schema-parse-failure return.
 
-4. **TDD compliance:** Task 8 is strictly test-first (exhaustive unit tests drive the pure function). Tasks 1, 2, 5, 6 are test-first. Task 4 writes a failing test then updates 7 return sites as a single edit — acceptable because they're all the same mechanical shape-change. Task 9 is wiring only; the behavior is covered by Task 8 unit tests, so TDD-via-proxy.
+5. **TDD compliance:** Task 7 strictly test-first (exhaustive unit tests drive the pure function). Tasks 1, 2, 5 test-first. Task 4 writes failing test then updates 7 return sites (mechanical same-shape change). Task 8 is wiring only; behavior covered by Task 7 tests.
 
-5. **Breaking-test enumeration:** Task 3 dedicates a whole task to finding and listing tests that will break in Tasks 4–5. Eliminates "rediscover mid-task" risk.
+6. **Breaking-test enumeration:** Task 3 enumerates affected tests before Tasks 4–5 modify them.
 
-6. **Test harness:** Task 9 explicitly does NOT require a dispatcher test harness. Task 8 unit-tests the policy in isolation. This matches the current codebase (no dispatcher harness exists today).
+7. **Test harness:** No dispatcher harness needed. Task 7 unit-tests the policy in isolation, matches the current codebase.
 
-7. **Log-line consistency:** Task 9 step 2 updates the log at lines 1447–1452 to emit both `Missing fields:` and `Telemetry missing:` lines. The `retry` case in the switch logs `outcome.missingFields` (union), matching the error built in the `fail` case (also union). No mismatch.
+8. **Log-line consistency:** Task 8 step 2 updates log at lines 1447–1452 to emit both `Missing fields:` and `Telemetry gaps:` lines. Retry case logs union. Error in fail case uses union. No mismatch.
 
-8. **No accidental scope:** `handleResumedAfterSuccessCompletion` path at `task-dispatcher.ts:2037` is not modified — it runs before reaching the tiered logic. Non-goals section calls this out.
+9. **No accidental scope:** `handleResumedAfterSuccessCompletion` at `task-dispatcher.ts:2037` is not modified — runs before the tiered logic.
 
-9. **Webhook contract:** `TaskResult` and `TaskError` shapes unchanged. `verificationHistory` gains two optional fields — backward compatible. Webhook consumers that only read `status`/`result`/`error` continue to work.
+10. **Webhook contract:** `TaskResult` and `TaskError` shapes unchanged. `verificationHistory` gains one optional field (`telemetryGaps`) — backward compatible.
 
-10. **Coverage:** Task 8 is well-covered (12+ explicit cases). Task 9 adds some v8-ignore blocks on paths unchanged from today (queued-messages, upstream retry error paths). Task 11 step 4 catches any regression.
+11. **Compliance validator:** Runs for execution agents on every `accept` outcome (unchanged from current behavior). No skip branch needed because the plan no longer has two kinds of accept.
 
-11. **Docs:** Task 10 adds a reference note so future maintainers don't have to reverse-engineer the tier system.
+12. **Observability:** Every accepted task with telemetry gaps emits a `warn`-level log (`Task accepted with telemetry gaps (observability-only)`) and persists `telemetryGaps` to `verificationHistory`. No telemetry signal is silently discarded.
+
+13. **Compile-safety of Task 4:** `agentData` is referenced in the empty-memory-fields return (line 868) and the memoryValidation-failures return (line 906). The original declaration at line 878 is AFTER the first of these. Task 4's hoist step moves the declaration to just after the `if (!parseResult?.success)` block closes, ensuring `agentData` is in scope at both returns. Without this hoist, TypeScript fails compilation.
+
+14. **Exit-code override precedence test:** Explicitly covered by `fail-exit-override takes precedence over retry when blocking missing AND non-zero exit` in Task 7's test suite. Documents the behavior change from v2/current.
+
+15. **Fatal-exit-vs-exit-override precedence:** Explicitly covered by `fatal exit takes precedence over exit-code override when both apply` in Task 7's test suite. `fatal_exit_code_*` fields always win over exit-code override.
+
+16. **Monitoring audit:** Task 10 Step 5 greps `terraform/`, `.github/`, `.claude/` for dependencies on the dropped failure class. The PR body reports the result.
+
+17. **Behavior changes disclosed up-front:** Three explicit behavior-change entries in the Non-goals section document (a) Opus/Sonnet now accepting telemetry-only failures, (b) unconditional exit-code override, (c) increased compliance PR-comment noise. Each is covered by either a test, a doc reference, or both.
