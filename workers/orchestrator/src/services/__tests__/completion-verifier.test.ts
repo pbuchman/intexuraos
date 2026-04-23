@@ -3297,5 +3297,63 @@ describe('[INT-1461] verdict routing — memory validation → telemetry bucket'
     expect(verdict.missingFields).toEqual([]);
     expect(verdict.telemetryMissingFields).toContain('memory_acknowledgment');
     expect(verdict.passed).toBe(false);
+    // [INT-1461] agentData MUST flow through the memory-failure return sites so the
+    // downstream decideCompletionOutcome() tier=optional acceptance gate (which requires
+    // agentData !== undefined) can fire. Without this the whole tiered-telemetry feature
+    // is unreachable — see the regression that prompted this assertion.
+    expect(verdict.agentData).toBeDefined();
+    expect(verdict.agentData?.agentType).toBe('review');
+  });
+
+  it('populates agentData on detectEmptyMemoryFields failure so tier=optional acceptance can fire', async () => {
+    generateMock.mockResolvedValueOnce({
+      ok: true,
+      value: {
+        content: JSON.stringify({
+          gh_pr_url: 'https://github.com/org/repo/pull/42',
+          review_id: '123',
+          review_comments_posted: '2',
+          review_types: 'code_quality',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
+          summary: 'Reviewed the PR.',
+        }),
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
+      },
+    });
+    const verifier = createVerifier();
+    const transcript = Array.from({ length: 20 }, (_, i) => `[claude] line ${String(i + 1)}`).join(
+      '\n'
+    );
+    const verdict = await verifier.verify({
+      taskId: 't-empty-memory',
+      attempt: 1,
+      maxAttempts: 3,
+      agentType: 'review',
+      rawLogs: transcript,
+      executionMemoryContext: {
+        applicationId: 'app',
+        retrievalVersion: 'v1',
+        querySummary: 's',
+        matchedMemories: [
+          {
+            memoryId: 'mem_1',
+            title: 't',
+            memoryType: 'pitfall_pattern',
+            score: 0.9,
+            appliesWhen: 'x',
+            action: 'x',
+            avoid: 'x',
+            verification: 'x',
+          },
+        ],
+      },
+    });
+    expect(verdict.passed).toBe(false);
+    expect(verdict.missingFields).toEqual([]);
+    expect(verdict.telemetryMissingFields).toEqual(['memory_ids_used', 'memory_ids_rejected']);
+    expect(verdict.agentData?.agentType).toBe('review');
+    expect(verdict.agentData?.summary).toBe('Reviewed the PR.');
   });
 });

@@ -2507,6 +2507,115 @@ describe('TaskDispatcher', () => {
       expect(failedPayload?.error?.message).toContain('Execution agent reported task failed');
     });
 
+    it('[INT-1461] tier=optional worker with only telemetry missing → completed with telemetryAccepted=true', async () => {
+      // glm is declared telemetryExpectation='optional' in WORKER_TYPES. When the verifier
+      // reports passed=false ONLY because the memory-acknowledgment block is missing AND
+      // agentData is populated (i.e. the primary deliverable is valid), the dispatcher must
+      // finalize the task as completed (not retry, not fail) with telemetryAccepted=true.
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        telemetryMissingFields: ['memory_acknowledgment', 'memory_ids_unaccounted'],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'review',
+          gh_pr_url: 'https://github.com/org/repo/pull/99',
+          review_id: '321',
+          review_comments_posted: '5',
+          review_types: 'code_quality',
+          memory_ids_used: 'mem_x',
+          memory_ids_rejected: '',
+          memory_usage_summary: 'Used it.',
+          requirements_tracker_updated: '',
+          gh_actions_status: '',
+          needs_remediation: '0',
+          review_body: 'Looks good',
+          review_inline_comments: '',
+          summary: 'Review complete.',
+        },
+      });
+      const request: CreateTaskRequest = {
+        taskId: 'glm-tier-optional-accept',
+        workerType: 'glm',
+        prompt: 'Weak-worker review task',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['pr-comment'],
+        hasChildren: false,
+        agentType: 'review',
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('glm-tier-optional-accept');
+      expect(task?.status).toBe('completed');
+      expect(task?.verificationHistory?.at(-1)?.telemetryAccepted).toBe(true);
+      expect(task?.verificationHistory?.at(-1)?.telemetryMissingFields).toEqual([
+        'memory_acknowledgment',
+        'memory_ids_unaccounted',
+      ]);
+
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string } | undefined;
+        return p?.status === 'completed';
+      });
+      expect(sentCall).toBeDefined();
+    });
+
+    it('[INT-1461] tier=required worker with only telemetry missing → retries (not accepted)', async () => {
+      // auto is telemetryExpectation='required'. Same telemetry-only failure must retry, not accept.
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        telemetryMissingFields: ['memory_acknowledgment'],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'review',
+          gh_pr_url: 'https://github.com/org/repo/pull/99',
+          review_id: '321',
+          review_comments_posted: '5',
+          review_types: 'code_quality',
+          memory_ids_used: 'mem_x',
+          memory_ids_rejected: '',
+          memory_usage_summary: 'Used it.',
+          requirements_tracker_updated: '',
+          gh_actions_status: '',
+          needs_remediation: '0',
+          review_body: 'Looks good',
+          review_inline_comments: '',
+          summary: 'Review complete.',
+        },
+      });
+      const request: CreateTaskRequest = {
+        taskId: 'auto-tier-required-retry',
+        workerType: 'auto',
+        prompt: 'Strong-worker review task',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['pr-comment'],
+        hasChildren: false,
+        agentType: 'review',
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('auto-tier-required-retry');
+      // maxAttempts=1 in singleAttemptCompletionControl, so we finalize failed on the first
+      // attempt rather than retry — the point is that status is NOT 'completed'.
+      expect(task?.status).toBe('failed');
+      expect(task?.verificationHistory?.at(-1)?.telemetryAccepted).toBeUndefined();
+    });
+
     it('buildResultFromVerification returns base result when agentData is undefined', () => {
       const internal = agentDispatcher as unknown as {
         buildResultFromVerification: (
