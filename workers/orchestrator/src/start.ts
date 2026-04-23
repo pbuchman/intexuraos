@@ -9,7 +9,7 @@
  * them testable in unit tests.
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
@@ -30,14 +30,9 @@ import {
   buildOrchestratorServices,
   startCredentialRefreshLoop,
 } from './bootstrap/service-wiring.js';
+import { ensureDirectoryExists } from './bootstrap/fs-utils.js';
 
 const errorSerializers = { error: serializeError, err: serializeError };
-
-/* v8 ignore start -- module-init: bootstrap helper cannot be unit-tested without real filesystem; exercised indirectly via start.test.ts @preserve */
-function ensureDirectoryExists(path: string): void {
-  mkdirSync(path, { recursive: true });
-}
-/* v8 ignore stop @preserve */
 
 function buildOrchestratorConfig(
   env: BootstrapEnvConfig,

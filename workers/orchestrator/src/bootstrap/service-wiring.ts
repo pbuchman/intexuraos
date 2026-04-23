@@ -10,7 +10,6 @@
  */
 
 import { join } from 'node:path';
-import { mkdirSync } from 'node:fs';
 import type { Logger } from 'pino';
 import Docker from 'dockerode';
 
@@ -54,15 +53,12 @@ import {
 import type { BootstrapEnvConfig } from './env-config.js';
 import { logWorkerAuthStartupStatus } from './api-key-validator.js';
 import { readRepoGitConfig } from './git-identity.js';
+import { ensureDirectoryExists } from './fs-utils.js';
 
 const DOCKER_NETWORK_NAME = 'code-worker-net';
 const TOKEN_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
 const CREDENTIAL_RELOAD_INTERVAL_MS = 60_000;
 const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000;
-
-function ensureDirectoryExists(path: string): void {
-  mkdirSync(path, { recursive: true });
-}
 
 export interface WiringInputs {
   env: BootstrapEnvConfig;
