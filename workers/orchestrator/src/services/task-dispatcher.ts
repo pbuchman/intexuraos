@@ -81,6 +81,7 @@ import {
   MAX_INACTIVITY_RESTARTS,
 } from './task-dispatcher/retry-logic.js';
 import { classifyAttempt, type AttemptClassification } from './task-dispatcher/classify-attempt.js';
+import { buildRuntimeHardErrorMessage } from './task-dispatcher/error-messages.js';
 
 // Re-export module-level helpers for backward compatibility with existing imports.
 export const getTaskEventUrl = getTaskEventUrlFn;
@@ -1576,6 +1577,46 @@ export class TaskDispatcher {
 
     // Verification passed
     if (verification.passed && verification.agentData !== undefined) {
+      // Execution agent explicitly reported a failed outcome — treat as terminal
+      // runtime failure. The verifier successfully parsed the transcript and
+      // determined the task failed (e.g., rate-limited, exited mid-work), so
+      // surface that verdict instead of falling through to the generic paths.
+      if (
+        verification.agentData.agentType === 'execution' &&
+        verification.agentData.outcome === 'failed'
+      ) {
+        const runtimeName = this.getRuntimeDisplayName(task);
+        const claudeError = this.claudeErrors.get(task.taskId);
+        const failureReason = verification.agentData.failure_reason;
+        const runtimePrefix = buildRuntimeHardErrorMessage({
+          exitCode,
+          claudeError,
+          runtimeName,
+        });
+        const baseMessage =
+          runtimePrefix !== ''
+            ? `${runtimePrefix}; Execution agent reported task failed`
+            : 'Execution agent reported task failed';
+        const message =
+          failureReason !== '' ? `${baseMessage} (reason: ${failureReason})` : baseMessage;
+        const error: TaskError = {
+          code: 'TASK_RUNTIME_HARD_ERROR',
+          message,
+          remediation: { action: 'retry' },
+        };
+        this.appendOrchestratorTaskLog(
+          task.taskId,
+          `Execution agent reported failed outcome: ${error.message}`
+        );
+        await this.flushTaskLogs(task.taskId);
+        await this.collectTurnMetrics(task, attempt);
+        await this.finalizeTask(task, 'failed', {
+          ...(result !== undefined && { result }),
+          error,
+        });
+        return;
+      }
+
       // Non-zero exit code overrides verifier passed decision
       if (exitCode !== undefined && exitCode !== 0) {
         this.appendOrchestratorTaskLog(
@@ -1676,6 +1717,39 @@ export class TaskDispatcher {
         message: `Worker process killed by signal: ${fatalField}`,
         remediation: { action: 'retry' },
       };
+      await this.finalizeTask(task, 'failed', {
+        ...(result !== undefined && { result }),
+        error,
+      });
+      return;
+    }
+
+    // Runtime hard error: non-zero exit code + runtime-reported error message.
+    // This covers the incident case where the verifier rejects a transcript as
+    // schema-invalid, but the runtime already emitted a concrete hard failure
+    // (e.g. Claude rate limit). Surface the runtime reason instead of the
+    // generic completion-verification failure.
+    const claudeErrorForHardFailure = this.claudeErrors.get(task.taskId);
+    if (
+      typeof exitCode === 'number' &&
+      exitCode !== 0 &&
+      claudeErrorForHardFailure !== undefined &&
+      claudeErrorForHardFailure !== ''
+    ) {
+      const runtimeName = this.getRuntimeDisplayName(task);
+      const message = buildRuntimeHardErrorMessage({
+        exitCode,
+        claudeError: claudeErrorForHardFailure,
+        runtimeName,
+      });
+      const error: TaskError = {
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message,
+        remediation: { action: 'retry' },
+      };
+      this.appendOrchestratorTaskLog(task.taskId, `Runtime hard error: ${error.message}`);
+      await this.flushTaskLogs(task.taskId);
+      await this.collectTurnMetrics(task, attempt);
       await this.finalizeTask(task, 'failed', {
         ...(result !== undefined && { result }),
         error,
@@ -1974,12 +2048,7 @@ export class TaskDispatcher {
     if (hasHardError) {
       const error: TaskError = {
         code: 'TASK_RESUMED_HARD_ERROR',
-        message: [
-          ...(typeof exitCode === 'number' && exitCode !== 0
-            ? [`Non-zero exit code: ${String(exitCode)}`]
-            : []),
-          ...(claudeError !== undefined ? [`${runtimeName} error: ${claudeError}`] : []),
-        ].join('; '),
+        message: buildRuntimeHardErrorMessage({ exitCode, claudeError, runtimeName }),
         remediation: { action: 'retry' },
       };
 

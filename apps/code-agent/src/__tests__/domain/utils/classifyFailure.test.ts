@@ -19,6 +19,7 @@ describe('classifyFailure', () => {
     ['TASK_RESUMED_HARD_ERROR', 'Process exited with exit code: 137'],
     ['TASK_FATAL_EXIT_CODE', 'Worker process terminated with signal 137'],
     ['TASK_COMPLETION_VERIFICATION_FAILED', 'fatal_exit_code_137: container killed'],
+    ['TASK_RUNTIME_HARD_ERROR', 'Non-zero exit code: 137; Claude error: OOM killed'],
   ])('returns "retry" for exit-137 pattern in code "%s"', (code, message) => {
     expect(classifyFailure({ code, message })).toBe('retry' satisfies FailureVerdict);
   });
@@ -35,6 +36,45 @@ describe('classifyFailure', () => {
   it('returns "retry_after_cooloff" for 429 rate limit', () => {
     expect(classifyFailure({ code: 'TASK_RESUMED_HARD_ERROR', message: 'API returned 429 Too Many Requests' }))
       .toBe('retry_after_cooloff' satisfies FailureVerdict);
+  });
+
+  // INT-1457: TASK_RUNTIME_HARD_ERROR is the normal-path counterpart to
+  // TASK_RESUMED_HARD_ERROR. Rate-limit / 429 classification must be identical.
+  it('returns "retry_after_cooloff" for 429 in TASK_RUNTIME_HARD_ERROR', () => {
+    expect(
+      classifyFailure({
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: 'Non-zero exit code: 1; Claude error: API returned 429',
+      })
+    ).toBe('retry_after_cooloff' satisfies FailureVerdict);
+  });
+
+  it('returns "retry_after_cooloff" for literal "rate limited" in TASK_RUNTIME_HARD_ERROR', () => {
+    expect(
+      classifyFailure({
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: 'Non-zero exit code: 1; Claude error: Task failed: rate limited',
+      })
+    ).toBe('retry_after_cooloff' satisfies FailureVerdict);
+  });
+
+  it('returns "retry_after_cooloff" for literal "rate limited" in TASK_RESUMED_HARD_ERROR', () => {
+    expect(
+      classifyFailure({
+        code: 'TASK_RESUMED_HARD_ERROR',
+        message: 'Non-zero exit code: 1; Claude error: Task failed: rate limited',
+      })
+    ).toBe('retry_after_cooloff' satisfies FailureVerdict);
+  });
+
+  it('returns "retry" for TASK_RUNTIME_HARD_ERROR with plain transient message via remediation', () => {
+    expect(
+      classifyFailure({
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: 'Non-zero exit code: 1; Claude error: transient infra glitch',
+        remediation: { action: 'retry' },
+      })
+    ).toBe('retry' satisfies FailureVerdict);
   });
 
   // AI quality failures — ask the user's configured LLM

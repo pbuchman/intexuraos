@@ -52,13 +52,21 @@ export function classifyFailure(error: TaskError): FailureVerdict {
     return 'retry';
   }
 
-  // Container crash — retry if signal kill (OOM/SIGKILL = exit 137)
-  if (errorCode === 'TASK_RESUMED_HARD_ERROR' || errorCode === 'TASK_FATAL_EXIT_CODE') {
+  // Container crash — retry if signal kill (OOM/SIGKILL = exit 137).
+  // INT-1457: TASK_RUNTIME_HARD_ERROR is the normal-path counterpart to
+  // TASK_RESUMED_HARD_ERROR — classify identically.
+  if (
+    errorCode === 'TASK_RESUMED_HARD_ERROR' ||
+    errorCode === 'TASK_FATAL_EXIT_CODE' ||
+    errorCode === 'TASK_RUNTIME_HARD_ERROR'
+  ) {
     if (errorMessage.includes('137')) {
       return 'retry';
     }
-    // Rate limit — retry after cooloff (check AFTER 137 so 137+429 = retry)
-    if (errorMessage.includes('429')) {
+    // Rate limit — retry after cooloff (check AFTER 137 so 137+429 = retry).
+    // Claude runtime errors commonly say "Task failed: rate limited" without
+    // the 429 substring, so match either form.
+    if (/429|rate limit/i.test(errorMessage)) {
       return 'retry_after_cooloff';
     }
   }

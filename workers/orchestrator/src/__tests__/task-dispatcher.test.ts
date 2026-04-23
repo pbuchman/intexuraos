@@ -1851,6 +1851,7 @@ describe('TaskDispatcher', () => {
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/900',
+          failure_reason: '',
           memory_ids_used: 'mem_142,mem_155',
           memory_ids_rejected: 'mem_188',
           memory_usage_summary: 'Used route logging and coverage lessons.',
@@ -1916,6 +1917,7 @@ describe('TaskDispatcher', () => {
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'not used',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/100',
+          failure_reason: '',
           memory_ids_used: '',
           memory_ids_rejected: '',
           memory_usage_summary:
@@ -2001,13 +2003,16 @@ describe('TaskDispatcher', () => {
       const task = await agentDispatcher.getTask('claude-error-test');
       expect(task?.status).toBe('failed');
 
+      // INT-1457: Claude emitting is_error=true also sets exit code 1 via the
+      // log processor's attempt_failed event. Runtime hard-error branch now
+      // surfaces the runtime reason instead of generic verifier failure.
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
             status: 'failed',
             error: expect.objectContaining({
-              code: 'TASK_COMPLETION_VERIFICATION_FAILED',
-              message: 'Completion verification failed',
+              code: 'TASK_RUNTIME_HARD_ERROR',
+              message: expect.stringContaining('StructuredOutput validation error'),
             }),
           }),
         })
@@ -2261,6 +2266,231 @@ describe('TaskDispatcher', () => {
           }),
         })
       );
+    });
+
+    it('INT-1457: normal-path rate-limit runtime error + exit 1 → TASK_RUNTIME_HARD_ERROR', async () => {
+      // Verifier rejects transcript as schema-invalid (outcome missing),
+      // but runtime already emitted a concrete rate-limit error. The dispatcher
+      // should surface the runtime reason, not the generic verification failure.
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: ['outcome'],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      // Spy on checkForResult so the result-defined spread branch is covered.
+      const internalCheck = agentDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internalCheck, 'checkForResult').mockResolvedValue({
+        branch: 'task/rate-limit-runtime',
+      });
+      const request: CreateTaskRequest = {
+        taskId: 'rate-limit-runtime-test',
+        workerType: 'auto',
+        prompt: 'Test rate limit runtime failure',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Grab onLog callback and emit Claude rate-limit stream error.
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onLog).toBeDefined();
+      expect(onComplete).toBeDefined();
+      onLog?.('{"type":"result","is_error":true,"result":"Task failed: rate limited"}\n');
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('rate-limit-runtime-test');
+      expect(task?.status).toBe('failed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_RUNTIME_HARD_ERROR',
+              message: expect.stringContaining('Non-zero exit code: 1'),
+              remediation: expect.objectContaining({ action: 'retry' }),
+            }),
+          }),
+        })
+      );
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string } | undefined;
+        return p?.status === 'failed';
+      });
+      const failedPayload = sentCall?.[0]?.payload as { error?: { message?: string } } | undefined;
+      expect(failedPayload?.error?.message).toContain('rate limited');
+    });
+
+    it('INT-1457: normal-path generic runtime error + exit 1 → TASK_RUNTIME_HARD_ERROR', async () => {
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      const request: CreateTaskRequest = {
+        taskId: 'generic-runtime-test',
+        workerType: 'auto',
+        prompt: 'Test generic runtime error',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      onLog?.(
+        '{"type":"result","is_error":true,"result":"Task failed: something generic broke"}\n'
+      );
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_RUNTIME_HARD_ERROR',
+              message: expect.stringContaining('something generic broke'),
+              remediation: expect.objectContaining({ action: 'retry' }),
+            }),
+          }),
+        })
+      );
+    });
+
+    it('INT-1457: verifier passed + execution outcome=failed → TASK_RUNTIME_HARD_ERROR with failure_reason (result defined)', async () => {
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: true,
+        missingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'execution',
+          outcome: 'failed',
+          superpowers_subagent_driven_dev: 'not used',
+          superpowers_requesting_code_review: 'not used',
+          gh_pr_url: '',
+          failure_reason: 'rate_limited',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
+          summary: 'Task was interrupted due to a rate limit before completion.',
+        },
+      });
+      // Spy on checkForResult so the result-present branch is covered.
+      const internalCheck = agentDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internalCheck, 'checkForResult').mockResolvedValue({
+        branch: 'task/exec-failed',
+      });
+      const request: CreateTaskRequest = {
+        taskId: 'exec-failed-outcome-test',
+        workerType: 'auto',
+        prompt: 'Execution task with failed verdict',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        agentType: 'execution',
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('exec-failed-outcome-test');
+      expect(task?.status).toBe('failed');
+
+      expect(mockWebhookClient.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            status: 'failed',
+            error: expect.objectContaining({
+              code: 'TASK_RUNTIME_HARD_ERROR',
+              message: expect.stringContaining('reason: rate_limited'),
+              remediation: expect.objectContaining({ action: 'retry' }),
+            }),
+          }),
+        })
+      );
+    });
+
+    it('INT-1457: verifier passed + execution outcome=failed + exit 1 + claudeError → combined message', async () => {
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: true,
+        missingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+        agentData: {
+          agentType: 'execution',
+          outcome: 'failed',
+          superpowers_subagent_driven_dev: 'not used',
+          superpowers_requesting_code_review: 'not used',
+          gh_pr_url: '',
+          failure_reason: '',
+          memory_ids_used: '',
+          memory_ids_rejected: '',
+          memory_usage_summary: '',
+          summary: 'Task was interrupted.',
+        },
+      });
+      const request: CreateTaskRequest = {
+        taskId: 'exec-failed-combined-test',
+        workerType: 'auto',
+        prompt: 'Execution task with failed verdict and runtime error',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        agentType: 'execution',
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      onLog?.('{"type":"result","is_error":true,"result":"Task failed: rate limited"}\n');
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string } | undefined;
+        return p?.status === 'failed';
+      });
+      const failedPayload = sentCall?.[0]?.payload as
+        | { error?: { code?: string; message?: string } }
+        | undefined;
+      expect(failedPayload?.error?.code).toBe('TASK_RUNTIME_HARD_ERROR');
+      expect(failedPayload?.error?.message).toContain('Non-zero exit code: 1');
+      expect(failedPayload?.error?.message).toContain('rate limited');
+      expect(failedPayload?.error?.message).toContain('Execution agent reported task failed');
     });
 
     it('buildResultFromVerification returns base result when agentData is undefined', () => {
@@ -2642,13 +2872,15 @@ describe('TaskDispatcher', () => {
       const task = await headerDispatcher.getTask('docker-header-error');
       expect(task?.status).toBe('failed');
 
+      // INT-1457: is_error=true produces attempt_failed(exitCode=1, errorMessage).
+      // Runtime hard-error branch surfaces the runtime reason.
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
             status: 'failed',
             error: expect.objectContaining({
-              code: 'TASK_COMPLETION_VERIFICATION_FAILED',
-              message: 'Completion verification failed',
+              code: 'TASK_RUNTIME_HARD_ERROR',
+              message: expect.stringContaining('error_max_structured_output_retries'),
             }),
           }),
         })
@@ -5178,6 +5410,7 @@ describe('TaskDispatcher', () => {
         superpowers_subagent_driven_dev: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
+        failure_reason: '',
         memory_ids_used: 'mem_142',
         memory_ids_rejected: '',
         memory_usage_summary:
@@ -5300,6 +5533,7 @@ describe('TaskDispatcher', () => {
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
+          failure_reason: '',
           memory_ids_used: '',
           memory_ids_rejected: '',
           memory_usage_summary: '',
@@ -5362,6 +5596,7 @@ describe('TaskDispatcher', () => {
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
+          failure_reason: '',
           memory_ids_used: '',
           memory_ids_rejected: '',
           memory_usage_summary: '',
@@ -5607,6 +5842,7 @@ describe('TaskDispatcher', () => {
           superpowers_subagent_driven_dev: 'used',
           superpowers_requesting_code_review: 'used',
           gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
+          failure_reason: '',
           memory_ids_used: '',
           memory_ids_rejected: '',
           memory_usage_summary: '',

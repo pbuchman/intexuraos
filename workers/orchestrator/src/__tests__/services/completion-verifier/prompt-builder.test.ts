@@ -77,12 +77,13 @@ describe('prompt byte-pins', () => {
 
   it('buildExecutionPrompt pins length and boundary anchors', () => {
     const p = buildExecutionPrompt(T);
-    expect(p.length).toBe(3257);
+    expect(p.length).toBe(4218);
     expect(p.startsWith('You are a task-completion verifier for the Execution Agent.')).toBe(true);
     expect(p.endsWith(`Transcript (last 50 lines):\n${T}`)).toBe(true);
     expect(p).toContain('- gh_pr_url: the GitHub Pull Request URL');
     expect(p).toContain('- superpowers_subagent_driven_dev:');
     expect(p).toContain('- superpowers_requesting_code_review:');
+    expect(p).toContain('- failure_reason:');
   });
 
   it('buildPullRequestPrompt pins length and boundary anchors', () => {
