@@ -1,10 +1,5 @@
 import { Mutex } from 'async-mutex';
-import {
-  type Result,
-  type Logger,
-  getErrorMessage,
-  hasCodeTaskLabel,
-} from '@intexuraos/common-core';
+import { type Result, type Logger, getErrorMessage } from '@intexuraos/common-core';
 import type { OrchestratorConfig } from '../types/config.js';
 import { withTimeout } from '../with-timeout.js';
 import type { Task, TaskResult, TaskError } from '../types/task.js';
@@ -64,6 +59,11 @@ import {
   enrichResultForResumedTask as enrichResultForResumedTaskFn,
   checkForResult as checkForResultFn,
 } from './task-dispatcher/webhook-callbacks.js';
+import {
+  pickCompletionAgentType as pickCompletionAgentTypeFn,
+  pickAgentLabel as pickAgentLabelFn,
+  describeAgent as describeAgentFn,
+} from './task-dispatcher/lifecycle.js';
 import {
   clearTaskTimers as clearTaskTimersFn,
   TASK_TIMEOUT_WARNING_MS,
@@ -469,38 +469,8 @@ export class TaskDispatcher {
       const promptPreview =
         task.prompt.length > 500 ? task.prompt.slice(0, 500) + '…' : task.prompt;
       this.appendTaggedTaskLog(taskId, 'prompt', promptPreview);
-      const isPullRequestTask =
-        task.agentType === 'pull_request' ||
-        task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
-      /* v8 ignore start -- source-map: ternary branch mapping misattributed after bundling despite unit tests for all agents @preserve */
-      const agentLabel = isPullRequestTask
-        ? 'Pull Request Agent'
-        : task.agentType === 'review'
-          ? 'Review Agent'
-          : task.agentType === 'remediation'
-            ? 'Remediation Agent'
-            : task.agentType === 'execution'
-              ? 'Execution Agent'
-              : task.agentType === 'planning'
-                ? 'Planning Agent'
-                : task.agentType === 'ask_agent'
-                  ? 'Ask Agent'
-                  : hasCodeTaskLabel(task.linearIssueLabels)
-                    ? 'Execution Agent'
-                    : 'Planning Agent';
-      const agentDesc =
-        agentLabel === 'Pull Request Agent'
-          ? 'Pull Request Agent \u2014 respond to PR comment/review and push to existing PR branch'
-          : agentLabel === 'Review Agent'
-            ? 'Review Agent \u2014 read-only PR review, post review comments'
-            : agentLabel === 'Remediation Agent'
-              ? 'Remediation Agent \u2014 address review findings on the existing PR branch and decide if re-review is needed'
-              : agentLabel === 'Ask Agent'
-                ? 'Ask Agent \u2014 interactive code assistant, respond to user questions'
-                : agentLabel === 'Execution Agent'
-                  ? 'Execution Agent \u2014 implement autonomously, run CI, create PR'
-                  : 'Planning Agent \u2014 create planning artifacts only, no implementation coding';
-      /* v8 ignore stop @preserve */
+      const agentLabel = pickAgentLabelFn(task);
+      const agentDesc = describeAgentFn(agentLabel);
       this.appendTaggedTaskLog(taskId, 'instructions', `${agentLabel}: ${agentDesc}`);
       this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
     } catch (error) {
@@ -1249,26 +1219,7 @@ export class TaskDispatcher {
 
     const attempt = task.attemptCount ?? 1;
     const maxAttempts = task.maxAttempts ?? 5;
-    const isPullRequestTask =
-      task.agentType === 'pull_request' ||
-      task.linearIssueLabels.some((l) => l.trim().toLowerCase() === 'pr-comment');
-    /* v8 ignore start -- ts-type: nested ternary chain over discriminated union variants creates structural branches; exhaustive conditional narrowing @preserve */
-    const completionAgentType: CompletionAgentType = isPullRequestTask
-      ? 'pull_request'
-      : task.agentType === 'review'
-        ? 'review'
-        : task.agentType === 'remediation'
-          ? 'remediation'
-          : task.agentType === 'execution'
-            ? 'execution'
-            : task.agentType === 'planning'
-              ? 'planning'
-              : task.agentType === 'ask_agent'
-                ? 'ask_agent'
-                : hasCodeTaskLabel(task.linearIssueLabels)
-                  ? 'execution'
-                  : 'planning';
-    /* v8 ignore stop @preserve */
+    const completionAgentType: CompletionAgentType = pickCompletionAgentTypeFn(task);
     this.attemptCompletionSignals.delete(task.taskId);
 
     // ask_agent: skip structured completion verification — extract summary and finalize
