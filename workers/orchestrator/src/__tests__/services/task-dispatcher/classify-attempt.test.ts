@@ -77,9 +77,38 @@ describe('classifyAttempt', () => {
         logs: '',
         exitCode: 0,
         durationMs: 60_000,
-        result: { prUrl: 'https://github.com/org/repo/pull/1', commits: 1, ciFailed: false },
+        result: { prUrl: 'https://github.com/org/repo/pull/1' },
       })
     ).toEqual({ outcome: 'ran' });
+  });
+
+  it('does not short-circuit when result.prUrl is null — falls through to heuristics', () => {
+    const res = classifyAttempt({
+      logs: '',
+      exitCode: 0,
+      durationMs: 1_000,
+      result: { prUrl: null },
+    });
+    expect(res.outcome).toBe('infra_failed');
+    if (res.outcome !== 'infra_failed') throw new Error('type narrowing');
+    expect(res.subReason).toBe('duration_below_threshold');
+  });
+
+  it("does not short-circuit when result.prUrl is '' — falls through to heuristics", () => {
+    const res = classifyAttempt({
+      logs: '',
+      exitCode: 0,
+      durationMs: 1_000,
+      result: { prUrl: '' },
+    });
+    expect(res.outcome).toBe('infra_failed');
+    if (res.outcome !== 'infra_failed') throw new Error('type narrowing');
+    expect(res.subReason).toBe('duration_below_threshold');
+  });
+
+  it('returns ran when a tool_use stream-JSON event is present without any other Claude signals', () => {
+    const logs = '{"type":"tool_use","id":"abc","name":"Read","input":{}}';
+    expect(classifyAttempt({ logs, exitCode: 0, durationMs: 30_000 })).toEqual({ outcome: 'ran' });
   });
 
   it('firstErrorLine is truncated to 500 chars', () => {

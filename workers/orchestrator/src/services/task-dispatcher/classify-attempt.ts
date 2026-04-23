@@ -36,8 +36,6 @@ export interface ClassifyAttemptInput {
    */
   result?: {
     prUrl?: string | null | undefined; // @allow-undefined-type -- TaskResult.prUrl is optional/nullable
-    commits?: number;
-    ciFailed?: unknown;
   };
 }
 
