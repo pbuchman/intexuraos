@@ -9352,7 +9352,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
     });
 
-    it('scheduleTimeoutKill handles error in callback gracefully', async () => {
+    it('scheduleTimeoutKill logs destroy error and proceeds when destroyWorker rejects', async () => {
       vi.useFakeTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
       const killErrorState = createStatePersistence();
@@ -9391,8 +9391,56 @@ describe('TaskDispatcher', () => {
 
       expect(errorSpy).toHaveBeenCalledWith(
         { taskId: 'kill-error-test', error: expect.any(Error) },
-        'Error in timeout kill callback'
+        'Failed to destroy worker during timeout kill'
       );
+      const task = await killErrorDispatcher.getTask('kill-error-test');
+      expect(task?.status).toBe('interrupted');
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('scheduleTimeoutKill finalizes task when destroyWorker hangs indefinitely', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      const killHangState = createStatePersistence();
+      const killHangDispatcher = new TaskDispatcher(
+        mockConfig,
+        killHangState,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockStatusUpdateClient,
+        mockGitHubTokenService,
+        mockLogger,
+        mockIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const request: CreateTaskRequest = {
+        taskId: 'kill-destroy-hang-test',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await killHangDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.mocked(mockIsolationProvider.destroyWorker).mockImplementationOnce(
+        () => new Promise<void>(() => undefined)
+      );
+
+      // Advance past the 5-hour kill + withTimeout for destroyWorker
+      await vi.advanceTimersByTimeAsync(300 * 60 * 1000 + 1000);
+      await vi.advanceTimersByTimeAsync(31_000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const task = await killHangDispatcher.getTask('kill-destroy-hang-test');
+      expect(task?.status).toBe('interrupted');
 
       vi.useRealTimers();
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
@@ -9874,6 +9922,69 @@ describe('TaskDispatcher', () => {
         'Container stats at inactivity kill'
       );
       expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('stats-null-test');
+
+      warnSpy.mockRestore();
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('proceeds with inactivity restart when copyOut hangs indefinitely', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      vi.mocked(mockIsolationProvider.copyOut).mockImplementationOnce(
+        () => new Promise<void>(() => undefined)
+      );
+
+      const dispatcher = await triggerInactivityRestart('copyout-hang-test');
+      // Advance past the evidence-capture timeout so the withTimeout rejection fires
+      await vi.advanceTimersByTimeAsync(31_000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('copyout-hang-test');
+      const task = await dispatcher.getTask('copyout-hang-test');
+      expect(task?.inactivityRestartCount).toBe(1);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('proceeds with inactivity restart when statsSnapshot hangs indefinitely', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      vi.mocked(mockIsolationProvider.statsSnapshot).mockImplementationOnce(
+        () => new Promise(() => undefined)
+      );
+
+      const dispatcher = await triggerInactivityRestart('stats-hang-test');
+      await vi.advanceTimersByTimeAsync(31_000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mockIsolationProvider.destroyWorker).toHaveBeenCalledWith('stats-hang-test');
+      const task = await dispatcher.getTask('stats-hang-test');
+      expect(task?.inactivityRestartCount).toBe(1);
+
+      vi.useRealTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+    });
+
+    it('proceeds with inactivity restart when destroyWorker hangs indefinitely', async () => {
+      vi.useFakeTimers();
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(true);
+      vi.mocked(mockIsolationProvider.destroyWorker).mockImplementationOnce(
+        () => new Promise<void>(() => undefined)
+      );
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
+
+      const dispatcher = await triggerInactivityRestart('destroy-hang-test');
+      await vi.advanceTimersByTimeAsync(31_000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'destroy-hang-test' }),
+        'Failed to destroy worker for inactivity restart'
+      );
+      const task = await dispatcher.getTask('destroy-hang-test');
+      expect(task?.inactivityRestartCount).toBe(1);
 
       warnSpy.mockRestore();
       vi.useRealTimers();
