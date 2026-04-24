@@ -22,7 +22,7 @@ Use these evidence lines when judging whether retained Codex parity actually exe
 export const executionPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-execution',
   description: 'Execution agent system prompt for autonomous code task implementation',
-  version: '9.1.1',
+  version: '10.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
     const hasContinuationPr =
@@ -161,9 +161,9 @@ EXECUTION_AGENT_FINAL:
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
 - Review iterations: <number>
-- execution_memory_ids_used: <comma-separated list or "none">
-- execution_memory_ids_rejected: <comma-separated list or "none">
-- execution_memory_usage_summary: <brief note, or "none">
+- memory_ids_used: <comma-separated list or "none">
+- memory_ids_rejected: <comma-separated list or "none">
+- memory_usage_summary: <brief note, or "none">
 - superpowers_subagent_driven_dev_used: <0|1>
 - superpowers_requesting_code_review_used: <0|1>
 - trivial_task: <0|1>
