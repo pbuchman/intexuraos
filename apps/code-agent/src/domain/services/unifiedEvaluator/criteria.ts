@@ -16,6 +16,10 @@ import { dispatchAndRecord, recordDecision, recordLog, resolveUserId } from './r
 
 export const REMEDIATION_RECENCY_MS = 60 * 60 * 1000; // 60 minutes
 
+// Shared instance — CIFailureRule is stateless, so a single module-scoped instance
+// is reused across all check_suite evaluations (avoids per-call allocation).
+const ciFailureRule = new CIFailureRule();
+
 /**
  * Handle CIFailureRule for check_suite events.
  * Returns `true` if the event has been fully handled (facade should return);
@@ -32,7 +36,6 @@ export async function handleCheckSuiteCIFailure(
   startTime: number,
   logger: Logger,
 ): Promise<boolean> {
-  const ciFailureRule = new CIFailureRule();
   const ciRuleOutcome = ciFailureRule.evaluate(event);
   logger.info(
     { eventId: event.id, action: ciRuleOutcome.action, reason: ciRuleOutcome.reason },

@@ -12,14 +12,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ok, err, type Logger } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
-import type { GitHubPREvent } from '../../../../domain/models/gitHubPREvent.js';
 import type { WebhookRulesService } from '../../../../domain/services/gitHubWebhookRules.js';
-import type {
-  WebhookDispatchService,
-  CIFailureDispatchService,
-} from '../../../../domain/services/gitHubDispatchService.js';
-import type { EventDecisionRepository } from '../../../../domain/repositories/eventDecisionRepository.js';
-import type { GitHubEventLogEntryRepository } from '../../../../domain/repositories/gitHubEventLogEntryRepository.js';
+import type { CIFailureDispatchService } from '../../../../domain/services/gitHubDispatchService.js';
 import type { CodeTaskRepository } from '../../../../domain/repositories/codeTaskRepository.js';
 import type { UnifiedEvaluatorDeps } from '../../../../domain/services/unifiedEvaluator/types.js';
 import {
@@ -28,62 +22,16 @@ import {
   shouldSkipReviewForRemediation,
   REMEDIATION_RECENCY_MS,
 } from '../../../../domain/services/unifiedEvaluator/criteria.js';
+import { createDeps as createBaseDeps, createFakeEvent, createFakeLogger } from './_fixtures.js';
 
-function createFakeLogger(): Logger {
-  return { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
-}
-
-function createFakeEvent(overrides: Partial<GitHubPREvent> = {}): GitHubPREvent {
-  return {
-    id: 'evt-1',
-    auditEventId: 'audit-evt-1',
-    githubEventId: 1001,
-    deliveryId: null,
-    repository: 'intexuraos/intexuraos',
-    repositoryId: 100,
-    pullRequestNumber: 42,
-    pullRequestId: 200,
-    eventType: 'issue_comment',
-    action: 'created',
-    senderLogin: 'dev-user',
-    senderId: 1,
-    senderType: 'User',
-    prAuthorLogin: null,
-    title: 't',
-    body: 'b',
-    state: 'open',
-    isDraft: null,
-    baseBranch: null,
-    mergedAt: null,
-    createdAt: new Date(),
-    processedAt: new Date(),
-    payload: null,
-    ...overrides,
-  };
-}
-
+/** Criteria tests default to a dispatch outcome for `webhookRules.evaluate`. */
 function createDeps(overrides: Partial<UnifiedEvaluatorDeps> = {}): UnifiedEvaluatorDeps {
-  return {
+  return createBaseDeps({
     webhookRules: {
       evaluate: vi.fn().mockReturnValue({ action: 'dispatch', reason: 'ALL_RULES_PASSED' }),
     } as unknown as WebhookRulesService,
-    dispatchService: {
-      dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: true }),
-    } as unknown as WebhookDispatchService,
-    eventDecisionRepo: {
-      save: vi.fn().mockResolvedValue(ok({ id: 'ed_1' })),
-    } as unknown as EventDecisionRepository,
-    gitHubEventLogEntryRepo: {
-      complete: vi.fn().mockResolvedValue(ok({ id: 'audit-evt-1' })),
-      createPending: vi.fn(),
-      listRecent: vi.fn(),
-      findByIds: vi.fn(),
-    } as unknown as GitHubEventLogEntryRepository,
-    createReviewTask: vi.fn(),
-    allowedBots: new Set(['claude[bot]']),
-    automationLog: { record: vi.fn().mockResolvedValue(undefined) },
     ...overrides,
-  };
+  });
 }
 
 function ciFailureService(
