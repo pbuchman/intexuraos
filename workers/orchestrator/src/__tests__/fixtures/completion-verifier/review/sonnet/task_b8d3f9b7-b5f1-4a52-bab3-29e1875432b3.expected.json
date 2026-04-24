@@ -1,0 +1,28 @@
+{
+  "data": {
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1917",
+    "review_id": "4165841663",
+    "review_comments_posted": 2,
+    "review_types": [
+      "code_quality",
+      "architecture",
+      "test_quality"
+    ],
+    "requirements_tracker_updated": "yes",
+    "gh_actions_status": "all passed",
+    "needs_remediation": false,
+    "memory_ids_used": [
+      "mem_f1559458-c36f-499d-a02c-1cb8b7a5f141",
+      "mem_b3d69266-f1b1-4d7b-94e2-401f79e07fcc",
+      "mem_bd838570-5194-4f6f-ae63-b676b0f7dba9"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "All three memories applied — thin-handler pattern used to assess handler size and business-logic extraction (mem_f1), call-site completeness scan for dependency refactoring (mem_b3), and per-module unit test coverage for extracted utilities like workerSecretMasking.ts (mem_bd8).",
+    "summary": "* Reviewed PR #1917: split 1,177-line `workerSettingsRoutes.ts` into 3 sub-plugins + schemas + 2 use cases under `routes/worker-settings/` and `domain/`.\n  * All 11 HTTP endpoints preserved, plugin export contract unchanged, CI fully green (Tests 1-3/3, Coverage, Lint, Type Check, Build, E2E all pass).\n  * Main code quality finding: 401/500 error response schemas are duplicated verbatim across all 4 CRUD handlers in `setting-crud-routes.ts` (545 lines); body schemas were extracted to `schemas.ts` but response shapes were not — partial DRY improvement.\n  * Plan deviation: `api-key-routes.ts`/`.test.ts` not created (replaced by `worker-ops-routes.ts`/`.test.ts`); the base-branch source had no API key endpoints, so the issue plan spec was incorrect and the PR naming is more accurate.\n  * No blocking issues; 12/12 original requirements met; 0 findings require code changes."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "data": {
+    "outcome": "planned",
+    "superpowers_writing_plans_used": true,
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1422/fix-internal-server-error-when-grouping-events-by-prompt-type-and-date",
+    "complex_task": false,
+    "plan_doc": true,
+    "subtask_urls": [],
+    "plan_pr": "https://github.com/pbuchman/intexuraos/pull/1888",
+    "parallel_breakdown_proof": "",
+    "memory_ids_used": [],
+    "memory_ids_rejected": [
+      "mem_7fa6d409-f92f-4e74-839a-eec2fdae3a8e",
+      "mem_ed826434-d1be-42c5-b59d-1cd42d72ec2e",
+      "mem_e831093c-7238-4f3b-abe4-ac39ff833471"
+    ],
+    "memory_usage_summary": "No memories were applicable to this task — all 3 were rejected as irrelevant (they cover LLM fallback verification and cross-cutting LLM client signature migrations, whereas this bug is a missing `GROUP_KEY_EXTRACTORS` entry in the LLM usage query use case).",
+    "clarification_message": "",
+    "summary": "* Task: fix HTTP 500 returned by `POST /llm-usage/query` when user selects \"Group by → Prompt Type\" in the LLM Usage page.\n  * Root cause: `ALLOWED_GROUP_BY` in `apps/llm-usage-service/src/domain/models/usageQuery.ts:36` lists `'request.promptType'` but `GROUP_KEY_EXTRACTORS` in `queryUsage.ts:55-66` has no entry, so `GROUP_KEY_EXTRACTORS[field]!(agg)` throws at runtime because `DailyUsageAggregate` never carried a `promptType` dimension.\n  * Decision: PLAN-DOC — spans backend (llm-usage-service) and frontend (web app), no data migration or cross-service coordination needed; scope limited to removing the non-functional option, not adding the aggregate dimension.\n  * Artifacts: plan doc `docs/plans/INT-1422-fix-llm-usage-group-by-prompt-type.md` on branch `plan/int-1422-group-by-prompt-type`, planning PR https://github.com/pbuchman/intexuraos/pull/1888, Linear description rewritten (original archived as comment).\n  * Follow-up: actually supporting \"Group by Prompt Type\" requires extending `DailyUsageAggregate`, updating the aggregator, backfilling historical data, and re-adding the extractor — flagged as out-of-scope in the plan for a separate issue."
+  },
+  "missingRequired": [
+    "subtask_urls",
+    "parallel_breakdown_proof",
+    "clarification_message"
+  ],
+  "warnings": [
+    "field outcome was read from deprecated alias Outcome; rename the emitter",
+    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
+    "field complex_task was read from deprecated alias Complex task; rename the emitter",
+    "field plan_doc was read from deprecated alias Plan doc; rename the emitter",
+    "field subtask_urls was read from deprecated alias Subtask URLs; rename the emitter",
+    "field plan_pr was read from deprecated alias Plan PR; rename the emitter",
+    "field parallel_breakdown_proof was read from deprecated alias Parallel breakdown proof; rename the emitter",
+    "field clarification_message was read from deprecated alias Clarification message; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

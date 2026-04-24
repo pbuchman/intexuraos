@@ -1,0 +1,21 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1920",
+    "requires_re_review": true,
+    "memory_ids_used": [
+      "mem_f1559458-c36f-499d-a02c-1cb8b7a5f141",
+      "mem_b3d69266-f1b1-4d7b-94e2-401f79e07fcc",
+      "mem_982fbb41-34ed-4f10-939f-1ec250ebda53"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "Applied the thin-route-handler pattern by extracting /code/cancel inline logic into a cancelTask use case (20-line handler), and traced all call sites + dependency wiring (codeCancel.test.ts, split-sanity, type map) to ensure no stale references remained when introducing the new use case.",
+    "summary": "* Extracted `cancelTask` use case (`apps/code-agent/src/domain/usecases/cancelTask.ts`) and rewrote `/code/cancel` handler as thin delegation; added 11 unit tests covering every error branch + best-effort worker/status-mirror paths\n  * Added `resetServices()` to `afterEach` in `split-sanity.test.ts` so container state can't leak between test files\n  * Skipped 6 findings: 1 informational (acceptable suppression), 2 out-of-scope minor refactors on unmodified pre-existing code (archive + GET /code/tasks), 3 test-duplication requests already covered by pre-existing integration suites\n  * Full `pnpm run ci:tracked` and PR CI green on commit `b29c6fc3a`"
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field outcome was read from deprecated alias Outcome; rename the emitter",
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

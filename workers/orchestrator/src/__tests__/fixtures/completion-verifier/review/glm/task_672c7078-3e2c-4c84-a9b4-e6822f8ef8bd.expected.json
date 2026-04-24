@@ -1,0 +1,28 @@
+{
+  "data": {
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1921",
+    "review_id": "4165227303",
+    "review_comments_posted": 0,
+    "review_types": [
+      "code_quality",
+      "architecture",
+      "security"
+    ],
+    "requirements_tracker_updated": "yes",
+    "gh_actions_status": "pending — Tests (3/3) and Lint in progress",
+    "needs_remediation": false,
+    "memory_ids_used": [],
+    "memory_ids_rejected": [
+      "mem_38af51c0-cc01-4025-b236-59887db29639",
+      "mem_b5eda4c1-8f95-4ec8-8732-f769a543a9e8",
+      "mem_d372728e-7f78-48d7-8551-ef3c5e0f0166"
+    ],
+    "memory_usage_summary": "No memories were applicable to this task — all 3 were rejected as irrelevant (routing bug fixes and agent link validation do not apply to code refactoring extraction).",
+    "summary": "* Reviewed PR #1921 extracting 701-line GitHub webhook handler into processGitHubWebhook use case\n  * Route successfully reduced to 93 lines (<100 requirement met) with thin HTTP adapter pattern\n  * All 11 requirements verified as met: endpoint preserved, signature verification runs first, dedup behavior maintained\n  * One informational architectural concern: domain imports from routes layer (extractEventUrl/extractEventSummary) — non-blocking\n  * Security posture fully preserved: HMAC-SHA256 verification first, no secret exposure, proper error handling\n  * GH Actions: most checks passing, Tests (3/3) and Lint still pending"
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

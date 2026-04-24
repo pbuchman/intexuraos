@@ -189,7 +189,7 @@ export function coerceFields(
         if (
           field.name === 'pr' &&
           contract.marker === 'EXECUTION_AGENT_FINAL:' &&
-          (record.outcome ?? '').trim().toLowerCase() === 'failed'
+          (record['outcome'] ?? record['Outcome'] ?? '').trim().toLowerCase() === 'failed'
         ) {
           continue;
         }

@@ -1,0 +1,36 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1936",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1442",
+    "review_iterations": 2,
+    "memory_ids_used": [
+      "mem_f1559458-c36f-499d-a02c-1cb8b7a5f141"
+    ],
+    "memory_ids_rejected": [
+      "mem_1f7d0a83-aef8-4652-8418-32dcad36a7d5",
+      "mem_6aaf7125-8e46-48a4-90ae-69f019ce007d"
+    ],
+    "memory_usage_summary": "The thin-route-handler pattern informed the split — left githubAgent.ts as a thin orchestrator delegating to dispatchAgent (I/O + LLM invocation) and processResponse (validation + result construction), matching the pattern's \"extract use cases and utilities, keep the orchestrator minimal\" advice.",
+    "superpowers_subagent_driven_dev_used": true,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "implementer (general-purpose) — scope: TDD refactor + tests + commit; spec-reviewer (general-purpose) — scope: DoD verification; code-reviewer (superpowers:code-reviewer) — scope: architecture/type-safety/behavior-preservation review",
+    "skill_sequence_proof": "Invoked superpowers:subagent-driven-development first (implementer + spec reviewer dispatched), then superpowers:requesting-code-review (final code-reviewer), then addressed minor issues with a follow-up commit before opening the PR.",
+    "summary": "* Split 624-line `githubAgent.ts` into a 104-line orchestrator + `dispatchAgent.ts` (449 lines, LLM setup/invocation) + `processResponse.ts` (183 lines, triage validation) under new `githubAgent/` sibling directory.\n  * Public API (`evaluateEvent`, `evaluatePREvent`, `isGitHubAgentEvent` + types) preserved; no DI/services.ts/route changes; existing 68-test suite unchanged and passing.\n  * `DispatchOutcome` discriminated union with `Extract<...>` narrowing lets processResponse skip runtime guards; 12 pre-existing v8-ignore pragmas carried over verbatim with zero new ones.\n  * Added 41 new tests (28 dispatchAgent + 13 processResponse) covering valid dispatch, orchestrator-unavailable error-without-retry, success-response side effects, and failure-response paths.\n  * Code review returned zero Critical/Important issues; addressed minor export-visibility nits in a follow-up commit.\n  * CI green: `pnpm run ci:tracked` → ✅ 15,965 tests passed; PR opened at https://github.com/pbuchman/intexuraos/pull/1936."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field outcome was read from deprecated alias Outcome; rename the emitter",
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
+    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
+    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
+    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

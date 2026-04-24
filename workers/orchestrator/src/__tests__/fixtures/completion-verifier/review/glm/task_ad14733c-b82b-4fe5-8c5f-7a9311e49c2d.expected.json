@@ -1,0 +1,24 @@
+{
+  "data": {
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1929",
+    "review_id": "4168841318",
+    "review_comments_posted": 0,
+    "review_types": [
+      "code_quality",
+      "architecture",
+      "test_quality"
+    ],
+    "requirements_tracker_updated": "yes",
+    "gh_actions_status": "pending (Coverage Check and Lint in progress, all others passed)",
+    "needs_remediation": false,
+    "memory_ids_used": [],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "",
+    "summary": "* Reviewed PR #1929 for code_quality, architecture, and test_quality\n  * Refactoring extracts 730-line monolith into 6 handler modules with registry pattern\n  * All 10 requirements met: dispatcher reduced to 55 lines, handlers have unit tests, Open/Closed extensibility achieved\n  * Test coverage comprehensive with proper Result narrowing patterns; dispatcher routing tests in aggregate test file\n  * One plan discrepancy noted: `issue-handler.ts` → `issue-comment-handler.ts` (plan confused `issues` vs `issue_comment` events; implementation correctly preserves original behavior)"
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

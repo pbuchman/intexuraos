@@ -1,0 +1,36 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1896",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1427",
+    "review_iterations": 1,
+    "memory_ids_used": [
+      "mem_1e205393-b526-40c4-a036-3ad04b9db676",
+      "mem_cb2ac90c-5843-4509-9d69-ee47f962e3b2"
+    ],
+    "memory_ids_rejected": [
+      "mem_9c9b142f-a2e1-48c0-9b32-f6e0f0f45b5c"
+    ],
+    "memory_usage_summary": "Applied snapshot testing patterns to verify byte-identical prompt output across all 6 agent prompts + overlay, and updated the 2 existing snapshot/version assertion tests for the patch-bumped version numbers.",
+    "superpowers_subagent_driven_dev_used": true,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "implementer (scope: split system-prompt.ts into 8 prompts/ modules + shared helpers, create 7 snapshot+unit tests, patch-bump versions, update existing tests, verify ci:tracked); code-reviewer (scope: validate byte-identical split, dispatch logic preservation, test coverage, CLAUDE.md compliance)",
+    "skill_sequence_proof": "Invoked superpowers:subagent-driven-development first (dispatched general-purpose implementer that produced commit fdb427df2 with all files + green CI), then invoked superpowers:requesting-code-review (dispatched pr-review-toolkit:code-reviewer that returned \"APPROVED — zero issues\"), then pushed branch and created PR — in that exact order.",
+    "summary": "* Split `workers/orchestrator/src/services/system-prompt.ts` from 1263 → 66 lines by extracting 7 PromptBuilders + shared helpers into 8 modules under `services/prompts/`\n  * Public API (`buildSystemPrompt`, `SystemPromptParams`, all `*Prompt` exports) preserved via re-exports; added new `getPromptForAgent` registry helper\n  * Patch-bumped every moved PromptBuilder (planning, execution, pullRequest, review, remediation, askAgent, prReviewOverlay) to signal byte-identical relocation\n  * Added 7 per-agent tests under `__tests__/services/prompts/` with snapshot fixtures anchoring byte-identical output\n  * `pnpm run ci:tracked` green (15180 tests, prompt-versions valid, typecheck/lint/build/format clean); code review returned APPROVED — zero issues"
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field outcome was read from deprecated alias Outcome; rename the emitter",
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
+    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
+    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
+    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

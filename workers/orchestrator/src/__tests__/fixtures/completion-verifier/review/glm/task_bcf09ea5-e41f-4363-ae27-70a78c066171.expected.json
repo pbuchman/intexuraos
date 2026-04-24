@@ -1,0 +1,23 @@
+{
+  "data": {
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1890",
+    "review_id": "4144198645",
+    "review_comments_posted": 0,
+    "review_types": [
+      "code_quality",
+      "test_quality"
+    ],
+    "requirements_tracker_updated": "yes",
+    "gh_actions_status": "pending",
+    "needs_remediation": false,
+    "memory_ids_used": [],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "",
+    "summary": "* Reviewed PR #1890 fixing HTTP 500 crash when grouping LLM usage by prompt type\n  * All 4 requirements fully implemented: backend ALLOWED_GROUP_BY cleanup, frontend type/map/options cleanup, localStorage guard, regression test\n  * Code quality clean — minimal focused changes following established patterns with good TypeScript strict mode compliance\n  * Test quality thorough — regression test uses proper Result narrowing, specific assertions, clear naming with context\n  * CI checks still pending (Tests, Lint, E2E) — awaiting final results before merge recommendation"
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

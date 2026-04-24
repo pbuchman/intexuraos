@@ -1,0 +1,38 @@
+{
+  "data": {
+    "outcome": "planned",
+    "superpowers_writing_plans_used": true,
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1460/investigate-cause-of-failures-in-recent-code-tasks",
+    "complex_task": false,
+    "plan_doc": true,
+    "subtask_urls": [],
+    "plan_pr": "https://github.com/pbuchman/intexuraos/pull/1919",
+    "parallel_breakdown_proof": "",
+    "memory_ids_used": [
+      "mem_63ab692e-3837-4530-9d2f-fd403fd67242",
+      "mem_8356c7f4-b2c1-4e8a-9e17-07490d79396b"
+    ],
+    "memory_ids_rejected": [
+      "mem_23165d03-1f43-4ae1-8cfd-dcd4b647f0fb"
+    ],
+    "memory_usage_summary": "Memory [3] drove the PLAN-DOC classification (multi-point incident investigation with log evidence) and the enumeration of all 8 affected tasks with lifecycle evidence; memory [2] shaped the fix proposal to short-circuit on a successful TaskResult rather than let doomed classifications persist — the INT-1455 author is the same pattern owner and memory [1] (verifying an existing fix) did not apply because the task is about a new regression.",
+    "clarification_message": "",
+    "summary": "* Task asked to investigate the cause of the recent code-task failure spike and propose a fix plan.\n  * Outcome: PLAN-DOC — single orchestrator bug across 3 interconnected logic points, documented rather than split across services.\n  * 8 affected tasks identified, all with `WORKER_INFRA_FAILURE: empty_transcript` after PR #1913 merged 2026-04-23T17:44:16Z.\n  * Root cause: `classifyAttempt` scans `getWorkerLogs()` for `[claude]`/`[tool]` prefixes that are produced in-process and never written to the inspected source; tests passed only because fixtures injected the prefix.\n  * Artifacts produced: `docs/plans/INT-1460-investigation.md` (3-task TDD fix plan), Linear issue updated in place with original description archived as a comment, planning PR #1919 opened on `plan/int-1460-code-task-failures` targeting `development`."
+  },
+  "missingRequired": [
+    "subtask_urls",
+    "parallel_breakdown_proof",
+    "clarification_message"
+  ],
+  "warnings": [
+    "field outcome was read from deprecated alias Outcome; rename the emitter",
+    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
+    "field complex_task was read from deprecated alias Complex task; rename the emitter",
+    "field plan_doc was read from deprecated alias Plan doc; rename the emitter",
+    "field subtask_urls was read from deprecated alias Subtask URLs; rename the emitter",
+    "field plan_pr was read from deprecated alias Plan PR; rename the emitter",
+    "field parallel_breakdown_proof was read from deprecated alias Parallel breakdown proof; rename the emitter",
+    "field clarification_message was read from deprecated alias Clarification message; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

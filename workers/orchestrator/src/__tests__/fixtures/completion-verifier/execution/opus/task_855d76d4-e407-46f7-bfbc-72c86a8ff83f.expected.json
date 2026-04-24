@@ -1,0 +1,35 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1900",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1429",
+    "review_iterations": 1,
+    "memory_ids_used": [
+      "mem_f346abb4-8683-4e05-84cf-668c41ce9bf5",
+      "mem_f4abd45b-f483-41b5-9dae-6e24153b5b8f",
+      "mem_35bb24d1-50bf-4438-8a3e-b873af48c700"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "Memory 1 drove validating scope across orchestrator runtime + tests (grep/glob for all start.ts references, index.ts auto-invoke side-effect); Memory 2 prompted careful re-evaluation of old inline functions as they migrated to modules (no stale mocks left behind since tests are new); Memory 3 drove creation of dedicated unit test files per new bootstrap module with thorough branch coverage.",
+    "superpowers_subagent_driven_dev_used": true,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "superpowers:code-reviewer — scope: full bootstrap refactor quality + correctness review against INT-1429 acceptance criteria and project conventions",
+    "skill_sequence_proof": "Invoked `superpowers:subagent-driven-development` skill first (established task decomposition and TDD approach for the refactor), then `superpowers:requesting-code-review` skill second (dispatched code-reviewer subagent before PR creation; fed its feedback into follow-up commit that restored the PRECONDITION FAILED banner and deduped ensureDirectoryExists via new fs-utils.ts).",
+    "summary": "* Extracted 914-line `workers/orchestrator/src/start.ts` into focused bootstrap modules: env-config, gcp-validator, port-checker, api-key-validator, secret-manager + service-wiring, git-identity, fs-utils helpers; `start.ts` now 191 lines.\n  * All extracted modules throw `Error` instead of calling `process.exit()` so they are unit-testable; the top-level `index.ts` catch emits the preserved `❌ PRECONDITION FAILED:` banner to keep operator log greps working.\n  * Added dedicated unit test files for every bootstrap module plus `start.test.ts` that mocks all deps and verifies the full bootstrap invocation order; tested `fetchWithRetry` via dependency injection and `runCredentialRefreshTick` (extracted from the interval wrapper for testability).\n  * `pnpm run ci:tracked` passes on all 4 phases (Type & Lint, Tests, Static Validation, Build & Format); 1717 orchestrator tests and 15221 workspace tests green.\n  * Addressed code-reviewer feedback in a follow-up commit (restored PRECONDITION FAILED banner, deduped ensureDirectoryExists into `bootstrap/fs-utils.ts`); noted log-ordering shift of non-blocking `validateWorkerApiKeys` in the PR description."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field outcome was read from deprecated alias Outcome; rename the emitter",
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
+    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
+    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
+    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

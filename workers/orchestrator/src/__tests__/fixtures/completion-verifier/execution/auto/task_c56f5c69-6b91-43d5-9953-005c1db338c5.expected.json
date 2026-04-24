@@ -1,0 +1,35 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1928",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1461/introduce-tiered-telemetry-for-completion-verifier",
+    "review_iterations": 2,
+    "memory_ids_used": [
+      "mem_fe85bc13-208d-4be4-a6f2-c481b6c01e7c",
+      "mem_1e946fe4-37f2-4b3c-ab21-2cf00247a30e",
+      "mem_41cd06fc-e5d3-4f4e-8478-2e5c7607ce39"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "Memory [1] (tiered completion verification) directly mapped to the plan — implemented CompletionOutcome discriminated union and WorkerTypeConfig.telemetryExpectation; memory [2] (avoid success-only schemas) validated my instinct to keep the 'failed' outcome in EXECUTION_SCHEMA rather than stripping it per plan; memory [3] (deliverable-first verification) shaped the policy order (exit-code override, then deliverable accept, then telemetry-only accept).",
+    "superpowers_subagent_driven_dev_used": true,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "superpowers:code-reviewer dispatched twice (initial review → flagged C1 agentData-drop; re-review after fix → approved)",
+    "skill_sequence_proof": "superpowers:subagent-driven-development invoked at the start (guided the task structure and explicit subagent dispatching), then superpowers:requesting-code-review invoked twice post-implementation (first review caught the C1 bug about unreachable tier=optional acceptance; second review approved the fix).",
+    "summary": "* Split CompletionVerifierVerdict into blocking `missingFields` vs `telemetryMissingFields`; added `telemetryExpectation: 'required' | 'optional'` per worker type with auto/opus/sonnet=required and glm/qwen/kimi/minimax/mimo-pro/codex/codex-xhigh/openrouter-free=optional.\n  * Extracted retry/accept/fail policy into pure `decideCompletionOutcome` in `task-dispatcher/decide-outcome.ts` with 7-kind discriminated union; dispatcher is now a thin if-chain with all original side effects (pending-messages resume, compliance validation, INT-1457 runtime-hard-error) preserved.\n  * Code review caught a critical bug: `failVerdict()` was dropping `agentData` on memory-failure return sites, making tier=optional acceptance unreachable. Fixed by threading `agentData` through both return sites; added verifier unit tests + dispatcher integration tests (glm tier=optional → completed with telemetryAccepted=true; auto tier=required → failed).\n  * Relaxed EXECUTION_SCHEMA memory fields to optional-default-empty; preserved `outcome: 'failed'` + `failure_reason` (dispatcher depends on them for INT-1457 handling). CI green end-to-end (2,067 orchestrator tests, full static validation, 15,658 total tests across workspace)."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field outcome was read from deprecated alias Outcome; rename the emitter",
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
+    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
+    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
+    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

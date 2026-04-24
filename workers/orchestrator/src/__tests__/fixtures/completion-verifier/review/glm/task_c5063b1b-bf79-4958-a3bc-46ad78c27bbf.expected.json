@@ -1,0 +1,28 @@
+{
+  "data": {
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1917",
+    "review_id": "4164950084",
+    "review_comments_posted": 0,
+    "review_types": [
+      "code_quality",
+      "architecture",
+      "test_quality"
+    ],
+    "requirements_tracker_updated": "yes",
+    "gh_actions_status": "all passed",
+    "needs_remediation": false,
+    "memory_ids_used": [
+      "mem_f1559458-c36f-499d-a02c-1cb8b7a5f141",
+      "mem_b3d69266-f1b1-4d7b-94e2-401f79e07fcc",
+      "mem_bd838570-5194-4f6f-ae63-b676b0f7dba9"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "All three memories were applicable — Thin Route Handler Pattern validated the extraction approach, incomplete dependency refactoring memory checked for missed call sites (none found), and unit test coverage memory confirmed dedicated test files for extracted modules.",
+    "summary": "- Refactoring reduces workerSettingsRoutes.ts from 1177 → 37 lines, exceeding all requirements\n  - Architecture properly separates concerns: thin handlers, use cases, shared schemas\n  - Tests are thorough: 75 new tests, existing 49 unchanged, all CI checks passed\n  - Minor cosmetic inconsistency in v8 ignore placement noted but not blocking\n  - All 12 Definition of Done requirements verified as met"
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

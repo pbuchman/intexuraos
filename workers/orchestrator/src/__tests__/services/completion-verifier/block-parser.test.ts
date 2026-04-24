@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   locateFinalBlock,
@@ -37,7 +37,9 @@ describe('locateFinalBlock', () => {
   });
 
   it('rejects false-positive marker buried in a diff line (task_536a87b7)', () => {
-    const txt = readFixture('execution/opus/task_536a87b7-6565-4442-a446-392c33223bb0.txt');
+    const txt = readFixture(
+      'execution/opus/task_536a87b7-6565-4442-a446-392c33223bb0.negative.txt'
+    );
     const block = locateFinalBlock(txt, 'EXECUTION_AGENT_FINAL:');
     // Fixture captures a line containing `PULL_REQUEST_AGENT_FINAL:` inside a
     // test-file diff — it's not a real emitted block. Parser must reject.
@@ -254,5 +256,76 @@ describe('coerceFields', () => {
     };
     const { missingRequired } = coerceFields(record, AGENT_CONTRACTS.execution);
     expect(missingRequired).toContain('pr');
+  });
+});
+
+interface FixtureDescriptor {
+  agentType: keyof typeof AGENT_CONTRACTS;
+  workerType: string;
+  taskId: string;
+  txtPath: string;
+  expectedPath: string;
+}
+
+function discoverFixtures(): FixtureDescriptor[] {
+  const out: FixtureDescriptor[] = [];
+  const agentTypes = ['execution', 'planning', 'review', 'remediation', 'pull_request'] as const;
+  for (const agentType of agentTypes) {
+    const agentDir = join(FIXTURE_ROOT, agentType);
+    if (!existsSync(agentDir)) continue;
+    for (const workerType of readdirSync(agentDir)) {
+      const workerDir = join(agentDir, workerType);
+      for (const file of readdirSync(workerDir)) {
+        if (!file.endsWith('.txt')) continue;
+        // Skip negative fixtures (covered by dedicated tests below).
+        if (file.endsWith('.negative.txt')) continue;
+        const taskId = file.replace(/\.txt$/, '');
+        out.push({
+          agentType,
+          workerType,
+          taskId,
+          txtPath: join(workerDir, file),
+          expectedPath: join(workerDir, `${taskId}.expected.json`),
+        });
+      }
+    }
+  }
+  return out;
+}
+
+const REGEN = process.env.REGEN_FIXTURES === '1';
+
+describe('fixture golden-file parser replay', () => {
+  const fixtures = discoverFixtures();
+  it('discovers at least 100 fixtures (sanity)', () => {
+    expect(fixtures.length).toBeGreaterThan(100);
+  });
+
+  it.each(fixtures)(
+    '$agentType/$workerType/$taskId',
+    ({ agentType, txtPath, expectedPath }) => {
+      const contract = AGENT_CONTRACTS[agentType];
+      const transcript = readFileSync(txtPath, 'utf8');
+      const block = locateFinalBlock(transcript, contract.marker);
+      expect(block, `no block located in ${txtPath}`).not.toBeNull();
+      const record = parseKeyValues(block as string);
+      const { data, missingRequired, warnings } = coerceFields(record, contract);
+      const actual = { data, missingRequired, warnings };
+
+      if (REGEN || !existsSync(expectedPath)) {
+        writeFileSync(expectedPath, JSON.stringify(actual, null, 2) + '\n');
+      }
+      const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as typeof actual;
+      expect(actual).toEqual(expected);
+    }
+  );
+});
+
+describe('negative fixtures', () => {
+  it('negative fixture: task_536a87b7 has no real EXECUTION_AGENT_FINAL block', () => {
+    const txt = readFixture(
+      'execution/opus/task_536a87b7-6565-4442-a446-392c33223bb0.negative.txt'
+    );
+    expect(locateFinalBlock(txt, 'EXECUTION_AGENT_FINAL:')).toBeNull();
   });
 });

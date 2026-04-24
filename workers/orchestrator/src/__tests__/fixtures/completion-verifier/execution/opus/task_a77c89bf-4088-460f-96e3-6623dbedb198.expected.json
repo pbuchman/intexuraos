@@ -1,0 +1,34 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1897",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1425",
+    "review_iterations": 1,
+    "memory_ids_used": [
+      "mem_a26345d7-b1ae-46fc-855f-cb5b6a42bc39",
+      "mem_d68f110e-d8b7-46c9-9072-7ebefe99382f"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "Memory [1] guided correct v8-ignore category choices when moving ignore blocks (kept upstream/source-map/ts-type categories aligned with the actual blocker — e.g. adjusted lifecycle.ts pickTaskLifecycleEvent category from ts-type to source-map since the pattern is nested string comparisons, not type narrowing). Memory [2] guided extraction of common agent-type / agent-label branching into reusable helpers (pickCompletionAgentType, pickAgentLabel, describeAgent) which replaced two inline duplicated nested-ternary blocks in task-dispatcher.ts during the review iteration.",
+    "superpowers_subagent_driven_dev_used": false,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "superpowers:code-reviewer — scope: full review of the INT-1425 refactor against its DoD (behavior preservation, module boundaries, v8-ignore rationales, test quality, dead-code detection); findings addressed in a follow-up commit before push.",
+    "skill_sequence_proof": "used superpowers:using-superpowers at session start (to establish skill discipline), then attempted subagent-driven-development as the execution strategy but switched to direct in-session edits after discovering the hook-blocking constraint on v8-ignore writes in new files made the subagent dispatch inefficient. Then invoked superpowers:requesting-code-review (code-reviewer subagent) AFTER implementation and AFTER initial green CI, BEFORE the final commit + push. Review findings (dead lifecycle.ts wiring, dead retry-logic helpers, missing prompts.test.ts) were addressed in a second commit before push.",
+    "summary": "* Extracted 6 sibling modules under workers/orchestrator/src/services/task-dispatcher/ (prompts, log-streaming, metrics, webhook-callbacks, retry-logic, lifecycle); reduced task-dispatcher.ts from 3,036 → 2,447 LOC while preserving the public API exactly. The <300-line DoD target was not met because the remaining state-machine methods share mutable state that requires a separate TaskStateContext refactor (documented in PR body).\n  * Added 6 new unit-test files under src/__tests__/services/task-dispatcher/ totalling 77 focused assertions; all 1,723 existing orchestrator tests pass unchanged via the preserved thin private/@internal delegates (parseRebaseResultOutput, parseContinuationPrOutput).\n  * Addressed one code-review iteration: wired lifecycle.ts helpers into the dispatcher (replacing two inline ternary blocks and deleting their v8 ignores), deleted 4 unused retry-logic helpers, and added the missing prompts.test.ts.\n  * pnpm run ci:tracked passes fully on the pushed branch (typecheck, lint, typecheck:tests, tests + coverage, v8-ignore validation at 442 blocks, 22 static validation steps, build, format).\n  * PR opened at https://github.com/pbuchman/intexuraos/pull/1897 targeting development."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field outcome was read from deprecated alias Outcome; rename the emitter",
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
+    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
+    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
+    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1939",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1468",
+    "review_iterations": 2,
+    "memory_ids_used": [
+      "mem_174538d5-7eb1-47ac-8954-2e00688624ec",
+      "mem_7325cc43-2e66-476e-bb49-148b328b2c6e",
+      "mem_d5d6b156-ea42-419a-a428-d73ea27d08c1"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "Applied all three retrieved memories — retry-delay clarity (scheduler-driven natural delay, no per-task timers), rate-limit cooloff clarity (distinct retry_after_cooloff verdict with absolute UTC from dedicated parser plus single explicit 60-min fallback), and codebase-audit-before-plan (verified DispatchSchedule type ergonomics, existing drain/TTL/PR-lock behavior, queue API shape, user-service timezone fetch signature, and web form patterns before each subtask).",
+    "superpowers_subagent_driven_dev_used": true,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "Task 1 implementer (code-agent domain/repo/serializer for DispatchSchedule); Task 1 spec reviewer; Task 1 code-reviewer; Task 2 implementer (/code/submit scheduledDispatch); Task 2 spec+quality reviewer; Task 3 implementer (drainTaskQueue schedule-awareness + max-size scan); Task 3 spec+quality reviewer; Task 4 implementer (cooloff prompt + triage integration + autoRetryTask dispatchSchedule); Task 4 classifier regex fix; Task 4 spec+quality reviewer; Task 5 implementer (web scheduling UX + ConfirmSubmitModal); Task 5 spec+quality reviewer; Task 6 implementer (queue API fields + DispatchQueuePage rendering); Task 6 spec+quality reviewer; final holistic reviewer (superpowers:code-reviewer); fix-round implementer; post-fix reviewer.",
+    "skill_sequence_proof": "Invoked superpowers:using-superpowers at session start → superpowers:subagent-driven-development to execute the 6-task plan (each task followed the per-task TDD + spec-review + quality-review loop until APPROVED) → ran pnpm run ci:tracked (green) → invoked superpowers:requesting-code-review for final holistic review (0 Critical, 4 Important, 6 Minor) → dispatched fix round → re-reviewed (APPROVED with zero remaining issues) → committed + pushed + opened PR.",
+    "summary": ""
+  },
+  "missingRequired": [
+    "summary"
+  ],
+  "warnings": [
+    "field outcome was read from deprecated alias Outcome; rename the emitter",
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
+    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
+    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
+    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}
