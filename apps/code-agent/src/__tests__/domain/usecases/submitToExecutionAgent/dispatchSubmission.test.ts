@@ -6,6 +6,9 @@
  *  - Orchestrator accepts: returns the new execution task ID.
  *  - Orchestrator rejects (queue_full): error propagated with correct code
  *    and implementationTaskId rolled back.
+ *  - Create-failure rollback: implementationTaskId reset to null.
+ *  - Complex fan-out: returns primary child task ID and propagates
+ *    queue_full / no_qualifying_children errors.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -17,6 +20,13 @@ import {
   type DispatchSubmissionDeps,
 } from '../../../../domain/usecases/submitToExecutionAgent/dispatchSubmission.js';
 import type { PreparedSubmission } from '../../../../domain/usecases/submitToExecutionAgent/prepareSubmission.js';
+import { fanOutChildTasks } from '../../../../domain/usecases/fanOutChildTasks.js';
+
+vi.mock('../../../../domain/usecases/fanOutChildTasks.js', () => ({
+  fanOutChildTasks: vi.fn(),
+}));
+
+const mockFanOutChildTasks = vi.mocked(fanOutChildTasks);
 
 describe('dispatchSubmission', () => {
   const userId = 'user_123';
@@ -131,5 +141,98 @@ describe('dispatchSubmission', () => {
       'task_planning',
       expect.objectContaining({ implementationTaskId: null }),
     );
+  });
+
+  it('rolls back the optimistic lock when task creation fails', async () => {
+    mockCodeTaskRepo.create.mockResolvedValue(
+      err({ code: 'FIRESTORE_ERROR', message: 'db down' }),
+    );
+
+    const result = await dispatchSubmission(createDeps(), createPrepared());
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('internal_error');
+    }
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledTimes(2);
+    expect(mockCodeTaskRepo.update).toHaveBeenLastCalledWith(
+      'task_planning',
+      expect.objectContaining({ implementationTaskId: null }),
+    );
+    // Orchestrator should never be called when create fails before dispatch.
+    expect(mockTaskEnqueueService.enqueue).not.toHaveBeenCalled();
+  });
+
+  describe('complex fan-out', () => {
+    function createComplexPrepared(): PreparedSubmission {
+      return {
+        planningTask: makeTask(),
+        userId,
+        linearIssueId,
+        effectiveWorkerType: 'auto',
+        complex: {
+          validatedIssueUuid: 'linear-uuid-parent',
+          directChildren: [
+            { id: 'c1', identifier: 'INT-101', url: 'u1', parentId: 'linear-uuid-parent', labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+            { id: 'c2', identifier: 'INT-102', url: 'u2', parentId: 'linear-uuid-parent', labels: ['code-task'], assigneeId: null, state: 'Backlog' },
+          ],
+        },
+      };
+    }
+
+    it('returns the primary child task ID when fan-out succeeds', async () => {
+      mockFanOutChildTasks.mockResolvedValue(
+        ok({
+          childTaskIds: ['task_child_a', 'task_child_b'],
+          primaryChildTaskId: 'task_child_a',
+          primaryChildIssueId: 'INT-101',
+        }),
+      );
+
+      const result = await dispatchSubmission(createDeps(), createComplexPrepared());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.codeTaskId).toBe('task_child_a');
+        expect(result.value.childTaskIds).toEqual(['task_child_a', 'task_child_b']);
+        expect(result.value.workerLocation).toBe('queued');
+      }
+      // create/update/enqueue should NOT be called — fan-out handles persistence.
+      expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
+      expect(mockTaskEnqueueService.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('propagates queue_full from fan-out', async () => {
+      mockFanOutChildTasks.mockResolvedValue(
+        err({ code: 'queue_full', message: 'queue full during fan-out' }),
+      );
+
+      const result = await dispatchSubmission(createDeps(), createComplexPrepared());
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe('queue_full');
+    });
+
+    it('propagates no_qualifying_children from fan-out', async () => {
+      mockFanOutChildTasks.mockResolvedValue(
+        err({ code: 'no_qualifying_children', message: 'none had code-task label' }),
+      );
+
+      const result = await dispatchSubmission(createDeps(), createComplexPrepared());
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe('complex_task_no_qualifying_children');
+    });
+
+    it('wraps internal_error on unexpected fan-out failure', async () => {
+      mockFanOutChildTasks.mockResolvedValue(
+        err({ code: 'internal_error', message: 'boom' }),
+      );
+
+      const result = await dispatchSubmission(createDeps(), createComplexPrepared());
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toMatch(/Fan-out failed/);
+      }
+    });
   });
 });
