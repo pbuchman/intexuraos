@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 import type { CodeTaskWorkerType } from '@intexuraos/common-core/code-task-worker-types';
 import type { TaskMode } from '@/types';
+import { formatSchedulePreview } from '@/utils/scheduledDispatch';
 import { Button } from './ui/Button.js';
 import { WORKER_TYPE_LABELS } from './workers/shared.js';
 
@@ -15,6 +16,11 @@ interface ConfirmSubmitModalProps {
   taskTitle: string;
   workerType: CodeTaskWorkerType;
   taskMode: TaskMode;
+  schedule?: {
+    localDateTime: string;
+    timezone: string;
+    notBeforeAt: string;
+  };
   onConfirm: () => Promise<void>;
   onCancel: () => void;
 }
@@ -24,6 +30,7 @@ export function ConfirmSubmitModal({
   taskTitle,
   workerType,
   taskMode,
+  schedule,
   onConfirm,
   onCancel,
 }: ConfirmSubmitModalProps): React.JSX.Element | null {
@@ -97,6 +104,16 @@ export function ConfirmSubmitModal({
                 </span>
                 {' '}mode?
               </p>
+              {schedule !== undefined ? (
+                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                    {formatSchedulePreview(schedule.notBeforeAt, schedule.timezone)}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Added to queue immediately
+                  </p>
+                </div>
+              ) : null}
             </div>
 
             <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-200 p-4 dark:border-slate-700">

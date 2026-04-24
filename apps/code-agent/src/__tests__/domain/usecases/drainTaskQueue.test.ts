@@ -2410,4 +2410,176 @@ describe('drainTaskQueue', () => {
       expect(dispatchCall['retriedFrom']).toBeUndefined();
     });
   });
+
+  describe('schedule-aware draining (INT-1463)', () => {
+    it('skips a scheduled task that is not yet eligible without dispatching or updating it', async () => {
+      const now = Date.now();
+      const task = createMockTask({
+        id: 'scheduled-task',
+        queuedAt: Timestamp.fromDate(new Date(now - 60 * 1000)),
+        dispatchSchedule: {
+          notBeforeAt: Timestamp.fromDate(new Date(now + 10 * 60 * 1000)),
+          source: 'user_scheduled',
+          derivedBy: 'user_input',
+        },
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'still_busy' });
+      }
+
+      // Not dispatched, not updated (no queuedAt reset, no status change).
+      expect(mockTaskDispatcher.dispatch).not.toHaveBeenCalled();
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('dispatches an eligible unscheduled task ahead of an older future-scheduled row', async () => {
+      const now = Date.now();
+      const olderScheduled = createMockTask({
+        id: 'older-scheduled',
+        createdAt: Timestamp.fromDate(new Date(now - 30 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(now - 30 * 60 * 1000)),
+        dispatchSchedule: {
+          notBeforeAt: Timestamp.fromDate(new Date(now + 60 * 60 * 1000)),
+          source: 'user_scheduled',
+          derivedBy: 'user_input',
+        },
+      });
+      const newerUnscheduled = createMockTask({
+        id: 'newer-unscheduled',
+        createdAt: Timestamp.fromDate(new Date(now - 2 * 60 * 1000)),
+        queuedAt: Timestamp.fromDate(new Date(now - 2 * 60 * 1000)),
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([olderScheduled, newerUnscheduled]));
+      setupWorkerSettings();
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'newer-unscheduled' });
+      }
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledTimes(1);
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'newer-unscheduled' }),
+      );
+    });
+
+    it('does not expire a scheduled task whose notBeforeAt is still in the future even if queuedAt is past TTL', async () => {
+      const now = Date.now();
+      const task = createMockTask({
+        id: 'long-wait-scheduled',
+        // queuedAt 25h ago — would normally be expired under 1440-minute TTL.
+        queuedAt: Timestamp.fromDate(new Date(now - 25 * 60 * 60 * 1000)),
+        dispatchSchedule: {
+          notBeforeAt: Timestamp.fromDate(new Date(now + 60 * 60 * 1000)),
+          source: 'user_scheduled',
+          derivedBy: 'user_input',
+        },
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'still_busy' });
+      }
+
+      // Must not be marked failed / timed out while schedule wait is still active.
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ status: 'failed' }),
+      );
+      expect(mockWhatsappNotifier.notifyTaskQueueExpired).not.toHaveBeenCalled();
+    });
+
+    it('expires a scheduled task when notBeforeAt itself is past TTL (eligible long ago but still undispatched)', async () => {
+      const now = Date.now();
+      const task = createMockTask({
+        id: 'stale-scheduled',
+        queuedAt: Timestamp.fromDate(new Date(now - 25 * 60 * 60 * 1000)),
+        dispatchSchedule: {
+          // notBeforeAt elapsed 25h ago — effectiveEligibleAt = notBeforeAt, and 25h > 24h TTL.
+          notBeforeAt: Timestamp.fromDate(new Date(now - 25 * 60 * 60 * 1000)),
+          source: 'retry_cooloff',
+          derivedBy: 'llm',
+        },
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      mockCodeTaskRepo.update.mockResolvedValue(ok(task));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual(
+          expect.objectContaining({ action: 'expired', taskId: 'stale-scheduled' }),
+        );
+      }
+      expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('stale-scheduled', {
+        status: 'failed',
+        error: {
+          code: 'queue_timeout',
+          message: 'Task expired in queue after 1440 minutes. Workers were still busy.',
+        },
+      });
+    });
+
+    it('dispatches a scheduled task normally once notBeforeAt has passed, without resetting queuedAt', async () => {
+      const now = Date.now();
+      const originalQueuedAt = Timestamp.fromDate(new Date(now - 5 * 60 * 1000));
+      const task = createMockTask({
+        id: 'eligible-scheduled',
+        queuedAt: originalQueuedAt,
+        dispatchSchedule: {
+          notBeforeAt: Timestamp.fromDate(new Date(now - 1)),
+          source: 'user_scheduled',
+          derivedBy: 'user_input',
+        },
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' })
+      );
+      mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'dispatched', taskId: 'eligible-scheduled' });
+      }
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'eligible-scheduled' }),
+      );
+      // No queuedAt reset while crossing the schedule boundary.
+      expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(
+        'eligible-scheduled',
+        expect.objectContaining({ queuedAt: expect.any(Date) }),
+      );
+    });
+
+    it('calls listQueuedByAge with config.queue.maxSize (50), not the legacy batch of 10', async () => {
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([]));
+
+      await drainTaskQueue(createDeps());
+
+      expect(mockCodeTaskRepo.listQueuedByAge).toHaveBeenCalledTimes(1);
+      expect(mockCodeTaskRepo.listQueuedByAge).toHaveBeenCalledWith(50);
+    });
+  });
 });

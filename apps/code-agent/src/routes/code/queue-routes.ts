@@ -244,6 +244,9 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
                           queuedAt: { type: 'string' },
                           createdAt: { type: 'string' },
                           position: { type: 'number' },
+                          dispatchEligibleAt: { type: 'string' },
+                          dispatchScheduleSource: { type: 'string', enum: ['user_scheduled', 'retry_cooloff'] },
+                          dispatchScheduleText: { type: 'string' },
                         },
                         required: ['id', 'prompt', 'queuedAt', 'createdAt', 'position'],
                       },
@@ -290,16 +293,28 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
         // Scope to requesting user's tasks only — prevents cross-user data leakage
         const userTasks = result.value.filter((task) => task.userId === userId);
 
-        const tasks = userTasks.map((task, index) => ({
-          id: task.id,
-          prompt: task.sanitizedPrompt.slice(0, QUEUE_PROMPT_PREVIEW_LENGTH),
-          linearIssueId: task.linearIssueId,
-          workerType: task.workerType,
-          agentType: task.agentType,
-          queuedAt: task.queuedAt !== undefined ? task.queuedAt.toDate().toISOString() : task.createdAt.toDate().toISOString(),
-          createdAt: task.createdAt.toDate().toISOString(),
-          position: index + 1,
-        }));
+        const tasks = userTasks.map((task, index) => {
+          const dispatchScheduleFields = task.dispatchSchedule !== undefined
+            ? {
+                dispatchEligibleAt: task.dispatchSchedule.notBeforeAt.toDate().toISOString(),
+                dispatchScheduleSource: task.dispatchSchedule.source,
+                dispatchScheduleText: task.dispatchSchedule.source === 'user_scheduled'
+                  ? 'Scheduled by user'
+                  : 'Waiting for Claude reset',
+              }
+            : undefined;
+          return {
+            id: task.id,
+            prompt: task.sanitizedPrompt.slice(0, QUEUE_PROMPT_PREVIEW_LENGTH),
+            linearIssueId: task.linearIssueId,
+            workerType: task.workerType,
+            agentType: task.agentType,
+            queuedAt: task.queuedAt !== undefined ? task.queuedAt.toDate().toISOString() : task.createdAt.toDate().toISOString(),
+            createdAt: task.createdAt.toDate().toISOString(),
+            position: index + 1,
+            ...(dispatchScheduleFields !== undefined && dispatchScheduleFields),
+          };
+        });
 
         return await reply.ok({
           tasks,

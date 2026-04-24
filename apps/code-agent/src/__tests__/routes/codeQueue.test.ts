@@ -4,6 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as jose from 'jose';
+import { Timestamp } from '@google-cloud/firestore';
 
 // Mock jose library for JWT validation
 vi.mock('jose', () => ({
@@ -335,6 +336,120 @@ describe('GET /code/queue', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.data.tasks[0].prompt).toHaveLength(200);
+    });
+  });
+
+  describe('dispatch schedule metadata (INT-1468)', () => {
+    it('exposes dispatchEligibleAt + source + label for a user_scheduled task', async () => {
+      const notBefore = new Date('2026-05-01T10:00:00.000Z');
+      const result = await codeTaskRepo.create({
+        userId: 'test-user-id',
+        prompt: 'Scheduled exec task',
+        sanitizedPrompt: 'Scheduled exec task',
+        systemPromptHash: 'default',
+        workerType: 'opus',
+        workerLocation: 'pending',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_sched_user',
+        agentType: 'execution',
+        dispatchSchedule: {
+          notBeforeAt: Timestamp.fromDate(notBefore),
+          source: 'user_scheduled',
+          derivedBy: 'user_input',
+          timezone: 'Europe/Warsaw',
+          localDateTime: '2026-05-01T12:00',
+        },
+      });
+      if (!result.ok) {
+        throw new Error(`Failed to create task: ${result.error.message}`);
+      }
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/code/queue',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.tasks).toHaveLength(1);
+      const task = body.data.tasks[0];
+      expect(task.dispatchEligibleAt).toBe(notBefore.toISOString());
+      expect(task.dispatchScheduleSource).toBe('user_scheduled');
+      expect(task.dispatchScheduleText).toBe('Scheduled by user');
+    });
+
+    it('exposes Waiting for Claude reset label for a retry_cooloff task', async () => {
+      const notBefore = new Date('2026-05-02T22:00:00.000Z');
+      const result = await codeTaskRepo.create({
+        userId: 'test-user-id',
+        prompt: 'Retry cooloff task',
+        sanitizedPrompt: 'Retry cooloff task',
+        systemPromptHash: 'default',
+        workerType: 'opus',
+        workerLocation: 'pending',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_sched_cooloff',
+        agentType: 'execution',
+        dispatchSchedule: {
+          notBeforeAt: Timestamp.fromDate(notBefore),
+          source: 'retry_cooloff',
+          derivedBy: 'llm',
+          sourceText: "You've hit your limit · resets 10pm (UTC)",
+          derivedFromTaskId: 'task_parent',
+        },
+      });
+      if (!result.ok) {
+        throw new Error(`Failed to create task: ${result.error.message}`);
+      }
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/code/queue',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.tasks).toHaveLength(1);
+      const task = body.data.tasks[0];
+      expect(task.dispatchEligibleAt).toBe(notBefore.toISOString());
+      expect(task.dispatchScheduleSource).toBe('retry_cooloff');
+      expect(task.dispatchScheduleText).toBe('Waiting for Claude reset');
+    });
+
+    it('omits dispatch schedule fields for queued tasks without schedule metadata', async () => {
+      const result = await codeTaskRepo.create({
+        userId: 'test-user-id',
+        prompt: 'No-schedule task',
+        sanitizedPrompt: 'No-schedule task',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'pending',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_no_sched',
+      });
+      if (!result.ok) {
+        throw new Error(`Failed to create task: ${result.error.message}`);
+      }
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/code/queue',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.tasks).toHaveLength(1);
+      const task = body.data.tasks[0];
+      // Must not leak undefined placeholders into the JSON body
+      expect(Object.keys(task)).not.toContain('dispatchEligibleAt');
+      expect(Object.keys(task)).not.toContain('dispatchScheduleSource');
+      expect(Object.keys(task)).not.toContain('dispatchScheduleText');
     });
   });
 

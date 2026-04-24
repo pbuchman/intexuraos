@@ -67,6 +67,40 @@ describe('classifyFailure', () => {
     ).toBe('retry_after_cooloff' satisfies FailureVerdict);
   });
 
+  // INT-1463: Claude's actual usage-limit wording does not contain "429" or
+  // "rate limit". The production message below is the verbatim string that
+  // motivated retry_after_cooloff — classifier must recognize it so the
+  // cooloff parser + scheduler path is actually exercised in production.
+  it('returns "retry_after_cooloff" for production usage-limit message in TASK_RUNTIME_HARD_ERROR', () => {
+    expect(
+      classifyFailure({
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message:
+          "Non-zero exit code: 1; Claude error: You've hit your limit · resets 10pm (UTC)",
+      })
+    ).toBe('retry_after_cooloff' satisfies FailureVerdict);
+  });
+
+  it('returns "retry_after_cooloff" for production usage-limit message in TASK_RESUMED_HARD_ERROR', () => {
+    expect(
+      classifyFailure({
+        code: 'TASK_RESUMED_HARD_ERROR',
+        message:
+          "Non-zero exit code: 1; Claude error: You've hit your limit · resets 9am (UTC)",
+      })
+    ).toBe('retry_after_cooloff' satisfies FailureVerdict);
+  });
+
+  // 137 priority must still win over the broadened usage-limit phrasing.
+  it('prioritizes exit 137 over "hit your limit" in TASK_RUNTIME_HARD_ERROR', () => {
+    expect(
+      classifyFailure({
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: "exit code: 137 — Claude error: You've hit your limit · resets 10pm (UTC)",
+      })
+    ).toBe('retry' satisfies FailureVerdict);
+  });
+
   it('returns "retry" for TASK_RUNTIME_HARD_ERROR with plain transient message via remediation', () => {
     expect(
       classifyFailure({

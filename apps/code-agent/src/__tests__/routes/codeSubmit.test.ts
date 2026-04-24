@@ -773,4 +773,186 @@ describe('POST /code/submit', () => {
       );
     });
   });
+
+  describe('scheduled dispatch', () => {
+    it('persists dispatchSchedule when execution mode includes valid future scheduledDispatch (INT-1468)', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-700',
+        linearIssueTitle: 'Scheduled task',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
+      const notBeforeAt = new Date(Date.now() + 60 * 60 * 1000); // 1h in the future
+      const notBeforeAtIso = notBeforeAt.toISOString();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Run this later',
+          taskMode: 'execution',
+          scheduledDispatch: {
+            localDateTime: '2026-04-24T22:00',
+            timezone: 'Europe/Warsaw',
+            notBeforeAt: notBeforeAtIso,
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      const taskId = body.data.codeTaskId as string;
+
+      // Verify round-trip: load task back and inspect dispatchSchedule
+      const taskResult = await codeTaskRepo.findById(taskId);
+      expect(taskResult.ok).toBe(true);
+      if (!taskResult.ok) return;
+      const task = taskResult.value;
+      expect(task.dispatchSchedule).toBeDefined();
+      expect(task.dispatchSchedule?.notBeforeAt.toMillis()).toBe(notBeforeAt.getTime());
+      expect(task.dispatchSchedule?.source).toBe('user_scheduled');
+      expect(task.dispatchSchedule?.derivedBy).toBe('user_input');
+      expect(task.dispatchSchedule?.timezone).toBe('Europe/Warsaw');
+      expect(task.dispatchSchedule?.localDateTime).toBe('2026-04-24T22:00');
+    });
+
+    it('rejects scheduledDispatch when taskMode is planning (400 INVALID_REQUEST)', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-701',
+        linearIssueTitle: 'Planning task',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
+      const notBeforeAtIso = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Plan later',
+          taskMode: 'planning',
+          scheduledDispatch: {
+            localDateTime: '2026-04-24T22:00',
+            timezone: 'UTC',
+            notBeforeAt: notBeforeAtIso,
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toMatch(/execution/i);
+    });
+
+    it('rejects scheduledDispatch with past notBeforeAt (400 INVALID_REQUEST)', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-702',
+        linearIssueTitle: 'Past task',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
+      const pastIso = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Run in the past',
+          taskMode: 'execution',
+          scheduledDispatch: {
+            localDateTime: '2020-01-01T00:00',
+            timezone: 'UTC',
+            notBeforeAt: pastIso,
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toMatch(/future/i);
+    });
+
+    it('rejects scheduledDispatch with invalid ISO notBeforeAt (400 INVALID_REQUEST)', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-703',
+        linearIssueTitle: 'Invalid task',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Run with bad iso',
+          taskMode: 'execution',
+          scheduledDispatch: {
+            localDateTime: '2026-04-24T22:00',
+            timezone: 'UTC',
+            notBeforeAt: 'not-a-valid-iso',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('omits dispatchSchedule on execution submit when scheduledDispatch is not provided', async () => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-704',
+        linearIssueTitle: 'No schedule task',
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Run now',
+          taskMode: 'execution',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      const taskId = body.data.codeTaskId as string;
+
+      const taskResult = await codeTaskRepo.findById(taskId);
+      expect(taskResult.ok).toBe(true);
+      if (!taskResult.ok) return;
+      expect(taskResult.value.dispatchSchedule).toBeUndefined();
+    });
+  });
 });

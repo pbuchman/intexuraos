@@ -34,6 +34,12 @@ export interface QueuedTask {
   queuedAt: string;
   createdAt: string;
   position: number;
+  /** Absolute UTC ISO timestamp (earliest dispatch time) — INT-1468. */
+  dispatchEligibleAt?: string;
+  /** Origin of the dispatch schedule (user request vs. cooloff retry). */
+  dispatchScheduleSource?: 'user_scheduled' | 'retry_cooloff';
+  /** Server-generated short label for the schedule source. */
+  dispatchScheduleText?: string;
 }
 
 export interface QueueResponse {

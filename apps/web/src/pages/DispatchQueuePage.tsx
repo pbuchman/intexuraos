@@ -3,7 +3,7 @@ import { ArrowLeft, Clock, Loader2 } from 'lucide-react';
 import { Layout } from '@/components';
 import { useDispatchQueue } from '@/hooks';
 import { useTimeTick } from '@/hooks';
-import { formatRelative } from '@/utils/dateFormat';
+import { formatAbsoluteDateTime, formatRelative } from '@/utils/dateFormat';
 import { getAgentTypeLabel } from '@/utils/issueGroups';
 
 export function DispatchQueuePage(): React.JSX.Element {
@@ -99,6 +99,18 @@ export function DispatchQueuePage(): React.JSX.Element {
                     <p className="text-xs text-slate-400 dark:text-slate-500">
                       Queued {formatRelative(task.queuedAt)}
                     </p>
+                    {task.dispatchEligibleAt !== undefined ? (
+                      <>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                          Dispatches {formatAbsoluteDateTime(task.dispatchEligibleAt)}
+                        </p>
+                        {task.dispatchScheduleText !== undefined ? (
+                          <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                            {task.dispatchScheduleText}
+                          </p>
+                        ) : null}
+                      </>
+                    ) : null}
                   </div>
                 </div>
               </Link>
