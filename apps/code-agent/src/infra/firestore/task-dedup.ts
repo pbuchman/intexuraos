@@ -20,15 +20,16 @@ import type {
   CreateTaskInput,
   RepositoryError,
 } from '../../domain/repositories/codeTaskRepository.js';
+import { ACTIVE_TASK_STATUSES, isMergeConflictTaskData } from './task-constants.js';
+
+// Re-export shared symbols for existing importers (back-compat).
+export { ACTIVE_TASK_STATUSES, isMergeConflictTaskData };
 
 /** 5-minute window for prompt-based dedup (design line 1544). */
 export const DEDUP_WINDOW_MS = 5 * 60 * 1000;
 
 /** Fetch up to 5 candidates for app-level active-status filtering. */
 export const DEDUP_CANDIDATE_LIMIT = 5;
-
-/** Task statuses that still block dedup (everything else is terminal). */
-export const ACTIVE_TASK_STATUSES = ['queued', 'dispatched', 'running'] as const;
 
 /**
  * Errors that `checkDedupLayers` can return. A strict subset of
@@ -61,18 +62,6 @@ export function generateDedupKey(
     linearIssueId !== undefined ? userId + linearIssueId + normalized : userId + normalized;
   const hash = createHash('sha256').update(input).digest('hex');
   return hash.substring(0, 16);
-}
-
-/**
- * Whether a task document represents a merge-conflict follow-up.
- * Used to exclude these from dedup/PR-routing queries that should target
- * the canonical task.
- */
-export function isMergeConflictTaskData(data: Record<string, unknown>): boolean {
-  return (
-    data['followUpReason'] === 'merge_conflict' ||
-    data['systemPromptHash'] === MERGE_CONFLICT_SYSTEM_PROMPT_HASH
-  );
 }
 
 /**

@@ -23,12 +23,11 @@ import {
   dispatchedOrRunningForPR, erroredExecutionMemoryPostRun, latestAskAgentForUser,
   nonArchivedForUser, nonArchivedGlobal, pendingExecutionMemoryPostRun,
   plannedPlanningByLinearIssue, preservedPullRequestForPR, prTasksByCreatedAt,
-  queuedOrderedByAge, recentByLinearIssue, recentRemediationForPR,
+  queuedOrderedByAge, recentByLinearIssue, recentRemediationForPR, scanPrWindow,
   selectLatestExecutionTask, selectNonMergeConflict, selectOriginTask,
   selectPreservedPullRequest, tasksCreatedSince, zombieTasks,
 } from '../firestore/task-query-builder.js';
-
-type DocLike = { id: string; data(): Record<string, unknown> };
+import { LIST_QUEUED_DEFAULT_LIMIT } from '../firestore/task-constants.js';
 
 function firestoreError(error: unknown): RepositoryError {
   /* v8 ignore start -- ts-type: catch blocks always throw Error instances so non-Error branch is unreachable in unit tests @preserve */
@@ -59,10 +58,10 @@ export const createFirestoreCodeTaskRepository = (deps: {
     }
   };
   const docsToTasks = async (q: Query): Promise<CodeTask[]> =>
-    (await q.get()).docs.map((d) => fromFirestoreDoc(d as DocLike));
+    (await q.get()).docs.map((d) => fromFirestoreDoc(d));
   const firstOrNull = async (q: Query): Promise<CodeTask | null> => {
     const snap = await q.get();
-    return snap.empty ? null : fromFirestoreDoc(snap.docs[0]! as DocLike);
+    return snap.empty ? null : fromFirestoreDoc(snap.docs[0]!);
   };
   const runCreate = async (
     input: CreateTaskInput, transaction: FirestoreTransaction,
@@ -92,14 +91,14 @@ export const createFirestoreCodeTaskRepository = (deps: {
     findById: (taskId) => guarded<CodeTask>(async () => {
       const doc = await collection.doc(taskId).get();
       if (!doc.exists) return err({ code: 'NOT_FOUND', message: `Task ${taskId} not found` });
-      return ok(fromFirestoreDoc(doc as DocLike));
+      return ok(fromFirestoreDoc(doc));
     }, { taskId }, 'Failed to find task by id', true),
     findByIdForUser: (taskId, userId) => guarded<CodeTask>(async () => {
       const doc = await collection.doc(taskId).get();
       if (!doc.exists || doc.data()?.['userId'] !== userId) {
         return err({ code: 'NOT_FOUND', message: `Task ${taskId} not found` });
       }
-      return ok(fromFirestoreDoc(doc as DocLike));
+      return ok(fromFirestoreDoc(doc));
     }, { taskId, userId }, 'Failed to find task by id for user', true),
     update: (taskId, input, options) => guarded<CodeTask>(async () => {
       const docRef = collection.doc(taskId);
@@ -114,14 +113,14 @@ export const createFirestoreCodeTaskRepository = (deps: {
         return ok(fromFirestoreDoc({ id: taskId, data: () => merged }));
       }
       await docRef.update(updateData);
-      return ok(fromFirestoreDoc((await docRef.get()) as DocLike));
+      return ok(fromFirestoreDoc(await docRef.get()));
     }, { taskId, input }, 'Failed to update task', true),
     list: (input: ListTasksInput) => guarded<ListTasksOutput>(async () => {
       const { query, limit } = await buildListQuery(collection, input);
       const docs = (await query.get()).docs;
       const hasMore = docs.length > limit;
       const result = hasMore ? docs.slice(0, limit) : docs;
-      const out: ListTasksOutput = { tasks: result.map((d) => fromFirestoreDoc(d as DocLike)) };
+      const out: ListTasksOutput = { tasks: result.map((d) => fromFirestoreDoc(d)) };
       if (hasMore && result.length > 0) {
         const last = result[result.length - 1];
         /* v8 ignore start -- ts-type: FakeFirestore always returns non-sparse arrays from queries @preserve */
@@ -205,7 +204,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
       { limit }, 'Failed to list queued tasks by age',
     ),
     listQueued: () => guarded(
-      () => docsToTasks(queuedOrderedByAge(collection, 200)),
+      () => docsToTasks(queuedOrderedByAge(collection, LIST_QUEUED_DEFAULT_LIMIT)),
       {}, 'Failed to list queued tasks',
     ),
     countQueued: () => guarded(
@@ -215,7 +214,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
     findPlannedTaskByLinearIssue: (linearIssueId) => guarded(async () => {
       const snap = await plannedPlanningByLinearIssue(collection, linearIssueId).get();
       if (snap.empty) return null;
-      const task = fromFirestoreDoc(snap.docs[0]! as DocLike);
+      const task = fromFirestoreDoc(snap.docs[0]!);
       // Only return if implementation has not already been launched
       if (
         task.implementationTaskId !== undefined
@@ -255,24 +254,16 @@ export const createFirestoreCodeTaskRepository = (deps: {
       return out;
     }, { repository, prNumber }, 'Failed to check dispatched/running task for PR'),
     // Uses limit(50) + in-memory filter to avoid a composite index on agentType.
-    findLatestExecutionTaskByPR: (repository, prNumber) => guarded(async () => {
-      const snap = await prTasksByCreatedAt(collection, repository, prNumber).get();
-      const task = selectLatestExecutionTask(snap.docs);
-      if (task === null && snap.docs.length === 50) {
-        logger.warn({ repository, prNumber, docsScanned: 50 },
-          'findLatestExecutionTaskByPR exhausted 50-doc window without finding an execution-eligible task');
-      }
-      return task;
-    }, { repository, prNumber }, 'Failed to find latest execution task by PR'),
-    findOriginTaskByPR: (repository, prNumber) => guarded(async () => {
-      const snap = await prTasksByCreatedAt(collection, repository, prNumber).get();
-      const task = selectOriginTask(snap.docs);
-      if (task === null && snap.docs.length === 50) {
-        logger.warn({ repository, prNumber, docsScanned: 50 },
-          'findOriginTaskByPR exhausted 50-doc window without finding an origin task');
-      }
-      return task;
-    }, { repository, prNumber }, 'Failed to find origin task by PR'),
+    findLatestExecutionTaskByPR: (repository, prNumber) => guarded(
+      () => scanPrWindow(collection, repository, prNumber, selectLatestExecutionTask, logger,
+        'findLatestExecutionTaskByPR exhausted 50-doc window without finding an execution-eligible task'),
+      { repository, prNumber }, 'Failed to find latest execution task by PR',
+    ),
+    findOriginTaskByPR: (repository, prNumber) => guarded(
+      () => scanPrWindow(collection, repository, prNumber, selectOriginTask, logger,
+        'findOriginTaskByPR exhausted 50-doc window without finding an origin task'),
+      { repository, prNumber }, 'Failed to find origin task by PR',
+    ),
     findRecentTasksByLinearIssue: (linearIssueId, limit) => guarded(
       () => docsToTasks(recentByLinearIssue(collection, linearIssueId, limit)),
       { linearIssueId, limit }, 'Failed to find recent tasks by Linear issue',

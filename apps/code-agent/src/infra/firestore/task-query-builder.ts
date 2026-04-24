@@ -8,15 +8,17 @@
 
 /* eslint-disable */
 
-import type { CollectionReference, Query, QueryDocumentSnapshot, Timestamp } from '@google-cloud/firestore';
+import type { CollectionReference, Query, Timestamp } from '@google-cloud/firestore';
+import type { Logger } from '@intexuraos/common-core';
 import type { CodeTask } from '../../domain/models/codeTask.js';
 import type { ListTasksInput } from '../../domain/repositories/codeTaskRepository.js';
-import { ACTIVE_TASK_STATUSES, isMergeConflictTaskData } from './task-dedup.js';
+import {
+  ACTIVE_TASK_STATUSES,
+  DISPATCHED_OR_RUNNING_STATUSES,
+  type DocLike,
+  isMergeConflictTaskData,
+} from './task-constants.js';
 import { fromFirestoreDoc } from './task-serializer.js';
-
-type DocLike = { id: string; data(): Record<string, unknown> };
-
-const DISPATCHED_OR_RUNNING_STATUSES = ['dispatched', 'running'] as const;
 
 /**
  * Build the Firestore query for `list()`, ordered by createdAt desc with a
@@ -261,18 +263,18 @@ export function pendingExecutionMemoryPostRun(
  * Treats missing agentType as execution-eligible (backward compatibility).
  */
 export function selectLatestExecutionTask(
-  docs: readonly QueryDocumentSnapshot[]
+  docs: readonly DocLike[]
 ): CodeTask | null {
   for (const doc of docs) {
     const data = doc.data();
-    const agentType = data['agentType'] as string | undefined;
+    const agentType = data['agentType'];
     if (
       agentType !== 'review' &&
       agentType !== 'remediation' &&
       agentType !== 'planning' &&
       !isMergeConflictTaskData(data)
     ) {
-      return fromFirestoreDoc(doc as DocLike);
+      return fromFirestoreDoc(doc);
     }
   }
   return null;
@@ -283,17 +285,17 @@ export function selectLatestExecutionTask(
  * from a PR-scoped query snapshot.
  */
 export function selectOriginTask(
-  docs: readonly QueryDocumentSnapshot[]
+  docs: readonly DocLike[]
 ): CodeTask | null {
-  let fallback: QueryDocumentSnapshot | null = null;
+  let fallback: DocLike | null = null;
   for (const doc of docs) {
-    const agentType = doc.data()['agentType'] as string | undefined;
+    const agentType = doc.data()['agentType'];
     if (agentType === 'planning' || agentType === 'execution') {
-      return fromFirestoreDoc(doc as DocLike);
+      return fromFirestoreDoc(doc);
     }
     if (agentType === 'pull_request' && fallback === null) fallback = doc;
   }
-  return fallback !== null ? fromFirestoreDoc(fallback as DocLike) : null;
+  return fallback !== null ? fromFirestoreDoc(fallback) : null;
 }
 
 /**
@@ -301,10 +303,10 @@ export function selectOriginTask(
  * returning null if none match.
  */
 export function selectNonMergeConflict(
-  docs: readonly QueryDocumentSnapshot[]
+  docs: readonly DocLike[]
 ): CodeTask | null {
   for (const doc of docs) {
-    if (!isMergeConflictTaskData(doc.data())) return fromFirestoreDoc(doc as DocLike);
+    if (!isMergeConflictTaskData(doc.data())) return fromFirestoreDoc(doc);
   }
   return null;
 }
@@ -315,19 +317,45 @@ export function selectNonMergeConflict(
  * null if none match.
  */
 export function selectPreservedPullRequest(
-  docs: readonly QueryDocumentSnapshot[]
+  docs: readonly DocLike[]
 ): { id: string; workerLocation: string; userId: string } | null {
   for (const doc of docs) {
     const data = doc.data();
     if (!isMergeConflictTaskData(data)) {
       return {
         id: doc.id,
-        /* v8 ignore start -- test-infra: FakeFirestore always returns complete documents, cannot simulate missing Firestore fields so these ?? '' fallbacks are unreachable @preserve */
         workerLocation: String(data['workerLocation'] ?? ''),
         userId: String(data['userId'] ?? ''),
-        /* v8 ignore stop @preserve */
       };
     }
   }
   return null;
+}
+
+/** Width of the PR-scoped scan window used by PR task selectors. */
+const PR_SCAN_WINDOW = 50;
+
+/**
+ * Scan the PR-scoped tasks-by-createdAt window and delegate selection to
+ * the provided selector. Emits the caller-supplied `warnMessage` when the
+ * window is fully exhausted without a match, so callers can detect
+ * truncation and preserve their method-specific diagnostic text.
+ */
+export async function scanPrWindow(
+  collection: CollectionReference,
+  repository: string,
+  prNumber: number,
+  selector: (docs: readonly DocLike[]) => CodeTask | null,
+  logger: Logger,
+  warnMessage: string
+): Promise<CodeTask | null> {
+  const snap = await prTasksByCreatedAt(collection, repository, prNumber).get();
+  const task = selector(snap.docs);
+  if (task === null && snap.docs.length === PR_SCAN_WINDOW) {
+    logger.warn(
+      { repository, prNumber, docsScanned: PR_SCAN_WINDOW },
+      warnMessage
+    );
+  }
+  return task;
 }

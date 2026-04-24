@@ -46,6 +46,16 @@ describe('stripLegacyLinearFields', () => {
 });
 
 describe('fromFirestoreDoc', () => {
+  it('treats undefined data() (missing DocumentSnapshot) as empty', () => {
+    const task = fromFirestoreDoc({
+      id: 'task_missing',
+      data: (): undefined => undefined,
+    } as unknown as Parameters<typeof fromFirestoreDoc>[0]);
+    expect(task.id).toBe('task_missing');
+    expect(task.createdAt).toBeUndefined();
+    expect(task.updatedAt).toBeUndefined();
+  });
+
   it('returns CodeTask with id, createdAt, updatedAt; strips legacy fields', () => {
     const now = Timestamp.fromDate(new Date('2025-01-01T00:00:00Z'));
     const doc = {
@@ -95,7 +105,7 @@ describe('serializeExecutionMemoryContext', () => {
     const matchedAt = new Date('2025-01-01T10:00:00Z');
     const out = serializeExecutionMemoryContext({
       status: 'matched',
-      matchedAt: matchedAt as unknown as Timestamp,
+      matchedAt,
     });
     expect(out.matchedAt).toBeInstanceOf(Timestamp);
   });
@@ -118,8 +128,8 @@ describe('serializeExecutionMemoryPostRun', () => {
       status: 'completed',
       attempts: 1,
       generatedMemoryIds: [],
-      lastAttemptAt: lastAttemptAt as unknown as Timestamp,
-      completedAt: completedAt as unknown as Timestamp,
+      lastAttemptAt,
+      completedAt,
     });
     expect(out.lastAttemptAt).toBeInstanceOf(Timestamp);
     expect(out.completedAt).toBeInstanceOf(Timestamp);
@@ -185,6 +195,8 @@ describe('toFirestoreDoc', () => {
           generatedMemoryIds: [],
           lastAttemptAt: memPostLastAttempt,
         },
+        failedWorkerLocation: 'vm-prev',
+        autoRetryAttempt: 2,
       },
       opts
     );
@@ -204,6 +216,8 @@ describe('toFirestoreDoc', () => {
     expect(doc.reviewTypes).toEqual(['security']);
     expect(doc.executionMemoryContext?.matchedAt).toBe(memCtxMatchedAt);
     expect(doc.executionMemoryPostRun?.lastAttemptAt).toBe(memPostLastAttempt);
+    expect(doc.failedWorkerLocation).toBe('vm-prev');
+    expect(doc.autoRetryAttempt).toBe(2);
   });
 
   it('omits optional fields when not provided', () => {
@@ -224,6 +238,8 @@ describe('toFirestoreDoc', () => {
     expect(doc.reviewTypes).toBeUndefined();
     expect(doc.executionMemoryContext).toBeUndefined();
     expect(doc.executionMemoryPostRun).toBeUndefined();
+    expect(doc.failedWorkerLocation).toBeUndefined();
+    expect(doc.autoRetryAttempt).toBeUndefined();
   });
 });
 
@@ -332,13 +348,13 @@ describe('buildUpdateData', () => {
     const data = buildUpdateData({
       executionMemoryContext: {
         status: 'matched',
-        matchedAt: ctxMatched as unknown as Timestamp,
+        matchedAt: ctxMatched,
       },
       executionMemoryPostRun: {
         status: 'pending',
         attempts: 0,
         generatedMemoryIds: [],
-        lastAttemptAt: postRunLast as unknown as Timestamp,
+        lastAttemptAt: postRunLast,
       },
     });
     const ctx = data['executionMemoryContext'] as { matchedAt: Timestamp };
