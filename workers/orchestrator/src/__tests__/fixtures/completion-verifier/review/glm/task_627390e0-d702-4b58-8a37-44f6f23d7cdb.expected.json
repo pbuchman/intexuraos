@@ -22,8 +22,5 @@
     "summary": "* Refactor reduces linearAgentHttpClient.ts from 699 to 41 lines (94% reduction, exceeds <200 target)\n  * Thin Facade pattern correctly applied with discriminated union abstraction for HTTP mechanics\n  * All 14/15 requirements met; 1 partial (retry test) is valid architectural decision per original behavior\n  * Test coverage comprehensive: 14 new tests for fetch utility + existing 95 tests pass unchanged\n  * No inline findings — clean implementation following execution memories guidance"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

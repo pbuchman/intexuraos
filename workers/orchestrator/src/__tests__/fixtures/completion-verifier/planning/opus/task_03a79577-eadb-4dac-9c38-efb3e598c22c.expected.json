@@ -24,15 +24,5 @@
     "parallel_breakdown_proof",
     "clarification_message"
   ],
-  "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field complex_task was read from deprecated alias Complex task; rename the emitter",
-    "field plan_doc was read from deprecated alias Plan doc; rename the emitter",
-    "field subtask_urls was read from deprecated alias Subtask URLs; rename the emitter",
-    "field plan_pr was read from deprecated alias Plan PR; rename the emitter",
-    "field parallel_breakdown_proof was read from deprecated alias Parallel breakdown proof; rename the emitter",
-    "field clarification_message was read from deprecated alias Clarification message; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

@@ -130,17 +130,26 @@ describe('parseKeyValues', () => {
     expect(parsed.pr).toBe('https://github.com/x/y/pull/1');
   });
 
-  it('ignores lines that are not "- key: value"', () => {
+  it('treats non-key lines after a key as continuation (bullets without indent)', () => {
+    // [INT-1470] Agents commonly emit unindented bulleted summaries:
+    //   - Summary:
+    //   * bullet 1
+    //   * bullet 2
+    // The old parser closed the key on the `*` lines and returned an empty
+    // `Summary`, falsely marking it missing. The new parser keeps appending
+    // until the next "- key:" line appears.
     const block = [
       'EXECUTION_AGENT_FINAL:',
       '- Outcome: implemented',
-      '',
-      'Some narrative in the middle',
-      '',
+      '- Summary:',
+      '* bullet 1',
+      '* bullet 2',
       '- pr: https://github.com/x/y/pull/1',
     ].join('\n');
     const parsed = parseKeyValues(block);
     expect(parsed.Outcome).toBe('implemented');
+    expect(parsed.Summary).toContain('bullet 1');
+    expect(parsed.Summary).toContain('bullet 2');
     expect(parsed.pr).toBe('https://github.com/x/y/pull/1');
   });
 
@@ -195,6 +204,36 @@ describe('coerceFields', () => {
     };
     const { data, warnings } = coerceFields(record, AGENT_CONTRACTS.execution);
     expect(data.memory_ids_used).toEqual(['mem_a', 'mem_b']);
+    expect(
+      warnings.some((w) => w.includes('execution_memory_ids_used') && w.includes('alias'))
+    ).toBe(true);
+  });
+
+  it('[INT-1470] does NOT warn for case/whitespace-only alias differences (Outcome vs outcome, CI evidence vs ci_evidence)', () => {
+    const record = {
+      // Every key here differs from its canonical name only in case/punctuation.
+      Outcome: 'implemented',
+      PR: 'https://github.com/x/y/pull/1',
+      Summary: 'ok',
+      'CI evidence': 'ci green',
+      'Linear issue': 'https://linear.app/x/issue/X-1',
+      'Review iterations': '2',
+      'Skill sequence proof': 'proof',
+    };
+    const { warnings } = coerceFields(record, AGENT_CONTRACTS.execution);
+    // None of the above differ semantically — the alias lookup just
+    // picks up the casing variant. No warning should be emitted.
+    expect(warnings.filter((w) => w.includes('alias'))).toEqual([]);
+  });
+
+  it('[INT-1470] still warns for semantic-rename aliases (execution_memory_* → memory_*)', () => {
+    const record = {
+      outcome: 'implemented',
+      pr: 'https://github.com/x/y/pull/1',
+      summary: 'ok',
+      execution_memory_ids_used: 'mem_a',
+    };
+    const { warnings } = coerceFields(record, AGENT_CONTRACTS.execution);
     expect(
       warnings.some((w) => w.includes('execution_memory_ids_used') && w.includes('alias'))
     ).toBe(true);

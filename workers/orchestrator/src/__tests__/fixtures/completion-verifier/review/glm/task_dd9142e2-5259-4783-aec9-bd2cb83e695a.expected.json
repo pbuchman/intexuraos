@@ -21,8 +21,5 @@
     "summary": "* Route file reduced from 701 to 93 lines with clean delegation to processGitHubWebhook use case\n  * Use case (658 lines) extracts all business logic with discriminated result types and dependency inversion\n  * Domain utilities relocated to fix prior architectural violation (routes→domain import)\n  * 12 unit tests + 71 integration tests + valid v8 ignores = comprehensive coverage\n  * All CI checks pass; all 12 requirements met; ready to merge"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

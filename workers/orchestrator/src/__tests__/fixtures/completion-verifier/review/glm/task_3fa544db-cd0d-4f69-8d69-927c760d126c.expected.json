@@ -23,8 +23,6 @@
   },
   "missingRequired": [],
   "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field review_comments_posted not a valid int: 3 (architectural concern on line 38, test coverage concern on line 515, type assertion concern on line 189)",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field review_comments_posted not a valid int: 3 (architectural concern on line 38, test coverage concern on line 515, type assertion concern on line 189)"
   ]
 }

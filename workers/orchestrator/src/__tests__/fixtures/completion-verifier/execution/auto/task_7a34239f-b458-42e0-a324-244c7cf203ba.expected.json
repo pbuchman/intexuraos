@@ -17,21 +17,13 @@
     "trivial_task": false,
     "subagents": "Task 1 implementer (code-agent domain/repo/serializer for DispatchSchedule); Task 1 spec reviewer; Task 1 code-reviewer; Task 2 implementer (/code/submit scheduledDispatch); Task 2 spec+quality reviewer; Task 3 implementer (drainTaskQueue schedule-awareness + max-size scan); Task 3 spec+quality reviewer; Task 4 implementer (cooloff prompt + triage integration + autoRetryTask dispatchSchedule); Task 4 classifier regex fix; Task 4 spec+quality reviewer; Task 5 implementer (web scheduling UX + ConfirmSubmitModal); Task 5 spec+quality reviewer; Task 6 implementer (queue API fields + DispatchQueuePage rendering); Task 6 spec+quality reviewer; final holistic reviewer (superpowers:code-reviewer); fix-round implementer; post-fix reviewer.",
     "skill_sequence_proof": "Invoked superpowers:using-superpowers at session start → superpowers:subagent-driven-development to execute the 6-task plan (each task followed the per-task TDD + spec-review + quality-review loop until APPROVED) → ran pnpm run ci:tracked (green) → invoked superpowers:requesting-code-review for final holistic review (0 Critical, 4 Important, 6 Minor) → dispatched fix round → re-reviewed (APPROVED with zero remaining issues) → committed + pushed + opened PR.",
-    "summary": ""
+    "failure_reason": "",
+    "summary": "* Added DispatchSchedule metadata on CodeTask, persisted via Firestore serializer, with user_scheduled and retry_cooloff sources (plus derivedBy, timezone, sourceText, derivedFromTaskId).\n* POST /code/submit accepts scheduledDispatch for execution tasks (rejecting planning + past + invalid ISO with 400); drainTaskQueue scans up to queue.maxSize, skips future-scheduled tasks without mutating queuedAt, and uses max(queuedAt, notBeforeAt) for TTL.\n* New cooloffRetryPrompt + triage integration fetches logs/timezone/LLM only for retry_after_cooloff; fallback writes one absolute +60m notBeforeAt marked derivedBy='fallback'; classifyFailure regex now matches Claude usage-limit wording.\n* Web: collapsible execution-only \"Schedule this execution\" toggle with datetime-local input (refreshed min via useTimeTick), past-time validation, live preview, ConfirmSubmitModal schedule row, and DispatchQueuePage second time row with dispatchScheduleText.\n* pnpm run ci:tracked passed (typecheck, lint, 15993 tests, static validation, build, format) — PR #1939 opened against development."
   },
-  "missingRequired": [
-    "summary"
-  ],
+  "missingRequired": [],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
-    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
   ]
 }

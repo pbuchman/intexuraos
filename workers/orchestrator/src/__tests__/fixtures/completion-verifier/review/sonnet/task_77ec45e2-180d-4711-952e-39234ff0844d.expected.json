@@ -15,8 +15,5 @@
     "summary": "* Reviewed plan doc for INT-1451 (WhatsApp voice transcription silent failure investigation & fix plan), 6-task structure\n  * 🔴 Critical gap in Task 4: changing `BasePubSubPublisher.publishToTopic` to non-nullable signature will break `bookmarks-agent` (stores `topicName: string | null`, calls `publishToTopic` with it); the plan's audit step (\"grep for GcpPubSubPublisher constructors\") would miss this entirely\n  * 🟡 Task 2 proposed test uses `as unknown` type-cast with `vi.fn()` mocks, diverging from the established `fakes.ts` pattern used in the same test file; recommend typed `FakeEventPublisher` instead\n  * All evidence lines verified accurate (E4 line 231, E5 lines 433–454, E6 lines 52–58, E7 lines 96–97, E8 line 29)\n  * Plan is otherwise well-structured and actionable; 7/8 requirements fully met, 1 partial (Task 4 cross-service scope gap requires plan amendment before execution)"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

@@ -21,8 +21,5 @@
     "summary": "* Reviewed PR #1936 refactoring githubAgent.ts from 624 to 104 lines\n  * All 12 requirements met: public API preserved, no DI changes, behavior preserved, two sibling modules created\n  * Code quality: Clean separation with DispatchOutcome discriminated union enabling type narrowing\n  * Test quality: Thorough coverage (28+13 new tests, 68 existing tests pass)\n  * GH Actions: All checks passed, ready to merge"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

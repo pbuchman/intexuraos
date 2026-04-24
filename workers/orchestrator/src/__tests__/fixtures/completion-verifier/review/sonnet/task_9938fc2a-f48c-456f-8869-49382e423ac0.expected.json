@@ -21,8 +21,5 @@
     "summary": "* Reviewed INT-1427 PR: refactor of 1,263-line `system-prompt.ts` into 8 focused prompt modules with a registry/factory in 66 lines\n  * All 11 requirements fully met — public API preserved, byte-identical snapshot tests, CI all green, no DI wiring changes\n  * Code quality clean: consistent module structure, proper constant placement, correct patch version bumps\n  * Architecture sound: clean dependency direction, exhaustive `Record<AgentType, …>` registry, clear separation of registry (`getPromptForAgent`) vs routing logic (`buildSystemPrompt`)\n  * Two informational findings, neither requiring remediation: pre-existing `toBeTruthy()` perpetuated in a touched test file; no standalone snapshot for the bonus `pr-review-overlay-prompt` module"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

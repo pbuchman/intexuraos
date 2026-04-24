@@ -14,11 +14,10 @@
     ],
     "memory_ids_rejected": [],
     "memory_usage_summary": "Applied infrastructure-code alignment verification memory to validate Terraform bucket resource names against ecosystem.config.cjs fallback values, confirming the mismatch.",
-    "summary": "- Reviewed plan/evidence PR for INT-1458 audio upload bucket name fix\n  - Evidence document accurately identifies root cause: config fallbacks don't match Terraform bucket `intexuraos-whatsapp-media-dev`\n  - All claims verified against Terraform module and config files — analysis is correct\n  - Plan is ready; implementation PR needed to apply the 2 file edits\n  - No code remediation required — this is a documentation PR, not implementation"
+    "summary": "- Reviewed plan/evidence PR for INT-1458 audio upload bucket name fix"
   },
   "missingRequired": [],
   "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "unknown key in AGENT_FINAL block: Evidence document accurately identifies root cause"
   ]
 }

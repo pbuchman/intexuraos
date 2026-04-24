@@ -21,8 +21,5 @@
     "summary": "* Refactoring reduces 1,068-line monolith to 184-line orchestrator with focused sibling modules\n  * Code quality is clean — proper TypeScript strictness, DRY patterns, module separation\n  * Test quality has minor gaps (near duplicate merge, skip scenarios, error paths) but passes CI with 95% coverage\n  * All 12 requirements met, including behavior preservation via testablesCompat layer\n  * No code changes required — test gaps are informational and covered by existing 2,705-line legacy test suite"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

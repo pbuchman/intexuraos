@@ -20,8 +20,5 @@
     "summary": "* Reviewed plan document for INT-1463 scheduled code task dispatch and cooloff retries\n  * All 6 implementation tasks properly decomposed with checkbox syntax, scoped to child issues INT-1466 and INT-1467\n  * File paths verified accurate; all referenced code patterns (retry_after_cooloff verdict, getUserTimezone, drainTaskQueue) exist and match plan assumptions\n  * Three non-blocking recommendations: define fallback delay constant explicitly, validate 5x Firestore read increase performance, add ambiguous time string parser edge cases\n  * Plan is ready for implementation via subagent-driven-development workflow"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

@@ -11,9 +11,5 @@
     "summary": "* Finding 1 addressed: Task 4 audit broadened in the plan to grep every `publishToTopic(` call site and `extends BasePubSubPublisher` subclass across apps/packages/workers, with `bookmarks-agent` and `research-agent` explicitly flagged; Task 4 steps renumbered and Risks §8 bullet updated.\n  * Finding 2 addressed: Task 2 Step 1 test rewritten to use the existing typed `FakeEventPublisher` + `FakeWhatsAppWebhookEventRepository` from `fakes.ts`, dropping the `as unknown as ConstructorParameters<…>` cast; state now asserted via `webhookEventRepository.getAll()[0]?.status`.\n  * Minor finding addressed: Task 2 Step 3 replacement snippet now preserves the `audio_processed` happy-path `logger.info('Audio message saved successfully')` call.\n  * Automation comments (4) skipped as non-actionable status/@ignore; all 9 comments marked with 😄 and inline findings replied to.\n  * Pushed commit `1d5d459e` to `plan/int-1451-whatsapp-voice-transcription`; local `pnpm run ci:tracked` and remote CI both green; summary comment posted to PR #1902."
   },
   "missingRequired": [],
-  "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

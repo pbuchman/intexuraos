@@ -17,19 +17,13 @@
     "trivial_task": false,
     "subagents": "superpowers:code-reviewer (subagent-type) — reviewed full refactor SHAs b72475364..604024f03 against INT-1431 requirements; no Critical issues, approved",
     "skill_sequence_proof": "superpowers:subagent-driven-development was invoked first (before any implementation work); superpowers:requesting-code-review was invoked after implementation + CI pass, before PR creation (review commit d0fce9c68 followed review feedback)",
+    "failure_reason": "",
     "summary": "* Reduced apps/code-agent/src/routes/webhookRoutes.ts from 2,258 → 169 lines by extracting domain logic into handleTaskCompletion.ts (task-complete body), recordTaskEvent.ts (log-chunk + turn-metrics bodies), webhookHelpers.ts (resolveLogRuntime + memory/remediation/automation helpers + flush), and webhookRouteSchemas.ts.\n  * Verbatim extraction of the 1,741-line task-completion handler preserves exact control flow, closures, and log shape; outcome union maps cleanly to reply.send/reply.fail so all signature-validation and response contracts are identical.\n  * Added 30 unit tests (webhookHelpers 18, handleTaskCompletion 5, recordTaskEvent 7); all 235 existing webhooks.test.ts cases pass unchanged.\n  * ci:tracked passes end-to-end: typecheck, typecheck:tests, lint, 15,526 tests, all static validation, build, format.\n  * Code review returned no Critical issues; addressed Minor items (use logger param, dedupe body type) in follow-up commit before pushing."
   },
   "missingRequired": [],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
-    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
   ]
 }

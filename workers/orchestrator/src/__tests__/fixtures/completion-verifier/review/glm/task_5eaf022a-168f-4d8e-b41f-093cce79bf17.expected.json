@@ -21,8 +21,5 @@
     "summary": "* Reviewed PR #1938 splitting 604-line submitToExecutionAgent.ts into thin 88-line facade + prepare/dispatch modules\n  * Code quality: clean refactoring with proper separation of concerns, types extraction preventing circular deps, helper module for shared Linear logic\n  * Test quality: thorough coverage with 13 new tests across both modules, proper TypeScript strictness, existing 63 tests unchanged\n  * All 7 requirements met: line reduction, module extraction, coverage, signature preservation, DI unchanged, logger accepted, behavior preserved\n  * GH Actions pending (CI tests in progress), no findings requiring remediation"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

@@ -14,9 +14,5 @@
     "summary": "* Fixed review finding #1 (`getRuntimeDisplayName`): removed misapplied `ts-type` v8-ignore; added `delete task.runtime` test covering the `??` fallback branch.\n  * Fixed review finding #2 (`pickAgentLabel`): removed masking `source-map` v8-ignore; added 6 missing branch tests so all 9 arms are asserted (matching `pickCompletionAgentType`).\n  * Fixed review finding #3 (`mockLogForwarder`): `beforeEach` now `mockReset()`s every forwarder spy so call history cannot leak between tests.\n  * Addressed review-body Test Quality #2: added 4 guard-clause unit tests for `prepareComplianceValidationInput` (undefined validator, missing `agentData`, non-execution `agentType`, unextractable PR number); file-I/O paths deferred.\n  * Pushed 1 commit to `feature/int-1425`; `pnpm run ci:tracked` green locally and remote CI all-green."
   },
   "missingRequired": [],
-  "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

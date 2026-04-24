@@ -19,8 +19,5 @@
     "summary": "* Reviewed plan document `docs/plans/INT-1460-investigation.md` for accuracy and completeness\n  * Verified all 7 referenced source files and line numbers exist and match plan descriptions\n  * Root cause analysis is correct: `classifyAttempt` checks for `[claude]`/`[tool]` prefixes that never appear in `getWorkerLogs()` output\n  * TDD task decomposition is proper: red integration test → green implementation → belt-and-suspenders short-circuit\n  * All 7 requirements met, no blocking issues found\n  * Plan is ready for implementation"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

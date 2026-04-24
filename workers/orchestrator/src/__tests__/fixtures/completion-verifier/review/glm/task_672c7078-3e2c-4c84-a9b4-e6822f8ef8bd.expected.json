@@ -21,8 +21,5 @@
     "summary": "* Reviewed PR #1921 extracting 701-line GitHub webhook handler into processGitHubWebhook use case\n  * Route successfully reduced to 93 lines (<100 requirement met) with thin HTTP adapter pattern\n  * All 11 requirements verified as met: endpoint preserved, signature verification runs first, dedup behavior maintained\n  * One informational architectural concern: domain imports from routes layer (extractEventUrl/extractEventSummary) — non-blocking\n  * Security posture fully preserved: HMAC-SHA256 verification first, no secret exposure, proper error handling\n  * GH Actions: most checks passing, Tests (3/3) and Lint still pending"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

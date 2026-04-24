@@ -22,8 +22,5 @@
     "summary": "* Reviewed PR #1912 for code_quality, architecture, test_quality\n  * webhookRoutes.ts reduced from 2,279 lines → 170 lines (primary goal achieved)\n  * Domain logic correctly extracted into 2 use cases + 1 helper service + schemas file\n  * 30 new unit tests added; 235 existing webhook tests preserved\n  * All CI checks passed; 9/10 DoD requirements met, 1 partially met (handler line counts slightly over 30 but acceptable for security validation)\n  * No blocking issues — refactor is high quality and ready for merge"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

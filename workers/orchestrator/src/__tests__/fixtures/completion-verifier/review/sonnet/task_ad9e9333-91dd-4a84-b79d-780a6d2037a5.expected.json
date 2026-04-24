@@ -20,8 +20,5 @@
     "summary": "* Reviewed `webhookRoutes.ts` and `webhooks.test.ts` for a focused reversal of INT-1282: removes the auto-merge of plan PRs on review pass\n  * Code quality is clean: `mergePlanPr` import removed, `fetchGitHubToken` correctly retained, planning branch preserved to prevent ready-to-merge fall-through\n  * Test quality is thorough: old five-case block replaced with three targeted negative-assertion tests; `mergePullRequest.not.toHaveBeenCalled()` directly addresses all acceptance criteria\n  * Two minor findings posted as inline comments: (1) log message says \"passed\" but fires for remediation cases too (cosmetic); (2) test 2 (remediation) could add a parallel ready-to-merge label absence assertion to mirror test 3\n  * All CI checks green; 6/6 requirements met; no code changes required"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

@@ -18,19 +18,13 @@
     "trivial_task": false,
     "subagents": "general-purpose (scope: implement full refactor — create 8 new files, rewrite parser as thin dispatcher, add unit tests, run verify); pr-review-toolkit:code-reviewer (scope: initial review of commit d42819523 against INT-1437 DoD); pr-review-toolkit:code-reviewer (scope: re-review of fix commit 097631f37 to confirm zero remaining issues)",
     "skill_sequence_proof": "superpowers:subagent-driven-development skill was launched first (implementer subagent dispatched, completed with DONE status); then superpowers:requesting-code-review skill was launched (first review surfaced Minor findings about missing test files; follow-up commit added them; second review returned \"Approved, no remaining issues\").",
+    "failure_reason": "",
     "summary": "* Split 730-line `github-event-parser.ts` into 6 per-event handler modules + `shared.ts` helpers + registry `index.ts` under `apps/code-agent/src/infra/github/event-handlers/`; dispatcher shrunk to 55 lines.\n  * Every handler body copied byte-for-byte including all `/* v8 ignore */` pragmas; backward compat preserved via `export *` re-export so no consumer (`routes/webhooks/github.ts`, existing 2650-line aggregate test) required changes.\n  * Added 6 per-handler unit test files under `__tests__/infra/github/event-handlers/` covering push, pull_request, pull_request_review (body-precedence), pull_request_review_comment, issue_comment (PR-vs-issue branching), check_suite (conclusion filter + empty pull_requests short-circuit).\n  * `pnpm run ci:tracked` green: 15711 tests pass, all lints/typechecks/static validations/build pass.\n  * Two review iterations: first flagged two missing per-handler test files (DoD literal requirement) → added; second returned Approved with zero issues."
   },
   "missingRequired": [],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
-    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
   ]
 }

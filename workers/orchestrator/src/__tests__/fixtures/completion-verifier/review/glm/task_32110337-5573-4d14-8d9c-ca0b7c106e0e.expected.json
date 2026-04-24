@@ -22,8 +22,5 @@
     "summary": "* Reviewed scheduled code-task dispatch implementation (INT-1468) covering backend + web frontend\n  * All 8 plan requirements fully implemented with comprehensive test coverage across all layers\n  * Code quality is clean with proper TypeScript strictness, naming, and documentation\n  * Architecture is sound with clean domain model, proper use-case layer, and separation of concerns\n  * No blocking issues found — PR is ready for CI completion and merge"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

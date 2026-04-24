@@ -19,11 +19,11 @@
       "mem_40ceeee4-15b6-4a6e-b597-e00141c3a10f"
     ],
     "memory_usage_summary": "Applied the \"Thin Route Handler Pattern\" memory to validate that route handlers should delegate to use cases rather than contain inline business logic, identifying violations in `/code/cancel`, `/code/tasks/:taskId/archive`, and `GET /code/tasks` handlers.",
-    "summary": "- Reviewed PR decomposing 4,786-line codeRoutes.ts into thin 48-line composition layer with 5 resource-specific route plugins\n  - Found 3 handlers violating thin-handler principle with inline business logic exceeding 5-line threshold\n  - Test suite provides structural verification via smoke tests but lacks behavioral coverage per requirements table\n  - Overall quality: excellent decomposition, minor gaps in handler thinness and coverage\n  - Remediation needed: Extract inline logic from `/code/cancel` handler into use case; address queue-routes.ts 94.73% coverage gap"
+    "summary": "- Reviewed PR decomposing 4,786-line codeRoutes.ts into thin 48-line composition layer with 5 resource-specific route plugins\n  - Found 3 handlers violating thin-handler principle with inline business logic exceeding 5-line threshold\n  - Test suite provides structural verification via smoke tests but lacks behavioral coverage per requirements table"
   },
   "missingRequired": [],
   "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "unknown key in AGENT_FINAL block: Overall quality",
+    "unknown key in AGENT_FINAL block: Remediation needed"
   ]
 }

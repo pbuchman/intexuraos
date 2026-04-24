@@ -21,8 +21,5 @@
     "summary": "* Reviewed code_quality and test_quality for PR #1897 ([INT-1425] task-dispatcher refactor into 6 sibling modules), re-review after nitpick-nuker fixed 4 prior findings.\n  * All 4 Review 1 findings were resolved: ts-type ignore removed from pickCompletionAgentType, upstream misuse fixed in webhook-callbacks.ts, circular constant assertions replaced with relationship tests, describeAgent split to it.each.\n  * New code_quality finding: getRuntimeDisplayName uses ts-type v8 ignore category (should be source-map) with a factually incorrect coverage claim (both tests pass explicit runtime values, the ?? fallback path is untested).\n  * New test_quality findings: pickAgentLabel has only 3/8 branches tested with source-map ignore hiding the gap (pickCompletionAgentType has all 9 tested); prepareComplianceValidationInput has no unit tests despite 4 testable guard-clause paths; mockLogForwarder not reset between tests in metrics.test.ts.\n  * CI fully green. All remediation items require code changes (v8 ignore fix + test additions)."
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

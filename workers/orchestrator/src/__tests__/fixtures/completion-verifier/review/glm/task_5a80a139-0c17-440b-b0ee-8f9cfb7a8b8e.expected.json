@@ -20,8 +20,5 @@
     "summary": "* Re-review for PR #1897 (commit d93891d41bfeb3fc6c240fcaf88690b7eab97cde) — code_quality and architecture review types\n  * All 3 Review 3 findings resolved: resolveTaskRuntime/getRuntimeDisplayName wired, checkForResult injection seam added with 7 tests, dead re-exports removed from lifecycle.ts\n  * CI fully green, architecture sound with consistent delegation patterns and clean module boundaries\n  * DoD gaps (<300 lines, mandatory state-machine test scenarios) explicitly scoped as deferred follow-up in PR description\n  * PR ready for merge pending user acceptance of scoped DoD exceptions"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

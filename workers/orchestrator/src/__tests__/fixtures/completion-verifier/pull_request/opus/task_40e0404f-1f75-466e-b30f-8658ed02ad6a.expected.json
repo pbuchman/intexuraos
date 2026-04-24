@@ -17,14 +17,5 @@
     "summary": "* PR #1889 was already merged; opened new PR #1903 from fresh `development` with updated plan on branch `plan/int-1423-multi-repo-support-v2`.\n  * Added Appendix A to `docs/plans/2026-04-20-multi-repo-support-investigation.md`: consolidated table of every `intexuraos` / `pbuchman/intexuraos` / `github.com`-in-git-context reference, annotated with action classes (R-CHANGE / R-PARAM / M-META / D-DISPLAY / T-FIXTURE / N-NOTE).\n  * Corrected the orchestrator installation-id env var name throughout the plan (`INTEXURAOS_GITHUB_INSTALLATION_ID`), and surfaced `apps/web/src/pages/MergeQueuePage.tsx:13-14` which revision 1 missed.\n  * `pnpm run ci:tracked` passed all phases; posted the comprehensive audit comment on PR #1903 and updated the in-place tracking comment on PR #1889."
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field comment_replied was read from deprecated alias Comment replied; rename the emitter",
-    "field tracking_comment_id was read from deprecated alias Tracking comment ID; rename the emitter",
-    "field tracking_comment was read from deprecated alias Tracking comment; rename the emitter",
-    "field total_pr_comments_posted was read from deprecated alias Total PR comments posted; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

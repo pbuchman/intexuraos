@@ -20,8 +20,5 @@
     "summary": "* Reviewed PR #1913 implementing infra-failure classification before completion verifier (INT-1455)\n  * Pure `classifyAttempt` function correctly short-circuits verifier for container/entrypoint failures\n  * All 11 requirements fully implemented with comprehensive test coverage (14 test cases across 3 files)\n  * Code quality clean: pure function design, discriminated union types, clear logging, good comments\n  * Test quality thorough: all branches covered, strong assertions, proper lifecycle management\n  * No findings requiring remediation — implementation ready for merge"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

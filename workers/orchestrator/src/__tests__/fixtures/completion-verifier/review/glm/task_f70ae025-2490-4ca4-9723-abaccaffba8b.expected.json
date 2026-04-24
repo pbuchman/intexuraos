@@ -22,8 +22,6 @@
   },
   "missingRequired": [],
   "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field review_comments_posted not a valid int: 0 (summary-only review with no inline comments)",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field review_comments_posted not a valid int: 0 (summary-only review with no inline comments)"
   ]
 }

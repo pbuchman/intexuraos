@@ -21,8 +21,5 @@
     "summary": "* Reviewed PR #1900 — orchestrator `start.ts` bootstrap refactoring (189 lines, 8 bootstrap modules, 7 test files)\n  * 🔴 Two invalid v8 ignores in `bootstrap/api-key-validator.ts`: `logWorkerAuthStartupStatus` and the top of `validateWorkerApiKeys` both have testable `if/else` branches explicitly forbidden from coverage exemption by CLAUDE.md; fix requires tests with a fake `WorkerAuthRegistry`\n  * 🟡 `start.test.ts` asserts `validateWorkerApiKeys` in the strict call-order sequence, but the function is `void`-ed; the assertion only works because the mock is synchronous, not because the sequencing is enforced at runtime\n  * All 10 original requirements met; CI fully green (all GH Actions passed)\n  * Code quality is otherwise excellent: clean dep-injection, process.exit→Error semantics, and comprehensive test coverage for the 5 core bootstrap modules"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

@@ -20,8 +20,5 @@
     "summary": "* Reviewed `docs/plans/2026-04-20-multi-repo-support-investigation.md` — pure documentation change (one file, one commit since last review)\n  * Both prior findings fully resolved: revision history typo (`_APP_` now correct on line 10) and token-refresher framing (both §2.1 and A.1 tables updated to clarify per-task paths exist, constraint is single installation pool)\n  * All 9 requirements met; 9/9 in tracker updated from 8/9\n  * No new issues found — plan is accurate, internally consistent, and ready to merge\n  * All CI checks passed (Tests, Build, Lint, Type Check, Terraform, Coverage, E2E)"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

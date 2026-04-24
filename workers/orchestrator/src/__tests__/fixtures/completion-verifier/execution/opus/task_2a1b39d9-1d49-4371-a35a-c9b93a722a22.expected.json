@@ -18,19 +18,13 @@
     "trivial_task": false,
     "subagents": "(1) superpowers:code-reviewer — independent spec + code-quality review of initial commit 755ea9d7; (2) superpowers:code-reviewer — re-review of fixup commit 8dfd9e32 confirming no remaining issues.",
     "skill_sequence_proof": "Invoked superpowers:subagent-driven-development first (per mandatory first-skill rule) to plan the fix; then executed implementation; then invoked superpowers:requesting-code-review which dispatched superpowers:code-reviewer twice (round 1 raised 2 Important + 4 Minor findings; addressed all; round 2 returned \"no remaining issues\"). Commit order matches: 755ea9d7 (implementation) → 8dfd9e32 (review fixes) → PR created.",
+    "failure_reason": "",
     "summary": "* Added `isWorktreeRegistered` + `repairWorktree` to `WorktreeManager` and wired them into `TaskDispatcher.adoptTask` so an orchestrator restart that drops `.git/worktrees/<taskId>/` metadata repairs it via `git worktree repair` before the new container starts.\n  * When repair fails, `adoptTask` finalizes the task with a new terminal error code `WORKTREE_LOST` (remediation `contact_support`), skipping doomed attempts 2/3 instead of silently burning them.\n  * Wired `WORKTREE_LOST` into `apps/code-agent/.../classifyFailure` as `fail`, placed above the orchestrator-remediation fallback so a stray `retry` hint can't resurrect a permanently-broken task.\n  * Post-repair `symbolic-ref HEAD` diagnostic surfaces the latent \"repair succeeded but branch ref lost → detached HEAD\" case with a warn log.\n  * 15260 tests pass, full `pnpm run ci:tracked` green, PR #1907 open."
   },
   "missingRequired": [],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
-    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
   ]
 }

@@ -18,11 +18,10 @@
     ],
     "memory_ids_rejected": [],
     "memory_usage_summary": "All three facade pattern memories applied - validated that the implementation follows the thin facade decomposition pattern with preserved public signatures, centralized types, and module independence.",
-    "summary": "- Clean refactor reducing gitHubDispatchService.ts from 681 to 45 lines with 4 sibling modules\n  - All 12 requirements met: DI preserved, behavior unchanged (79 tests pass), coverage verified\n  - Module naming reflects actual behavior (webhook/ciFailure/prTaskHelpers) vs proposed abstract names\n  - Facade pattern correctly applied per execution memories - thin facade with unchanged public API\n  - No remediation needed - CI passes, tests thorough, architecture sound"
+    "summary": "- Clean refactor reducing gitHubDispatchService.ts from 681 to 45 lines with 4 sibling modules"
   },
   "missingRequired": [],
   "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "unknown key in AGENT_FINAL block: All 12 requirements met"
   ]
 }

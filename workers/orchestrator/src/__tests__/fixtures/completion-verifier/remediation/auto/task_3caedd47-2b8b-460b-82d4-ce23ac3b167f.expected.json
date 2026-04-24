@@ -13,9 +13,5 @@
     "summary": "* Removed blanket `v8 ignore` around `logWorkerAuthStartupStatus` and added 4 branch-covering tests with a fake `WorkerAuthRegistry` (Finding 1).\n  * Narrowed `validateWorkerApiKeys` `v8 ignore` to wrap only the `Promise.all` fan-out; added 4 tests for claude/codex auth-state logging branches (Finding 2).\n  * Dropped `validateWorkerApiKeys` from the strict `toEqual` order in `start.test.ts` and stripped its `callOrder.push` side-effect, since production fires it with `void`; retained `toHaveBeenCalledOnce()` (Finding 3).\n  * Improved `setImmediate` comment in `service-wiring.test.ts` so it is not mistaken for dead code (review-body minor).\n  * Skipped `git-identity.ts` dep-injection refactor — reviewer explicitly flagged it as future work; skipped 5 `@ignore`-tagged automation issue comments. CI green; commit `9496cab3b` pushed to `feature/int-1429`."
   },
   "missingRequired": [],
-  "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

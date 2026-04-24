@@ -18,19 +18,13 @@
     "trivial_task": true,
     "subagents": "superpowers:code-reviewer (role: independent production-readiness review of the diff 7d4a031..dd69610; scope: apps/code-agent notifier impl + test); superpowers:code-reviewer (role: re-review after hardening fix; scope: same range)",
     "skill_sequence_proof": "superpowers:subagent-driven-development invoked first at the start of execution (read the plan and dispatched implementation); superpowers:requesting-code-review invoked after commit f2a2ce240 to obtain the initial review, then a second time after hardening commit dd69610b0 to confirm zero remaining issues — strictly in that order.",
+    "failure_reason": "",
     "summary": "* Removed `important: true` from `notifyTaskStarted` and added it to `notifyTaskComplete` in `apps/code-agent/src/infra/services/whatsappNotifierImpl.ts`; all other notifiers untouched per spec.\n  * Updated tests to assert `callArgs.important` is `undefined` for started and `important: true` for complete (including both the plain and prUrl branches); removed the now-stale INT-1418 comment.\n  * TDD cycle confirmed — tests failed red before implementation, passed green after; 73/73 whatsappNotifier tests pass.\n  * `pnpm run verify:workspace:tracked code-agent` and `pnpm run ci:tracked` both fully green (15241 tests, static validation, build, format).\n  * Two code-review iterations: first returned \"Ready to merge\" with one minor hardening suggestion (lock the flag on the prUrl branch test); fix applied and re-reviewed with \"Approved, no remaining issues\"; PR #1908 opened against development."
   },
   "missingRequired": [],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
-    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
   ]
 }

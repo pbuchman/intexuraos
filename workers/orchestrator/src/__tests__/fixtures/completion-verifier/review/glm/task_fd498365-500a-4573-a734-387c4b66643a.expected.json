@@ -22,8 +22,5 @@
     "summary": "PR #1898 review complete — v8 ignore violations from previous reviews fully addressed with proper test coverage; new worker-ops.test.ts covers undefined worker paths; CI passes with 15209 tests; PR ready for merge with one informational note about untested `?? 0` fallback."
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

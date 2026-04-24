@@ -19,8 +19,5 @@
     "summary": "* Reviewed PR removing vestigial devDependency to resolve cyclic workspace dependencies\n  * Verified no actual imports exist (only JSDoc comment preserved intentionally as documentation)\n  * Implementation follows plan correctly with minimal mechanical edit\n  * Clean code_quality review — no findings requiring remediation\n  * CI typecheck/build passed; tests still pending verification"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

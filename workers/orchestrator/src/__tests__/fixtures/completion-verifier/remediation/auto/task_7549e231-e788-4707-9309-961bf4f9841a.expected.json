@@ -13,9 +13,5 @@
     "summary": "* Fixed the line-10 revision-history typo: \"previous revision wrote\" now correctly names `INTEXURAOS_GITHUB_APP_INSTALLATION_ID`, so the correction reads coherently.\n  * Reworded the `token-refresher.ts` rows in both §2.1 and Appendix A.1 to attribute the single-file constraint to `start.ts:544–549` (`GitHubTokenService`), noting per-task token paths already exist at `token-refresher.ts:113–114`.\n  * Skipped 6 issue comments: pbuchman automation log (`@ignore`), linear[bot] linkback, bot occurrence-map summary (describes already-in-PR content, no suggestions), 3 bot `@ignore` review-status/Requirements-Tracker comments.\n  * Pushed commit `9232382df` to `plan/int-1423-multi-repo-support-v2`; remote CI is fully green (Lint, Type Check, Tests 1-3/3, Build, Validation, Coverage, E2E, Terraform all SUCCESS).\n  * Posted inline + issue replies, 😄 reactions on all 8 processed surfaces (1 review body, 1 inline review comment, 6 issue comments), and a summary comment on the PR."
   },
   "missingRequired": [],
-  "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

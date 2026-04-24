@@ -21,8 +21,5 @@
     "summary": "* Reviewed PR #1920 which refactors 4,786-line `codeRoutes.ts` into a 41-line thin plugin composing 5 resource-specific sub-plugins — structural decomposition is excellent, CI is fully green.\n  * 🔴 `/code/cancel` handler (task-routes.ts:2384–2459, ~75 lines) violates Requirement #4 (\"no business logic in route handlers\") and the >5-lines rule; needs a `cancelTask` use case extracting ownership verification, status guard, and worker-credential lookup.\n  * 🔴 The spec's \"Test Requirements (MANDATORY)\" table (6 behavioral scenarios) is absent from all 5 new per-plugin test files — they only check URL registration, not handler behavior.\n  * ⚠️ `queue-routes.ts` branch coverage at 94.73%; `split-sanity.test.ts` missing `resetServices()` in `afterEach`.\n  * Both 🔴 findings require code remediation before this PR meets the Definition of Done."
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

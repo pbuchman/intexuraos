@@ -13,9 +13,5 @@
     "summary": "* Extracted `cancelTask` use case (`apps/code-agent/src/domain/usecases/cancelTask.ts`) and rewrote `/code/cancel` handler as thin delegation; added 11 unit tests covering every error branch + best-effort worker/status-mirror paths\n  * Added `resetServices()` to `afterEach` in `split-sanity.test.ts` so container state can't leak between test files\n  * Skipped 6 findings: 1 informational (acceptable suppression), 2 out-of-scope minor refactors on unmodified pre-existing code (archive + GET /code/tasks), 3 test-duplication requests already covered by pre-existing integration suites\n  * Full `pnpm run ci:tracked` and PR CI green on commit `b29c6fc3a`"
   },
   "missingRequired": [],
-  "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

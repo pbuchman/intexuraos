@@ -13,9 +13,5 @@
     "summary": "* Reviewed 18 unprocessed PR items: 7 issue_comments, 1 review_body (Review 4), 10 inline review_comments.\n  * Review 4 (id 4162459986) posted Clean/Sound verdict verifying prior fixes with zero new findings — skipped as non-actionable.\n  * All 10 inline review_comments were prior nitpick-nuker self-replies confirming fixes that already landed — skipped and marked 😄.\n  * Issue comments were @ignore trackers (review-started, retry-task, requirements tracker) and prior nitpick-nuker reports — all skipped and marked 😄.\n  * No code pushed — no actionable findings remained; CI on head commit is fully green; posted summary comment 4304588390 to PR."
   },
   "missingRequired": [],
-  "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

@@ -22,8 +22,5 @@
     "summary": "* Reviewed PR #1898: refactor of 1,721-line docker-provider.ts into a 295-line facade with 4 domain modules + 6 helper modules; all CI checks pass.\n  * 🔴 Two invalid `v8 ignore` directives in worker-ops.ts (lines 108–110 and 248–250): null guards use the `ts-type` category, which CLAUDE.md explicitly prohibits for null guards — branches are directly testable and must have coverage.\n  * 🔴 One incorrect `v8 ignore` in worker-create.ts (lines 595–599): async-timing race mislabeled as `ts-type`; explanation does not name the testing blocker as required.\n  * ⚠️ worker-ops.ts bypasses DockerContainer abstraction (calls docker.getContainer() directly for 6 operations); ⚠️ protected shims on DockerProvider exist only to satisfy `(provider as any)` test access — acknowledged tech debt but untracked.\n  * Remediation needed: fix the 3 v8 ignore violations (remove null-guard ignores + add tests, correct async-timing category and explanation)."
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

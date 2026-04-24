@@ -20,8 +20,5 @@
     "summary": "* Plan document reviewed for INT-1424 — reversal of INT-1282 auto-merge behavior\n  * All referenced files verified to exist with accurate line numbers\n  * `submitToExecutionAgent` confirmed to use `mergePlanPr` (plan's assumption validated)\n  * TDD sequence correct, Out of Scope explicit, no gaps detected\n  * Plan ready for implementation, no remediation needed"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

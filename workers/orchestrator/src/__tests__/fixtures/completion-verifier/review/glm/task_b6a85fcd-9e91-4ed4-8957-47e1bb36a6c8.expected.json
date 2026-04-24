@@ -22,8 +22,5 @@
     "summary": "* Reviewed refactoring of 1,397-line firestoreCodeTaskRepository.ts into 4 extracted modules (serializer, dedup, query-builder, constants) + thin 284-line adapter\n  * Clean architecture with proper separation of concerns, no circular dependencies, preserved interfaces and transaction semantics\n  * Comprehensive test coverage with 60 new unit tests plus preserved 162 existing repository tests\n  * All code quality and architecture checks passed; test quality thorough with one informational observation about FakeFirestore simulation limitations\n  * Ready for merge once Coverage Check completes; no remediation needed"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

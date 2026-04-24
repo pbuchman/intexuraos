@@ -21,8 +21,5 @@
     "summary": "* Clean refactor reducing internalRoutes.ts from 831 → 22 lines (exceeds <150 target)\n  * 3 cohesive sub-plugins + 1 schemas file created, each with dedicated tests\n  * All 12 requirements met, all CI checks passed\n  * Test quality good: correct lifecycle patterns, proper Result narrowing, no gaps\n  * Ready for merge — no remediation needed"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

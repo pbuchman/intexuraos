@@ -20,8 +20,5 @@
     "summary": "* Reviewed PR implementing fix for completion verifier failing when agents hit rate limits\n  * Clean implementation: new `outcome: \"failed\"` schema, `buildRuntimeHardErrorMessage` helper, dispatcher runtime hard-error branch\n  * Thorough test coverage: 10 helper tests, 4 schema tests, 4 classifier tests, 4 dispatcher regressions reproducing exact incident path\n  * All 8 requirements met with direct evidence from codebase\n  * All CI checks passed, no remediation needed — ready for merge"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }
