@@ -190,10 +190,13 @@ describe('classifyMergeConflictStatus', () => {
 });
 
 describe('defaultSleep', () => {
-  it('resolves after the requested delay', async () => {
+  it('resolves after at least the requested delay', async () => {
     const start = Date.now();
-    await defaultSleep(5);
-    expect(Date.now() - start).toBeGreaterThanOrEqual(0);
+    await defaultSleep(15);
+    const elapsed = Date.now() - start;
+    // Allow small scheduling jitter; we care that it actually waited,
+    // not returned synchronously.
+    expect(elapsed).toBeGreaterThanOrEqual(10);
   });
 });
 
