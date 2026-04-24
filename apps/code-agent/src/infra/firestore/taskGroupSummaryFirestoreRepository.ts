@@ -4,7 +4,7 @@
  */
 /* eslint-disable no-restricted-imports */
 import { Timestamp, FieldValue } from '@google-cloud/firestore';
-import type { Firestore, DocumentSnapshot, Transaction } from '@google-cloud/firestore';
+import type { DocumentData, Firestore, DocumentSnapshot, Transaction } from '@google-cloud/firestore';
 import type { Logger, Result } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type { TaskGroupSummaryRepository, ListGroupSummariesInput, ListGroupSummariesOutput, GroupSummaryError } from '../../domain/ports/taskGroupSummaryRepository.js';
@@ -15,10 +15,10 @@ import { hasImplementationReadyLabel, hasMergeReadyLabel } from '../../domain/is
 import {
   applyDeleteGroupDelta, applyDeleteUpdate, applyIncrementalCreateUpdate,
   applyNewGroupDelta, applyStatusChangeDelta, applyStatusChangeUpdate,
-  buildInitialSummary, computeSummaryFromTasks, countsToDoc, defaultCounts,
-  docToCounts, docToSummary, getGroupKey, summaryToDoc,
+  buildInitialSummary, computeSummaryFromTasks, defaultCounts,
+  docToCounts, docToSummary, getGroupKey,
 } from './taskGroupSummary/serializer.js';
-import { SUMMARIES_COLLECTION, asDocRef, buildListQuery, countsDocRef, summaryDocRef } from './taskGroupSummary/queries.js';
+import { SUMMARIES_COLLECTION, buildListQuery, countsDocRef, summaryDocRef } from './taskGroupSummary/queries.js';
 
 export function createTaskGroupSummaryFirestoreRepository(deps: { firestore: Firestore; logger: Logger }): TaskGroupSummaryRepository {
   const { firestore, logger } = deps;
@@ -29,7 +29,7 @@ export function createTaskGroupSummaryFirestoreRepository(deps: { firestore: Fir
   }
 
   function writeCounts(tx: Transaction, userId: string, counts: UserGroupCounts, now: Timestamp): void {
-    tx.set(countsDocRef(firestore, userId), countsToDoc({ ...counts, userId, updatedAt: now }));
+    tx.set(countsDocRef(firestore, userId), { ...counts, userId, updatedAt: now } as unknown as DocumentData);
   }
 
   return {
@@ -45,7 +45,7 @@ export function createTaskGroupSummaryFirestoreRepository(deps: { firestore: Fir
             const initial = buildInitialSummary(task, now);
             const aggregateStatus = deriveAggregateStatusFromSummary(initial);
             const summary: TaskGroupSummary = { ...initial, aggregateStatus };
-            tx.set(summaryRef, summaryToDoc(summary));
+            tx.set(summaryRef, summary as unknown as DocumentData);
             if (task.status !== 'archived') {
               writeCounts(tx, task.userId, applyNewGroupDelta(existingCounts, aggregateStatus), now);
             }
@@ -55,7 +55,7 @@ export function createTaskGroupSummaryFirestoreRepository(deps: { firestore: Fir
           const current = docToSummary(summaryDoc.data() as Record<string, unknown>);
           const oldStatus = current.aggregateStatus;
           const updated = applyIncrementalCreateUpdate(current, task, now);
-          tx.set(summaryRef, summaryToDoc(updated));
+          tx.set(summaryRef, updated as unknown as DocumentData);
           if (updated.aggregateStatus !== oldStatus) {
             writeCounts(tx, task.userId, applyStatusChangeDelta(existingCounts, oldStatus, updated.aggregateStatus), now);
           }
@@ -87,7 +87,7 @@ export function createTaskGroupSummaryFirestoreRepository(deps: { firestore: Fir
           const current = docToSummary(summaryDoc.data() as Record<string, unknown>);
           const oldStatus = current.aggregateStatus;
           const { updated, allArchived } = applyStatusChangeUpdate(current, oldTask, newTask, now);
-          tx.set(summaryRef, summaryToDoc(updated));
+          tx.set(summaryRef, updated as unknown as DocumentData);
 
           if (allArchived) {
             writeCounts(tx, newTask.userId, applyStatusChangeDelta(existingCounts, oldStatus, 'archived'), now);
@@ -124,7 +124,7 @@ export function createTaskGroupSummaryFirestoreRepository(deps: { firestore: Fir
             return;
           }
 
-          tx.set(summaryRef, summaryToDoc(updated));
+          tx.set(summaryRef, updated as unknown as DocumentData);
           if (updated.aggregateStatus !== oldStatus) {
             writeCounts(tx, task.userId, applyStatusChangeDelta(existingCounts, oldStatus, updated.aggregateStatus), now);
           }
@@ -206,7 +206,7 @@ export function createTaskGroupSummaryFirestoreRepository(deps: { firestore: Fir
           }
 
           summary.aggregateStatus = deriveAggregateStatusFromSummary(summary);
-          tx.set(summaryRef, summaryToDoc(summary), { merge: true });
+          tx.set(summaryRef, summary as unknown as DocumentData, { merge: true });
 
           if (existingSummary === null) {
             writeCounts(tx, userId, applyNewGroupDelta(existingCounts, summary.aggregateStatus), now);
@@ -258,7 +258,7 @@ export function createTaskGroupSummaryFirestoreRepository(deps: { firestore: Fir
             updatedAt: now,
           };
           updated.aggregateStatus = deriveAggregateStatusFromSummary(updated);
-          tx.set(summaryRef, summaryToDoc(updated));
+          tx.set(summaryRef, updated as unknown as DocumentData);
 
           if (updated.aggregateStatus !== oldStatus) {
             writeCounts(tx, userId, applyStatusChangeDelta(existingCounts, oldStatus, updated.aggregateStatus), now);
@@ -294,5 +294,3 @@ export function createTaskGroupSummaryFirestoreRepository(deps: { firestore: Fir
     },
   };
 }
-
-export { asDocRef };

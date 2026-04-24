@@ -16,7 +16,6 @@ import {
   buildInitialSummary,
   computeReviewNeedsRemediation,
   computeSummaryFromTasks,
-  countsToDoc,
   defaultCounts,
   docToCounts,
   docToSummary,
@@ -26,7 +25,6 @@ import {
   hasImplementationLink,
   isActiveStatus,
   statusToCountField,
-  summaryToDoc,
   toTimestamp,
 } from '../../../../infra/firestore/taskGroupSummary/serializer.js';
 
@@ -142,10 +140,10 @@ describe('serializer: toTimestamp', () => {
   });
 });
 
-describe('serializer: docToSummary / summaryToDoc roundtrip', () => {
+describe('serializer: docToSummary', () => {
   const now = Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'));
 
-  it('roundtrips a full summary', () => {
+  it('reads a full summary', () => {
     const original: TaskGroupSummary = {
       userId: 'u1',
       linearIssueId: 'INT-1',
@@ -167,8 +165,7 @@ describe('serializer: docToSummary / summaryToDoc roundtrip', () => {
       aggregateStatus: 'active',
       updatedAt: now,
     };
-    const doc = summaryToDoc(original);
-    const back = docToSummary(doc as Record<string, unknown>);
+    const back = docToSummary(original as unknown as Record<string, unknown>);
     expect(back).toMatchObject(original);
   });
 
@@ -182,7 +179,7 @@ describe('serializer: docToSummary / summaryToDoc roundtrip', () => {
       hasImplementationReadyLabel: true, hasMergeReadyLabel: false, labelsUpdatedAt: now,
       isImportant: true, aggregateStatus: 'done', updatedAt: now,
     };
-    const back = docToSummary(summaryToDoc(s) as Record<string, unknown>);
+    const back = docToSummary(s as unknown as Record<string, unknown>);
     expect(back.hasImplementationReadyLabel).toBe(true);
     expect(back.hasMergeReadyLabel).toBe(false);
     expect(back.labelsUpdatedAt).toBeDefined();
@@ -228,7 +225,7 @@ describe('serializer: docToSummary / summaryToDoc roundtrip', () => {
   });
 });
 
-describe('serializer: docToCounts / countsToDoc / defaultCounts', () => {
+describe('serializer: docToCounts / defaultCounts', () => {
   it('defaultCounts is all zeros', () => {
     const c = defaultCounts('u1');
     expect(c.userId).toBe('u1');
@@ -240,12 +237,12 @@ describe('serializer: docToCounts / countsToDoc / defaultCounts', () => {
     expect(c.totalGroups).toBe(0);
   });
 
-  it('roundtrips a counts doc', () => {
+  it('reads a counts doc', () => {
     const now = Timestamp.now();
     const original: UserGroupCounts = {
       userId: 'u', active: 1, needsAction: 2, done: 3, failed: 4, archived: 5, totalGroups: 15, updatedAt: now,
     };
-    const back = docToCounts(countsToDoc(original) as Record<string, unknown>);
+    const back = docToCounts(original as unknown as Record<string, unknown>);
     expect(back).toMatchObject(original);
   });
 });
@@ -361,6 +358,30 @@ describe('serializer: applyIncrementalCreateUpdate', () => {
     const updated = applyIncrementalCreateUpdate(base, makeTask({ status: 'running', createdAt: t2, updatedAt: t2 }), t2);
     expect(updated.aggregateStatus).toBe('active');
   });
+
+  it('mostRecentDispatchedAt advances when new dispatch is newer than existing', () => {
+    const existingDispatch = Timestamp.fromMillis(100);
+    const newerDispatch = Timestamp.fromMillis(200);
+    const withExisting: TaskGroupSummary = { ...base, mostRecentDispatchedAt: existingDispatch };
+    const updated = applyIncrementalCreateUpdate(
+      withExisting,
+      makeTask({ status: 'dispatched', dispatchedAt: newerDispatch, createdAt: t2, updatedAt: t2 }),
+      t2,
+    );
+    expect(updated.mostRecentDispatchedAt?.toMillis()).toBe(200);
+  });
+
+  it('mostRecentDispatchedAt does not regress when new dispatch is older than existing', () => {
+    const existingDispatch = Timestamp.fromMillis(100);
+    const olderDispatch = Timestamp.fromMillis(50);
+    const withExisting: TaskGroupSummary = { ...base, mostRecentDispatchedAt: existingDispatch };
+    const updated = applyIncrementalCreateUpdate(
+      withExisting,
+      makeTask({ status: 'dispatched', dispatchedAt: olderDispatch, createdAt: t2, updatedAt: t2 }),
+      t2,
+    );
+    expect(updated.mostRecentDispatchedAt?.toMillis()).toBe(100);
+  });
 });
 
 describe('serializer: applyStatusChangeUpdate', () => {
@@ -428,6 +449,32 @@ describe('serializer: applyStatusChangeUpdate', () => {
   it('updates review remediation', () => {
     const { updated } = applyStatusChangeUpdate(base, makeTask({ status: 'running' }), makeTask({ agentType: 'review', status: 'reviewed', result: { needs_remediation: '0' }, updatedAt: t2 }), t2);
     expect(updated.latestReviewNeedsRemediation).toBe(false);
+  });
+
+  it('mostRecentDispatchedAt advances when new dispatch is newer than existing', () => {
+    const existingDispatch = Timestamp.fromMillis(100);
+    const newerDispatch = Timestamp.fromMillis(200);
+    const withExisting: TaskGroupSummary = { ...base, mostRecentDispatchedAt: existingDispatch };
+    const { updated } = applyStatusChangeUpdate(
+      withExisting,
+      makeTask({ status: 'queued' }),
+      makeTask({ status: 'dispatched', dispatchedAt: newerDispatch, updatedAt: t2 }),
+      t2,
+    );
+    expect(updated.mostRecentDispatchedAt?.toMillis()).toBe(200);
+  });
+
+  it('mostRecentDispatchedAt does not regress when new dispatch is older than existing', () => {
+    const existingDispatch = Timestamp.fromMillis(100);
+    const olderDispatch = Timestamp.fromMillis(50);
+    const withExisting: TaskGroupSummary = { ...base, mostRecentDispatchedAt: existingDispatch };
+    const { updated } = applyStatusChangeUpdate(
+      withExisting,
+      makeTask({ status: 'queued' }),
+      makeTask({ status: 'dispatched', dispatchedAt: olderDispatch, updatedAt: t2 }),
+      t2,
+    );
+    expect(updated.mostRecentDispatchedAt?.toMillis()).toBe(100);
   });
 });
 
@@ -537,6 +584,30 @@ describe('serializer: computeSummaryFromTasks', () => {
     const t1Task = makeTask({ id: 'a', agentType: 'execution', status: 'implemented', result: { prUrl: 'https://1' }, prNumber: 10, createdAt: t1, updatedAt: t1 });
     const t2Task = makeTask({ id: 'b', agentType: 'execution', status: 'implemented', result: { prUrl: 'https://2' }, prNumber: 20, createdAt: t2, updatedAt: t2 });
     expect(computeSummaryFromTasks('u', 'g', [t1Task, t2Task], t2)?.prNumber).toBe(10);
+  });
+
+  it('mostRecentDispatchedAt keeps the max when tasks arrive in descending dispatch order', () => {
+    const newerDispatch = Timestamp.fromMillis(200);
+    const olderDispatch = Timestamp.fromMillis(100);
+    const newerTask = makeTask({ id: 'a', status: 'dispatched', dispatchedAt: newerDispatch, createdAt: t1, updatedAt: t1 });
+    const olderTask = makeTask({ id: 'b', status: 'dispatched', dispatchedAt: olderDispatch, createdAt: t1, updatedAt: t1 });
+    const s = computeSummaryFromTasks('u', 'g', [newerTask, olderTask], t2);
+    expect(s?.mostRecentDispatchedAt?.toMillis()).toBe(200);
+  });
+
+  it('latestReviewNeedsRemediation reflects the later review when reviews arrive in reverse chronological order', () => {
+    const laterReview = makeTask({
+      id: 'later', agentType: 'review', status: 'reviewed',
+      result: { needs_remediation: '1' }, createdAt: t1, updatedAt: t2,
+    });
+    const earlierReview = makeTask({
+      id: 'earlier', agentType: 'review', status: 'reviewed',
+      result: { needs_remediation: '0' }, createdAt: t1, updatedAt: t1,
+    });
+    // Tasks iterated in [later, earlier] order — the later-timestamp branch wins first,
+    // the earlier review hits the else branch and must not overwrite.
+    const s = computeSummaryFromTasks('u', 'g', [laterReview, earlierReview], t2);
+    expect(s?.latestReviewNeedsRemediation).toBe(true);
   });
 });
 
