@@ -136,7 +136,7 @@ describe('contracts — round-trip with every agent prompt', () => {
     workerType: 'auto',
   };
 
-  const cases: Array<{ agent: CompletionAgentType; build: () => string }> = [
+  const cases: { agent: CompletionAgentType; build: () => string }[] = [
     { agent: 'planning', build: () => planningPrompt.build(baseParams) },
     { agent: 'execution', build: () => executionPrompt.build(baseParams) },
     { agent: 'review', build: () => reviewPrompt.build(baseParams) },
