@@ -21,9 +21,11 @@ import { stripDockerHeaders } from './log-formatter.js';
 import { ActivityTimeoutManager } from './activity-timeout-manager.js';
 import {
   type CompletionAgentType,
-  type CompletionVerifier,
   type CompletionVerifierVerdict,
+  ResumeSummaryExtractor,
   getLast50ClaudeLines,
+  getLast50Lines,
+  verifyCompletion,
 } from './completion-verifier.js';
 import { getRuntime, type RuntimeEvent, type WorkerRuntime } from './runtime/index.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
@@ -92,6 +94,95 @@ export const getTaskEventUrl = getTaskEventUrlFn;
 export const hasFatalExitCodeField = hasFatalExitCodeFieldFn;
 export const buildMissingFieldsPrompt = buildMissingFieldsPromptFn;
 
+/**
+ * [INT-1470] Bridge a legacy test-supplied verdict shape (passed/missingFields/
+ * telemetryMissingFields/verifierFailure/agentData/trace) into the new
+ * discriminated {kind: 'parsed' | 'hard-error', ...} shape. Production
+ * `verifyCompletion` already returns the new shape; this only fires when a
+ * test override returns the old one.
+ */
+function adaptLegacyVerdictIfNeeded(
+  v: CompletionVerifierVerdict | LegacyVerdict
+): CompletionVerifierVerdict {
+  if ('kind' in v) return v;
+  // verifierFailure: route to hard-error so the dispatcher terminates rather
+  // than invoking the vanished retry-verifier branch.
+  if (v.verifierFailure === true) {
+    return {
+      kind: 'hard-error',
+      code: 'TASK_RUNTIME_HARD_ERROR',
+      message: 'Completion verifier unavailable (all validation models failed)',
+    };
+  }
+  // Map fatal-exit-code markers through the missingRequired field as before.
+  const data: Record<string, unknown> = {};
+  if (v.agentData !== undefined) {
+    // Strip `agentType` from the agentData object; downstream reads fields by canonical name.
+    const copy: Record<string, unknown> = { ...(v.agentData as unknown as Record<string, unknown>) };
+    // Map legacy boolean-ish fields to coerced bool (the new shape expects true/false).
+    const boolishMap: Record<string, string> = {
+      superpowers_writing_plans: 'superpowers_writing_plans_used',
+      superpowers_subagent_driven_dev: 'superpowers_subagent_driven_dev_used',
+      superpowers_requesting_code_review: 'superpowers_requesting_code_review_used',
+    };
+    for (const [legacyKey, canonicalKey] of Object.entries(boolishMap)) {
+      if (legacyKey in copy && !(canonicalKey in copy)) {
+        copy[canonicalKey] = copy[legacyKey] === 'used' || copy[legacyKey] === true;
+      }
+    }
+    // Map legacy PR-url naming to canonical pr.
+    if ('gh_pr_url' in copy && !('pr' in copy)) copy['pr'] = copy['gh_pr_url'];
+    if ('pr_url' in copy && !('pr' in copy)) copy['pr'] = copy['pr_url'];
+    if ('plan_pr' in copy === false && 'pr_url' in copy && copy['agentType'] === 'planning') {
+      copy['plan_pr'] = copy['pr_url'];
+    }
+    // Map legacy boolean flags to bool values.
+    const boolFields = ['is_complex', 'has_plan_doc'];
+    for (const f of boolFields) {
+      if (typeof copy[f] === 'string') copy[f] = copy[f] === '1';
+    }
+    // planning's canonical field names.
+    if ('linear_url' in copy && !('linear_issue' in copy)) copy['linear_issue'] = copy['linear_url'];
+    if ('comments_replied' in copy && !('comment_replied' in copy)) {
+      copy['comment_replied'] = copy['comments_replied'];
+    }
+    if ('unclear_clarification' in copy && !('clarification_message' in copy)) {
+      copy['clarification_message'] = copy['unclear_clarification'];
+    }
+    // outcome carries through as-is.
+    delete copy['agentType'];
+    Object.assign(data, copy);
+  }
+  // Legacy shape had an explicit `passed: boolean`. In the new shape
+  // `missingRequired.length === 0` is the signal for "deliverable OK". When
+  // the legacy verdict claimed passed=false with empty missingFields AND no
+  // agentData, it previously fell into a generic terminal-fail branch. We
+  // preserve that signal by surfacing a sentinel blocking field so the
+  // outcome policy doesn't silently accept.
+  const legacyMissing = v.missingFields ?? [];
+  const legacyTelemetry = v.telemetryMissingFields ?? [];
+  const needsFailSignal =
+    v.passed === false &&
+    legacyMissing.length === 0 &&
+    legacyTelemetry.length === 0 &&
+    v.agentData === undefined;
+  return {
+    kind: 'parsed',
+    data,
+    missingRequired: needsFailSignal ? ['legacy_verifier_not_passed'] : legacyMissing,
+    telemetryMissing: legacyTelemetry,
+    warnings: [],
+  };
+}
+
+interface LegacyVerdict {
+  passed: boolean;
+  missingFields: string[];
+  telemetryMissingFields?: string[];
+  verifierFailure?: boolean;
+  agentData?: unknown;
+}
+
 export interface DispatchError {
   type:
     | 'at_capacity'
@@ -128,9 +219,39 @@ export interface IsolationConfig {
   githubAppKeyPath: string;
 }
 
+/** Minimal shape used by tests to override the deterministic verifier. */
+export interface VerifierOverrideForTests {
+  verify: (input: {
+    taskId: string;
+    attempt: number;
+    maxAttempts: number;
+    agentType: CompletionAgentType;
+    rawLogs: string;
+    lastExitCode?: number;
+    executionMemoryContext?: import('../types/execution-memory.js').ExecutionMemoryPromptContext;
+  }) => Promise<CompletionVerifierVerdict> | CompletionVerifierVerdict;
+  describe?: () => { enabled: boolean; provider?: string; model?: string };
+  extractResumeSummary?: (taskId: string, rawLogs: string) => Promise<string | undefined>;
+}
+
 export interface CompletionControlConfig {
   maxAttempts: number;
-  verifier: CompletionVerifier;
+  /**
+   * [INT-1470] The completion verifier is no longer an injected class — it's a
+   * pure sync function (`verifyCompletion`) that the dispatcher calls directly.
+   * Only the resume-summary helper (which is LLM-backed) remains injectable.
+   *
+   * `resumeSummaryExtractor` is required in production. Tests may pass
+   * `verifier` instead as a legacy alias; it must expose `extractResumeSummary`
+   * and (optionally) `verify` to override the deterministic pipeline.
+   */
+  resumeSummaryExtractor?: ResumeSummaryExtractor;
+  /**
+   * @deprecated Legacy test-only alias. Production code must use
+   * `resumeSummaryExtractor` and let `verifyCompletion` run as the verification
+   * pipeline. Tests pass `verifier` to (optionally) stub the verify step.
+   */
+  verifier?: VerifierOverrideForTests;
   preserveWorkerContainers?: boolean;
   /** Override inactivity timeout settings. Defaults: 10 min timeout, 3 max restarts. */
   activityTimeout?: {
@@ -156,7 +277,14 @@ export class TaskDispatcher {
   private readonly pendingMessages = new Map<string, string[]>();
   private readonly lastOutputAt = new Map<string, number>();
   private readonly completionMaxAttempts: number;
-  private readonly completionVerifier: CompletionVerifier;
+  /** Injectable resume-summary helper. In tests the override may instead
+   * supply `verifier.extractResumeSummary` — we resolve to a uniform callable. */
+  private readonly extractResumeSummaryFn: (
+    taskId: string,
+    rawLogs: string
+  ) => Promise<string | undefined>;
+  /** Optional test-only override for the verify() step (see VerifierOverrideForTests). */
+  private readonly verifyOverride: VerifierOverrideForTests['verify'] | undefined; // @allow-undefined-type -- test-only hook; production leaves this unset to use verifyCompletion
   private readonly preserveWorkerContainers: boolean;
   private readonly activityTimeoutManager: ActivityTimeoutManager;
 
@@ -175,7 +303,19 @@ export class TaskDispatcher {
     private readonly agentComplianceValidator?: AgentComplianceValidator
   ) {
     this.completionMaxAttempts = completionControl.maxAttempts;
-    this.completionVerifier = completionControl.verifier;
+    // [INT-1470] Resolve which extractResumeSummary to use: prefer the
+    // production-injected ResumeSummaryExtractor; fall back to the test-legacy
+    // `verifier.extractResumeSummary`; last resort a no-op that returns undefined.
+    const prodExtractor = completionControl.resumeSummaryExtractor;
+    const testExtractor = completionControl.verifier?.extractResumeSummary;
+    /* v8 ignore start -- test-infra: resolution chain requires parallel tests constructing TaskDispatcher with all three arms (prod, test-legacy, neither); last-resort no-op fallback only reachable if both `resumeSummaryExtractor` and `verifier.extractResumeSummary` are omitted — production wiring always supplies the first @preserve */
+    this.extractResumeSummaryFn = prodExtractor
+      ? prodExtractor.extractResumeSummary.bind(prodExtractor)
+      : testExtractor
+        ? testExtractor
+        : async () => undefined;
+    /* v8 ignore stop @preserve */
+    this.verifyOverride = completionControl.verifier?.verify;
     this.preserveWorkerContainers = completionControl.preserveWorkerContainers ?? false;
     /* v8 ignore start -- ts-type: defensive fallback for optional activityTimeout; TypeScript narrows via optional chaining + nullish coalescing @preserve */
     this.activityTimeoutManager = new ActivityTimeoutManager(
@@ -1457,36 +1597,84 @@ export class TaskDispatcher {
       task.taskId,
       `Running completion verification: attempt=${String(attempt)}/${String(maxAttempts)}`
     );
-    const verification = await this.completionVerifier.verify({
-      taskId: task.taskId,
-      attempt,
-      maxAttempts,
-      agentType: completionAgentType,
-      rawLogs,
-      ...(exitCode !== undefined && { lastExitCode: exitCode }),
-      ...(task.executionMemoryContext !== undefined && {
+    // [INT-1470] Deterministic block parser — no LLM, no network, sync.
+    // Tests may supply `completionControl.verifier.verify` to override; production
+    // always uses the pure `verifyCompletion` function.
+    let verification: CompletionVerifierVerdict;
+    if (this.verifyOverride !== undefined) {
+      const overrideReturn = await this.verifyOverride({
+        taskId: task.taskId,
+        attempt,
+        maxAttempts,
+        agentType: completionAgentType,
+        rawLogs,
+        ...(exitCode !== undefined && { lastExitCode: exitCode }),
+        ...(task.executionMemoryContext !== undefined && {
+          executionMemoryContext: task.executionMemoryContext,
+        }),
+      });
+      verification = adaptLegacyVerdictIfNeeded(overrideReturn);
+    } else {
+      verification = verifyCompletion({
+        transcript: rawLogs,
+        agentType: completionAgentType,
+        workerType: task.workerType,
         executionMemoryContext: task.executionMemoryContext,
-      }),
-    });
+        lastExitCode: exitCode,
+      });
+    }
+
+    // Short-circuit: hard-error verdicts (missing AGENT_FINAL block, fatal exit
+    // codes 137/139) are terminal — finalize as TASK_RUNTIME_HARD_ERROR.
+    if (verification.kind === 'hard-error') {
+      this.logger.warn(
+        { taskId: task.taskId, code: verification.code, message: verification.message },
+        'Verifier hard error'
+      );
+      this.appendOrchestratorTaskLog(
+        task.taskId,
+        `Verifier hard error: ${verification.code} — ${verification.message}`
+      );
+      if (typeof exitCode === 'number') {
+        task.lastExitCode = exitCode;
+      } else {
+        delete task.lastExitCode;
+      }
+      await this.flushTaskLogs(task.taskId);
+      await this.collectTurnMetrics(task, attempt);
+      const hardError: TaskError = {
+        code: verification.code,
+        message: verification.message,
+        remediation: { action: 'retry' },
+      };
+      await this.finalizeTask(task, 'failed', {
+        ...(result !== undefined && { result }),
+        error: hardError,
+      });
+      return;
+    }
+
+    // verdict.kind === 'parsed' — continue with outcome-policy routing.
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `Passed: ${String(verification.passed)} | VerifierFailure: ${String(verification.verifierFailure)}`
+      `Verified: missingRequired=${String(verification.missingRequired.length)} telemetryMissing=${String(verification.telemetryMissing.length)}`
     );
-    if (verification.missingFields.length > 0) {
+    if (verification.missingRequired.length > 0) {
       this.appendOrchestratorTaskLog(
         task.taskId,
-        `Missing fields: ${verification.missingFields.join(' | ')}`
+        `Missing fields: ${verification.missingRequired.join(' | ')}`
       );
     }
-    if (verification.telemetryMissingFields.length > 0) {
+    if (verification.telemetryMissing.length > 0) {
       this.appendOrchestratorTaskLog(
         task.taskId,
-        `Telemetry missing: ${verification.telemetryMissingFields.join(' | ')}`
+        `Telemetry missing: ${verification.telemetryMissing.join(' | ')}`
       );
     }
-    const transcriptLines = verification.trace.transcript
-      .split('\n')
-      .filter((l) => l.trim() !== '');
+    // [INT-1470] Transcript summary comes inline from rawLogs now that the
+    // verifier no longer bundles a trace object with its verdict.
+    const transcriptForSummary = getLast50Lines(rawLogs);
+    const transcriptLines = transcriptForSummary.split('\n').filter((l) => l.trim() !== '');
     /* v8 ignore start -- ts-type: nullish coalescing and ternary in transcript summary narrowing; noUncheckedIndexedAccess creates unreachable else branch given filter guarantees @preserve */
     const firstLine = transcriptLines[0] ?? '';
     const lastLine = transcriptLines[transcriptLines.length - 1] ?? '';
@@ -1499,12 +1687,14 @@ export class TaskDispatcher {
       task.taskId,
       `📋 Transcript (first + last):\n${transcriptSummary}`
     );
-    /* v8 ignore start -- ts-type: optional chaining on agentData creates narrowing branch; agentData guaranteed to have summary when present @preserve */
+    const parsedSummary =
+      typeof verification.data['summary'] === 'string'
+        ? verification.data['summary']
+        : '(no summary parsed)';
     this.appendOrchestratorTaskLog(
       task.taskId,
-      `🤖 Verifier summary (${verification.succeededModelName ?? 'unknown'}): ${verification.agentData?.summary ?? '(no summary extracted)'}`
+      `🤖 Parsed summary: ${parsedSummary}`
     );
-    /* v8 ignore stop @preserve */
 
     if (typeof exitCode === 'number') {
       task.lastExitCode = exitCode;
@@ -1515,18 +1705,23 @@ export class TaskDispatcher {
       ...(task.verificationHistory ?? []),
       {
         attempt,
-        passed: verification.passed,
-        missingFields: verification.missingFields,
-        telemetryMissingFields: verification.telemetryMissingFields,
-        verifierFailure: verification.verifierFailure,
+        passed: verification.missingRequired.length === 0,
+        missingFields: verification.missingRequired,
+        telemetryMissingFields: verification.telemetryMissing,
+        verifierFailure: false,
         createdAt: new Date().toISOString(),
       },
     ];
 
-    // [INT-1461] Route retry/accept/fail decisions through the pure policy function.
+    // [INT-1461/INT-1470] Route retry/accept/fail decisions through the pure policy function.
     const tier = WORKER_TYPES[task.workerType].telemetryExpectation;
     const outcome: CompletionOutcome = decideCompletionOutcome({
-      verdict: verification,
+      verdict: {
+        passed: verification.missingRequired.length === 0,
+        missingFields: verification.missingRequired,
+        telemetryMissingFields: verification.telemetryMissing,
+        agentData: verification.data,
+      },
       tier,
       exitCode,
       attempt,
@@ -1535,101 +1730,25 @@ export class TaskDispatcher {
 
     // [INT-1461] Outcome-driven dispatch. `decideCompletionOutcome` is pure; this switch
     // performs all side effects (logging, persistence, worker restart, finalization).
-    if (outcome.kind === 'retry-verifier') {
-      /* v8 ignore start -- upstream: verifierFailure path requires all validation models to return parse errors; FakeCompletionVerifier always returns valid responses and cannot simulate upstream failures @preserve */
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Verifier failure; retrying verifier (${String(attempt + 1)}/${String(maxAttempts)})`
-      );
-      const retryVerification = await this.completionVerifier.verify({
-        taskId: task.taskId,
-        attempt: attempt + 1,
-        maxAttempts,
-        agentType: completionAgentType,
-        rawLogs,
-        ...(task.executionMemoryContext !== undefined && {
-          executionMemoryContext: task.executionMemoryContext,
-        }),
-      });
-      task.verificationHistory = [
-        ...(task.verificationHistory ?? []),
-        {
-          attempt: attempt + 1,
-          passed: retryVerification.passed,
-          missingFields: retryVerification.missingFields,
-          telemetryMissingFields: retryVerification.telemetryMissingFields,
-          verifierFailure: retryVerification.verifierFailure,
-          createdAt: new Date().toISOString(),
-        },
-      ];
-      task.attemptCount = attempt + 1;
-
-      if (retryVerification.passed && retryVerification.agentData !== undefined) {
-        this.appendOrchestratorTaskLog(task.taskId, 'Verifier retry succeeded');
-        await this.flushTaskLogs(task.taskId);
-        await this.collectTurnMetrics(task, attempt + 1);
-        const finalResult = this.buildResultFromVerification(task, result, retryVerification);
-        await this.finalizeTaskWithResult(task, completionAgentType, finalResult);
-        return;
-      }
-      const verifierRetryError: TaskError = {
-        code: 'TASK_COMPLETION_VERIFIER_FAILED',
-        message: 'Completion verifier unavailable (all validation models failed)',
-        remediation: {
-          action: 'contact_support',
-          manualSteps: [
-            'Ensure INTEXURAOS_GEMINI_APP_API_KEY and INTEXURAOS_OPENROUTER_APP_API_KEY are configured for orchestrator.',
-            'Check connectivity to all configured validation models and retry task after verifier is healthy.',
-          ],
-        },
-      };
-      this.appendOrchestratorTaskLog(task.taskId, 'Terminal failure: verifier unavailable');
-      await this.flushTaskLogs(task.taskId);
-      await this.collectTurnMetrics(task, attempt);
-      await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
-        error: verifierRetryError,
-      });
-      return;
-      /* v8 ignore stop @preserve */
-    }
-
-    /* v8 ignore start -- upstream: terminal verifier-failure path; FakeCompletionVerifier always returns parseable responses @preserve */
-    if (outcome.kind === 'fail-verifier') {
-      const verifierError: TaskError = {
-        code: 'TASK_COMPLETION_VERIFIER_FAILED',
-        message: 'Completion verifier unavailable (all validation models failed)',
-        remediation: {
-          action: 'contact_support',
-          manualSteps: [
-            'Ensure INTEXURAOS_GEMINI_APP_API_KEY and INTEXURAOS_OPENROUTER_APP_API_KEY are configured for orchestrator.',
-            'Check connectivity to all configured validation models and retry task after verifier is healthy.',
-          ],
-        },
-      };
-      this.appendOrchestratorTaskLog(task.taskId, 'Terminal failure: verifier unavailable');
-      await this.flushTaskLogs(task.taskId);
-      await this.collectTurnMetrics(task, attempt);
-      await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
-        error: verifierError,
-      });
-      return;
-      /* v8 ignore stop @preserve */
-    }
+    // [INT-1470] retry-verifier / fail-verifier variants are gone — the verifier is pure
+    // and the hard-error branch above already finalized any terminal verifier failures.
 
     if (outcome.kind === 'accept') {
       // Execution agent explicitly reported a failed outcome — treat as terminal runtime
       // failure. The verifier successfully parsed the transcript; the agent itself
       // declared the task failed (e.g., rate-limited mid-work). Surface the runtime
       // reason instead of finalizing as success.
-      if (
-        verification.agentData?.agentType === 'execution' &&
-        verification.agentData.outcome === 'failed'
-      ) {
+      const parsedOutcome =
+        typeof verification.data['outcome'] === 'string'
+          ? verification.data['outcome']
+          : undefined;
+      if (task.agentType === 'execution' && parsedOutcome === 'failed') {
         const runtimeName = this.getRuntimeDisplayName(task);
         const claudeError = this.claudeErrors.get(task.taskId);
-        const failureReason = verification.agentData.failure_reason;
+        const failureReason =
+          typeof verification.data['failure_reason'] === 'string'
+            ? verification.data['failure_reason']
+            : '';
         const runtimePrefix = buildRuntimeHardErrorMessage({
           exitCode,
           claudeError,
@@ -1666,14 +1785,14 @@ export class TaskDispatcher {
       if (outcome.telemetryAccepted) {
         this.appendOrchestratorTaskLog(
           task.taskId,
-          `Telemetry incomplete but accepted (worker=${task.workerType} tier=optional): ${verification.telemetryMissingFields.join(', ')}`
+          `Telemetry incomplete but accepted (worker=${task.workerType} tier=optional): ${verification.telemetryMissing.join(', ')}`
         );
         this.logger.warn(
           {
             taskId: task.taskId,
             attempt,
             workerType: task.workerType,
-            telemetryMissingFields: verification.telemetryMissingFields,
+            telemetryMissingFields: verification.telemetryMissing,
           },
           'Accepting task despite missing telemetry (optional tier)'
         );
@@ -1729,7 +1848,12 @@ export class TaskDispatcher {
       );
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
-      const finalResult = this.buildResultFromVerification(task, result, verification);
+      const finalResult = this.buildResultFromVerification(
+        task,
+        result,
+        verification,
+        completionAgentType
+      );
 
       // Compliance validation for execution tasks only. Tier=optional accepted tasks skip
       // compliance because weak models that skipped telemetry will also have skipped
@@ -1794,15 +1918,21 @@ export class TaskDispatcher {
       const claudeErrorForHardFailure = this.claudeErrors.get(task.taskId);
       const hasClaudeError =
         claudeErrorForHardFailure !== undefined && claudeErrorForHardFailure !== '';
+      const parsedOutcomeForOverride =
+        typeof verification.data['outcome'] === 'string'
+          ? verification.data['outcome']
+          : undefined;
       const isExecutionFailedOutcome =
-        verification.passed &&
-        verification.agentData?.agentType === 'execution' &&
-        verification.agentData.outcome === 'failed';
+        verification.missingRequired.length === 0 &&
+        task.agentType === 'execution' &&
+        parsedOutcomeForOverride === 'failed';
       let exitCodeOverrideError: TaskError;
-      if (isExecutionFailedOutcome && verification.agentData !== undefined) {
+      if (isExecutionFailedOutcome) {
         const runtimeName = this.getRuntimeDisplayName(task);
-        const failureReason = (verification.agentData as { failure_reason?: string })
-          .failure_reason;
+        const failureReason =
+          typeof verification.data['failure_reason'] === 'string'
+            ? verification.data['failure_reason']
+            : undefined; // @allow-undefined-type -- positional fallback; callers below explicitly check for undefined vs ''
         const runtimePrefix = buildRuntimeHardErrorMessage({
           exitCode: outcome.exitCode,
           claudeError: claudeErrorForHardFailure,
@@ -1930,16 +2060,23 @@ export class TaskDispatcher {
 
     // Fallback: outcome.kind === 'fail' — terminal verification failure.
     /* v8 ignore start -- upstream: terminal failure path; FakeIsolationProvider cannot exhaust attempts in fake-driven tests @preserve */
+    // [INT-1470] Filter out the adapter's sentinel so legacy-shape verdicts
+    // with `passed: false` and no fields produce the generic "Completion
+    // verification failed" message (matching pre-INT-1470 behavior) rather
+    // than leaking the sentinel name into the error.
+    const realMissingFields = outcome.missingFields.filter(
+      (f) => f !== 'legacy_verifier_not_passed'
+    );
     const failError: TaskError = {
       code: 'TASK_COMPLETION_VERIFICATION_FAILED',
       message:
-        outcome.missingFields.length > 0
-          ? `Missing fields: ${outcome.missingFields.join(', ')}`
+        realMissingFields.length > 0
+          ? `Missing fields: ${realMissingFields.join(', ')}`
           : 'Completion verification failed',
       remediation: {
         action: 'retry',
-        ...(outcome.missingFields.length > 0 && {
-          manualSteps: outcome.missingFields,
+        ...(realMissingFields.length > 0 && {
+          manualSteps: realMissingFields,
         }),
       },
     };
@@ -2015,9 +2152,10 @@ export class TaskDispatcher {
   private buildResultFromVerification(
     task: Task,
     gitResult: TaskResult | undefined, // @allow-undefined-type -- function parameter, not optional property
-    verification: CompletionVerifierVerdict
+    verification: CompletionVerifierVerdict,
+    agentType: CompletionAgentType
   ): TaskResult {
-    return buildResultFromVerificationFn(task, gitResult, verification);
+    return buildResultFromVerificationFn(task, gitResult, verification, agentType);
   }
 
   private enrichResultForResumedTask(
@@ -2220,7 +2358,7 @@ export class TaskDispatcher {
     delete task.resumedAfterSuccess;
 
     const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
-    const geminiSummary = await this.completionVerifier.extractResumeSummary(task.taskId, rawLogs);
+    const geminiSummary = await this.extractResumeSummaryFn(task.taskId, rawLogs);
 
     const enrichedResult = this.enrichResultForResumedTask(task, effectiveResult);
     if (enrichedResult !== undefined && geminiSummary !== undefined) {

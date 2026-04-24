@@ -38,7 +38,7 @@ import { ApiKeyValidator } from '../services/api-key-validator.js';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { CompletionControlConfig, IsolationConfig } from '../services/task-dispatcher.js';
 import {
-  OrchestratorCompletionVerifier,
+  ResumeSummaryExtractor,
   getVerifierTaskId,
 } from '../services/completion-verifier.js';
 import { TurnMetricsCollector } from '../services/turn-metrics-collector.js';
@@ -289,7 +289,9 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
   }
 
   const primaryModelName = primaryEntry.modelName;
-  const completionVerifier = new OrchestratorCompletionVerifier(logger, {
+  // [INT-1470] The completion verifier is a pure sync function; only the
+  // resume-summary helper is LLM-backed and injected here.
+  const resumeSummaryExtractor = new ResumeSummaryExtractor(logger, {
     primaryClient: primaryEntry.client,
     fallbackClients: validationClients.slice(1).map((e) => e.client),
     primaryModelName,
@@ -298,7 +300,7 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
 
   const completionControl: CompletionControlConfig = {
     maxAttempts: env.completionMaxAttempts,
-    verifier: completionVerifier,
+    resumeSummaryExtractor,
     preserveWorkerContainers: env.preserveWorkerContainers,
   };
 
@@ -307,10 +309,10 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
       completionMaxAttempts: completionControl.maxAttempts,
       preserveWorkerContainers: env.preserveWorkerContainers,
       workerImage: env.workerImage,
-      verifier: completionVerifier.describe(),
+      resumeSummaryExtractor: resumeSummaryExtractor.describe(),
       validationModels: validationModels.map((m) => m.modelId),
     },
-    'Completion verification configuration'
+    'Completion verification configuration (deterministic parser + resume-summary LLM)'
   );
 
   const turnMetricsCollector = new TurnMetricsCollector(
