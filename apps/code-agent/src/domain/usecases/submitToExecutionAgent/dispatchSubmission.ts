@@ -27,6 +27,7 @@ import {
   type SubmitToExecutionAgentResult,
 } from './types.js';
 import type { PreparedSubmission } from './prepareSubmission.js';
+import { announceInLinear } from './announceInLinear.js';
 
 export interface DispatchSubmissionDeps {
   logger: Logger;
@@ -85,18 +86,6 @@ async function dispatchComplex(
     .filter((child) => hasCodeTaskLabel(child.labels))
     .sort((a, b) => a.identifier.localeCompare(b.identifier));
 
-  const updateParentIssueResult = await linearAgentClient.updateIssueState({
-    userId,
-    issueId: linearIssueId,
-    state: 'in_progress',
-  });
-  if (!updateParentIssueResult.ok) {
-    logger.warn(
-      { linearIssueId, error: updateParentIssueResult.error },
-      'Failed to update parent Linear issue to In Progress for complex execution',
-    );
-  }
-
   const childTaskLines = qualifyingChildren
     .map((child, index) => {
       const taskId = fanOutResult.value.childTaskIds[index];
@@ -106,21 +95,20 @@ async function dispatchComplex(
     })
     .join('\n');
 
-  const parentCommentResult = await linearAgentClient.addComment({
-    userId,
-    issueId: linearIssueId,
-    body: `🚀 **Execution Agent implementation started for child tasks**
+  await announceInLinear(
+    { logger, linearAgentClient },
+    {
+      userId,
+      issueId: linearIssueId,
+      stateFailureMessage: 'Failed to update parent Linear issue to In Progress for complex execution',
+      commentFailureMessage: 'Failed to add complex Execution Agent start comment to parent Linear issue',
+      body: `🚀 **Execution Agent implementation started for child tasks**
 
 **Design task:** [${planningTask.id}](${webUrl}/#/code-tasks/${planningTask.id})
 **Child implementation tasks:**
 ${childTaskLines}`,
-  });
-  if (!parentCommentResult.ok) {
-    logger.warn(
-      { linearIssueId, error: parentCommentResult.error },
-      'Failed to add complex Execution Agent start comment to parent Linear issue',
-    );
-  }
+    },
+  );
 
   await Promise.all(
     qualifyingChildren.map(async (child, index) => {
@@ -209,25 +197,20 @@ async function dispatchSingle(
   );
 
   // Update Linear issue to In Progress + add comment (best-effort)
-  const updateIssueResult = await linearAgentClient.updateIssueState({
-    userId,
-    issueId: linearIssueId,
-    state: 'in_progress',
-  });
-  if (!updateIssueResult.ok) {
-    logger.warn({ linearIssueId, error: updateIssueResult.error }, 'Failed to update Linear issue to In Progress for Execution Agent');
-  }
-
   const webUrl = process.env['INTEXURAOS_WEB_URL'] ?? 'https://intexuraos.cloud';
-  const commentBody = `🚀 **Execution Agent implementation started**
+  await announceInLinear(
+    { logger, linearAgentClient },
+    {
+      userId,
+      issueId: linearIssueId,
+      stateFailureMessage: 'Failed to update Linear issue to In Progress for Execution Agent',
+      commentFailureMessage: 'Failed to add Execution Agent start comment to Linear issue',
+      body: `🚀 **Execution Agent implementation started**
 
 **Design task:** [${planningTask.id}](${webUrl}/#/code-tasks/${planningTask.id})
-**Implementation task:** [${executionTaskId}](${webUrl}/#/code-tasks/${executionTaskId})`;
-
-  const commentResult = await linearAgentClient.addComment({ userId, issueId: linearIssueId, body: commentBody });
-  if (!commentResult.ok) {
-    logger.warn({ linearIssueId, error: commentResult.error }, 'Failed to add Execution Agent start comment to Linear issue');
-  }
+**Implementation task:** [${executionTaskId}](${webUrl}/#/code-tasks/${executionTaskId})`,
+    },
+  );
 
   // Enqueue the task for the worker
   const enqueueResult = await taskEnqueueService.enqueue({ taskId: executionTaskId, userId });

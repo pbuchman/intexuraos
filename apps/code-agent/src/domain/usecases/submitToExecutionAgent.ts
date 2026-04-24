@@ -12,7 +12,7 @@
  * reach into the sibling files.
  */
 
-import type { Result } from '@intexuraos/common-core';
+import { err, getErrorMessage, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
@@ -56,17 +56,27 @@ export async function submitToExecutionAgent(
   deps: SubmitToExecutionAgentDeps,
   request: SubmitToExecutionAgentRequest,
 ): Promise<Result<SubmitToExecutionAgentResult, SubmitToExecutionAgentError>> {
-  const prepared = await prepareSubmission(
-    {
-      logger: deps.logger,
-      codeTaskRepo: deps.codeTaskRepo,
-      linearAgentClient: deps.linearAgentClient,
-      workerSettingsRepo: deps.workerSettingsRepo,
-      gitHubPRClient: deps.gitHubPRClient,
-      userServiceClient: deps.userServiceClient,
-    },
-    request,
-  );
+  let prepared: Awaited<ReturnType<typeof prepareSubmission>>;
+  try {
+    prepared = await prepareSubmission(
+      {
+        logger: deps.logger,
+        codeTaskRepo: deps.codeTaskRepo,
+        linearAgentClient: deps.linearAgentClient,
+        workerSettingsRepo: deps.workerSettingsRepo,
+        gitHubPRClient: deps.gitHubPRClient,
+        userServiceClient: deps.userServiceClient,
+      },
+      request,
+    );
+  } catch (e) {
+    // prepareSubmission throws only for malformed request input (missing
+    // originalTaskId / userId). Convert the thrown Error into a structured
+    // Result so the public facade's contract stays Result-based.
+    const message = getErrorMessage(e, 'Invalid request');
+    deps.logger.warn({ request, error: message }, 'submitToExecutionAgent: malformed request');
+    return err({ code: 'invalid_status', message });
+  }
 
   if (!prepared.ok) {
     return prepared;
