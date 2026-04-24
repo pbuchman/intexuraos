@@ -14,6 +14,6 @@
     "clarification_message": "",
     "summary": "* Investigation identified root cause: bucket name mismatch between Terraform (`intexuraos-whatsapp-media-dev`) and home-dev fallbacks (`whatsapp-media`)\n* Task classified as SIMPLE — 2 file edits required, no design decisions\n* Updated Linear issue with findings and fix plan\n* Archived original description in Linear comment before update\n* Created evidence PR with investigation document"
   },
-  "missingRequired": ["subtask_urls", "parallel_breakdown_proof", "clarification_message"],
+  "missingRequired": [],
   "warnings": []
 }

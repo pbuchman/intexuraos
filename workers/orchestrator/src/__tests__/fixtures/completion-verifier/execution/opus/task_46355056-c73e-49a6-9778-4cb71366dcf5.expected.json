@@ -9,7 +9,9 @@
       "mem_1f7d0a83-aef8-4652-8418-32dcad36a7d5",
       "mem_4b61618c-9951-40aa-b7a9-b007cea9ca97"
     ],
-    "memory_ids_rejected": ["mem_48c09865-7bdd-4e47-9b59-65129cef01f3"],
+    "memory_ids_rejected": [
+      "mem_48c09865-7bdd-4e47-9b59-65129cef01f3"
+    ],
     "memory_usage_summary": "Applied the thin-facade pattern from mem_1f7d0a83 by extracting prepare/dispatch modules with the main file shrunk to 88 lines; heeded mem_4b61618c by keeping the facade as pure delegation (not relocating logic) and extracting an announceInLinear helper to eliminate moved-but-duplicated blocks.",
     "superpowers_subagent_driven_dev_used": true,
     "superpowers_requesting_code_review_used": true,

@@ -100,6 +100,10 @@ export const buildMissingFieldsPrompt = buildMissingFieldsPromptFn;
  * discriminated {kind: 'parsed' | 'hard-error', ...} shape. Production
  * `verifyCompletion` already returns the new shape; this only fires when a
  * test override returns the old one.
+ *
+ * @internal Test-only shim. Not part of the stable public API — scheduled for
+ * removal once every fake-verifier in task-dispatcher.test.ts emits the
+ * canonical `CompletionVerifierVerdict` shape directly.
  */
 function adaptLegacyVerdictIfNeeded(
   v: CompletionVerifierVerdict | LegacyVerdict
@@ -230,6 +234,8 @@ export async function runVerification(input: {
  * `adaptLegacyVerdictIfNeeded` converts it into the canonical discriminated
  * verdict before the dispatcher consumes it. Exported so tests can type
  * their mocks against the union `CompletionVerifierVerdict | LegacyVerdict`.
+ *
+ * @internal Test-only. Not part of the stable public API.
  */
 export interface LegacyVerdict {
   passed: boolean;
@@ -282,6 +288,8 @@ export interface IsolationConfig {
  * legacy `{passed, missingFields, …}` shape — `adaptLegacyVerdictIfNeeded`
  * bridges between them, so existing fake-verifier stubs in
  * task-dispatcher.test.ts can return either form.
+ *
+ * @internal Test-only. Not part of the stable public API.
  */
 export interface VerifierOverrideForTests {
   verify: (input: {
@@ -317,6 +325,8 @@ export interface CompletionControlConfig {
    * let `verifyCompletion` run as the verification pipeline. Tests pass
    * `verifier` to (optionally) stub the verify step; `adaptLegacyVerdictIfNeeded`
    * bridges the returned verdict into the canonical shape.
+   *
+   * @internal Test-only. Not part of the stable public API.
    */
   verifier?: VerifierOverrideForTests;
   preserveWorkerContainers?: boolean;
@@ -1687,7 +1697,7 @@ export class TaskDispatcher {
         task.taskId,
         `Verifier hard error: ${verification.code} — ${verification.message}`
       );
-      /* v8 ignore start -- upstream: hard-error path is reached only via fake-verifier stubs that set verifierFailure=true; these fakes cannot produce both `typeof exitCode === 'number'` AND `typeof exitCode !== 'number'` in the same hard-error test, so v8 always reports one arm as uncovered. Both arms are covered in aggregate across the dispatcher test suite. @preserve */
+      /* v8 ignore start -- upstream: FakeIsolationProvider cannot produce both `typeof exitCode === 'number'` AND `typeof exitCode !== 'number'` within a single hard-error dispatcher test — each test fixture sets exitCode to a fixed value (number or undefined), so v8 always reports one arm of this post-hard-error cleanup as uncovered even though both arms are exercised across separate tests @preserve */
       if (typeof exitCode === 'number') {
         task.lastExitCode = exitCode;
       } else {

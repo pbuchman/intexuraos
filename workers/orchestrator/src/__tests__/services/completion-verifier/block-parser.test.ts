@@ -97,6 +97,27 @@ describe('locateFinalBlock', () => {
     expect(block).not.toContain('trailing prose');
   });
 
+  it('does NOT terminate the body on a fake/unknown AGENT_FINAL-looking marker', () => {
+    // [INT-1470 review follow-up] The end-of-block detector only recognises
+    // markers registered in AGENT_CONTRACTS. A typo/fake marker like
+    // `FAKE_AGENT_FINAL:` quoted inside a real block must NOT cut the body
+    // short — the summary below must survive.
+    const txt = [
+      'EXECUTION_AGENT_FINAL:',
+      '- Outcome: implemented',
+      '- pr: https://github.com/x/y/pull/1',
+      '- summary: the reviewer mentioned FAKE_AGENT_FINAL: as an example of a fake marker',
+      'FAKE_AGENT_FINAL:',
+      '- still part of the body',
+    ].join('\n');
+    const block = locateFinalBlock(txt, 'EXECUTION_AGENT_FINAL:');
+    expect(block).not.toBeNull();
+    // Body contains the entire transcript from EXECUTION_AGENT_FINAL onwards,
+    // including the fake marker line and what follows it.
+    expect(block).toContain('FAKE_AGENT_FINAL:');
+    expect(block).toContain('still part of the body');
+  });
+
   it('terminates the body when a different AGENT_FINAL marker starts', () => {
     // [INT-1470 coverage] If the transcript contains a PULL_REQUEST_AGENT_FINAL
     // block immediately after an EXECUTION_AGENT_FINAL block, the body of
@@ -188,6 +209,29 @@ describe('parseKeyValues', () => {
     expect(parsed['Summary']).toContain('bullet 1');
     expect(parsed['Summary']).toContain('bullet 2');
     expect(parsed['pr']).toBe('https://github.com/x/y/pull/1');
+  });
+
+  it('does not misinterpret summary bullets containing colons as new keys', () => {
+    // [INT-1470 review follow-up] A `- Key decision: ...` prose bullet
+    // inside a `- Summary:` block must NOT be parsed as a new top-level
+    // key. The key-line regex alone would match, but the whitelist check
+    // against AGENT_CONTRACTS keys keeps these bullets glued to the
+    // currently-open summary value.
+    const block = [
+      'EXECUTION_AGENT_FINAL:',
+      '- Outcome: implemented',
+      '- pr: https://github.com/x/y/pull/1',
+      '- Summary:',
+      '- Key decision: rewrote the verifier',
+      '- Another thing: yes',
+    ].join('\n');
+    const parsed = parseKeyValues(block);
+    expect(parsed['Outcome']).toBe('implemented');
+    expect(parsed['pr']).toBe('https://github.com/x/y/pull/1');
+    expect(parsed['Summary']).toContain('Key decision: rewrote the verifier');
+    expect(parsed['Summary']).toContain('Another thing: yes');
+    expect(parsed).not.toHaveProperty('Key decision');
+    expect(parsed).not.toHaveProperty('Another thing');
   });
 
   it('handles the minimax bold-every-value fixture', () => {

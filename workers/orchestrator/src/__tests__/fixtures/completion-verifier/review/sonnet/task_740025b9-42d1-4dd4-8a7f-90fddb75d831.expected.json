@@ -3,7 +3,11 @@
     "pr": "https://github.com/pbuchman/intexuraos/pull/1900",
     "review_id": "4161897164",
     "review_comments_posted": 2,
-    "review_types": ["code_quality", "test_quality", "security"],
+    "review_types": [
+      "code_quality",
+      "test_quality",
+      "security"
+    ],
     "requirements_tracker_updated": "yes",
     "gh_actions_status": "all passed",
     "needs_remediation": true,
@@ -11,7 +15,9 @@
       "mem_c4937fb0-9acf-4fba-8051-6ec027a5b8ad",
       "mem_a4ce6dce-aecb-4189-816f-4a69d7d19251"
     ],
-    "memory_ids_rejected": ["mem_f346abb4-8683-4e05-84cf-668c41ce9bf5"],
+    "memory_ids_rejected": [
+      "mem_f346abb4-8683-4e05-84cf-668c41ce9bf5"
+    ],
     "memory_usage_summary": "The two bootstrap-modularization memories guided verification of the deps-injection pattern (Deps interfaces on every bootstrap module), the <200-line target for start.ts, and the requirement for unit tests with fakes — all confirmed present; the global-refactor-scope memory was rejected as unrelated to this bootstrap split.",
     "summary": "* Reviewed a bootstrap refactor of `workers/orchestrator/src/start.ts` (914 → 191 lines) into 8 focused modules under `bootstrap/`, with full dep-injection pattern and typed constants.\n  * All 3 prior review findings (logWorkerAuthStartupStatus v8 ignore, validateWorkerApiKeys broad ignore, callOrder sequencing) were addressed in the latest commit — tests added, ignores narrowed, ordering comment fixed.\n  * One remaining finding (🔴): the broad `module-init` v8 ignore on `start()` names blockers already mocked in start.test.ts, hiding testable branches for `githubPrivateKeyOverride` and `gitUserNameOverride`/`gitUserEmailOverride`; fix is 1–2 additional test cases + narrowing the ignore.\n  * One minor finding (⚠️): `ts-type` v8 category misapplied to a runtime unreachable throw in `fetchWithRetry` (should be `async-timing`); advisory only.\n  * All CI checks passed; overall code and test quality is high with solid dep-injection discipline throughout."
   },
