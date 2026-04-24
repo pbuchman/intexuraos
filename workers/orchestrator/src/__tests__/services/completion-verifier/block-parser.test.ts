@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import {
   locateFinalBlock,
   parseKeyValues,
+  coerceFields,
 } from '../../../services/completion-verifier/block-parser.js';
+import { AGENT_CONTRACTS } from '../../../services/completion-verifier/contracts.js';
 
 const FIXTURE_ROOT = join(__dirname, '../../fixtures/completion-verifier');
 
@@ -148,5 +150,109 @@ describe('parseKeyValues', () => {
     expect(parsed.Outcome).toBe('implemented');
     expect(parsed.PR).toBe('https://github.com/pbuchman/intexuraos/pull/1925');
     expect(parsed.execution_memory_ids_used).toMatch(/^mem_463bb567/);
+  });
+});
+
+describe('coerceFields', () => {
+  it('returns empty-alias coercion for memory csv (none/None/N/A/empty)', () => {
+    const record = {
+      outcome: 'implemented',
+      pr: 'https://github.com/x/y/pull/1',
+      summary: 'ok',
+      memory_ids_used: 'none',
+      memory_ids_rejected: 'None',
+      memory_usage_summary: '',
+    };
+    const { data, missingRequired, warnings } = coerceFields(record, AGENT_CONTRACTS.execution);
+    expect(missingRequired).toEqual([]);
+    expect(warnings).toEqual([]);
+    expect(data.memory_ids_used).toEqual([]);
+    expect(data.memory_ids_rejected).toEqual([]);
+    expect(data.memory_usage_summary).toBe('');
+  });
+
+  it('reports missing required fields when absent', () => {
+    const record = { outcome: 'implemented', summary: 'ok' }; // no pr
+    const { missingRequired } = coerceFields(record, AGENT_CONTRACTS.execution);
+    expect(missingRequired).toContain('pr');
+  });
+
+  it('does NOT report pr as missing when outcome=failed (pr is deliverable-optional for failed)', () => {
+    const record = { outcome: 'failed', summary: 'interrupted', pr: '' };
+    const { missingRequired } = coerceFields(record, AGENT_CONTRACTS.execution);
+    expect(missingRequired).not.toContain('pr');
+  });
+
+  it('resolves aliases (execution_memory_ids_used → memory_ids_used)', () => {
+    const record = {
+      outcome: 'implemented',
+      pr: 'https://github.com/x/y/pull/1',
+      summary: 'ok',
+      execution_memory_ids_used: 'mem_a,mem_b',
+      execution_memory_ids_rejected: 'none',
+    };
+    const { data, warnings } = coerceFields(record, AGENT_CONTRACTS.execution);
+    expect(data.memory_ids_used).toEqual(['mem_a', 'mem_b']);
+    expect(
+      warnings.some((w) => w.includes('execution_memory_ids_used') && w.includes('alias'))
+    ).toBe(true);
+  });
+
+  it('coerces bool01 from multiple accepted formats', () => {
+    const cases: Array<[string, boolean]> = [
+      ['0', false],
+      ['1', true],
+      ['yes', true],
+      ['no', false],
+      ['true', true],
+      ['false', false],
+      ['used', true],
+      ['not used', false],
+      ['not_used', false],
+    ];
+    for (const [input, expected] of cases) {
+      const record = {
+        outcome: 'implemented',
+        pr: 'https://github.com/x/y/pull/1',
+        summary: 'ok',
+        trivial_task: input,
+      };
+      const { data } = coerceFields(record, AGENT_CONTRACTS.execution);
+      expect(data.trivial_task, `input ${input}`).toBe(expected);
+    }
+  });
+
+  it('emits warning (not failure) for malformed int', () => {
+    const record = {
+      outcome: 'implemented',
+      pr: 'https://github.com/x/y/pull/1',
+      summary: 'ok',
+      review_iterations: 'two',
+    };
+    const { data, warnings, missingRequired } = coerceFields(record, AGENT_CONTRACTS.execution);
+    expect(missingRequired).toEqual([]);
+    expect(data.review_iterations).toBeNull();
+    expect(warnings.some((w) => w.includes('review_iterations'))).toBe(true);
+  });
+
+  it('rejects enum values case-insensitively but reports in canonical case', () => {
+    const record = {
+      outcome: 'IMPLEMENTED',
+      pr: 'https://github.com/x/y/pull/1',
+      summary: 'ok',
+    };
+    const { data, missingRequired } = coerceFields(record, AGENT_CONTRACTS.execution);
+    expect(missingRequired).toEqual([]);
+    expect(data.outcome).toBe('implemented');
+  });
+
+  it('fails when url field is non-http', () => {
+    const record = {
+      outcome: 'implemented',
+      pr: 'not-a-url',
+      summary: 'ok',
+    };
+    const { missingRequired } = coerceFields(record, AGENT_CONTRACTS.execution);
+    expect(missingRequired).toContain('pr');
   });
 });
