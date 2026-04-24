@@ -68,6 +68,9 @@ export function classifyFailure(error: TaskError): FailureVerdict {
     // the 429 substring. Claude's usage-limit wording ("You've hit your limit
     // · resets 10pm (UTC)") does not contain "rate limit" either, so match
     // all observed production phrasings. INT-1463.
+    // Also matches Codex CLI wording ("hit your usage limit", "limit · resets")
+    // so Codex usage-limit exits route to retry_after_cooloff on parity with
+    // Claude — INT-1471.
     if (/429|rate limit|hit your limit|usage limit|limit · resets/i.test(errorMessage)) {
       return 'retry_after_cooloff';
     }
