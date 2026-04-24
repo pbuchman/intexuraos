@@ -1,4 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// [INT-1470 coverage] Mock transcript-reader so prepareComplianceValidationInput
+// tests can exercise the full input-build path (asOutcome/asUsedNotUsed/
+// arrayOrStringToCsv/asString helpers) without a real worktree.
+vi.mock('../../../services/transcript-reader.js', () => ({
+  readSessionTranscript: vi.fn(),
+}));
+
+// [INT-1470 coverage] Also mock transcript-formatter so we don't need real
+// session entries to build a transcript string.
+vi.mock('../../../services/transcript-formatter.js', () => ({
+  formatTranscript: vi.fn(() => 'formatted transcript'),
+}));
+
 import {
   collectTurnMetrics,
   executeComplianceValidation,
@@ -130,6 +144,87 @@ describe('prepareComplianceValidationInput', () => {
     );
     expect(result).toBeUndefined();
     expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('[INT-1470 coverage] coerces all agentClaims helper branches (array memory_ids, non-string outcome, non-true boolean)', async () => {
+    // Exercise asString, arrayOrStringToCsv, asOutcome, asUsedNotUsed helpers.
+    const validator = { validate: vi.fn() };
+    vi.mocked(
+      (await import('../../../services/transcript-reader.js')).readSessionTranscript
+    ).mockResolvedValueOnce([{ role: 'assistant', content: 'anything' }] as never);
+    const verdict: CompletionVerifierVerdict = {
+      kind: 'parsed',
+      data: {
+        outcome: 'failed', // asOutcome: hits the 'failed' branch
+        superpowers_subagent_driven_dev_used: false, // asUsedNotUsed: hits the 'not used' branch
+        superpowers_requesting_code_review_used: '1', // asUsedNotUsed: hits the '1' → 'used' branch
+        pr: 42, // asString: non-string input → returns ''
+        failure_reason: 'because',
+        memory_ids_used: ['mem_a', 'mem_b'], // arrayOrStringToCsv: array branch
+        memory_ids_rejected: ['mem_c', 99], // arrayOrStringToCsv: non-string array member → String() coercion
+        memory_usage_summary: null, // asString: null → ''
+        summary: 'done',
+      },
+      missingRequired: [],
+      telemetryMissing: [],
+      warnings: [],
+    };
+    const result = await prepareComplianceValidationInput(
+      validator as never,
+      mockConfig,
+      mockLogForwarder as never,
+      mockLogger as never,
+      makeTask({ agentType: 'execution' }),
+      mockResult,
+      verdict
+    );
+    expect(result).toBeDefined();
+    if (result === undefined) return;
+    expect(result.agentClaims.outcome).toBe('failed');
+    expect(result.agentClaims.superpowers_subagent_driven_dev).toBe('not used');
+    expect(result.agentClaims.superpowers_requesting_code_review).toBe('used');
+    expect(result.agentClaims.gh_pr_url).toBe(''); // non-string coerced
+    expect(result.agentClaims.memory_ids_used).toBe('mem_a,mem_b');
+    expect(result.agentClaims.memory_ids_rejected).toBe('mem_c,99');
+    expect(result.agentClaims.memory_usage_summary).toBe('');
+  });
+
+  it('[INT-1470 coverage] asOutcome defaults to implemented when value is unrecognized', async () => {
+    // Exercise the default-return arm of asOutcome.
+    const validator = { validate: vi.fn() };
+    vi.mocked(
+      (await import('../../../services/transcript-reader.js')).readSessionTranscript
+    ).mockResolvedValueOnce([{ role: 'assistant', content: 'anything' }] as never);
+    const verdict: CompletionVerifierVerdict = {
+      kind: 'parsed',
+      data: {
+        outcome: 'something_unexpected',
+        superpowers_subagent_driven_dev_used: true,
+        superpowers_requesting_code_review_used: true,
+        pr: 'https://github.com/owner/repo/pull/42',
+        failure_reason: '',
+        memory_ids_used: 'mem_a,mem_b', // arrayOrStringToCsv: string branch
+        memory_ids_rejected: '',
+        memory_usage_summary: '',
+        summary: 'done',
+      },
+      missingRequired: [],
+      telemetryMissing: [],
+      warnings: [],
+    };
+    const result = await prepareComplianceValidationInput(
+      validator as never,
+      mockConfig,
+      mockLogForwarder as never,
+      mockLogger as never,
+      makeTask({ agentType: 'execution' }),
+      mockResult,
+      verdict
+    );
+    expect(result).toBeDefined();
+    if (result === undefined) return;
+    expect(result.agentClaims.outcome).toBe('implemented'); // default
+    expect(result.agentClaims.memory_ids_used).toBe('mem_a,mem_b'); // string passthrough
   });
 
   it('returns undefined when the verdict is kind=hard-error (guard clause)', async () => {

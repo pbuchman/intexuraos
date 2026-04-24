@@ -12,6 +12,7 @@ import {
   getVerifierTaskId,
   verifyCompletion,
 } from '../completion-verifier.js';
+import { countMeaningfulTranscriptLines } from '../completion-verifier/transcript.js';
 
 const loggerInfo = vi.fn();
 const loggerWarn = vi.fn();
@@ -66,12 +67,7 @@ describe('transcript helpers', () => {
   });
 
   it('getLast50ClaudeLines filters for [claude] prefix', () => {
-    const logs = [
-      '[orchestrator] meta',
-      '[claude] one',
-      '[hook] hook',
-      '[claude] two',
-    ].join('\n');
+    const logs = ['[orchestrator] meta', '[claude] one', '[hook] hook', '[claude] two'].join('\n');
     const out = getLast50ClaudeLines(logs).split('\n');
     expect(out).toEqual(['[claude] one', '[claude] two']);
   });
@@ -82,14 +78,34 @@ describe('transcript helpers', () => {
   });
 
   it('detectFatalExitCode returns 137 for SIGKILL marker in last 5 lines', () => {
-    const logs = ['line 1', 'line 2', '[entrypoint] Claude attempt finished with exit code: 137'].join(
-      '\n'
-    );
+    const logs = [
+      'line 1',
+      'line 2',
+      '[entrypoint] Claude attempt finished with exit code: 137',
+    ].join('\n');
     expect(detectFatalExitCode(logs)).toBe(137);
   });
 
   it('detectFatalExitCode returns undefined when marker is absent', () => {
     expect(detectFatalExitCode('nothing fatal here')).toBeUndefined();
+  });
+
+  it('[INT-1470 coverage] countMeaningfulTranscriptLines skips infrastructure prefixes', () => {
+    const lines = [
+      '[orchestrator] setup',
+      '[hook] pre',
+      '[entrypoint] running',
+      '[system] info',
+      '[claude] real agent output',
+      'plain line',
+    ];
+    // 2 non-infrastructure lines: '[claude] real agent output' and 'plain line'
+    expect(countMeaningfulTranscriptLines(lines)).toBe(2);
+  });
+
+  it('[INT-1470 coverage] countMeaningfulTranscriptLines counts all when no infrastructure prefixes', () => {
+    const lines = ['[claude] a', '[claude] b', 'c'];
+    expect(countMeaningfulTranscriptLines(lines)).toBe(3);
   });
 });
 
