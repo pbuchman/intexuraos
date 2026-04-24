@@ -7,7 +7,6 @@
 
 /* eslint-disable no-restricted-imports, @typescript-eslint/no-base-to-string */
 import { Timestamp } from '@google-cloud/firestore';
-import type { DocumentData } from '@google-cloud/firestore';
 import type { TaskGroupSummary, UserGroupCounts } from '../../../domain/models/taskGroupSummary.js';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 import type { GroupStatus } from '../../../domain/issueGrouping/types.js';
@@ -167,14 +166,6 @@ export function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
 }
 
 /**
- * Serialize a TaskGroupSummary to Firestore document shape.
- * Kept as an identity cast for symmetry and testability.
- */
-export function summaryToDoc(summary: TaskGroupSummary): DocumentData {
-  return summary as unknown as DocumentData;
-}
-
-/**
  * Build a default UserGroupCounts for a user with all zeros.
  */
 export function defaultCounts(userId: string): UserGroupCounts {
@@ -206,14 +197,6 @@ export function docToCounts(data: Record<string, unknown>): UserGroupCounts {
     updatedAt: toTimestamp(data['updatedAt']),
   };
   /* v8 ignore stop @preserve */
-}
-
-/**
- * Serialize a UserGroupCounts to Firestore document shape.
- * Kept as an identity cast for symmetry and testability.
- */
-export function countsToDoc(counts: UserGroupCounts): DocumentData {
-  return counts as unknown as DocumentData;
 }
 
 // =============================================================================
@@ -318,14 +301,12 @@ export function applyIncrementalCreateUpdate(current: TaskGroupSummary, task: Co
   }
   if (task.dispatchedAt !== undefined) {
     const dispatchedTs = toTimestamp(task.dispatchedAt);
-    /* v8 ignore start -- ts-type: FakeFirestore cannot produce the 3-task dispatch sequence needed to reach the non-null mostRecentDispatchedAt + newer-timestamp sub-branch @preserve */
     if (
       current.mostRecentDispatchedAt === null ||
       dispatchedTs.toMillis() > current.mostRecentDispatchedAt.toMillis()
     ) {
       updated.mostRecentDispatchedAt = dispatchedTs;
     }
-    /* v8 ignore stop @preserve */
   }
 
   updated.aggregateStatus = deriveAggregateStatusFromSummary(updated);
@@ -406,14 +387,12 @@ export function applyStatusChangeUpdate(
   // Update sort key for dispatched
   if (newTask.dispatchedAt !== undefined) {
     const dispatchedTs = toTimestamp(newTask.dispatchedAt);
-    /* v8 ignore start -- ts-type: FakeFirestore cannot produce the 3-task dispatch sequence needed to reach the non-null mostRecentDispatchedAt + newer-timestamp sub-branch @preserve */
     if (
       current.mostRecentDispatchedAt === null ||
       dispatchedTs.toMillis() > current.mostRecentDispatchedAt.toMillis()
     ) {
       updated.mostRecentDispatchedAt = dispatchedTs;
     }
-    /* v8 ignore stop @preserve */
   }
 
   updated.aggregateStatus = deriveAggregateStatusFromSummary(updated);
@@ -534,18 +513,14 @@ export function computeSummaryFromTasks(
 
     if (task.dispatchedAt !== undefined) {
       const dispatchedTs = toTimestamp(task.dispatchedAt);
-      /* v8 ignore start -- ts-type: FakeFirestore cannot produce tasks in descending dispatch order needed to hit the non-newer sub-branch; only ascending-order path is reachable in tests @preserve */
       if (mostRecentDispatchedAt === null || dispatchedTs.toMillis() > mostRecentDispatchedAt.toMillis()) {
         mostRecentDispatchedAt = dispatchedTs;
       }
-      /* v8 ignore stop @preserve */
     }
 
     // Track latest review result
     if (task.agentType === 'review' && task.result !== undefined) {
-      /* v8 ignore start -- ts-type: FakeFirestore cannot produce review tasks in reverse-chronological order; the false branch (earlier review after a later one) is unreachable in tests @preserve */
       if (updatedAtMs > latestReviewUpdatedAtMs) {
-      /* v8 ignore stop @preserve */
         latestReviewUpdatedAtMs = updatedAtMs;
         const nr = task.result.needs_remediation;
         if (nr === REMEDIATION_NOT_NEEDED) {
