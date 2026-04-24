@@ -103,9 +103,9 @@ export const EXECUTION_SCHEMA = z
     superpowers_requesting_code_review: z.enum(['used', 'not used']),
     gh_pr_url: z.string(),
     failure_reason: z.string().optional().default(''),
-    memory_ids_used: z.string(),
-    memory_ids_rejected: z.string(),
-    memory_usage_summary: z.string(),
+    memory_ids_used: z.string().optional().default(''),
+    memory_ids_rejected: z.string().optional().default(''),
+    memory_usage_summary: z.string().optional().default(''),
     summary: z.string(),
   })
   .refine((data) => data.outcome === 'failed' || data.gh_pr_url !== '', {

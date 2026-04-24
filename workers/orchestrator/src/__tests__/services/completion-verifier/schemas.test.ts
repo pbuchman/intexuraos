@@ -178,6 +178,32 @@ describe('EXECUTION_SCHEMA refinement', () => {
   });
 });
 
+describe('[INT-1461] EXECUTION_SCHEMA memory fields (post-relaxation)', () => {
+  it('accepts JSON without memory fields and defaults them to empty strings', () => {
+    const parsed = EXECUTION_SCHEMA.parse({
+      outcome: 'implemented',
+      superpowers_subagent_driven_dev: 'used',
+      superpowers_requesting_code_review: 'used',
+      gh_pr_url: 'https://github.com/o/r/pull/1',
+      summary: 'done',
+    });
+    expect(parsed.memory_ids_used).toBe('');
+    expect(parsed.memory_ids_rejected).toBe('');
+    expect(parsed.memory_usage_summary).toBe('');
+  });
+
+  it('still rejects JSON without gh_pr_url when outcome is implemented', () => {
+    const result = EXECUTION_SCHEMA.safeParse({
+      outcome: 'implemented',
+      superpowers_subagent_driven_dev: 'used',
+      superpowers_requesting_code_review: 'used',
+      gh_pr_url: '',
+      summary: 'done',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
 describe('REMEDIATION_SCHEMA refinement', () => {
   const base = {
     outcome: 'implemented' as const,
