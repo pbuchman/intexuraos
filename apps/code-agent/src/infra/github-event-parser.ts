@@ -28,14 +28,7 @@ export function shouldProcessRepository(repositoryFullName: string): boolean {
 
 // Re-export per-event handlers so existing consumers that import from
 // this module path continue to work.
-export {
-  parseCheckSuiteEvent,
-  parseIssueCommentEvent,
-  parsePullRequestEvent,
-  parsePullRequestReviewCommentEvent,
-  parsePullRequestReviewEvent,
-  parsePushEvent,
-} from './github/event-handlers/index.js';
+export * from './github/event-handlers/index.js';
 
 /**
  * Parse a GitHub webhook event based on the event type.
