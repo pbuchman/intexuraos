@@ -8,6 +8,7 @@
 >
 > - `2026-04-20` — initial investigation (merged in PR #1889).
 > - `2026-04-23` — re-audit on follow-up comment: added the **Comprehensive Occurrence Audit** (§A, consolidated table of every `intexuraos` / `pbuchman/intexuraos` / `github.com`-in-git-context reference across runtime code, UI config, env vars, Terraform, CI, docs, migrations, and `.claude/`), corrected the orchestrator installation-id env var name (actual: `INTEXURAOS_GITHUB_INSTALLATION_ID`; the previous revision wrote `INTEXURAOS_GITHUB_APP_INSTALLATION_ID`, which does not exist in the codebase), and annotated each occurrence with an action class (`R-CHANGE` / `R-PARAM` / `M-META` / `D-DISPLAY` / `T-FIXTURE` / `N-NOTE`).
+> - `2026-04-24` — second re-audit on review follow-up: added previously-missed repo/base-branch defaults in `task-dispatcher.ts`, `codeRoutes.ts`, `processCodeAction.ts`, and `startAskAgent.ts`; added the missing Ask Agent UI/API surface to the audit; and captured two missed server-side `github.com` URL builders in `extractEventUrl.ts` and `labelHelpers.ts`.
 
 ---
 
@@ -19,7 +20,7 @@ Today a user creates a code task in the IntexuraOS web app and it always execute
 
 ### 1.2 The shortest truthful answer
 
-The task payload already *carries* a `repository` field, but the orchestrator is **hardcoded to clone exactly one repo at bootstrap time** and **re-uses files inside that repo** (settings template, `.claude/` skills, the worker Dockerfile) for every task it runs. So "multi-repo" is not a feature toggle — it is a **re-architecture of the orchestrator** plus parameter plumbing in the web UI, code-agent service, infra, and auth.
+The task payload already *carries* a `repository` field, but the orchestrator is **hardcoded to clone exactly one repo at bootstrap time**, multiple code-agent submission paths still synthesize `pbuchman/intexuraos` / `development` when callers omit them, and the worker bootstrap **re-uses files inside that repo** (settings template, `.claude/` skills, the worker Dockerfile) for every task it runs. So "multi-repo" is not a feature toggle — it is a **re-architecture of the orchestrator** plus parameter plumbing in the web UI, code-agent service, infra, and auth.
 
 ### 1.3 Effort estimate (engineering days, one senior full-stack engineer)
 
@@ -65,6 +66,7 @@ The orchestrator is a long-running process that accepts task dispatches over HTT
 | `workers/orchestrator/src/services/worktree-manager.ts`          | 86–88         | `git fetch origin "${baseBranch}"` — assumes the `origin` remote is the one we want                                                                                                                                    |
 | `workers/orchestrator/src/services/repo-manager.ts`              | 131           | `cloneRepository` is only called from the bootstrap path                                                                                                                                                               |
 | `workers/orchestrator/src/services/isolation/token-refresher.ts` | 7–13, 37, 114 | **Single installation ID** drives all token minting, refreshed every 30 min (per-task token paths already exist at :113–114; the single-file constraint actually lives in `start.ts:544–549` via `GitHubTokenService`) |
+| `workers/orchestrator/src/services/task-dispatcher.ts`           | 430–431,859–863 | Dispatch falls back to `repository = 'pbuchman/intexuraos'` and `baseBranch = 'development'` when callers omit them                                                                                                   |
 
 **Implication:** adding a repo today requires spinning up another orchestrator deployment, another GitHub App installation ID env var, and another repo clone path. You cannot run "task A against repo 1 and task B against repo 2" in the same orchestrator process.
 
@@ -72,17 +74,22 @@ The orchestrator is a long-running process that accepts task dispatches over HTT
 
 The code-agent is the Fastify app the web UI POSTs to. It *already* stores `repository` on the task, but treats it as metadata:
 
-| File                                                           | Line                                           | Observation                                                                                                |
-| -------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `apps/code-agent/src/domain/model/codeTask.ts`                 | 189                                            | `repository: string` (e.g. `"pbuchman/intexuraos"`) — stored on the task                                   |
-| `apps/code-agent/src/domain/model/codeTask.ts`                 | ~190                                           | `baseBranch: string` — stored on the task                                                                  |
-| `apps/code-agent/src/domain/services/gitHubDispatchService.ts` | 113–122                                        | `if (owner === 'intexuraos') return senderLogin;` — **hardcoded org name** in fork-detection logic         |
-| `apps/code-agent/src/domain/services/gitHubDispatchService.ts` | 246                                            | `` `https://github.com/${event.repository}/pull/${...}` `` — hardcodes `github.com` (no GitHub Enterprise) |
-| Multiple tests                                                 | e.g. `automationCommentRenderer.test.ts:52,57` | Fixtures hardcode `https://github.com/pbuchman/intexuraos/pull/42`                                         |
+| File                                                           | Line               | Observation                                                                                                                         |
+| -------------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/code-agent/src/domain/models/codeTask.ts`                | 189                | `repository: string` (e.g. `"pbuchman/intexuraos"`) — stored on the task                                                            |
+| `apps/code-agent/src/domain/models/codeTask.ts`                | ~190               | `baseBranch: string` — stored on the task                                                                                           |
+| `apps/code-agent/src/routes/codeRoutes.ts`                     | 1808–1809          | Public `POST /code/submit` still creates tasks with `repository: 'pbuchman/intexuraos'`, `baseBranch: 'development'`               |
+| `apps/code-agent/src/domain/usecases/processCodeAction.ts`     | 209–210, 365–366   | Action-approval / internal-submit flow defaults missing `repository` / `baseBranch` to `pbuchman/intexuraos` / `development`       |
+| `apps/code-agent/src/domain/usecases/startAskAgent.ts`         | 70–71              | Ask-agent tasks are always created against `pbuchman/intexuraos` / `development`                                                   |
+| `apps/code-agent/src/domain/services/gitHubDispatchService.ts` | 113–122            | `if (owner === 'intexuraos') return senderLogin;` — **hardcoded org name** in fork-detection logic                                  |
+| `apps/code-agent/src/domain/services/gitHubDispatchService.ts` | 246                | `` `https://github.com/${event.repository}/pull/${...}` `` — hardcodes `github.com` (no GitHub Enterprise)                          |
+| `apps/code-agent/src/routes/code/extractEventUrl.ts`           | 44                 | Compare URL builder hardcodes `https://github.com/${fullName}/compare/...`                                                          |
+| `apps/code-agent/src/domain/issueGrouping/labelHelpers.ts`     | 100                | Merge URL fallback hardcodes `https://github.com/${task.repository}/pull/...`                                                       |
+| Multiple tests                                                 | e.g. `automationCommentRenderer.test.ts:52,57` | Fixtures hardcode `https://github.com/pbuchman/intexuraos/pull/42`                                                                  |
 
-**Implication:** the service can *carry* a different repo identifier, but (a) it will route everything to the same orchestrator, and (b) the fork-detection branch breaks for any org other than `intexuraos`.
+**Implication:** the service can *carry* a different repo identifier, but public submit, action-approval/internal-submit, and ask-agent still synthesize IntexuraOS's repo/branch defaults, and a few server-side link builders still pin `github.com`.
 
-### 2.3 Web app (`apps/web/`) — no repo concept at all in the user flow
+### 2.3 Web app (`apps/web/`) — no repo concept in either task-creation flow
 
 | File                                      | Line      | Observation                                                                                     |
 | ----------------------------------------- | --------- | ----------------------------------------------------------------------------------------------- |
@@ -90,11 +97,14 @@ The code-agent is the Fastify app the web UI POSTs to. It *already* stores `repo
 | `apps/web/src/types/index.ts`             | 1040–1045 | `SubmitCodeTaskRequest` has no `repository` field                                               |
 | `apps/web/src/types/index.ts`             | 987–1029  | `CodeTask.repository` exists on the response type only                                          |
 | `apps/web/src/services/codeAgentApi.ts`   | 85        | `POST /code/submit` — backend decides the repo                                                  |
+| `apps/web/src/pages/AskAgentPage.tsx`     | full file | Ask Agent is also prompt-only — no repository selector or repo context                          |
+| `apps/web/src/hooks/useAskAgent.ts`       | 118–125   | `start()` sends only `{ prompt }`                                                               |
+| `apps/web/src/services/codeAgentApi.ts`   | 285–291   | `POST /code/ask-agent/start` has no `repository` or `baseBranch` request fields                |
 | `apps/web/src/utils/issueGroups.ts`       | 110       | PR link built from `task.repository` — already flexible                                         |
 | `apps/web/src/pages/CodeTasksPage.tsx`    | 95–96     | Task grouping keyed by `linearIssueId`, not repo — no per-repo filter UI                        |
 | `apps/web/src/pages/CodeTaskViewPage.tsx` | 62        | `https://github.com/${task.repository}/pull/${prNumber}` — already flexible                     |
 
-**Implication:** users cannot pick a repo. List views don't filter or group by repo. All PR links already use the `repository` field, so display-side is 80% ready; input-side is 0% ready.
+**Implication:** users cannot pick a repo in either the standard submit flow or Ask Agent. List views don't filter or group by repo. All PR links already use the `repository` field, so display-side is 80% ready; input-side is still 0% ready.
 
 ### 2.4 Worker runtime (`workers/code-worker/`)
 
@@ -338,11 +348,14 @@ Every claim above is traceable to a specific file:line inspected during the inve
 
 - Orchestrator single-repo bootstrap: `workers/orchestrator/src/start.ts:442,539,564–569`
 - Single installation ID: `workers/orchestrator/src/start.ts:456`, `token-refresher.ts:7–13,37,114`
+- Orchestrator dispatch fallbacks: `workers/orchestrator/src/services/task-dispatcher.ts:430–431,859–863`
+- Code-agent task-creation fallbacks: `apps/code-agent/src/routes/codeRoutes.ts:1808–1809`, `processCodeAction.ts:209–210,365–366`, `startAskAgent.ts:70–71`
 - Hardcoded org in fork logic: `apps/code-agent/src/domain/services/gitHubDispatchService.ts:113–122`
 - Hardcoded github.com: `apps/code-agent/src/domain/services/gitHubDispatchService.ts:246`
 - Web submit request has no `repository`: `apps/web/src/types/index.ts:1040–1045`
+- Ask Agent has no repo input: `apps/web/src/pages/AskAgentPage.tsx`, `useAskAgent.ts:118–125`, `codeAgentApi.ts:285–291`
 - Web new-task page has no selector: `apps/web/src/pages/CodeTaskNewPage.tsx` (full)
-- Task model already carries `repository`: `apps/code-agent/src/domain/model/codeTask.ts:189`
+- Task model already carries `repository`: `apps/code-agent/src/domain/models/codeTask.ts:189`
 - Flat Firestore collection: `firestore-collections.json:137–141`
 - Worker bootstrap assumes pnpm: `workers/code-worker/Dockerfile:50–51`
 - Terraform is parameterized: `terraform/environments/dev/main.tf:56–76`
@@ -350,9 +363,9 @@ Every claim above is traceable to a specific file:line inspected during the inve
 
 ---
 
-## Appendix A. Comprehensive Occurrence Audit — every `intexuraos` reference that touches git context
+## Appendix A. Comprehensive Occurrence Audit — every repo-configurability-relevant `intexuraos` / `pbuchman/intexuraos` / `github.com` reference
 
-> Added on the 2026-04-23 re-audit. Section 2 above summarises the **runtime-critical** single-repo assumptions; this appendix is the **exhaustive** list, so that nothing slips through when the work is scheduled.
+> Added on the 2026-04-23 re-audit. Section 2 above summarises the **runtime-critical** single-repo assumptions; this appendix is the **exhaustive repo-configurability list**, so that nothing slips through when the work is scheduled.
 >
 > **Action classes:**
 >
@@ -380,6 +393,7 @@ Every claim above is traceable to a specific file:line inspected during the inve
 | `src/services/worktree-manager.ts`                           | 86–92, 108    | `git fetch origin "${baseBranch}"`, `git worktree add … origin/${baseBranch}`                                                                                                                                                                                                                                     | R-CHANGE  | `this.config.repositoryPath` is the single cached repo. Signature must take `repoUrl` (or cached path) per call.                                                                          |
 | `src/services/isolation/docker-provider.ts`                  | 41            | Literal default `'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest'`                                                                                                                                                                                                      | R-PARAM   | Fallback when env isn't set; second source of truth for the same default as `start.ts:62`. Consolidate or leave.                                                                          |
 | `src/services/isolation/token-refresher.ts`                  | 7–13, 37, 114 | Single installation ID; token paths are already per-task (`${secretsBasePath}/${taskId}/github-token` at :113–114) — constraint is the single installation pool, not the path layout. The single-file constraint lives in `start.ts:544–549` (`GitHubTokenService` uses `join(orchestratorDir, 'github-token')`). | R-CHANGE  | Per-installation token refresh: introduce a `GitHubTokenPool` keyed by `installationId`, each installation getting its own refresh timer.                                                 |
+| `src/services/task-dispatcher.ts`                            | 430–431       | `request.repository ?? getDefaultRepository(request)` and `request.baseBranch ?? 'development'`                                                                                                                                                                                                                    | R-CHANGE  | Dispatch still assumes IntexuraOS repo/branch when upstream callers omit them. `development` must come from repo metadata, not a global fallback.                                         |
 | `src/services/task-dispatcher.ts`                            | 859–863       | `private getDefaultRepository(_): string { return 'pbuchman/intexuraos'; }`                                                                                                                                                                                                                                       | R-CHANGE  | **Hardcoded fallback** used when no repository is supplied. For multi-repo this fallback must be removed or replaced with the user's "last-used repository" from their settings.          |
 | `scripts/claude-login.sh`                                    | 6             | `WORKER_IMAGE="${INTEXURAOS_CODE_WORKER_IMAGE:-…/intexuraos-dev/code-worker:latest}"`                                                                                                                                                                                                                             | N-NOTE    | Login helper for local dev; harmless default.                                                                                                                                             |
 | `scripts/codex-login.sh`                                     | 6             | same default                                                                                                                                                                                                                                                                                                      | N-NOTE    | As above.                                                                                                                                                                                 |
@@ -388,8 +402,13 @@ Every claim above is traceable to a specific file:line inspected during the inve
 
 | File                                                         | Line(s)     | Occurrence                                                                                       | Class     | Notes                                                                                                                                                                                     |
 | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/routes/codeRoutes.ts`                                   | 1808–1809   | Public `POST /code/submit` still writes `repository: 'pbuchman/intexuraos'`, `baseBranch: 'development'` | R-CHANGE  | UI submit path is still pinned even before the orchestrator sees the task.                                                                                                                |
+| `src/domain/usecases/processCodeAction.ts`                   | 209–210,365–366 | Action-approval / internal-submit flow defaults missing `repository` / `baseBranch` to `pbuchman/intexuraos` / `development` | R-CHANGE  | Second hardcoded fallback path separate from the orchestrator's own `getDefaultRepository()`.                                                                                             |
+| `src/domain/usecases/startAskAgent.ts`                       | 70–71       | Ask-agent tasks are always created against `pbuchman/intexuraos` / `development`                 | R-CHANGE  | Ask Agent is a separate submission surface that must become repo-aware too.                                                                                                               |
 | `src/domain/services/gitHubDispatchService.ts`               | 113–122     | `if (owner === 'intexuraos') return senderLogin;` — literal org in fork-detection                | R-CHANGE  | Replace the literal with a per-repo "primary owner" looked up from the `ConnectedRepository` record.                                                                                      |
 | `src/domain/services/gitHubDispatchService.ts`               | 246         | `` prUrl = `https://github.com/${event.repository}/pull/${…}` ``                                 | R-PARAM   | `github.com` scheme is literal; acceptable for MVP (GitHub Enterprise is an explicit non-goal). Flag only.                                                                                |
+| `src/routes/code/extractEventUrl.ts`                         | 44          | `` `https://github.com/${fullName}/compare/${before}...${after}` ``                              | R-PARAM   | Compare-link helper is dynamic on repo, but still pins `github.com`. Missed in the previous audit.                                                                                       |
+| `src/domain/issueGrouping/labelHelpers.ts`                   | 100         | `` `https://github.com/${task.repository}/pull/${…}` ``                                          | R-PARAM   | Server-side twin of web `issueGroups.ts`; dynamic repo, literal host. Missed in the previous audit.                                                                                      |
 | `src/domain/services/automationCommentRenderer.ts`           | 228         | `` `- [\`${shortSha}\`](https://github.com/${options.repository}/commit/${c.sha}) …` ``          | R-PARAM   | Same `github.com` scheme assumption. Flag only.                                                                                                                                           |
 | `src/routes/webhooks/github.ts`                              | 34–42       | `ALLOWED_BOTS` and `CODE_WORKER_BOTS` contain `'intexuraos-code-worker[bot]'`                    | R-CHANGE  | The GitHub App slug `intexuraos-code-worker` is the single App IntexuraOS owns. If a second App is ever registered (e.g. for a different brand / tenant), this set must be configurable.  |
 | `src/routes/merge-queue/mergeQueueRoutes.ts`                 | 374         | `` `https://github.com/${owner}/${repo}/pull/${…}` ``                                            | R-PARAM   | Uses dynamic owner/repo (good); only `github.com` literal. Same as above.                                                                                                                 |
@@ -404,6 +423,9 @@ Every claim above is traceable to a specific file:line inspected during the inve
 | `src/types/index.ts`                                         | 1040–1045               | `SubmitCodeTaskRequest` has no `repository` field                                               | R-CHANGE  | Add `repository: string`.                                                                                                                                                                 |
 | `src/types/index.ts`                                         | 987–1029                | `CodeTask.repository` exists on the response type only                                          | R-PARAM   | Display side is already wired; nothing to change.                                                                                                                                         |
 | `src/services/codeAgentApi.ts`                               | 85                      | `POST /code/submit` — backend decides the repo                                                  | R-CHANGE  | Must pass `repository` explicitly after the selector is added.                                                                                                                            |
+| `src/pages/AskAgentPage.tsx`                                 | full file               | Ask Agent page presents only a prompt box / Start button                                        | R-CHANGE  | No repository selector or repo context for interactive sessions.                                                                                                                           |
+| `src/hooks/useAskAgent.ts`                                   | 118–125                 | `start()` calls `startAskAgent(token, { prompt })`                                              | R-CHANGE  | Hook contract drops repo/baseBranch entirely.                                                                                                                                             |
+| `src/services/codeAgentApi.ts`                               | 285–291                 | `POST /code/ask-agent/start` request is `{ prompt: string }` only                              | R-CHANGE  | Client API must accept repo/baseBranch (or connected-repo ID) once Ask Agent becomes repo-aware.                                                                                          |
 | `src/pages/CodeTasksPage.tsx`                                | 95–96                   | Task grouping keyed by `linearIssueId`; no repo filter UI                                       | R-CHANGE  | Add repo filter + "group by repo" option.                                                                                                                                                 |
 | `src/pages/MergeQueuePage.tsx`                               | 13–14                   | `const DEFAULT_OWNER = 'pbuchman'; const DEFAULT_REPO = 'intexuraos';`                          | R-CHANGE  | The Merge Queue page is pinned to IntexuraOS's own repo. Must derive from the selected `ConnectedRepository`, or gated to only show for IntexuraOS self-builds.                           |
 | `src/components/VersionInfoModal.tsx`                        | 8                       | `const GITHUB_REPO_URL = 'https://github.com/pbuchman/intexuraos';`                             | D-DISPLAY | Points the "About" modal at the IntexuraOS source — correct and stays. No change.                                                                                                         |
@@ -517,11 +539,11 @@ Class T-FIXTURE: **keep** the fixtures (they represent a real repo — IntexuraO
 
 | Class          | Count (this audit)                    | Required for multi-repo?                                                 |
 | -------------- | ------------------------------------- | ------------------------------------------------------------------------ |
-| R-CHANGE       | ~19 distinct runtime sites            | **Yes — blocking.**                                                      |
-| R-PARAM        | ~12 sites                             | **Yes**, but mechanical (thread a value).                                |
+| R-CHANGE       | ~24 distinct runtime sites            | **Yes — blocking.**                                                      |
+| R-PARAM        | ~14 sites                             | **Yes**, but mechanical (thread a value).                                |
 | M-META         | Terraform + CI + scripts              | **No.** IntexuraOS builds itself; leave alone.                           |
 | D-DISPLAY      | HomePage, VersionInfoModal, etc.      | **No.** Marketing / user-facing IntexuraOS links.                        |
 | N-NOTE         | Docs + example envs                   | **No**, but update wording post-refactor.                                |
 | T-FIXTURE      | Tests (many)                          | **No** — keep them, optionally add a parallel external-repo fixture set. |
 
-The net is: ~**19 runtime code changes** and ~**12 parameter-threading changes** are the actual unit of multi-repo work, consistent with the 22–31 engineering-day estimate in §1.3.
+The net is: ~**24 runtime code changes** and ~**14 parameter-threading changes** are the actual unit of multi-repo work. The estimate remains 22–31 engineering days because the newly surfaced misses are real, but they cluster inside the same orchestrator/code-agent/web workstreams already budgeted in §1.3.
