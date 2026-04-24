@@ -5,7 +5,6 @@
  * when `isE2eMode` is set.
  */
 
-import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { Logger } from 'pino';
 import {
   createPRTriagePublisher,
@@ -32,10 +31,12 @@ export interface PublisherServices {
  * Create WhatsApp and PR-triage publishers.
  *
  * When `isE2eMode` is true, returns the e2e mock publishers directly; otherwise
- * constructs real Pub/Sub-backed publishers from infra-pubsub.
+ * constructs real Pub/Sub-backed publishers from infra-pubsub. Each publisher
+ * gets a named child of the injected logger so logs stay correlated without
+ * the factory creating ad-hoc global loggers.
  */
 export function createPublisherServices(deps: PublisherFactoryDeps): PublisherServices {
-  const { config, isE2eMode, e2eMocks } = deps;
+  const { config, isE2eMode, e2eMocks, logger } = deps;
 
   if (isE2eMode) {
     return {
@@ -48,12 +49,12 @@ export function createPublisherServices(deps: PublisherFactoryDeps): PublisherSe
     whatsappPublisher: createWhatsAppSendPublisher({
       projectId: config.gcpProjectId,
       topicName: config.whatsappSendTopic,
-      logger: createAppLogger({ name: 'whatsapp-publisher' }),
+      logger: logger.child({ component: 'whatsapp-publisher' }),
     }),
     prTriagePublisher: createPRTriagePublisher({
       projectId: config.gcpProjectId,
       topicName: config.prTriageTopic,
-      logger: createAppLogger({ name: 'pr-triage-publisher' }),
+      logger: logger.child({ component: 'pr-triage-publisher' }),
     }),
   };
 }

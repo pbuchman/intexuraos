@@ -100,7 +100,9 @@ export interface ServiceContainer {
   executionMemoryApplicationRepo?: ExecutionMemoryApplicationRepository;
   executionMemoryEmbeddingClient?: EmbeddingClient;
   usageServiceClient?: UsageServiceClient;
-  // Optional so existing setServices() call sites in tests don't need updating
+  // The two fields below are optional so existing `setServices({fakes})` call
+  // sites in tests don't need updating when these services are added to the
+  // container. Production code paths always populate them via `initServices()`.
   groupSummaryRepo?: TaskGroupSummaryRepository;
   createRemediationTaskFn?: (
     logger: Logger,

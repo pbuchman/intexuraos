@@ -62,6 +62,10 @@ export interface RepositoryServices {
   eventDecisionRepo: EventDecisionRepository;
   executionMemoryRepo: ExecutionMemoryRepository;
   executionMemoryApplicationRepo: ExecutionMemoryApplicationRepository;
+  /**
+   * Consumed only by `automationLog` composition in `services.ts`; intentionally
+   * not placed on `ServiceContainer` because no other module depends on it.
+   */
   prAutomationCommentRepo: PRAutomationCommentRepository;
 }
 
