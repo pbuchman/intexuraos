@@ -1,0 +1,42 @@
+PLANNING_AGENT_FINAL:
+    [... 50 lines omitted ...]
+      const createStatePersistence = (): StatePersistence => {
+        const state: OrchestratorState = {
+          tasks: {},
+          githubToken: null,
+          pendingWebhooks: [],
+        };
+    
+        const mock = {
+          load: vi.fn(
+            (): Promise<OrchestratorState> => Promise.resolve(JSON.parse(JSON.stringify(state)))
+          ),
+          save: vi.fn(async (newState: OrchestratorState) => {
+            Object.assign(state, newState);
+          }),
+          saveAtomic: vi.fn(async (newState: OrchestratorState) => {
+            Object.assign(state, newState);
+          }),
+          modify: vi.fn(async (fn: (s: OrchestratorState) => void | Promise<void>) => {
+            const current: OrchestratorState = JSON.parse(JSON.stringify(state));
+            await fn(current);
+            Object.assign(state, current);
+          }),
+          detectOrphanWorktrees: vi.fn(async () => []),
+          emptyState: () => ({ tasks: {}, githubToken: null, pendingWebhooks: [] }),
+        } as unknown as StatePersistence;
+        return mock;
+      };
+    
+      // Mock WorktreeManager
+      const mockWorktreeManager = {
+        createWorktree: vi.fn(async () => '/tmp/worktrees/test-task'),
+        deleteWorktree: vi.fn(async () => ({ ok: true, value: undefined })),
+        worktreeExists: vi.fn(async () => true),
+      } as unknown as WorktreeManager;
+    
+      // Mock IsolationProvider
+      const mockIsolationProvider: IsolationProvider = {
+        createWorker: vi.fn(
+          async (config): Promise<WorkerHandle> => ({
+            taskId: config.taskId,

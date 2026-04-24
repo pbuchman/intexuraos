@@ -1,0 +1,20 @@
+EXECUTION_AGENT_FINAL:
+- Outcome: implemented
+- PR: https://github.com/pbuchman/intexuraos/pull/1932
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/pbuchman/issue/INT-1438
+- Review iterations: 2
+- execution_memory_ids_used: mem_4b61618c-9951-40aa-b7a9-b007cea9ca97,mem_bd838570-5194-4f6f-ae63-b676b0f7dba9
+- execution_memory_ids_rejected: mem_f1559458-c36f-499d-a02c-1cb8b7a5f141
+- execution_memory_usage_summary: Applied the "Superficial Refactoring" memory by enforcing real deduplication (`fetchLinearAgent` util + `mapSilentFetchError` helper) rather than just shuffling code; applied the "Unit Test Coverage" memory by adding a dedicated `linear-fetch-util.test.ts` with 14 nock-based cases covering all 5 result kinds instead of relying solely on the existing integration suite.
+- superpowers_subagent_driven_dev_used: 1
+- superpowers_requesting_code_review_used: 1
+- trivial_task: 0
+- subagents: implementer (general-purpose, refactor execution via TDD), spec-compliance reviewer (general-purpose), code-quality reviewer (general-purpose), final code-reviewer (superpowers:code-reviewer)
+- Skill sequence proof: Invoked `superpowers:subagent-driven-development` (Skill tool at start) before dispatching the implementer subagent; invoked `superpowers:requesting-code-review` (Skill tool) after implementer+review loop and before opening the PR; final reviewer subagent was dispatched per that skill's template.
+- Summary:
+  * Split 699-line `linearAgentHttpClient.ts` into a 41-line facade + private `linear-fetch-util.ts` + 4 endpoint modules (`issues`, `issue-tree`, `issue-metadata`, `comments`) under `apps/code-agent/src/infra/http/linear/`, preserving all public signatures.
+  * Centralized `AbortController`/timeout, auth headers, JSON body, and envelope parsing into a `LinearFetchResult<T>` discriminated union; added `silent-fetch-mapper.ts` for the three no-log endpoints.
+  * Adopted `getErrorMessage()` from `@intexuraos/common-core`; deviated from plan by omitting `labels.ts` and `projects.ts` (no such methods exist on the client).
+  * Added 14 unit tests in new `linear-fetch-util.test.ts` plus 4 new timeout/network tests covering previously-uncovered branches in `linearAgentHttpClient.test.ts`.
+  * `pnpm run ci:tracked` green; full workspace verify green (15,719 tests); PR #1932 opened against `development`.

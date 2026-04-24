@@ -1,0 +1,20 @@
+EXECUTION_AGENT_FINAL:
+- Outcome: implemented
+- PR: https://github.com/pbuchman/intexuraos/pull/1922
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/pbuchman/issue/INT-1457/fix-completion-verifier-failing-when-agents-hit-rate-limits
+- Review iterations: 2
+- execution_memory_ids_used: mem_a0c0698b-7cdd-4889-9503-377d32e45db1,mem_6b439458-f9bf-488c-96da-b70a5f7fc782,mem_be6cf635-b07d-4fe8-8829-89bb1e78c3f7
+- execution_memory_ids_rejected: none
+- execution_memory_usage_summary: Memory 1 drove end-to-end behavioral tests that assert the parsed "failed" verdict propagates all the way to the webhook payload, not just schema validation; memory 2 kept the orchestrator remediation.action=retry fallback intact in classifyFailure for unknown TASK_RUNTIME_HARD_ERROR messages; memory 3 is honored by the new `buildRuntimeHardErrorMessage` helper taking `runtimeName` as a parameter rather than hardcoding "Claude", verified by an explicit Codex-error test.
+- superpowers_subagent_driven_dev_used: 1
+- superpowers_requesting_code_review_used: 1
+- trivial_task: 0
+- subagents: implementer (general-purpose, scope: all 4 plan tasks end-to-end), spec-compliance reviewer (general-purpose, scope: verify each Task 1-3 requirement against diff), first-round code-quality reviewer (superpowers:code-reviewer, scope: correctness + CLAUDE.md gates + memory adherence), final holistic code-quality reviewer (superpowers:code-reviewer, scope: final approval before PR)
+- Skill sequence proof: superpowers:subagent-driven-development invoked first (dispatched implementer + spec reviewer + first code-quality reviewer), followed by the final superpowers:requesting-code-review skill after the refactor commit a70bd1194 addressed the first reviewer's minor issues; the final review approved with only stylistic notes, which were then addressed in commit d9339edce.
+- Summary:
+  * Added `'failed'` outcome + optional `failure_reason` to `EXECUTION_SCHEMA`; prompt now instructs verifier models to emit a failed verdict when transcripts show the agent could not complete (e.g. rate-limited).
+  * Dispatcher `handleTaskCompletion` gained two ordered branches producing `TASK_RUNTIME_HARD_ERROR`: (a) verifier parses `outcome: 'failed'` → terminal failure with runtime-evidence-enriched message, (b) schema-failing verifier + non-zero exit + runtime `claudeErrors` message → direct terminal failure before the generic verification-failed path — `TASK_EXIT_CODE_OVERRIDE` remains strictly scoped to success-verdict + non-zero exit.
+  * `classifyFailure` groups `TASK_RUNTIME_HARD_ERROR` with `TASK_RESUMED_HARD_ERROR` (137 → retry, 429/rate-limit → retry_after_cooloff) and detects rate-limit via `/429|rate limit/i` so the incident string `"Task failed: rate limited"` maps to cool-off retry.
+  * Extracted shared `buildRuntimeHardErrorMessage` helper (10 unit tests) used by all three runtime-hard-error sites; guards empty-string `claudeError`; runtime name flows through (Claude/Codex) dynamically.
+  * Full `pnpm run ci:tracked` passes (15533 tests, all static validators green); PR #1922 open targeting `development`.
