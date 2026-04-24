@@ -2390,6 +2390,205 @@ describe('TaskDispatcher', () => {
       );
     });
 
+    it('INT-1471: resolves classifyAttempt runtime to "claude" for a legacy task with workerType "auto" when task.runtime is absent', async () => {
+      // Guards the resolveTaskRuntime() fallback for workerType='auto' (which
+      // maps to runtime 'claude' via WORKER_TYPES). Legacy persisted tasks from
+      // before INT-1455 had no `runtime` field; the dispatcher must still
+      // classify them correctly by resolving the runtime from the worker type.
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        telemetryMissingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        '[claude] Session init: id=legacy-session\n' +
+          '{"type":"result","is_error":true,"result":"Task failed: legacy error"}\n'
+      );
+      const request: CreateTaskRequest = {
+        taskId: 'legacy-runtime-undefined-test',
+        workerType: 'auto',
+        prompt: 'Test legacy task without runtime field',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Simulate a legacy persisted task by stripping the runtime field. The
+      // next getTask() call (inside the completion monitor) will reload the
+      // task with task.runtime === undefined, exercising the nullish default.
+      const preState = await statePersistence.load();
+      const persistedTask = preState.tasks['legacy-runtime-undefined-test'];
+      if (!persistedTask) throw new Error('Task not found');
+      delete persistedTask.runtime;
+      await statePersistence.save(preState);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      onLog?.('{"type":"result","is_error":true,"result":"Task failed: legacy error"}\n');
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('legacy-runtime-undefined-test');
+      expect(task?.status).toBe('failed');
+
+      // Legacy task with Claude-like logs must be classified as `ran` under
+      // the default `claude` runtime and finalized via TASK_RUNTIME_HARD_ERROR,
+      // NOT WORKER_INFRA_FAILURE.
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string; taskId?: string } | undefined;
+        return p?.status === 'failed' && p.taskId === 'legacy-runtime-undefined-test';
+      });
+      const failedPayload = sentCall?.[0]?.payload as
+        | { error?: { code?: string; message?: string } }
+        | undefined;
+      expect(failedPayload?.error?.code).toBe('TASK_RUNTIME_HARD_ERROR');
+    });
+
+    it('INT-1471: resolves classifyAttempt runtime from workerType when task.runtime is absent (legacy codex state)', async () => {
+      // Companion to the Claude-legacy test above. A legacy persisted task with
+      // workerType='codex' but no task.runtime field must still resolve to the
+      // 'codex' runtime via resolveTaskRuntime(), so codex-only ran-signals are
+      // recognized and the attempt flows through TASK_RUNTIME_HARD_ERROR instead
+      // of being short-circuited to WORKER_INFRA_FAILURE.
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        telemetryMissingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        '[codex] Session started: thread=legacy-thread\n' +
+          '[codex] Turn started\n' +
+          "[error] You've hit your usage limit. Upgrade to Pro\n" +
+          '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit. Upgrade to Pro"}}\n'
+      );
+      const request: CreateTaskRequest = {
+        taskId: 'legacy-codex-runtime-undefined-test',
+        workerType: 'codex',
+        prompt: 'Legacy codex task without runtime field',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Strip runtime to simulate a legacy persisted task — classifier must
+      // still pick 'codex' via WORKER_TYPES[task.workerType].runtime.
+      const preState = await statePersistence.load();
+      const persistedTask = preState.tasks['legacy-codex-runtime-undefined-test'];
+      if (!persistedTask) throw new Error('Task not found');
+      delete persistedTask.runtime;
+      await statePersistence.save(preState);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      onLog?.('[codex] Session started: thread=legacy-thread\n');
+      onLog?.("[error] You've hit your usage limit. Upgrade to Pro\n");
+      onLog?.(
+        '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit. Upgrade to Pro"}}\n'
+      );
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('legacy-codex-runtime-undefined-test');
+      expect(task?.status).toBe('failed');
+
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string; taskId?: string } | undefined;
+        return p?.status === 'failed' && p.taskId === 'legacy-codex-runtime-undefined-test';
+      });
+      const failedPayload = sentCall?.[0]?.payload as
+        | { error?: { code?: string; message?: string } }
+        | undefined;
+      expect(failedPayload?.error?.code).toBe('TASK_RUNTIME_HARD_ERROR');
+      expect(failedPayload?.error?.code).not.toBe('WORKER_INFRA_FAILURE');
+    });
+
+    it('INT-1471: Codex usage-limit runtime error + exit 1 → TASK_RUNTIME_HARD_ERROR (not WORKER_INFRA_FAILURE)', async () => {
+      // Replicates the real INT-1471 incident: a codex attempt emits
+      // thread/turn markers and then turn.failed with the ChatGPT usage-limit
+      // message. The runtime-aware classifyAttempt must treat the attempt as
+      // `ran` (via hasCodexRanSignal), so the dispatcher falls through to the
+      // runtime-hard-error path instead of finalizing as WORKER_INFRA_FAILURE.
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        telemetryMissingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      // rawLogs fetched by the dispatcher must contain codex ran-signals so
+      // classifyAttempt({ runtime: 'codex', ... }) returns outcome: 'ran'.
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        '[codex] Session started: thread=019dc00d-fb13-7e30-b21d-a77982c54bab\n' +
+          '[codex] Turn started\n' +
+          "[error] You've hit your usage limit. Upgrade to Pro\n" +
+          '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit. Upgrade to Pro"}}\n'
+      );
+      const request: CreateTaskRequest = {
+        taskId: 'codex-usage-limit-test',
+        workerType: 'codex',
+        prompt: 'Test Codex usage-limit runtime failure',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Feed the codex stream-JSON logs via onLog so the codex-log-processor
+      // emits attempt_failed{ errorMessage: "You've hit your usage limit..." },
+      // which populates claudeErrors for the codex runtime. onComplete(1)
+      // triggers the fail-exit-override path with a non-zero exit code.
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onLog).toBeDefined();
+      expect(onComplete).toBeDefined();
+      onLog?.('[codex] Session started: thread=019dc00d\n');
+      onLog?.('[codex] Turn started\n');
+      onLog?.("[error] You've hit your usage limit. Upgrade to Pro\n");
+      onLog?.(
+        '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit. Upgrade to Pro"}}\n'
+      );
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('codex-usage-limit-test');
+      expect(task?.status).toBe('failed');
+
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string } | undefined;
+        return p?.status === 'failed';
+      });
+      const failedPayload = sentCall?.[0]?.payload as
+        | { error?: { code?: string; message?: string } }
+        | undefined;
+      expect(failedPayload?.error?.code).toBe('TASK_RUNTIME_HARD_ERROR');
+      expect(failedPayload?.error?.code).not.toBe('WORKER_INFRA_FAILURE');
+      expect(failedPayload?.error?.message).toContain('hit your usage limit');
+    });
+
     it('INT-1457: verifier passed + execution outcome=failed → TASK_RUNTIME_HARD_ERROR with failure_reason (result defined)', async () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,

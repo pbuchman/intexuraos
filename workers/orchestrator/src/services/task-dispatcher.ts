@@ -1437,6 +1437,7 @@ export class TaskDispatcher {
     const attemptDurationMs =
       attemptStart !== undefined ? Date.now() - attemptStart : Number.POSITIVE_INFINITY;
     const classification: AttemptClassification = classifyAttempt({
+      runtime: this.resolveTaskRuntime(task),
       logs: rawLogs,
       exitCode,
       durationMs: attemptDurationMs,
