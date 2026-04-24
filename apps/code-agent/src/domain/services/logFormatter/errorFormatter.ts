@@ -7,19 +7,14 @@ export function stripSystemReminders(input: string): string {
   return withoutReminder.replace(/\n{2,}/g, '\n').trimEnd();
 }
 
-const MAX_TOOL_RESULT_CHARS = 2048;
-const HEAD_LINES = 10;
-const TAIL_LINES = 40;
+export function renderIndentedToolResult(trimmedContent: string, prefix: string): string {
+  const MAX_TOOL_RESULT_CHARS = 2048;
+  const HEAD_LINES = 10;
+  const TAIL_LINES = 40;
 
-export function formatErrorToolResult(content: string, _toolName?: string): string {
-  const trimmed = stripSystemReminders(content).replace(TOOL_USE_ERROR_BLOCK, '$1').trim();
-  if (trimmed === '') return '';
+  let lines = trimmedContent.split('\n');
 
-  const prefix = '  ✗ ';
-
-  let lines = trimmed.split('\n');
-
-  if (trimmed.length > MAX_TOOL_RESULT_CHARS && lines.length > HEAD_LINES + TAIL_LINES) {
+  if (trimmedContent.length > MAX_TOOL_RESULT_CHARS && lines.length > HEAD_LINES + TAIL_LINES) {
     const head = lines.slice(0, HEAD_LINES);
     const tail = lines.slice(-TAIL_LINES);
     const omitted = lines.length - HEAD_LINES - TAIL_LINES;
@@ -29,4 +24,10 @@ export function formatErrorToolResult(content: string, _toolName?: string): stri
   return lines
     .map((line, index) => (index === 0 ? `${prefix}${line}` : `    ${line}`))
     .join('\n');
+}
+
+export function formatErrorToolResult(content: string): string {
+  const trimmed = stripSystemReminders(content).replace(TOOL_USE_ERROR_BLOCK, '$1').trim();
+  if (trimmed === '') return '';
+  return renderIndentedToolResult(trimmed, '  ✗ ');
 }

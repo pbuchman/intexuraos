@@ -2,11 +2,13 @@ import type { Timestamp } from '@google-cloud/firestore';
 import type { FormattedLogLine } from '../models/logLine.js';
 import { stripSystemReminders } from './logFormatter/errorFormatter.js';
 import {
+  createFormatterState,
   formatAssistant,
   formatToolResult,
   formatToolUse,
   formatUser,
   registerToolContext,
+  type FormatterState,
   type StreamJsonMessage,
 } from './logFormatter/markdownFormatter.js';
 import {
@@ -16,20 +18,10 @@ import {
   formatSystem,
 } from './logFormatter/progressFormatter.js';
 
-export interface FormatterState {
-  toolCallsById: Map<string, string>;
-  lastToolName: string | undefined; // @allow-undefined-type -- mutable state field, always present but nullable
-  partialLine?: string; // Buffered incomplete JSON from previous chunk
-}
+export { createFormatterState };
+export type { FormatterState };
 
 export type LogRuntime = 'claude' | 'codex';
-
-export function createFormatterState(): FormatterState {
-  return {
-    toolCallsById: new Map<string, string>(),
-    lastToolName: undefined,
-  };
-}
 
 function formatJsonMessage(obj: StreamJsonMessage, state: FormatterState): string {
   switch (obj.type) {

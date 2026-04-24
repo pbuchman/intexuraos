@@ -1,5 +1,22 @@
-import type { FormatterState } from '../logFormatter.js';
-import { formatErrorToolResult, stripSystemReminders, TOOL_USE_ERROR_BLOCK } from './errorFormatter.js';
+import {
+  formatErrorToolResult,
+  renderIndentedToolResult,
+  stripSystemReminders,
+  TOOL_USE_ERROR_BLOCK,
+} from './errorFormatter.js';
+
+export interface FormatterState {
+  toolCallsById: Map<string, string>;
+  lastToolName: string | undefined; // @allow-undefined-type -- mutable state field, always present but nullable
+  partialLine?: string; // Buffered incomplete JSON from previous chunk
+}
+
+export function createFormatterState(): FormatterState {
+  return {
+    toolCallsById: new Map<string, string>(),
+    lastToolName: undefined,
+  };
+}
 
 export interface StreamJsonMessage {
   type: string;
@@ -97,10 +114,6 @@ export function formatUser(obj: StreamJsonMessage, state: FormatterState): strin
   return parts.join('\n');
 }
 
-const MAX_TOOL_RESULT_CHARS = 2048;
-const HEAD_LINES = 10;
-const TAIL_LINES = 40;
-
 function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max - 3) + '...' : s;
 }
@@ -171,7 +184,7 @@ export function summarizeJsonArray(content: string): string | undefined {
   } catch {
     return undefined;
   }
-  /* v8 ignore start -- ts-type: JSON.parse of bracket-prefixed content returns array — cannot inject non-array JSON @preserve */
+  /* v8 ignore start -- ts-type: cannot craft input that bypasses the caller's startsWith('[') + length>=200 pre-filter while still producing a non-array or empty-array from JSON.parse — empty '[]' is 2 chars (fails length floor), non-array JSON fails the bracket-prefix guard, so this branch is unreachable from any test input @preserve */
   if (!Array.isArray(arr) || arr.length === 0) return undefined;
   /* v8 ignore stop @preserve */
 
@@ -286,7 +299,7 @@ function formatFileStats(added: number, removed: number): string {
 
 export function formatToolResult(content: string, isError: boolean, toolName?: string): string {
   if (isError) {
-    return formatErrorToolResult(content, toolName);
+    return formatErrorToolResult(content);
   }
 
   const trimmed = stripSystemReminders(content).replace(TOOL_USE_ERROR_BLOCK, '$1').trim();
@@ -311,18 +324,7 @@ export function formatToolResult(content: string, isError: boolean, toolName?: s
     if (summary !== undefined) return `${prefix}${summary}`;
   }
 
-  let lines = trimmed.split('\n');
-
-  if (trimmed.length > MAX_TOOL_RESULT_CHARS && lines.length > HEAD_LINES + TAIL_LINES) {
-    const head = lines.slice(0, HEAD_LINES);
-    const tail = lines.slice(-TAIL_LINES);
-    const omitted = lines.length - HEAD_LINES - TAIL_LINES;
-    lines = [...head, `[... ${String(omitted)} lines omitted ...]`, ...tail];
-  }
-
-  return lines
-    .map((line, index) => (index === 0 ? `${prefix}${line}` : `    ${line}`))
-    .join('\n');
+  return renderIndentedToolResult(trimmed, prefix);
 }
 
 export function registerToolContext(obj: StreamJsonMessage, state: FormatterState): void {
