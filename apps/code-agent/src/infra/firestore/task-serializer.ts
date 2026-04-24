@@ -17,11 +17,13 @@ import type {
 } from '@google-cloud/firestore';
 import type {
   CodeTask,
+  DispatchSchedule,
   ExecutionMemoryContext,
   ExecutionMemoryPostRun,
 } from '../../domain/models/codeTask.js';
 import type {
   CreateTaskInput,
+  DispatchScheduleCreateInput,
   ExecutionMemoryContextCreateInput,
   ExecutionMemoryPostRunCreateInput,
   UpdateTaskInput,
@@ -119,6 +121,32 @@ export function serializeExecutionMemoryPostRun(
 }
 
 /**
+ * Serialize a DispatchSchedule write-input into the persisted shape (INT-1468).
+ * Converts `Date → Timestamp`; existing `Timestamp` values pass through
+ * unchanged. Optional fields are included conditionally so
+ * `exactOptionalPropertyTypes` is honored.
+ */
+export function serializeDispatchSchedule(
+  input: DispatchScheduleCreateInput
+): DispatchSchedule {
+  const notBeforeAt =
+    input.notBeforeAt instanceof Timestamp
+      ? input.notBeforeAt
+      : Timestamp.fromDate(input.notBeforeAt);
+  return {
+    notBeforeAt,
+    source: input.source,
+    derivedBy: input.derivedBy,
+    ...(input.timezone !== undefined && { timezone: input.timezone }),
+    ...(input.localDateTime !== undefined && { localDateTime: input.localDateTime }),
+    ...(input.sourceText !== undefined && { sourceText: input.sourceText }),
+    ...(input.derivedFromTaskId !== undefined && {
+      derivedFromTaskId: input.derivedFromTaskId,
+    }),
+  };
+}
+
+/**
  * Build the Firestore document for a new task.
  *
  * The dedupKey and taskId are computed by the caller (so dedup can run against
@@ -204,6 +232,9 @@ export function toFirestoreDoc(
   }
   if (input.autoRetryAttempt !== undefined) {
     taskData.autoRetryAttempt = input.autoRetryAttempt;
+  }
+  if (input.dispatchSchedule !== undefined) {
+    taskData.dispatchSchedule = serializeDispatchSchedule(input.dispatchSchedule);
   }
 
   return taskData;
@@ -315,6 +346,9 @@ export function buildUpdateData(input: UpdateTaskInput): Record<string, unknown>
   }
   if (input.prUrlValidationErrors !== undefined) {
     updateData['prUrlValidationErrors'] = input.prUrlValidationErrors;
+  }
+  if (input.dispatchSchedule !== undefined) {
+    updateData['dispatchSchedule'] = serializeDispatchSchedule(input.dispatchSchedule);
   }
 
   return updateData;

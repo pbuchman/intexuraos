@@ -9,6 +9,7 @@ import type { Timestamp } from '@google-cloud/firestore';
 import type {
   AgentType,
   CodeTask,
+  DispatchSchedule,
   ExecutionMemoryContext,
   ExecutionMemoryPostRun,
   TaskStatus,
@@ -30,6 +31,14 @@ export type ExecutionMemoryPostRunCreateInput = Omit<
 > & {
   lastAttemptAt?: Date | Timestamp;
   completedAt?: Date | Timestamp;
+};
+
+/**
+ * Write-time shape for `DispatchSchedule` (INT-1468).
+ * Accepts `Date | Timestamp` for `notBeforeAt` — the serializer converts to Timestamp.
+ */
+export type DispatchScheduleCreateInput = Omit<DispatchSchedule, 'notBeforeAt'> & {
+  notBeforeAt: Date | Timestamp;
 };
 
 export interface CreateTaskInput {
@@ -78,6 +87,9 @@ export interface CreateTaskInput {
   // Auto-retry metadata (INT-1375)
   failedWorkerLocation?: string;
   autoRetryAttempt?: number;
+
+  // Deferred dispatch metadata (INT-1468)
+  dispatchSchedule?: DispatchScheduleCreateInput | undefined;
 }
 
 export interface UpdateTaskInput {
@@ -115,6 +127,9 @@ export interface UpdateTaskInput {
 
   // Remediation task metadata
   requiresReReview?: boolean;
+
+  // Deferred dispatch metadata (INT-1468)
+  dispatchSchedule?: DispatchScheduleCreateInput | undefined;
 }
 
 export interface ListTasksInput {

@@ -108,4 +108,25 @@ describe('ConfirmSubmitModal', () => {
     );
     expect(container.firstChild).toBeNull();
   });
+
+  it('renders the Dispatches preview when schedule prop is provided', () => {
+    render(
+      <ConfirmSubmitModal
+        isOpen
+        taskTitle="Scheduled task"
+        workerType="auto"
+        taskMode="execution"
+        schedule={{
+          localDateTime: '2026-04-24T22:00',
+          timezone: 'UTC',
+          notBeforeAt: '2026-04-24T22:00:00.000Z',
+        }}
+        onConfirm={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/^Dispatches /)).toBeInTheDocument();
+    expect(screen.getByText(/Added to queue immediately/i)).toBeInTheDocument();
+  });
 });

@@ -1042,6 +1042,11 @@ export interface SubmitCodeTaskRequest {
   workerType?: CodeTaskWorkerType;
   linearIssueId?: string;
   taskMode?: TaskMode;
+  scheduledDispatch?: {
+    localDateTime: string;
+    timezone: string;
+    notBeforeAt: string; // ISO UTC
+  };
 }
 
 /**

@@ -4,9 +4,10 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { CodeTaskNewPage } from '../pages/CodeTaskNewPage.js';
 import type { LinearIssueOption } from '../hooks/useLinearIssueOptions.js';
+import { submitCodeTask } from '../services/codeAgentApi.js';
 
 // Mock react-router-dom
 const mockNavigate = vi.fn();
@@ -73,6 +74,7 @@ vi.mock('@/hooks', () => ({
     loading: false,
   }),
   findRecentTask: vi.fn(),
+  useTimeTick: (): number => 0,
 }));
 
 // Mock @uiw/react-md-editor
@@ -112,6 +114,7 @@ vi.mock('lucide-react', () => ({
   Pencil: (): React.JSX.Element => <span data-testid="icon-pencil" />,
   ClipboardList: (): React.JSX.Element => <span data-testid="icon-clipboard-list" />,
   Rocket: (): React.JSX.Element => <span data-testid="icon-rocket" />,
+  Clock: (): React.JSX.Element => <span data-testid="icon-clock" />,
 }));
 
 /** Dummy issue to use when simulating a selection in the modal */
@@ -148,7 +151,47 @@ vi.mock('@/components', () => ({
   Layout: ({ children }: { children: React.ReactNode }): React.JSX.Element => (
     <div data-testid="layout">{children}</div>
   ),
-  ConfirmSubmitModal: (_props: { isOpen: boolean; taskTitle: string; workerType: string; taskMode: string; onConfirm: () => void; onCancel: () => void }): null => null,
+  ConfirmSubmitModal: ({
+    isOpen,
+    onConfirm,
+    onCancel,
+    schedule,
+  }: {
+    isOpen: boolean;
+    taskTitle: string;
+    workerType: string;
+    taskMode: string;
+    schedule?: { localDateTime: string; timezone: string; notBeforeAt: string };
+    onConfirm: () => Promise<void>;
+    onCancel: () => void;
+  }): React.JSX.Element | null => {
+    if (!isOpen) return null;
+    return (
+      <div data-testid="confirm-submit-modal">
+        {schedule !== undefined ? (
+          <div data-testid="confirm-schedule">
+            {schedule.notBeforeAt} {schedule.timezone}
+          </div>
+        ) : null}
+        <button
+          type="button"
+          data-testid="confirm-submit-btn"
+          onClick={(): void => {
+            void onConfirm();
+          }}
+        >
+          Confirm Submit
+        </button>
+        <button
+          type="button"
+          data-testid="confirm-cancel-btn"
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  },
   TaskConflictModal: (): null => null,
   TaskErrorModal: (): null => null,
   LinearIssueSelectorModal: ({
@@ -368,6 +411,150 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
         'placeholder',
         'Describe what you want to build. The selected worker will analyze the instructions, create a Linear issue with acceptance criteria, and prepare a design — no code will be written prior to your approval.'
       );
+    }
+  });
+});
+
+describe('CodeTaskNewPage - scheduled dispatch UX', () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  const enableExecutionMode = (): void => {
+    fireEvent.click(screen.getByRole('button', { name: /execution/i }));
+  };
+
+  it('hides the schedule toggle in planning mode (default)', () => {
+    render(<CodeTaskNewPage />);
+
+    expect(
+      screen.queryByText(/schedule this execution/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it('reveals "Schedule this execution" when execution mode is selected', () => {
+    render(<CodeTaskNewPage />);
+
+    enableExecutionMode();
+
+    expect(
+      screen.getByText(/schedule this execution/i),
+    ).toBeInTheDocument();
+  });
+
+  it('renders timezone label, datetime-local input, and helper copy when schedule is enabled', () => {
+    render(<CodeTaskNewPage />);
+    enableExecutionMode();
+
+    const checkbox = screen.getByRole('checkbox', { name: /schedule this execution/i });
+    fireEvent.click(checkbox);
+
+    expect(screen.getByText(/your timezone:/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/scheduled dispatch time/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /the task joins the queue immediately, but will not dispatch before the selected time\./i,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('shows inline "Must be in the future" error when a past datetime is selected', () => {
+    render(<CodeTaskNewPage />);
+    enableExecutionMode();
+    fireEvent.click(screen.getByRole('checkbox', { name: /schedule this execution/i }));
+
+    const input = screen.getByLabelText(/scheduled dispatch time/i) as HTMLInputElement;
+    // Past time relative to any reasonable test clock.
+    fireEvent.change(input, { target: { value: '2000-01-01T00:00' } });
+
+    expect(screen.getByText(/must be in the future/i)).toBeInTheDocument();
+  });
+
+  it('shows live preview starting with "Dispatches" when a future datetime is selected', () => {
+    render(<CodeTaskNewPage />);
+    enableExecutionMode();
+    fireEvent.click(screen.getByRole('checkbox', { name: /schedule this execution/i }));
+
+    const input = screen.getByLabelText(/scheduled dispatch time/i) as HTMLInputElement;
+    // Far future: 2999-01-01 00:00 local.
+    fireEvent.change(input, { target: { value: '2999-01-01T00:00' } });
+
+    expect(screen.queryByText(/must be in the future/i)).not.toBeInTheDocument();
+    const preview = screen.getByText(/^Dispatches /);
+    expect(preview).toBeInTheDocument();
+  });
+
+  it('clears schedule state and hides the control when switching back to planning mode', () => {
+    render(<CodeTaskNewPage />);
+    enableExecutionMode();
+    fireEvent.click(screen.getByRole('checkbox', { name: /schedule this execution/i }));
+
+    const input = screen.getByLabelText(/scheduled dispatch time/i) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '2999-01-01T00:00' } });
+
+    // Switch to planning
+    fireEvent.click(screen.getByRole('button', { name: /planning/i }));
+
+    // Control is hidden.
+    expect(
+      screen.queryByText(/schedule this execution/i),
+    ).not.toBeInTheDocument();
+
+    // Re-enable execution mode: schedule should be collapsed again (state cleared).
+    enableExecutionMode();
+    const checkbox = screen.getByRole('checkbox', { name: /schedule this execution/i }) as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+    expect(screen.queryByLabelText(/scheduled dispatch time/i)).not.toBeInTheDocument();
+  });
+
+  it('submits request with scheduledDispatch when execution mode + future schedule are set', async () => {
+    // Stub the browser timezone so we can assert it.
+    const originalResolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+    vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({
+      timeZone: 'America/New_York',
+    } as Intl.ResolvedDateTimeFormatOptions);
+
+    try {
+      render(<CodeTaskNewPage />);
+
+      // Provide prompt so form is valid.
+      const editor = screen.getAllByTestId('md-editor')[0] as HTMLTextAreaElement;
+      fireEvent.change(editor, { target: { value: 'do the thing' } });
+
+      enableExecutionMode();
+      fireEvent.click(screen.getByRole('checkbox', { name: /schedule this execution/i }));
+
+      const futureLocal = '2999-01-01T00:00';
+      const input = screen.getByLabelText(/scheduled dispatch time/i) as HTMLInputElement;
+      fireEvent.change(input, { target: { value: futureLocal } });
+
+      // Open confirm modal.
+      const submitButtons = screen.getAllByRole('button', { name: /submit task/i });
+      fireEvent.click(submitButtons[0] as HTMLElement);
+
+      // Click the confirm button inside the modal.
+      fireEvent.click(screen.getByTestId('confirm-submit-btn'));
+
+      await waitFor(() => {
+        expect(submitCodeTask).toHaveBeenCalledTimes(1);
+      });
+
+      const call = vi.mocked(submitCodeTask).mock.calls[0];
+      expect(call).toBeDefined();
+      const [, requestBody] = call as [string, { scheduledDispatch?: { timezone: string; notBeforeAt: string; localDateTime: string } }];
+      expect(requestBody.scheduledDispatch).toBeDefined();
+      const sd = requestBody.scheduledDispatch;
+      if (sd === undefined) throw new Error('scheduledDispatch missing');
+      expect(sd.timezone).toBe('America/New_York');
+      expect(sd.localDateTime).toBe(futureLocal);
+      // notBeforeAt should be a valid ISO UTC string in the future.
+      const nb = new Date(sd.notBeforeAt);
+      expect(Number.isNaN(nb.getTime())).toBe(false);
+      expect(nb.getTime() > Date.now()).toBe(true);
+      expect(sd.notBeforeAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    } finally {
+      Intl.DateTimeFormat.prototype.resolvedOptions = originalResolvedOptions;
     }
   });
 });

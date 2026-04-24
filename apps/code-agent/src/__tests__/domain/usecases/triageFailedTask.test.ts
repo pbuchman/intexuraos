@@ -10,6 +10,7 @@ import type { Logger } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
 import {
   triageFailedTask,
+  COOLOFF_FALLBACK_MS,
   type TriageFailedTaskDeps,
 } from '../../../domain/usecases/triageFailedTask.js';
 import type { CodeTask, TaskError } from '../../../domain/models/codeTask.js';
@@ -33,6 +34,7 @@ describe('triageFailedTask', () => {
   };
   let mockUserServiceClient: {
     getLlmClient: ReturnType<typeof vi.fn>;
+    getUserTimezone: ReturnType<typeof vi.fn>;
   };
 
   function buildTask(overrides: Partial<CodeTask> = {}): CodeTask {
@@ -99,6 +101,7 @@ describe('triageFailedTask', () => {
 
     mockUserServiceClient = {
       getLlmClient: vi.fn(),
+      getUserTimezone: vi.fn().mockResolvedValue(undefined),
     };
   });
 
@@ -121,12 +124,24 @@ describe('triageFailedTask', () => {
   });
 
   describe('retry_after_cooloff verdict', () => {
+    // Production evidence: task_ac5fb880-... and task_8f4bc53b-... (INT-1463).
+    // The verbatim production message — classifyFailure's regex recognizes
+    // Claude's "hit your limit · resets …" wording directly, so no synthetic
+    // "rate limited" phrasing is needed.
+    const PRODUCTION_MESSAGE =
+      "Non-zero exit code: 1; Claude error: You've hit your limit · resets 10pm (UTC)";
+
     it('auto-retries rate-limit failures (429 → action: retried_after_cooloff)', async () => {
       const task = buildTask({ id: 'task_ratelimit' });
       const taskError: TaskError = {
         code: 'TASK_RESUMED_HARD_ERROR',
         message: 'Agent exited with code 429',
       };
+
+      // No LLM key — should use fallback delay.
+      mockUserServiceClient.getLlmClient.mockResolvedValue(
+        err({ code: 'NO_API_KEY', message: 'no key' })
+      );
 
       const result = await triageFailedTask(buildDeps(), {
         task,
@@ -137,6 +152,218 @@ describe('triageFailedTask', () => {
       expect(result.action).toBe('retried_after_cooloff');
       expect(result.retryTaskId).toBeDefined();
       expect(mockCodeTaskRepo.create).toHaveBeenCalledOnce();
+    });
+
+    it('passes cooloffSchedule with derivedBy "llm" when the LLM returns a valid future timestamp', async () => {
+      const task = buildTask({ id: 'task_cooloff_prod' });
+      const taskError: TaskError = {
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: PRODUCTION_MESSAGE,
+      };
+
+      // Future reset ~10 hours away.
+      const futureIso = new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString();
+      const mockGenerate = vi.fn().mockResolvedValue(
+        ok({
+          content: JSON.stringify({
+            notBeforeAt: futureIso,
+            timezone: 'UTC',
+            sourceText: 'resets 10pm (UTC)',
+            reason: 'Claude usage limit resets at 10 PM UTC',
+          }),
+        })
+      );
+      mockUserServiceClient.getLlmClient.mockResolvedValue(ok({ generate: mockGenerate }));
+      mockUserServiceClient.getUserTimezone.mockResolvedValue('UTC');
+
+      const result = await triageFailedTask(buildDeps(), {
+        task,
+        completedAt: new Date(),
+        taskError,
+      });
+
+      expect(result.action).toBe('retried_after_cooloff');
+      expect(mockUserServiceClient.getUserTimezone).toHaveBeenCalledWith('user_123');
+      expect(mockGenerate).toHaveBeenCalledOnce();
+      expect(mockGenerate.mock.calls[0]?.[1]).toMatchObject({ promptType: 'cooloff-retry' });
+
+      const createInput = mockCodeTaskRepo.create.mock.calls[0]?.[0] as
+        | { dispatchSchedule?: Record<string, unknown> }
+        | undefined;
+      expect(createInput?.dispatchSchedule).toBeDefined();
+      expect(createInput?.dispatchSchedule?.['derivedBy']).toBe('llm');
+      expect(createInput?.dispatchSchedule?.['source']).toBe('retry_cooloff');
+      const persisted = createInput?.dispatchSchedule?.['notBeforeAt'];
+      expect(persisted).toBeInstanceOf(Date);
+      expect((persisted as Date).toISOString()).toBe(futureIso);
+    });
+
+    it('falls back to derivedBy "fallback" with ~60-minute delay when LLM returns invalid JSON', async () => {
+      const task = buildTask({ id: 'task_cooloff_badjson' });
+      const taskError: TaskError = {
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: PRODUCTION_MESSAGE,
+      };
+
+      const mockGenerate = vi.fn().mockResolvedValue(
+        ok({ content: 'not a json blob at all' })
+      );
+      mockUserServiceClient.getLlmClient.mockResolvedValue(ok({ generate: mockGenerate }));
+
+      const before = Date.now();
+      const result = await triageFailedTask(buildDeps(), {
+        task,
+        completedAt: new Date(),
+        taskError,
+      });
+      const after = Date.now();
+
+      expect(result.action).toBe('retried_after_cooloff');
+
+      const createInput = mockCodeTaskRepo.create.mock.calls[0]?.[0] as
+        | { dispatchSchedule?: Record<string, unknown> }
+        | undefined;
+      expect(createInput?.dispatchSchedule?.['derivedBy']).toBe('fallback');
+      expect(createInput?.dispatchSchedule?.['source']).toBe('retry_cooloff');
+      const persisted = createInput?.dispatchSchedule?.['notBeforeAt'] as Date;
+      // `new Date()` is sampled inside the use case at some point in [before, after],
+      // so the persisted delay is exactly COOLOFF_FALLBACK_MS relative to that sample.
+      expect(persisted.getTime() - before).toBeGreaterThanOrEqual(COOLOFF_FALLBACK_MS);
+      expect(persisted.getTime() - after).toBeLessThanOrEqual(COOLOFF_FALLBACK_MS);
+    });
+
+    it('falls back to derivedBy "fallback" when userServiceClient.getLlmClient errors and propagates known user timezone', async () => {
+      const task = buildTask({ id: 'task_cooloff_nokey' });
+      const taskError: TaskError = {
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: PRODUCTION_MESSAGE,
+      };
+
+      // Timezone is known, but LLM client is unavailable — fallback path
+      // must still carry the user timezone onto the retry schedule (INT-1468).
+      mockUserServiceClient.getUserTimezone.mockResolvedValue('America/New_York');
+      mockUserServiceClient.getLlmClient.mockResolvedValue(
+        err({ code: 'NO_API_KEY', message: 'no key' })
+      );
+
+      const result = await triageFailedTask(buildDeps(), {
+        task,
+        completedAt: new Date(),
+        taskError,
+      });
+
+      expect(result.action).toBe('retried_after_cooloff');
+      const createInput = mockCodeTaskRepo.create.mock.calls[0]?.[0] as
+        | { dispatchSchedule?: Record<string, unknown> }
+        | undefined;
+      expect(createInput?.dispatchSchedule?.['derivedBy']).toBe('fallback');
+      expect(createInput?.dispatchSchedule?.['timezone']).toBe('America/New_York');
+    });
+
+    it('still calls LLM with empty log lines when logLineRepo.listRecent returns err', async () => {
+      const task = buildTask({ id: 'task_cooloff_logfail' });
+      const taskError: TaskError = {
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: PRODUCTION_MESSAGE,
+      };
+
+      mockLogLineRepo.listRecent.mockResolvedValue(
+        err({ code: 'FIRESTORE_ERROR', message: 'read failed' })
+      );
+      const mockGenerate = vi.fn().mockResolvedValue(ok({ content: 'bogus' }));
+      mockUserServiceClient.getLlmClient.mockResolvedValue(ok({ generate: mockGenerate }));
+
+      const result = await triageFailedTask(buildDeps(), {
+        task,
+        completedAt: new Date(),
+        taskError,
+      });
+
+      expect(result.action).toBe('retried_after_cooloff');
+      expect(mockGenerate).toHaveBeenCalledOnce();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task_cooloff_logfail' }),
+        expect.stringContaining('Failed to fetch log lines for cooloff parsing')
+      );
+    });
+
+    it('tolerates getUserTimezone throwing and falls through to LLM with undefined timezone', async () => {
+      const task = buildTask({ id: 'task_cooloff_tz_throw' });
+      const taskError: TaskError = {
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: PRODUCTION_MESSAGE,
+      };
+
+      mockUserServiceClient.getUserTimezone.mockRejectedValue(new Error('tz boom'));
+      const futureIso = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+      const mockGenerate = vi.fn().mockResolvedValue(
+        ok({
+          content: JSON.stringify({
+            notBeforeAt: futureIso,
+            reason: 'r',
+          }),
+        })
+      );
+      mockUserServiceClient.getLlmClient.mockResolvedValue(ok({ generate: mockGenerate }));
+
+      const result = await triageFailedTask(buildDeps(), {
+        task,
+        completedAt: new Date(),
+        taskError,
+      });
+
+      expect(result.action).toBe('retried_after_cooloff');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task_cooloff_tz_throw' }),
+        expect.stringContaining('Failed to fetch user timezone')
+      );
+      const createInput = mockCodeTaskRepo.create.mock.calls[0]?.[0] as
+        | { dispatchSchedule?: Record<string, unknown> }
+        | undefined;
+      expect(createInput?.dispatchSchedule?.['derivedBy']).toBe('llm');
+    });
+
+    it('falls back to derivedBy "fallback" when LLM generate itself fails', async () => {
+      const task = buildTask({ id: 'task_cooloff_gen_err' });
+      const taskError: TaskError = {
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: PRODUCTION_MESSAGE,
+      };
+
+      const mockGenerate = vi.fn().mockResolvedValue(
+        err({ code: 'LLM_ERROR', message: 'model unavailable' })
+      );
+      mockUserServiceClient.getLlmClient.mockResolvedValue(ok({ generate: mockGenerate }));
+
+      const result = await triageFailedTask(buildDeps(), {
+        task,
+        completedAt: new Date(),
+        taskError,
+      });
+
+      expect(result.action).toBe('retried_after_cooloff');
+      const createInput = mockCodeTaskRepo.create.mock.calls[0]?.[0] as
+        | { dispatchSchedule?: Record<string, unknown> }
+        | undefined;
+      expect(createInput?.dispatchSchedule?.['derivedBy']).toBe('fallback');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task_cooloff_gen_err' }),
+        expect.stringContaining('LLM cooloff call failed')
+      );
+    });
+
+    it('does NOT fetch user LLM or timezone for the plain "retry" verdict', async () => {
+      const task = buildTask({ id: 'task_retry_plain' });
+      const taskError: TaskError = { code: 'SETUP_FAILED', message: 'infra blew up' };
+
+      await triageFailedTask(buildDeps(), {
+        task,
+        completedAt: new Date(),
+        taskError,
+      });
+
+      expect(mockUserServiceClient.getLlmClient).not.toHaveBeenCalled();
+      expect(mockUserServiceClient.getUserTimezone).not.toHaveBeenCalled();
     });
   });
 

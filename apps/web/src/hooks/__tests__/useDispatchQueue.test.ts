@@ -161,6 +161,55 @@ describe('useDispatchQueue', () => {
     });
   });
 
+  it('passes through dispatch schedule metadata from the API response unchanged (INT-1468)', async () => {
+    mockGetDispatchQueue.mockResolvedValue({
+      tasks: [
+        {
+          id: 'task-sched',
+          prompt: 'Scheduled task',
+          workerType: 'opus',
+          queuedAt: '2026-04-24T09:00:00Z',
+          createdAt: '2026-04-24T09:00:00Z',
+          position: 1,
+          dispatchEligibleAt: '2026-04-24T22:00:00Z',
+          dispatchScheduleSource: 'user_scheduled',
+          dispatchScheduleText: 'Scheduled by user',
+        },
+        {
+          id: 'task-cooloff',
+          prompt: 'Cooloff retry',
+          workerType: 'opus',
+          queuedAt: '2026-04-24T09:05:00Z',
+          createdAt: '2026-04-24T09:05:00Z',
+          position: 2,
+          dispatchEligibleAt: '2026-04-24T22:00:00Z',
+          dispatchScheduleSource: 'retry_cooloff',
+          dispatchScheduleText: 'Waiting for Claude reset',
+        },
+      ],
+      totalQueued: 2,
+      maxQueueSize: 10,
+    });
+
+    const { result } = renderHook(() => useDispatchQueue());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.tasks).toHaveLength(2);
+    expect(result.current.tasks[0]).toEqual(expect.objectContaining({
+      dispatchEligibleAt: '2026-04-24T22:00:00Z',
+      dispatchScheduleSource: 'user_scheduled',
+      dispatchScheduleText: 'Scheduled by user',
+    }));
+    expect(result.current.tasks[1]).toEqual(expect.objectContaining({
+      dispatchEligibleAt: '2026-04-24T22:00:00Z',
+      dispatchScheduleSource: 'retry_cooloff',
+      dispatchScheduleText: 'Waiting for Claude reset',
+    }));
+  });
+
   it('initializes Firebase when not authenticated', async () => {
     mockIsFirebaseAuthenticated.mockReturnValue(false);
     mockGetDispatchQueue.mockResolvedValue({

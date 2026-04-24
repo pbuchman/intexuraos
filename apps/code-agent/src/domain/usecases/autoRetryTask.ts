@@ -25,6 +25,18 @@ export interface AutoRetryTaskRequest {
   failedTask: CodeTask;
   failedWorkerLocation: string;
   reason: string;
+  /**
+   * Optional cooloff dispatch schedule (INT-1463). Only set when the failure
+   * verdict is `retry_after_cooloff`; the retry task will be queued but
+   * ineligible for dispatch until `notBeforeAt`. Fallback-derived schedules
+   * use a fixed 60-minute wait; LLM-derived ones use the parsed reset time.
+   */
+  cooloffSchedule?: {
+    notBeforeAt: Date;
+    timezone?: string;
+    sourceText?: string;
+    derivedBy: 'llm' | 'fallback';
+  };
 }
 
 export interface AutoRetryTaskResult {
@@ -76,7 +88,7 @@ export async function autoRetryTask(
   request: AutoRetryTaskRequest
 ): Promise<Result<AutoRetryTaskResult, AutoRetryTaskError>> {
   const { logger, codeTaskRepo, taskEnqueueService, whatsappNotifier } = deps;
-  const { failedTask, failedWorkerLocation, reason } = request;
+  const { failedTask, failedWorkerLocation, reason, cooloffSchedule } = request;
 
   // Step 1: Check retry budget via chain walking
   const retryDepth = await countRetryDepth(codeTaskRepo, failedTask);
@@ -116,6 +128,16 @@ export async function autoRetryTask(
     ...(failedTask.linearIssueId !== undefined && { linearIssueId: failedTask.linearIssueId }),
     ...(failedTask.prNumber !== undefined && { prNumber: failedTask.prNumber }),
     ...(failedTask.prBranch !== undefined && { prBranch: failedTask.prBranch }),
+    ...(cooloffSchedule !== undefined && {
+      dispatchSchedule: {
+        notBeforeAt: cooloffSchedule.notBeforeAt,
+        source: 'retry_cooloff' as const,
+        derivedBy: cooloffSchedule.derivedBy,
+        derivedFromTaskId: failedTask.id,
+        ...(cooloffSchedule.timezone !== undefined && { timezone: cooloffSchedule.timezone }),
+        ...(cooloffSchedule.sourceText !== undefined && { sourceText: cooloffSchedule.sourceText }),
+      },
+    }),
   });
 
   if (!createResult.ok) {
