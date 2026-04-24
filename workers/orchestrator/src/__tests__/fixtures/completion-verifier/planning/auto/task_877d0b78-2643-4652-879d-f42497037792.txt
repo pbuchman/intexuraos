@@ -1,0 +1,19 @@
+PLANNING_AGENT_FINAL:
+- Outcome: planned
+- superpowers_writing_plans_used: 1
+- Linear issue: https://linear.app/pbuchman/issue/INT-1422/fix-internal-server-error-when-grouping-events-by-prompt-type-and-date
+- Complex task: 0
+- Plan doc: 1
+- Subtask URLs: 
+- Plan PR: https://github.com/pbuchman/intexuraos/pull/1888
+- Parallel breakdown proof: 
+- Clarification message: 
+- memory_ids_used: none
+- memory_ids_rejected: mem_7fa6d409-f92f-4e74-839a-eec2fdae3a8e,mem_ed826434-d1be-42c5-b59d-1cd42d72ec2e,mem_e831093c-7238-4f3b-abe4-ac39ff833471
+- memory_usage_summary: No memories were applicable to this task — all 3 were rejected as irrelevant (they cover LLM fallback verification and cross-cutting LLM client signature migrations, whereas this bug is a missing `GROUP_KEY_EXTRACTORS` entry in the LLM usage query use case).
+- Summary:
+  * Task: fix HTTP 500 returned by `POST /llm-usage/query` when user selects "Group by → Prompt Type" in the LLM Usage page.
+  * Root cause: `ALLOWED_GROUP_BY` in `apps/llm-usage-service/src/domain/models/usageQuery.ts:36` lists `'request.promptType'` but `GROUP_KEY_EXTRACTORS` in `queryUsage.ts:55-66` has no entry, so `GROUP_KEY_EXTRACTORS[field]!(agg)` throws at runtime because `DailyUsageAggregate` never carried a `promptType` dimension.
+  * Decision: PLAN-DOC — spans backend (llm-usage-service) and frontend (web app), no data migration or cross-service coordination needed; scope limited to removing the non-functional option, not adding the aggregate dimension.
+  * Artifacts: plan doc `docs/plans/INT-1422-fix-llm-usage-group-by-prompt-type.md` on branch `plan/int-1422-group-by-prompt-type`, planning PR https://github.com/pbuchman/intexuraos/pull/1888, Linear description rewritten (original archived as comment).
+  * Follow-up: actually supporting "Group by Prompt Type" requires extending `DailyUsageAggregate`, updating the aggregator, backfilling historical data, and re-adding the extractor — flagged as out-of-scope in the plan for a separate issue.

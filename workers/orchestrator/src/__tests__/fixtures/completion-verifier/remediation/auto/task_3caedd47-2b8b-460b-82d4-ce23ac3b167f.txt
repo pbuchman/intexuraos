@@ -1,0 +1,13 @@
+REMEDIATION_AGENT_FINAL:
+- Outcome: implemented
+- PR: https://github.com/pbuchman/intexuraos/pull/1900
+- requires_re_review: 0
+- memory_ids_used: none
+- memory_ids_rejected: mem_c4937fb0-9acf-4fba-8051-6ec027a5b8ad,mem_b3df0496-a922-4d72-94c9-2ec18fdddec8,mem_2d894d6c-e31b-4783-af57-19307d675180
+- memory_usage_summary: No memories were applicable to this task — all 3 were rejected as irrelevant.
+- Summary:
+  * Removed blanket `v8 ignore` around `logWorkerAuthStartupStatus` and added 4 branch-covering tests with a fake `WorkerAuthRegistry` (Finding 1).
+  * Narrowed `validateWorkerApiKeys` `v8 ignore` to wrap only the `Promise.all` fan-out; added 4 tests for claude/codex auth-state logging branches (Finding 2).
+  * Dropped `validateWorkerApiKeys` from the strict `toEqual` order in `start.test.ts` and stripped its `callOrder.push` side-effect, since production fires it with `void`; retained `toHaveBeenCalledOnce()` (Finding 3).
+  * Improved `setImmediate` comment in `service-wiring.test.ts` so it is not mistaken for dead code (review-body minor).
+  * Skipped `git-identity.ts` dep-injection refactor — reviewer explicitly flagged it as future work; skipped 5 `@ignore`-tagged automation issue comments. CI green; commit `9496cab3b` pushed to `feature/int-1429`.
