@@ -252,6 +252,19 @@ describe('submitToExecutionAgent', () => {
   });
 
   describe('validation', () => {
+    it('returns invalid_status when the request is malformed (empty originalTaskId)', async () => {
+      const result = await submitToExecutionAgent(createDeps(), {
+        originalTaskId: '',
+        userId,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_status');
+        expect(result.error.message).toContain('originalTaskId');
+      }
+    });
+
     it('returns task_not_found when findByIdForUser fails', async () => {
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(
         err({ code: 'NOT_FOUND', message: 'Not found' })
