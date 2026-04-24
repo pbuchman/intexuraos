@@ -136,7 +136,9 @@ describe('buildResultFromVerification [INT-1470 deterministic verdict shape]', (
       code: 'TASK_RUNTIME_HARD_ERROR',
       message: 'nope',
     };
-    expect(buildResultFromVerification(task, gitResult, hardError)).toEqual({ branch: 'feature/x' });
+    expect(buildResultFromVerification(task, gitResult, hardError)).toEqual({
+      branch: 'feature/x',
+    });
   });
 
   it('overlays planning fields when agentType=planning', () => {
@@ -343,6 +345,226 @@ describe('buildResultFromVerification [INT-1470 deterministic verdict shape]', (
     );
     expect(result.prUrl).toBeUndefined();
     expect(result.comment_replied).toBe(false);
+  });
+
+  it('[INT-1470 coverage] infers agentType=planning from plan_pr presence when omitted', () => {
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'Planned',
+        outcome: 'planned',
+        plan_pr: 'https://github.com/pr/1',
+      })
+    );
+    expect(result.planning_outcome_label).toBe('planned');
+  });
+
+  it('[INT-1470 coverage] infers agentType=pull_request from tracking_comment_id presence', () => {
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'PR',
+        tracking_comment_id: '42',
+        pr: 'https://github.com/pr/1',
+        comment_replied: 'yes',
+      })
+    );
+    expect(result.prUrl).toBe('https://github.com/pr/1');
+    expect(result.comment_replied).toBe(true);
+  });
+
+  it('[INT-1470 coverage] infers agentType=review from review_id presence', () => {
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'Reviewed',
+        review_id: 'rev-1',
+        pr: 'https://github.com/pr/1',
+      })
+    );
+    expect(result.review_id).toBe('rev-1');
+  });
+
+  it('[INT-1470 coverage] infers agentType=remediation from requires_re_review presence', () => {
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'Remediated',
+        outcome: 'implemented',
+        requires_re_review: true,
+        pr: 'https://github.com/pr/1',
+      })
+    );
+    expect(result.requires_re_review).toBe('1');
+  });
+
+  it('[INT-1470 coverage] arrayToCsv: coerces non-string array members via String()', () => {
+    // Exercise the `typeof v === 'string' ? v : String(v)` branch in arrayToCsv.
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'S',
+        memory_ids_used: ['mem_a', 42, { toString: (): string => 'obj' }],
+        memory_ids_rejected: [],
+        memory_usage_summary: '',
+      })
+    );
+    expect(result.execution_memory_ids_used).toBe('mem_a,42,obj');
+  });
+
+  it('[INT-1470 coverage] arrayToCsv: accepts string as-is (not an array)', () => {
+    // Exercise the `typeof value === 'string'` branch in arrayToCsv.
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'S',
+        memory_ids_used: 'mem_pre,mem_post', // already a csv string
+        memory_ids_rejected: [],
+        memory_usage_summary: '',
+      })
+    );
+    expect(result.execution_memory_ids_used).toBe('mem_pre,mem_post');
+  });
+
+  it('[INT-1470 coverage] planning: outcome=unclear sets planning_outcome_label', () => {
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'Unclear',
+        outcome: 'unclear',
+      }),
+      'planning'
+    );
+    expect(result.planning_outcome_label).toBe('unclear');
+  });
+
+  it('[INT-1470 coverage] review: review_comments_posted accepts string as-is', () => {
+    // Exercise the `typeof reviewCommentsPosted === 'string'` branch.
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'Reviewed',
+        review_id: 'rev-1',
+        review_comments_posted: '7',
+        pr: 'https://github.com/pr/1',
+      }),
+      'review'
+    );
+    expect(result.review_comments_posted).toBe('7');
+  });
+
+  it('[INT-1470 coverage] planning: outcome not in {planned, unclear} is not labeled', () => {
+    // Exercise the false-branch of `outcome === 'planned' || outcome === 'unclear'`.
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'Planning',
+        outcome: 'something-else',
+      }),
+      'planning'
+    );
+    expect(result.planning_outcome_label).toBeUndefined();
+  });
+
+  it('[INT-1470 coverage] remediation: outcome not in {implemented, already_completed} is not labeled', () => {
+    // Exercise the false-branch of
+    // `outcome === 'implemented' || outcome === 'already_completed'`.
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'Remediated',
+        outcome: 'weird',
+        pr: 'https://github.com/pr/1',
+        requires_re_review: false,
+      }),
+      'remediation'
+    );
+    expect(result.execution_outcome_label).toBeUndefined();
+  });
+
+  it('[INT-1470 coverage] infers agentType=execution when no dispatch key is present and default-overlays exec fields', () => {
+    // Exercise the final-fallback branch `: 'execution'` in the inference
+    // ternary. No `plan_pr`/`tracking_comment_id`/`review_id`/`requires_re_review`
+    // keys — defaults to execution.
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'Done',
+        outcome: 'implemented',
+        pr: 'https://github.com/pr/1',
+      })
+    );
+    expect(result.execution_outcome_label).toBe('implemented');
+    expect(result.prUrl).toBe('https://github.com/pr/1');
+  });
+
+  it('[INT-1470 coverage] ask_agent: no overlay path — falls through every else-if branch without mutation', () => {
+    // Exercise the implicit-else fall-through arm of the final
+    // `else if (inferredType === 'pull_request')` condition. BuildResultAgentType
+    // includes 'ask_agent', for which no overlay applies; every inference
+    // arm (planning/execution/review/remediation/pull_request) must return
+    // false and the base result must be unchanged beyond the summary/memory
+    // pass-through set earlier.
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'Asked',
+        memory_ids_used: [],
+        memory_ids_rejected: [],
+        memory_usage_summary: '',
+      }),
+      'ask_agent'
+    );
+    expect(result.summary).toBe('Asked');
+    // None of the agent-specific fields should be set.
+    expect(result.planning_outcome_label).toBeUndefined();
+    expect(result.execution_outcome_label).toBeUndefined();
+    expect(result.review_id).toBeUndefined();
+    expect(result.requires_re_review).toBeUndefined();
+    expect(result.prUrl).toBeUndefined();
+    expect(result.comment_replied).toBeUndefined();
+  });
+
+  it('[INT-1470 coverage] remediation: requires_re_review with non-bool value is dropped', () => {
+    // Exercise the `requiresReReview === undefined` arm
+    // (boolToBoolZeroOne returns undefined for non-bool / non-'0'/'1').
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
+        summary: 'Remediated',
+        outcome: 'implemented',
+        pr: 'https://github.com/pr/1',
+        requires_re_review: 'not-a-bool', // non-bool, non-'0'/'1' → undefined
+      }),
+      'remediation'
+    );
+    expect(result.requires_re_review).toBeUndefined();
   });
 });
 

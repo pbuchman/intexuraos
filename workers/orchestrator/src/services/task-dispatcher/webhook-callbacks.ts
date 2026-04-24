@@ -93,7 +93,7 @@ export function buildResultFromVerification(
   task: Task,
   gitResult: TaskResult | undefined, // @allow-undefined-type -- function parameter, not optional property
   verification: CompletionVerifierVerdict,
-  agentType: BuildResultAgentType | undefined = undefined // @allow-undefined-type -- back-compat: older call sites didn't pass agentType; we dispatch off fields present in data when omitted
+  agentType?: BuildResultAgentType // back-compat: older call sites didn't pass agentType; we dispatch off fields present in data when omitted
 ): TaskResult {
   const base: TaskResult = { ...(gitResult ?? {}) };
   if (verification.kind !== 'parsed') return base;
@@ -103,7 +103,11 @@ export function buildResultFromVerification(
   base.summary = toStringOr(data['summary']);
 
   // Memory fields: wire format preserves legacy `execution_memory_*` strings.
-  if ('memory_ids_used' in data || 'memory_ids_rejected' in data || 'memory_usage_summary' in data) {
+  if (
+    'memory_ids_used' in data ||
+    'memory_ids_rejected' in data ||
+    'memory_usage_summary' in data
+  ) {
     base.execution_memory_ids_used = arrayToCsv(data['memory_ids_used']);
     base.execution_memory_ids_rejected = arrayToCsv(data['memory_ids_rejected']);
     base.execution_memory_usage_summary = toStringOr(data['memory_usage_summary']);
