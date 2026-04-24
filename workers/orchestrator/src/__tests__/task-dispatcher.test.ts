@@ -2390,6 +2390,68 @@ describe('TaskDispatcher', () => {
       );
     });
 
+    it('INT-1471: defaults classifyAttempt runtime to "claude" when task.runtime is absent (legacy state)', async () => {
+      // Guards the `task.runtime ?? 'claude'` fallback. Legacy persisted tasks
+      // from before INT-1455 had no `runtime` field; the dispatcher must still
+      // classify them correctly by defaulting to Claude semantics.
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        telemetryMissingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        '[claude] Session init: id=legacy-session\n' +
+          '{"type":"result","is_error":true,"result":"Task failed: legacy error"}\n'
+      );
+      const request: CreateTaskRequest = {
+        taskId: 'legacy-runtime-undefined-test',
+        workerType: 'auto',
+        prompt: 'Test legacy task without runtime field',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Simulate a legacy persisted task by stripping the runtime field. The
+      // next getTask() call (inside the completion monitor) will reload the
+      // task with task.runtime === undefined, exercising the nullish default.
+      const preState = await statePersistence.load();
+      const persistedTask = preState.tasks['legacy-runtime-undefined-test'];
+      if (!persistedTask) throw new Error('Task not found');
+      delete persistedTask.runtime;
+      await statePersistence.save(preState);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      onLog?.('{"type":"result","is_error":true,"result":"Task failed: legacy error"}\n');
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('legacy-runtime-undefined-test');
+      expect(task?.status).toBe('failed');
+
+      // Legacy task with Claude-like logs must be classified as `ran` under
+      // the default `claude` runtime and finalized via TASK_RUNTIME_HARD_ERROR,
+      // NOT WORKER_INFRA_FAILURE.
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string; taskId?: string } | undefined;
+        return p?.status === 'failed' && p.taskId === 'legacy-runtime-undefined-test';
+      });
+      const failedPayload = sentCall?.[0]?.payload as
+        | { error?: { code?: string; message?: string } }
+        | undefined;
+      expect(failedPayload?.error?.code).toBe('TASK_RUNTIME_HARD_ERROR');
+    });
+
     it('INT-1471: Codex usage-limit runtime error + exit 1 → TASK_RUNTIME_HARD_ERROR (not WORKER_INFRA_FAILURE)', async () => {
       // Replicates the real INT-1471 incident: a codex attempt emits
       // thread/turn markers and then turn.failed with the ChatGPT usage-limit
@@ -2408,7 +2470,7 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
         '[codex] Session started: thread=019dc00d-fb13-7e30-b21d-a77982c54bab\n' +
           '[codex] Turn started\n' +
-          '[error] You\'ve hit your usage limit. Upgrade to Pro\n' +
+          "[error] You've hit your usage limit. Upgrade to Pro\n" +
           '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit. Upgrade to Pro"}}\n'
       );
       const request: CreateTaskRequest = {
@@ -2435,7 +2497,7 @@ describe('TaskDispatcher', () => {
       expect(onComplete).toBeDefined();
       onLog?.('[codex] Session started: thread=019dc00d\n');
       onLog?.('[codex] Turn started\n');
-      onLog?.('[error] You\'ve hit your usage limit. Upgrade to Pro\n');
+      onLog?.("[error] You've hit your usage limit. Upgrade to Pro\n");
       onLog?.(
         '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit. Upgrade to Pro"}}\n'
       );
