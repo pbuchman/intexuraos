@@ -2390,6 +2390,75 @@ describe('TaskDispatcher', () => {
       );
     });
 
+    it('INT-1471: Codex usage-limit runtime error + exit 1 → TASK_RUNTIME_HARD_ERROR (not WORKER_INFRA_FAILURE)', async () => {
+      // Replicates the real INT-1471 incident: a codex attempt emits
+      // thread/turn markers and then turn.failed with the ChatGPT usage-limit
+      // message. The runtime-aware classifyAttempt must treat the attempt as
+      // `ran` (via hasCodexRanSignal), so the dispatcher falls through to the
+      // runtime-hard-error path instead of finalizing as WORKER_INFRA_FAILURE.
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        telemetryMissingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      // rawLogs fetched by the dispatcher must contain codex ran-signals so
+      // classifyAttempt({ runtime: 'codex', ... }) returns outcome: 'ran'.
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        '[codex] Session started: thread=019dc00d-fb13-7e30-b21d-a77982c54bab\n' +
+          '[codex] Turn started\n' +
+          '[error] You\'ve hit your usage limit. Upgrade to Pro\n' +
+          '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit. Upgrade to Pro"}}\n'
+      );
+      const request: CreateTaskRequest = {
+        taskId: 'codex-usage-limit-test',
+        workerType: 'codex',
+        prompt: 'Test Codex usage-limit runtime failure',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Feed the codex stream-JSON logs via onLog so the codex-log-processor
+      // emits attempt_failed{ errorMessage: "You've hit your usage limit..." },
+      // which populates claudeErrors for the codex runtime. onComplete(1)
+      // triggers the fail-exit-override path with a non-zero exit code.
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onLog).toBeDefined();
+      expect(onComplete).toBeDefined();
+      onLog?.('[codex] Session started: thread=019dc00d\n');
+      onLog?.('[codex] Turn started\n');
+      onLog?.('[error] You\'ve hit your usage limit. Upgrade to Pro\n');
+      onLog?.(
+        '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit. Upgrade to Pro"}}\n'
+      );
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('codex-usage-limit-test');
+      expect(task?.status).toBe('failed');
+
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string } | undefined;
+        return p?.status === 'failed';
+      });
+      const failedPayload = sentCall?.[0]?.payload as
+        | { error?: { code?: string; message?: string } }
+        | undefined;
+      expect(failedPayload?.error?.code).toBe('TASK_RUNTIME_HARD_ERROR');
+      expect(failedPayload?.error?.code).not.toBe('WORKER_INFRA_FAILURE');
+      expect(failedPayload?.error?.message).toContain('hit your usage limit');
+    });
+
     it('INT-1457: verifier passed + execution outcome=failed → TASK_RUNTIME_HARD_ERROR with failure_reason (result defined)', async () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: true,
