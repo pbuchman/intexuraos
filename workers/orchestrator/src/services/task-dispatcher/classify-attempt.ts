@@ -2,11 +2,16 @@
  * Pure classifier used before the completion verifier runs.
  *
  * INT-1455 — distinguishes infra-layer failures (container/entrypoint aborted
- * before Claude ever produced output) from real Claude transcripts that the
- * verifier should grade. Short-circuiting infra failures keeps the verifier's
- * "missing memory fields" error reserved for actual transcript defects.
+ * before the runtime ever produced output) from real transcripts that the
+ * verifier should grade.
+ *
+ * INT-1471 — runtime-aware: recognizes Codex session/turn markers so a Codex
+ * attempt that failed mid-turn (e.g. usage-limit exit 1) is classified as
+ * `ran`, which routes through the normal runtime-hard-error path instead of
+ * the terminal WORKER_INFRA_FAILURE path.
  */
 
+import type { WorkerRuntime } from '../runtime/types.js';
 import type { InfraFailureSubReason } from '../../types/task.js';
 
 export type { InfraFailureSubReason } from '../../types/task.js';
@@ -25,6 +30,7 @@ export type AttemptClassification =
     };
 
 export interface ClassifyAttemptInput {
+  runtime: WorkerRuntime;
   logs: string;
   exitCode: number | undefined; // @allow-undefined-type -- orchestrator tracks optional exit codes
   durationMs: number;
@@ -39,32 +45,7 @@ export interface ClassifyAttemptInput {
   };
 }
 
-export function classifyAttempt(input: ClassifyAttemptInput): AttemptClassification {
-  const { logs, exitCode, durationMs, result } = input;
-
-  // Short-circuit: if the dispatcher already captured a successful TaskResult
-  // (non-empty `prUrl`), the attempt must be classified as "ran" regardless
-  // of transcript-signal heuristics. This guards against future log-shape
-  // drift where `getWorkerLogs()` output changes and the signals below go
-  // stale — the PR URL is the ground truth for "Claude produced output".
-  const prUrl = result?.prUrl;
-  if (prUrl !== undefined && prUrl !== null && prUrl !== '') {
-    return { outcome: 'ran' };
-  }
-
-  const lines = logs.split('\n');
-
-  // Detection signals for "Claude actually ran". The raw `getWorkerLogs()`
-  // stream returned by `isolation/worker-ops` is (a) Docker container stdout
-  // with RFC3339 timestamps and (b) the orchestrator's `attemptLogBuffer` —
-  // which is the raw stdout of `claude --print --output-format stream-json`.
-  // Neither source contains the `[claude]`/`[tool]` prefixes; those are added
-  // by the in-process `claude-log-processor` and pushed to Firestore AFTER
-  // `getWorkerLogs()` has already returned. So the load-bearing signals here
-  // are `hasStreamJsonInit` and `hasAssistantEvent`, which detect the raw
-  // stream-JSON events the container actually emits. The `[claude]`/`[tool]`
-  // checks remain as belt-and-suspenders in case formatted output ever leaks
-  // back into `getWorkerLogs()` (e.g. if attemptLogBuffer wiring changes).
+function hasClaudeRanSignal(lines: readonly string[]): boolean {
   const hasSessionInit = lines.some((line) => line.includes('[claude] Session init'));
   const hasClaudeOrToolLine = lines.some((line) => {
     const trimmed = line.trimStart();
@@ -76,8 +57,53 @@ export function classifyAttempt(input: ClassifyAttemptInput): AttemptClassificat
   const hasAssistantEvent = lines.some(
     (line) => line.includes('"type":"assistant"') || line.includes('"type":"tool_use"')
   );
+  return hasSessionInit || hasClaudeOrToolLine || hasStreamJsonInit || hasAssistantEvent;
+}
 
-  if (hasSessionInit || hasClaudeOrToolLine || hasStreamJsonInit || hasAssistantEvent) {
+function hasCodexRanSignal(lines: readonly string[]): boolean {
+  // Mirrors the markers emitted by workers/orchestrator/src/services/runtime/processors/codex-log-processor.ts
+  // and the raw JSON events produced by `codex exec --json` (thread.started,
+  // turn.started). Any of these proves Codex authenticated and began a turn,
+  // so a later non-zero exit (e.g. turn.failed from a usage-limit) must flow
+  // through the runtime-hard-error path, not infra_failed.
+  const hasCodexPrefix = lines.some((line) => {
+    const trimmed = line.trimStart();
+    return (
+      trimmed.startsWith('[codex]') ||
+      trimmed.startsWith('[msg]') ||
+      trimmed.startsWith('[cmd]')
+    );
+  });
+  const hasThreadStarted = lines.some((line) => line.includes('"type":"thread.started"'));
+  const hasTurnStarted = lines.some((line) => line.includes('"type":"turn.started"'));
+  const hasTurnCompleted = lines.some((line) => line.includes('"type":"turn.completed"'));
+  const hasTurnFailed = lines.some((line) => line.includes('"type":"turn.failed"'));
+  return (
+    hasCodexPrefix ||
+    hasThreadStarted ||
+    hasTurnStarted ||
+    hasTurnCompleted ||
+    hasTurnFailed
+  );
+}
+
+export function classifyAttempt(input: ClassifyAttemptInput): AttemptClassification {
+  const { runtime, logs, exitCode, durationMs, result } = input;
+
+  // Short-circuit: if the dispatcher already captured a successful TaskResult
+  // (non-empty `prUrl`), the attempt must be classified as "ran" regardless
+  // of transcript-signal heuristics. This guards against future log-shape
+  // drift where `getWorkerLogs()` output changes and the signals below go
+  // stale — the PR URL is the ground truth for "agent produced output".
+  const prUrl = result?.prUrl;
+  if (prUrl !== undefined && prUrl !== null && prUrl !== '') {
+    return { outcome: 'ran' };
+  }
+
+  const lines = logs.split('\n');
+
+  const ran = runtime === 'codex' ? hasCodexRanSignal(lines) : hasClaudeRanSignal(lines);
+  if (ran) {
     return { outcome: 'ran' };
   }
 
@@ -113,9 +139,9 @@ function pickFirstErrorLine(lines: readonly string[], exitCode: number | undefin
     }
   }
   if (exitCode !== undefined && exitCode !== 0) {
-    return `Container exited with code ${String(exitCode)} before producing Claude output`;
+    return `Container exited with code ${String(exitCode)} before producing agent output`;
   }
-  return 'Attempt produced no Claude or tool output';
+  return 'Attempt produced no agent or tool output';
 }
 
 function truncate(line: string): string {
