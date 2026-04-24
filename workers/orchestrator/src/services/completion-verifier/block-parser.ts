@@ -1,4 +1,5 @@
 import { stripDockerHeaders } from '../log-formatter.js';
+import type { AgentContract, FieldSpec } from './contracts.js';
 
 /**
  * Locate the last standalone `<MARKER>` line in the transcript and return
@@ -116,4 +117,158 @@ function stripOuterEmphasis(value: string): string {
     }
   }
   return v;
+}
+
+/** Result of coercing a raw key-value record against an AgentContract. */
+export interface CoercionResult {
+  /** Typed field values keyed by canonical field name. */
+  data: Record<string, unknown>;
+  /** Required fields that were absent or failed coercion. */
+  missingRequired: string[];
+  /** Non-fatal issues (malformed optional values, alias usage, unknown keys). */
+  warnings: string[];
+}
+
+const BOOL_TRUE = new Set(['1', 'yes', 'true', 'used']);
+const BOOL_FALSE = new Set(['0', 'no', 'false', 'not used', 'not_used']);
+
+const DEFAULT_EMPTY_ALIASES: readonly string[] = ['', 'none', 'None', 'N/A', 'n/a'];
+
+export function coerceFields(
+  record: Readonly<Record<string, string>>,
+  contract: AgentContract
+): CoercionResult {
+  const data: Record<string, unknown> = {};
+  const missingRequired: string[] = [];
+  const warnings: string[] = [];
+
+  // Resolve the canonical value for each field (check name then aliases).
+  const rawFor = (field: FieldSpec): { raw: string | undefined; sourceKey?: string } => {
+    if (Object.prototype.hasOwnProperty.call(record, field.name)) {
+      return { raw: record[field.name], sourceKey: field.name };
+    }
+    for (const alias of field.alias ?? []) {
+      if (Object.prototype.hasOwnProperty.call(record, alias)) {
+        warnings.push(
+          `field ${field.name} was read from deprecated alias ${alias}; rename the emitter`
+        );
+        return { raw: record[alias], sourceKey: alias };
+      }
+    }
+    return { raw: undefined };
+  };
+
+  const emptyAliases = (field: FieldSpec): readonly string[] =>
+    field.emptyAliases ?? DEFAULT_EMPTY_ALIASES;
+
+  const isEmpty = (field: FieldSpec, raw: string | undefined): boolean => {
+    if (raw === undefined) return true;
+    return emptyAliases(field).includes(raw.trim());
+  };
+
+  for (const field of contract.fields) {
+    const { raw } = rawFor(field);
+
+    if (isEmpty(field, raw)) {
+      // Default values per kind.
+      switch (field.kind) {
+        case 'csv':
+          data[field.name] = [];
+          break;
+        case 'int':
+          data[field.name] = null;
+          break;
+        case 'bool01':
+          data[field.name] = null;
+          break;
+        default:
+          data[field.name] = '';
+      }
+      if (field.required) {
+        // Exception: execution.pr may be empty when outcome='failed'.
+        if (
+          field.name === 'pr' &&
+          contract.marker === 'EXECUTION_AGENT_FINAL:' &&
+          (record.outcome ?? '').trim().toLowerCase() === 'failed'
+        ) {
+          continue;
+        }
+        missingRequired.push(field.name);
+      }
+      continue;
+    }
+
+    const trimmed = (raw ?? '').trim();
+
+    switch (field.kind) {
+      case 'string': {
+        data[field.name] = trimmed;
+        break;
+      }
+      case 'url': {
+        if (!/^https?:\/\//.test(trimmed)) {
+          if (field.required) missingRequired.push(field.name);
+          else warnings.push(`field ${field.name} is not an http(s) URL: ${trimmed}`);
+          data[field.name] = '';
+        } else {
+          data[field.name] = trimmed;
+        }
+        break;
+      }
+      case 'int': {
+        // Accept a pure integer literal (optional sign). Reject non-numeric
+        // tokens like "two" or "2 (no review requested)".
+        if (/^-?\d+$/.test(trimmed)) {
+          data[field.name] = Number.parseInt(trimmed, 10);
+        } else {
+          data[field.name] = null;
+          warnings.push(`field ${field.name} not a valid int: ${trimmed}`);
+        }
+        break;
+      }
+      case 'bool01': {
+        const lower = trimmed.toLowerCase();
+        if (BOOL_TRUE.has(lower)) data[field.name] = true;
+        else if (BOOL_FALSE.has(lower)) data[field.name] = false;
+        else {
+          data[field.name] = null;
+          warnings.push(`field ${field.name} not a valid bool: ${trimmed}`);
+        }
+        break;
+      }
+      case 'csv': {
+        data[field.name] = trimmed
+          .split(',')
+          .map((part) => part.trim())
+          .filter((part) => part !== '');
+        break;
+      }
+      case 'enum': {
+        const values = field.enumValues ?? [];
+        const canonical = values.find((v) => v.toLowerCase() === trimmed.toLowerCase());
+        if (canonical === undefined) {
+          if (field.required) missingRequired.push(field.name);
+          else warnings.push(`field ${field.name} not in enum: ${trimmed}`);
+          data[field.name] = '';
+        } else {
+          data[field.name] = canonical;
+        }
+        break;
+      }
+    }
+  }
+
+  // Note keys in record but not in contract → unknown-key warning, not an error.
+  const knownNames = new Set<string>();
+  for (const f of contract.fields) {
+    knownNames.add(f.name);
+    for (const a of f.alias ?? []) knownNames.add(a);
+  }
+  for (const key of Object.keys(record)) {
+    if (!knownNames.has(key)) {
+      warnings.push(`unknown key in AGENT_FINAL block: ${key}`);
+    }
+  }
+
+  return { data, missingRequired, warnings };
 }
