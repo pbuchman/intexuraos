@@ -9,9 +9,7 @@
       "mem_1e205393-b526-40c4-a036-3ad04b9db676",
       "mem_cb2ac90c-5843-4509-9d69-ee47f962e3b2"
     ],
-    "memory_ids_rejected": [
-      "mem_9c9b142f-a2e1-48c0-9b32-f6e0f0f45b5c"
-    ],
+    "memory_ids_rejected": ["mem_9c9b142f-a2e1-48c0-9b32-f6e0f0f45b5c"],
     "memory_usage_summary": "Applied snapshot testing patterns to verify byte-identical prompt output across all 6 agent prompts + overlay, and updated the 2 existing snapshot/version assertion tests for the patch-bumped version numbers.",
     "superpowers_subagent_driven_dev_used": true,
     "superpowers_requesting_code_review_used": true,

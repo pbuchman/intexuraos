@@ -18,10 +18,6 @@
     "clarification_message": "",
     "summary": "* Task: trim WhatsApp \"important\" flag on code-task notifications to fire only on actionable states.\n  * Classified SIMPLE — two flag edits in one impl file (`whatsappNotifierImpl.ts`) plus test updates in its companion test file.\n  * Plan: remove `important: true` from `notifyTaskStarted`, add it to `notifyTaskComplete`; `notifyDesignComplete` already correct; all other notifiers untouched.\n  * Original issue description archived as a Linear comment before the description was rewritten to point at the plan doc.\n  * Artifacts: `docs/plans/INT-1452-evidence.md` committed on branch `plan/int-1452-whatsapp-importance`; PR #1904 open against `development`."
   },
-  "missingRequired": [
-    "subtask_urls",
-    "parallel_breakdown_proof",
-    "clarification_message"
-  ],
+  "missingRequired": ["subtask_urls", "parallel_breakdown_proof", "clarification_message"],
   "warnings": []
 }

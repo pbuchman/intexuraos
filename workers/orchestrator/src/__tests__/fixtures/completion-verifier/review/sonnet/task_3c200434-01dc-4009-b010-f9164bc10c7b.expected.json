@@ -3,9 +3,7 @@
     "pr": "https://github.com/pbuchman/intexuraos/pull/1903",
     "review_id": "4162267031",
     "review_comments_posted": 1,
-    "review_types": [
-      "plan_review"
-    ],
+    "review_types": ["plan_review"],
     "requirements_tracker_updated": "yes",
     "gh_actions_status": "all passed",
     "needs_remediation": true,
