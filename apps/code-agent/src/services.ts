@@ -1,427 +1,85 @@
 /**
- * Service wiring for code-agent.
- * Provides dependency injection for domain adapters.
+ * Service wiring for code-agent. Thin DI composer.
+ *
+ * Interfaces live in `./services/types.ts`. Heavy construction logic lives
+ * in `./services/factories/*`. This file only composes the final container.
  */
 
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { Logger } from 'pino';
-import type { Firestore } from '@google-cloud/firestore';
-import { ok, err, type Result } from '@intexuraos/common-core';
+import type { Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
-import {
-  createWhatsAppSendPublisher,
-  type WhatsAppSendPublisher,
-  type PRTriagePublisher,
-  createPRTriagePublisher,
-} from '@intexuraos/infra-pubsub';
-import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
-import { createToolCallingClient } from '@intexuraos/llm-factory';
-import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
-import { EmbeddingClient } from '@intexuraos/infra-gpt';
-import OpenAI from 'openai';
-import type { CreateEmbeddingResponse } from 'openai/resources';
-import type { CodeTaskRepository } from './domain/repositories/codeTaskRepository.js';
-import type { LogChunkRepository } from './domain/repositories/logChunkRepository.js';
-import type { LogLineRepository } from './domain/repositories/logLineRepository.js';
-import type { TaskDispatcherService } from './domain/services/taskDispatcher.js';
-import type { WhatsAppNotifier } from './domain/services/whatsappNotifier.js';
-import type { ActionsAgentClient } from './infra/clients/actionsAgentClient.js';
-import type { WorkerSettingsRepository } from './domain/ports/workerSettingsRepository.js';
-import type { WorkerHealthProbe } from './domain/ports/workerHealthProbe.js';
-import type { UserLookupService } from './domain/ports/userLookupService.js';
-import { createFirestoreCodeTaskRepository } from './infra/repositories/firestoreCodeTaskRepository.js';
-import { createFirestoreLogChunkRepository } from './infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from './infra/repositories/firestoreLogLineRepository.js';
 import { createTaskDispatcherService } from './infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from './infra/services/whatsappNotifierImpl.js';
-import { createActionsAgentClient } from './infra/clients/actionsAgentClient.js';
-import { createLinearAgentHttpClient } from './infra/http/linearAgentHttpClient.js';
-import { createLinearIssueService, type LinearIssueService } from './domain/services/linearIssueService.js';
-import type { LinearAgentClient, IssueContext, LinearAgentError } from './domain/ports/linearAgentClient.js';
-import { createStatusMirrorService, type StatusMirrorService } from './infra/services/statusMirrorServiceImpl.js';
-import { createProcessHeartbeatUseCase, type ProcessHeartbeatUseCase } from './domain/usecases/processHeartbeat.js';
-import { createDetectZombieTasksUseCase, type DetectZombieTasksUseCase } from './domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase, type CleanupTaskLogsUseCase } from './domain/usecases/cleanupTaskLogs.js';
-import { createArchiveStaleGroupsUseCase, type ArchiveStaleGroupsUseCase } from './domain/usecases/archiveStaleGroups.js';
-import { createAutoArchiveMergedTasksUseCase, type AutoArchiveMergedTasksUseCase } from './domain/usecases/autoArchiveMergedTasks.js';
-import { createMetricsClient, createNoOpMetricsClient, type MetricsClient } from './infra/metrics.js';
-import { createWorkerSettingsRepository } from './infra/firestore/workerSettingsRepository.js';
+import { createLinearIssueService } from './domain/services/linearIssueService.js';
+import { createStatusMirrorService } from './infra/services/statusMirrorServiceImpl.js';
+import { createProcessHeartbeatUseCase } from './domain/usecases/processHeartbeat.js';
+import { createDetectZombieTasksUseCase } from './domain/usecases/detectZombieTasks.js';
+import { createCleanupTaskLogsUseCase } from './domain/usecases/cleanupTaskLogs.js';
+import { createArchiveStaleGroupsUseCase } from './domain/usecases/archiveStaleGroups.js';
+import { createAutoArchiveMergedTasksUseCase } from './domain/usecases/autoArchiveMergedTasks.js';
+import { createMetricsClient, createNoOpMetricsClient } from './infra/metrics.js';
 import { createWorkerHealthProbe } from './infra/services/workerHealthProbe.js';
 import { createUserLookupService } from './infra/services/userLookupServiceImpl.js';
-import type { GitHubPREventRepository } from './domain/repositories/gitHubPREventRepository.js';
-import { createFirestoreGitHubPREventsRepository } from './infra/firestore/gitHubPREventsRepository.js';
-import type { TurnMetricsRepository } from './domain/repositories/turnMetricsRepository.js';
-import { createFirestoreTurnMetricsRepository } from './infra/repositories/firestoreTurnMetricsRepository.js';
-import type { ExecutionMemoryRepository } from './domain/repositories/executionMemoryRepository.js';
-import type { ExecutionMemoryApplicationRepository } from './domain/repositories/executionMemoryApplicationRepository.js';
-import { createFirestoreExecutionMemoryRepository } from './infra/repositories/firestoreExecutionMemoryRepository.js';
-import { createFirestoreExecutionMemoryApplicationRepository } from './infra/repositories/firestoreExecutionMemoryApplicationRepository.js';
-import type { GitHubPRSummaryRepository } from './domain/repositories/gitHubPRSummaryRepository.js';
-import { createFirestoreGitHubPRSummariesRepository } from './infra/firestore/gitHubPRSummariesRepository.js';
-import type { GitHubPRClient } from './domain/ports/gitHubPRClient.js';
-import { createGitHubPRHttpClient } from './infra/http/gitHubPRHttpClient.js';
-import type { UserServiceClient, UsageServiceClient } from '@intexuraos/internal-clients';
-import { createUserServiceClient, createUsageServiceClient } from '@intexuraos/internal-clients';
 import { createGitHubUsernameResolver } from './infra/services/gitHubUsernameResolverImpl.js';
-import { CodeWorkerOutputRule, DraftPRRule, ActionableEventRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, CIFailureRule, createWebhookRulesService, type WebhookRulesService } from './domain/services/gitHubWebhookRules.js';
-import { createWebhookDispatchService, type WebhookDispatchService, type CIFailureDispatchService } from './domain/services/gitHubDispatchService.js';
+import { ActionableEventRule, CIFailureRule, CodeWorkerOutputRule, DraftPRRule, ProtectedBaseBranchRule, SenderWhitelistRule, SkipPrefixRule, createWebhookRulesService } from './domain/services/gitHubWebhookRules.js';
+import { createWebhookDispatchService, type CIFailureDispatchService, type WebhookDispatchService } from './domain/services/gitHubDispatchService.js';
 import { createWebhookMessageBuilder } from './domain/services/gitHubMessageBuilder.js';
 import { ALLOWED_BOTS, CODE_WORKER_BOTS } from './domain/constants/gitHubBots.js';
-import type { EventDecisionRepository } from './domain/repositories/eventDecisionRepository.js';
-import { createFirestoreEventDecisionRepository } from './infra/firestore/eventDecisionRepository.js';
-import type { DispatchRetryRepository } from './domain/repositories/dispatchRetryRepository.js';
-import { createFirestoreDispatchRetryRepository } from './infra/firestore/dispatchRetryRepository.js';
-import { createUnifiedEvaluator, type UnifiedEvaluator } from './domain/services/unifiedEvaluator.js';
+import { createUnifiedEvaluator } from './domain/services/unifiedEvaluator.js';
 import { evaluateEvent, type GitHubAgentEvalResult, type GitHubAgentError } from './domain/usecases/githubAgent.js';
 import type { GitHubPREvent } from './domain/models/gitHubPREvent.js';
 import { createReviewTask } from './domain/usecases/createReviewTask.js';
-import { createRemediationTask, type CreateRemediationTaskRequest, type CreateRemediationTaskResult, type CreateRemediationTaskError } from './domain/usecases/createRemediationTask.js';
-import type { MergeConflictDetector } from './domain/services/mergeConflictDetector.js';
+import { createRemediationTask, type CreateRemediationTaskError, type CreateRemediationTaskRequest, type CreateRemediationTaskResult } from './domain/usecases/createRemediationTask.js';
 import { createDetectMergeConflictsOnPush } from './domain/usecases/detectMergeConflictsOnPush.js';
 import { fetchGitHubToken } from './domain/utils/gitHubTokenResolver.js';
-import type { GitHubWebhookAuditEventRepository } from './domain/repositories/gitHubWebhookAuditEventRepository.js';
-import { createFirestoreGitHubWebhookAuditEventRepository } from './infra/firestore/gitHubWebhookAuditEventRepository.js';
-import type { GitHubEventLogEntryRepository } from './domain/repositories/gitHubEventLogEntryRepository.js';
-import { createFirestoreGitHubEventLogEntryRepository } from './infra/firestore/gitHubEventLogEntryRepository.js';
-import type { AutomationLog } from './domain/ports/automationLog.js';
 import { createGitHubPRAutomationLog } from './infra/services/gitHubPRAutomationLog.js';
-import { createFirestorePRAutomationCommentRepository } from './infra/firestore/prAutomationCommentRepository.js';
-import type { TaskEnqueueService } from './domain/services/taskEnqueueService.js';
 import { createTaskEnqueueService } from './infra/services/taskEnqueueServiceImpl.js';
-import type { MergeQueueWatchRepository } from './domain/repositories/mergeQueueWatchRepository.js';
-import { createFirestoreMergeQueueWatchRepository } from './infra/firestore/mergeQueueWatchRepository.js';
 import { createUnauthorizedSenderCommentHandler } from './domain/services/unauthorizedSenderCommentHandler.js';
 import { createOnReviewSkippedCallback } from './domain/services/onReviewSkippedCallback.js';
-import type { TaskGroupSummaryRepository } from './domain/ports/taskGroupSummaryRepository.js';
-import { createTaskGroupSummaryFirestoreRepository } from './infra/firestore/taskGroupSummaryFirestoreRepository.js';
-import { withGroupUpdates } from './infra/repositories/codeTaskRepositoryWithGroupUpdates.js';
+import { createE2EMocks } from './services/factories/e2eMocks.js';
+import { createRepositoryServices } from './services/factories/repositoryFactory.js';
+import { createPublisherServices } from './services/factories/publisherFactory.js';
+import { createClientServices } from './services/factories/clientFactory.js';
+import { createLlmServices } from './services/factories/llmFactory.js';
+import type { ServiceConfig, ServiceContainer } from './services/types.js';
 
-export interface ServiceContainer {
-  firestore: Firestore;
-  logger: Logger;
-  serviceUrl?: string;
-  codeTaskRepo: CodeTaskRepository;
-  logChunkRepo: LogChunkRepository;
-  logLineRepo: LogLineRepository;
-  taskDispatcher: TaskDispatcherService;
-  whatsappNotifier: WhatsAppNotifier;
-  actionsAgentClient: ActionsAgentClient;
-  linearAgentClient: LinearAgentClient;
-  linearIssueService: LinearIssueService;
-  statusMirrorService: StatusMirrorService;
-  processHeartbeat: ProcessHeartbeatUseCase;
-  detectZombieTasks: DetectZombieTasksUseCase;
-  cleanupTaskLogs: CleanupTaskLogsUseCase;
-  archiveStaleGroups: ArchiveStaleGroupsUseCase;
-  autoArchiveMergedTasks: AutoArchiveMergedTasksUseCase;
-  metricsClient: MetricsClient;
-  workerSettingsRepo: WorkerSettingsRepository;
-  workerHealthProbe: WorkerHealthProbe;
-  gitHubPREventRepo: GitHubPREventRepository;
-  gitHubPRSummaryRepo: GitHubPRSummaryRepository;
-  gitHubWebhookAuditEventRepo?: GitHubWebhookAuditEventRepository;
-  gitHubEventLogEntryRepo?: GitHubEventLogEntryRepository;
-  turnMetricsRepo: TurnMetricsRepository;
-  userServiceClient: UserServiceClient;
-  gitHubPRClient: GitHubPRClient;
-  userLookupService?: UserLookupService;
-  webhookRules: WebhookRulesService;
-  dispatchService: WebhookDispatchService;
-  // GitHub Agent (INT-743)
-  resolveToolCallingClient: (userId: string) => Promise<Result<ToolCallingClient, GitHubAgentError>>;
-  // INT-744: Unified Webhook Evaluator
-  eventDecisionRepo: EventDecisionRepository;
-  dispatchRetryRepo: DispatchRetryRepository;
-  unifiedEvaluator: UnifiedEvaluator;
-  prTriagePublisher: PRTriagePublisher;
-  mergeConflictDetector: MergeConflictDetector;
-  automationLog: AutomationLog;
-  taskEnqueueService: TaskEnqueueService;
-  mergeQueueWatchRepo: MergeQueueWatchRepository;
-  executionMemoryRepo?: ExecutionMemoryRepository;
-  executionMemoryApplicationRepo?: ExecutionMemoryApplicationRepository;
-  executionMemoryEmbeddingClient?: EmbeddingClient;
-  usageServiceClient?: UsageServiceClient;
-  // Optional so existing setServices() call sites in tests don't need updating
-  groupSummaryRepo?: TaskGroupSummaryRepository;
-  createRemediationTaskFn?: (logger: Logger, request: CreateRemediationTaskRequest) => Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>>;
-}
-
-// Configuration required to initialize services
-export interface ServiceConfig {
-  gcpProjectId: string;
-  internalAuthToken: string;
-  firestoreProjectId: string;
-  whatsappServiceUrl: string;
-  whatsappSendTopic: string;
-  prTriageTopic: string;
-  linearAgentUrl: string;
-  actionsAgentUrl: string;
-  webhookVerifySecret: string;
-  orchestratorSecret: string;
-  serviceUrl: string;
-  userServiceUrl: string;
-  // GitHub Agent (INT-743)
-  geminiAppApiKey: string;
-  openaiAppApiKey: string;
-  llmUsageServiceUrl: string;
-}
+export type { ServiceConfig, ServiceContainer } from './services/types.js';
 
 let container: ServiceContainer | null = null;
 
-const isE2eMode = process.env['E2E_MODE'] === 'true';
-
 /**
- * Create a no-op WhatsApp publisher for E2E testing.
- */
-function createE2eWhatsAppPublisher(): WhatsAppSendPublisher {
-  return {
-    publishSendMessage(): ReturnType<WhatsAppSendPublisher['publishSendMessage']> {
-      return Promise.resolve(ok(undefined));
-    },
-  };
-}
-
-/**
- * Create a no-op PR triage publisher for E2E testing.
- */
-function createE2ePRTriagePublisher(): PRTriagePublisher {
-  return {
-    publishPRTriage(): ReturnType<PRTriagePublisher['publishPRTriage']> {
-      return Promise.resolve(ok(undefined));
-    },
-  };
-}
-
-/**
- * Create a no-op Linear agent client for E2E testing.
- */
-function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
-  return {
-    createIssue(request): ReturnType<LinearAgentClient['createIssue']> {
-      const issueNum = Date.now() % 10000;
-      logger.info({ title: request.title }, '[E2E] Mock Linear issue creation');
-      return Promise.resolve(ok({
-        issueId: `INT-${String(issueNum)}`,
-        issueIdentifier: `INT-${String(issueNum)}`,
-        issueTitle: request.title,
-        issueUrl: `https://linear.app/intexura/issue/INT-${String(issueNum)}`,
-      }));
-    },
-    updateIssueState(request): ReturnType<LinearAgentClient['updateIssueState']> {
-      logger.info({ issueId: request.issueId, state: request.state }, '[E2E] Mock Linear state update');
-      return Promise.resolve(ok(undefined));
-    },
-    validateIssue(request): ReturnType<LinearAgentClient['validateIssue']> {
-      logger.info({ identifier: request.identifier }, '[E2E] Mock Linear issue validation');
-      return Promise.resolve(ok({
-        id: `issue-${request.identifier}`,
-        identifier: request.identifier,
-        title: `Mock ${request.identifier}`,
-        url: `https://linear.app/intexura/issue/${request.identifier}`,
-        labels: [],
-        childCount: 0,
-        parentId: null,
-      }));
-    },
-    generateTitle(request): ReturnType<LinearAgentClient['generateTitle']> {
-      logger.info({ descriptionLength: request.description.length }, '[E2E] Mock title generation');
-      return Promise.resolve(ok({
-        title: request.description.slice(0, 80),
-        issueType: 'feature',
-      }));
-    },
-    addComment(request): ReturnType<LinearAgentClient['addComment']> {
-      logger.info({ issueId: request.issueId }, '[E2E] Mock Linear comment addition');
-      return Promise.resolve(ok({
-        commentId: `comment-${String(Date.now())}`,
-      }));
-    },
-    fetchIssueTree(request): ReturnType<LinearAgentClient['fetchIssueTree']> {
-      logger.info({ issueId: request.issueId }, '[E2E] Mock Linear issue tree fetch');
-      return Promise.resolve(ok({
-        root: {
-          id: request.issueId,
-          identifier: `INT-${request.issueId}`,
-          url: `https://linear.app/pbuchman/issue/${request.issueId}`,
-          parentId: null,
-          labels: [],
-          assigneeId: null,
-          state: 'Backlog',
-        },
-        descendants: [],
-      }));
-    },
-    fetchDirectChildrenLive(request): ReturnType<LinearAgentClient['fetchDirectChildrenLive']> {
-      logger.info({ issueId: request.issueId }, '[E2E] Mock live direct children fetch');
-      return Promise.resolve(ok([]));
-    },
-    updateIssueMetadata(request): ReturnType<LinearAgentClient['updateIssueMetadata']> {
-      logger.info(
-        { issueId: request.issueId, addLabels: request.addLabels, removeLabels: request.removeLabels, assigneeId: request.assigneeId },
-        '[E2E] Mock Linear metadata update'
-      );
-      return Promise.resolve(ok({ droppedLabels: [] }));
-    },
-    fetchIssueForDisplay(request): ReturnType<LinearAgentClient['fetchIssueForDisplay']> {
-      logger.info({ identifier: request.identifier }, '[E2E] Mock Linear issue fetch for display');
-      return Promise.resolve(ok({
-        identifier: request.identifier,
-        parentIdentifier: null,
-        title: `Mock ${request.identifier}`,
-        state: { name: 'In Progress', type: 'started' },
-        priority: 2,
-        assignee: null,
-        labels: [],
-        url: `https://linear.app/intexura/issue/${request.identifier}`,
-        commentCount: 0,
-        lastCommentAt: null,
-      }));
-    },
-    fetchIssuesForDisplay(request): ReturnType<LinearAgentClient['fetchIssuesForDisplay']> {
-      logger.info({ issueCount: request.identifiers.length }, '[E2E] Mock Linear issues fetch for display');
-      return Promise.resolve(ok(
-        request.identifiers.map((identifier) => ({
-          identifier,
-          parentIdentifier: null,
-          title: `Mock ${identifier}`,
-          state: { name: 'In Progress', type: 'started' as const },
-          priority: 2,
-          assignee: null,
-          labels: [],
-          url: `https://linear.app/intexura/issue/${identifier}`,
-          commentCount: 0,
-          lastCommentAt: null,
-        }))
-      ));
-    },
-    getIssueDescription(): ReturnType<LinearAgentClient['getIssueDescription']> {
-      return Promise.resolve(ok(undefined));
-    },
-    getIssueContext(_request: { identifier: string }): Promise<Result<IssueContext, LinearAgentError>> {
-      logger.info({}, '[E2E] getIssueContext → returning empty context');
-      return Promise.resolve(ok({ description: null, comments: [] }));
-    },
-  };
-}
-
-/**
- * Create a no-op actions agent client for E2E testing.
- */
-function createE2eActionsAgentClient(logger: Logger): ActionsAgentClient {
-  return {
-    updateActionStatus(actionId, status): ReturnType<ActionsAgentClient['updateActionStatus']> {
-      logger.info({ actionId, status }, '[E2E] Mock action status update');
-      return Promise.resolve(ok(undefined));
-    },
-  };
-}
-
-/**
- * Initialize services with config. Call this early in server startup.
- * MUST be called before getServices().
+ * Initialize services with config. Call before getServices().
  */
 export function initServices(config: ServiceConfig): void {
   const firestore = getFirestore();
   const logger = createAppLogger({ name: 'code-agent' });
+  const isE2eMode = process.env['E2E_MODE'] === 'true';
+  if (isE2eMode) logger.info('Initializing services in E2E mode with mock external services');
 
-  if (isE2eMode) {
-    logger.info('Initializing services in E2E mode with mock external services');
-  }
-
-  const linearAgentClient = isE2eMode
-    ? createE2eLinearAgentClient(logger)
-    : createLinearAgentHttpClient({
-        baseUrl: config.linearAgentUrl,
-        internalAuthToken: config.internalAuthToken,
-        timeoutMs: 60000,
-      }, logger);
-
-  const linearIssueService = createLinearIssueService({
-    linearAgentClient,
-    logger,
-  });
-
-  const actionsAgentClient = isE2eMode
-    ? createE2eActionsAgentClient(logger)
-    : createActionsAgentClient({
-        baseUrl: config.actionsAgentUrl,
-        internalAuthToken: config.internalAuthToken,
-        logger,
-      });
+  const e2eMocks = createE2EMocks(logger);
+  const repos = createRepositoryServices({ firestore, logger });
+  const { whatsappPublisher, prTriagePublisher } = createPublisherServices({ config, isE2eMode, e2eMocks, logger });
+  const { linearAgentClient, actionsAgentClient, userServiceClient, usageServiceClient, gitHubPRClient, buildUsageSink } =
+    createClientServices({ config, logger, isE2eMode, e2eMocks });
+  const { resolveToolCallingClient, executionMemoryEmbeddingClient } = createLlmServices({ config, logger, userServiceClient, buildUsageSink });
 
   const enableMetrics = process.env['INTEXURAOS_ENABLE_METRICS'] === 'true';
   const metricsClient = isE2eMode || !enableMetrics ? createNoOpMetricsClient() : createMetricsClient();
-
-  const whatsappPublisher = isE2eMode
-    ? createE2eWhatsAppPublisher()
-    : createWhatsAppSendPublisher({
-        projectId: config.gcpProjectId,
-        topicName: config.whatsappSendTopic,
-        logger: createAppLogger({ name: 'whatsapp-publisher' }),
-      });
-
-  const prTriagePublisher = isE2eMode
-    ? createE2ePRTriagePublisher()
-    : createPRTriagePublisher({
-        projectId: config.gcpProjectId,
-        topicName: config.prTriageTopic,
-        logger: createAppLogger({ name: 'pr-triage-publisher' }),
-      });
-
-  const buildUsageSink = (component: string): HttpInternalAuthUsageSink =>
-    new HttpInternalAuthUsageSink({
-      usageServiceUrl: config.llmUsageServiceUrl,
-      internalAuthToken: config.internalAuthToken,
-      service: 'code-agent',
-      component,
-      logger,
-    });
-
-  const userServiceClient = createUserServiceClient({
-    baseUrl: config.userServiceUrl,
-    internalAuthToken: config.internalAuthToken,
-    logger,
-    usageSink: buildUsageSink('user-service-client'),
-  });
-
-  const usageServiceClient = config.llmUsageServiceUrl !== ''
-    ? createUsageServiceClient({
-        baseUrl: config.llmUsageServiceUrl,
-        internalAuthToken: config.internalAuthToken,
-        logger,
-      })
-    : undefined;
-
-  const rawCodeTaskRepo = createFirestoreCodeTaskRepository({ firestore, logger });
-  const groupSummaryRepo = createTaskGroupSummaryFirestoreRepository({ firestore, logger });
-  const codeTaskRepo = withGroupUpdates(rawCodeTaskRepo, groupSummaryRepo, logger);
-  const logLineRepo = createFirestoreLogLineRepository({ firestore, logger });
-  const workerSettingsRepo = createWorkerSettingsRepository({ firestore, logger });
   const workerHealthProbe = createWorkerHealthProbe();
   const taskDispatcher = createTaskDispatcherService({ logger, workerHealthProbe });
   const whatsappNotifier = createWhatsAppNotifier({ whatsappPublisher, linearAgentClient });
-  const gitHubPRClient = createGitHubPRHttpClient({ timeoutMs: 10000 });
-
-  const prAutomationCommentRepo = createFirestorePRAutomationCommentRepository({ logger });
-
-  const automationLog = createGitHubPRAutomationLog({
-    gitHubPRClient,
-    prAutomationCommentRepo,
-    resolveOAuthToken: async (userId) => await fetchGitHubToken(userServiceClient, userId, logger),
-    userServiceClient,
-    logger,
-  });
-
-  const statusMirrorService = createStatusMirrorService({
-    actionsAgentClient,
-    logger,
-  });
-
+  const linearIssueService = createLinearIssueService({ linearAgentClient, logger });
+  const statusMirrorService = createStatusMirrorService({ actionsAgentClient, logger });
   const userLookupService = createUserLookupService({
     gitHubUsernameResolver: createGitHubUsernameResolver({ userServiceClient, logger }),
-    workerSettingsRepo,
+    workerSettingsRepo: repos.workerSettingsRepo,
     logger,
+  });
+  const automationLog = createGitHubPRAutomationLog({
+    gitHubPRClient, prAutomationCommentRepo: repos.prAutomationCommentRepo,
+    resolveOAuthToken: async (userId) => await fetchGitHubToken(userServiceClient, userId, logger),
+    userServiceClient, logger,
   });
 
   const webhookRules = createWebhookRulesService([
@@ -446,140 +104,34 @@ export function initServices(config: ServiceConfig): void {
     // The original dispatched all edited bot comments without payload inspection.
   ]);
 
-  const TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
-  const githubAgentUsageSink = buildUsageSink('github-agent');
-
-  const resolveToolCallingClient = async (userId: string): Promise<Result<ToolCallingClient, GitHubAgentError>> => {
-    // Try user's own Google API key first
-    const keysResult = await userServiceClient.getApiKeys(userId);
-    if (keysResult.ok) {
-      const googleKey = keysResult.value.google;
-      if (googleKey !== undefined) {
-        logger.debug({ userId }, 'GitHub Agent: using user Google API key');
-        return ok(createToolCallingClient({
-          apiKey: googleKey,
-          model: TOOL_CALLING_MODEL,
-          userId,
-          logger,
-          usageSink: githubAgentUsageSink,
-        }));
-      }
-    }
-
-    // Fall back to platform key
-    if (config.geminiAppApiKey !== '') {
-      logger.debug({ userId }, 'GitHub Agent: falling back to platform Gemini API key');
-      return ok(createToolCallingClient({
-        apiKey: config.geminiAppApiKey,
-        model: TOOL_CALLING_MODEL,
-        userId,
-        logger,
-        usageSink: githubAgentUsageSink,
-      }));
-    }
-
-    return err({ code: 'LLM_FAILED' as const, message: 'No Google API key available for tool calling' });
-  };
-
-  const executionMemoryOpenAI = config.openaiAppApiKey !== ''
-    ? new OpenAI({ apiKey: config.openaiAppApiKey })
-    : undefined;
-  const executionMemoryEmbeddingClient = executionMemoryOpenAI !== undefined
-    ? new EmbeddingClient({
-        embedFn: (text: string, model: string): Promise<CreateEmbeddingResponse> =>
-          executionMemoryOpenAI.embeddings.create({ model, input: text }),
-      })
-    : undefined;
-
-  const gitHubPREventRepo = createFirestoreGitHubPREventsRepository({ logger });
-  const gitHubPRSummaryRepo = createFirestoreGitHubPRSummariesRepository({ logger });
-  const gitHubWebhookAuditEventRepo = createFirestoreGitHubWebhookAuditEventRepository({ logger });
-  const gitHubEventLogEntryRepo = createFirestoreGitHubEventLogEntryRepository({ logger });
-  const dispatchRetryRepo = createFirestoreDispatchRetryRepository({ logger });
-
-  const taskEnqueueService = createTaskEnqueueService({
-    logger: logger.child({ service: 'task-enqueue' }),
-    codeTaskRepo,
-  });
+  const taskEnqueueService = createTaskEnqueueService({ logger: logger.child({ service: 'task-enqueue' }), codeTaskRepo: repos.codeTaskRepo });
 
   const mergeConflictDetector = createDetectMergeConflictsOnPush({
-    logger,
-    gitHubPRClient,
-    gitHubPRSummaryRepo,
-    codeTaskRepo,
-    userServiceClient,
-    gitHubPREventRepo,
-    linearIssueService,
-    taskDispatcher,
-    taskEnqueueService,
-    logLineRepo,
-    workerSettingsRepo,
-    statusMirrorService,
-    whatsappNotifier,
-    allowedBots: ALLOWED_BOTS,
-    orchestratorSecret: config.orchestratorSecret,
+    logger, gitHubPRClient, gitHubPRSummaryRepo: repos.gitHubPRSummaryRepo, codeTaskRepo: repos.codeTaskRepo,
+    userServiceClient, gitHubPREventRepo: repos.gitHubPREventRepo, linearIssueService, taskDispatcher,
+    taskEnqueueService, logLineRepo: repos.logLineRepo, workerSettingsRepo: repos.workerSettingsRepo,
+    statusMirrorService, whatsappNotifier, allowedBots: ALLOWED_BOTS, orchestratorSecret: config.orchestratorSecret,
   });
 
-  const dispatchServiceResult = createWebhookDispatchService({
-    gitHubPREventRepo,
-    codeTaskRepo,
-    logLineRepo,
-    userLookupService,
-    linearIssueService,
-    taskDispatcher,
-    taskEnqueueService,
-    whatsappNotifier,
-    workerSettingsRepo,
-    statusMirrorService,
-    gitHubPRClient,
-    userServiceClient,
-    firestore,
-    messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS),
-    allowedBots: ALLOWED_BOTS,
-    orchestratorSecret: config.orchestratorSecret,
-    serviceUrl: config.serviceUrl,
-    dispatchRetryRepo,
-    automationLog,
-  });
-
-  const dispatchService: WebhookDispatchService & CIFailureDispatchService = dispatchServiceResult;
-
-  const mergeQueueWatchRepo = createFirestoreMergeQueueWatchRepository({ logger });
-  const eventDecisionRepo = createFirestoreEventDecisionRepository({ logger });
-  const executionMemoryRepo = createFirestoreExecutionMemoryRepository({ firestore, logger });
-  const executionMemoryApplicationRepo = createFirestoreExecutionMemoryApplicationRepository({
-    firestore,
-    logger,
+  const dispatchService: WebhookDispatchService & CIFailureDispatchService = createWebhookDispatchService({
+    gitHubPREventRepo: repos.gitHubPREventRepo, codeTaskRepo: repos.codeTaskRepo, logLineRepo: repos.logLineRepo,
+    userLookupService, linearIssueService, taskDispatcher, taskEnqueueService, whatsappNotifier,
+    workerSettingsRepo: repos.workerSettingsRepo, statusMirrorService, gitHubPRClient, userServiceClient,
+    firestore, messageBuilder: createWebhookMessageBuilder(ALLOWED_BOTS), allowedBots: ALLOWED_BOTS,
+    orchestratorSecret: config.orchestratorSecret, serviceUrl: config.serviceUrl,
+    dispatchRetryRepo: repos.dispatchRetryRepo, automationLog,
   });
 
   const unifiedEvaluator = createUnifiedEvaluator({
-    webhookRules,
-    dispatchService,
-    ciFailureDispatchService: dispatchService,
-    eventDecisionRepo,
-    gitHubEventLogEntryRepo,
-    evaluateEvent: (event: GitHubPREvent, correctionContext?: string): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> => evaluateEvent(
-      { logger, gitHubPRClient, resolveToolCallingClient, userServiceClient, allowedBots: ALLOWED_BOTS },
-      event,
-      correctionContext,
-    ),
-    createReviewTask: (taskLogger, request) => createReviewTask(
-      {
-        logger: taskLogger,
-        codeTaskRepo,
-        userLookupService,
-        taskDispatcher,
-        taskEnqueueService,
-        linearAgentClient,
-        gitHubPRClient,
-        userServiceClient,
-        workerSettingsRepo,
-        orchestratorSecret: config.orchestratorSecret,
-        automationLog,
-        gitHubPRSummaryRepo,
-      },
-      request,
-    ),
+    webhookRules, dispatchService, ciFailureDispatchService: dispatchService,
+    eventDecisionRepo: repos.eventDecisionRepo, gitHubEventLogEntryRepo: repos.gitHubEventLogEntryRepo,
+    evaluateEvent: (event: GitHubPREvent, correctionContext?: string): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> =>
+      evaluateEvent({ logger, gitHubPRClient, resolveToolCallingClient, userServiceClient, allowedBots: ALLOWED_BOTS }, event, correctionContext),
+    createReviewTask: (taskLogger, request) => createReviewTask({
+      logger: taskLogger, codeTaskRepo: repos.codeTaskRepo, userLookupService, taskDispatcher, taskEnqueueService,
+      linearAgentClient, gitHubPRClient, userServiceClient, workerSettingsRepo: repos.workerSettingsRepo,
+      orchestratorSecret: config.orchestratorSecret, automationLog, gitHubPRSummaryRepo: repos.gitHubPRSummaryRepo,
+    }, request),
     automationLog,
     resolveTokenUserId: async (senderLogin) => {
       const userResult = await userServiceClient.resolveGitHubUsername(senderLogin);
@@ -588,115 +140,48 @@ export function initServices(config: ServiceConfig): void {
       if (resolvedUser === null) return undefined;
       return resolvedUser.userId;
     },
-    allowedBots: ALLOWED_BOTS,
-    codeTaskRepo,
-    onReviewSkipped: createOnReviewSkippedCallback({
-      codeTaskRepo,
-      linearAgentClient,
-      automationLog,
-      groupSummaryRepo,
-      logger,
-    }),
+    allowedBots: ALLOWED_BOTS, codeTaskRepo: repos.codeTaskRepo,
+    onReviewSkipped: createOnReviewSkippedCallback({ codeTaskRepo: repos.codeTaskRepo, linearAgentClient, automationLog, groupSummaryRepo: repos.groupSummaryRepo, logger }),
     onUnauthorizedSender: createUnauthorizedSenderCommentHandler({ gitHubPRClient, userServiceClient, logger }),
   });
 
   container = {
-    firestore,
-    logger,
-    serviceUrl: config.serviceUrl,
-    codeTaskRepo,
-    logChunkRepo: createFirestoreLogChunkRepository({ firestore, logger }),
-    logLineRepo,
-    taskDispatcher,
-    whatsappNotifier,
-    actionsAgentClient,
-    linearAgentClient,
-    statusMirrorService,
-    linearIssueService,
-    processHeartbeat: createProcessHeartbeatUseCase({
-      codeTaskRepository: codeTaskRepo,
-      logger,
-    }),
-    detectZombieTasks: createDetectZombieTasksUseCase({
-      codeTaskRepository: codeTaskRepo,
-      logger,
-    }),
-    cleanupTaskLogs: createCleanupTaskLogsUseCase({
-      codeTaskRepository: codeTaskRepo,
-      logger,
-    }),
-    archiveStaleGroups: createArchiveStaleGroupsUseCase({
-      codeTaskRepository: codeTaskRepo,
-      logger,
-    }),
-    autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({
-      codeTaskRepository: codeTaskRepo,
-      logger,
-    }),
-    metricsClient,
-    workerSettingsRepo,
-    workerHealthProbe,
-    gitHubPREventRepo,
-    gitHubPRSummaryRepo,
-    gitHubWebhookAuditEventRepo,
-    gitHubEventLogEntryRepo,
-    turnMetricsRepo: createFirestoreTurnMetricsRepository({ firestore, logger }),
-    userServiceClient,
-    gitHubPRClient,
-    userLookupService,
-    webhookRules,
-    resolveToolCallingClient,
-    dispatchService,
-    eventDecisionRepo,
-    dispatchRetryRepo,
-    unifiedEvaluator,
-    prTriagePublisher,
-    mergeConflictDetector,
-    automationLog,
-    taskEnqueueService,
-    mergeQueueWatchRepo,
-    executionMemoryRepo,
-    executionMemoryApplicationRepo,
+    firestore, logger, serviceUrl: config.serviceUrl,
+    codeTaskRepo: repos.codeTaskRepo, logChunkRepo: repos.logChunkRepo, logLineRepo: repos.logLineRepo,
+    taskDispatcher, whatsappNotifier, actionsAgentClient, linearAgentClient, statusMirrorService, linearIssueService,
+    processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
+    detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
+    cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
+    archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
+    autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
+    metricsClient, workerSettingsRepo: repos.workerSettingsRepo, workerHealthProbe,
+    gitHubPREventRepo: repos.gitHubPREventRepo, gitHubPRSummaryRepo: repos.gitHubPRSummaryRepo,
+    gitHubWebhookAuditEventRepo: repos.gitHubWebhookAuditEventRepo,
+    gitHubEventLogEntryRepo: repos.gitHubEventLogEntryRepo, turnMetricsRepo: repos.turnMetricsRepo,
+    userServiceClient, gitHubPRClient, userLookupService, webhookRules, resolveToolCallingClient,
+    dispatchService, eventDecisionRepo: repos.eventDecisionRepo, dispatchRetryRepo: repos.dispatchRetryRepo,
+    unifiedEvaluator, prTriagePublisher, mergeConflictDetector, automationLog, taskEnqueueService,
+    mergeQueueWatchRepo: repos.mergeQueueWatchRepo, executionMemoryRepo: repos.executionMemoryRepo,
+    executionMemoryApplicationRepo: repos.executionMemoryApplicationRepo,
     ...(executionMemoryEmbeddingClient !== undefined && { executionMemoryEmbeddingClient }),
     ...(usageServiceClient !== undefined && { usageServiceClient }),
-    groupSummaryRepo,
-    createRemediationTaskFn: (taskLogger: Logger, request: CreateRemediationTaskRequest): Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>> => createRemediationTask(
-      {
-        logger: taskLogger,
-        codeTaskRepo,
-        userLookupService,
-        taskEnqueueService,
-        workerSettingsRepo,
-        orchestratorSecret: config.orchestratorSecret,
-        automationLog,
-      },
-      request,
-    ),
+    groupSummaryRepo: repos.groupSummaryRepo,
+    createRemediationTaskFn: (taskLogger: Logger, request: CreateRemediationTaskRequest): Promise<Result<CreateRemediationTaskResult, CreateRemediationTaskError>> =>
+      createRemediationTask({
+        logger: taskLogger, codeTaskRepo: repos.codeTaskRepo, userLookupService, taskEnqueueService,
+        workerSettingsRepo: repos.workerSettingsRepo, orchestratorSecret: config.orchestratorSecret, automationLog,
+      }, request),
   };
 }
 
-
-/**
- * Get the service container. Throws if initServices() wasn't called.
- * DO NOT add fallbacks here - that creates test code in production.
- */
+/** Get the service container. Throws if initServices() wasn't called. */
 export function getServices(): ServiceContainer {
-  if (container === null) {
-    throw new Error('Service container not initialized. Call initServices() first.');
-  }
+  if (container === null) throw new Error('Service container not initialized. Call initServices() first.');
   return container;
 }
 
-/**
- * Replace services for testing. Only use in tests.
- */
-export function setServices(s: ServiceContainer): void {
-  container = s;
-}
+/** Replace services for testing. Only use in tests. */
+export function setServices(s: ServiceContainer): void { container = s; }
 
-/**
- * Reset services. Call in afterEach() in tests.
- */
-export function resetServices(): void {
-  container = null;
-}
+/** Reset services. Call in afterEach() in tests. */
+export function resetServices(): void { container = null; }
