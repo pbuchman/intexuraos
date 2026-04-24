@@ -9,9 +9,7 @@
       "mem_463bb567-f4fb-4dc7-9a11-0d87bb6ab618",
       "mem_d43698ce-ca78-4c64-8f49-d6250b541fb2"
     ],
-    "memory_ids_rejected": [
-      "mem_fd8f2e18-0b97-42a5-9cf7-203595166e24"
-    ],
+    "memory_ids_rejected": ["mem_fd8f2e18-0b97-42a5-9cf7-203595166e24"],
     "memory_usage_summary": "mem_463bb567 was applied to confirm no source/test file imports `@intexuraos/internal-clients` before removing the devDependency; mem_d43698ce was applied as context confirming the opaque type design (`Record<string, unknown>`) already severs the type-level cycle",
     "superpowers_subagent_driven_dev_used": null,
     "superpowers_requesting_code_review_used": null,
@@ -21,9 +19,7 @@
     "failure_reason": "",
     "summary": ""
   },
-  "missingRequired": [
-    "summary"
-  ],
+  "missingRequired": ["summary"],
   "warnings": [
     "field review_iterations not a valid int: **0** (no review requested; single mechanical edit)",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",

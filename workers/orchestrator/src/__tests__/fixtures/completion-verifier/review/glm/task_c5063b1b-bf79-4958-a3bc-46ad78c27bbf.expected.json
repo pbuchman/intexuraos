@@ -3,11 +3,7 @@
     "pr": "https://github.com/pbuchman/intexuraos/pull/1917",
     "review_id": "4164950084",
     "review_comments_posted": 0,
-    "review_types": [
-      "code_quality",
-      "architecture",
-      "test_quality"
-    ],
+    "review_types": ["code_quality", "architecture", "test_quality"],
     "requirements_tracker_updated": "yes",
     "gh_actions_status": "all passed",
     "needs_remediation": false,

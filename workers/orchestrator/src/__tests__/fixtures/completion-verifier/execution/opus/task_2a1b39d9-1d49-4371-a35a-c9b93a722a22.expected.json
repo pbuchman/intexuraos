@@ -9,9 +9,7 @@
       "mem_7f5c6f87-0534-48b7-b474-2b48ade8af1a",
       "mem_44f8dac8-00e7-4392-9550-37c07cde2b26"
     ],
-    "memory_ids_rejected": [
-      "mem_1fe20107-647d-403b-81aa-bff5cf99dfc5"
-    ],
+    "memory_ids_rejected": ["mem_1fe20107-647d-403b-81aa-bff5cf99dfc5"],
     "memory_usage_summary": "Memories [2] and [3] directly shaped the adoption-path check: rehydrateWorktreeForAdoption prioritizes the persistent worktree on disk over the volatile `.git/worktrees/<id>` metadata (mem [2]) and deliberately uses a non-strict pre-check that repairs rather than rejects when metadata is missing (mem [3]).",
     "superpowers_subagent_driven_dev_used": true,
     "superpowers_requesting_code_review_used": true,

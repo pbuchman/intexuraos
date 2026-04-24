@@ -411,6 +411,20 @@ describe('coerceFields', () => {
     expect(missingRequired).not.toContain('pr');
   });
 
+  it('[INT-1470 review follow-up] execution pr exemption still reports pr missing when neither outcome nor Outcome key is present', () => {
+    // Covers the `?? ''` fallback arm of the
+    // `(record['outcome'] ?? record['Outcome'] ?? '').trim().toLowerCase()`
+    // expression. With neither key, the comparison yields '' !== 'failed',
+    // so the exemption does NOT apply and pr is still reported missing.
+    const record = {
+      summary: 'ok',
+      pr: '',
+    };
+    const { missingRequired } = coerceFields(record, AGENT_CONTRACTS.execution);
+    expect(missingRequired).toContain('pr');
+    expect(missingRequired).toContain('outcome');
+  });
+
   it('[INT-1470 coverage] emits unknown-key warning for keys not in the contract', () => {
     const record = {
       outcome: 'implemented',

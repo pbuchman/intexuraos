@@ -5,9 +5,7 @@
     "ci_evidence": "pnpm run ci:tracked successful",
     "linear_issue": "https://linear.app/pbuchman/issue/INT-1442",
     "review_iterations": 2,
-    "memory_ids_used": [
-      "mem_f1559458-c36f-499d-a02c-1cb8b7a5f141"
-    ],
+    "memory_ids_used": ["mem_f1559458-c36f-499d-a02c-1cb8b7a5f141"],
     "memory_ids_rejected": [
       "mem_1f7d0a83-aef8-4652-8418-32dcad36a7d5",
       "mem_6aaf7125-8e46-48a4-90ae-69f019ce007d"

@@ -9,9 +9,7 @@
       "mem_38af51c0-cc01-4025-b236-59887db29639",
       "mem_b5eda4c1-8f95-4ec8-8732-f769a543a9e8"
     ],
-    "memory_ids_rejected": [
-      "mem_3e3d1d29-c69a-4dc5-abed-62fbcf59d9c4"
-    ],
+    "memory_ids_rejected": ["mem_3e3d1d29-c69a-4dc5-abed-62fbcf59d9c4"],
     "memory_usage_summary": "Applied end-to-end routing verification guidance by preserving all 71 route-level integration tests unchanged to catch regressions in the full Webhook → audit → parse → dispatch → triage flow, in addition to new use-case-level unit tests.",
     "superpowers_subagent_driven_dev_used": true,
     "superpowers_requesting_code_review_used": true,
