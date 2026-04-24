@@ -122,7 +122,7 @@ raw `reply.code().send()` vs `{ error }`), and at least two bloated route files 
 
 ### Proposed Linear Issue
 
-See [issue §11](#proposed-linear-issues).
+See [INT-1529](#a-int-1529--refactor-backend-apps--consolidate-service-bootstrap-di-and-routing-conventions-high).
 
 ---
 
