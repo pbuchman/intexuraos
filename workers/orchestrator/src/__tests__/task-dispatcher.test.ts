@@ -2390,10 +2390,11 @@ describe('TaskDispatcher', () => {
       );
     });
 
-    it('INT-1471: defaults classifyAttempt runtime to "claude" when task.runtime is absent (legacy state)', async () => {
-      // Guards the `task.runtime ?? 'claude'` fallback. Legacy persisted tasks
-      // from before INT-1455 had no `runtime` field; the dispatcher must still
-      // classify them correctly by defaulting to Claude semantics.
+    it('INT-1471: resolves classifyAttempt runtime to "claude" for a legacy task with workerType "auto" when task.runtime is absent', async () => {
+      // Guards the resolveTaskRuntime() fallback for workerType='auto' (which
+      // maps to runtime 'claude' via WORKER_TYPES). Legacy persisted tasks from
+      // before INT-1455 had no `runtime` field; the dispatcher must still
+      // classify them correctly by resolving the runtime from the worker type.
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
         missingFields: [],
