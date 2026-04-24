@@ -1,3 +1,10 @@
+/**
+ * Detection layer: classifies mergeability, loads PR details with retry, resolves
+ * GitHub access context, and coordinates the per-PR pipeline by delegating to
+ * `resolveConflicts` (task/workflow) and, transitively, `notifyConflicts`
+ * (managed PR comment). The thin facade at `../detectMergeConflictsOnPush.ts`
+ * sequences these at the PR list level (push event / reconcile sweep).
+ */
 import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { GitHubPREvent } from '../../models/gitHubPREvent.js';
@@ -51,7 +58,7 @@ export interface ProcessingTrigger {
   lastActivityAt: Date;
 }
 
-export type ProcessingOutcome = 'closed' | 'clean' | 'conflicting' | 'unknown' | 'skipped' | 'error';
+export type ProcessingOutcome = 'closed' | 'clean' | 'conflicting' | 'unknown' | 'skipped';
 
 export interface MergeConflictTransitionParams {
   deps: DetectConflictDeps;
