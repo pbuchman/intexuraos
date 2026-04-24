@@ -1,16 +1,27 @@
 import { describe, it, expect } from 'vitest';
 import type { CompletionVerifierVerdict } from '../../../services/completion-verifier/types.js';
 
-describe('CompletionVerifierVerdict shape', () => {
-  it('exposes telemetryMissingFields alongside missingFields', () => {
+describe('CompletionVerifierVerdict shape (post-INT-1470)', () => {
+  it('accepts a kind=parsed verdict with data, missingRequired, telemetryMissing, warnings', () => {
     const verdict: CompletionVerifierVerdict = {
-      passed: false,
-      missingFields: ['gh_pr_url'],
-      telemetryMissingFields: ['memory_acknowledgment'],
-      verifierFailure: false,
-      trace: { transcript: '', prompt: '', response: '' },
+      kind: 'parsed',
+      data: { outcome: 'implemented' },
+      missingRequired: [],
+      telemetryMissing: [],
+      warnings: [],
     };
-    expect(verdict.missingFields).toEqual(['gh_pr_url']);
-    expect(verdict.telemetryMissingFields).toEqual(['memory_acknowledgment']);
+    expect(verdict.kind).toBe('parsed');
+  });
+
+  it('accepts a kind=hard-error verdict with code + message', () => {
+    const verdict: CompletionVerifierVerdict = {
+      kind: 'hard-error',
+      code: 'TASK_RUNTIME_HARD_ERROR',
+      message: 'No EXECUTION_AGENT_FINAL: block in transcript',
+    };
+    expect(verdict.kind).toBe('hard-error');
+    if (verdict.kind === 'hard-error') {
+      expect(verdict.code).toBe('TASK_RUNTIME_HARD_ERROR');
+    }
   });
 });
