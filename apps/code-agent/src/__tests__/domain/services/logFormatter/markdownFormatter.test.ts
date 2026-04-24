@@ -301,6 +301,22 @@ describe('summarizeJsonArray', () => {
     expect(json.length).toBeGreaterThanOrEqual(200);
     expect(summarizeJsonArray(json)).toBeUndefined();
   });
+
+  it('returns undefined for a whitespace-padded empty array', () => {
+    // Triggers the arr.length === 0 guard with input that still clears the length>=200 floor.
+    const json = '[' + ' '.repeat(250) + ']';
+    expect(json.length).toBeGreaterThanOrEqual(200);
+    expect(summarizeJsonArray(json)).toBeUndefined();
+  });
+
+  it('returns undefined when JSON parses to a non-array value', () => {
+    // Exercises the !Array.isArray(arr) guard via a direct call with a
+    // large numeric JSON payload (the function is exported, so callers can
+    // bypass the bracket pre-filter used inside formatToolResult).
+    const json = `${'0'.repeat(250)}`;
+    expect(json.length).toBeGreaterThanOrEqual(200);
+    expect(summarizeJsonArray(json)).toBeUndefined();
+  });
 });
 
 describe('summarizeDiff', () => {
