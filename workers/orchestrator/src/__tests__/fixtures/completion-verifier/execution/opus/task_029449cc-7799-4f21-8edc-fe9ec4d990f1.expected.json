@@ -1,0 +1,36 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1930",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1436",
+    "review_iterations": 2,
+    "memory_ids_used": [
+      "mem_6788098b-6d41-4b8a-bed7-7b443bed7e79"
+    ],
+    "memory_ids_rejected": [
+      "mem_c0652e5d-d065-47e8-9060-8a227a6937a6",
+      "mem_9159fdd1-a122-430e-8fdf-bf4516d10aee"
+    ],
+    "memory_usage_summary": "The \"in-memory fake limitations\" memory informed the split decision to make buildListQuery synchronous and testable against FakeFirestore directly, and motivated replacing stale v8-ignore pragmas with concrete unit tests on the pure helpers once the code lived in a fake-free module.",
+    "superpowers_subagent_driven_dev_used": true,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "implementer (general-purpose, refactor + test creation), spec-reviewer (general-purpose, spec compliance), code-quality-reviewer (pr-review-toolkit:code-reviewer, round 1 + round 2 re-review), fix-implementer (general-purpose, addressed review findings), final-holistic-reviewer (superpowers:code-reviewer, pre-merge approval)",
+    "skill_sequence_proof": "Skill tool invoked superpowers:subagent-driven-development FIRST (before any implementation agent dispatch), then implementer → spec reviewer → code-quality reviewer → fix implementer → re-review; AFTER zero issues, invoked superpowers:requesting-code-review which dispatched the final superpowers:code-reviewer subagent. PR created only after final approval.",
+    "summary": "* Split `taskGroupSummaryFirestoreRepository.ts` from 971 → 295 lines into three files: `serializer.ts` (pure doc↔model conversion + aggregation helpers), `queries.ts` (SDK ref/query construction), and a thin orchestration adapter.\n  * Preserved `TaskGroupSummaryRepository` interface, Firestore doc shape, composite-index usage, fire-and-forget vs Result semantics, `merge:true` on recompute, and `FieldValue.delete()` semantics.\n  * Added 77 serializer unit tests + 12 queries unit tests; kept the 104 existing repo integration tests unchanged and passing.\n  * Code review surfaced three issues (stale v8-ignore pragmas on now-pure branches, accidental `asDocRef` re-export, dead identity-cast wrappers) — all fixed in a follow-up commit with concrete replacement tests.\n  * `pnpm run ci:tracked` passes end-to-end; PR #1930 opened against `development`."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field outcome was read from deprecated alias Outcome; rename the emitter",
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
+    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
+    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
+    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1897",
+    "requires_re_review": true,
+    "memory_ids_used": [
+      "mem_87d21fc9-fd32-47d6-a495-d1349e395a69"
+    ],
+    "memory_ids_rejected": [
+      "mem_c4937fb0-9acf-4fba-8051-6ec027a5b8ad",
+      "mem_b3df0496-a922-4d72-94c9-2ec18fdddec8"
+    ],
+    "memory_usage_summary": "The Facade-based Monolith Splitting memory reinforced the existing thin-coordinator pattern in the PR; remediation kept the facade boundaries intact while removing invalid v8-ignores and adding unit tests for the extracted sibling modules without rewriting the existing facade tests.",
+    "summary": "* Removed misapplied `ts-type` v8-ignore on `pickCompletionAgentType` (lifecycle.ts) — all 8 if/else branches already covered by tests\n  * Removed both misapplied `upstream` v8-ignores in `webhook-callbacks.ts` and added unit tests for `review`/`remediation`/`pull_request` agentData branches plus `'used'`/`'not_used'` and empty-`gh_pr_url`/missing-`linearIssueId` paths so v8 sees every branch\n  * Replaced circular constant-mirror assertions in `retry-logic.test.ts` with relationship invariants (warning < kill, warning gap ≥ check interval, inactivity < kill, image-pull > container-create, positivity, integer/range)\n  * Split monolithic `describeAgent` test into `it.each` cases plus a dedicated unknown-label fallback test; reset all `mockLogger` spy state in a top-level `beforeEach` to prevent leakage across describe blocks\n  * `pnpm run ci:tracked` green locally, all GitHub Actions checks passing on commit `8382716f2`; out-of-scope DoD gaps from the review body (mandatory unit tests for `dispatchTask`/`markTaskCompleted`/`streamTaskLogs`/`notifyCompletion`/`scheduleRetry` and the <300-line target) deferred per the PR description"
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field outcome was read from deprecated alias Outcome; rename the emitter",
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

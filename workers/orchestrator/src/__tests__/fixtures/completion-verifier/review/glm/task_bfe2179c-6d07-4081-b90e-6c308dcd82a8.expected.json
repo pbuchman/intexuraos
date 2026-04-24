@@ -1,0 +1,28 @@
+{
+  "data": {
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1900",
+    "review_id": "4162488387",
+    "review_comments_posted": 0,
+    "review_types": [
+      "code_quality",
+      "architecture",
+      "test_quality"
+    ],
+    "requirements_tracker_updated": "yes",
+    "gh_actions_status": "all passed",
+    "needs_remediation": false,
+    "memory_ids_used": [
+      "mem_a4ce6dce-aecb-4189-816f-4a69d7d19251",
+      "mem_c4937fb0-9acf-4fba-8051-6ec027a5b8ad",
+      "mem_9a915545-540f-448e-aaae-108e9d88dea8"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "All 3 execution memories were applicable and guided validation of the bootstrap modularization pattern (deps injection, module extraction, thin orchestrator).",
+    "summary": "* Reviewed PR #1900 for INT-1429 bootstrap modularization refactoring\n  * Verified `start.ts` at 194 lines (target <200), 8 bootstrap modules, constants centralized\n  * All 13 tracked requirements fully met; prior review findings resolved (v8 ignore categories, logger fake alignment)\n  * GH Actions all passed; code ready for merge with no remediation needed"
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

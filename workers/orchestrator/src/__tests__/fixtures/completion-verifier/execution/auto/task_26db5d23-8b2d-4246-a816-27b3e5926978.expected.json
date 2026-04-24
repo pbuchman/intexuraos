@@ -1,0 +1,35 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1895",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1424/prevent-automatic-merging-of-code-tasks-to-allow-for-manual-review",
+    "review_iterations": 1,
+    "memory_ids_used": [
+      "mem_26d588f3-c12e-4ffd-9c02-fded950e5f68",
+      "mem_b2f0fecf-1329-4af9-9d13-99220c3cfbd6",
+      "mem_635bf396-efdf-41a2-8f6d-2b8ac8eadb84"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "Memory [1] framed the exact goal (keep planning PR open after review pass) and the webhook-handler scope; memory [2] drove a pre-push verification that the diff addresses the issue's acceptance criteria; memory [3] drove verification that the PR contains real code changes to webhookRoutes.ts and tests, not just doc updates.",
+    "superpowers_subagent_driven_dev_used": true,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "implementer (general-purpose) — scope: execute 3-file plan (webhookRoutes.ts, webhooks.test.ts, INT-1282 plan doc), run CI; spec-reviewer (general-purpose) — scope: verify diff matches plan acceptance criteria exactly; code-quality reviewer (superpowers:code-reviewer) — scope: final holistic review of all 3 commits",
+    "skill_sequence_proof": "Skill tool invoked \"superpowers:subagent-driven-development\" first (returned skill content with implementer/spec-reviewer flow), subagents executed implementation + spec review, then Skill tool invoked \"superpowers:requesting-code-review\" which dispatched the superpowers:code-reviewer subagent for the final pass, and only after its \"Ready to proceed\" verdict was the PR created.",
+    "summary": "* Removed the `mergePlanPr` call and its `fetchGitHubToken` + try/catch block from the planning sub-branch in `apps/code-agent/src/routes/webhookRoutes.ts`; planning branch now only logs and lets the plan PR stay open.\n  * Dropped the now-unused `mergePlanPr` import; `fetchGitHubToken` import retained (still used in the execution-advance path).\n  * Replaced the `describe('plan PR auto-merge on review pass')` test block with `describe('plan PR NOT merged on review pass')` (3 cases) asserting `mergePullRequest` is never called and `ready-to-merge` is never added on plan reviews.\n  * Added a reversal notice blockquote at the top of `docs/plans/INT-1282-auto-merge-plan-pr-on-review-pass.md` pointing at the INT-1424 plan.\n  * Verified: targeted tests 3/3 pass, full webhooks.test.ts 235 pass, workspace verify for code-agent green, `pnpm run ci:tracked` green — PR #1895 opened against `development`."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field outcome was read from deprecated alias Outcome; rename the emitter",
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
+    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
+    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
+    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "data": {
+    "outcome": "planned",
+    "superpowers_writing_plans_used": true,
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1459/align-completion-verifier-telemetry-plan-with-current-codebase",
+    "complex_task": false,
+    "plan_doc": true,
+    "subtask_urls": [],
+    "plan_pr": "https://github.com/pbuchman/intexuraos/pull/1918",
+    "parallel_breakdown_proof": "",
+    "memory_ids_used": [
+      "mem_b2f0fecf-1329-4af9-9d13-99220c3cfbd6",
+      "mem_c45fe698-2d31-4400-9890-5f5a359c8630",
+      "mem_ab2cd142-2b68-4ec4-9dba-a28eae78fa16"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "All three memories guided the rewrite: I verified the plan against the current codebase and recently merged PRs (#1899, #1913), documented the discrepancies and the rationale for each change in the PR description and plan preface, and ensured the PR content strictly addresses the Linear issue's four stated deliverables (verify, improve, use INT-1459 as source of truth, open PR with reasoning).",
+    "clarification_message": "",
+    "summary": "* Task asked to verify `docs/plans/2026-04-23-completion-verifier-tiered-telemetry.md` against the current codebase and most recently merged PRs in the same area, then rewrite it using INT-1459 as the single source of truth.\n  * Classified as PLAN-DOC: single plan-document update, multi-step implementation guidance, single PR.\n  * Found the plan was invalidated by PR #1899 (completion-verifier split from 1024→197 lines into sibling modules) and PR #1913 (infra-failure classifier added before the verifier); every file path, line range, and return-site count in the original plan was stale.\n  * Rewrote the plan (375 insertions / 324 deletions) to match current module layout, extended the `failVerdict` helper once rather than editing 7 return sites, added `noUncheckedIndexedAccess` safety for the `WORKER_TYPES` lookup, centralized `TELEMETRY_FIELD_NAMES` next to their producers, and anchored the new pure-policy helper under `services/task-dispatcher/` to match the sibling-module pattern.\n  * Archived the original Linear description as a comment, updated INT-1459's description to reference the plan doc, and opened planning PR #1918 with reasoning for the rewrite in the PR description."
+  },
+  "missingRequired": [
+    "subtask_urls",
+    "parallel_breakdown_proof",
+    "clarification_message"
+  ],
+  "warnings": [
+    "field outcome was read from deprecated alias Outcome; rename the emitter",
+    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
+    "field complex_task was read from deprecated alias Complex task; rename the emitter",
+    "field plan_doc was read from deprecated alias Plan doc; rename the emitter",
+    "field subtask_urls was read from deprecated alias Subtask URLs; rename the emitter",
+    "field plan_pr was read from deprecated alias Plan PR; rename the emitter",
+    "field parallel_breakdown_proof was read from deprecated alias Parallel breakdown proof; rename the emitter",
+    "field clarification_message was read from deprecated alias Clarification message; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

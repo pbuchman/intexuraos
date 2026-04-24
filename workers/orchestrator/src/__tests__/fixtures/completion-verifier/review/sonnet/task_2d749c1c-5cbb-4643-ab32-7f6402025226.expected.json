@@ -1,0 +1,27 @@
+{
+  "data": {
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1900",
+    "review_id": "4162129905",
+    "review_comments_posted": 1,
+    "review_types": [
+      "code_quality",
+      "test_quality"
+    ],
+    "requirements_tracker_updated": "yes",
+    "gh_actions_status": "all passed",
+    "needs_remediation": true,
+    "memory_ids_used": [
+      "mem_a4ce6dce-aecb-4189-816f-4a69d7d19251",
+      "mem_c4937fb0-9acf-4fba-8051-6ec027a5b8ad",
+      "mem_bd838570-5194-4f6f-ae63-b676b0f7dba9"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "All three bootstrap modularization memories were applicable and informed the review — confirmed that start.ts is <200 lines, that each extracted module has a dedicated test file, and that process.exit() was correctly replaced with thrown Errors for testability.",
+    "summary": "* Reviewed PR #1900: refactors 914-line orchestrator start.ts into 9 focused bootstrap modules; start.ts is now 194 lines\n  * Code quality is clean — constants centralized, error messages preserved, startup order unchanged, no changes to non-bootstrap modules\n  * All prior review findings (v8 ignores on logWorkerAuthStartupStatus, validateWorkerApiKeys, start() body) were addressed\n  * One unfixed finding: v8 ignore category in api-key-validator.ts:96 still reads `ts-type` — the previous review's action-taken comment promised `async-timing` but the commit was never pushed; one-line fix required\n  * Minor advisory: service-wiring.test.ts logger fake silently drops message strings (second pino arg), limiting future assertion strength — non-blocking"
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

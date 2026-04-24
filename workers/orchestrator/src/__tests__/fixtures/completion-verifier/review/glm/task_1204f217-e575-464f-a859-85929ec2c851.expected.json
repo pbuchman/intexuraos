@@ -1,0 +1,27 @@
+{
+  "data": {
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1891",
+    "review_id": "4147799837",
+    "review_comments_posted": 0,
+    "review_types": [
+      "plan_review"
+    ],
+    "requirements_tracker_updated": "yes",
+    "gh_actions_status": "pending",
+    "needs_remediation": false,
+    "memory_ids_used": [
+      "mem_635bf396-efdf-41a2-8f6d-2b8ac8eadb84"
+    ],
+    "memory_ids_rejected": [
+      "mem_6a24c832-9037-4ba3-b5bb-30d7bb12bb43",
+      "mem_a8fa16e2-4658-4fd3-a972-3a0e8b02005d"
+    ],
+    "memory_usage_summary": "Applied the plan-only PR memory to confirm this is intentional for planning-phase workflow; rejected the two auto-merge memories because this task reverses that behavior.",
+    "summary": "* Plan document reviewed for INT-1424 — reversal of INT-1282 auto-merge behavior\n  * All referenced files verified to exist with accurate line numbers\n  * `submitToExecutionAgent` confirmed to use `mergePlanPr` (plan's assumption validated)\n  * TDD sequence correct, Out of Scope explicit, no gaps detected\n  * Plan ready for implementation, no remediation needed"
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

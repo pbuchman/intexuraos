@@ -1,0 +1,35 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1917",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1432",
+    "review_iterations": 1,
+    "memory_ids_used": [
+      "mem_f1559458-c36f-499d-a02c-1cb8b7a5f141",
+      "mem_b3d69266-f1b1-4d7b-94e2-401f79e07fcc",
+      "mem_982fbb41-34ed-4f10-939f-1ec250ebda53"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "Thin-route pattern drove the sub-plugin split + use case extraction; the dependency-propagation pitfalls were actively checked (apps/code-agent/src/index.ts and routes/index.ts deliberately unchanged, `workerSettingsRoutes` export preserved, all 49 existing integration tests still pass — proving no missed call sites).",
+    "superpowers_subagent_driven_dev_used": false,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "code-reviewer (superpowers:code-reviewer) — scope: review commit 629ab20ea vs base 70e82f434 for plan adherence, logic equivalence of extracted use cases, config-array approach for the 5 PATCH routes, and coverage.",
+    "skill_sequence_proof": "Implementation completed directly (mechanical refactor with clear spec), then superpowers:requesting-code-review skill invoked which dispatched code-reviewer subagent that returned \"Approve\" with one minor suggestion (relocate `UseCaseLogger` to a shared port) — addressed in follow-up commit e68d04ba3.",
+    "summary": "* Split `apps/code-agent/src/routes/workerSettingsRoutes.ts` (1,177 lines / 11 handlers) into three resource-specific sub-plugins (`setting-crud-routes`, `worker-ops-routes`, `config-routes`) + shared `schemas.ts`; main plugin now 37 lines.\n  * Extracted 2 use cases (`testWorkerConnectivity`, `updateDefaultWorkerType`) and a masking/credential-validation service; added `UseCaseLogger` port so both pino and Fastify `request.log` satisfy it.\n  * Five PATCH `default-*-worker-type` handlers are now generated from a `readonly` config array while preserving per-endpoint OpenAPI metadata byte-for-byte; `workerSettingsRoutes` export kept intact so `routes/index.ts` and `src/index.ts` are untouched.\n  * Added unit tests (masking + 2 use cases) and focused smoke tests per sub-plugin; all 49 existing integration tests pass unchanged.\n  * `pnpm run ci:tracked` green (15546 tests, 95% branch coverage, all 22 static validators, lint, build, format); PR #1917 opened against `development`."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field outcome was read from deprecated alias Outcome; rename the emitter",
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
+    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
+    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
+    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

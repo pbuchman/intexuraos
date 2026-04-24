@@ -1,0 +1,22 @@
+{
+  "data": {
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1888",
+    "review_id": "4144110694",
+    "review_comments_posted": 0,
+    "review_types": [
+      "plan_review"
+    ],
+    "requirements_tracker_updated": "yes",
+    "gh_actions_status": "pending",
+    "needs_remediation": false,
+    "memory_ids_used": [],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "",
+    "summary": "* Plan-only PR (no implementation code) reviewed for accuracy and completeness\n  * All 8 file references verified against actual codebase — root cause evidence confirmed\n  * TDD discipline validated: Task 1 adds failing test before fix\n  * Task decomposition minimal and logical; no over-engineering\n  * 5/5 requirements covered by plan tasks\n  * Verdict: Ready for implementation via superpowers:executing-plans"
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

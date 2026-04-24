@@ -1,0 +1,36 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1932",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1438",
+    "review_iterations": 2,
+    "memory_ids_used": [
+      "mem_4b61618c-9951-40aa-b7a9-b007cea9ca97",
+      "mem_bd838570-5194-4f6f-ae63-b676b0f7dba9"
+    ],
+    "memory_ids_rejected": [
+      "mem_f1559458-c36f-499d-a02c-1cb8b7a5f141"
+    ],
+    "memory_usage_summary": "Applied the \"Superficial Refactoring\" memory by enforcing real deduplication (`fetchLinearAgent` util + `mapSilentFetchError` helper) rather than just shuffling code; applied the \"Unit Test Coverage\" memory by adding a dedicated `linear-fetch-util.test.ts` with 14 nock-based cases covering all 5 result kinds instead of relying solely on the existing integration suite.",
+    "superpowers_subagent_driven_dev_used": true,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "implementer (general-purpose, refactor execution via TDD), spec-compliance reviewer (general-purpose), code-quality reviewer (general-purpose), final code-reviewer (superpowers:code-reviewer)",
+    "skill_sequence_proof": "Invoked `superpowers:subagent-driven-development` (Skill tool at start) before dispatching the implementer subagent; invoked `superpowers:requesting-code-review` (Skill tool) after implementer+review loop and before opening the PR; final reviewer subagent was dispatched per that skill's template.",
+    "summary": "* Split 699-line `linearAgentHttpClient.ts` into a 41-line facade + private `linear-fetch-util.ts` + 4 endpoint modules (`issues`, `issue-tree`, `issue-metadata`, `comments`) under `apps/code-agent/src/infra/http/linear/`, preserving all public signatures.\n  * Centralized `AbortController`/timeout, auth headers, JSON body, and envelope parsing into a `LinearFetchResult<T>` discriminated union; added `silent-fetch-mapper.ts` for the three no-log endpoints.\n  * Adopted `getErrorMessage()` from `@intexuraos/common-core`; deviated from plan by omitting `labels.ts` and `projects.ts` (no such methods exist on the client).\n  * Added 14 unit tests in new `linear-fetch-util.test.ts` plus 4 new timeout/network tests covering previously-uncovered branches in `linearAgentHttpClient.test.ts`.\n  * `pnpm run ci:tracked` green; full workspace verify green (15,719 tests); PR #1932 opened against `development`."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field outcome was read from deprecated alias Outcome; rename the emitter",
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
+    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
+    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
+    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}

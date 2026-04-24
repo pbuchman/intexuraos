@@ -1,0 +1,29 @@
+{
+  "data": {
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1897",
+    "review_id": "4162197349",
+    "review_comments_posted": 3,
+    "review_types": [
+      "code_quality",
+      "architecture",
+      "test_quality"
+    ],
+    "requirements_tracker_updated": "yes",
+    "gh_actions_status": "all passed",
+    "needs_remediation": true,
+    "memory_ids_used": [
+      "mem_87d21fc9-fd32-47d6-a495-d1349e395a69"
+    ],
+    "memory_ids_rejected": [
+      "mem_a4ce6dce-aecb-4189-816f-4a69d7d19251",
+      "mem_c4937fb0-9acf-4fba-8051-6ec027a5b8ad"
+    ],
+    "memory_usage_summary": "The facade-based monolith splitting memory informed the review of whether the private shim pattern (class delegates to extracted module functions) was correctly applied — specifically flagging that resolveTaskRuntime/getRuntimeDisplayName were extracted to lifecycle.ts but not wired back into the class via the _Fn shim pattern used by all other extracted functions.",
+    "summary": "* Reviewed PR #1897 — refactor of 3,036-line `task-dispatcher.ts` into 6 sibling modules (`prompts`, `log-streaming`, `metrics`, `webhook-callbacks`, `retry-logic`, `lifecycle`); all CI checks passed\n  * New finding (code_quality): `resolveTaskRuntime`/`getRuntimeDisplayName` extracted to `lifecycle.ts` but not wired back into the class — class still has inline duplicates at lines 738–743, breaking the `_Fn` shim pattern used everywhere else\n  * New finding (architecture): `lifecycle.ts` re-exports 3 unrelated symbols (`hasFatalExitCodeField`, `stripDockerHeaders`, `buildSystemPrompt`) at lines 130–131 that no consumer imports from this module — dead re-exports\n  * New finding (code_quality): `checkForResult` v8 ignore uses `upstream` category for an if/else branch — CLAUDE.md explicitly prohibits this; should be `module-mock` with `execAsync` named as the testing blocker\n  * Ongoing gap (test_quality): all 5 mandatory test scenarios from the issue requirements table remain absent — the state-machine behaviors (`dispatchTask` at capacity, `markTaskCompleted`, `streamTaskLogs`, `notifyCompletion`+retry, `scheduleRetry`) were not extracted and therefore cannot be unit-tested yet; prior reviews also noted this"
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field pr was read from deprecated alias PR; rename the emitter",
+    "field summary was read from deprecated alias Summary; rename the emitter"
+  ]
+}
