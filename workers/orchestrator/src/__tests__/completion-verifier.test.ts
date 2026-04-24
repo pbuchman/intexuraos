@@ -6,7 +6,14 @@ import { verifyCompletion } from '../services/completion-verifier.js';
 const FIXTURE_ROOT = join(__dirname, 'fixtures/completion-verifier');
 
 describe('verifyCompletion — synchronous pipeline', () => {
-  it('accepts task_5946dce4 (the INT-1441 regression fixture)', () => {
+  it('regression — task_5946dce4 (INT-1441) accepts with populated memory arrays', () => {
+    // Phase-5 regression guard. The original failing transcript would have
+    // been rejected by the old LLM verifier ("Missing fields: memory_ids_used,
+    // memory_ids_rejected") because the agent emitted the deprecated
+    // `execution_memory_*` key names. The new deterministic parser resolves
+    // the alias and returns the populated arrays. This test would have failed
+    // before the INT-1470 refactor and would have caught the regression
+    // pre-merge if it had existed when PR #1928 landed.
     const transcript = readFileSync(
       join(FIXTURE_ROOT, 'execution/opus/task_5946dce4-b1b6-46b2-9576-10f316bfdbd4.txt'),
       'utf8'
@@ -28,8 +35,18 @@ describe('verifyCompletion — synchronous pipeline', () => {
     expect(verdict.kind).toBe('parsed');
     if (verdict.kind !== 'parsed') return;
     expect(verdict.missingRequired).toEqual([]);
-    expect((verdict.data['memory_ids_used'] as string[]).length).toBeGreaterThan(0);
-    expect((verdict.data['memory_ids_rejected'] as string[]).length).toBeGreaterThan(0);
+    // The agent reported two used and one rejected memory ID — assert the
+    // exact ids, not just `.length > 0`. That's the whole point of the
+    // fixture: the deprecated-alias rename preserves payload fidelity.
+    expect(verdict.data['memory_ids_used']).toEqual([
+      'mem_e5089b28-f805-49cb-a2e5-eb4aeb5e932b',
+      'mem_bd838570-5194-4f6f-ae63-b676b0f7dba9',
+    ]);
+    expect(verdict.data['memory_ids_rejected']).toEqual([
+      'mem_9e4de081-6568-465e-8a98-6492041bfa7c',
+    ]);
+    // telemetryMissing must be empty — agent filled both memory_ids_* fields.
+    expect(verdict.telemetryMissing).toEqual([]);
   });
 
   it('returns kind=hard-error when no AGENT_FINAL block is present', () => {
