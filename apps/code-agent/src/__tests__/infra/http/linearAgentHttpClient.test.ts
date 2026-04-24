@@ -349,6 +349,54 @@ describe('linearAgentHttpClient', () => {
         expect.fail('Expected error result');
       }
     });
+
+    it('should return UNAVAILABLE on request timeout', async () => {
+      nock(baseUrl)
+        .patch('/internal/issues/issue-timeout/state')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .delayConnection(10000)
+        .reply(200, { success: true });
+
+      const shortTimeoutClient = createLinearAgentHttpClient(
+        { baseUrl, internalAuthToken, timeoutMs: 50 },
+        mockLogger,
+      );
+
+      const result = await shortTimeoutClient.updateIssueState({
+        userId: 'test-user-123',
+        issueId: 'issue-timeout',
+        state: 'in_progress',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNAVAILABLE');
+        expect(result.error.message).toBe('Request timed out');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNKNOWN on network error', async () => {
+      nock(baseUrl)
+        .patch('/internal/issues/issue-net/state')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .replyWithError('ECONNREFUSED');
+
+      const result = await client.updateIssueState({
+        userId: 'test-user-123',
+        issueId: 'issue-net',
+        state: 'in_progress',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toContain('ECONNREFUSED');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
   });
 
   describe('validateIssue', () => {
@@ -1046,6 +1094,32 @@ describe('linearAgentHttpClient', () => {
         expect.fail('Expected error result');
       }
     });
+
+    it('should return UNKNOWN on request timeout', async () => {
+      nock(baseUrl)
+        .get('/internal/issues/issue-timeout/tree')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .delayConnection(10000)
+        .reply(200, { success: true, data: { root: {}, descendants: [] } });
+
+      const shortTimeoutClient = createLinearAgentHttpClient(
+        { baseUrl, internalAuthToken, timeoutMs: 50 },
+        mockLogger,
+      );
+
+      const result = await shortTimeoutClient.fetchIssueTree({
+        userId: 'test-user-123',
+        issueId: 'issue-timeout',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toBe('Request timed out');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
   });
 
   describe('fetchDirectChildrenLive', () => {
@@ -1140,6 +1214,52 @@ describe('linearAgentHttpClient', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('UNKNOWN');
         expect(result.error.message).toBe('Invalid response from linear-agent');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNKNOWN on network error', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/issue-net/direct-children')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .replyWithError('ECONNREFUSED');
+
+      const result = await client.fetchDirectChildrenLive({
+        userId: 'test-user-123',
+        issueId: 'issue-net',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toContain('ECONNREFUSED');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNKNOWN on request timeout', async () => {
+      nock(baseUrl)
+        .get('/internal/linear/issues/issue-timeout/direct-children')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .delayConnection(10000)
+        .reply(200, { success: true, data: [] });
+
+      const shortTimeoutClient = createLinearAgentHttpClient(
+        { baseUrl, internalAuthToken, timeoutMs: 50 },
+        mockLogger,
+      );
+
+      const result = await shortTimeoutClient.fetchDirectChildrenLive({
+        userId: 'test-user-123',
+        issueId: 'issue-timeout',
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toBe('Request timed out');
       } else {
         expect.fail('Expected error result');
       }
@@ -1268,6 +1388,33 @@ describe('linearAgentHttpClient', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('UNKNOWN');
         expect(result.error.message).toContain('ECONNREFUSED');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('should return UNKNOWN on request timeout', async () => {
+      nock(baseUrl)
+        .patch('/internal/linear/issues/issue-timeout/metadata')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
+        .delayConnection(10000)
+        .reply(200, { success: true });
+
+      const shortTimeoutClient = createLinearAgentHttpClient(
+        { baseUrl, internalAuthToken, timeoutMs: 50 },
+        mockLogger,
+      );
+
+      const result = await shortTimeoutClient.updateIssueMetadata({
+        userId: 'test-user-123',
+        issueId: 'issue-timeout',
+        addLabels: ['bug'],
+      });
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('UNKNOWN');
+        expect(result.error.message).toBe('Request timed out');
       } else {
         expect.fail('Expected error result');
       }
