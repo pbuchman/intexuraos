@@ -5,6 +5,14 @@ import {
   type AgentContract,
 } from '../../../services/completion-verifier/contracts.js';
 import type { CompletionAgentType } from '../../../services/completion-verifier/schemas.js';
+import {
+  planningPrompt,
+  executionPrompt,
+  reviewPrompt,
+  remediationPrompt,
+  pullRequestPrompt,
+} from '../../../services/system-prompt.js';
+import type { SystemPromptParams } from '../../../services/prompts/prompt-shared.js';
 
 describe('contracts — canonical field table', () => {
   const expectedAgents: CompletionAgentType[] = [
@@ -112,4 +120,41 @@ describe('contracts — canonical field table', () => {
       'Total PR comments posted'
     );
   });
+});
+
+/**
+ * For every agent contract, the generated system prompt must contain
+ * the marker line AND every field (by canonical name OR alias). This is
+ * the regression guard that would have caught the original
+ * execution_memory_* / memory_ids_used split.
+ */
+describe('contracts — round-trip with every agent prompt', () => {
+  const baseParams: SystemPromptParams = {
+    taskId: 'task-123',
+    linearIssueId: 'INT-123',
+    linearIssueLabels: [],
+    workerType: 'auto',
+  };
+
+  const cases: Array<{ agent: CompletionAgentType; build: () => string }> = [
+    { agent: 'planning', build: () => planningPrompt.build(baseParams) },
+    { agent: 'execution', build: () => executionPrompt.build(baseParams) },
+    { agent: 'review', build: () => reviewPrompt.build(baseParams) },
+    { agent: 'remediation', build: () => remediationPrompt.build(baseParams) },
+    { agent: 'pull_request', build: () => pullRequestPrompt.build(baseParams) },
+  ];
+
+  it.each(cases)(
+    '$agent prompt contains the marker and every contract field',
+    ({ agent, build }) => {
+      const prompt = build();
+      const contract = AGENT_CONTRACTS[agent];
+      expect(prompt).toContain(contract.marker);
+      for (const field of contract.fields) {
+        const candidates = [field.name, ...(field.alias ?? [])];
+        const found = candidates.some((candidate) => prompt.includes(`- ${candidate}:`));
+        expect(found, `${agent} prompt missing field ${field.name}`).toBe(true);
+      }
+    }
+  );
 });
