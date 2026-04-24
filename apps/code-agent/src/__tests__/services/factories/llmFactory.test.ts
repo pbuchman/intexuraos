@@ -9,7 +9,8 @@
  * - resolveToolCallingClient errors when no key is available
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import nock from 'nock';
 import pino from 'pino';
 import type { Logger } from 'pino';
 import { ok, err, type Result } from '@intexuraos/common-core';
@@ -64,6 +65,53 @@ describe('createLlmServices', () => {
         userServiceClient: makeUserServiceClient(), buildUsageSink,
       });
       expect(services.executionMemoryEmbeddingClient).toBeDefined();
+    });
+
+    describe('embedFn callback', () => {
+      beforeEach(() => {
+        nock.disableNetConnect();
+      });
+
+      afterEach(() => {
+        nock.cleanAll();
+        nock.enableNetConnect();
+      });
+
+      it('routes embed() calls through the configured OpenAI client', async () => {
+        // Stub the OpenAI embeddings endpoint so the factory's embedFn
+        // (llmFactory.ts) actually executes against a fake HTTP response.
+        // This proves the factory wired embedFn to the configured OpenAI
+        // client and not, say, a detached no-op closure.
+        let capturedBody: unknown = null;
+        const scope = nock('https://api.openai.com')
+          .post('/v1/embeddings', (body) => {
+            capturedBody = body;
+            return true;
+          })
+          .reply(200, {
+            object: 'list',
+            model: 'text-embedding-3-small',
+            usage: { prompt_tokens: 1, total_tokens: 1 },
+            data: [{ object: 'embedding', index: 0, embedding: [0.1, 0.2, 0.3] }],
+          });
+
+        const services = createLlmServices({
+          config: makeConfig({ openaiAppApiKey: 'sk-test' }), logger,
+          userServiceClient: makeUserServiceClient(), buildUsageSink,
+        });
+        const client = services.executionMemoryEmbeddingClient;
+        expect(client).toBeDefined();
+        if (client === undefined) return;
+
+        await client.embed('hello world');
+
+        // The request hit OpenAI — proves the factory's embedFn arrow body
+        // (the call to `executionMemoryOpenAI.embeddings.create`) executed.
+        expect(scope.isDone()).toBe(true);
+        const body = capturedBody as { input?: string; model?: string } | null;
+        expect(body?.input).toBe('hello world');
+        expect(body?.model).toBe('text-embedding-3-small');
+      });
     });
   });
 

@@ -114,15 +114,34 @@ describe('initServices', () => {
     expect(c.actionsAgentClient).toBeDefined();
   });
 
-  it('composes services so statusMirrorService routes through the actionsAgentClient', () => {
-    // Spot-check one wiring edge to prove the composer actually threads
-    // factory outputs together rather than just returning independent objects.
+  it('composes services so statusMirrorService forwards through actionsAgentClient', async () => {
+    // Spot-check an actual wiring edge: if the composer created a second
+    // actionsAgentClient by mistake, this test would fail.
+    process.env['E2E_MODE'] = 'true';
     initServices(makeConfig());
     const c = getServices();
-    expect(typeof c.actionsAgentClient.updateActionStatus).toBe('function');
-    expect(typeof c.statusMirrorService.mirrorStatus).toBe('function');
-    // whatsappNotifier was constructed from the whatsapp publisher + linear agent client.
-    expect(typeof c.whatsappNotifier.notifyTaskStarted).toBe('function');
+
+    const calls: { actionId: string; status: string }[] = [];
+    // Replace the in-container client's method so we can observe calls from
+    // statusMirrorService. If statusMirrorService was constructed with a
+    // DIFFERENT client instance, the spy would never fire.
+    c.actionsAgentClient.updateActionStatus = async (
+      actionId,
+      status,
+    ): Promise<{ ok: true; value: undefined }> => {
+      calls.push({ actionId, status });
+      return { ok: true, value: undefined };
+    };
+
+    // Use a real UUID so isRealActionId() allows the forward.
+    await c.statusMirrorService.mirrorStatus({
+      actionId: '11111111-1111-4111-8111-111111111111',
+      taskStatus: 'running',
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.actionId).toBe('11111111-1111-4111-8111-111111111111');
+    expect(calls[0]?.status).toBe('running');
   });
 
   it('throws from getServices() before initServices()', () => {
