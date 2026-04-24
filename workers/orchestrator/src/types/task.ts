@@ -14,6 +14,10 @@ export interface TaskVerificationRecord {
   attempt: number;
   passed: boolean;
   missingFields: string[];
+  /** Memory-telemetry fields missing at this attempt. Separate from missingFields because they may be non-blocking for optional-tier workers. Absent in records written before the tiered-telemetry change. */
+  telemetryMissingFields?: string[];
+  /** True when this attempt was accepted despite missing telemetry (tier=optional). Absent or false otherwise. */
+  telemetryAccepted?: boolean;
   verifierFailure: boolean;
   createdAt: string;
 }

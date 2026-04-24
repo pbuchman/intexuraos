@@ -117,6 +117,7 @@ describe('buildResultFromVerification', () => {
     const verification = {
       passed: true,
       missingFields: [],
+      telemetryMissingFields: [],
       verifierFailure: false,
       trace: { transcript: '' },
     } as unknown as CompletionVerifierVerdict;
@@ -129,6 +130,7 @@ describe('buildResultFromVerification', () => {
     const verification = {
       passed: true,
       missingFields: [],
+      telemetryMissingFields: [],
       verifierFailure: false,
       trace: { transcript: '' },
       agentData: {
@@ -157,6 +159,7 @@ describe('buildResultFromVerification', () => {
     const verification = {
       passed: true,
       missingFields: [],
+      telemetryMissingFields: [],
       verifierFailure: false,
       trace: { transcript: '' },
       agentData: {
@@ -182,6 +185,7 @@ describe('buildResultFromVerification', () => {
     const verification = {
       passed: true,
       missingFields: [],
+      telemetryMissingFields: [],
       verifierFailure: false,
       trace: { transcript: '' },
       agentData: {
@@ -210,6 +214,7 @@ describe('buildResultFromVerification', () => {
     const verification = {
       passed: true,
       missingFields: [],
+      telemetryMissingFields: [],
       verifierFailure: false,
       trace: { transcript: '' },
       agentData: {
@@ -233,6 +238,7 @@ describe('buildResultFromVerification', () => {
     const verification = {
       passed: true,
       missingFields: [],
+      telemetryMissingFields: [],
       verifierFailure: false,
       trace: { transcript: '' },
       agentData: {
@@ -266,6 +272,7 @@ describe('buildResultFromVerification', () => {
     const verification = {
       passed: true,
       missingFields: [],
+      telemetryMissingFields: [],
       verifierFailure: false,
       trace: { transcript: '' },
       agentData: {
@@ -293,6 +300,7 @@ describe('buildResultFromVerification', () => {
     const verification = {
       passed: true,
       missingFields: [],
+      telemetryMissingFields: [],
       verifierFailure: false,
       trace: { transcript: '' },
       agentData: {
@@ -314,6 +322,7 @@ describe('buildResultFromVerification', () => {
     const verification = {
       passed: true,
       missingFields: [],
+      telemetryMissingFields: [],
       verifierFailure: false,
       trace: { transcript: '' },
       agentData: {
@@ -334,6 +343,7 @@ describe('buildResultFromVerification', () => {
     const verification = {
       passed: true,
       missingFields: [],
+      telemetryMissingFields: [],
       verifierFailure: false,
       trace: { transcript: '' },
       agentData: {
@@ -353,6 +363,7 @@ describe('buildResultFromVerification', () => {
     const verification = {
       passed: true,
       missingFields: [],
+      telemetryMissingFields: [],
       verifierFailure: false,
       trace: { transcript: '' },
       agentData: {

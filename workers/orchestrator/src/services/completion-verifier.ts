@@ -8,7 +8,7 @@ import { buildVerificationPrompt, buildResumeSummaryPrompt } from './completion-
 // prettier-ignore
 import { callVerificationLlm, extractAndParseJson, generateResumeSummaryWithFallback } from './completion-verifier/llm-client.js';
 // prettier-ignore
-import { detectEmptyMemoryFields, validateMemoryReporting } from './completion-verifier/memory-validation.js';
+import { detectEmptyMemoryFields, validateMemoryReporting, partitionMissingFields } from './completion-verifier/memory-validation.js';
 // prettier-ignore
 import { MIN_MEANINGFUL_TRANSCRIPT_LINES, countMeaningfulTranscriptLines, detectFatalExitCode, getLast20Lines, getLast50Lines } from './completion-verifier/transcript.js';
 // prettier-ignore
@@ -18,7 +18,11 @@ export * from './completion-verifier/schemas.js';
 export * from './completion-verifier/types.js';
 export * from './completion-verifier/transcript.js';
 export * from './completion-verifier/prompt-builder.js';
-export { buildMemoryAcknowledgmentPattern } from './completion-verifier/memory-validation.js';
+export {
+  buildMemoryAcknowledgmentPattern,
+  isTelemetryField,
+  partitionMissingFields,
+} from './completion-verifier/memory-validation.js';
 
 const verifierTaskIdStorage = new AsyncLocalStorage<string>();
 
@@ -30,13 +34,20 @@ export function getVerifierTaskId(): string | null {
 function failVerdict(
   missingFields: string[],
   trace: CompletionVerifierVerdict['trace'],
-  opts: { model?: string; verifierFailure?: boolean } = {}
+  opts: {
+    model?: string;
+    verifierFailure?: boolean;
+    telemetryMissingFields?: string[];
+    agentData?: CompletionVerifierVerdict['agentData'];
+  } = {}
 ): CompletionVerifierVerdict {
   return {
     passed: false,
     missingFields,
+    telemetryMissingFields: opts.telemetryMissingFields ?? [],
     verifierFailure: opts.verifierFailure ?? false,
     ...(opts.model !== undefined && { succeededModelName: opts.model }),
+    ...(opts.agentData !== undefined && { agentData: opts.agentData }),
     trace,
   };
 }
@@ -113,9 +124,13 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
       const trace = { transcript, prompt, response: llmResult.error.content };
       if (llmResult.error.kind === 'schema-failed') {
         const { modelName: model, missingFields } = llmResult.error;
+        const parts = partitionMissingFields(missingFields);
         // prettier-ignore
-        logger.error({ taskId, attempt, model, missingFields }, 'Completion verifier: all models failed schema validation');
-        return failVerdict(missingFields, trace, { model });
+        logger.error({ taskId, attempt, model, missingFields: parts.blocking, telemetryMissingFields: parts.telemetry }, 'Completion verifier: all models failed schema validation');
+        return failVerdict(parts.blocking, trace, {
+          model,
+          telemetryMissingFields: parts.telemetry,
+        });
       }
       // prettier-ignore
       logger.error({ taskId, attempt }, 'Completion verifier returned no response (all models failed)');
@@ -124,15 +139,21 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
 
     const { content: response, modelName: model, parsed } = llmResult.value; // @allow-result-access -- guarded by if (!llmResult.ok) early return above
     const trace = { transcript, prompt, response };
+    // [INT-1461] Compute agentData up-front so we can thread it through the memory-failure
+    // return sites; decideCompletionOutcome needs agentData to accept tier=optional verdicts.
+    const agentData = toAgentData(agentType, parsed);
 
     const emptyMemoryFields = detectEmptyMemoryFields(agentType, executionMemoryContext, parsed);
     if (emptyMemoryFields !== undefined) {
       // prettier-ignore
       logger.warn({ taskId, attempt, model, emptyMemoryFields }, 'Memory fields are empty despite memories being injected');
-      return failVerdict(emptyMemoryFields, trace, { model });
+      return failVerdict([], trace, {
+        model,
+        telemetryMissingFields: emptyMemoryFields,
+        agentData,
+      });
     }
 
-    const agentData = toAgentData(agentType, parsed);
     const memoryValidation =
       executionMemoryContext !== undefined
         ? validateMemoryReporting(rawLogs, executionMemoryContext, agentData)
@@ -144,12 +165,16 @@ export class OrchestratorCompletionVerifier implements CompletionVerifier {
     if (memoryValidation.failures.length > 0) {
       // prettier-ignore
       logger.warn({ taskId, attempt, model, memoryValidationFailures: memoryValidation.failures }, 'Completion verifier memory validation failed');
-      return failVerdict(memoryValidation.failures, trace, { model });
+      return failVerdict([], trace, {
+        model,
+        telemetryMissingFields: memoryValidation.failures,
+        agentData,
+      });
     }
 
     logger.info({ taskId, attempt, model, agentData }, 'Completion verifier parsed verdict');
     // prettier-ignore
-    return { passed: true, missingFields: [], verifierFailure: false, agentData, succeededModelName: model, trace };
+    return { passed: true, missingFields: [], telemetryMissingFields: [], verifierFailure: false, agentData, succeededModelName: model, trace };
   }
 
   private async doExtractResumeSummary(

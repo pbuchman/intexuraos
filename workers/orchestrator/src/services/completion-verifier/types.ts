@@ -29,7 +29,10 @@ export interface CompletionVerifierTrace {
 export interface CompletionVerifierVerdict {
   /** True when LLM extraction succeeded and all Zod fields were present — does NOT mean the agent completed its task. */
   passed: boolean;
+  /** Blocking fields — deliverable contract (e.g. gh_pr_url, review_comments_posted). Non-empty → task cannot succeed regardless of worker tier. */
   missingFields: string[];
+  /** Telemetry fields — memory acknowledgment / reporting. Non-empty → task may still succeed when worker tier is 'optional'. */
+  telemetryMissingFields: string[];
   verifierFailure: boolean;
   agentData?:
     | PlanningAgentData
