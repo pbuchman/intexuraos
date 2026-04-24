@@ -1,0 +1,20 @@
+EXECUTION_AGENT_FINAL:
+- Outcome: implemented
+- PR: https://github.com/pbuchman/intexuraos/pull/1939
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/pbuchman/issue/INT-1468
+- Review iterations: 2
+- execution_memory_ids_used: mem_174538d5-7eb1-47ac-8954-2e00688624ec,mem_7325cc43-2e66-476e-bb49-148b328b2c6e,mem_d5d6b156-ea42-419a-a428-d73ea27d08c1
+- execution_memory_ids_rejected: none
+- execution_memory_usage_summary: Applied all three retrieved memories — retry-delay clarity (scheduler-driven natural delay, no per-task timers), rate-limit cooloff clarity (distinct retry_after_cooloff verdict with absolute UTC from dedicated parser plus single explicit 60-min fallback), and codebase-audit-before-plan (verified DispatchSchedule type ergonomics, existing drain/TTL/PR-lock behavior, queue API shape, user-service timezone fetch signature, and web form patterns before each subtask).
+- superpowers_subagent_driven_dev_used: 1
+- superpowers_requesting_code_review_used: 1
+- trivial_task: 0
+- subagents: Task 1 implementer (code-agent domain/repo/serializer for DispatchSchedule); Task 1 spec reviewer; Task 1 code-reviewer; Task 2 implementer (/code/submit scheduledDispatch); Task 2 spec+quality reviewer; Task 3 implementer (drainTaskQueue schedule-awareness + max-size scan); Task 3 spec+quality reviewer; Task 4 implementer (cooloff prompt + triage integration + autoRetryTask dispatchSchedule); Task 4 classifier regex fix; Task 4 spec+quality reviewer; Task 5 implementer (web scheduling UX + ConfirmSubmitModal); Task 5 spec+quality reviewer; Task 6 implementer (queue API fields + DispatchQueuePage rendering); Task 6 spec+quality reviewer; final holistic reviewer (superpowers:code-reviewer); fix-round implementer; post-fix reviewer.
+- Skill sequence proof: Invoked superpowers:using-superpowers at session start → superpowers:subagent-driven-development to execute the 6-task plan (each task followed the per-task TDD + spec-review + quality-review loop until APPROVED) → ran pnpm run ci:tracked (green) → invoked superpowers:requesting-code-review for final holistic review (0 Critical, 4 Important, 6 Minor) → dispatched fix round → re-reviewed (APPROVED with zero remaining issues) → committed + pushed + opened PR.
+- Summary:
+* Added DispatchSchedule metadata on CodeTask, persisted via Firestore serializer, with user_scheduled and retry_cooloff sources (plus derivedBy, timezone, sourceText, derivedFromTaskId).
+* POST /code/submit accepts scheduledDispatch for execution tasks (rejecting planning + past + invalid ISO with 400); drainTaskQueue scans up to queue.maxSize, skips future-scheduled tasks without mutating queuedAt, and uses max(queuedAt, notBeforeAt) for TTL.
+* New cooloffRetryPrompt + triage integration fetches logs/timezone/LLM only for retry_after_cooloff; fallback writes one absolute +60m notBeforeAt marked derivedBy='fallback'; classifyFailure regex now matches Claude usage-limit wording.
+* Web: collapsible execution-only "Schedule this execution" toggle with datetime-local input (refreshed min via useTimeTick), past-time validation, live preview, ConfirmSubmitModal schedule row, and DispatchQueuePage second time row with dispatchScheduleText.
+* pnpm run ci:tracked passed (typecheck, lint, 15993 tests, static validation, build, format) — PR #1939 opened against development.

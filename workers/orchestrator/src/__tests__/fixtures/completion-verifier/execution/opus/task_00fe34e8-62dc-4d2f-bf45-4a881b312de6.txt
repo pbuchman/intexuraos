@@ -1,0 +1,20 @@
+EXECUTION_AGENT_FINAL:
+- Outcome: implemented
+- PR: https://github.com/pbuchman/intexuraos/pull/1923
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/pbuchman/issue/INT-1460/investigate-cause-of-failures-in-recent-code-tasks
+- Review iterations: 3 (spec compliance PASS, code quality found 3 must-fix + 1 nit → fixed, final holistic review PASS with zero blockers)
+- execution_memory_ids_used: mem_38685eda-9500-4d12-a4b8-d14a3cf16da6,mem_fad706b7-90a2-44bd-9dc3-b28b5d312089,mem_fe85bc13-208d-4be4-a6f2-c481b6c01e7c
+- execution_memory_ids_rejected: none
+- execution_memory_usage_summary: All three memories directly informed the fix — the log-source-mismatch memories shaped the root-cause narrative and the realistic-raw-log integration fixture, while the tiered-completion-verification memory justified the short-circuit on a successful `TaskResult.prUrl` (deliverable authoritative over log heuristics).
+- superpowers_subagent_driven_dev_used: 1
+- superpowers_requesting_code_review_used: 1
+- trivial_task: 0
+- subagents: implementer (general-purpose, role: TDD implementation of 3 classifier tasks), spec-reviewer (general-purpose, role: plan conformance check), code-quality-reviewer (general-purpose, role: strict-mode/coverage/audit review), fix-implementer (general-purpose, role: apply 4 review fixes), final-holistic-reviewer (superpowers:code-reviewer, role: pre-PR sanity pass)
+- Skill sequence proof: superpowers:subagent-driven-development invoked first (before any implementation; dispatched implementer + spec reviewer + quality reviewer + fix implementer per its two-stage review contract); superpowers:requesting-code-review invoked last (after the 4th fix commit, before push/PR) — visible in message order: subagent-driven-development skill block → 4 implementer/reviewer subagents → requesting-code-review skill block → final holistic reviewer subagent → git push → gh pr create.
+- Summary:
+  * Fixed WORKER_INFRA_FAILURE regression where `classifyAttempt` searched raw `getWorkerLogs()` for `[claude]`/`[tool]` prefixes that are only added downstream by `claude-log-processor.ts`, causing every successful post-#1913 attempt to be mis-classified as `empty_transcript`.
+  * Broadened classifier to detect stream-JSON `system/init` and `assistant`/`tool_use` events (the shapes that actually appear in raw logs) and added a short-circuit on successful `TaskResult.prUrl`; kept the legacy prefix checks as belt-and-suspenders.
+  * TDD: committed a red integration test with a realistic raw-stream fixture (1 commit), then the stream-JSON signal broadening (1 commit), then the `prUrl` short-circuit with `exactOptional`-safe plumbing through `task-dispatcher.ts` (1 commit), then review-fix commit tightening the input type and covering null/empty/tool_use branches (1 commit) plus a prettier-format commit.
+  * Tests: 6 new tests in `classify-attempt.test.ts` (now 15 total) + new `classify-attempt-integration.test.ts`; full `pnpm run ci:tracked` green (15517 tests).
+  * Flagged `getLast50ClaudeLines` in `completion-verifier/transcript.ts:30` as the same pattern (non-blocking, webhook summary only) for a scoped follow-up PR, per plan §5; documented in PR body and Linear comment.

@@ -1,0 +1,20 @@
+EXECUTION_AGENT_FINAL:
+- Outcome: implemented
+- PR: https://github.com/pbuchman/intexuraos/pull/1895
+- CI evidence: pnpm run ci:tracked successful
+- Linear issue: https://linear.app/pbuchman/issue/INT-1424/prevent-automatic-merging-of-code-tasks-to-allow-for-manual-review
+- Review iterations: 1
+- execution_memory_ids_used: mem_26d588f3-c12e-4ffd-9c02-fded950e5f68,mem_b2f0fecf-1329-4af9-9d13-99220c3cfbd6,mem_635bf396-efdf-41a2-8f6d-2b8ac8eadb84
+- execution_memory_ids_rejected: none
+- execution_memory_usage_summary: Memory [1] framed the exact goal (keep planning PR open after review pass) and the webhook-handler scope; memory [2] drove a pre-push verification that the diff addresses the issue's acceptance criteria; memory [3] drove verification that the PR contains real code changes to webhookRoutes.ts and tests, not just doc updates.
+- superpowers_subagent_driven_dev_used: 1
+- superpowers_requesting_code_review_used: 1
+- trivial_task: 0
+- subagents: implementer (general-purpose) — scope: execute 3-file plan (webhookRoutes.ts, webhooks.test.ts, INT-1282 plan doc), run CI; spec-reviewer (general-purpose) — scope: verify diff matches plan acceptance criteria exactly; code-quality reviewer (superpowers:code-reviewer) — scope: final holistic review of all 3 commits
+- Skill sequence proof: Skill tool invoked "superpowers:subagent-driven-development" first (returned skill content with implementer/spec-reviewer flow), subagents executed implementation + spec review, then Skill tool invoked "superpowers:requesting-code-review" which dispatched the superpowers:code-reviewer subagent for the final pass, and only after its "Ready to proceed" verdict was the PR created.
+- Summary:
+  * Removed the `mergePlanPr` call and its `fetchGitHubToken` + try/catch block from the planning sub-branch in `apps/code-agent/src/routes/webhookRoutes.ts`; planning branch now only logs and lets the plan PR stay open.
+  * Dropped the now-unused `mergePlanPr` import; `fetchGitHubToken` import retained (still used in the execution-advance path).
+  * Replaced the `describe('plan PR auto-merge on review pass')` test block with `describe('plan PR NOT merged on review pass')` (3 cases) asserting `mergePullRequest` is never called and `ready-to-merge` is never added on plan reviews.
+  * Added a reversal notice blockquote at the top of `docs/plans/INT-1282-auto-merge-plan-pr-on-review-pass.md` pointing at the INT-1424 plan.
+  * Verified: targeted tests 3/3 pass, full webhooks.test.ts 235 pass, workspace verify for code-agent green, `pnpm run ci:tracked` green — PR #1895 opened against `development`.
