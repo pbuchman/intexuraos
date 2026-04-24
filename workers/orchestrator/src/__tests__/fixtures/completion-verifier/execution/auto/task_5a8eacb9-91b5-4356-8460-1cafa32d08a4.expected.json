@@ -9,9 +9,7 @@
       "mem_ead942e6-2f78-4c37-aa16-2670d91a6a43",
       "mem_16dbe3ce-0c2e-42a1-94d6-a020412575fc"
     ],
-    "memory_ids_rejected": [
-      "mem_e97d3f6f-3979-44af-8577-bbe9e43bc3fb"
-    ],
+    "memory_ids_rejected": ["mem_e97d3f6f-3979-44af-8577-bbe9e43bc3fb"],
     "memory_usage_summary": "mem_ead942e6 and mem_16dbe3ce guided the importance-flag placement — interactive-button convention was intentionally overridden on `notifyTaskStarted` because dispatch is not an actionable moment, while `notifyTaskComplete` now carries the flag as a terminal \"ready to merge\" state; mem_e97d3f6f (queued notification removal) did not apply since `notifyTaskQueued` is out of scope.",
     "superpowers_subagent_driven_dev_used": true,
     "superpowers_requesting_code_review_used": true,

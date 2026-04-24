@@ -9,9 +9,7 @@
       "mem_1f7d0a83-aef8-4652-8418-32dcad36a7d5",
       "mem_6aaf7125-8e46-48a4-90ae-69f019ce007d"
     ],
-    "memory_ids_rejected": [
-      "mem_61c40e7c-a315-4800-a054-ec94160ddbca"
-    ],
+    "memory_ids_rejected": ["mem_61c40e7c-a315-4800-a054-ec94160ddbca"],
     "memory_usage_summary": "Applied the \"thin facade\" pattern from both facade memories — extracted private helpers into sibling modules under gitHubDispatch/ and reduced the main file to a 45-line facade while preserving every public signature; PR-state-validation memory was not applicable to this structural refactor.",
     "superpowers_subagent_driven_dev_used": false,
     "superpowers_requesting_code_review_used": false,

@@ -9,9 +9,7 @@
       "mem_4b61618c-9951-40aa-b7a9-b007cea9ca97",
       "mem_bd838570-5194-4f6f-ae63-b676b0f7dba9"
     ],
-    "memory_ids_rejected": [
-      "mem_f1559458-c36f-499d-a02c-1cb8b7a5f141"
-    ],
+    "memory_ids_rejected": ["mem_f1559458-c36f-499d-a02c-1cb8b7a5f141"],
     "memory_usage_summary": "Applied the \"Superficial Refactoring\" memory by enforcing real deduplication (`fetchLinearAgent` util + `mapSilentFetchError` helper) rather than just shuffling code; applied the \"Unit Test Coverage\" memory by adding a dedicated `linear-fetch-util.test.ts` with 14 nock-based cases covering all 5 result kinds instead of relying solely on the existing integration suite.",
     "superpowers_subagent_driven_dev_used": true,
     "superpowers_requesting_code_review_used": true,
