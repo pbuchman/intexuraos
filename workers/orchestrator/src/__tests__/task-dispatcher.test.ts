@@ -2574,7 +2574,7 @@ describe('TaskDispatcher', () => {
       expect(sentCall).toBeDefined();
     });
 
-    it('[INT-1461] tier=required worker with only telemetry missing → retries (not accepted)', async () => {
+    it('[INT-1461/INT-1470] tier=required worker with only telemetry missing → accepts with telemetryAccepted=true (was: retry 3x then fail)', async () => {
       // auto is telemetryExpectation='required'. Same telemetry-only failure must retry, not accept.
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
@@ -2617,10 +2617,10 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
       const task = await agentDispatcher.getTask('auto-tier-required-retry');
-      // maxAttempts=1 in singleAttemptCompletionControl, so we finalize failed on the first
-      // attempt rather than retry — the point is that status is NOT 'completed'.
-      expect(task?.status).toBe('failed');
-      expect(task?.verificationHistory?.at(-1)?.telemetryAccepted).toBeUndefined();
+      // [INT-1470] Policy flip: tier=required + telemetry-only miss now accepts
+      // with telemetryAccepted=true (previously retried 3x then failed).
+      expect(task?.status).toBe('completed');
+      expect(task?.verificationHistory?.at(-1)?.telemetryAccepted).toBe(true);
     });
 
     it('buildResultFromVerification returns base result when agentData is undefined', () => {
@@ -2656,28 +2656,32 @@ describe('TaskDispatcher', () => {
         buildResultFromVerification: (
           task: Task,
           gitResult: TaskResult | undefined, // @allow-undefined-type -- function parameter type in as-cast block cannot use ?: syntax
-          verification: CompletionVerifierVerdict
+          verification: CompletionVerifierVerdict,
+          agentType: 'remediation'
         ) => TaskResult;
       };
       const fakeTask = { taskId: 'remediation-memory', linearIssueLabels: [] } as unknown as Task;
       const gitResult: TaskResult = { branch: 'task/remediation-memory' };
-      const result = internal.buildResultFromVerification(fakeTask, gitResult, {
-        agentData: {
-          agentType: 'remediation',
-          outcome: 'implemented',
-          gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
-          memory_ids_used: 'mem_142',
-          memory_ids_rejected: 'mem_188',
-          memory_usage_summary: 'Used remediation memory to keep the fix scoped.',
-          requires_re_review: '1',
-          summary: 'Done.',
+      const result = internal.buildResultFromVerification(
+        fakeTask,
+        gitResult,
+        {
+          kind: 'parsed',
+          data: {
+            outcome: 'implemented',
+            pr: 'https://github.com/pbuchman/intexuraos/pull/123',
+            memory_ids_used: ['mem_142'],
+            memory_ids_rejected: ['mem_188'],
+            memory_usage_summary: 'Used remediation memory to keep the fix scoped.',
+            requires_re_review: true,
+            summary: 'Done.',
+          },
+          missingRequired: [],
+          telemetryMissing: [],
+          warnings: [],
         },
-        passed: true,
-        missingFields: [],
-        telemetryMissingFields: [],
-        verifierFailure: false,
-        trace: dummyTrace,
-      });
+        'remediation'
+      );
 
       expect(result).toMatchObject({
         branch: 'task/remediation-memory',
@@ -3493,12 +3497,10 @@ describe('TaskDispatcher', () => {
 
       const task = await verifierFailureDispatcher.getTask('verifier-failure-task');
       expect(task?.status).toBe('failed');
-      // attemptCount is 2 because verifier retries once (attempt + 1)
-      expect(task?.attemptCount).toBe(2);
-      expect(task?.verificationHistory?.[0]?.verifierFailure).toBe(true);
-      // Verifier retry also recorded
-      expect(task?.verificationHistory?.[1]?.verifierFailure).toBe(true);
-      // createWorker called once (only task worker, not the verifier retry)
+      // [INT-1470] Verifier-LLM retries are gone — the dispatcher finalizes
+      // immediately on a verifier-failure signal (routed to TASK_RUNTIME_HARD_ERROR).
+      expect(task?.attemptCount).toBe(1);
+      // createWorker called once (no verifier retry)
       expect(mockIsolationProvider.createWorker).toHaveBeenCalledTimes(1);
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -3508,8 +3510,7 @@ describe('TaskDispatcher', () => {
               prUrl: 'https://github.com/pbuchman/intexuraos/pull/1234',
             }),
             error: expect.objectContaining({
-              code: 'TASK_COMPLETION_VERIFIER_FAILED',
-              message: expect.stringContaining('Completion verifier unavailable'),
+              code: 'TASK_RUNTIME_HARD_ERROR',
             }),
           }),
         })
@@ -4707,7 +4708,8 @@ describe('TaskDispatcher', () => {
       vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
-      // First call: attempt defaults to 1, maxAttempts defaults to 5 (fallback)
+      // [INT-1470] Verifier-LLM retries are gone — verify is called once with
+      // default fallback metadata (attempt=1, maxAttempts=5).
       expect(verify).toHaveBeenCalledWith(
         expect.objectContaining({
           attempt: 1,
@@ -4715,19 +4717,10 @@ describe('TaskDispatcher', () => {
           taskId: 'fallback-metadata-task',
         })
       );
-      // Second call: Gemini retry at attempt 2
-      expect(verify).toHaveBeenCalledWith(
-        expect.objectContaining({
-          attempt: 2,
-          maxAttempts: 5,
-          taskId: 'fallback-metadata-task',
-        })
-      );
+      expect(verify).toHaveBeenCalledTimes(1);
 
       const finalTask = await fallbackDispatcher.getTask('fallback-metadata-task');
       expect(finalTask?.status).toBe('failed');
-      // 2 records: initial verifier failure + one Gemini retry (also failed)
-      expect(finalTask?.verificationHistory).toHaveLength(2);
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
@@ -5553,24 +5546,22 @@ describe('TaskDispatcher', () => {
     ) => Promise<void>;
 
     const executionVerification: CompletionVerifierVerdict = {
-      passed: true,
-      missingFields: [],
-      telemetryMissingFields: [],
-      verifierFailure: false,
-      trace: dummyTrace,
-      agentData: {
-        agentType: 'execution' as const,
-        outcome: 'implemented' as const,
-        superpowers_subagent_driven_dev: 'used',
-        superpowers_requesting_code_review: 'used',
-        gh_pr_url: 'https://github.com/pbuchman/intexuraos/pull/123',
+      kind: 'parsed',
+      data: {
+        outcome: 'implemented',
+        superpowers_subagent_driven_dev_used: true,
+        superpowers_requesting_code_review_used: true,
+        pr: 'https://github.com/pbuchman/intexuraos/pull/123',
         failure_reason: '',
-        memory_ids_used: 'mem_142',
-        memory_ids_rejected: '',
+        memory_ids_used: ['mem_142'],
+        memory_ids_rejected: [],
         memory_usage_summary:
           'Used the execution memory to align the implementation with prior patterns.',
         summary: 'Done.',
       },
+      missingRequired: [],
+      telemetryMissing: [],
+      warnings: [],
     };
 
     const mockTranscriptEntry: SessionJsonlEntry = {
@@ -5583,6 +5574,7 @@ describe('TaskDispatcher', () => {
 
     const mockTask = {
       taskId: 'compliance-val-test',
+      agentType: 'execution',
       repository: 'pbuchman/intexuraos',
       worktreePath: '/tmp/worktrees/compliance-val-test',
       linearIssueLabels: [],
@@ -5813,33 +5805,34 @@ describe('TaskDispatcher', () => {
       );
 
       const planningVerification: CompletionVerifierVerdict = {
-        passed: true,
-        missingFields: [],
-        telemetryMissingFields: [],
-        verifierFailure: false,
-        trace: dummyTrace,
-        agentData: {
-          agentType: 'planning' as const,
+        kind: 'parsed',
+        data: {
           outcome: 'planned',
-          superpowers_writing_plans: 'used',
-          linear_url: '',
-          is_complex: '0',
-          has_plan_doc: '0',
-          subtask_urls: '',
-          pr_url: '',
-          memory_ids_used: '',
-          memory_ids_rejected: '',
+          superpowers_writing_plans_used: true,
+          linear_issue: '',
+          complex_task: false,
+          plan_doc: false,
+          subtask_urls: [],
+          plan_pr: '',
+          memory_ids_used: [],
+          memory_ids_rejected: [],
           memory_usage_summary: '',
           summary: 'Planned',
-          unclear_clarification: '',
+          clarification_message: '',
         },
+        missingRequired: [],
+        telemetryMissing: [],
+        warnings: [],
       };
 
       const internal = complianceDispatcher as unknown as {
         prepareComplianceValidationInput: PrepareComplianceValidationInput;
       };
+      // [INT-1470] agent-type gating now reads from task.agentType, not the
+      // verdict's agentData. The guard still applies — a planning task must
+      // not run execution compliance even if the verdict is well-formed.
       const result = await internal.prepareComplianceValidationInput(
-        mockTask,
+        { ...mockTask, agentType: 'planning' } as Task,
         mockFinalResult,
         planningVerification
       );
