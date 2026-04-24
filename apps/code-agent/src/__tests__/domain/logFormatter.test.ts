@@ -553,6 +553,46 @@ describe('formatLogChunk', () => {
       expect(result[0]?.text).toBe('  \u2717 File has not been read yet. Read it first before writing to it.');
       expect(result[0]?.text).not.toContain('<tool_use_error>');
     });
+
+    it('error tool_result with empty content after stripping returns nothing', () => {
+      const json = JSON.stringify({
+        type: 'tool_result',
+        content: '<tool_use_error></tool_use_error>',
+        is_error: true
+      });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result).toEqual([]);
+    });
+
+    it('error tool_result multi-line content indents continuation lines', () => {
+      const json = JSON.stringify({
+        type: 'tool_result',
+        content: 'first error line\nsecond error line\nthird error line',
+        is_error: true
+      });
+      const result = formatLogChunk(json, 0, ts());
+      expect(result[0]?.text).toBe('  \u2717 first error line\n    second error line\n    third error line');
+    });
+
+    it('error tool_result with >2048 chars and >50 lines is head+tail truncated', () => {
+      const lineCount = 60;
+      const lines: string[] = [];
+      for (let i = 0; i < lineCount; i++) {
+        // each line ~50 chars \u2192 well over 2048 total
+        lines.push(`error-line-${String(i)}-${'x'.repeat(40)}`);
+      }
+      const json = JSON.stringify({
+        type: 'tool_result',
+        content: lines.join('\n'),
+        is_error: true
+      });
+      const result = formatLogChunk(json, 0, ts());
+      const text = result[0]?.text ?? '';
+      expect(text).toContain('[... 10 lines omitted ...]');
+      expect(text.startsWith('  \u2717 error-line-0-')).toBe(true);
+      expect(text).toContain('error-line-59-');
+      expect(text).not.toContain('error-line-10-');
+    });
   });
 
   describe('user messages (tool results)', () => {
