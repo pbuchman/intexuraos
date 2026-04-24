@@ -184,9 +184,7 @@ export function summarizeJsonArray(content: string): string | undefined {
   } catch {
     return undefined;
   }
-  /* v8 ignore start -- ts-type: cannot craft input that bypasses the caller's startsWith('[') + length>=200 pre-filter while still producing a non-array or empty-array from JSON.parse — empty '[]' is 2 chars (fails length floor), non-array JSON fails the bracket-prefix guard, so this branch is unreachable from any test input @preserve */
   if (!Array.isArray(arr) || arr.length === 0) return undefined;
-  /* v8 ignore stop @preserve */
 
   const first = arr[0];
   if (typeof first !== 'object' || first === null) return undefined;
