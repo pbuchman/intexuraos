@@ -76,6 +76,45 @@ describe('locateFinalBlock', () => {
     expect(block).not.toBeNull();
     expect(block).toContain('- Outcome: implemented');
   });
+
+  it('terminates the body at a closing code fence (```)', () => {
+    // [INT-1470 coverage] Exercise the code-fence end-of-block detector in
+    // locateFinalBlock. Agents sometimes wrap the AGENT_FINAL block in a
+    // fenced section; anything after the closing ``` must NOT bleed into
+    // the body.
+    const txt = [
+      '```',
+      'EXECUTION_AGENT_FINAL:',
+      '- Outcome: implemented',
+      '- pr: https://github.com/x/y/pull/1',
+      '- summary: ok',
+      '```',
+      'trailing prose that must be excluded',
+    ].join('\n');
+    const block = locateFinalBlock(txt, 'EXECUTION_AGENT_FINAL:');
+    expect(block).not.toBeNull();
+    expect(block).toContain('- Outcome: implemented');
+    expect(block).not.toContain('trailing prose');
+  });
+
+  it('terminates the body when a different AGENT_FINAL marker starts', () => {
+    // [INT-1470 coverage] If the transcript contains a PULL_REQUEST_AGENT_FINAL
+    // block immediately after an EXECUTION_AGENT_FINAL block, the body of
+    // the first must stop where the second begins — not bleed through.
+    const txt = [
+      'EXECUTION_AGENT_FINAL:',
+      '- Outcome: implemented',
+      '- pr: https://github.com/x/y/pull/1',
+      '- summary: ok',
+      'PULL_REQUEST_AGENT_FINAL:',
+      '- pr_url: https://github.com/x/y/pull/2',
+    ].join('\n');
+    const block = locateFinalBlock(txt, 'EXECUTION_AGENT_FINAL:');
+    expect(block).not.toBeNull();
+    expect(block).toContain('- Outcome: implemented');
+    expect(block).not.toContain('PULL_REQUEST_AGENT_FINAL');
+    expect(block).not.toContain('pr_url');
+  });
 });
 
 describe('parseKeyValues', () => {
@@ -94,11 +133,9 @@ describe('parseKeyValues', () => {
   });
 
   it('preserves case in keys (does not normalize)', () => {
-    const block = [
-      'EXECUTION_AGENT_FINAL:',
-      '- Outcome: implemented',
-      '- CI evidence: ok',
-    ].join('\n');
+    const block = ['EXECUTION_AGENT_FINAL:', '- Outcome: implemented', '- CI evidence: ok'].join(
+      '\n'
+    );
     expect(parseKeyValues(block)).toHaveProperty('CI evidence', 'ok');
     expect(parseKeyValues(block)).toHaveProperty('Outcome', 'implemented');
   });
@@ -111,9 +148,9 @@ describe('parseKeyValues', () => {
       '- summary: _ok_',
     ].join('\n');
     const parsed = parseKeyValues(block);
-    expect(parsed.Outcome).toBe('implemented');
-    expect(parsed.pr).toBe('https://github.com/x/y/pull/1');
-    expect(parsed.summary).toBe('ok');
+    expect(parsed['Outcome']).toBe('implemented');
+    expect(parsed['pr']).toBe('https://github.com/x/y/pull/1');
+    expect(parsed['summary']).toBe('ok');
   });
 
   it('joins continuation lines (indented under a key) into the value', () => {
@@ -126,8 +163,8 @@ describe('parseKeyValues', () => {
       '- pr: https://github.com/x/y/pull/1',
     ].join('\n');
     const parsed = parseKeyValues(block);
-    expect(parsed.summary).toBe('* first bullet\n  * second bullet');
-    expect(parsed.pr).toBe('https://github.com/x/y/pull/1');
+    expect(parsed['summary']).toBe('* first bullet\n  * second bullet');
+    expect(parsed['pr']).toBe('https://github.com/x/y/pull/1');
   });
 
   it('treats non-key lines after a key as continuation (bullets without indent)', () => {
@@ -147,10 +184,10 @@ describe('parseKeyValues', () => {
       '- pr: https://github.com/x/y/pull/1',
     ].join('\n');
     const parsed = parseKeyValues(block);
-    expect(parsed.Outcome).toBe('implemented');
-    expect(parsed.Summary).toContain('bullet 1');
-    expect(parsed.Summary).toContain('bullet 2');
-    expect(parsed.pr).toBe('https://github.com/x/y/pull/1');
+    expect(parsed['Outcome']).toBe('implemented');
+    expect(parsed['Summary']).toContain('bullet 1');
+    expect(parsed['Summary']).toContain('bullet 2');
+    expect(parsed['pr']).toBe('https://github.com/x/y/pull/1');
   });
 
   it('handles the minimax bold-every-value fixture', () => {
@@ -158,9 +195,9 @@ describe('parseKeyValues', () => {
     const block = locateFinalBlock(txt, 'EXECUTION_AGENT_FINAL:');
     expect(block).not.toBeNull();
     const parsed = parseKeyValues(block as string);
-    expect(parsed.Outcome).toBe('implemented');
-    expect(parsed.PR).toBe('https://github.com/pbuchman/intexuraos/pull/1925');
-    expect(parsed.execution_memory_ids_used).toMatch(/^mem_463bb567/);
+    expect(parsed['Outcome']).toBe('implemented');
+    expect(parsed['PR']).toBe('https://github.com/pbuchman/intexuraos/pull/1925');
+    expect(parsed['execution_memory_ids_used']).toMatch(/^mem_463bb567/);
   });
 });
 
@@ -177,9 +214,9 @@ describe('coerceFields', () => {
     const { data, missingRequired, warnings } = coerceFields(record, AGENT_CONTRACTS.execution);
     expect(missingRequired).toEqual([]);
     expect(warnings).toEqual([]);
-    expect(data.memory_ids_used).toEqual([]);
-    expect(data.memory_ids_rejected).toEqual([]);
-    expect(data.memory_usage_summary).toBe('');
+    expect(data['memory_ids_used']).toEqual([]);
+    expect(data['memory_ids_rejected']).toEqual([]);
+    expect(data['memory_usage_summary']).toBe('');
   });
 
   it('reports missing required fields when absent', () => {
@@ -203,7 +240,7 @@ describe('coerceFields', () => {
       execution_memory_ids_rejected: 'none',
     };
     const { data, warnings } = coerceFields(record, AGENT_CONTRACTS.execution);
-    expect(data.memory_ids_used).toEqual(['mem_a', 'mem_b']);
+    expect(data['memory_ids_used']).toEqual(['mem_a', 'mem_b']);
     expect(
       warnings.some((w) => w.includes('execution_memory_ids_used') && w.includes('alias'))
     ).toBe(true);
@@ -240,7 +277,7 @@ describe('coerceFields', () => {
   });
 
   it('coerces bool01 from multiple accepted formats', () => {
-    const cases: Array<[string, boolean]> = [
+    const cases: [string, boolean][] = [
       ['0', false],
       ['1', true],
       ['yes', true],
@@ -259,7 +296,7 @@ describe('coerceFields', () => {
         trivial_task: input,
       };
       const { data } = coerceFields(record, AGENT_CONTRACTS.execution);
-      expect(data.trivial_task, `input ${input}`).toBe(expected);
+      expect(data['trivial_task'], `input ${input}`).toBe(expected);
     }
   });
 
@@ -272,7 +309,7 @@ describe('coerceFields', () => {
     };
     const { data, warnings, missingRequired } = coerceFields(record, AGENT_CONTRACTS.execution);
     expect(missingRequired).toEqual([]);
-    expect(data.review_iterations).toBeNull();
+    expect(data['review_iterations']).toBeNull();
     expect(warnings.some((w) => w.includes('review_iterations'))).toBe(true);
   });
 
@@ -284,7 +321,63 @@ describe('coerceFields', () => {
     };
     const { data, missingRequired } = coerceFields(record, AGENT_CONTRACTS.execution);
     expect(missingRequired).toEqual([]);
-    expect(data.outcome).toBe('implemented');
+    expect(data['outcome']).toBe('implemented');
+  });
+
+  it('[INT-1470 coverage] warns (not fails) when optional url field is non-http', () => {
+    // execution.linear_issue is optional kind='url'. Non-http value must
+    // warn but not push into missingRequired.
+    const record = {
+      outcome: 'implemented',
+      pr: 'https://github.com/x/y/pull/1',
+      summary: 'ok',
+      linear_issue: 'not-a-url',
+    };
+    const { missingRequired, warnings, data } = coerceFields(record, AGENT_CONTRACTS.execution);
+    expect(missingRequired).not.toContain('linear_issue');
+    expect(warnings.some((w) => w.includes('linear_issue') && w.includes('not an http'))).toBe(
+      true
+    );
+    expect(data['linear_issue']).toBe('');
+  });
+
+  it('[INT-1470 coverage] reports required enum in missingRequired when value is unknown', () => {
+    // execution.outcome is a required enum. A value outside {implemented,
+    // already_completed, failed} must push into missingRequired (not just warn).
+    const record = {
+      outcome: 'bogus-outcome',
+      pr: 'https://github.com/x/y/pull/1',
+      summary: 'ok',
+    };
+    const { missingRequired, data } = coerceFields(record, AGENT_CONTRACTS.execution);
+    expect(missingRequired).toContain('outcome');
+    expect(data['outcome']).toBe('');
+  });
+
+  it('[INT-1470 coverage] uses canonical execution pr exemption when outcome=failed via Outcome (capital O) key', () => {
+    // Exercise the `record['Outcome']` fallback arm in the
+    // `(record['outcome'] ?? record['Outcome'] ?? '').trim().toLowerCase()`
+    // expression at the execution pr-exemption check.
+    const record = {
+      Outcome: 'failed',
+      summary: 'interrupted',
+      pr: '',
+    };
+    const { missingRequired } = coerceFields(record, AGENT_CONTRACTS.execution);
+    expect(missingRequired).not.toContain('pr');
+  });
+
+  it('[INT-1470 coverage] emits unknown-key warning for keys not in the contract', () => {
+    const record = {
+      outcome: 'implemented',
+      pr: 'https://github.com/x/y/pull/1',
+      summary: 'ok',
+      totally_unknown_key: 'some value',
+    };
+    const { warnings } = coerceFields(record, AGENT_CONTRACTS.execution);
+    expect(
+      warnings.some((w) => w.includes('unknown key') && w.includes('totally_unknown_key'))
+    ).toBe(true);
   });
 
   it('fails when url field is non-http', () => {
@@ -332,7 +425,7 @@ function discoverFixtures(): FixtureDescriptor[] {
   return out;
 }
 
-const REGEN = process.env.REGEN_FIXTURES === '1';
+const REGEN = process.env['REGEN_FIXTURES'] === '1';
 
 describe('fixture golden-file parser replay', () => {
   const fixtures = discoverFixtures();
@@ -340,24 +433,21 @@ describe('fixture golden-file parser replay', () => {
     expect(fixtures.length).toBeGreaterThan(100);
   });
 
-  it.each(fixtures)(
-    '$agentType/$workerType/$taskId',
-    ({ agentType, txtPath, expectedPath }) => {
-      const contract = AGENT_CONTRACTS[agentType];
-      const transcript = readFileSync(txtPath, 'utf8');
-      const block = locateFinalBlock(transcript, contract.marker);
-      expect(block, `no block located in ${txtPath}`).not.toBeNull();
-      const record = parseKeyValues(block as string);
-      const { data, missingRequired, warnings } = coerceFields(record, contract);
-      const actual = { data, missingRequired, warnings };
+  it.each(fixtures)('$agentType/$workerType/$taskId', ({ agentType, txtPath, expectedPath }) => {
+    const contract = AGENT_CONTRACTS[agentType];
+    const transcript = readFileSync(txtPath, 'utf8');
+    const block = locateFinalBlock(transcript, contract.marker);
+    expect(block, `no block located in ${txtPath}`).not.toBeNull();
+    const record = parseKeyValues(block as string);
+    const { data, missingRequired, warnings } = coerceFields(record, contract);
+    const actual = { data, missingRequired, warnings };
 
-      if (REGEN || !existsSync(expectedPath)) {
-        writeFileSync(expectedPath, JSON.stringify(actual, null, 2) + '\n');
-      }
-      const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as typeof actual;
-      expect(actual).toEqual(expected);
+    if (REGEN || !existsSync(expectedPath)) {
+      writeFileSync(expectedPath, JSON.stringify(actual, null, 2) + '\n');
     }
-  );
+    const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as typeof actual;
+    expect(actual).toEqual(expected);
+  });
 });
 
 describe('negative fixtures', () => {

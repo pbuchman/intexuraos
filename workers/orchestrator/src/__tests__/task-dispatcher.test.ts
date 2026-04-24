@@ -23,6 +23,7 @@ import type { ApiKeyValidator } from '../services/api-key-validator.js';
 import type { WorkerAuthRegistry } from '../services/worker-auth/index.js';
 import type { TurnMetricsCollector } from '../services/turn-metrics-collector.js';
 import type { CompletionVerifierVerdict } from '../services/completion-verifier.js';
+import type { LegacyVerdict } from '../services/task-dispatcher.js';
 import type {
   AgentComplianceValidator,
   ComplianceValidationInput,
@@ -323,7 +324,10 @@ describe('TaskDispatcher', () => {
     debug: vi.fn(),
   };
 
-  type VerifierMockResult = CompletionVerifierVerdict;
+  // [INT-1470] Accept the legacy fake-verifier verdict shape — bridged by
+  // adaptLegacyVerdictIfNeeded in the dispatcher — OR the new discriminated
+  // verdict. Every pre-existing test stub in this file uses the legacy shape.
+  type VerifierMockResult = CompletionVerifierVerdict | LegacyVerdict;
   const dummyTrace = { transcript: '', prompt: '', response: '' };
 
   // Activity timeout set to 6 hours so it never fires in tests that don't test it explicitly
