@@ -8,7 +8,6 @@ import {
   pullRequestPrompt,
   buildSystemPrompt,
 } from '../services/system-prompt.js';
-import { REVIEW_SCHEMA } from '../services/completion-verifier.js';
 
 describe('executionPrompt', () => {
   it('renders non-finite execution memory scores without toFixed formatting', () => {
@@ -374,34 +373,8 @@ describe('prompt versions', () => {
   });
 });
 
-describe('REVIEW_SCHEMA', () => {
-  it('accepts review_body and review_inline_comments', () => {
-    const result = REVIEW_SCHEMA.safeParse({
-      gh_pr_url: 'https://github.com/test/repo/pull/1',
-      review_comments_posted: '3',
-      review_types: 'code_quality security',
-      summary: 'Reviewed the PR',
-      review_body: 'Overall looks good with minor issues',
-      review_inline_comments: '[{"path":"src/foo.ts","line":10,"body":"Fix this"}]',
-    });
-    expect(result.success).toBe(true);
-    if (!result.success) return;
-    expect(result.data.review_body).toBe('Overall looks good with minor issues');
-    expect(result.data.review_inline_comments).toBe(
-      '[{"path":"src/foo.ts","line":10,"body":"Fix this"}]'
-    );
-  });
-
-  it('defaults review_body and review_inline_comments to empty strings when absent', () => {
-    const result = REVIEW_SCHEMA.safeParse({
-      gh_pr_url: 'https://github.com/test/repo/pull/1',
-      review_comments_posted: '3',
-      review_types: 'code_quality security',
-      summary: 'Reviewed the PR',
-    });
-    expect(result.success).toBe(true);
-    if (!result.success) return;
-    expect(result.data.review_body).toBe('');
-    expect(result.data.review_inline_comments).toBe('');
-  });
-});
+// [INT-1470] REVIEW_SCHEMA was deleted with the LLM verifier. The review
+// agent final block no longer emits `review_body` / `review_inline_comments` —
+// those were LLM-invented fields, never in the live review prompt. TaskResult
+// retains optional slots for them for wire back-compat, but the deterministic
+// parser does not read or emit them.

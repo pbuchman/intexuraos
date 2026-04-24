@@ -110,43 +110,53 @@ describe('sendSetupFailureWebhook', () => {
   });
 });
 
-describe('buildResultFromVerification', () => {
-  it('returns the base git result untouched when agentData is absent', () => {
+describe('buildResultFromVerification [INT-1470 deterministic verdict shape]', () => {
+  function parsedVerdict(data: Record<string, unknown>): CompletionVerifierVerdict {
+    return {
+      kind: 'parsed',
+      data,
+      missingRequired: [],
+      telemetryMissing: [],
+      warnings: [],
+    };
+  }
+
+  it('returns the base git result untouched when data is empty', () => {
     const task = makeTask();
     const gitResult: TaskResult = { branch: 'feature/x', commits: 2 };
-    const verification = {
-      passed: true,
-      missingFields: [],
-      telemetryMissingFields: [],
-      verifierFailure: false,
-      trace: { transcript: '' },
-    } as unknown as CompletionVerifierVerdict;
-    const result = buildResultFromVerification(task, gitResult, verification);
+    const result = buildResultFromVerification(task, gitResult, parsedVerdict({}));
     expect(result).toEqual({ branch: 'feature/x', commits: 2 });
   });
 
-  it('overlays planning agentData fields', () => {
+  it('is a no-op when the verdict is kind=hard-error', () => {
     const task = makeTask();
-    const verification = {
-      passed: true,
-      missingFields: [],
-      telemetryMissingFields: [],
-      verifierFailure: false,
-      trace: { transcript: '' },
-      agentData: {
-        agentType: 'planning',
-        summary: 'Planned it',
+    const gitResult: TaskResult = { branch: 'feature/x' };
+    const hardError: CompletionVerifierVerdict = {
+      kind: 'hard-error',
+      code: 'TASK_RUNTIME_HARD_ERROR',
+      message: 'nope',
+    };
+    expect(buildResultFromVerification(task, gitResult, hardError)).toEqual({ branch: 'feature/x' });
+  });
+
+  it('overlays planning fields when agentType=planning', () => {
+    const task = makeTask();
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
         outcome: 'planned',
-        superpowers_writing_plans: 'used',
-        linear_url: 'https://linear.app/x',
-        is_complex: true,
-        has_plan_doc: true,
+        summary: 'Planned it',
+        superpowers_writing_plans_used: true,
+        linear_issue: 'https://linear.app/x',
+        complex_task: true,
+        plan_doc: true,
         subtask_urls: ['https://linear.app/y'],
-        pr_url: 'https://github.com/pr/1',
-        unclear_clarification: '',
-      },
-    } as unknown as CompletionVerifierVerdict;
-    const result = buildResultFromVerification(task, undefined, verification);
+        plan_pr: 'https://github.com/pr/1',
+        clarification_message: '',
+      }),
+      'planning'
+    );
     expect(result.summary).toBe('Planned it');
     expect(result.planning_outcome_label).toBe('planned');
     expect(result.planning_superpowers_writing_plans_used).toBe('1');
@@ -154,53 +164,45 @@ describe('buildResultFromVerification', () => {
     expect(result.planning_pr_url).toBe('https://github.com/pr/1');
   });
 
-  it('records planning_superpowers_writing_plans_used="0" when not used and skips empty pr_url', () => {
+  it('records planning flag as "0" when not-used and skips empty plan_pr', () => {
     const task = makeTask();
-    const verification = {
-      passed: true,
-      missingFields: [],
-      telemetryMissingFields: [],
-      verifierFailure: false,
-      trace: { transcript: '' },
-      agentData: {
-        agentType: 'planning',
-        summary: 'Planned it',
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
         outcome: 'planned',
-        superpowers_writing_plans: 'not_used',
-        linear_url: 'https://linear.app/x',
-        is_complex: false,
-        has_plan_doc: false,
+        summary: 'Planned it',
+        superpowers_writing_plans_used: false,
+        linear_issue: 'https://linear.app/x',
+        complex_task: false,
+        plan_doc: false,
         subtask_urls: [],
-        pr_url: '',
-        unclear_clarification: 'why',
-      },
-    } as unknown as CompletionVerifierVerdict;
-    const result = buildResultFromVerification(task, undefined, verification);
+        plan_pr: '',
+        clarification_message: 'why',
+      }),
+      'planning'
+    );
     expect(result.planning_superpowers_writing_plans_used).toBe('0');
     expect(result.planning_pr_url).toBeUndefined();
   });
 
-  it('overlays execution agentData and injects the linear issue URL', () => {
+  it('overlays execution fields and injects linear issue url', () => {
     const task = makeTask({ linearIssueId: 'INT-123' });
-    const verification = {
-      passed: true,
-      missingFields: [],
-      telemetryMissingFields: [],
-      verifierFailure: false,
-      trace: { transcript: '' },
-      agentData: {
-        agentType: 'execution',
-        summary: 'Shipped',
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
         outcome: 'implemented',
-        superpowers_subagent_driven_dev: 'used',
-        superpowers_requesting_code_review: 'not_used',
-        gh_pr_url: 'https://github.com/pr/9',
-        memory_ids_used: 'mem_a',
-        memory_ids_rejected: '',
+        summary: 'Shipped',
+        superpowers_subagent_driven_dev_used: true,
+        superpowers_requesting_code_review_used: false,
+        pr: 'https://github.com/pr/9',
+        memory_ids_used: ['mem_a'],
+        memory_ids_rejected: [],
         memory_usage_summary: 'one',
-      },
-    } as unknown as CompletionVerifierVerdict;
-    const result = buildResultFromVerification(task, undefined, verification);
+      }),
+      'execution'
+    );
     expect(result.prUrl).toBe('https://github.com/pr/9');
     expect(result.execution_outcome_label).toBe('implemented');
     expect(result.execution_superpowers_subagent_driven_dev_used).toBe('1');
@@ -209,53 +211,43 @@ describe('buildResultFromVerification', () => {
     expect(result.execution_memory_ids_used).toBe('mem_a');
   });
 
-  it('records execution flags as "0" when not used and skips empty gh_pr_url + missing linearIssueId', () => {
+  it('execution: records flags as "0" when not-used and skips empty pr + missing linearIssueId', () => {
     const task = makeTask(); // no linearIssueId
-    const verification = {
-      passed: true,
-      missingFields: [],
-      telemetryMissingFields: [],
-      verifierFailure: false,
-      trace: { transcript: '' },
-      agentData: {
-        agentType: 'execution',
-        summary: 'Shipped',
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
         outcome: 'failed',
-        superpowers_subagent_driven_dev: 'not_used',
-        superpowers_requesting_code_review: 'used',
-        gh_pr_url: '',
-      },
-    } as unknown as CompletionVerifierVerdict;
-    const result = buildResultFromVerification(task, undefined, verification);
+        summary: 'Shipped',
+        superpowers_subagent_driven_dev_used: false,
+        superpowers_requesting_code_review_used: true,
+        pr: '',
+      }),
+      'execution'
+    );
     expect(result.execution_superpowers_subagent_driven_dev_used).toBe('0');
     expect(result.execution_superpowers_requesting_code_review_used).toBe('1');
     expect(result.prUrl).toBeUndefined();
     expect(result.execution_linear_issue_url).toBeUndefined();
   });
 
-  it('overlays review agentData (PR url, ids, counters, optional bodies)', () => {
+  it('overlays review fields (pr, ids, counters — review_body/inline_comments no longer emitted)', () => {
     const task = makeTask();
-    const verification = {
-      passed: true,
-      missingFields: [],
-      telemetryMissingFields: [],
-      verifierFailure: false,
-      trace: { transcript: '' },
-      agentData: {
-        agentType: 'review',
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
         summary: 'Reviewed',
-        gh_pr_url: 'https://github.com/pr/42',
+        pr: 'https://github.com/pr/42',
         review_id: 'rev-1',
-        review_comments_posted: '3',
-        review_types: 'code,test',
+        review_comments_posted: 3,
+        review_types: ['code', 'test'],
         requirements_tracker_updated: 'true',
         gh_actions_status: 'success',
-        needs_remediation: '0',
-        review_body: 'looks good',
-        review_inline_comments: 'one inline',
-      },
-    } as unknown as CompletionVerifierVerdict;
-    const result = buildResultFromVerification(task, undefined, verification);
+        needs_remediation: false,
+      }),
+      'review'
+    );
     expect(result.prUrl).toBe('https://github.com/pr/42');
     expect(result.review_id).toBe('rev-1');
     expect(result.review_comments_posted).toBe('3');
@@ -263,117 +255,92 @@ describe('buildResultFromVerification', () => {
     expect(result.requirements_tracker_updated).toBe('true');
     expect(result.gh_actions_status).toBe('success');
     expect(result.needs_remediation).toBe('0');
-    expect(result.review_body).toBe('looks good');
-    expect(result.review_inline_comments).toBe('one inline');
   });
 
-  it('skips empty optional review fields (gh_pr_url, review_body, review_inline_comments)', () => {
+  it('skips empty optional review pr and omits review_id when blank', () => {
     const task = makeTask();
-    const verification = {
-      passed: true,
-      missingFields: [],
-      telemetryMissingFields: [],
-      verifierFailure: false,
-      trace: { transcript: '' },
-      agentData: {
-        agentType: 'review',
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
         summary: 'Reviewed',
-        gh_pr_url: '',
-        review_comments_posted: '0',
-        review_types: 'code',
+        pr: '',
+        review_id: '',
+        review_comments_posted: 0,
+        review_types: ['code'],
         requirements_tracker_updated: 'false',
         gh_actions_status: 'pending',
-        needs_remediation: '0',
-        review_body: '',
-        review_inline_comments: '',
-      },
-    } as unknown as CompletionVerifierVerdict;
-    const result = buildResultFromVerification(task, undefined, verification);
+        needs_remediation: false,
+      }),
+      'review'
+    );
     expect(result.prUrl).toBeUndefined();
     expect(result.review_id).toBeUndefined();
-    expect(result.review_body).toBeUndefined();
-    expect(result.review_inline_comments).toBeUndefined();
   });
 
-  it('overlays remediation agentData (PR url, outcome, requires_re_review)', () => {
+  it('overlays remediation fields (pr, outcome, requires_re_review)', () => {
     const task = makeTask();
-    const verification = {
-      passed: true,
-      missingFields: [],
-      telemetryMissingFields: [],
-      verifierFailure: false,
-      trace: { transcript: '' },
-      agentData: {
-        agentType: 'remediation',
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
         summary: 'Remediated',
         outcome: 'implemented',
-        gh_pr_url: 'https://github.com/pr/77',
-        requires_re_review: '1',
-      },
-    } as unknown as CompletionVerifierVerdict;
-    const result = buildResultFromVerification(task, undefined, verification);
+        pr: 'https://github.com/pr/77',
+        requires_re_review: true,
+      }),
+      'remediation'
+    );
     expect(result.execution_outcome_label).toBe('implemented');
     expect(result.prUrl).toBe('https://github.com/pr/77');
     expect(result.requires_re_review).toBe('1');
   });
 
-  it('skips empty gh_pr_url for remediation agentData', () => {
+  it('remediation: skips empty pr', () => {
     const task = makeTask();
-    const verification = {
-      passed: true,
-      missingFields: [],
-      telemetryMissingFields: [],
-      verifierFailure: false,
-      trace: { transcript: '' },
-      agentData: {
-        agentType: 'remediation',
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
         summary: 'Remediated',
         outcome: 'already_completed',
-        gh_pr_url: '',
-        requires_re_review: '0',
-      },
-    } as unknown as CompletionVerifierVerdict;
-    const result = buildResultFromVerification(task, undefined, verification);
+        pr: '',
+        requires_re_review: false,
+      }),
+      'remediation'
+    );
     expect(result.prUrl).toBeUndefined();
     expect(result.requires_re_review).toBe('0');
   });
 
-  it('overlays pull_request agentData (PR url, comment_replied="yes")', () => {
+  it('overlays pull_request fields (pr, comment_replied=yes)', () => {
     const task = makeTask();
-    const verification = {
-      passed: true,
-      missingFields: [],
-      telemetryMissingFields: [],
-      verifierFailure: false,
-      trace: { transcript: '' },
-      agentData: {
-        agentType: 'pull_request',
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
         summary: 'Replied',
-        gh_pr_url: 'https://github.com/pr/55',
-        comments_replied: 'yes',
-      },
-    } as unknown as CompletionVerifierVerdict;
-    const result = buildResultFromVerification(task, undefined, verification);
+        pr: 'https://github.com/pr/55',
+        comment_replied: 'yes',
+      }),
+      'pull_request'
+    );
     expect(result.prUrl).toBe('https://github.com/pr/55');
     expect(result.comment_replied).toBe(true);
   });
 
-  it('treats non-"yes" comments_replied as false for pull_request agentData', () => {
+  it('pull_request: treats non-yes comment_replied as false', () => {
     const task = makeTask();
-    const verification = {
-      passed: true,
-      missingFields: [],
-      telemetryMissingFields: [],
-      verifierFailure: false,
-      trace: { transcript: '' },
-      agentData: {
-        agentType: 'pull_request',
+    const result = buildResultFromVerification(
+      task,
+      undefined,
+      parsedVerdict({
         summary: 'No reply',
-        gh_pr_url: '',
-        comments_replied: 'no',
-      },
-    } as unknown as CompletionVerifierVerdict;
-    const result = buildResultFromVerification(task, undefined, verification);
+        pr: '',
+        comment_replied: 'no',
+      }),
+      'pull_request'
+    );
     expect(result.prUrl).toBeUndefined();
     expect(result.comment_replied).toBe(false);
   });

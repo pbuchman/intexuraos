@@ -7,10 +7,7 @@ import {
 import type { Task, TaskResult } from '../../../types/task.js';
 import type { ComplianceValidationInput } from '../../../services/agent-compliance-validator.js';
 import type { OrchestratorConfig } from '../../../types/config.js';
-import type {
-  CompletionVerifierVerdict,
-  ExecutionAgentData,
-} from '../../../services/completion-verifier.js';
+import type { CompletionVerifierVerdict } from '../../../services/completion-verifier.js';
 
 const mockLogger = {
   info: vi.fn(),
@@ -97,23 +94,21 @@ describe('prepareComplianceValidationInput', () => {
 
   function makeExecutionVerdict(): CompletionVerifierVerdict {
     return {
-      passed: true,
-      missingFields: [],
-      telemetryMissingFields: [],
-      verifierFailure: false,
-      agentData: {
-        agentType: 'execution',
+      kind: 'parsed',
+      data: {
         outcome: 'implemented',
-        superpowers_subagent_driven_dev: 'used',
-        superpowers_requesting_code_review: 'used',
-        gh_pr_url: 'https://github.com/owner/repo/pull/42',
+        superpowers_subagent_driven_dev_used: true,
+        superpowers_requesting_code_review_used: true,
+        pr: 'https://github.com/owner/repo/pull/42',
         failure_reason: '',
-        memory_ids_used: '',
-        memory_ids_rejected: '',
+        memory_ids_used: [],
+        memory_ids_rejected: [],
         memory_usage_summary: '',
         summary: 'done',
-      } satisfies ExecutionAgentData,
-      trace: { attempts: [] } as unknown as CompletionVerifierVerdict['trace'],
+      },
+      missingRequired: [],
+      telemetryMissing: [],
+      warnings: [],
     };
   }
 
@@ -129,7 +124,7 @@ describe('prepareComplianceValidationInput', () => {
       mockConfig,
       mockLogForwarder as never,
       mockLogger as never,
-      makeTask(),
+      makeTask({ agentType: 'execution' }),
       mockResult,
       makeExecutionVerdict()
     );
@@ -137,21 +132,19 @@ describe('prepareComplianceValidationInput', () => {
     expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 
-  it('returns undefined when agentData is missing (guard clause)', async () => {
+  it('returns undefined when the verdict is kind=hard-error (guard clause)', async () => {
     const validator = { validate: vi.fn() };
     const verdict: CompletionVerifierVerdict = {
-      passed: false,
-      missingFields: [],
-      telemetryMissingFields: [],
-      verifierFailure: true,
-      trace: { attempts: [] } as unknown as CompletionVerifierVerdict['trace'],
+      kind: 'hard-error',
+      code: 'TASK_RUNTIME_HARD_ERROR',
+      message: 'nope',
     };
     const result = await prepareComplianceValidationInput(
       validator as never,
       mockConfig,
       mockLogForwarder as never,
       mockLogger as never,
-      makeTask(),
+      makeTask({ agentType: 'execution' }),
       mockResult,
       verdict
     );
@@ -159,38 +152,16 @@ describe('prepareComplianceValidationInput', () => {
     expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 
-  it('returns undefined when agent type is not execution (guard clause)', async () => {
+  it('returns undefined when the task agentType is not execution (guard clause)', async () => {
     const validator = { validate: vi.fn() };
-    const verdict: CompletionVerifierVerdict = {
-      passed: true,
-      missingFields: [],
-      telemetryMissingFields: [],
-      verifierFailure: false,
-      agentData: {
-        agentType: 'planning',
-        outcome: 'planned',
-        superpowers_writing_plans: 'used',
-        linear_url: '',
-        is_complex: '0',
-        has_plan_doc: '0',
-        subtask_urls: '',
-        pr_url: '',
-        memory_ids_used: '',
-        memory_ids_rejected: '',
-        memory_usage_summary: '',
-        summary: '',
-        unclear_clarification: '',
-      },
-      trace: { attempts: [] } as unknown as CompletionVerifierVerdict['trace'],
-    };
     const result = await prepareComplianceValidationInput(
       validator as never,
       mockConfig,
       mockLogForwarder as never,
       mockLogger as never,
-      makeTask(),
+      makeTask({ agentType: 'planning' }),
       mockResult,
-      verdict
+      makeExecutionVerdict()
     );
     expect(result).toBeUndefined();
     expect(mockLogger.warn).not.toHaveBeenCalled();
@@ -203,7 +174,7 @@ describe('prepareComplianceValidationInput', () => {
       mockConfig,
       mockLogForwarder as never,
       mockLogger as never,
-      makeTask(),
+      makeTask({ agentType: 'execution' }),
       { prUrl: 'not-a-real-url' } as TaskResult,
       makeExecutionVerdict()
     );
@@ -238,6 +209,7 @@ describe('executeComplianceValidation', () => {
         superpowers_subagent_driven_dev: 'used',
         superpowers_requesting_code_review: 'used',
         gh_pr_url: 'https://github.com/pr/42',
+        failure_reason: '',
         memory_ids_used: '',
         memory_ids_rejected: '',
         memory_usage_summary: '',

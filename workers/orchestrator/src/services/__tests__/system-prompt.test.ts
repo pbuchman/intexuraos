@@ -492,11 +492,12 @@ describe('system-prompt', () => {
     expect(result).toContain('superpowers:requesting-code-review');
     expect(result).toContain('gh pr create');
     expect(result).toContain('EXECUTION_AGENT_FINAL:');
-    expect(result).toContain('- Outcome: <implemented|already_completed>');
+    expect(result).toContain('- Outcome: <implemented|already_completed|failed>');
     expect(result).toContain('- Review iterations: <number>');
+    expect(result).toContain('- failure_reason:');
     expect(result).toContain('- Skill sequence proof:');
     expect(result).not.toContain('- Turn summary:');
-    expect(result).toContain('- PR: <full GitHub PR URL>');
+    expect(result).toContain('- PR: <full GitHub PR URL');
     expect(result).not.toContain('"N/A"');
   });
 

@@ -53,80 +53,149 @@ export async function sendSetupFailureWebhook(
   }
 }
 
+function toStringOr(value: unknown, fallback = ''): string {
+  if (typeof value === 'string') return value;
+  return fallback;
+}
+
+function arrayToCsv(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.map((v) => (typeof v === 'string' ? v : String(v))).join(',');
+  }
+  if (typeof value === 'string') return value;
+  return '';
+}
+
+function boolToBoolZeroOne(value: unknown): '0' | '1' | undefined {
+  if (typeof value === 'boolean') return value ? '1' : '0';
+  if (value === '0' || value === '1') return value;
+  return undefined;
+}
+
 /**
- * Merges verifier-provided agent data (summary, PR URL, outcome labels,
- * per-agent fields) into the git-discovered TaskResult. Per-agent shapes
- * differ, so this is a dispatch on `agentData.agentType`.
+ * [INT-1470] Merges the deterministic-verifier's parsed AGENT_FINAL data
+ * into the git-discovered TaskResult. Accepts the new discriminated verdict;
+ * hard-error variants are handled upstream and should never reach here.
+ *
+ * Wire format for memory fields stays unchanged: `TaskResult` exposes the
+ * legacy `execution_memory_*` string names so web/webhook consumers don't
+ * break. Coerced arrays get joined back to CSV strings.
  */
+type BuildResultAgentType =
+  | 'planning'
+  | 'execution'
+  | 'pull_request'
+  | 'review'
+  | 'remediation'
+  | 'ask_agent';
+
 export function buildResultFromVerification(
   task: Task,
   gitResult: TaskResult | undefined, // @allow-undefined-type -- function parameter, not optional property
-  verification: CompletionVerifierVerdict
+  verification: CompletionVerifierVerdict,
+  agentType: BuildResultAgentType | undefined = undefined // @allow-undefined-type -- back-compat: older call sites didn't pass agentType; we dispatch off fields present in data when omitted
 ): TaskResult {
   const base: TaskResult = { ...(gitResult ?? {}) };
-  const agentData = verification.agentData;
-  if (agentData === undefined) return base;
+  if (verification.kind !== 'parsed') return base;
+  const data = verification.data;
+  if (Object.keys(data).length === 0) return base;
 
-  base.summary = agentData.summary;
-  if ('memory_ids_used' in agentData) {
-    base.execution_memory_ids_used = agentData.memory_ids_used;
-    base.execution_memory_ids_rejected = agentData.memory_ids_rejected;
-    base.execution_memory_usage_summary = agentData.memory_usage_summary;
+  base.summary = toStringOr(data['summary']);
+
+  // Memory fields: wire format preserves legacy `execution_memory_*` strings.
+  if ('memory_ids_used' in data || 'memory_ids_rejected' in data || 'memory_usage_summary' in data) {
+    base.execution_memory_ids_used = arrayToCsv(data['memory_ids_used']);
+    base.execution_memory_ids_rejected = arrayToCsv(data['memory_ids_rejected']);
+    base.execution_memory_usage_summary = toStringOr(data['memory_usage_summary']);
   }
 
-  if (agentData.agentType === 'planning') {
-    base.planning_outcome_label = agentData.outcome;
-    base.planning_superpowers_writing_plans_used =
-      agentData.superpowers_writing_plans === 'used' ? '1' : '0';
-    base.planning_linear_url = agentData.linear_url;
-    base.planning_is_complex = agentData.is_complex;
-    base.planning_has_plan_doc = agentData.has_plan_doc;
-    base.planning_subtask_urls = agentData.subtask_urls;
-    if (agentData.pr_url !== '') {
-      base.planning_pr_url = agentData.pr_url;
+  // Dispatch by agent type if provided; otherwise infer from the fields present.
+  const inferredType: typeof agentType =
+    agentType ??
+    ('plan_pr' in data
+      ? 'planning'
+      : 'tracking_comment_id' in data
+        ? 'pull_request'
+        : 'review_id' in data
+          ? 'review'
+          : 'requires_re_review' in data
+            ? 'remediation'
+            : 'execution');
+
+  if (inferredType === 'planning') {
+    const outcome = toStringOr(data['outcome']);
+    if (outcome === 'planned' || outcome === 'unclear') {
+      base.planning_outcome_label = outcome;
     }
-    base.planning_unclear_clarification = agentData.unclear_clarification;
-  } else if (agentData.agentType === 'execution') {
-    base.execution_outcome_label = agentData.outcome;
+    base.planning_superpowers_writing_plans_used =
+      boolToBoolZeroOne(data['superpowers_writing_plans_used']) ?? '0';
+    base.planning_linear_url = toStringOr(data['linear_issue']);
+    base.planning_is_complex = boolToBoolZeroOne(data['complex_task']) ?? '0';
+    base.planning_has_plan_doc = boolToBoolZeroOne(data['plan_doc']) ?? '0';
+    base.planning_subtask_urls = arrayToCsv(data['subtask_urls']);
+    const planPr = toStringOr(data['plan_pr']);
+    if (planPr !== '') {
+      base.planning_pr_url = planPr;
+    }
+    base.planning_unclear_clarification = toStringOr(data['clarification_message']);
+  } else if (inferredType === 'execution') {
+    const outcome = toStringOr(data['outcome']);
+    if (outcome === 'implemented' || outcome === 'already_completed' || outcome === 'failed') {
+      base.execution_outcome_label = outcome;
+    }
     base.execution_superpowers_subagent_driven_dev_used =
-      agentData.superpowers_subagent_driven_dev === 'used' ? '1' : '0';
+      boolToBoolZeroOne(data['superpowers_subagent_driven_dev_used']) ?? '0';
     base.execution_superpowers_requesting_code_review_used =
-      agentData.superpowers_requesting_code_review === 'used' ? '1' : '0';
-    if (agentData.gh_pr_url !== '') {
-      base.prUrl = agentData.gh_pr_url;
+      boolToBoolZeroOne(data['superpowers_requesting_code_review_used']) ?? '0';
+    const prUrl = toStringOr(data['pr']);
+    if (prUrl !== '') {
+      base.prUrl = prUrl;
     }
     if (task.linearIssueId !== undefined) {
       base.execution_linear_issue_url = `https://linear.app/pbuchman/issue/${task.linearIssueId}`;
     }
-  } else if (agentData.agentType === 'review') {
-    if (agentData.gh_pr_url !== '') {
-      base.prUrl = agentData.gh_pr_url;
+  } else if (inferredType === 'review') {
+    const prUrl = toStringOr(data['pr']);
+    if (prUrl !== '') {
+      base.prUrl = prUrl;
     }
-    if (agentData.review_id !== undefined) {
-      base.review_id = agentData.review_id;
+    const reviewId = toStringOr(data['review_id']);
+    if (reviewId !== '') {
+      base.review_id = reviewId;
     }
-    base.review_comments_posted = agentData.review_comments_posted;
-    base.review_types = agentData.review_types;
-    base.requirements_tracker_updated = agentData.requirements_tracker_updated;
-    base.gh_actions_status = agentData.gh_actions_status;
-    base.needs_remediation = agentData.needs_remediation;
-    if (agentData.review_body !== '') {
-      base.review_body = agentData.review_body;
+    const reviewCommentsPosted = data['review_comments_posted'];
+    if (typeof reviewCommentsPosted === 'number') {
+      base.review_comments_posted = String(reviewCommentsPosted);
+    } else if (typeof reviewCommentsPosted === 'string') {
+      base.review_comments_posted = reviewCommentsPosted;
     }
-    if (agentData.review_inline_comments !== '') {
-      base.review_inline_comments = agentData.review_inline_comments;
+    base.review_types = arrayToCsv(data['review_types']);
+    base.requirements_tracker_updated = toStringOr(data['requirements_tracker_updated']);
+    base.gh_actions_status = toStringOr(data['gh_actions_status']);
+    const needsRemediation = boolToBoolZeroOne(data['needs_remediation']);
+    if (needsRemediation !== undefined) {
+      base.needs_remediation = needsRemediation;
     }
-  } else if (agentData.agentType === 'remediation') {
-    base.execution_outcome_label = agentData.outcome;
-    if (agentData.gh_pr_url !== '') {
-      base.prUrl = agentData.gh_pr_url;
+  } else if (inferredType === 'remediation') {
+    const outcome = toStringOr(data['outcome']);
+    if (outcome === 'implemented' || outcome === 'already_completed') {
+      base.execution_outcome_label = outcome;
     }
-    base.requires_re_review = agentData.requires_re_review;
-  } else {
-    if (agentData.gh_pr_url !== '') {
-      base.prUrl = agentData.gh_pr_url;
+    const prUrl = toStringOr(data['pr']);
+    if (prUrl !== '') {
+      base.prUrl = prUrl;
     }
-    base.comment_replied = agentData.comments_replied === 'yes';
+    const requiresReReview = boolToBoolZeroOne(data['requires_re_review']);
+    if (requiresReReview !== undefined) {
+      base.requires_re_review = requiresReReview;
+    }
+  } else if (inferredType === 'pull_request') {
+    const prUrl = toStringOr(data['pr']);
+    if (prUrl !== '') {
+      base.prUrl = prUrl;
+    }
+    const commentReplied = toStringOr(data['comment_replied']);
+    base.comment_replied = commentReplied === 'yes';
   }
 
   return base;
