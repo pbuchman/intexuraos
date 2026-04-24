@@ -2452,6 +2452,73 @@ describe('TaskDispatcher', () => {
       expect(failedPayload?.error?.code).toBe('TASK_RUNTIME_HARD_ERROR');
     });
 
+    it('INT-1471: resolves classifyAttempt runtime from workerType when task.runtime is absent (legacy codex state)', async () => {
+      // Companion to the Claude-legacy test above. A legacy persisted task with
+      // workerType='codex' but no task.runtime field must still resolve to the
+      // 'codex' runtime via resolveTaskRuntime(), so codex-only ran-signals are
+      // recognized and the attempt flows through TASK_RUNTIME_HARD_ERROR instead
+      // of being short-circuited to WORKER_INFRA_FAILURE.
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        passed: false,
+        missingFields: [],
+        telemetryMissingFields: [],
+        verifierFailure: false,
+        trace: dummyTrace,
+      });
+      vi.mocked(mockIsolationProvider.getWorkerLogs).mockResolvedValueOnce(
+        '[codex] Session started: thread=legacy-thread\n' +
+          '[codex] Turn started\n' +
+          "[error] You've hit your usage limit. Upgrade to Pro\n" +
+          '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit. Upgrade to Pro"}}\n'
+      );
+      const request: CreateTaskRequest = {
+        taskId: 'legacy-codex-runtime-undefined-test',
+        workerType: 'codex',
+        prompt: 'Legacy codex task without runtime field',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Strip runtime to simulate a legacy persisted task — classifier must
+      // still pick 'codex' via WORKER_TYPES[task.workerType].runtime.
+      const preState = await statePersistence.load();
+      const persistedTask = preState.tasks['legacy-codex-runtime-undefined-test'];
+      if (!persistedTask) throw new Error('Task not found');
+      delete persistedTask.runtime;
+      await statePersistence.save(preState);
+
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      onLog?.('[codex] Session started: thread=legacy-thread\n');
+      onLog?.("[error] You've hit your usage limit. Upgrade to Pro\n");
+      onLog?.(
+        '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit. Upgrade to Pro"}}\n'
+      );
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const task = await agentDispatcher.getTask('legacy-codex-runtime-undefined-test');
+      expect(task?.status).toBe('failed');
+
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string; taskId?: string } | undefined;
+        return p?.status === 'failed' && p.taskId === 'legacy-codex-runtime-undefined-test';
+      });
+      const failedPayload = sentCall?.[0]?.payload as
+        | { error?: { code?: string; message?: string } }
+        | undefined;
+      expect(failedPayload?.error?.code).toBe('TASK_RUNTIME_HARD_ERROR');
+      expect(failedPayload?.error?.code).not.toBe('WORKER_INFRA_FAILURE');
+    });
+
     it('INT-1471: Codex usage-limit runtime error + exit 1 → TASK_RUNTIME_HARD_ERROR (not WORKER_INFRA_FAILURE)', async () => {
       // Replicates the real INT-1471 incident: a codex attempt emits
       // thread/turn markers and then turn.failed with the ChatGPT usage-limit
