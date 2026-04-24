@@ -1,9 +1,10 @@
 import type { Timestamp } from '@google-cloud/firestore';
 import type { FormattedLogLine } from '../../models/logLine.js';
-import type { FormatterState } from '../logFormatter.js';
 import { stripSystemReminders } from './errorFormatter.js';
 import {
+  createFormatterState,
   formatObjectKeysSummary,
+  type FormatterState,
   type StreamJsonMessage,
 } from './markdownFormatter.js';
 
@@ -97,7 +98,7 @@ export function formatRawCodexLogChunk(
   const result: FormattedLogLine[] = [];
   let seq = startSequence * 1000;
   const hasExternalState = state !== undefined;
-  const s: FormatterState = state ?? { toolCallsById: new Map<string, string>(), lastToolName: undefined };
+  const s: FormatterState = state ?? createFormatterState();
 
   if (s.partialLine !== undefined && lines.length > 0) {
     /* v8 ignore start -- ts-type: String.split always returns a dense array, so lines[0] is defined when length > 0 @preserve */
