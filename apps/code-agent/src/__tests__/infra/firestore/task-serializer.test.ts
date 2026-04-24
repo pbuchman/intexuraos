@@ -1,0 +1,367 @@
+/**
+ * Unit tests for task-serializer module.
+ *
+ * Pure functions — no Firestore needed (uses Timestamp directly from
+ * @google-cloud/firestore).
+ */
+import { describe, expect, it } from 'vitest';
+import { FieldValue, Timestamp } from '@google-cloud/firestore';
+import {
+  buildUpdateData,
+  fromFirestoreDoc,
+  mergeUpdateForTransaction,
+  serializeExecutionMemoryContext,
+  serializeExecutionMemoryPostRun,
+  stripLegacyLinearFields,
+  toFirestoreDoc,
+  toTimestamp,
+} from '../../../infra/firestore/task-serializer.js';
+import type { CreateTaskInput, UpdateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
+
+const baseCreate = (): CreateTaskInput => ({
+  userId: 'u1',
+  prompt: 'hello',
+  sanitizedPrompt: 'hello',
+  systemPromptHash: 'h1',
+  workerType: 'opus',
+  workerLocation: 'vm',
+  repository: 'o/r',
+  baseBranch: 'main',
+  traceId: 't1',
+});
+
+describe('stripLegacyLinearFields', () => {
+  it('removes legacy Linear keys and keeps other fields', () => {
+    const out = stripLegacyLinearFields({
+      id: 'x',
+      linearIssueTitle: 'drop',
+      linearIssueUrl: 'drop',
+      linearIssueType: 'drop',
+      linearIssueLabels: ['drop'],
+      linearFallback: true,
+      keep: 'me',
+    });
+    expect(out).toEqual({ id: 'x', keep: 'me' });
+  });
+});
+
+describe('fromFirestoreDoc', () => {
+  it('returns CodeTask with id, createdAt, updatedAt; strips legacy fields', () => {
+    const now = Timestamp.fromDate(new Date('2025-01-01T00:00:00Z'));
+    const doc = {
+      id: 'task_1',
+      data: (): Record<string, unknown> => ({
+        userId: 'u1',
+        status: 'queued',
+        dedupKey: 'dk',
+        createdAt: now,
+        updatedAt: now,
+        linearIssueTitle: 'stripme',
+      }),
+    };
+    const task = fromFirestoreDoc(doc);
+    expect(task.id).toBe('task_1');
+    expect(task.userId).toBe('u1');
+    expect(task.createdAt).toBe(now);
+    expect(task.updatedAt).toBe(now);
+    expect((task as unknown as Record<string, unknown>)['linearIssueTitle']).toBeUndefined();
+  });
+});
+
+describe('toTimestamp', () => {
+  it('returns undefined for undefined input', () => {
+    expect(toTimestamp(undefined)).toBeUndefined();
+  });
+  it('returns the same Timestamp for Timestamp input', () => {
+    const ts = Timestamp.fromDate(new Date('2025-01-01'));
+    expect(toTimestamp(ts)).toBe(ts);
+  });
+  it('converts Date to Timestamp', () => {
+    const d = new Date('2025-02-03T04:05:06Z');
+    const ts = toTimestamp(d);
+    expect(ts).toBeInstanceOf(Timestamp);
+    expect(ts?.toDate().toISOString()).toBe(d.toISOString());
+  });
+  it('returns undefined for unsupported types', () => {
+    expect(toTimestamp('2025-01-01')).toBeUndefined();
+    expect(toTimestamp(12345)).toBeUndefined();
+    expect(toTimestamp(null)).toBeUndefined();
+    expect(toTimestamp({})).toBeUndefined();
+  });
+});
+
+describe('serializeExecutionMemoryContext', () => {
+  it('converts Date matchedAt to Timestamp', () => {
+    const matchedAt = new Date('2025-01-01T10:00:00Z');
+    const out = serializeExecutionMemoryContext({
+      status: 'matched',
+      matchedAt: matchedAt as unknown as Timestamp,
+    });
+    expect(out.matchedAt).toBeInstanceOf(Timestamp);
+  });
+  it('omits matchedAt when absent', () => {
+    const out = serializeExecutionMemoryContext({ status: 'none' });
+    expect(out.matchedAt).toBeUndefined();
+  });
+  it('preserves Timestamp matchedAt as-is', () => {
+    const ts = Timestamp.fromDate(new Date('2025-06-01'));
+    const out = serializeExecutionMemoryContext({ status: 'matched', matchedAt: ts });
+    expect(out.matchedAt).toBe(ts);
+  });
+});
+
+describe('serializeExecutionMemoryPostRun', () => {
+  it('converts Date lastAttemptAt/completedAt to Timestamps', () => {
+    const lastAttemptAt = new Date('2025-01-01T10:00:00Z');
+    const completedAt = new Date('2025-01-01T11:00:00Z');
+    const out = serializeExecutionMemoryPostRun({
+      status: 'completed',
+      attempts: 1,
+      generatedMemoryIds: [],
+      lastAttemptAt: lastAttemptAt as unknown as Timestamp,
+      completedAt: completedAt as unknown as Timestamp,
+    });
+    expect(out.lastAttemptAt).toBeInstanceOf(Timestamp);
+    expect(out.completedAt).toBeInstanceOf(Timestamp);
+  });
+  it('omits lastAttemptAt/completedAt when absent', () => {
+    const out = serializeExecutionMemoryPostRun({
+      status: 'pending',
+      attempts: 0,
+      generatedMemoryIds: [],
+    });
+    expect(out.lastAttemptAt).toBeUndefined();
+    expect(out.completedAt).toBeUndefined();
+  });
+});
+
+describe('toFirestoreDoc', () => {
+  const opts = {
+    taskId: 'task_abc',
+    dedupKey: 'deadbeefcafebabe',
+    now: new Date('2025-01-01T00:00:00Z'),
+  };
+
+  it('builds a minimal doc with defaults (status queued, callbackReceived false)', () => {
+    const doc = toFirestoreDoc(baseCreate(), opts);
+    expect(doc.id).toBe('task_abc');
+    expect(doc.status).toBe('queued');
+    expect(doc.callbackReceived).toBe(false);
+    expect(doc.dedupKey).toBe('deadbeefcafebabe');
+    expect(doc.createdAt).toBeInstanceOf(Timestamp);
+    expect(doc.updatedAt).toBeInstanceOf(Timestamp);
+    expect(doc.createdAt.toMillis()).toBe(opts.now.getTime());
+  });
+
+  it('honors initialStatus', () => {
+    const doc = toFirestoreDoc({ ...baseCreate(), initialStatus: 'dispatched' }, opts);
+    expect(doc.status).toBe('dispatched');
+  });
+
+  it('sets every optional field when provided', () => {
+    const memCtxMatchedAt = Timestamp.fromDate(new Date('2025-01-02'));
+    const memPostLastAttempt = Timestamp.fromDate(new Date('2025-01-03'));
+    const doc = toFirestoreDoc(
+      {
+        ...baseCreate(),
+        actionId: 'a1',
+        approvalEventId: 'ap1',
+        linearIssueId: 'L1',
+        webhookSecret: 's1',
+        retriedFrom: 'task_orig',
+        prNumber: 42,
+        prBranch: 'br',
+        parentTaskId: 'task_parent',
+        followUpReason: 'pr_comment',
+        agentType: 'review',
+        planningPrBranch: 'plan-br',
+        planningPrUrl: 'https://example/plan',
+        trackingCommentId: 'tc1',
+        reviewTypes: ['security'],
+        executionMemoryContext: { status: 'matched', matchedAt: memCtxMatchedAt },
+        executionMemoryPostRun: {
+          status: 'pending',
+          attempts: 0,
+          generatedMemoryIds: [],
+          lastAttemptAt: memPostLastAttempt,
+        },
+      },
+      opts
+    );
+    expect(doc.actionId).toBe('a1');
+    expect(doc.approvalEventId).toBe('ap1');
+    expect(doc.linearIssueId).toBe('L1');
+    expect(doc.webhookSecret).toBe('s1');
+    expect(doc.retriedFrom).toBe('task_orig');
+    expect(doc.prNumber).toBe(42);
+    expect(doc.prBranch).toBe('br');
+    expect(doc.parentTaskId).toBe('task_parent');
+    expect(doc.followUpReason).toBe('pr_comment');
+    expect(doc.agentType).toBe('review');
+    expect(doc.planningPrBranch).toBe('plan-br');
+    expect(doc.planningPrUrl).toBe('https://example/plan');
+    expect(doc.trackingCommentId).toBe('tc1');
+    expect(doc.reviewTypes).toEqual(['security']);
+    expect(doc.executionMemoryContext?.matchedAt).toBe(memCtxMatchedAt);
+    expect(doc.executionMemoryPostRun?.lastAttemptAt).toBe(memPostLastAttempt);
+  });
+
+  it('omits optional fields when not provided', () => {
+    const doc = toFirestoreDoc(baseCreate(), opts);
+    expect(doc.actionId).toBeUndefined();
+    expect(doc.approvalEventId).toBeUndefined();
+    expect(doc.linearIssueId).toBeUndefined();
+    expect(doc.webhookSecret).toBeUndefined();
+    expect(doc.retriedFrom).toBeUndefined();
+    expect(doc.prNumber).toBeUndefined();
+    expect(doc.prBranch).toBeUndefined();
+    expect(doc.parentTaskId).toBeUndefined();
+    expect(doc.followUpReason).toBeUndefined();
+    expect(doc.agentType).toBeUndefined();
+    expect(doc.planningPrBranch).toBeUndefined();
+    expect(doc.planningPrUrl).toBeUndefined();
+    expect(doc.trackingCommentId).toBeUndefined();
+    expect(doc.reviewTypes).toBeUndefined();
+    expect(doc.executionMemoryContext).toBeUndefined();
+    expect(doc.executionMemoryPostRun).toBeUndefined();
+  });
+});
+
+describe('buildUpdateData', () => {
+  it('always sets updatedAt (from input.updatedAt when provided)', () => {
+    const d = new Date('2025-05-01T00:00:00Z');
+    const data = buildUpdateData({ updatedAt: d });
+    expect(data['updatedAt']).toBeInstanceOf(Timestamp);
+    expect((data['updatedAt'] as Timestamp).toMillis()).toBe(d.getTime());
+  });
+
+  it('always sets updatedAt (from current time when not provided)', () => {
+    const before = Date.now();
+    const data = buildUpdateData({});
+    const after = Date.now();
+    expect(data['updatedAt']).toBeInstanceOf(Timestamp);
+    const ms = (data['updatedAt'] as Timestamp).toMillis();
+    expect(ms).toBeGreaterThanOrEqual(before);
+    expect(ms).toBeLessThanOrEqual(after);
+  });
+
+  it('converts Date fields to Timestamps', () => {
+    const data = buildUpdateData({
+      queuedAt: new Date('2025-01-01'),
+      dispatchedAt: new Date('2025-01-02'),
+      completedAt: new Date('2025-01-03'),
+      lastHeartbeat: new Date('2025-01-04'),
+      prMergedAt: new Date('2025-01-05'),
+      prClosedAt: new Date('2025-01-06'),
+    });
+    expect(data['queuedAt']).toBeInstanceOf(Timestamp);
+    expect(data['dispatchedAt']).toBeInstanceOf(Timestamp);
+    expect(data['completedAt']).toBeInstanceOf(Timestamp);
+    expect(data['lastHeartbeat']).toBeInstanceOf(Timestamp);
+    expect(data['prMergedAt']).toBeInstanceOf(Timestamp);
+    expect(data['prClosedAt']).toBeInstanceOf(Timestamp);
+  });
+
+  it('uses FieldValue.delete() for null-clear fields', () => {
+    const data = buildUpdateData({
+      error: null,
+      cancelNonce: null,
+      cancelNonceExpiresAt: null,
+      implementationTaskId: null,
+      fanOutChildTaskIds: null,
+    });
+    expect(data['error']).toBeInstanceOf(FieldValue);
+    expect(data['cancelNonce']).toBeInstanceOf(FieldValue);
+    expect(data['cancelNonceExpiresAt']).toBeInstanceOf(FieldValue);
+    expect(data['implementationTaskId']).toBeInstanceOf(FieldValue);
+    expect(data['fanOutChildTaskIds']).toBeInstanceOf(FieldValue);
+  });
+
+  it('passes non-null values through for nullable fields', () => {
+    const data = buildUpdateData({
+      error: { code: 'X', message: 'oops' },
+      cancelNonce: 'abcd',
+      cancelNonceExpiresAt: '2025-01-01',
+      implementationTaskId: 'task_impl',
+      fanOutChildTaskIds: ['task_a', 'task_b'],
+    });
+    expect(data['error']).toEqual({ code: 'X', message: 'oops' });
+    expect(data['cancelNonce']).toBe('abcd');
+    expect(data['cancelNonceExpiresAt']).toBe('2025-01-01');
+    expect(data['implementationTaskId']).toBe('task_impl');
+    expect(data['fanOutChildTaskIds']).toEqual(['task_a', 'task_b']);
+  });
+
+  it('sets every scalar field when provided', () => {
+    const input: UpdateTaskInput = {
+      status: 'running',
+      result: { summary: 'ok' },
+      statusSummary: {
+        phase: 'implementing',
+        message: 'go',
+        updatedAt: Timestamp.fromDate(new Date('2025-01-10')),
+      },
+      workerLocation: 'vm1',
+      callbackReceived: true,
+      logChunksDropped: 7,
+      pendingUserMessages: ['hi'],
+      prNumber: 9,
+      prBranch: 'b',
+      requiresReReview: true,
+      prUrlValidationFailed: true,
+      prUrlValidationErrors: ['bad'],
+    };
+    const data = buildUpdateData(input);
+    expect(data['status']).toBe('running');
+    expect(data['result']).toEqual({ summary: 'ok' });
+    expect(data['statusSummary']).toEqual(input.statusSummary);
+    expect(data['workerLocation']).toBe('vm1');
+    expect(data['callbackReceived']).toBe(true);
+    expect(data['logChunksDropped']).toBe(7);
+    expect(data['pendingUserMessages']).toEqual(['hi']);
+    expect(data['prNumber']).toBe(9);
+    expect(data['prBranch']).toBe('b');
+    expect(data['requiresReReview']).toBe(true);
+    expect(data['prUrlValidationFailed']).toBe(true);
+    expect(data['prUrlValidationErrors']).toEqual(['bad']);
+  });
+
+  it('serializes executionMemoryContext/PostRun when provided', () => {
+    const ctxMatched = new Date('2025-01-01');
+    const postRunLast = new Date('2025-01-02');
+    const data = buildUpdateData({
+      executionMemoryContext: {
+        status: 'matched',
+        matchedAt: ctxMatched as unknown as Timestamp,
+      },
+      executionMemoryPostRun: {
+        status: 'pending',
+        attempts: 0,
+        generatedMemoryIds: [],
+        lastAttemptAt: postRunLast as unknown as Timestamp,
+      },
+    });
+    const ctx = data['executionMemoryContext'] as { matchedAt: Timestamp };
+    const post = data['executionMemoryPostRun'] as { lastAttemptAt: Timestamp };
+    expect(ctx.matchedAt).toBeInstanceOf(Timestamp);
+    expect(post.lastAttemptAt).toBeInstanceOf(Timestamp);
+  });
+
+  it('leaves unspecified fields absent', () => {
+    const data = buildUpdateData({});
+    expect(Object.keys(data).sort()).toEqual(['updatedAt']);
+  });
+});
+
+describe('mergeUpdateForTransaction', () => {
+  it('merges update data onto existing and strips FieldValue sentinels', () => {
+    const existing = { a: 1, b: 'old', toDelete: 'still here' };
+    const update = {
+      b: 'new',
+      toDelete: FieldValue.delete(),
+      fresh: 9,
+    };
+    const merged = mergeUpdateForTransaction(existing, update);
+    expect(merged).toEqual({ a: 1, b: 'new', fresh: 9 });
+  });
+});
