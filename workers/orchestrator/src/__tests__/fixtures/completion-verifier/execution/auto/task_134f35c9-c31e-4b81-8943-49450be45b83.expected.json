@@ -1,0 +1,28 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1913",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1455",
+    "review_iterations": 2,
+    "memory_ids_used": [
+      "mem_8356c7f4-b2c1-4e8a-9e17-07490d79396b",
+      "mem_fe85bc13-208d-4be4-a6f2-c481b6c01e7c"
+    ],
+    "memory_ids_rejected": ["mem_44f8dac8-00e7-4392-9550-37c07cde2b26"],
+    "memory_usage_summary": "The \"doomed retry loop\" memory directly drove the `WORKER_INFRA_FAILURE → 'fail'` branch in `classifyFailure` (mirroring `WORKTREE_LOST`), and the \"tiered completion verification\" memory shaped the classifier-before-verifier split and the repeated-sub-reason remediation flip; the \"overly strict pre-checks\" memory was not applicable because this task adds post-facto attempt classification rather than pre-start resource gating.",
+    "superpowers_subagent_driven_dev_used": true,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "implementer-T1 (pure classifyAttempt function + unit tests in workers/orchestrator), implementer-T2 (extend Task type with taskInfraFailureHistory), implementer-T3 (wire classifier into task-dispatcher.ts, add finalizeAttemptAsInfraFailure, update test fixtures), implementer-T4 (add integration tests for WORKER_INFRA_FAILURE classification), implementer-T5 (classifyFailure terminal branch in apps/code-agent + tests), code-reviewer (holistic review of commits c74c2ec5..e7406dce3), code-reviewer (follow-up review of 67449a237 after review fixes)",
+    "skill_sequence_proof": "I invoked superpowers:writing-plans first (plan saved at docs/superpowers/plans/2026-04-23-int-1455-classify-attempt.md), then superpowers:subagent-driven-development to dispatch five sequential implementer subagents (Task 1→2→3→4→5, each followed by inline verification), then ran the full pnpm run ci:tracked loop, addressed a branch-coverage failure, re-ran CI to green, and finally invoked superpowers:requesting-code-review which produced a 1st-pass review (findings I-1..I-4, M-1..M-5, N-1..N-5) that I addressed in commit 67449a237, followed by a 2nd code-review pass that returned \"ship it\". PR #1913 was pushed only after both reviews were clean and CI was green.",
+    "failure_reason": "",
+    "summary": "* Added pure `classifyAttempt` (workers/orchestrator/src/services/task-dispatcher/classify-attempt.ts) that short-circuits the completion verifier on infra-layer failures (container exit before `[claude] Session init`, empty transcript, sub-5s duration) and returns a sub-reason + first error line.\n  * Wired the classifier into task-dispatcher so infra-failed attempts finalize with a new `WORKER_INFRA_FAILURE` TaskError instead of the misleading `TASK_COMPLETION_VERIFICATION_FAILED: Missing fields: memory_ids_used, memory_ids_rejected`.\n  * Added `taskInfraFailureHistory` with typed `InfraFailureSubReason` union; on repeat sub-reason across a user-driven resume the remediation flips from `retry` to `contact_support` (advisory — code-agent's classifyFailure returns `'fail'` unconditionally so the auto-retry loop stops, mirroring the existing `WORKTREE_LOST` terminal path).\n  * Tested via 9 classifier unit cases, 3 integration scenarios (exit=128 finalizes as WORKER_INFRA_FAILURE, verifier never called, repeat sub-reason flips remediation + passes through a TaskResult), and 2 classifyFailure terminal-branch tests; adjusted existing fixtures to include `[claude]` prefix so the verifier path is still exercised.\n  * CI green (`pnpm run ci:tracked` — 15510 tests passed, 100% branch coverage maintained) and PR #1913 opened against development after 2 clean code-review iterations."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
+  ]
+}

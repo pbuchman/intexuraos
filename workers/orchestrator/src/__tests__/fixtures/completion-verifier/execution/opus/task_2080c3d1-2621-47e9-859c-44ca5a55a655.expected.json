@@ -1,0 +1,28 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1935",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1446",
+    "review_iterations": 2,
+    "memory_ids_used": ["mem_1f7d0a83-aef8-4652-8418-32dcad36a7d5"],
+    "memory_ids_rejected": [
+      "mem_6aaf7125-8e46-48a4-90ae-69f019ce007d",
+      "mem_41cc65b5-af41-4a00-b38c-344f657020fc"
+    ],
+    "memory_usage_summary": "Applied the thin-facade pattern from memory [1] — extracted a 47-line facade that composes three sibling modules with preserved public API; memories [2] and [3] were HTTP-client-specific and not applicable to this webhook-evaluator refactor.",
+    "superpowers_subagent_driven_dev_used": true,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "implementer (general-purpose, full refactor + tests + commit), spec-reviewer (general-purpose, requirement-by-requirement compliance check), code-quality-reviewer (superpowers:code-reviewer, first pass minor findings), final-reviewer (superpowers:code-reviewer, post-fix confirmation)",
+    "skill_sequence_proof": "superpowers:subagent-driven-development invoked first (loaded implementer-prompt.md, dispatched implementer + spec-reviewer subagents), then superpowers:requesting-code-review invoked AFTER implementation completed (dispatched superpowers:code-reviewer subagents that produced initial findings, applied fixes, re-dispatched for final zero-issues confirmation). Commits on branch: a289894b3 (initial refactor) → 27ae3ddde (review fixes) on feature/int-1446.",
+    "failure_reason": "",
+    "summary": "* Split 619-line `unifiedEvaluator.ts` into 47-line facade plus three sibling modules (`criteria.ts` 175, `scoring.ts` 314, `reporting.ts` 155) and shared `types.ts` under `apps/code-agent/src/domain/services/unifiedEvaluator/`, preserving public API and all `v8 ignore`/`@allow-*` pragmas.\n  * Mapped the templated scoring/criteria/reporting split onto the file's actual concerns (deterministic rules / LLM triage / audit trail), since the original file is a webhook-event evaluator — not an evaluation-scoring service.\n  * Added 54 new module-level tests (100% branch coverage on all four new files) and shared `_fixtures.ts` helper; existing 2127-line `unifiedEvaluator.test.ts` regression suite passes unchanged (78/78).\n  * `pnpm run ci:tracked` green end-to-end (15978 tests, all static validators, lint, build, format).\n  * Two-stage review completed: spec compliance confirmed, code quality findings addressed (CIFailureRule hoisted, docstring updated, fixtures consolidated), final reviewer confirmed zero remaining issues."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
+  ]
+}

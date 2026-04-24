@@ -1,0 +1,22 @@
+{
+  "data": {
+    "outcome": "planned",
+    "superpowers_writing_plans_used": true,
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1462/resolve-cyclic-workspace-dependencies-in-core-packages",
+    "complex_task": false,
+    "plan_doc": true,
+    "subtask_urls": [],
+    "plan_pr": "https://github.com/pbuchman/intexuraos/pull/1924",
+    "parallel_breakdown_proof": "",
+    "memory_ids_used": [
+      "mem_b0b3dbbd-39ed-4422-9ce2-57698e546996",
+      "mem_baf941fc-94c6-4566-ba6e-1bc5011c8093"
+    ],
+    "memory_ids_rejected": ["mem_72652cc0-fe0e-4c44-8b99-aed2a06ee4ed"],
+    "memory_usage_summary": "The layer-separation memory directly informed the decision to remove the back-edge rather than restructure, preserving unidirectional client→factory→provider→pricing flow; the centralized LLM fallback memory confirmed that internal-clients is the correct home for fallback logic and therefore must sit above llm-pricing, not alongside it.",
+    "clarification_message": "",
+    "summary": "* Task: investigate and resolve pnpm cyclic workspace dependency warning spanning infra-gemini, llm-pricing, internal-clients, and llm-factory.\n  * Root cause: vestigial devDependency on `@intexuraos/internal-clients` inside `packages/llm-pricing/package.json` with zero actual imports in source or tests (only a JSDoc mention).\n  * Every reported cycle routes through that single back-edge; the rest of the graph is clean and unidirectional.\n  * Decision: SIMPLE — remove that one devDep entry, refresh the lockfile, and verify with `pnpm install` + `pnpm run ci:tracked`. Alternative restructures rejected as YAGNI.\n  * Artifacts: original description archived as Linear comment, issue description updated with analysis and `Plan document:` pointer, plan doc added at `docs/plans/INT-1462-cyclic-workspace-deps.md`, evidence PR opened at pbuchman/intexuraos#1924 targeting `development`."
+  },
+  "missingRequired": [],
+  "warnings": []
+}

@@ -1,28 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { decideCompletionOutcome } from '../../../services/task-dispatcher/decide-outcome.js';
-import type { CompletionVerifierVerdict } from '../../../services/completion-verifier/types.js';
+import {
+  decideCompletionOutcome,
+  type OutcomeVerdictView,
+} from '../../../services/task-dispatcher/decide-outcome.js';
 
-function baseVerdict(
-  overrides: Partial<CompletionVerifierVerdict> = {}
-): CompletionVerifierVerdict {
+function baseVerdict(overrides: Partial<OutcomeVerdictView> = {}): OutcomeVerdictView {
   return {
     passed: false,
     missingFields: [],
     telemetryMissingFields: [],
-    verifierFailure: false,
-    trace: { transcript: '', prompt: '', response: '' },
+    agentData: undefined,
     ...overrides,
   };
 }
 
-describe('[INT-1461] decideCompletionOutcome', () => {
+describe('[INT-1461/INT-1470] decideCompletionOutcome', () => {
   describe('success paths', () => {
     it('accept when verifier passed and exit code is 0', () => {
       const out = decideCompletionOutcome({
-        verdict: baseVerdict({
-          passed: true,
-          agentData: { agentType: 'review' } as never,
-        }),
+        verdict: baseVerdict({ passed: true, agentData: { outcome: 'implemented' } }),
         tier: 'required',
         exitCode: 0,
       });
@@ -31,7 +27,7 @@ describe('[INT-1461] decideCompletionOutcome', () => {
 
     it('accept when passed and exit code undefined', () => {
       const out = decideCompletionOutcome({
-        verdict: baseVerdict({ passed: true, agentData: { agentType: 'review' } as never }),
+        verdict: baseVerdict({ passed: true, agentData: { outcome: 'implemented' } }),
         tier: 'optional',
         exitCode: undefined,
       });
@@ -45,7 +41,7 @@ describe('[INT-1461] decideCompletionOutcome', () => {
         verdict: baseVerdict({
           missingFields: [],
           telemetryMissingFields: ['memory_acknowledgment'],
-          agentData: { agentType: 'review' } as never,
+          agentData: { outcome: 'implemented' },
         }),
         tier: 'optional',
         exitCode: 0,
@@ -57,7 +53,7 @@ describe('[INT-1461] decideCompletionOutcome', () => {
       const out = decideCompletionOutcome({
         verdict: baseVerdict({
           telemetryMissingFields: ['memory_acknowledgment'],
-          agentData: { agentType: 'review' } as never,
+          agentData: { outcome: 'implemented' },
         }),
         tier: 'optional',
         exitCode: undefined,
@@ -69,7 +65,7 @@ describe('[INT-1461] decideCompletionOutcome', () => {
       const out = decideCompletionOutcome({
         verdict: baseVerdict({
           telemetryMissingFields: ['memory_acknowledgment'],
-          agentData: { agentType: 'review' } as never,
+          agentData: { outcome: 'implemented' },
         }),
         tier: 'optional',
         exitCode: 1,
@@ -82,9 +78,7 @@ describe('[INT-1461] decideCompletionOutcome', () => {
 
     it('does NOT accept if agentData missing (nothing to build a result from)', () => {
       const out = decideCompletionOutcome({
-        verdict: baseVerdict({
-          telemetryMissingFields: ['memory_acknowledgment'],
-        }),
+        verdict: baseVerdict({ telemetryMissingFields: ['memory_acknowledgment'] }),
         tier: 'optional',
         exitCode: 0,
       });
@@ -92,35 +86,27 @@ describe('[INT-1461] decideCompletionOutcome', () => {
     });
   });
 
-  describe('tier=required telemetry-only missing', () => {
-    it('retry with union missing fields when attempts remain', () => {
+  describe('[INT-1470] tier=required telemetry-only missing', () => {
+    it('accept with telemetryAccepted=true (was: retry 3× then fail)', () => {
       const out = decideCompletionOutcome({
         verdict: baseVerdict({
-          telemetryMissingFields: ['memory_acknowledgment'],
-          agentData: { agentType: 'review' } as never,
+          missingFields: [],
+          telemetryMissingFields: ['memory_ids_used', 'memory_ids_rejected'],
+          agentData: { outcome: 'implemented' },
         }),
         tier: 'required',
         exitCode: 0,
-        attempt: 1,
-        maxAttempts: 3,
       });
-      expect(out.kind).toBe('retry');
-      if (out.kind === 'retry') {
-        expect(out.missingFields).toEqual(['memory_acknowledgment']);
-      }
+      expect(out).toEqual({ kind: 'accept', telemetryAccepted: true });
     });
 
-    it('terminal failure when out of attempts', () => {
+    it('does NOT accept if agentData missing on tier=required telemetry-only (parity with optional)', () => {
       const out = decideCompletionOutcome({
-        verdict: baseVerdict({
-          telemetryMissingFields: ['memory_acknowledgment'],
-        }),
+        verdict: baseVerdict({ telemetryMissingFields: ['memory_acknowledgment'] }),
         tier: 'required',
         exitCode: 0,
-        attempt: 3,
-        maxAttempts: 3,
       });
-      expect(out.kind).toBe('fail');
+      expect(out.kind).not.toBe('accept');
     });
   });
 
@@ -205,34 +191,10 @@ describe('[INT-1461] decideCompletionOutcome', () => {
     });
   });
 
-  describe('verifier failure (all LLMs down)', () => {
-    it('retry-verifier when attempts remain', () => {
-      const out = decideCompletionOutcome({
-        verdict: baseVerdict({ verifierFailure: true }),
-        tier: 'required',
-        exitCode: 0,
-        attempt: 1,
-        maxAttempts: 3,
-      });
-      expect(out.kind).toBe('retry-verifier');
-    });
-
-    it('fail-verifier when out of attempts', () => {
-      const out = decideCompletionOutcome({
-        verdict: baseVerdict({ verifierFailure: true }),
-        tier: 'required',
-        exitCode: 0,
-        attempt: 3,
-        maxAttempts: 3,
-      });
-      expect(out.kind).toBe('fail-verifier');
-    });
-  });
-
   describe('exit-code override', () => {
     it('fail-exit-override when verdict passed but exit code non-zero', () => {
       const out = decideCompletionOutcome({
-        verdict: baseVerdict({ passed: true, agentData: { agentType: 'review' } as never }),
+        verdict: baseVerdict({ passed: true, agentData: { outcome: 'implemented' } }),
         tier: 'required',
         exitCode: 1,
       });

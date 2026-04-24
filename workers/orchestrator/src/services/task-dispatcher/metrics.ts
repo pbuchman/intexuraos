@@ -6,7 +6,7 @@ import type {
   AgentComplianceValidator,
   ComplianceValidationInput,
 } from '../agent-compliance-validator.js';
-import type { CompletionVerifierVerdict, ExecutionAgentData } from '../completion-verifier.js';
+import type { CompletionVerifierVerdict } from '../completion-verifier.js';
 import type { WebhookClient } from '../webhook-client.js';
 import type { LogForwarder } from '../log-forwarder.js';
 import { readSessionTranscript } from '../transcript-reader.js';
@@ -47,6 +47,33 @@ export async function collectTurnMetrics(
  * not an execution agent, the PR number is unavailable, or the transcript is
  * empty. Called *before* teardown so the worktree transcript is still readable.
  */
+function asString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function arrayOrStringToCsv(value: unknown): string {
+  if (Array.isArray(value))
+    return value.map((v) => (typeof v === 'string' ? v : String(v))).join(',');
+  return asString(value);
+}
+
+function asOutcome(value: unknown): 'implemented' | 'already_completed' | 'failed' {
+  if (value === 'implemented' || value === 'already_completed' || value === 'failed') return value;
+  return 'implemented';
+}
+
+function asUsedNotUsed(value: unknown): 'used' | 'not used' {
+  if (value === true || value === '1') return 'used';
+  return 'not used';
+}
+
+/**
+ * [INT-1470] Post-verifier-LLM: `verification.data` is a Record<string, unknown>
+ * from the deterministic block parser. Task type is routed on the presence of
+ * the `pr` field + absence of planning/review-specific keys; for execution
+ * compliance we also check that the agent is actually an execution agent
+ * via `task.agentType`.
+ */
 export async function prepareComplianceValidationInput(
   agentComplianceValidator: AgentComplianceValidator | undefined, // @allow-undefined-type -- function parameter, not optional property
   config: OrchestratorConfig,
@@ -57,10 +84,11 @@ export async function prepareComplianceValidationInput(
   verification: CompletionVerifierVerdict
 ): Promise<ComplianceValidationInput | undefined> {
   if (agentComplianceValidator === undefined) return undefined;
-  if (verification.agentData?.agentType !== 'execution') return undefined;
+  if (verification.kind !== 'parsed') return undefined;
+  if (task.agentType !== 'execution') return undefined;
 
   try {
-    const agentData: ExecutionAgentData = verification.agentData;
+    const data = verification.data;
 
     const prNumber = extractPrNumber(finalResult.prUrl);
     if (prNumber === undefined) {
@@ -85,15 +113,19 @@ export async function prepareComplianceValidationInput(
       repository: task.repository,
       formattedTranscript,
       agentClaims: {
-        outcome: agentData.outcome,
-        superpowers_subagent_driven_dev: agentData.superpowers_subagent_driven_dev,
-        superpowers_requesting_code_review: agentData.superpowers_requesting_code_review,
-        gh_pr_url: agentData.gh_pr_url,
-        failure_reason: agentData.failure_reason,
-        memory_ids_used: agentData.memory_ids_used,
-        memory_ids_rejected: agentData.memory_ids_rejected,
-        memory_usage_summary: agentData.memory_usage_summary,
-        summary: agentData.summary,
+        outcome: asOutcome(data['outcome']),
+        superpowers_subagent_driven_dev: asUsedNotUsed(
+          data['superpowers_subagent_driven_dev_used']
+        ),
+        superpowers_requesting_code_review: asUsedNotUsed(
+          data['superpowers_requesting_code_review_used']
+        ),
+        gh_pr_url: asString(data['pr']),
+        failure_reason: asString(data['failure_reason']),
+        memory_ids_used: arrayOrStringToCsv(data['memory_ids_used']),
+        memory_ids_rejected: arrayOrStringToCsv(data['memory_ids_rejected']),
+        memory_usage_summary: asString(data['memory_usage_summary']),
+        summary: asString(data['summary']),
       },
       workerType: task.workerType,
     };

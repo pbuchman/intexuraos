@@ -1,0 +1,17 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1903",
+    "requires_re_review": false,
+    "memory_ids_used": [
+      "mem_1181b473-d863-4ff0-8407-238b424f3e4b",
+      "mem_f5f36db7-27c7-43f4-827d-8c0c3dd958e3",
+      "mem_61117d10-7ef5-422c-8b96-30eba75787bc"
+    ],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "Memory 1 drove skipping all 6 `@ignore`/linkback bot comments and focusing only on the substantive bot review findings; memory 2 drove auditing the same token-refresher framing text in both §2.1 (line 67) and Appendix A.1 so the doc correction stayed consistent; memory 3 framed the scope as a multi-repo hardcoding audit review, which matched the PR content perfectly.",
+    "summary": "* Fixed the line-10 revision-history typo: \"previous revision wrote\" now correctly names `INTEXURAOS_GITHUB_APP_INSTALLATION_ID`, so the correction reads coherently.\n  * Reworded the `token-refresher.ts` rows in both §2.1 and Appendix A.1 to attribute the single-file constraint to `start.ts:544–549` (`GitHubTokenService`), noting per-task token paths already exist at `token-refresher.ts:113–114`.\n  * Skipped 6 issue comments: pbuchman automation log (`@ignore`), linear[bot] linkback, bot occurrence-map summary (describes already-in-PR content, no suggestions), 3 bot `@ignore` review-status/Requirements-Tracker comments.\n  * Pushed commit `9232382df` to `plan/int-1423-multi-repo-support-v2`; remote CI is fully green (Lint, Type Check, Tests 1-3/3, Build, Validation, Coverage, E2E, Terraform all SUCCESS).\n  * Posted inline + issue replies, 😄 reactions on all 8 processed surfaces (1 review body, 1 inline review comment, 6 issue comments), and a summary comment on the PR."
+  },
+  "missingRequired": [],
+  "warnings": []
+}

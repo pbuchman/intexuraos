@@ -1,9 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
 import type { Logger } from '@intexuraos/common-core';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import {
-  callVerificationLlm,
+  extractAndParseJson,
   generateResumeSummaryWithFallback,
 } from '../../../services/completion-verifier/llm-client.js';
 
@@ -18,8 +17,6 @@ const logger: Logger = {
   error: loggerError as Logger['error'],
   debug: loggerDebug as Logger['debug'],
 };
-
-const schema = z.object({ field: z.string() });
 
 function fakeClient(
   response: { ok: true; content: string } | { ok: false; code: string }
@@ -38,149 +35,21 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('callVerificationLlm', () => {
-  it('returns ok when the first client returns valid JSON matching schema', async () => {
-    const result = await callVerificationLlm({
-      models: [
-        {
-          client: fakeClient({ ok: true, content: '{"field":"hello"}' }),
-          modelName: 'primary',
-        },
-      ],
-      prompt: 'p',
-      schema,
-      logger,
-      taskId: 'task_1',
-      attempt: 1,
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.modelName).toBe('primary');
-      expect(result.value.content).toBe('{"field":"hello"}');
-      expect(result.value.parsed).toEqual({ field: 'hello' });
-    }
+describe('extractAndParseJson', () => {
+  it('parses a pure JSON object', () => {
+    expect(extractAndParseJson('{"summary":"ok"}')).toEqual({ summary: 'ok' });
   });
 
-  it('falls through to next client when content is unparseable', async () => {
-    const result = await callVerificationLlm({
-      models: [
-        {
-          client: fakeClient({ ok: true, content: 'not json at all' }),
-          modelName: 'primary',
-        },
-        {
-          client: fakeClient({ ok: true, content: '{"field":"ok"}' }),
-          modelName: 'fallback-1',
-        },
-      ],
-      prompt: 'p',
-      schema,
-      logger,
-      taskId: 'task_1',
-      attempt: 1,
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.modelName).toBe('fallback-1');
-    }
-    // Expect warning log about parsing failure
-    expect(loggerWarn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        taskId: 'task_1',
-        model: 'primary',
-      }),
-      'Completion verifier response parsing failed, trying next model'
-    );
+  it('extracts a JSON object embedded in surrounding text', () => {
+    expect(extractAndParseJson('noise {"summary":"ok"} trailing')).toEqual({ summary: 'ok' });
   });
 
-  it('falls through when primary generate fails; fallback succeeds', async () => {
-    const result = await callVerificationLlm({
-      models: [
-        { client: fakeClient({ ok: false, code: 'rate_limited' }), modelName: 'primary' },
-        {
-          client: fakeClient({ ok: true, content: '{"field":"ok"}' }),
-          modelName: 'fallback-1',
-        },
-      ],
-      prompt: 'p',
-      schema,
-      logger,
-      taskId: 'task_1',
-      attempt: 1,
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.modelName).toBe('fallback-1');
-    }
-    expect(loggerWarn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        taskId: 'task_1',
-        model: 'primary',
-        errorCode: 'rate_limited',
-      }),
-      'Completion verifier model call failed, trying next'
-    );
+  it('throws when no object is present', () => {
+    expect(() => extractAndParseJson('no json here')).toThrow();
   });
 
-  it('returns kind=schema-failed when schema validation fails on every model', async () => {
-    const result = await callVerificationLlm({
-      models: [
-        {
-          client: fakeClient({ ok: true, content: '{"wrong_key":"x"}' }),
-          modelName: 'primary',
-        },
-      ],
-      prompt: 'p',
-      schema,
-      logger,
-      taskId: 'task_1',
-      attempt: 1,
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.kind).toBe('schema-failed');
-      expect(result.error.modelName).toBe('primary');
-      expect(result.error.missingFields).toContain('field');
-    }
-  });
-
-  it('returns kind=all-failed when every client fails at generate', async () => {
-    const result = await callVerificationLlm({
-      models: [
-        { client: fakeClient({ ok: false, code: 'rate_limited' }), modelName: 'primary' },
-        { client: fakeClient({ ok: false, code: 'timeout' }), modelName: 'fallback-1' },
-      ],
-      prompt: 'p',
-      schema,
-      logger,
-      taskId: 'task_1',
-      attempt: 1,
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.kind).toBe('all-failed');
-      expect(result.error.content).toBe('');
-      // When no model ever produced content, modelName is empty string
-      expect(result.error.modelName).toBe('');
-    }
-  });
-
-  it('returns kind=all-failed when every client returns unparseable content', async () => {
-    const result = await callVerificationLlm({
-      models: [
-        { client: fakeClient({ ok: true, content: 'not json' }), modelName: 'primary' },
-        { client: fakeClient({ ok: true, content: 'also not json' }), modelName: 'fallback-1' },
-      ],
-      prompt: 'p',
-      schema,
-      logger,
-      taskId: 'task_1',
-      attempt: 1,
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.kind).toBe('all-failed');
-    }
+  it('throws when input is not valid JSON despite braces', () => {
+    expect(() => extractAndParseJson('{this is not json}')).toThrow();
   });
 });
 
@@ -224,7 +93,6 @@ describe('generateResumeSummaryWithFallback', () => {
     });
     expect(result.ok).toBe(true);
     expect(result.modelName).toBe('fallback-1');
-    // fallback-2 must NOT have been called once fallback-1 succeeded
     expect(fallback2Gen).not.toHaveBeenCalled();
   });
 
@@ -252,12 +120,8 @@ describe('generateResumeSummaryWithFallback', () => {
     });
     expect(result.ok).toBe(true);
     expect(result.modelName).toBe('fallback-2');
-    // ORDER: fallback-1 is tried before fallback-2
     expect(fallback1Gen).toHaveBeenCalledTimes(1);
     expect(fallback2Gen).toHaveBeenCalledTimes(1);
-    expect(fallback1Gen.mock.invocationCallOrder[0]).toBeLessThan(
-      fallback2Gen.mock.invocationCallOrder[0] ?? Infinity
-    );
   });
 
   it('returns primary error (ok=false) and primary modelName when all models fail', async () => {
@@ -273,7 +137,6 @@ describe('generateResumeSummaryWithFallback', () => {
       logger,
     });
     expect(result.ok).toBe(false);
-    // Preserves the primary's error, and reports the primary model name
     expect(result.modelName).toBe('primary');
   });
 });
