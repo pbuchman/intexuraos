@@ -4,6 +4,7 @@
  * Orchestrates: classify -> budget check -> (optional user-selected LLM) -> auto-retry or permanent fail.
  *
  * INT-1375: Self-healing failure triage.
+ * INT-1463: Cooloff-aware retry scheduling for Claude usage-limit failures.
  */
 
 import type { Logger } from '@intexuraos/common-core';
@@ -14,8 +15,12 @@ import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import { classifyFailure } from '../utils/classifyFailure.js';
-import { autoRetryTask } from './autoRetryTask.js';
+import { autoRetryTask, type AutoRetryTaskRequest } from './autoRetryTask.js';
 import { buildFailureTriagePrompt, parseTriageResponse } from '../prompts/failureTriagePrompt.js';
+import {
+  buildCooloffRetryPrompt,
+  parseCooloffResponse,
+} from '../prompts/cooloffRetryPrompt.js';
 
 export type TriageAction = 'retried' | 'retried_after_cooloff' | 'permanent_failure';
 
@@ -31,9 +36,14 @@ export interface TriageFailedTaskDeps {
   taskEnqueueService: TaskEnqueueService;
   whatsappNotifier: WhatsAppNotifier;
   logLineRepo: LogLineRepository;
-  userServiceClient: Pick<UserServiceClient, 'getLlmClient'>;
+  userServiceClient: Pick<UserServiceClient, 'getLlmClient' | 'getUserTimezone'>;
   orchestratorSecret: string;
 }
+
+/** Fallback cooloff wait when the LLM parser cannot extract a reset time. */
+export const COOLOFF_FALLBACK_MS = 60 * 60 * 1000;
+
+type CooloffSchedule = NonNullable<AutoRetryTaskRequest['cooloffSchedule']>;
 
 export async function triageFailedTask(
   deps: TriageFailedTaskDeps,
@@ -60,14 +70,23 @@ export async function triageFailedTask(
     // Fall through to retry
   }
 
+  // Step 3b: For retry_after_cooloff, resolve the reset time (LLM or fallback).
+  let cooloffSchedule: CooloffSchedule | undefined;
+  if (verdict === 'retry_after_cooloff') {
+    cooloffSchedule = await resolveCooloffSchedule(deps, task, taskError, new Date());
+  }
+
   // Step 4: Attempt auto-retry
+  const retryRequest: AutoRetryTaskRequest = {
+    failedTask: task,
+    failedWorkerLocation: task.workerLocation,
+    reason: `${taskError.code}: ${taskError.message}`.slice(0, 200),
+    ...(cooloffSchedule !== undefined && { cooloffSchedule }),
+  };
+
   const retryResult = await autoRetryTask(
     { logger, codeTaskRepo, taskEnqueueService, whatsappNotifier, orchestratorSecret: deps.orchestratorSecret },
-    {
-      failedTask: task,
-      failedWorkerLocation: task.workerLocation,
-      reason: `${taskError.code}: ${taskError.message}`.slice(0, 200),
-    }
+    retryRequest
   );
 
   if (!retryResult.ok) {
@@ -137,4 +156,112 @@ async function askUserLlmForTriage(
   );
 
   return triageResponse;
+}
+
+/**
+ * Resolve a cooloff dispatch schedule for a `retry_after_cooloff` failure.
+ *
+ * Strategy:
+ *   1. Fetch recent log lines (tolerate fetch errors).
+ *   2. Fetch user timezone (tolerate fetch errors).
+ *   3. Resolve the user's LLM client; on failure, use the fallback delay.
+ *   4. Call the LLM with the cooloff prompt.
+ *   5. Parse the response; on invalid/past/out-of-range, use the fallback delay.
+ *
+ * The fallback path writes ONE absolute `notBeforeAt = now + 60 min` and
+ * marks `derivedBy = 'fallback'`. It is not a recurring retry.
+ */
+async function resolveCooloffSchedule(
+  deps: TriageFailedTaskDeps,
+  task: CodeTask,
+  taskError: TaskError,
+  now: Date
+): Promise<CooloffSchedule> {
+  const { logger, logLineRepo, userServiceClient } = deps;
+
+  // Fetch recent log lines (best-effort).
+  const logResult = await logLineRepo.listRecent(task.id, 20);
+  const recentLogLines = logResult.ok ? logResult.value.map((line) => line.text) : [];
+  if (!logResult.ok) {
+    logger.warn(
+      { taskId: task.id, error: logResult.error },
+      'Failed to fetch log lines for cooloff parsing'
+    );
+  }
+
+  // Fetch user timezone (best-effort).
+  let userTimezone: string | undefined;
+  try {
+    userTimezone = await userServiceClient.getUserTimezone(task.userId);
+  } catch (error) {
+    logger.warn(
+      { taskId: task.id, userId: task.userId, error },
+      'Failed to fetch user timezone for cooloff parsing'
+    );
+    userTimezone = undefined;
+  }
+
+  // Build the fallback schedule after timezone resolution so the retry task's
+  // dispatchSchedule reflects the real user timezone when known (INT-1468).
+  const fallback: CooloffSchedule = {
+    notBeforeAt: new Date(now.getTime() + COOLOFF_FALLBACK_MS),
+    derivedBy: 'fallback' as const,
+    sourceText: taskError.message.slice(0, 200),
+    ...(userTimezone !== undefined && { timezone: userTimezone }),
+  };
+
+  // Resolve LLM client.
+  const llmClientResult = await userServiceClient.getLlmClient(task.userId);
+  if (!llmClientResult.ok) {
+    logger.warn(
+      { taskId: task.id, userId: task.userId, error: llmClientResult.error },
+      'User LLM unavailable for cooloff parsing; using fallback delay'
+    );
+    return fallback;
+  }
+
+  const prompt = buildCooloffRetryPrompt({
+    errorCode: taskError.code,
+    errorMessage: taskError.message,
+    recentLogLines,
+    now,
+    ...(userTimezone !== undefined && { userTimezone }),
+  });
+
+  const generateResult = await llmClientResult.value.generate(prompt, {
+    promptType: 'cooloff-retry',
+  });
+  if (!generateResult.ok) {
+    logger.warn(
+      { taskId: task.id, error: generateResult.error },
+      'LLM cooloff call failed; using fallback delay'
+    );
+    return fallback;
+  }
+
+  const parsed = parseCooloffResponse(generateResult.value.content, now);
+  if (parsed === null) {
+    logger.warn(
+      { taskId: task.id },
+      'Cooloff parser rejected LLM response; using fallback delay'
+    );
+    return fallback;
+  }
+
+  logger.info(
+    {
+      taskId: task.id,
+      notBeforeAt: parsed.notBeforeAt.toISOString(),
+      timezone: parsed.timezone,
+      reason: parsed.reason,
+    },
+    'Cooloff reset time extracted from LLM'
+  );
+
+  return {
+    notBeforeAt: parsed.notBeforeAt,
+    derivedBy: 'llm' as const,
+    ...(parsed.timezone !== undefined && { timezone: parsed.timezone }),
+    ...(parsed.sourceText !== undefined && { sourceText: parsed.sourceText }),
+  };
 }

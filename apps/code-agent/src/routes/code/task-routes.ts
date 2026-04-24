@@ -30,6 +30,7 @@ import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { generateWebhookSecret } from '../../domain/utils/secrets.js';
 import { loadConfig } from '../../config.js';
 import type { TaskStatus, WorkerType } from '../../domain/models/codeTask.js';
+import type { DispatchScheduleCreateInput } from '../../domain/repositories/codeTaskRepository.js';
 import { taskToApiResponse, inFlightRequests } from './responseFormatters.js';
 import {
   codeTaskSchema,
@@ -1476,6 +1477,11 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerType?: WorkerType;
         linearIssueId?: string;
         taskMode?: 'planning' | 'execution';
+        scheduledDispatch?: {
+          localDateTime: string;
+          timezone: string;
+          notBeforeAt: string;
+        };
       };
     }>(
       '/code/submit',
@@ -1492,6 +1498,15 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               workerType: workerTypeSchema,
               linearIssueId: { type: 'string' },
               taskMode: { type: 'string', enum: ['planning', 'execution'] },
+              scheduledDispatch: {
+                type: 'object',
+                properties: {
+                  localDateTime: { type: 'string' },
+                  timezone: { type: 'string' },
+                  notBeforeAt: { type: 'string' },
+                },
+                required: ['localDateTime', 'timezone', 'notBeforeAt'],
+              },
             },
             required: ['prompt'],
           },
@@ -1509,6 +1524,22 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                     codeTaskId: { type: 'string' },
                   },
                   required: ['status', 'codeTaskId'],
+                },
+              },
+            },
+            400: {
+              description: 'Invalid request — scheduledDispatch only allowed in execution mode with valid future notBeforeAt',
+              type: 'object',
+              required: ['success', 'error'],
+              properties: {
+                success: { type: 'boolean', enum: [false] },
+                error: {
+                  type: 'object',
+                  required: ['code', 'message'],
+                  properties: {
+                    code: { type: 'string', enum: ['INVALID_REQUEST'] },
+                    message: { type: 'string' },
+                  },
                 },
               },
             },
@@ -1599,7 +1630,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           },
         },
       },
-      async (request: FastifyRequest<{ Body: { prompt: string; workerType?: WorkerType; workerLocation?: string; linearIssueId?: string; taskMode?: 'planning' | 'execution' } }>, reply: FastifyReply) => {
+      async (request: FastifyRequest<{ Body: { prompt: string; workerType?: WorkerType; workerLocation?: string; linearIssueId?: string; taskMode?: 'planning' | 'execution'; scheduledDispatch?: { localDateTime: string; timezone: string; notBeforeAt: string } } }>, reply: FastifyReply) => {
         logIncomingRequest(request, {
           message: 'Received request to POST /code/submit',
           includeParams: true,
@@ -1611,6 +1642,11 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           workerType?: WorkerType;
           linearIssueId?: string;
           taskMode?: 'planning' | 'execution';
+          scheduledDispatch?: {
+            localDateTime: string;
+            timezone: string;
+            notBeforeAt: string;
+          };
         };
 
         /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
@@ -1633,6 +1669,25 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         }
         const issueResult = await linearIssueService.ensureIssueExists(ensureParams);
 
+        // Derive effective agent type (INT-1468: used to gate scheduledDispatch acceptance)
+        const agentType: 'planning' | 'execution' = body.taskMode ?? (hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'planning');
+
+        // Validate scheduledDispatch (INT-1468): execution-only + future ISO
+        let scheduleNotBeforeAt: Date | undefined;
+        if (body.scheduledDispatch !== undefined) {
+          if (agentType !== 'execution') {
+            return await reply.fail('INVALID_REQUEST', 'scheduledDispatch is only allowed when taskMode is execution');
+          }
+          const parsed = new Date(body.scheduledDispatch.notBeforeAt);
+          if (Number.isNaN(parsed.getTime())) {
+            return await reply.fail('INVALID_REQUEST', 'scheduledDispatch.notBeforeAt must be a valid ISO 8601 timestamp');
+          }
+          if (parsed.getTime() <= Date.now()) {
+            return await reply.fail('INVALID_REQUEST', 'scheduledDispatch.notBeforeAt must be in the future');
+          }
+          scheduleNotBeforeAt = parsed;
+        }
+
         // Pre-generate task ID and derive deterministic webhook secret
         const config = loadConfig();
         const taskId = `task_${randomUUID()}`;
@@ -1653,6 +1708,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           webhookSecret: string;
           linearIssueId?: string;
           agentType: 'planning' | 'execution';
+          dispatchSchedule?: DispatchScheduleCreateInput;
         } = {
           id: taskId,
           userId,
@@ -1665,13 +1721,26 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           baseBranch: 'development',
           traceId: `trace_${String(Date.now())}_${Math.random().toString(36).substring(7)}`,
           webhookSecret,
-          agentType: body.taskMode ?? (hasCodeTaskLabel(issueResult.linearIssueLabels) ? 'execution' : 'planning'),
+          agentType,
         };
 
         // Save linearIssueId if available (linking to existing issue)
         if (issueResult.linearIssueId !== undefined) {
           createInput.linearIssueId = issueResult.linearIssueId;
         }
+
+        // Persist user-provided schedule on the new task (INT-1468)
+        if (scheduleNotBeforeAt !== undefined && body.scheduledDispatch !== undefined) {
+          const dispatchSchedule: DispatchScheduleCreateInput = {
+            notBeforeAt: scheduleNotBeforeAt,
+            source: 'user_scheduled',
+            timezone: body.scheduledDispatch.timezone,
+            localDateTime: body.scheduledDispatch.localDateTime,
+            derivedBy: 'user_input',
+          };
+          createInput.dispatchSchedule = dispatchSchedule;
+        }
+
         const createResult = await codeTaskRepo.create(createInput);
 
         if (!createResult.ok) {

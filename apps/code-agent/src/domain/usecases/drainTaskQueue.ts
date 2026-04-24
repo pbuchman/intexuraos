@@ -31,8 +31,13 @@ import {
   type PrepareExecutionMemoryResources,
 } from './prepareExecutionMemoryContext.js';
 
-/** Max candidates fetched per drain cycle for the per-resource concurrency guard. */
-const DRAIN_CANDIDATE_BATCH_SIZE = 10;
+/**
+ * Max candidates fetched per drain cycle for the per-resource concurrency guard.
+ * Kept as a fallback for callers that need a safe default; the drain cycle itself
+ * uses `config.queue.maxSize` so older future-scheduled rows cannot starve newer
+ * eligible work (INT-1463).
+ */
+export const DRAIN_CANDIDATE_BATCH_SIZE = 10;
 
 function groupTasksByPR(tasks: CodeTask[]): Map<string, CodeTask[]> {
   const groups = new Map<string, CodeTask[]>();
@@ -92,7 +97,10 @@ export async function drainTaskQueue(
   isDraining = true;
   try {
     // Step 1: Fetch queued candidates (INT-949: per-resource concurrency guard)
-    const candidatesResult = await codeTaskRepo.listQueuedByAge(DRAIN_CANDIDATE_BATCH_SIZE);
+    // INT-1463: scan the full queued set so future-scheduled rows do not hide newer
+    // eligible work behind them. `config.queue.maxSize` bounds the queue itself.
+    const drainBatchSize = config.queue.maxSize;
+    const candidatesResult = await codeTaskRepo.listQueuedByAge(drainBatchSize);
     if (!candidatesResult.ok) {
       logger.error({ error: candidatesResult.error }, 'Failed to list queued tasks');
       return err({ code: 'internal_error', message: candidatesResult.error.message });
@@ -184,6 +192,22 @@ export async function drainTaskQueue(
     // Find first dispatchable candidate with per-PR guard + TTL check
     let task: CodeTask | null = null;
     for (const candidate of roundRobinCandidates) {
+      // INT-1463: schedule-aware skip — if the task is not yet eligible for dispatch,
+      // skip BEFORE the PR-lock check and BEFORE the TTL check. Do not touch queuedAt
+      // (TTL must remain independent of the schedule wait — see notBeforeAt branch below).
+      const notBeforeAt = candidate.dispatchSchedule?.notBeforeAt;
+      if (notBeforeAt !== undefined && notBeforeAt.toMillis() > Date.now()) {
+        logger.info(
+          {
+            taskId: candidate.id,
+            notBeforeAt: notBeforeAt.toDate().toISOString(),
+            source: candidate.dispatchSchedule?.source,
+          },
+          'Skipping future-scheduled task — not yet eligible',
+        );
+        continue;
+      }
+
       // Per-PR concurrency guard FIRST — don't expire tasks that are merely PR-locked
       if (candidate.prNumber !== undefined) {
         const prActiveResult = await codeTaskRepo.hasDispatchedOrRunningForPR(candidate.repository, candidate.prNumber);
@@ -209,11 +233,18 @@ export async function drainTaskQueue(
       }
 
       // TTL check — only for tasks that are actually dispatchable (not PR-locked)
+      // INT-1463: scheduled tasks may legitimately sit in the queue past TTL while waiting
+      // for their notBeforeAt. Compute effective eligibility as max(queuedAt, notBeforeAt)
+      // so TTL only starts counting from the moment the task is actually eligible.
       const queuedAt = candidate.queuedAt?.toDate() ?? candidate.createdAt.toDate();
+      const notBeforeDate = candidate.dispatchSchedule?.notBeforeAt.toDate();
+      const effectiveEligibleAt = notBeforeDate !== undefined && notBeforeDate.getTime() > queuedAt.getTime()
+        ? notBeforeDate
+        : queuedAt;
       const ttlMs = config.queue.ttlMinutes * 60 * 1000;
       const now = Date.now();
 
-      if (now - queuedAt.getTime() > ttlMs) {
+      if (now - effectiveEligibleAt.getTime() > ttlMs) {
         logger.warn({ taskId: candidate.id, queuedAt }, 'Queued task expired');
         await codeTaskRepo.update(candidate.id, {
           status: 'failed',

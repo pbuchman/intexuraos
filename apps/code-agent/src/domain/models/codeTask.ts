@@ -131,6 +131,30 @@ export interface ExecutionMemoryPostRun {
 }
 
 /**
+ * Scheduling metadata for deferred dispatch (INT-1468).
+ *
+ * Carries the earliest time a queued task may be dispatched plus provenance for
+ * how that time was derived (user-provided vs. LLM-parsed vs. fallback). The
+ * queue drainer consults `notBeforeAt` to skip tasks still in their wait window.
+ */
+export interface DispatchSchedule {
+  /** Earliest permissible dispatch time. */
+  notBeforeAt: Timestamp;
+  /** Origin of the schedule — user-entered or automatic retry cooloff. */
+  source: 'user_scheduled' | 'retry_cooloff';
+  /** IANA timezone (e.g. 'UTC', 'Europe/Warsaw') used to compute notBeforeAt. */
+  timezone?: string;
+  /** Local-clock representation of notBeforeAt (e.g. '2026-04-24T22:00'). */
+  localDateTime?: string;
+  /** Raw text we parsed the schedule from (e.g. Claude usage-limit message). */
+  sourceText?: string;
+  /** How notBeforeAt was derived. */
+  derivedBy: 'user_input' | 'llm' | 'fallback';
+  /** Task that produced this schedule (set for retry_cooloff chains). */
+  derivedFromTaskId?: string;
+}
+
+/**
  * Task error on failure.
  * Design reference: Lines 1762-1848 (error taxonomy)
  */
@@ -257,4 +281,7 @@ export interface CodeTask {
   // Auto-retry metadata (INT-1375)
   failedWorkerLocation?: string;   // Worker location that failed, to exclude on retry dispatch
   autoRetryAttempt?: number;       // 1-based auto-retry attempt number (max 3)
+
+  // Deferred dispatch metadata (INT-1468)
+  dispatchSchedule?: DispatchSchedule;
 }

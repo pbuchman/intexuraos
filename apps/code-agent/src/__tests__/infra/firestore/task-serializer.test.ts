@@ -10,6 +10,7 @@ import {
   buildUpdateData,
   fromFirestoreDoc,
   mergeUpdateForTransaction,
+  serializeDispatchSchedule,
   serializeExecutionMemoryContext,
   serializeExecutionMemoryPostRun,
   stripLegacyLinearFields,
@@ -145,6 +146,60 @@ describe('serializeExecutionMemoryPostRun', () => {
   });
 });
 
+describe('serializeDispatchSchedule', () => {
+  it('converts Date notBeforeAt to Timestamp', () => {
+    const notBeforeAt = new Date('2026-04-24T22:00:00Z');
+    const out = serializeDispatchSchedule({
+      notBeforeAt,
+      source: 'user_scheduled',
+      derivedBy: 'user_input',
+    });
+    expect(out.notBeforeAt).toBeInstanceOf(Timestamp);
+    expect(out.notBeforeAt.toMillis()).toBe(notBeforeAt.getTime());
+  });
+
+  it('preserves Timestamp notBeforeAt as-is (no double conversion)', () => {
+    const ts = Timestamp.fromDate(new Date('2026-04-24T22:00:00Z'));
+    const out = serializeDispatchSchedule({
+      notBeforeAt: ts,
+      source: 'user_scheduled',
+      derivedBy: 'user_input',
+    });
+    expect(out.notBeforeAt).toBe(ts);
+  });
+
+  it('omits optional fields when absent', () => {
+    const out = serializeDispatchSchedule({
+      notBeforeAt: Timestamp.fromDate(new Date('2026-04-24T22:00:00Z')),
+      source: 'user_scheduled',
+      derivedBy: 'user_input',
+    });
+    expect(out.timezone).toBeUndefined();
+    expect(out.localDateTime).toBeUndefined();
+    expect(out.sourceText).toBeUndefined();
+    expect(out.derivedFromTaskId).toBeUndefined();
+  });
+
+  it('includes every optional field when provided', () => {
+    const ts = Timestamp.fromDate(new Date('2026-04-24T22:00:00Z'));
+    const out = serializeDispatchSchedule({
+      notBeforeAt: ts,
+      source: 'retry_cooloff',
+      derivedBy: 'llm',
+      timezone: 'Europe/Warsaw',
+      localDateTime: '2026-04-25T00:00',
+      sourceText: 'resets 10pm (UTC)',
+      derivedFromTaskId: 'task_prev',
+    });
+    expect(out.source).toBe('retry_cooloff');
+    expect(out.derivedBy).toBe('llm');
+    expect(out.timezone).toBe('Europe/Warsaw');
+    expect(out.localDateTime).toBe('2026-04-25T00:00');
+    expect(out.sourceText).toBe('resets 10pm (UTC)');
+    expect(out.derivedFromTaskId).toBe('task_prev');
+  });
+});
+
 describe('toFirestoreDoc', () => {
   const opts = {
     taskId: 'task_abc',
@@ -197,6 +252,11 @@ describe('toFirestoreDoc', () => {
         },
         failedWorkerLocation: 'vm-prev',
         autoRetryAttempt: 2,
+        dispatchSchedule: {
+          notBeforeAt: new Date('2026-04-24T22:00:00Z'),
+          source: 'user_scheduled',
+          derivedBy: 'user_input',
+        },
       },
       opts
     );
@@ -218,6 +278,8 @@ describe('toFirestoreDoc', () => {
     expect(doc.executionMemoryPostRun?.lastAttemptAt).toBe(memPostLastAttempt);
     expect(doc.failedWorkerLocation).toBe('vm-prev');
     expect(doc.autoRetryAttempt).toBe(2);
+    expect(doc.dispatchSchedule?.notBeforeAt).toBeInstanceOf(Timestamp);
+    expect(doc.dispatchSchedule?.source).toBe('user_scheduled');
   });
 
   it('omits optional fields when not provided', () => {
@@ -240,6 +302,7 @@ describe('toFirestoreDoc', () => {
     expect(doc.executionMemoryPostRun).toBeUndefined();
     expect(doc.failedWorkerLocation).toBeUndefined();
     expect(doc.autoRetryAttempt).toBeUndefined();
+    expect(doc.dispatchSchedule).toBeUndefined();
   });
 });
 
@@ -366,6 +429,28 @@ describe('buildUpdateData', () => {
   it('leaves unspecified fields absent', () => {
     const data = buildUpdateData({});
     expect(Object.keys(data).sort()).toEqual(['updatedAt']);
+  });
+
+  it('serializes dispatchSchedule when provided', () => {
+    const notBeforeAt = new Date('2026-04-24T22:00:00Z');
+    const data = buildUpdateData({
+      dispatchSchedule: {
+        notBeforeAt,
+        source: 'retry_cooloff',
+        derivedBy: 'llm',
+        sourceText: 'resets 10pm (UTC)',
+        derivedFromTaskId: 'task_prev',
+      },
+    });
+    const schedule = data['dispatchSchedule'] as {
+      notBeforeAt: Timestamp;
+      source: string;
+      sourceText: string;
+    };
+    expect(schedule.notBeforeAt).toBeInstanceOf(Timestamp);
+    expect(schedule.notBeforeAt.toMillis()).toBe(notBeforeAt.getTime());
+    expect(schedule.source).toBe('retry_cooloff');
+    expect(schedule.sourceText).toBe('resets 10pm (UTC)');
   });
 });
 

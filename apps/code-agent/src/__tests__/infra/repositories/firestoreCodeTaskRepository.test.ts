@@ -750,6 +750,82 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.id).toBe('task_external-tx');
       expect(result.value.status).toBe('queued');
     });
+
+    it('persists dispatchSchedule with Date notBeforeAt converted to Timestamp (INT-1468)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const notBeforeAt = new Date('2026-04-24T22:00:00Z');
+      const input = createTaskInput({
+        dispatchSchedule: {
+          notBeforeAt,
+          source: 'user_scheduled',
+          timezone: 'UTC',
+          localDateTime: '2026-04-24T22:00',
+          derivedBy: 'user_input',
+        },
+      });
+
+      const result = await repo.create(input);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const schedule = result.value.dispatchSchedule;
+      expect(schedule).toBeDefined();
+      if (schedule === undefined) return;
+      expect(schedule.notBeforeAt).toBeInstanceOf(Timestamp);
+      expect(schedule.notBeforeAt.toMillis()).toBe(notBeforeAt.getTime());
+      expect(schedule.source).toBe('user_scheduled');
+      expect(schedule.timezone).toBe('UTC');
+      expect(schedule.localDateTime).toBe('2026-04-24T22:00');
+      expect(schedule.derivedBy).toBe('user_input');
+    });
+
+    it('omits dispatchSchedule when not provided (back-compat)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.create(createTaskInput());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.dispatchSchedule).toBeUndefined();
+    });
+
+    it('accepts a pre-converted Timestamp for dispatchSchedule.notBeforeAt without double conversion', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const notBeforeAt = Timestamp.fromDate(new Date('2026-04-24T22:00:00Z'));
+      const input = createTaskInput({
+        dispatchSchedule: {
+          notBeforeAt,
+          source: 'user_scheduled',
+          derivedBy: 'user_input',
+        },
+      });
+
+      const result = await repo.create(input);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const schedule = result.value.dispatchSchedule;
+      expect(schedule).toBeDefined();
+      if (schedule === undefined) return;
+      expect(schedule.notBeforeAt).toBeInstanceOf(Timestamp);
+      expect(schedule.notBeforeAt.toMillis()).toBe(notBeforeAt.toMillis());
+      expect(schedule.source).toBe('user_scheduled');
+      expect(schedule.derivedBy).toBe('user_input');
+    });
   });
 
   describe('findById', () => {
@@ -1102,6 +1178,41 @@ describe('firestoreCodeTaskRepository', () => {
       if (result.value.prClosedAt !== undefined) {
         expect(result.value.prClosedAt.toDate()).toStrictEqual(prClosedAt);
       }
+    });
+
+    it('updates dispatchSchedule with retry_cooloff source (INT-1468)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const notBeforeAt = new Date('2026-04-24T22:00:00Z');
+      const result = await repo.update(created.value.id, {
+        dispatchSchedule: {
+          notBeforeAt,
+          source: 'retry_cooloff',
+          sourceText: 'resets 10pm (UTC)',
+          derivedBy: 'llm',
+          derivedFromTaskId: 'task_prev',
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const schedule = result.value.dispatchSchedule;
+      expect(schedule).toBeDefined();
+      if (schedule === undefined) return;
+      expect(schedule.notBeforeAt).toBeInstanceOf(Timestamp);
+      expect(schedule.notBeforeAt.toMillis()).toBe(notBeforeAt.getTime());
+      expect(schedule.source).toBe('retry_cooloff');
+      expect(schedule.sourceText).toBe('resets 10pm (UTC)');
+      expect(schedule.derivedBy).toBe('llm');
+      expect(schedule.derivedFromTaskId).toBe('task_prev');
     });
   });
 

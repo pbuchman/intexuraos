@@ -34,6 +34,25 @@ export function formatDateTime(isoDate: string): string {
 }
 
 /**
+ * Format absolute date-time as "Apr 24, 2026, 10:00 PM EST"
+ * Use for: Future dispatch eligibility labels where both the date and
+ * wall-clock time need to be visible in a single compact string (INT-1468).
+ *
+ * Uses the browser's default timezone and appends a short timezone label so
+ * queue rows stay consistent with the schedule preview shown in the modal.
+ */
+export function formatAbsoluteDateTime(isoDate: string): string {
+  return new Date(isoDate).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+}
+
+/**
  * Format date with time as "Jan 15, 2:30 PM"
  * Use for: Compact mobile metadata rows
  */
