@@ -1,9 +1,56 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { verifyCompletion } from '../services/completion-verifier.js';
+import type { CompletionAgentType } from '../services/completion-verifier/schemas.js';
 
 const FIXTURE_ROOT = join(__dirname, 'fixtures/completion-verifier');
+
+interface FixtureDescriptor {
+  agentType: CompletionAgentType;
+  workerType: string;
+  taskId: string;
+  txtPath: string;
+  expectedPath: string;
+}
+
+/**
+ * Enumerate every real-production AGENT_FINAL fixture (and its golden
+ * .expected.json sibling). Mirrors the helper in block-parser.test.ts —
+ * reimplemented here rather than exported to keep the parser test file's
+ * surface unchanged, and because only these two files consume it.
+ */
+function discoverFixtures(): FixtureDescriptor[] {
+  const out: FixtureDescriptor[] = [];
+  const agentTypes: readonly CompletionAgentType[] = [
+    'execution',
+    'planning',
+    'review',
+    'remediation',
+    'pull_request',
+  ];
+  for (const agentType of agentTypes) {
+    const agentDir = join(FIXTURE_ROOT, agentType);
+    if (!existsSync(agentDir)) continue;
+    for (const workerType of readdirSync(agentDir)) {
+      const workerDir = join(agentDir, workerType);
+      for (const file of readdirSync(workerDir)) {
+        if (!file.endsWith('.txt')) continue;
+        // Skip negative fixtures — the parser test covers those directly.
+        if (file.endsWith('.negative.txt')) continue;
+        const taskId = file.replace(/\.txt$/, '');
+        out.push({
+          agentType,
+          workerType,
+          taskId,
+          txtPath: join(workerDir, file),
+          expectedPath: join(workerDir, `${taskId}.expected.json`),
+        });
+      }
+    }
+  }
+  return out;
+}
 
 describe('verifyCompletion — synchronous pipeline', () => {
   it('regression — task_5946dce4 (INT-1441) accepts with populated memory arrays', () => {
@@ -136,4 +183,55 @@ describe('verifyCompletion — synchronous pipeline', () => {
     if (verdict.kind !== 'parsed') return;
     expect(verdict.telemetryMissing).toEqual(['memory_ids_used', 'memory_ids_rejected']);
   });
+});
+
+describe('verifyCompletion — full-fixture replay (Phase-5 regression guard)', () => {
+  // Every real-production AGENT_FINAL transcript harvested into the fixture
+  // corpus MUST either accept (kind='parsed' with missingRequired=[]) when
+  // the golden says the block is a deliverable, or cleanly report the same
+  // missingRequired set the parser captured in the golden. The one thing
+  // that may NEVER happen on a real transcript that contains the marker is
+  // `kind='hard-error'` — that verdict is reserved for transcripts with no
+  // marker at all (see the `returns kind=hard-error when no AGENT_FINAL
+  // block is present` test above and the dedicated negative fixtures in
+  // block-parser.test.ts).
+  const fixtures = discoverFixtures();
+
+  it('discovers at least 100 fixtures (sanity)', () => {
+    expect(fixtures.length).toBeGreaterThan(100);
+  });
+
+  interface Golden {
+    missingRequired: string[];
+  }
+
+  it.each(fixtures)(
+    '$agentType/$workerType/$taskId replays through verifyCompletion without hard-error',
+    ({ agentType, workerType, txtPath, expectedPath }) => {
+      const transcript = readFileSync(txtPath, 'utf8');
+      const golden = JSON.parse(readFileSync(expectedPath, 'utf8')) as Golden;
+      const verdict = verifyCompletion({
+        transcript,
+        agentType,
+        // Worker type is only used for tier lookup downstream; the parser
+        // itself is worker-agnostic. Pass the fixture's bucket through as-is.
+        workerType: workerType as never,
+        // No memory context injected — we're exercising the parser, not the
+        // telemetry policy. The golden files capture the parser output, which
+        // is independent of executionMemoryContext.
+        executionMemoryContext: undefined,
+        lastExitCode: 0,
+      });
+      expect(
+        verdict.kind,
+        `fixture ${txtPath} must not produce a hard-error — that verdict is reserved for transcripts with no AGENT_FINAL marker`
+      ).toBe('parsed');
+      if (verdict.kind !== 'parsed') return;
+      // missingRequired must match the golden exactly. Deliverable fixtures
+      // (golden has []) must verify cleanly; incomplete-deliverable fixtures
+      // (golden has a non-empty list) must still be `parsed`, never
+      // `hard-error`, and must report the same missing set.
+      expect(verdict.missingRequired).toEqual(golden.missingRequired);
+    }
+  );
 });
