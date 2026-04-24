@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { locateFinalBlock } from '../../../services/completion-verifier/block-parser.js';
+import {
+  locateFinalBlock,
+  parseKeyValues,
+} from '../../../services/completion-verifier/block-parser.js';
 
 const FIXTURE_ROOT = join(__dirname, '../../fixtures/completion-verifier');
 
@@ -68,5 +71,82 @@ describe('locateFinalBlock', () => {
     const block = locateFinalBlock(txt, 'EXECUTION_AGENT_FINAL:');
     expect(block).not.toBeNull();
     expect(block).toContain('- Outcome: implemented');
+  });
+});
+
+describe('parseKeyValues', () => {
+  it('parses simple "- key: value" pairs', () => {
+    const block = [
+      'EXECUTION_AGENT_FINAL:',
+      '- Outcome: implemented',
+      '- pr: https://github.com/x/y/pull/1',
+      '- summary: ok',
+    ].join('\n');
+    expect(parseKeyValues(block)).toEqual({
+      Outcome: 'implemented',
+      pr: 'https://github.com/x/y/pull/1',
+      summary: 'ok',
+    });
+  });
+
+  it('preserves case in keys (does not normalize)', () => {
+    const block = [
+      'EXECUTION_AGENT_FINAL:',
+      '- Outcome: implemented',
+      '- CI evidence: ok',
+    ].join('\n');
+    expect(parseKeyValues(block)).toHaveProperty('CI evidence', 'ok');
+    expect(parseKeyValues(block)).toHaveProperty('Outcome', 'implemented');
+  });
+
+  it('strips paired markdown emphasis from values (**, *, `, _)', () => {
+    const block = [
+      'EXECUTION_AGENT_FINAL:',
+      '- Outcome: **implemented**',
+      '- pr: `https://github.com/x/y/pull/1`',
+      '- summary: _ok_',
+    ].join('\n');
+    const parsed = parseKeyValues(block);
+    expect(parsed.Outcome).toBe('implemented');
+    expect(parsed.pr).toBe('https://github.com/x/y/pull/1');
+    expect(parsed.summary).toBe('ok');
+  });
+
+  it('joins continuation lines (indented under a key) into the value', () => {
+    const block = [
+      'EXECUTION_AGENT_FINAL:',
+      '- Outcome: implemented',
+      '- summary:',
+      '  * first bullet',
+      '  * second bullet',
+      '- pr: https://github.com/x/y/pull/1',
+    ].join('\n');
+    const parsed = parseKeyValues(block);
+    expect(parsed.summary).toBe('* first bullet\n  * second bullet');
+    expect(parsed.pr).toBe('https://github.com/x/y/pull/1');
+  });
+
+  it('ignores lines that are not "- key: value"', () => {
+    const block = [
+      'EXECUTION_AGENT_FINAL:',
+      '- Outcome: implemented',
+      '',
+      'Some narrative in the middle',
+      '',
+      '- pr: https://github.com/x/y/pull/1',
+    ].join('\n');
+    const parsed = parseKeyValues(block);
+    expect(parsed.Outcome).toBe('implemented');
+    expect(parsed.pr).toBe('https://github.com/x/y/pull/1');
+  });
+
+  it('handles the minimax bold-every-value fixture', () => {
+    const txt = readFixture('execution/minimax/task_24eb987c-361e-4973-90a8-229e7432b645.txt');
+    const block = locateFinalBlock(txt, 'EXECUTION_AGENT_FINAL:');
+    expect(block).not.toBeNull();
+    const parsed = parseKeyValues(block as string);
+    expect(parsed.Outcome).toBe('implemented');
+    expect(parsed.PR).toBe('https://github.com/pbuchman/intexuraos/pull/1925');
+    expect(parsed.execution_memory_ids_used).toMatch(/^mem_463bb567/);
   });
 });

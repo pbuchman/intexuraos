@@ -54,3 +54,66 @@ export function locateFinalBlock(transcript: string, marker: string): string | n
   }
   return body.join('\n').trimEnd();
 }
+
+/**
+ * Parse the body of an AGENT_FINAL block into a flat key-value record.
+ * Lines matching `^\s*-\s+<key>:\s*<value>$` start a new entry. Indented
+ * continuation lines are appended with `\n`. Values have paired outer
+ * markdown emphasis (**...**, *...*, `...`, _..._) stripped once.
+ *
+ * Keys are preserved as-written (case, spaces, underscores all kept).
+ * Callers that want canonical lookup should use the alias-aware
+ * resolution in coerceFields.
+ */
+export function parseKeyValues(block: string): Record<string, string> {
+  const lines = block.split('\n');
+  const result: Record<string, string> = {};
+  let currentKey: string | null = null;
+
+  const keyLinePattern = /^\s*-\s+([^:]+?)\s*:\s*(.*)$/;
+
+  for (const line of lines) {
+    // Indented continuation lines should NOT match as new keys.
+    const isIndented = /^\s{2,}/.test(line);
+    const match = !isIndented ? keyLinePattern.exec(line) : null;
+    if (match) {
+      currentKey = match[1] ?? '';
+      result[currentKey] = match[2] ?? '';
+    } else if (currentKey !== null && isIndented) {
+      // Indented continuation of current key's value.
+      result[currentKey] = `${result[currentKey] ?? ''}\n${line}`;
+    } else if (currentKey !== null && line.trim() === '') {
+      // Blank inside a multi-line value — keep going; terminator is the
+      // next keyed line or end of block.
+      continue;
+    } else {
+      // Non-indented line that isn't a key → ends the current value.
+      currentKey = null;
+    }
+  }
+
+  // Strip paired outer emphasis from each final value.
+  for (const key of Object.keys(result)) {
+    result[key] = stripOuterEmphasis((result[key] ?? '').trim());
+  }
+  return result;
+}
+
+function stripOuterEmphasis(value: string): string {
+  let v = value;
+  // Peel one layer of ** / __ / * / _ / ` if paired.
+  const pairs: readonly (readonly [string, string])[] = [
+    ['**', '**'],
+    ['__', '__'],
+    ['`', '`'],
+    ['*', '*'],
+    ['_', '_'],
+  ];
+  for (const [open, close] of pairs) {
+    if (v.startsWith(open) && v.endsWith(close) && v.length >= open.length + close.length) {
+      v = v.slice(open.length, v.length - close.length).trim();
+      break;
+    }
+  }
+  return v;
+}
