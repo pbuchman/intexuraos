@@ -7,7 +7,23 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Timestamp, createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { CollectionReference, Firestore } from '@google-cloud/firestore';
-import { buildListQuery } from '../../../infra/firestore/task-query-builder.js';
+import {
+  buildListQuery,
+  selectLatestExecutionTask,
+  selectNonMergeConflict,
+  selectOriginTask,
+  selectPreservedPullRequest,
+} from '../../../infra/firestore/task-query-builder.js';
+import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH } from '../../../domain/models/codeTask.js';
+
+interface DocLike {
+  id: string;
+  data(): Record<string, unknown>;
+}
+
+function doc(id: string, data: Record<string, unknown>): DocLike {
+  return { id, data: () => data };
+}
 
 describe('buildListQuery', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -144,11 +160,14 @@ describe('buildListQuery', () => {
     expect(snap.docs.length).toBe(3); // limit + 1
   });
 
-  it('applies startAfter when cursor doc exists (query execution succeeds)', async () => {
-    // FakeFirestore.startAfter uses strict-equality on the ordering field value
-    // rather than the doc reference, so we cannot deterministically assert the
-    // skipped document in a unit test. We exercise the code path instead:
-    // with a valid cursor doc, query.get() must not throw.
+  it('exercises the cursor code path when cursor doc exists', async () => {
+    // FakeFirestore limitation: `startAfter(docSnapshot)` in the fake performs
+    // strict-equality against the ordering-field VALUE rather than the doc
+    // reference, so passing a DocumentSnapshot (as real Firestore expects)
+    // never matches and nothing is actually skipped. We still exercise the
+    // cursor-lookup branch (collection.doc(cursor).get() + startAfter(...))
+    // to cover the code path; precise skip semantics are exercised
+    // end-to-end against real Firestore in integration tests.
     await seed('t1', {
       userId: 'u1',
       status: 'queued',
@@ -165,8 +184,9 @@ describe('buildListQuery', () => {
       cursor: 't2',
     });
     const snap = await query.get();
-    // At minimum, the query runs cleanly and returns a subset of seeded docs.
-    expect(snap.docs.length).toBeLessThanOrEqual(2);
+    const ids = snap.docs.map((d) => d.id);
+    // Cursor branch ran without throwing, and the seeded docs are reachable.
+    expect(ids).toContain('t1');
   });
 
   it('ignores cursor when cursor doc does not exist', async () => {
@@ -181,5 +201,141 @@ describe('buildListQuery', () => {
     });
     const snap = await query.get();
     expect(snap.docs.map((d) => d.id)).toEqual(['t1']);
+  });
+});
+
+describe('selectLatestExecutionTask', () => {
+  const ts = Timestamp.fromDate(new Date('2025-01-01'));
+  const base = { userId: 'u1', dedupKey: 'k', createdAt: ts, updatedAt: ts };
+
+  it('returns null for an empty array', () => {
+    expect(selectLatestExecutionTask([])).toBeNull();
+  });
+
+  it('skips review / remediation / planning agent types', () => {
+    const task = selectLatestExecutionTask([
+      doc('a', { ...base, agentType: 'review' }),
+      doc('b', { ...base, agentType: 'remediation' }),
+      doc('c', { ...base, agentType: 'planning' }),
+      doc('d', { ...base, agentType: 'execution' }),
+    ]);
+    expect(task?.id).toBe('d');
+  });
+
+  it('skips merge-conflict follow-up tasks', () => {
+    const task = selectLatestExecutionTask([
+      doc('mc', { ...base, agentType: 'execution', followUpReason: 'merge_conflict' }),
+      doc('hash', {
+        ...base,
+        agentType: 'execution',
+        systemPromptHash: MERGE_CONFLICT_SYSTEM_PROMPT_HASH,
+      }),
+      doc('ok', { ...base, agentType: 'execution' }),
+    ]);
+    expect(task?.id).toBe('ok');
+  });
+
+  it('returns the first eligible doc', () => {
+    const task = selectLatestExecutionTask([
+      doc('skip', { ...base, agentType: 'review' }),
+      doc('first', { ...base, agentType: 'execution' }),
+      doc('second', { ...base, agentType: 'execution' }),
+    ]);
+    expect(task?.id).toBe('first');
+  });
+
+  it('returns the first doc when agentType is missing (backward compat)', () => {
+    const task = selectLatestExecutionTask([doc('legacy', base)]);
+    expect(task?.id).toBe('legacy');
+  });
+});
+
+describe('selectOriginTask', () => {
+  const ts = Timestamp.fromDate(new Date('2025-01-01'));
+  const base = { userId: 'u1', dedupKey: 'k', createdAt: ts, updatedAt: ts };
+
+  it('returns planning task when present', () => {
+    const task = selectOriginTask([
+      doc('pr', { ...base, agentType: 'pull_request' }),
+      doc('pl', { ...base, agentType: 'planning' }),
+    ]);
+    expect(task?.id).toBe('pl');
+  });
+
+  it('returns execution task when present', () => {
+    const task = selectOriginTask([
+      doc('pr', { ...base, agentType: 'pull_request' }),
+      doc('ex', { ...base, agentType: 'execution' }),
+    ]);
+    expect(task?.id).toBe('ex');
+  });
+
+  it('falls back to pull_request when no planning/execution found', () => {
+    const task = selectOriginTask([
+      doc('rv', { ...base, agentType: 'review' }),
+      doc('pr', { ...base, agentType: 'pull_request' }),
+    ]);
+    expect(task?.id).toBe('pr');
+  });
+
+  it('returns null when no match', () => {
+    const task = selectOriginTask([
+      doc('rv', { ...base, agentType: 'review' }),
+      doc('rm', { ...base, agentType: 'remediation' }),
+    ]);
+    expect(task).toBeNull();
+  });
+});
+
+describe('selectNonMergeConflict', () => {
+  const ts = Timestamp.fromDate(new Date('2025-01-01'));
+  const base = { userId: 'u1', dedupKey: 'k', createdAt: ts, updatedAt: ts };
+
+  it('filters out merge-conflict docs via followUpReason', () => {
+    const task = selectNonMergeConflict([
+      doc('mc', { ...base, followUpReason: 'merge_conflict' }),
+      doc('ok', base),
+    ]);
+    expect(task?.id).toBe('ok');
+  });
+
+  it('filters out merge-conflict docs via systemPromptHash', () => {
+    const task = selectNonMergeConflict([
+      doc('mc', { ...base, systemPromptHash: MERGE_CONFLICT_SYSTEM_PROMPT_HASH }),
+      doc('ok', base),
+    ]);
+    expect(task?.id).toBe('ok');
+  });
+
+  it('returns null when all docs are merge-conflict', () => {
+    const task = selectNonMergeConflict([
+      doc('mc1', { ...base, followUpReason: 'merge_conflict' }),
+      doc('mc2', { ...base, systemPromptHash: MERGE_CONFLICT_SYSTEM_PROMPT_HASH }),
+    ]);
+    expect(task).toBeNull();
+  });
+});
+
+describe('selectPreservedPullRequest', () => {
+  it('returns the first non-merge-conflict doc with workerLocation/userId', () => {
+    const out = selectPreservedPullRequest([
+      doc('mc', { followUpReason: 'merge_conflict', userId: 'u1', workerLocation: 'vmX' }),
+      doc('keep', { userId: 'uK', workerLocation: 'vmK' }),
+      doc('later', { userId: 'uL', workerLocation: 'vmL' }),
+    ]);
+    expect(out).toEqual({ id: 'keep', workerLocation: 'vmK', userId: 'uK' });
+  });
+
+  it('falls back to empty strings when userId/workerLocation are missing', () => {
+    const out = selectPreservedPullRequest([doc('sparse', {})]);
+    expect(out).toEqual({ id: 'sparse', workerLocation: '', userId: '' });
+  });
+
+  it('returns null when every doc is merge-conflict', () => {
+    const out = selectPreservedPullRequest([
+      doc('a', { followUpReason: 'merge_conflict' }),
+      doc('b', { systemPromptHash: MERGE_CONFLICT_SYSTEM_PROMPT_HASH }),
+    ]);
+    expect(out).toBeNull();
   });
 });

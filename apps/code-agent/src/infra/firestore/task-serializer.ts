@@ -12,20 +12,24 @@
 
 import { FieldValue, Timestamp } from '@google-cloud/firestore';
 import type {
+  DocumentSnapshot,
+  QueryDocumentSnapshot,
+} from '@google-cloud/firestore';
+import type {
   CodeTask,
   ExecutionMemoryContext,
   ExecutionMemoryPostRun,
 } from '../../domain/models/codeTask.js';
 import type {
   CreateTaskInput,
+  ExecutionMemoryContextCreateInput,
+  ExecutionMemoryPostRunCreateInput,
   UpdateTaskInput,
 } from '../../domain/repositories/codeTaskRepository.js';
+import type { DocLike } from './task-constants.js';
 
-/** Minimal shape accepted from query snapshots / DocumentSnapshot. */
-export interface DocLike {
-  id: string;
-  data(): Record<string, unknown>;
-}
+// Re-export shared DocLike for existing importers.
+export type { DocLike };
 
 /**
  * Drop legacy Linear-issue fields that were removed from the CodeTask model.
@@ -48,11 +52,20 @@ export function stripLegacyLinearFields(
 
 /**
  * Convert a Firestore document (or document-like object used by the fake)
- * into a domain CodeTask. Legacy Linear fields are stripped.
+ * into a domain CodeTask. Legacy Linear fields are stripped. Accepts
+ * `QueryDocumentSnapshot` (data is always populated), `DocumentSnapshot`
+ * (callers must guard with `.exists` — when present, data is populated),
+ * or a test-only `DocLike`. `data()` returning undefined for a missing doc
+ * is treated as empty to preserve a safe domain shape.
  */
-export function fromFirestoreDoc(doc: DocLike): CodeTask {
-  const rawData = doc.data();
-  const data = stripLegacyLinearFields(rawData);
+export function fromFirestoreDoc(
+  doc: QueryDocumentSnapshot | DocumentSnapshot | DocLike
+): CodeTask {
+  const raw = (doc.data() ?? {}) as Record<string, unknown>;
+  const data = stripLegacyLinearFields(raw) as Record<string, unknown> & {
+    createdAt?: Timestamp;
+    updatedAt?: Timestamp;
+  };
   return {
     ...data,
     id: doc.id,
@@ -76,7 +89,7 @@ export function toTimestamp(value: unknown): Timestamp | undefined {
 }
 
 export function serializeExecutionMemoryContext(
-  input: ExecutionMemoryContext
+  input: ExecutionMemoryContextCreateInput
 ): ExecutionMemoryContext {
   const { matchedAt: _matchedAt, ...rest } = input;
   const matchedAt = toTimestamp(input.matchedAt);
@@ -88,7 +101,7 @@ export function serializeExecutionMemoryContext(
 }
 
 export function serializeExecutionMemoryPostRun(
-  input: ExecutionMemoryPostRun
+  input: ExecutionMemoryPostRunCreateInput
 ): ExecutionMemoryPostRun {
   const {
     lastAttemptAt: _lastAttemptAt,
@@ -186,14 +199,12 @@ export function toFirestoreDoc(
       input.executionMemoryPostRun
     );
   }
-  /* v8 ignore start -- test-infra: FakeFirestore cannot exercise create() with failedWorkerLocation/autoRetryAttempt inside runTransaction retry semantics; these fields only populate on auto-retry paths out of scope for unit tests @preserve */
   if (input.failedWorkerLocation !== undefined) {
     taskData.failedWorkerLocation = input.failedWorkerLocation;
   }
   if (input.autoRetryAttempt !== undefined) {
     taskData.autoRetryAttempt = input.autoRetryAttempt;
   }
-  /* v8 ignore stop @preserve */
 
   return taskData;
 }

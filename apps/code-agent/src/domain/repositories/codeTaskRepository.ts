@@ -5,7 +5,32 @@
 
 import type { Result } from '@intexuraos/common-core';
 import type FirebaseFirestore from '@google-cloud/firestore';
-import type { AgentType, CodeTask, TaskStatus, WorkerType } from '../models/codeTask.js';
+import type { Timestamp } from '@google-cloud/firestore';
+import type {
+  AgentType,
+  CodeTask,
+  ExecutionMemoryContext,
+  ExecutionMemoryPostRun,
+  TaskStatus,
+  WorkerType,
+} from '../models/codeTask.js';
+
+/**
+ * Create/update input shapes: accept raw `Date` for timestamp fields as a
+ * convenience for callers — the serializer converts them to Firestore
+ * `Timestamp` values. Production reads still yield `Timestamp` via `CodeTask`.
+ */
+export type ExecutionMemoryContextCreateInput = Omit<ExecutionMemoryContext, 'matchedAt'> & {
+  matchedAt?: Date | Timestamp;
+};
+
+export type ExecutionMemoryPostRunCreateInput = Omit<
+  ExecutionMemoryPostRun,
+  'lastAttemptAt' | 'completedAt'
+> & {
+  lastAttemptAt?: Date | Timestamp;
+  completedAt?: Date | Timestamp;
+};
 
 export interface CreateTaskInput {
   /** Pre-generated task ID. Auto-generated if not provided. */
@@ -47,8 +72,8 @@ export interface CreateTaskInput {
 
   // Review task metadata
   reviewTypes?: string[];
-  executionMemoryContext?: CodeTask['executionMemoryContext'];
-  executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
+  executionMemoryContext?: ExecutionMemoryContextCreateInput | undefined;
+  executionMemoryPostRun?: ExecutionMemoryPostRunCreateInput | undefined;
 
   // Auto-retry metadata (INT-1375)
   failedWorkerLocation?: string;
@@ -81,8 +106,8 @@ export interface UpdateTaskInput {
   prBranch?: string;
   prMergedAt?: Date;  // When PR was merged (INT-1174)
   prClosedAt?: Date;  // When PR was closed without merge (INT-1316)
-  executionMemoryContext?: CodeTask['executionMemoryContext'];
-  executionMemoryPostRun?: CodeTask['executionMemoryPostRun'];
+  executionMemoryContext?: ExecutionMemoryContextCreateInput | undefined;
+  executionMemoryPostRun?: ExecutionMemoryPostRunCreateInput | undefined;
 
   // PR URL validation (INT-1361)
   prUrlValidationFailed?: boolean;
