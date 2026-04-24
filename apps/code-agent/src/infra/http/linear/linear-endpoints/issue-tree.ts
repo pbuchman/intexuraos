@@ -6,7 +6,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import { ok, err, getErrorMessage } from '@intexuraos/common-core';
+import { ok } from '@intexuraos/common-core';
 import type {
   LinearAgentClient,
   IssueTreeNode,
@@ -15,6 +15,7 @@ import type {
   LinearAgentError,
 } from '../../../../domain/ports/linearAgentClient.js';
 import { fetchLinearAgent } from '../linear-fetch-util.js';
+import { isOk, mapSilentFetchError } from '../silent-fetch-mapper.js';
 
 export interface IssueTreeEndpointsDeps {
   baseUrl: string;
@@ -47,24 +48,7 @@ export function createIssueTreeEndpoints(
         userId: request.userId,
       });
 
-      if (result.kind === 'http-error') {
-        return err({
-          code: result.status === 404 ? 'NOT_FOUND' : 'UNAVAILABLE',
-          message: result.errorText,
-        });
-      }
-
-      if (result.kind === 'invalid-body') {
-        return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
-      }
-
-      if (result.kind === 'timeout') {
-        return err({ code: 'UNKNOWN', message: 'Request timed out' });
-      }
-
-      if (result.kind === 'network-error') {
-        return err({ code: 'UNKNOWN', message: getErrorMessage(result.error) });
-      }
+      if (!isOk(result)) return mapSilentFetchError(result);
 
       return ok(result.data);
     },
@@ -82,24 +66,7 @@ export function createIssueTreeEndpoints(
         userId: request.userId,
       });
 
-      if (result.kind === 'http-error') {
-        return err({
-          code: result.status === 404 ? 'NOT_FOUND' : 'UNAVAILABLE',
-          message: result.errorText,
-        });
-      }
-
-      if (result.kind === 'invalid-body') {
-        return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
-      }
-
-      if (result.kind === 'timeout') {
-        return err({ code: 'UNKNOWN', message: 'Request timed out' });
-      }
-
-      if (result.kind === 'network-error') {
-        return err({ code: 'UNKNOWN', message: getErrorMessage(result.error) });
-      }
+      if (!isOk(result)) return mapSilentFetchError(result);
 
       return ok(result.data);
     },
