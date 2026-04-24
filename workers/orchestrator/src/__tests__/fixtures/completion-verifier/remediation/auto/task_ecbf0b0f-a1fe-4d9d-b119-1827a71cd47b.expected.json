@@ -3,7 +3,9 @@
     "outcome": "implemented",
     "pr": "https://github.com/pbuchman/intexuraos/pull/1897",
     "requires_re_review": true,
-    "memory_ids_used": ["mem_87d21fc9-fd32-47d6-a495-d1349e395a69"],
+    "memory_ids_used": [
+      "mem_87d21fc9-fd32-47d6-a495-d1349e395a69"
+    ],
     "memory_ids_rejected": [
       "mem_a4ce6dce-aecb-4189-816f-4a69d7d19251",
       "mem_c4937fb0-9acf-4fba-8051-6ec027a5b8ad"

@@ -103,6 +103,22 @@ export function buildResultFromVerification(
   base.summary = toStringOr(data['summary']);
 
   // Memory fields: wire format preserves legacy `execution_memory_*` strings.
+  //
+  // [INT-1470] The wire keys (`execution_memory_ids_used`,
+  // `execution_memory_ids_rejected`, `execution_memory_usage_summary`) are
+  // INTENTIONALLY different from the canonical internal field names
+  // (`memory_ids_used`, `memory_ids_rejected`, `memory_usage_summary`) used
+  // by the deterministic AGENT_FINAL parser and by every consumer inside
+  // this worker. The canonical names were introduced in INT-1470; the
+  // `execution_memory_*` wire format pre-dates that rename and is preserved
+  // here for backward compatibility with external webhook consumers
+  // (code-agent, metrics aggregators, web UI) that were not cut over in the
+  // same change.
+  //
+  // Plan follow-up: "Alias removal PR two releases after this lands" — once
+  // all downstream consumers read the canonical names, rename these three
+  // `base.execution_memory_*` assignments to `base.memory_*` and drop the
+  // `execution_memory_*` aliases from the TaskResult type + webhook schema.
   if (
     'memory_ids_used' in data ||
     'memory_ids_rejected' in data ||

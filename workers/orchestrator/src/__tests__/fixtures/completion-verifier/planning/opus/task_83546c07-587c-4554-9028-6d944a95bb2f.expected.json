@@ -18,6 +18,6 @@
     "clarification_message": "",
     "summary": "* Task asked to verify `docs/plans/2026-04-23-completion-verifier-tiered-telemetry.md` against the current codebase and most recently merged PRs in the same area, then rewrite it using INT-1459 as the single source of truth.\n  * Classified as PLAN-DOC: single plan-document update, multi-step implementation guidance, single PR.\n  * Found the plan was invalidated by PR #1899 (completion-verifier split from 1024→197 lines into sibling modules) and PR #1913 (infra-failure classifier added before the verifier); every file path, line range, and return-site count in the original plan was stale.\n  * Rewrote the plan (375 insertions / 324 deletions) to match current module layout, extended the `failVerdict` helper once rather than editing 7 return sites, added `noUncheckedIndexedAccess` safety for the `WORKER_TYPES` lookup, centralized `TELEMETRY_FIELD_NAMES` next to their producers, and anchored the new pure-policy helper under `services/task-dispatcher/` to match the sibling-module pattern.\n  * Archived the original Linear description as a comment, updated INT-1459's description to reference the plan doc, and opened planning PR #1918 with reasoning for the rewrite in the PR description."
   },
-  "missingRequired": ["subtask_urls", "parallel_breakdown_proof", "clarification_message"],
+  "missingRequired": [],
   "warnings": []
 }

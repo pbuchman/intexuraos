@@ -1,5 +1,46 @@
 import { stripDockerHeaders } from '../log-formatter.js';
-import type { AgentContract, FieldSpec } from './contracts.js';
+import { AGENT_CONTRACTS, type AgentContract, type FieldSpec } from './contracts.js';
+
+/**
+ * [INT-1470] Set of all known field names + aliases from every contract,
+ * normalized (lowercase + strip spaces/underscores). Used by `parseKeyValues`
+ * to distinguish a genuine `- key: value` line from a prose summary bullet
+ * like `- Key decision: ...` that happens to contain a colon.
+ *
+ * A `- <text>:` line only opens a new key if `normalize(text)` is in this
+ * set; otherwise, when a key is already open, the line is treated as a
+ * continuation of the current value.
+ */
+const normalizeKeyName = (key: string): string => key.toLowerCase().replace(/[\s_]+/g, '');
+
+const KNOWN_KEY_NORMALIZED: ReadonlySet<string> = ((): ReadonlySet<string> => {
+  const set = new Set<string>();
+  for (const contract of Object.values(AGENT_CONTRACTS)) {
+    for (const field of contract.fields) {
+      set.add(normalizeKeyName(field.name));
+      for (const alias of field.alias ?? []) {
+        set.add(normalizeKeyName(alias));
+      }
+    }
+  }
+  return set;
+})();
+
+/**
+ * [INT-1470] Alternation of the real AGENT_FINAL markers, used to detect a
+ * boundary between two blocks in a transcript. Restricting to markers that
+ * actually appear in `AGENT_CONTRACTS` prevents a fake `FAKE_AGENT_FINAL:`
+ * line inside a block body from prematurely terminating parsing. The
+ * `ask_agent` marker is empty and skipped so the alternation can never
+ * match the empty string.
+ */
+const KNOWN_MARKERS: readonly string[] = Object.values(AGENT_CONTRACTS)
+  .map((c) => c.marker)
+  .filter((m) => m !== '');
+
+const KNOWN_MARKER_ALTERNATION = KNOWN_MARKERS.map((m) =>
+  m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+).join('|');
 
 /**
  * Locate the last standalone `<MARKER>` line in the transcript and return
@@ -44,7 +85,13 @@ export function locateFinalBlock(transcript: string, marker: string): string | n
   //   - another *_AGENT_FINAL: line
   //   - EOF
   const body: string[] = [];
-  const anyAgentFinalPattern = /^\s*(?:\[[^\]]+\]\s+)?[*_`]*\s*[A-Z_]+_AGENT_FINAL:[*_`:]*\s*$/;
+  // [INT-1470] Restrict end-of-block detection to the known real markers
+  // (see KNOWN_MARKER_ALTERNATION). A generic `[A-Z_]+_AGENT_FINAL:` class
+  // would terminate on fake/typo markers like `FAKE_AGENT_FINAL:` quoted in
+  // the body of a legitimate block.
+  const anyAgentFinalPattern = new RegExp(
+    `^\\s*(?:\\[[^\\]]+\\]\\s+)?[*_\`]*\\s*(?:${KNOWN_MARKER_ALTERNATION})[*_\`:]*\\s*$`
+  );
   for (let i = lastMatchIdx; i < lines.length; i += 1) {
     /* v8 ignore start -- ts-type: noUncheckedIndexedAccess forces `?? ''` fallback but `i < lines.length` guarantees lines[i] is always a string; the fallback branch is unreachable @preserve */
     const line = lines[i] ?? '';
@@ -79,6 +126,13 @@ export function locateFinalBlock(transcript: string, marker: string): string | n
  * empty, which falsely reported `missingRequired: ['summary']`. The key
  * closes only when we hit a new key-line match, another AGENT_FINAL
  * marker, a closing fence, or EOF.
+ *
+ * [INT-1470 review follow-up] A `- <text>:` line is recognised as a new key
+ * ONLY when `normalize(text)` matches a field name or alias registered in
+ * `AGENT_CONTRACTS`. Otherwise — e.g. prose bullets inside a summary like
+ * `- Key decision: rewrote the verifier` — the line is appended to the
+ * currently-open key instead of hijacking it. The whitelist is built once
+ * at module load from the contract registry (see KNOWN_KEY_NORMALIZED).
  */
 export function parseKeyValues(block: string): Record<string, string> {
   const lines = block.split('\n');
@@ -91,10 +145,16 @@ export function parseKeyValues(block: string): Record<string, string> {
     const match = keyLinePattern.exec(line);
     if (match) {
       /* v8 ignore start -- ts-type: TypeScript's noUncheckedIndexedAccess types regex capture groups as `string | undefined` even when the regex guarantees both groups match (every alternative has exactly 2 `.*`-style captures); the `?? ''` fallback arms are unreachable at runtime @preserve */
-      currentKey = match[1] ?? '';
-      result[currentKey] = match[2] ?? '';
+      const candidateKey = match[1] ?? '';
+      if (KNOWN_KEY_NORMALIZED.has(normalizeKeyName(candidateKey))) {
+        currentKey = candidateKey;
+        result[currentKey] = match[2] ?? '';
+        continue;
+      }
       /* v8 ignore stop @preserve */
-      continue;
+      // Matched `- <text>:` syntactically but `<text>` is not a known field
+      // name/alias — this is a prose bullet (e.g. `- Key decision: ...`)
+      // inside a summary. Fall through to the continuation branch below.
     }
     if (currentKey !== null) {
       // Not a new key-line → continuation of the current value (including
@@ -215,8 +275,14 @@ export function coerceFields(
           data[field.name] = '';
       }
       if (field.required) {
-        // Exception: execution.pr may be empty when outcome='failed'.
-        /* v8 ignore start -- ts-type: record indexed access returns `string | undefined` under noUncheckedIndexedAccess; the final `?? ''` fallback is covered only when neither `outcome` nor `Outcome` key is present, which is unreachable for a well-formed execution block that reaches this branch (outcome is required, contract-validated upstream by locateFinalBlock + parseKeyValues) @preserve */
+        // Exception: execution.pr may be empty when outcome='failed'. Both
+        // `outcome` (canonical) and `Outcome` (Title Case alias) keys are
+        // covered by dedicated tests in block-parser.test.ts. The final
+        // `?? ''` is a type-safety fallback for the branch where the record
+        // has neither key — that path is unreachable in practice (the
+        // execution contract requires `outcome`, so such a block already
+        // failed the `outcome` required check above), but retained as a
+        // defensive comparison against the empty string that yields `false`.
         if (
           field.name === 'pr' &&
           contract.marker === 'EXECUTION_AGENT_FINAL:' &&
@@ -224,7 +290,6 @@ export function coerceFields(
         ) {
           continue;
         }
-        /* v8 ignore stop @preserve */
         missingRequired.push(field.name);
       }
       continue;

@@ -89,11 +89,15 @@ export const AGENT_CONTRACTS: Record<CompletionAgentType, AgentContract> = {
       { name: 'linear_issue', alias: ['Linear issue'], kind: 'url', required: true },
       { name: 'complex_task', alias: ['Complex task'], kind: 'bool01', required: true },
       { name: 'plan_doc', alias: ['Plan doc'], kind: 'bool01', required: true },
+      // `subtask_urls` is conditionally required: empty is valid per the prompt
+      // text "comma-separated full Linear URLs, or empty". Most non-complex
+      // planning tasks emit empty. Keeping this `required: true` would fail every
+      // simple/plan-doc planning task. Treat as optional with empty-alias coercion.
       {
         name: 'subtask_urls',
         alias: ['Subtask URLs'],
         kind: 'csv',
-        required: true,
+        required: false,
         emptyAliases: DEFAULT_EMPTY_ALIASES,
       },
       {
@@ -103,19 +107,25 @@ export const AGENT_CONTRACTS: Record<CompletionAgentType, AgentContract> = {
         required: true,
         emptyAliases: DEFAULT_EMPTY_ALIASES,
       },
+      // `parallel_breakdown_proof` is required only when Complex task=1; the live
+      // prompt says "empty otherwise". Enforcing required: true would reject
+      // every simple/plan-doc planning fixture in prod.
       {
         name: 'parallel_breakdown_proof',
         alias: ['Parallel breakdown proof'],
         kind: 'string',
-        required: true,
+        required: false,
         emptyAliases: DEFAULT_EMPTY_ALIASES,
       },
       ...MEMORY_FIELDS_STANDARD,
+      // `clarification_message` is required ONLY for unclear outcomes; the live
+      // prompt says "MUST be empty for successfully planned outcomes". Hard-gating
+      // would fail every planned outcome.
       {
         name: 'clarification_message',
         alias: ['Clarification message'],
         kind: 'string',
-        required: true,
+        required: false,
         emptyAliases: DEFAULT_EMPTY_ALIASES,
       },
       { name: 'summary', alias: ['Summary'], kind: 'string', required: true },

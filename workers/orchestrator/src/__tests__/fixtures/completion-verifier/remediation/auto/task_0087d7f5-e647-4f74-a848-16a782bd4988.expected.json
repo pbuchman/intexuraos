@@ -7,7 +7,9 @@
       "mem_f1559458-c36f-499d-a02c-1cb8b7a5f141",
       "mem_e7918346-cdad-41ae-85cf-7cce112f8fef"
     ],
-    "memory_ids_rejected": ["mem_c9ecfc18-e67d-4e47-894e-ebb38015cae7"],
+    "memory_ids_rejected": [
+      "mem_c9ecfc18-e67d-4e47-894e-ebb38015cae7"
+    ],
     "memory_usage_summary": "Thin Route Handler Pattern reinforced the move of pure utilities into the domain layer to keep the use-case route-free; \"ensure utility functions are called in relevant handlers\" guided verification that all 3 import sites (use case + github-pre-events route + tests) were updated to the new domain/utils paths.",
     "summary": "* Fixed the architectural finding (raised in all 3 reviews): moved `extractEventUrl.ts` + `extractEventSummary.ts` and their tests from `apps/code-agent/src/routes/code/` to `apps/code-agent/src/domain/utils/`, updated imports in `processGitHubWebhook.ts` and `routes/code/github-pre-events.ts`.\n  * Skipped the v8-ignore comment (FakeFirestore limitation; ≥95% coverage already met; prior remediation 0aa2fb3 already removed a separate v8 ignore on the dedup-fallback path).\n  * Skipped the `as never` test-fixture comment (standard codebase pattern for testing ill-typed payloads; type-safety loss bounded to tests).\n  * Skipped the `decidedBy: 'webhook_route'` rename (Firestore-persisted audit discriminator + port type union + 10+ test fixtures; rename would fracture historical analytics).\n  * Deferred the suggested `domain → routes` ESLint rule because adding it surfaced pre-existing violations in `whatsapp-service` (out of this PR's scope); pushed `f32fb4c09` to `feature/int-1434`, all CI checks green."
   },

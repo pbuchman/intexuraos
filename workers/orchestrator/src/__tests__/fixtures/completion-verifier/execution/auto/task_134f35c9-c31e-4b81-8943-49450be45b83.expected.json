@@ -9,7 +9,9 @@
       "mem_8356c7f4-b2c1-4e8a-9e17-07490d79396b",
       "mem_fe85bc13-208d-4be4-a6f2-c481b6c01e7c"
     ],
-    "memory_ids_rejected": ["mem_44f8dac8-00e7-4392-9550-37c07cde2b26"],
+    "memory_ids_rejected": [
+      "mem_44f8dac8-00e7-4392-9550-37c07cde2b26"
+    ],
     "memory_usage_summary": "The \"doomed retry loop\" memory directly drove the `WORKER_INFRA_FAILURE → 'fail'` branch in `classifyFailure` (mirroring `WORKTREE_LOST`), and the \"tiered completion verification\" memory shaped the classifier-before-verifier split and the repeated-sub-reason remediation flip; the \"overly strict pre-checks\" memory was not applicable because this task adds post-facto attempt classification rather than pre-start resource gating.",
     "superpowers_subagent_driven_dev_used": true,
     "superpowers_requesting_code_review_used": true,
