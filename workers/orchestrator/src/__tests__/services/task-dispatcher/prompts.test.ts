@@ -70,32 +70,29 @@ describe('buildMissingFieldsPrompt', () => {
     expect(result).toContain('- Do not restart from scratch.');
   });
 
-  it('injects the memory-failure triplet when a memory field is missing', () => {
-    const result = buildMissingFieldsPrompt('execution', ['memory_ids_used'], rawLogs);
-    expect(result).toContain('EXECUTION MEMORY REPORTING FAILURE:');
-    expect(result).toContain('memory_ids_used: comma-separated IDs of memories you applied');
+  it('[INT-1470] resume prompt does NOT mention EXECUTION MEMORY REPORTING FAILURE', () => {
+    // Telemetry-only retries are gone — the only resume prompt is for
+    // deliverable misses (outcome / pr / summary). Telemetry misses are
+    // warn-only and never trigger a retry.
+    const result = buildMissingFieldsPrompt(
+      'execution',
+      ['memory_ids_used', 'memory_ids_rejected'],
+      rawLogs
+    );
+    expect(result).not.toContain('EXECUTION MEMORY REPORTING FAILURE');
   });
 
-  it('omits the memory-failure triplet when no memory fields are missing', () => {
-    const result = buildMissingFieldsPrompt('execution', ['summary'], rawLogs);
-    expect(result).not.toContain('EXECUTION MEMORY REPORTING FAILURE:');
-  });
-
-  it('injects the acknowledgment guidance block when memory_acknowledgment is missing', () => {
+  it('[INT-1470] resume prompt does NOT emit memory-acknowledgment guidance', () => {
     const result = buildMissingFieldsPrompt('execution', ['memory_acknowledgment'], rawLogs, {
       matchedMemories: [
         { memoryId: 'mem_123', title: 'Sample', type: 't', score: 1, content: 'x' },
       ],
       totalMatched: 1,
     } as never);
-    expect(result).toContain('📋 **Execution Memories Received:**');
-    expect(result).toContain('mem_123');
-  });
-
-  it('omits the per-id bullets section when no memory context is provided', () => {
-    const result = buildMissingFieldsPrompt('execution', ['memory_acknowledgment'], rawLogs);
-    expect(result).toContain('📋 **Execution Memories Received:**');
+    expect(result).not.toContain('Execution Memories Received');
     expect(result).not.toContain('Injected memory IDs you MUST acknowledge');
+    // It still lists the missing field name by virtue of the standard resume header.
+    expect(result).toContain('memory_acknowledgment');
   });
 });
 

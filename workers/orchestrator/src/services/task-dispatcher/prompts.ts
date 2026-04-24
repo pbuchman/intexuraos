@@ -10,17 +10,6 @@ export const INACTIVITY_RESTART_PROMPT = `Your previous session became unrespons
 Continue working on the task from where you left off. Review your progress so far and
 resume the next incomplete step.`;
 
-const MEMORY_FIELDS = [
-  'memory_acknowledgment',
-  'memory_ids_used_invalid',
-  'memory_ids_rejected_invalid',
-  'memory_ids_overlap',
-  'memory_ids_unaccounted',
-  'memory_usage_summary',
-  'memory_ids_used',
-  'memory_ids_rejected',
-];
-
 export function getTaskEventUrl(webhookUrl: string): string {
   return webhookUrl.replace('/internal/webhooks/task-complete', '/internal/webhooks/task-event');
 }
@@ -29,41 +18,28 @@ export function hasFatalExitCodeField(missingFields: string[]): string | undefin
   return missingFields.find((f) => f.startsWith(FATAL_EXIT_CODE_PREFIX));
 }
 
+/**
+ * [INT-1470] Deliverable-only resume prompt. Telemetry-only misses
+ * (`memory_ids_used` / `memory_ids_rejected` / `memory_acknowledgment`) are
+ * now accepted with `telemetryAccepted: true` rather than retried, so this
+ * prompt only needs to cover deliverable misses (`outcome`, `pr`, `summary`,
+ * `linear_issue`, `plan_pr`, etc.). The removed telemetry branch used to
+ * auto-continue the session asking the agent to re-emit memory fields it
+ * had already either emitted or skipped — a no-op in practice.
+ */
 export function buildMissingFieldsPrompt(
   agentType: CompletionAgentType,
   missingFields: string[],
   rawLogs: string,
-  executionMemoryContext?: ExecutionMemoryPromptContext
+  _executionMemoryContext?: ExecutionMemoryPromptContext // @allow-undefined-type -- signature preserved for caller compat; telemetry branch removed so context is unused
 ): string {
   const transcript = getLast50Lines(rawLogs);
-  const hasMemoryFailures = missingFields.some((field) => MEMORY_FIELDS.includes(field));
-  const hasAckFailure = missingFields.includes('memory_acknowledgment');
-
-  const triplet = hasMemoryFailures
-    ? [
-        '',
-        'EXECUTION MEMORY REPORTING FAILURE:',
-        'You were injected with execution memories but did not properly report their usage.',
-        'You MUST include in your final output:',
-        '1. memory_ids_used: comma-separated IDs of memories you applied',
-        '2. memory_ids_rejected: comma-separated IDs of memories you found irrelevant',
-        '3. memory_usage_summary: one sentence about how memories influenced your work',
-        'Every injected memory must appear in either used or rejected. No ID may be missing.',
-        'If you did not use any memory, put all IDs in memory_ids_rejected.',
-      ]
-    : [];
-
-  const ackGuidance = hasAckFailure
-    ? buildMemoryAcknowledgmentGuidance(executionMemoryContext)
-    : [];
 
   return [
     '[AUTO-CONTINUE ATTEMPT]',
     'Your last response was missing required fields for the completion verifier.',
     '',
     `Missing fields: ${missingFields.join(', ')}`,
-    ...ackGuidance,
-    ...triplet,
     '',
     'Please ensure your final message includes all required information.',
     `Agent type: ${agentType}`,
@@ -75,36 +51,6 @@ export function buildMissingFieldsPrompt(
     '- Do not restart from scratch.',
     '- Continue from current repository/worktree state.',
   ].join('\n');
-}
-
-function buildMemoryAcknowledgmentGuidance(
-  context: ExecutionMemoryPromptContext | undefined // @allow-undefined-type -- function parameter, not optional property
-): string[] {
-  const idLines =
-    context !== undefined && context.matchedMemories.length > 0
-      ? [
-          'Injected memory IDs you MUST acknowledge (one bullet per ID):',
-          ...context.matchedMemories.map(
-            (memory, index) =>
-              `- [${String(index + 1)}] ${memory.memoryId} — "${memory.title}" — APPLICABLE|NOT APPLICABLE because <one-sentence reason>`
-          ),
-          '',
-        ]
-      : [];
-
-  return [
-    '',
-    'MEMORY ACKNOWLEDGMENT BLOCK MISSING:',
-    'The completion verifier requires this exact block, EACH bullet on the start of a new line with no leading characters other than "- ":',
-    '',
-    '📋 **Execution Memories Received:**',
-    'I have received and reviewed <N> execution memories for this task:',
-    '- [<n>] <memoryId> — "<title>" — APPLICABLE|NOT APPLICABLE because <one-sentence reason>',
-    '',
-    'Emit the block verbatim BEFORE your final REVIEW_AGENT_FINAL / PLAN_AGENT_FINAL / (etc.) block.',
-    'Do NOT inline the bullets as the value of a field — they must be standalone lines that start with "- [".',
-    ...idLines,
-  ];
 }
 
 export function buildResumePreamble(task?: Task): string {
