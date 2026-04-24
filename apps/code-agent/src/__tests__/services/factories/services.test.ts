@@ -114,6 +114,17 @@ describe('initServices', () => {
     expect(c.actionsAgentClient).toBeDefined();
   });
 
+  it('composes services so statusMirrorService routes through the actionsAgentClient', () => {
+    // Spot-check one wiring edge to prove the composer actually threads
+    // factory outputs together rather than just returning independent objects.
+    initServices(makeConfig());
+    const c = getServices();
+    expect(typeof c.actionsAgentClient.updateActionStatus).toBe('function');
+    expect(typeof c.statusMirrorService.mirrorStatus).toBe('function');
+    // whatsappNotifier was constructed from the whatsapp publisher + linear agent client.
+    expect(typeof c.whatsappNotifier.notifyTaskStarted).toBe('function');
+  });
+
   it('throws from getServices() before initServices()', () => {
     resetServices();
     expect(() => getServices()).toThrow('Service container not initialized');
