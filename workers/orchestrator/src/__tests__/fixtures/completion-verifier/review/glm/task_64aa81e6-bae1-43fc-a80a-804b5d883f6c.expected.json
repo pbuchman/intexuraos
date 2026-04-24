@@ -17,8 +17,5 @@
     "summary": "PR implements Tasks 2-4 from plan fixing silent audio.stored publish failures. Publish moved into ProcessAudioMessageUseCase with hard-failure semantics. Type-level invariants enforce required topics at Zod, TypeScript, and runtime levels. Tests cover failure paths and at-least-once semantics. CI in progress. Ready to merge once passes."
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

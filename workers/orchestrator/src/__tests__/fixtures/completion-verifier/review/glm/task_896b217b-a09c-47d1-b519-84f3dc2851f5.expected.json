@@ -19,8 +19,5 @@
     "summary": "* Plan-only PR adds comprehensive implementation plan for tiered completion verification\n  * 12 tasks with TDD discipline, breaking-test enumeration, and pure-function policy extraction\n  * All 11 requirements verified against plan document — no gaps or incorrect assumptions\n  * GitHub Actions pending (tests/lint in progress), 4 checks already passed\n  * Clean review with no inline comments — plan is ready for execution"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

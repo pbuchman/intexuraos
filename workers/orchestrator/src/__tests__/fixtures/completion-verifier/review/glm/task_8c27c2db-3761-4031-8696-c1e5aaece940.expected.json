@@ -19,8 +19,5 @@
     "summary": "* Reviewed plan document PR #1918 updating completion-verifier tiered telemetry plan to align with current codebase after restructuring PRs #1899 and #1913\n  * Verified all file paths, module structure, and line counts match actual repo: `completion-verifier.ts` is 197 lines, `completion-verifier/` and `task-dispatcher/` directories exist with claimed files\n  * Confirmed all 6 issue requirements addressed: current module layout, helper placement, failVerdict extension, noUncheckedIndexedAccess guard, INT-1455 precondition docs, INT-1459 anchoring\n  * Minor non-blocking finding: Task 4 intro says \"five return sites\" but lists 6; actual code has 6 calls\n  * Plan is TDD-compliant, well-structured, ready for implementation — no code changes required, needs_remediation=0"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

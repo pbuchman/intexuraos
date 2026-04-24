@@ -14,9 +14,5 @@
     "summary": "* Addressed reviewer's blocker: stripped `--` from `pnpm run verify:workspace:tracked code-agent` at both occurrences in `docs/plans/INT-1452-evidence.md` (Step 6 + Verification section), so the `validate-verify-workspace.sh` hook no longer blocks the implementation agent.\n  * Addressed reviewer's non-blocking observation: added a \"Design Tradeoff\" section documenting why `notifyTaskStarted` drops `important: true` despite carrying an interactive Cancel button.\n  * Skipped 4 automation-only issue comments (IntexuraOS timeline, Linear linkback, review-started notice, Requirements Tracker) — none carried net-new actionable feedback.\n  * Ran `pnpm run ci:tracked` locally (green) and remote CI on commit `efc3f80dc` is all green (11 SUCCESS, 0 FAIL).\n  * Pushed to existing branch `plan/int-1452-whatsapp-importance`; posted per-comment replies + 😄 reactions and a final Nitpick Nuker summary comment on PR #1904."
   },
   "missingRequired": [],
-  "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

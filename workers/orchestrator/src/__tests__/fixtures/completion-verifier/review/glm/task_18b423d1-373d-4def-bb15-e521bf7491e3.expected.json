@@ -22,8 +22,5 @@
     "summary": "* webhookRoutes.ts reduced from 2,279 → 170 lines (target was <300), with handlers now 30-40 lines each\n  * Use cases (handleTaskCompletion.ts, recordTaskEvent.ts) properly extracted with logger: Logger parameter\n  * Security-critical HMAC signature validation preserved in routes, called before use case invocation\n  * Test suite comprehensive: 4 new test files covering memory queued, remediation decision, valid/invalid signature scenarios\n  * All 14 DoD requirements verified, CI passed, clean review with no remediation needed"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

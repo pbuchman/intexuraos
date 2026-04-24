@@ -18,14 +18,5 @@
     "summary": "* Verified PR #1900 already resolved: remote `feature/int-1429` HEAD is the merge commit `7aafd32d` which reconciles `development` (including the [INT-1450] `DEFAULT_VALIDATION_MODELS` update) into the refactor branch.\n  * GitHub state confirmed as `mergeable: MERGEABLE`, `mergeStateStatus: CLEAN`; local HEAD is byte-identical to `origin/feature/int-1429`, so no additional push was required.\n  * Ran `pnpm run ci:tracked` — all phases green (typecheck, lint, 15291 tests, static validation, build, format).\n  * Updated the managed tracking comment (`4304276362`) in-place with the delivery summary; no new comment created."
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field comment_replied was read from deprecated alias Comment replied; rename the emitter",
-    "field tracking_comment_id was read from deprecated alias Tracking comment ID; rename the emitter",
-    "field tracking_comment was read from deprecated alias Tracking comment; rename the emitter",
-    "field total_pr_comments_posted was read from deprecated alias Total PR comments posted; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

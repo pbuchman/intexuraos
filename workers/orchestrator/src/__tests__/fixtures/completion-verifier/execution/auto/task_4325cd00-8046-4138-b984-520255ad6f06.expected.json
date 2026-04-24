@@ -16,19 +16,13 @@
     "trivial_task": false,
     "subagents": "implementer (scope: write failing test, remove `'request.promptType'` from backend `ALLOWED_GROUP_BY`, remove `promptType` from frontend `GroupByMode`/`GROUP_BY_MAP`/`GROUP_BY_OPTIONS`/`isGroupByMode`, run CI, commit); spec-compliance reviewer (scope: verify all 6 plan requirements met with zero scope creep); code-quality reviewer via pr-review-toolkit:code-reviewer (scope: TS hygiene, style, test quality, CLAUDE.md adherence); final holistic reviewer via superpowers:code-reviewer (scope: test genuinely exercises bug path, no stale references, migration-safety, commit-message convention).",
     "skill_sequence_proof": "superpowers:subagent-driven-development skill was invoked first (produced implementer + spec-compliance + code-quality subagents and two commits `ece85903c`, `4e6f8801f` with green `ci:tracked`), then superpowers:requesting-code-review skill was invoked AFTER all implementation commits landed to run the final holistic review that returned APPROVED, then `git push` and `gh pr create` were the last actions.",
+    "failure_reason": "",
     "summary": "* Removed `'request.promptType'` from backend `ALLOWED_GROUP_BY` and added a regression test that asserts `groupBy: ['request.promptType']` now returns `INVALID_GROUP_BY` instead of crashing (llm-usage-service).\n  * Dropped `promptType` from `GroupByMode` union, `GROUP_BY_MAP`, `GROUP_BY_OPTIONS`, and the `isGroupByMode` localStorage guard in the web app so stale values fall through to `DEFAULT_GROUP_BY`.\n  * Key decision: feature removal over data migration — `DailyUsageAggregate` has no `promptType` dimension, so supporting real grouping is tracked as a follow-up.\n  * `pnpm run ci:tracked` green (15156 tests, typecheck + 22 static checks clean); spec-compliance, code-quality, and final holistic reviews all approved with zero issues.\n  * PR #1890 targeting `development`."
   },
   "missingRequired": [],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
-    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
   ]
 }

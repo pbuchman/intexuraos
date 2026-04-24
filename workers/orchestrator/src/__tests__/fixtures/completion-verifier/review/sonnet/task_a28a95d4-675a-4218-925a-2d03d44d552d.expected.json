@@ -22,8 +22,5 @@
     "summary": "* Reviewed PR #1897 — refactor of 3,036-line `task-dispatcher.ts` into 6 sibling modules (`prompts`, `log-streaming`, `metrics`, `webhook-callbacks`, `retry-logic`, `lifecycle`); all CI checks passed\n  * New finding (code_quality): `resolveTaskRuntime`/`getRuntimeDisplayName` extracted to `lifecycle.ts` but not wired back into the class — class still has inline duplicates at lines 738–743, breaking the `_Fn` shim pattern used everywhere else\n  * New finding (architecture): `lifecycle.ts` re-exports 3 unrelated symbols (`hasFatalExitCodeField`, `stripDockerHeaders`, `buildSystemPrompt`) at lines 130–131 that no consumer imports from this module — dead re-exports\n  * New finding (code_quality): `checkForResult` v8 ignore uses `upstream` category for an if/else branch — CLAUDE.md explicitly prohibits this; should be `module-mock` with `execAsync` named as the testing blocker\n  * Ongoing gap (test_quality): all 5 mandatory test scenarios from the issue requirements table remain absent — the state-machine behaviors (`dispatchTask` at capacity, `markTaskCompleted`, `streamTaskLogs`, `notifyCompletion`+retry, `scheduleRetry`) were not extracted and therefore cannot be unit-tested yet; prior reviews also noted this"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

@@ -20,8 +20,5 @@
     "summary": "* Reviewed PR #1905 — cleanup that removes 6 snapshot test wrappers + 6 .snap files (1,434 deletions)\n  * Code quality verdict: Clean — well-structured deletions, clear rationale documented\n  * Test quality verdict: Thorough coverage retained — canonical suite covers all claimed sentinels with real assertions\n  * No findings requiring remediation — this is a well-executed cleanup that improves maintainability\n  * CI checks pending (Tests, Lint, E2E) — Validation, Build, Type Check, Terraform passed"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

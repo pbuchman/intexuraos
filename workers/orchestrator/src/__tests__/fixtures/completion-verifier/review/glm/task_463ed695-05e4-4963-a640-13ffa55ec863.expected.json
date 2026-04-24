@@ -18,11 +18,13 @@
       "mem_e97d3f6f-3979-44af-8577-bbe9e43bc3fb"
     ],
     "memory_usage_summary": "The applicable memories confirmed that importance flag adjustments for WhatsApp notifications are correctly classified as SIMPLE complexity and validated the convention that interactive buttons and actionable user moments should carry `important: true`.",
-    "summary": "- Reviewed PR #1908 reducing WhatsApp notification noise by restricting `important: true` to actionable states only\n  - Implementation is minimal and clean: removes `important: true` from `notifyTaskStarted`, adds it to `notifyTaskComplete`\n  - All 7 requirements fully met with proper test coverage and stale comment removal\n  - No code quality or test quality issues identified; assertions are specific and thorough\n  - CI pending but no blocking issues; ready for merge once CI completes"
+    "summary": ""
   },
-  "missingRequired": [],
+  "missingRequired": [
+    "summary"
+  ],
   "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "unknown key in AGENT_FINAL block: Reviewed PR #1908 reducing WhatsApp notification noise by restricting `important",
+    "unknown key in AGENT_FINAL block: Implementation is minimal and clean"
   ]
 }

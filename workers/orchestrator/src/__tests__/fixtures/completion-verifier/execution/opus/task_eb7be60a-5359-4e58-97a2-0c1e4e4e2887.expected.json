@@ -17,19 +17,13 @@
     "trivial_task": true,
     "subagents": "pr-review-toolkit:code-reviewer — scope: final cleanup review of commit dba041eda on feature/int-1453-cleanup-prompt-snapshots (verify deletions, verify sentinel coverage, verify CI)",
     "skill_sequence_proof": "Task is deletion-only cleanup per explicit PR review recommendation, classified as trivial; I followed a single code-review pass (superpowers:requesting-code-review → pr-review-toolkit:code-reviewer returned zero findings) before pushing and opening the PR.",
+    "failure_reason": "",
     "summary": "* Deleted 6 per-agent `*-prompt.test.ts` wrappers and 6 `*.snap` files in `workers/orchestrator/src/__tests__/services/prompts/`, plus the emptied `__snapshots__/` directory (1,434 deletions, 0 additions).\n  * Kept `prompt-factory.test.ts` which is the only file in that dir with unique value (registry + overlay dispatch coverage).\n  * Verified unique sentinels (`executionMemoryContext`, `/nitpick-nuker`, `[ASK AGENT MODE]`, `Per-Type Review Structure`, `[AGENT:REVIEW]`, `[AGENT:PULL_REQUEST]`) are all still covered in `services/__tests__/system-prompt.test.ts` before deletion.\n  * `pnpm run ci:tracked` passed with 15,234 tests green; code review returned zero findings.\n  * PR #1905 opened targeting `development`, follow-up to PR #1896 review comment r3130725643."
   },
   "missingRequired": [],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
-    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
   ]
 }

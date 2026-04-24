@@ -18,19 +18,13 @@
     "trivial_task": false,
     "subagents": "implementer (general-purpose, refactor execution via TDD), spec-compliance reviewer (general-purpose), code-quality reviewer (general-purpose), final code-reviewer (superpowers:code-reviewer)",
     "skill_sequence_proof": "Invoked `superpowers:subagent-driven-development` (Skill tool at start) before dispatching the implementer subagent; invoked `superpowers:requesting-code-review` (Skill tool) after implementer+review loop and before opening the PR; final reviewer subagent was dispatched per that skill's template.",
+    "failure_reason": "",
     "summary": "* Split 699-line `linearAgentHttpClient.ts` into a 41-line facade + private `linear-fetch-util.ts` + 4 endpoint modules (`issues`, `issue-tree`, `issue-metadata`, `comments`) under `apps/code-agent/src/infra/http/linear/`, preserving all public signatures.\n  * Centralized `AbortController`/timeout, auth headers, JSON body, and envelope parsing into a `LinearFetchResult<T>` discriminated union; added `silent-fetch-mapper.ts` for the three no-log endpoints.\n  * Adopted `getErrorMessage()` from `@intexuraos/common-core`; deviated from plan by omitting `labels.ts` and `projects.ts` (no such methods exist on the client).\n  * Added 14 unit tests in new `linear-fetch-util.test.ts` plus 4 new timeout/network tests covering previously-uncovered branches in `linearAgentHttpClient.test.ts`.\n  * `pnpm run ci:tracked` green; full workspace verify green (15,719 tests); PR #1932 opened against `development`."
   },
   "missingRequired": [],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
-    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
   ]
 }

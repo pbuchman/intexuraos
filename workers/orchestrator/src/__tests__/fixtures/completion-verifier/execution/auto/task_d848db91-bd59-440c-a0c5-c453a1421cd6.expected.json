@@ -18,19 +18,13 @@
     "trivial_task": false,
     "subagents": "implementer (edit 3 default-string locations + run CI), spec-compliance reviewer (verify exactly 3 files changed and strings match spec), code-quality reviewer (sanity-scan repo for duplicated defaults + verify README table), final holistic code-reviewer (pre-PR green-light review)",
     "skill_sequence_proof": "superpowers:subagent-driven-development was invoked FIRST and dispatched implementer → spec-reviewer → code-quality-reviewer (see commit c3e9c5e95 on branch feature/int-1450-remove-gemma-free-from-validation-defaults); superpowers:requesting-code-review was invoked SECOND and dispatched the final code-reviewer subagent whose APPROVED output preceded the `git push` / `gh pr create` calls.",
+    "failure_reason": "",
     "summary": "* Removed `or:google/gemma-4-31b-it:free` from the DEFAULT value of `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS`; new default is `or:google/gemma-4-31b-it,gemini-2.5-flash`.\n  * Updated three synchronized locations: `workers/orchestrator/src/start.ts`, `ecosystem.config.cjs`, and the README optional-env-vars table (plus cosmetic column-width cleanup in that single table).\n  * Operators who set the env var explicitly are unaffected — only the fallback default changes; no source logic modified.\n  * `pnpm run ci:tracked` passed; existing `parseValidationModels` tests still cover the parser; no new tests needed since the default is a string literal, not a logical branch.\n  * PR #1901 targets `development` and received spec-compliant + code-quality approved + final holistic-review approved with zero issues."
   },
   "missingRequired": [],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
-    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
   ]
 }

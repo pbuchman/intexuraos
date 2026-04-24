@@ -21,8 +21,5 @@
     "summary": "* Reviewed PR #1916 — a refactor of `internalRoutes.ts` (831→22 lines) into 3 sub-plugins + 1 schemas file for the code-agent service\n  * Code quality: clean; thin aggregator pattern well-executed, schema extraction eliminates ~100-line repetition, all handler bodies preserved byte-identically\n  * Test quality: solid; 4 new test files follow correct DI lifecycle patterns; 3 informational gaps noted (vi.mock stubs return `undefined` not `Result`, missing 401 test in cleanup file, weak `toContain` assertion in diagnostic test) — none block merge\n  * Issue requirements table references endpoints that don't exist (`POST /internal/tasks/cancel`, `GET /internal/task/:id`) — aspirational names; PR correctly tests actual endpoints\n  * All 19 CI checks passed including E2E; no remediation required"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

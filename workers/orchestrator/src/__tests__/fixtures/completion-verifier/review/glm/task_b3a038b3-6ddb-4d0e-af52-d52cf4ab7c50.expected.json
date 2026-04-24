@@ -20,8 +20,5 @@
     "summary": "* Reviewed PR #1931 refactoring gitHubPRHttpClient.ts (694L → 76L facade + extracted modules)\n  * All 12 requirements met: class signatures preserved, no DI changes, private util, behavior-identical, getErrorMessage() used, unit tests with nock for all modules\n  * Test quality thorough: 24 new fetch util tests + 4 NETWORK_ERROR tests + 74 existing facade tests, proper nock isolation, real timeout firing\n  * All CI checks passed (typecheck, lint, tests, coverage, validation)\n  * No remediation needed — clean decomposition following thin-handler pattern"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

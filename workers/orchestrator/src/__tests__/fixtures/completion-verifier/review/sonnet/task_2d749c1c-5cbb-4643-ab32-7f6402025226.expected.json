@@ -20,8 +20,5 @@
     "summary": "* Reviewed PR #1900: refactors 914-line orchestrator start.ts into 9 focused bootstrap modules; start.ts is now 194 lines\n  * Code quality is clean — constants centralized, error messages preserved, startup order unchanged, no changes to non-bootstrap modules\n  * All prior review findings (v8 ignores on logWorkerAuthStartupStatus, validateWorkerApiKeys, start() body) were addressed\n  * One unfixed finding: v8 ignore category in api-key-validator.ts:96 still reads `ts-type` — the previous review's action-taken comment promised `async-timing` but the commit was never pushed; one-line fix required\n  * Minor advisory: service-wiring.test.ts logger fake silently drops message strings (second pino arg), limiting future assertion strength — non-blocking"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

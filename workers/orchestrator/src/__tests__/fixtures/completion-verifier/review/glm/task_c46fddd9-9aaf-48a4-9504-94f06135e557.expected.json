@@ -20,8 +20,5 @@
     "summary": "- Reviewed code_quality and architecture for PR 1935 refactoring unifiedEvaluator.ts into thin facade + 4 sibling modules\n  - All 11 Definition of Done requirements met; facade reduced to 48 lines (target <150)\n  - CI all passed; no inline comments needed — clean execution of facade pattern\n  - Minor naming mismatch between spec and implementation documented by author and defensible\n  - Ready for merge"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

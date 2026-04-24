@@ -21,8 +21,5 @@
     "summary": "- 4,786-line monolith successfully decomposed to 41-line composition layer\n  - cancelTask use case extracted with 11 comprehensive unit tests addressing previous review findings\n  - split-sanity.test.ts now has proper resetServices() cleanup\n  - Three handlers remain with inline logic (GET /code/tasks, workers/status) but are secondary concerns\n  - All CI checks passed, existing integration tests provide full behavioral coverage\n  - Per-plugin test files are smoke tests lacking mandatory behavioral scenarios from spec table"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

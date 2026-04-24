@@ -21,8 +21,5 @@
     "summary": "* Clean SRP refactoring splitting 971-line repository into 295-line adapter + 2 helper modules\n  * All 11 requirements met: interface preserved, no DI changes, composite indexes maintained, behavior preserved (104 existing tests pass)\n  * 89 new unit tests (77 serializer + 12 queries) provide comprehensive coverage of extracted pure functions\n  * Code quality verdict: Clean — proper separation of concerns with pure, testable helpers\n  * Test quality verdict: Thorough — strong assertion patterns, edge case coverage, correct FakeFirestore usage\n  * v8 ignore comments legitimate with valid categories (ts-type, upstream) and proper explanations\n  * Minor gap noted: toTimestamp fallback branches could have explicit unit tests (defensive code, not blocking)\n  * Ready for merge once pending Coverage/Lint checks complete"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

@@ -21,8 +21,5 @@
     "summary": "* Reviewed 13 changed files: 6 new sibling modules (lifecycle, log-streaming, metrics, webhook-callbacks, retry-logic, prompts) + 6 new test files + modified task-dispatcher.ts\n  * 🔴 Two DoD gaps explicitly acknowledged in PR: (1) task-dispatcher.ts still 2,447 lines vs <300 target; (2) mandatory test scenarios (dispatchTask, markTaskCompleted, streamTaskLogs, notifyCompletion, scheduleRetry) not implemented — those functions weren't extracted\n  * 🔴 Invalid v8 ignore in `lifecycle.ts` `pickCompletionAgentType`: uses `ts-type` over tested `if/else` branches (explicitly prohibited by project standards); `webhook-callbacks.ts` uses `upstream` category for branches testable via the same inline-fake pattern already used in the same file\n  * 🟡 Test quality issues: constant-verification anti-pattern in retry-logic tests; multiple behaviors in single `it` block in lifecycle tests; missing default-label test for `describeAgent`\n  * CI all green; public API fully preserved via re-exports; architecture of extracted modules is clean and well-documented"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

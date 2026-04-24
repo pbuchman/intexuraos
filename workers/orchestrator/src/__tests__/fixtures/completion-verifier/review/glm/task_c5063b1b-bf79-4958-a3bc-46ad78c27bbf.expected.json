@@ -18,11 +18,11 @@
     ],
     "memory_ids_rejected": [],
     "memory_usage_summary": "All three memories were applicable — Thin Route Handler Pattern validated the extraction approach, incomplete dependency refactoring memory checked for missed call sites (none found), and unit test coverage memory confirmed dedicated test files for extracted modules.",
-    "summary": "- Refactoring reduces workerSettingsRoutes.ts from 1177 → 37 lines, exceeding all requirements\n  - Architecture properly separates concerns: thin handlers, use cases, shared schemas\n  - Tests are thorough: 75 new tests, existing 49 unchanged, all CI checks passed\n  - Minor cosmetic inconsistency in v8 ignore placement noted but not blocking\n  - All 12 Definition of Done requirements verified as met"
+    "summary": "- Refactoring reduces workerSettingsRoutes.ts from 1177 → 37 lines, exceeding all requirements"
   },
   "missingRequired": [],
   "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "unknown key in AGENT_FINAL block: Architecture properly separates concerns",
+    "unknown key in AGENT_FINAL block: Tests are thorough"
   ]
 }

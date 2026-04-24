@@ -17,19 +17,13 @@
     "trivial_task": true,
     "subagents": "",
     "skill_sequence_proof": "Invoked superpowers:subagent-driven-development → recognized trivial task → manual implementation → invoked superpowers:requesting-code-review → reviewer approved with zero issues",
+    "failure_reason": "",
     "summary": "* Fixed bucket name mismatch: ecosystem.config.cjs and .envrc.local.example fallbacks now match Terraform bucket `intexuraos-whatsapp-media-dev`\n  * Root cause resolved: dev config now aligns with IaC resource naming convention\n  * CI passed: 15496 tests, all static validations, build successful\n  * Code review: Approved with zero issues (1 iteration)\n  * PR created targeting development: #1914"
   },
   "missingRequired": [],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
-    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
   ]
 }

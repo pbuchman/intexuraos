@@ -17,25 +17,20 @@
     "superpowers_requesting_code_review_used": null,
     "trivial_task": true,
     "subagents": "",
-    "skill_sequence_proof": "N/A — trivial single-file edit; no skills or subagents required",
+    "skill_sequence_proof": "**N/A — trivial single-file edit; no skills or subagents required**\n\n### Summary",
+    "failure_reason": "",
     "summary": ""
   },
   "missingRequired": [
     "summary"
   ],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field review_iterations not a valid int: **0** (no review requested; single mechanical edit)",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
     "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
     "field superpowers_subagent_driven_dev_used not a valid bool: **0** (trivial single-file mechanical edit; no subagents needed)",
     "field superpowers_requesting_code_review_used not a valid bool: **0** (no review skill needed for mechanical dependency removal)",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
     "unknown key in AGENT_FINAL block: **Single mechanical edit** to `packages/llm-pricing/package.json`",
     "unknown key in AGENT_FINAL block: **Verified no actual imports**",
     "unknown key in AGENT_FINAL block: **Cycle resolved**",

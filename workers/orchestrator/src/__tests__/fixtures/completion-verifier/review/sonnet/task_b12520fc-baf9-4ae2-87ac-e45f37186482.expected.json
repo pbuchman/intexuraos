@@ -20,8 +20,5 @@
     "summary": "* Reviewed a 3-file config-only change removing `or:google/gemma-4-31b-it:free` from the default `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` in orchestrator's `start.ts`, `ecosystem.config.cjs`, and `README.md`.\n  * All three required locations updated consistently; codebase-wide grep confirmed no stale references in non-archival files.\n  * Remaining occurrences of `gemma:free` in the codebase are all correct: parser unit-test fixtures, the supported-model registry, and the separate `openrouter-free` worker type.\n  * All CI checks (build, tests, lint, type-check, coverage, terraform, e2e) passed.\n  * No remediation needed — PR is clean and fully satisfies INT-1450."
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

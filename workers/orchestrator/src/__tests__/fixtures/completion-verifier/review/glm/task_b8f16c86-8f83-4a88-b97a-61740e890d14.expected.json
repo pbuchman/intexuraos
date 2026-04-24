@@ -15,8 +15,5 @@
     "summary": "* Reviewed plan document `docs/plans/INT-1457-investigation.md` for accuracy and completeness\n  * All 7+ referenced source files verified to exist at correct paths\n  * Technical claims about success-only schema and classifier handling verified accurate\n  * Task decomposition follows TDD discipline with 4 logical tasks\n  * All 7 requirements met — plan is ready for implementation phase\n  * No blocking findings; 3 non-blocking recommendations offered for consideration"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

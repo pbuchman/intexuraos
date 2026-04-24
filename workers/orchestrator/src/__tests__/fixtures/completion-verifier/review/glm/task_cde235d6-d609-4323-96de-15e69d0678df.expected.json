@@ -18,8 +18,5 @@
     "summary": "* Plan-only PR (165 additions) adding implementation plan for resolving cyclic workspace dependencies\n  * Verified all plan claims: dependency graph accurate, grep result matches, no imports of internal-clients in llm-pricing\n  * Plan correctly identifies minimal fix (remove unused devDep) with appropriate task decomposition\n  * All 5 requirements met with thorough investigation and alternative analysis\n  * No gaps, issues, or remediation needed—plan is ready for execution"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

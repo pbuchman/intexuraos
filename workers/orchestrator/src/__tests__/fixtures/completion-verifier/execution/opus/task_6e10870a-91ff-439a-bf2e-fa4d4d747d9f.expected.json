@@ -17,19 +17,13 @@
     "trivial_task": false,
     "subagents": "superpowers:code-reviewer — scoped review of the refactor diff (development → HEAD) covering auth preservation, endpoint preservation, behavioral equivalence, and code-organization quality",
     "skill_sequence_proof": "superpowers:subagent-driven-development was invoked first (framing + TDD discipline for the refactor), followed by superpowers:requesting-code-review which dispatched a code-reviewer agent on SHAs 70e82f43..3a745be6; reviewer's minor finding (404 description drift) was then fixed in commit ed4c52bc8 before push.",
+    "failure_reason": "",
     "summary": "* Split `apps/code-agent/src/routes/internalRoutes.ts` (831L, 8 handlers) into 3 cohesive sub-plugins under `routes/internal/` (cleanup, task-admin, diagnostic) plus an extracted `schemas.ts`; aggregator is now 22 lines with the `internalRoutes` export preserved.\n  * Auth preserved verbatim — cleanup endpoints keep `authenticateInternalScheduler`, task-admin and diagnostic keep `validateInternalAuth`; handler bodies are byte-identical to the original.\n  * Added 11 new module tests under `__tests__/routes/internal/` (schemas, cleanup, task-admin, diagnostic) while 45 existing integration tests pass unchanged.\n  * Code-reviewer flagged a minor OpenAPI 404 description drift; fixed by introducing a `notFoundResponseSchema(description)` factory restoring 'Task not found' / 'Issue not found' per endpoint.\n  * Full CI (`pnpm run ci:tracked`) green: 15,507 tests, typecheck, lint, coverage, boundaries, and all static-validation checks pass."
   },
   "missingRequired": [],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
-    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
   ]
 }

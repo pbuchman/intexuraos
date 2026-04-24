@@ -22,8 +22,5 @@
     "summary": "* Reviewed a well-executed 1,024→197 line refactoring of `completion-verifier.ts` into 6 focused sibling modules (schemas, prompt-builder, llm-client, memory-validation, transcript, types)\n  * All CI checks green; public API preserved; no caller files changed\n  * Moderate gap: `llm-client.test.ts` lacks a test for the Zod-schema-fail-on-model-1 → success-on-model-2 fallback path (code path exists but untested)\n  * Minor gap: no `transcript.test.ts`; the 5 pure functions are covered via integration but have no dedicated unit tests\n  * Two inline comments posted (cosmetic prettier-ignore pattern + missing test scenario); no code changes required for merge — findings are informational"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

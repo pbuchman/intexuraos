@@ -19,8 +19,5 @@
     "summary": "* Reviewed plan document revision v1→v3 for INT-1456 (worker-agnostic completion verification)\n  * All 11 requirements met: worker-agnostic design correctly removes tier/workerType parameters\n  * 4 minor non-blocking refinements suggested (guard condition precision, grep scope, test naming, placeholder replacement)\n  * GitHub Actions CI + E2E Tests passed\n  * Plan ready for implementation"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

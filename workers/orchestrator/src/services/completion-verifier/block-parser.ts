@@ -65,6 +65,17 @@ export function locateFinalBlock(transcript: string, marker: string): string | n
  * Keys are preserved as-written (case, spaces, underscores all kept).
  * Callers that want canonical lookup should use the alias-aware
  * resolution in coerceFields.
+ *
+ * [INT-1470] Once a key has been opened, any non-empty line that is itself
+ * NOT a new `- <key>:` line is appended to the current value. This is the
+ * common "bulleted summary without 2-space indent" pattern, e.g.:
+ *   - Summary:
+ *   * bullet 1
+ *   * bullet 2
+ * Previously an unindented `*` line closed the key and `summary` came back
+ * empty, which falsely reported `missingRequired: ['summary']`. The key
+ * closes only when we hit a new key-line match, another AGENT_FINAL
+ * marker, a closing fence, or EOF.
  */
 export function parseKeyValues(block: string): Record<string, string> {
   const lines = block.split('\n');
@@ -74,23 +85,21 @@ export function parseKeyValues(block: string): Record<string, string> {
   const keyLinePattern = /^\s*-\s+([^:]+?)\s*:\s*(.*)$/;
 
   for (const line of lines) {
-    // Indented continuation lines should NOT match as new keys.
-    const isIndented = /^\s{2,}/.test(line);
-    const match = !isIndented ? keyLinePattern.exec(line) : null;
+    const match = keyLinePattern.exec(line);
     if (match) {
       currentKey = match[1] ?? '';
       result[currentKey] = match[2] ?? '';
-    } else if (currentKey !== null && isIndented) {
-      // Indented continuation of current key's value.
-      result[currentKey] = `${result[currentKey] ?? ''}\n${line}`;
-    } else if (currentKey !== null && line.trim() === '') {
-      // Blank inside a multi-line value — keep going; terminator is the
-      // next keyed line or end of block.
       continue;
-    } else {
-      // Non-indented line that isn't a key → ends the current value.
-      currentKey = null;
     }
+    if (currentKey !== null) {
+      // Not a new key-line → continuation of the current value (including
+      // unindented bullet lines emitted by agents without 2-space indent).
+      // Blank lines are preserved as-is to keep multi-paragraph summaries
+      // readable once stripped.
+      result[currentKey] = `${result[currentKey] ?? ''}\n${line}`;
+    }
+    // If no current key is open and the line isn't a new key, drop it —
+    // it's pre-block narrative.
   }
 
   // Strip paired outer emphasis from each final value.
@@ -142,6 +151,14 @@ export function coerceFields(
   const missingRequired: string[] = [];
   const warnings: string[] = [];
 
+  // Normalize a key for semantic comparison: lowercase + strip spaces/underscores.
+  // This lets us detect whether an alias match is just a casing/punctuation
+  // variant of the canonical name (e.g. `Outcome`/`outcome`, `CI evidence`/
+  // `ci_evidence`) vs a genuine semantic rename (`execution_memory_ids_used`
+  // → `memory_ids_used`). Only semantic renames should emit a warning so
+  // callers aren't flooded with cosmetic "deprecated alias" noise.
+  const normalizeKey = (key: string): string => key.toLowerCase().replace(/[\s_]+/g, '');
+
   // Resolve the canonical value for each field (check name then aliases).
   const rawFor = (field: FieldSpec): { raw: string | undefined; sourceKey?: string } => {
     if (Object.prototype.hasOwnProperty.call(record, field.name)) {
@@ -149,9 +166,13 @@ export function coerceFields(
     }
     for (const alias of field.alias ?? []) {
       if (Object.prototype.hasOwnProperty.call(record, alias)) {
-        warnings.push(
-          `field ${field.name} was read from deprecated alias ${alias}; rename the emitter`
-        );
+        // Only warn when the alias is semantically different from the
+        // canonical field name (not just a casing/underscore/space variant).
+        if (normalizeKey(alias) !== normalizeKey(field.name)) {
+          warnings.push(
+            `field ${field.name} was read from deprecated alias ${alias}; rename the emitter`
+          );
+        }
         return { raw: record[alias], sourceKey: alias };
       }
     }

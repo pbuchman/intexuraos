@@ -21,8 +21,5 @@
     "summary": "* Reviewed PR #1917: split 1,177-line `workerSettingsRoutes.ts` into 3 sub-plugins + schemas + 2 use cases under `routes/worker-settings/` and `domain/`.\n  * All 11 HTTP endpoints preserved, plugin export contract unchanged, CI fully green (Tests 1-3/3, Coverage, Lint, Type Check, Build, E2E all pass).\n  * Main code quality finding: 401/500 error response schemas are duplicated verbatim across all 4 CRUD handlers in `setting-crud-routes.ts` (545 lines); body schemas were extracted to `schemas.ts` but response shapes were not — partial DRY improvement.\n  * Plan deviation: `api-key-routes.ts`/`.test.ts` not created (replaced by `worker-ops-routes.ts`/`.test.ts`); the base-branch source had no API key endpoints, so the issue plan spec was incorrect and the PR naming is more accurate.\n  * No blocking issues; 12/12 original requirements met; 0 findings require code changes."
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

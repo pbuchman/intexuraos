@@ -20,8 +20,5 @@
     "summary": "* Reviewed plan document for INT-1463 (scheduled code task dispatch)\n  * Plan is Ready with minor clarifications needed (sane bounds undefined, \"create if needed\" vague, deps type extension implicit)\n  * All 10 requirements covered with explicit Key Decisions and Task decomposition\n  * File paths verified, config assumptions correct, existing code patterns match\n  * No code changes needed — this is a plan-only PR with informational findings"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

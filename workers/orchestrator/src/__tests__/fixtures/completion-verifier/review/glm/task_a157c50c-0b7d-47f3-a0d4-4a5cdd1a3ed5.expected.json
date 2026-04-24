@@ -18,8 +18,5 @@
     "summary": "* Reviewed multi-repo support investigation document for INT-1423\n  * Verified all file:line references accurate (orchestrator bootstrap, gitHubDispatchService, web types, Dockerfile, firestore-collections, CODEOWNERS)\n  * Plan correctly frames multi-repo as orchestrator re-architecture with clone cache + token pool design\n  * Effort estimate (22-31 days) realistic; MVP path (2 weeks same-org) well-defined\n  * 5 minor observations noted (schema clarity, deprecation timeline, capacity decision point, Dockerfile phrasing, migration file name) — all non-blocking\n  * All 4 original requirements met; plan ready for team review and MVP/full-product decision"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

@@ -18,19 +18,13 @@
     "trivial_task": false,
     "subagents": "implementer (refactor 701-line handler into use case + tests + CI); code-reviewer (spec + quality review flagging Critical C1 + Important I1/I2/I3); implementer-fix (address C1 via function ports on input, remove eslint-disable, add dedup test, verify I3); code-reviewer (re-review — Ready to merge).",
     "skill_sequence_proof": "superpowers:subagent-driven-development invoked first (dispatched general-purpose implementer for extract-to-use-case work), then superpowers:requesting-code-review invoked (dispatched pr-review-toolkit:code-reviewer which returned Critical C1 + Important I1/I2/I3). Fix iteration dispatched another implementer, then re-dispatched code-reviewer which returned \"Ready to merge\".",
+    "failure_reason": "",
     "summary": "* Extracted 701-line GitHub webhook handler body into new use case `apps/code-agent/src/domain/usecases/processGitHubWebhook.ts`; route reduced to 93 lines (thin parse → delegate → map HTTP adapter).\n  * Introduced `VerifyGitHubSignature` and `ParseGitHubWebhookEvent` function ports on `ProcessGitHubWebhookInput` to satisfy the domain→infra `no-restricted-imports` rule (code-review fix).\n  * Moved `ALLOWED_BOTS`/`CODE_WORKER_BOTS`/`resolvePrCloseSourceTimestamp`/`GitHubWebhookBody`/`GitHubWebhookHeaders` to canonical `domain/` homes; route re-exports them so callers and tests compile unchanged.\n  * Added 12 use-case tests covering invalid signature, missing audit repos, ping, unsupported event, duplicate, out-of-scope repo, happy path, parse error, triage-publish fallback, push, and dedup of existing decisions; all 71 pre-existing route integration tests pass unchanged.\n  * CI green: 15522 tests, 100% branches, all static validation, build, format."
   },
   "missingRequired": [],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
-    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
   ]
 }

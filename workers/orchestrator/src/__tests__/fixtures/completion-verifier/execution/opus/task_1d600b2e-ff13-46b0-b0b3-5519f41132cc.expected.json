@@ -18,19 +18,13 @@
     "trivial_task": false,
     "subagents": "implementer (general-purpose) — full refactor + TDD + commit; spec-reviewer (general-purpose) — spec compliance review against Linear issue DoD; code-quality-reviewer (pr-review-toolkit:code-reviewer) — quality review; final-reviewer (superpowers:code-reviewer) — holistic pre-merge review",
     "skill_sequence_proof": "superpowers:subagent-driven-development was invoked first (producing the implementer + 2 intermediate reviewer subagents and the 08f55c311 commit), then superpowers:requesting-code-review was invoked as the final holistic review gate (dispatched superpowers:code-reviewer, verdict APPROVED) before `git push` + `gh pr create`.",
+    "failure_reason": "",
     "summary": "* Extracted `fetchGitHub` util and 4 endpoint modules under `apps/code-agent/src/infra/http/github-pr/`; `gitHubPRHttpClient.ts` reduced from 694 → 76 lines of pure delegation.\n  * Behavior-preserving: error codes, merge 405/409 semantics, pagination, and shared AbortSignal for parallel check fetches all identical; `linearAgentHttpClient.ts` and all consumers untouched.\n  * New `github-fetch-util.test.ts` (24 nock tests covering happy path, status passthrough, network errors, timeout, custom signal, headers, body serialization) + `endpoint-network-errors.test.ts` (4 tests closing coverage on NETWORK_ERROR branches); existing 74-test facade suite passes unchanged.\n  * `pnpm run ci:tracked` green (typecheck, lint, 15727 tests, 434 v8-ignore pragmas validated, static validation, build, format); 100% branch coverage on all new files with zero new v8-ignore comments.\n  * All three review passes (spec compliance, code quality, final holistic) returned APPROVED with zero issues."
   },
   "missingRequired": [],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
-    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
   ]
 }

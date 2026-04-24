@@ -18,19 +18,13 @@
     "trivial_task": false,
     "subagents": "implementer (general-purpose) — scope: full refactor of processExecutionMemoryBacklog.ts into executionMemory/ sibling modules, preserve public API and __testables, write 3 new unit test files, pass pnpm run ci:tracked; code-reviewer (pr-review-toolkit:code-reviewer) — scope: final holistic review of split (module boundaries, Deps narrowness, behavior preservation, type safety, test meaningfulness)",
     "skill_sequence_proof": "invoked superpowers:subagent-driven-development first (dispatched implementer subagent that completed the refactor at commit e3e829d5a), then after CI passed invoked superpowers:requesting-code-review second (dispatched code-reviewer subagent which reported zero issues)",
+    "failure_reason": "",
     "summary": "* Split 1068-line processExecutionMemoryBacklog.ts into a 184-line orchestrator plus fetch/process/persist/sweep/prune/shared sibling modules under executionMemory/\n  * Added testablesCompat.ts shim so the existing 2705-line legacy test file keeps working unchanged; 3 new unit test files cover empty/populated backlog, happy/skip entry paths, and persist create/update/missing-embedding paths\n  * Preserved public signatures of processExecutionMemoryBacklog, sweepErroredApplications, pruneStaleMemories (re-exported from orchestrator) so cleanup-routes.ts required no edits\n  * pnpm run ci:tracked green (15932 tests, all static validators, build, format); code review found zero issues\n  * PR #1937 targets development"
   },
   "missingRequired": [],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
-    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
   ]
 }

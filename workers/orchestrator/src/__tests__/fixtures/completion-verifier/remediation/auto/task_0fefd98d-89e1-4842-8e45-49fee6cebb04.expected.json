@@ -13,9 +13,5 @@
     "summary": "* Removed three invalid/misclassified v8 ignores (`worker-ops.ts` copyOut + statsSnapshot null guards; `worker-create.ts` `.then()` worker lookup) that were flagged by both reviews as CLAUDE.md violations.\n  * Added `workers/orchestrator/src/services/isolation/__tests__/worker-ops.test.ts` covering both undefined-worker and valid-worker paths for `copyOut` and `statsSnapshot`, plus a deterministic race-condition test in `docker-provider.test.ts` that destroys the worker before resolving container wait to cover the previously-ignored branch.\n  * Skipped the `worker-ops.ts` → `DockerContainer` abstraction migration (reviewer explicitly marked non-blocking; out of INT-1426 scope) and the broader suggestions to split `worker-create.ts` and add direct tests for all helper modules (out of scope — noted as follow-up tickets).\n  * Pushed commit `1e6866e83` to the existing branch `task_65e45a64-9d3d-4e8e-9e6a-e5a21a62957e`; all PR checks (Lint, Type Check, Build & Format, Tests 1-3, Coverage, Terraform, E2E Tests, E2E Isolation, Validation) green; posted threaded replies + 😄 reactions on all 7 review comments, 2 review bodies, and 6 automated issue comments, followed by a Nitpick Nuker summary comment."
   },
   "missingRequired": [],
-  "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

@@ -21,8 +21,5 @@
     "summary": "* Reviewed `[INT-1434]` PR extracting the 701-line GitHub webhook handler into a new `processGitHubWebhook` use case with route slimmed to 93 lines.\n  * **Architecture violation (🔴):** `domain/usecases/processGitHubWebhook.ts` imports `extractEventUrl` and `extractEventSummary` from `routes/code/` — inverting the `Routes → Domain` dependency direction. No ESLint rule blocks `domain → routes` today, so this slipped through lint. Fix requires relocating both utilities to `domain/utils/`.\n  * **Security:** No concerns — HMAC-SHA256 verification preserved and slightly strengthened (explicit empty-string guard added).\n  * **Code quality:** Minor naming mismatch (`decidedBy: 'webhook_route'` inside the domain layer); `getServices()` used lazily rather than injected, intentional for test compatibility.\n  * All 11 original requirements met; CI fully green (all checks passed); one new architectural requirement identified as ❌ failing."
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

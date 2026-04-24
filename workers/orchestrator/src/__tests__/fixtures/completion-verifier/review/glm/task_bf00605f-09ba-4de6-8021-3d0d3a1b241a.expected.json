@@ -19,8 +19,5 @@
     "summary": "* Reviewed PR implementing worktree metadata rehydration on orchestrator restart (INT-1454)\n  * Code quality: Clean implementation with excellent JSDoc documentation, proper TypeScript strict mode, comprehensive error handling\n  * Architecture: Sound separation of concerns with WorktreeManager handling git ops, TaskDispatcher orchestrating adoption flow\n  * Test quality: Thorough coverage across all three layers with proper test isolation and strong assertions\n  * All 5 requirements from Linear issue fully met with comprehensive evidence\n  * No remediation needed — implementation is ready for merge"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

@@ -18,19 +18,13 @@
     "trivial_task": false,
     "subagents": "code-reviewer (scope: review INT-1430 refactor commit for behaviour drift, lint suppressions, type-safe IIFE replacement, infra-firestore import swap, and test quality)",
     "skill_sequence_proof": "Invoked superpowers:subagent-driven-development first (before any implementation edits), then superpowers:requesting-code-review after the implementation commit, then addressed the review's Minor (M1) finding with a follow-up commit and re-ran ci:tracked before pushing.",
+    "failure_reason": "",
     "summary": "* Split `apps/code-agent/src/routes/codeRoutes.ts` from 4,786 lines → 48-line thin Fastify plugin that composes 5 resource-specific sub-plugins (`task-routes`, `queue-routes`, `ask-agent-routes`, `feedback-routes`, `linear-routes`) plus shared `schemas.ts`, `responseFormatters.ts`, and `types.ts`.\n  * Preserved every one of the 27 original HTTP endpoints verbatim; `apps/code-agent/src/index.ts` is untouched and `codeRoutes.ts` re-exports `timestampToIso`, `taskToApiResponse`, and `inFlightRequests` for back-compat with existing importers/tests.\n  * Removed the blanket `/* eslint-disable */`; fixed underlying lint violations (routed `Timestamp` through `@intexuraos/infra-firestore`, converted IIFEs to typed helpers, scoped `no-non-null-assertion` suppression).\n  * Added `schemas.test.ts` (Ajv schema validation), `split-sanity.test.ts` (URL-surface assertion via `onRoute` hook), and per-plugin smoke tests; all 15 496 pre-existing tests pass unchanged.\n  * Full `pnpm run ci:tracked` green (typecheck, lint, coverage, build); PR #1920 opened against `development`."
   },
   "missingRequired": [],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
-    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
   ]
 }

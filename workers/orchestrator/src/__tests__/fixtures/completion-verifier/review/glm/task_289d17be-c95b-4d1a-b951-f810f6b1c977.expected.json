@@ -21,8 +21,5 @@
     "summary": "* Reviewed PR fixing WORKER_INFRA_FAILURE regression in classifyAttempt for stream-JSON event detection and prUrl short-circuit\n  * Code quality: Clean implementation with belt-and-suspenders approach, proper TypeScript strict mode handling, minimal interface design\n  * Test quality: Thorough coverage with realistic integration test fixture, edge cases for null/empty prUrl, type narrowing patterns\n  * All 6 plan requirements met; all GitHub Actions checks passed\n  * No remediation needed — high-quality TDD implementation directly addressing root cause"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

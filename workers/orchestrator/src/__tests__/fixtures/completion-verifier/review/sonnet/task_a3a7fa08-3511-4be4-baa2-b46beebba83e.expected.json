@@ -21,8 +21,5 @@
     "summary": "* Reviewed PR #1912 refactoring `webhookRoutes.ts` from 2,279 → 170 lines via three new modules: `handleTaskCompletion.ts` (1,741L), `recordTaskEvent.ts`, `webhookHelpers.ts`\n  * 🔴 Three blocking issues: (1) `/* eslint-disable */` blanket disable in the 1,741-line use case; (2) missing `webhookRoutes.test.ts` required explicitly by the issue; (3) missing `completed` path unit tests in `handleTaskCompletion.test.ts` (\"Memory queued, automation logged\" / \"Remediation decision recorded\")\n  * ⚠️ Two secondary issues: invalid `v8 ignore` in `recordTaskEvent.ts` (tests already cover the block); `process.env` leak in `webhookHelpers.test.ts` (no afterEach cleanup)\n  * ✅ Architecture goal achieved — route handlers are now thin (parse → validate → delegate → respond); all 235 existing integration tests pass; all CI checks green\n  * Needs remediation: fix eslint-disable, add webhookRoutes.test.ts, add completed-path unit tests before merge"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

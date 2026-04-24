@@ -20,8 +20,5 @@
     "summary": "* Reviewed planning PR for INT-1452 — WhatsApp notification importance flag adjustments\n  * Verified file paths, line numbers, and current behavior table against implementation\n  * All findings from Review 1 have been addressed: verification command fixed, design tradeoff documented\n  * Plan is implementation-ready with TDD steps correctly specified\n  * 10/10 requirements met, GH Actions all passed, no remediation needed"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

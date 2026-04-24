@@ -17,8 +17,5 @@
     "summary": "* Reviewed PR #1929 for code_quality, architecture, and test_quality\n  * Refactoring extracts 730-line monolith into 6 handler modules with registry pattern\n  * All 10 requirements met: dispatcher reduced to 55 lines, handlers have unit tests, Open/Closed extensibility achieved\n  * Test coverage comprehensive with proper Result narrowing patterns; dispatcher routing tests in aggregate test file\n  * One plan discrepancy noted: `issue-handler.ts` → `issue-comment-handler.ts` (plan confused `issues` vs `issue_comment` events; implementation correctly preserves original behavior)"
   },
   "missingRequired": [],
-  "warnings": [
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
-  ]
+  "warnings": []
 }

@@ -17,19 +17,13 @@
     "trivial_task": false,
     "subagents": "implementer (refactor + new tests), spec-compliance reviewer, holistic code reviewer (initial), fix-subagent (addressed review findings), second-pass code reviewer",
     "skill_sequence_proof": "Invoked `superpowers:subagent-driven-development` skill first (dispatched implementer + spec-reviewer), then invoked `superpowers:requesting-code-review` skill (dispatched code-reviewer subagent, received 2 Important findings, dispatched fix subagent, dispatched second-pass review which returned APPROVED). PR created only after second review APPROVED.",
+    "failure_reason": "",
     "summary": "* Split `workers/orchestrator/src/services/completion-verifier.ts` from 1,024 → 197 lines by extracting into 6 sibling modules under `services/completion-verifier/`: schemas.ts, prompt-builder.ts, llm-client.ts, memory-validation.ts, transcript.ts, types.ts\n  * Orchestration (`OrchestratorCompletionVerifier` class `doVerify`/`doExtractResumeSummary`) kept in parent file; agent-type branching isolated to registry lookups (`getSchemaForAgent`, `toAgentData`, `buildVerificationPrompt`)\n  * Zod schemas + prompt strings byte-identical to original; AsyncLocalStorage singleton preserved; public API surface at `./completion-verifier.js` unchanged via `export *` re-exports\n  * Added 38 new per-module unit tests (schemas: 21, prompt-builder: 14 with byte-pin snapshots, llm-client: 10 incl. fallback ordering, memory-validation: 18); existing 3,171-line + 184-line test files unchanged\n  * CI green: 15,223 tests pass, `pnpm run ci:tracked` passes all phases (typecheck, lint, tests, coverage, static validation, build, format)"
   },
   "missingRequired": [],
   "warnings": [
-    "field outcome was read from deprecated alias Outcome; rename the emitter",
-    "field pr was read from deprecated alias PR; rename the emitter",
-    "field ci_evidence was read from deprecated alias CI evidence; rename the emitter",
-    "field linear_issue was read from deprecated alias Linear issue; rename the emitter",
-    "field review_iterations was read from deprecated alias Review iterations; rename the emitter",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
-    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter",
-    "field skill_sequence_proof was read from deprecated alias Skill sequence proof; rename the emitter",
-    "field summary was read from deprecated alias Summary; rename the emitter"
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
   ]
 }
