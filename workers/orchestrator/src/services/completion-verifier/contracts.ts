@@ -165,8 +165,15 @@ export const AGENT_CONTRACTS: Record<CompletionAgentType, AgentContract> = {
         required: false,
         emptyAliases: DEFAULT_EMPTY_ALIASES,
       },
-      // failure_reason is not currently emitted by the execution prompt.
-      // Add it only if Task 1.2 first adds it to the live prompt.
+      {
+        // [INT-1470] Emitted by the execution prompt when outcome=failed; "n/a"
+        // otherwise. Consumers downstream (task-dispatcher, metrics, compliance)
+        // read `data.failure_reason` to label runtime hard errors.
+        name: 'failure_reason',
+        kind: 'string',
+        required: false,
+        emptyAliases: DEFAULT_EMPTY_ALIASES,
+      },
       { name: 'summary', alias: ['Summary'], kind: 'string', required: true },
     ],
   },
