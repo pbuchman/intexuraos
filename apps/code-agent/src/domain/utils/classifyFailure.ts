@@ -65,8 +65,10 @@ export function classifyFailure(error: TaskError): FailureVerdict {
     }
     // Rate limit — retry after cooloff (check AFTER 137 so 137+429 = retry).
     // Claude runtime errors commonly say "Task failed: rate limited" without
-    // the 429 substring, so match either form.
-    if (/429|rate limit/i.test(errorMessage)) {
+    // the 429 substring. Claude's usage-limit wording ("You've hit your limit
+    // · resets 10pm (UTC)") does not contain "rate limit" either, so match
+    // all observed production phrasings. INT-1463.
+    if (/429|rate limit|hit your limit|usage limit|limit · resets/i.test(errorMessage)) {
       return 'retry_after_cooloff';
     }
   }

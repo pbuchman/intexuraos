@@ -1,18 +1,25 @@
 import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core/code-task-worker-types';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, Play, Link2, Sparkles, Pencil, ClipboardList, Rocket } from 'lucide-react';
+import { AlertCircle, Play, Link2, Sparkles, Pencil, ClipboardList, Rocket, Clock } from 'lucide-react';
 import MDEditor from '@uiw/react-md-editor';
 import rehypeSanitize from 'rehype-sanitize';
 import { Button, Card, Layout, ConfirmSubmitModal, TaskConflictModal, TaskErrorModal, LinearIssueSelectorModal } from '@/components';
 import type { ConflictReason } from '@/components';
-import { useLinearIssueOptions, useWorkersStatus, findRecentTask } from '@/hooks';
+import { useLinearIssueOptions, useWorkersStatus, findRecentTask, useTimeTick } from '@/hooks';
 import type { CodeTaskWorkerType, TaskMode, SubmitCodeTaskRequest } from '@/types';
 import type { LinearIssueOption } from '@/hooks/useLinearIssueOptions';
 import { ApiError, parseConflictError } from '@/services/apiClient';
 import { listCodeTasks, submitCodeTask } from '@/services/codeAgentApi';
 import { useAuth } from '@/context';
 import { WORKER_TYPE_METADATA } from '@/components/workers/shared.js';
+import {
+  formatSchedulePreview,
+  getBrowserTimezone,
+  isFutureLocalDateTime,
+  localInputToIsoUtc,
+  nowLocalInputValue,
+} from '@/utils/scheduledDispatch';
 
 const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string }[] = CODE_TASK_WORKER_TYPES.map((id) => ({
   id,
@@ -62,6 +69,9 @@ export function CodeTaskNewPage(): React.JSX.Element {
   const [linearMode, setLinearMode] = useState<LinearMode>('create');
   const [taskMode, setTaskMode] = useState<TaskMode>('planning');
   const [selectedIssue, setSelectedIssue] = useState<LinearIssueOption | null>(null);
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduleLocalDateTime, setScheduleLocalDateTime] = useState('');
+  const [browserTimezone] = useState<string>(() => getBrowserTimezone());
   const [submitting, setSubmitting] = useState(false);
   const [loadingText, setLoadingText] = useState('Submitting...');
   const [error, setError] = useState<string | null>(null);
@@ -126,10 +136,41 @@ export function CodeTaskNewPage(): React.JSX.Element {
     ? PLANNING_PLACEHOLDER
     : 'Describe what you want the selected worker to build or fix...';
 
-  // Form is valid when: has prompt AND workers are configured
+  // Reset schedule state whenever we leave execution mode.
+  useEffect(() => {
+    if (taskMode !== 'execution') {
+      setScheduleEnabled(false);
+      setScheduleLocalDateTime('');
+    }
+  }, [taskMode]);
+
+  // Refresh the datetime-local `min` bound once a minute so it does not
+  // go stale when users leave the form open (INT-1468).
+  useTimeTick(60_000);
+  const scheduleMinValue = nowLocalInputValue();
+
+  const isScheduleFuture = isFutureLocalDateTime(scheduleLocalDateTime);
+  const scheduleIsoUtc: string | null =
+    scheduleLocalDateTime.length > 0 ? localInputToIsoUtc(scheduleLocalDateTime) : null;
+  // Narrow to a concrete payload when the schedule is both enabled and valid.
+  const validSchedulePayload: { localDateTime: string; timezone: string; notBeforeAt: string } | null =
+    scheduleEnabled && taskMode === 'execution' && isScheduleFuture && scheduleIsoUtc !== null
+      ? {
+          localDateTime: scheduleLocalDateTime,
+          timezone: browserTimezone,
+          notBeforeAt: scheduleIsoUtc,
+        }
+      : null;
+  const schedulePreview =
+    validSchedulePayload !== null
+      ? formatSchedulePreview(validSchedulePayload.notBeforeAt, validSchedulePayload.timezone)
+      : null;
+
+  // Form is valid when: has prompt AND workers are configured AND schedule (if enabled) is future.
   const isValid =
     prompt.trim().length > 0 &&
-    !hasNoWorkers;
+    !hasNoWorkers &&
+    (!scheduleEnabled || validSchedulePayload !== null);
 
   // Get task title for confirmation modal
   const getTaskTitle = (): string => {
@@ -164,6 +205,11 @@ export function CodeTaskNewPage(): React.JSX.Element {
       // Only send linearIssueId if linking to existing issue
       if (linearMode === 'link' && selectedIssue !== null) {
         requestData.linearIssueId = selectedIssue.identifier;
+      }
+
+      // Attach scheduledDispatch only when execution mode + schedule enabled + valid.
+      if (validSchedulePayload !== null) {
+        requestData.scheduledDispatch = validSchedulePayload;
       }
 
       const token = await getAccessToken();
@@ -349,6 +395,59 @@ export function CodeTaskNewPage(): React.JSX.Element {
             </p>
           </div>
 
+          {taskMode === 'execution' ? (
+            <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={scheduleEnabled}
+                  onChange={(e): void => {
+                    setScheduleEnabled(e.target.checked);
+                    if (!e.target.checked) {
+                      setScheduleLocalDateTime('');
+                    }
+                  }}
+                  disabled={submitting}
+                  className="h-4 w-4"
+                />
+                <Clock className="h-4 w-4 text-slate-500" />
+                Schedule this execution
+                <span className="ml-2 text-xs font-normal text-slate-500 dark:text-slate-400">
+                  Your timezone: {browserTimezone}
+                </span>
+              </label>
+
+              {scheduleEnabled ? (
+                <div className="mt-3 space-y-2">
+                  <input
+                    type="datetime-local"
+                    min={scheduleMinValue}
+                    value={scheduleLocalDateTime}
+                    onChange={(e): void => {
+                      setScheduleLocalDateTime(e.target.value);
+                    }}
+                    disabled={submitting}
+                    aria-label="Scheduled dispatch time"
+                    className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+                  />
+                  {scheduleLocalDateTime.length > 0 && !isScheduleFuture ? (
+                    <p className="text-xs text-red-600 dark:text-red-400">
+                      Must be in the future
+                    </p>
+                  ) : null}
+                  {schedulePreview !== null ? (
+                    <p className="text-xs text-slate-700 dark:text-slate-200">
+                      {schedulePreview}
+                    </p>
+                  ) : null}
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    The task joins the queue immediately, but will not dispatch before the selected time.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           {hasNoWorkers && !workersLoading ? (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
               <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
@@ -484,6 +583,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
         taskTitle={getTaskTitle()}
         workerType={workerType}
         taskMode={taskMode}
+        {...(validSchedulePayload !== null ? { schedule: validSchedulePayload } : {})}
         onConfirm={handleConfirmSubmit}
         onCancel={handleCancelModal}
       />

@@ -284,6 +284,82 @@ describe('autoRetryTask', () => {
     });
   });
 
+  describe('cooloff schedule (INT-1463)', () => {
+    it('persists dispatchSchedule when cooloffSchedule.derivedBy is "llm"', async () => {
+      const failedTask = buildTask({ id: 'task_cooloff_llm' });
+      const notBeforeAt = new Date('2026-04-23T22:00:00Z');
+
+      await autoRetryTask(buildDeps(), {
+        failedTask,
+        failedWorkerLocation: 'home-mac',
+        reason: 'rate limited',
+        cooloffSchedule: {
+          notBeforeAt,
+          timezone: 'UTC',
+          sourceText: 'resets 10pm (UTC)',
+          derivedBy: 'llm',
+        },
+      });
+
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledOnce();
+      const createInput = mockCodeTaskRepo.create.mock.calls[0]?.[0] as
+        | { dispatchSchedule?: Record<string, unknown> }
+        | undefined;
+
+      expect(createInput?.dispatchSchedule).toBeDefined();
+      expect(createInput?.dispatchSchedule?.['source']).toBe('retry_cooloff');
+      expect(createInput?.dispatchSchedule?.['derivedBy']).toBe('llm');
+      expect(createInput?.dispatchSchedule?.['derivedFromTaskId']).toBe('task_cooloff_llm');
+      expect(createInput?.dispatchSchedule?.['timezone']).toBe('UTC');
+      expect(createInput?.dispatchSchedule?.['sourceText']).toBe('resets 10pm (UTC)');
+
+      const persisted = createInput?.dispatchSchedule?.['notBeforeAt'];
+      expect(persisted).toBeInstanceOf(Date);
+      expect((persisted as Date).toISOString()).toBe(notBeforeAt.toISOString());
+    });
+
+    it('persists dispatchSchedule with derivedBy "fallback" when provided', async () => {
+      const failedTask = buildTask({ id: 'task_cooloff_fb' });
+      const notBeforeAt = new Date('2026-04-23T13:00:00Z');
+
+      await autoRetryTask(buildDeps(), {
+        failedTask,
+        failedWorkerLocation: 'home-mac',
+        reason: 'rate limited',
+        cooloffSchedule: {
+          notBeforeAt,
+          derivedBy: 'fallback',
+          sourceText: 'parser failure',
+        },
+      });
+
+      const createInput = mockCodeTaskRepo.create.mock.calls[0]?.[0] as
+        | { dispatchSchedule?: Record<string, unknown> }
+        | undefined;
+      expect(createInput?.dispatchSchedule?.['derivedBy']).toBe('fallback');
+      expect(createInput?.dispatchSchedule?.['source']).toBe('retry_cooloff');
+      expect(createInput?.dispatchSchedule?.['derivedFromTaskId']).toBe('task_cooloff_fb');
+      expect(createInput?.dispatchSchedule?.['timezone']).toBeUndefined();
+    });
+
+    it('omits dispatchSchedule entirely when cooloffSchedule is not provided', async () => {
+      const failedTask = buildTask({ id: 'task_no_cooloff' });
+
+      await autoRetryTask(buildDeps(), {
+        failedTask,
+        failedWorkerLocation: 'home-mac',
+        reason: 'worker_crashed',
+      });
+
+      const createInput = mockCodeTaskRepo.create.mock.calls[0]?.[0] as
+        | { dispatchSchedule?: unknown }
+        | undefined;
+      expect(createInput).toBeDefined();
+      expect(createInput?.dispatchSchedule).toBeUndefined();
+      expect(createInput && 'dispatchSchedule' in createInput).toBe(false);
+    });
+  });
+
   describe('whatsapp notification', () => {
     it('sends auto-retry notification with attempt number and reason', async () => {
       const failedTask = buildTask({ id: 'task_orig' });
