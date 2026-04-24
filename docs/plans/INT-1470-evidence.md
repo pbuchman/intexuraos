@@ -14,10 +14,11 @@ The complete, TDD-ready implementation plan already exists in the repo:
 
 It was authored and merged under INT-1469 (PR #1940). Re-authoring is unnecessary — this evidence PR acknowledges the existing plan and re-routes INT-1470 (the code-task issue) to it.
 
-This PR also patches two execution-readiness gaps identified during plan review:
+This PR also patches the execution-readiness gaps identified during plan review:
 
-1. **Task 6.2 `gh pr create` template** now emits `INT-1470` in the title and `Fixes INT-1470` plus the required metadata block (`Linear`, `IntexuraOS Code Task`, `Worker Type`, `Model`) in the body, so the delivery step satisfies the repo PR contract (CLAUDE.md §Cross-Linking).
-2. **Phase 3 file map** now explicitly schedules `task-dispatcher/metrics.ts`, `agent-compliance-validator.ts`, and the `CompletionAgentType` / `getLast50Lines` import migration in `task-dispatcher/prompts.ts` — all current `completion-verifier` public-surface consumers. Task 3.4 enumerates the full in-scope consumer list.
+1. **Task 6.2 `gh pr create` template** is now fully parameterized. The template uses `{{LINEAR_ISSUE}}`, `{{CODE_TASK_ID}}`, `{{WORKER_TYPE}}`, and `{{MODEL}}` placeholders with an explicit substitution table and an instruction to read the current run's values from the remediation-agent prompt's "PR Description Context" block. No stale task/worker/model metadata is hardcoded; an execution agent following Task 6.2 verbatim will emit the current run's values, and the title/body satisfy the repo PR contract (CLAUDE.md §Cross-Linking).
+2. **Phase 3 file map** explicitly schedules every current `completion-verifier` public-surface consumer — `task-dispatcher/metrics.ts`, `agent-compliance-validator.ts`, and the `CompletionAgentType` / `getLast50Lines` import migration in `task-dispatcher/prompts.ts`. Task 3.4 enumerates the full in-scope consumer list.
+3. **Coupled tests for the deleted verifier surface** are explicitly scheduled in Phase 3. The plan's Modified-files table and Tasks 3.4/3.5 now name `__tests__/services/completion-verifier/types.test.ts` (lines 1-12) and `__tests__/services/task-dispatcher/metrics.test.ts` (lines 10-13, 98-116) with exact updates required when `verifierFailure` / `trace` are dropped from `CompletionVerifierVerdict`, so the cutover commit fixes both producers and their coupled consumers in the same step instead of relying on Phase 6 CI to surface the breakage.
 
 ## Scope recap
 
