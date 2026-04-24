@@ -108,22 +108,24 @@ Known adversarial fixtures (covered by dedicated tests):
 
 ### Modified files
 
-| Path                                                                                      | Change                                                                                                                                                |
-| ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workers/orchestrator/src/services/prompts/execution-prompt.ts`                           | Rename `execution_memory_*` → `memory_*` and add an explicit `failure_reason` line if the execution-failed branch keeps consuming it                  |
-| `workers/orchestrator/src/services/prompts/review-prompt.ts`                              | Add explicit `review_body` / `review_inline_comments` lines if downstream persistence continues to depend on them                                     |
-| `workers/orchestrator/src/services/__tests__/system-prompt.test.ts`                       | Extend the existing prompt-contract assertions; do **not** invent a new snapshot file                                                                 |
-| `workers/orchestrator/src/services/completion-verifier.ts`                                | Rewrite to synchronous parser-only pipeline                                                                                                           |
-| `workers/orchestrator/src/services/completion-verifier/schemas.ts`                        | Delete only verification-era schemas; retain or move `RESUME_SUMMARY_SCHEMA` with the resume-summary path                                             |
-| `workers/orchestrator/src/services/completion-verifier/prompt-builder.ts`                 | Remove `buildVerificationPrompt`; keep or move `buildResumeSummaryPrompt`                                                                             |
-| `workers/orchestrator/src/services/completion-verifier/llm-client.ts`                     | Remove verifier-call helpers; keep or move `generateResumeSummaryWithFallback` / `extractAndParseJson` for resume summaries                          |
-| `workers/orchestrator/src/services/completion-verifier/memory-validation.ts`              | Keep `detectEmptyMemoryFields`, `isTelemetryField`, `partitionMissingFields`; delete `validateMemoryReporting` and `buildMemoryAcknowledgmentPattern` |
-| `workers/orchestrator/src/services/completion-verifier/types.ts`                          | Drop `verifierFailure`, `succeededModelName`, `trace` fields from `CompletionVerifierVerdict` (parser has no LLM)                                     |
-| `workers/orchestrator/src/services/task-dispatcher.ts`                                    | Call verifier synchronously; route `missingFinalBlock` verdicts to `TASK_RUNTIME_HARD_ERROR` classification                                           |
-| `workers/orchestrator/src/services/task-dispatcher/webhook-callbacks.ts`                  | Map the canonical parsed fields back onto the existing `TaskResult` wire shape (`prUrl`, `execution_memory_*`, etc.)                                 |
-| `workers/orchestrator/src/__tests__/services/task-dispatcher/webhook-callbacks.test.ts`   | Pin the canonical-field → `TaskResult` mapping and preserve the webhook wire contract                                                                  |
-| `workers/orchestrator/src/services/task-dispatcher/prompts.ts`                            | Remove the "EXECUTION MEMORY REPORTING FAILURE" resume-prompt branch                                                                                  |
-| `workers/orchestrator/src/services/task-dispatcher/decide-outcome.ts`                     | Simplify: drop `retry-verifier`/`fail-verifier` outcome variants (no LLM to fail)                                                                     |
+| Path                                                                                      | Change                                                                                                                                                                                                                                       |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workers/orchestrator/src/services/prompts/execution-prompt.ts`                           | Rename `execution_memory_*` → `memory_*` and add an explicit `failure_reason` line if the execution-failed branch keeps consuming it                                                                                                         |
+| `workers/orchestrator/src/services/prompts/review-prompt.ts`                              | Add explicit `review_body` / `review_inline_comments` lines if downstream persistence continues to depend on them                                                                                                                            |
+| `workers/orchestrator/src/services/__tests__/system-prompt.test.ts`                       | Extend the existing prompt-contract assertions; do **not** invent a new snapshot file                                                                                                                                                        |
+| `workers/orchestrator/src/services/completion-verifier.ts`                                | Rewrite to synchronous parser-only pipeline                                                                                                                                                                                                  |
+| `workers/orchestrator/src/services/completion-verifier/schemas.ts`                        | Delete only verification-era schemas; retain or move `RESUME_SUMMARY_SCHEMA` with the resume-summary path                                                                                                                                    |
+| `workers/orchestrator/src/services/completion-verifier/prompt-builder.ts`                 | Remove `buildVerificationPrompt`; keep or move `buildResumeSummaryPrompt`                                                                                                                                                                    |
+| `workers/orchestrator/src/services/completion-verifier/llm-client.ts`                     | Remove verifier-call helpers; keep or move `generateResumeSummaryWithFallback` / `extractAndParseJson` for resume summaries                                                                                                                  |
+| `workers/orchestrator/src/services/completion-verifier/memory-validation.ts`              | Keep `detectEmptyMemoryFields`, `isTelemetryField`, `partitionMissingFields`; delete `validateMemoryReporting` and `buildMemoryAcknowledgmentPattern`                                                                                        |
+| `workers/orchestrator/src/services/completion-verifier/types.ts`                          | Drop `verifierFailure`, `succeededModelName`, `trace` fields from `CompletionVerifierVerdict` (parser has no LLM)                                                                                                                            |
+| `workers/orchestrator/src/services/task-dispatcher.ts`                                    | Call verifier synchronously; route `missingFinalBlock` verdicts to `TASK_RUNTIME_HARD_ERROR` classification                                                                                                                                  |
+| `workers/orchestrator/src/services/task-dispatcher/webhook-callbacks.ts`                  | Map the canonical parsed fields back onto the existing `TaskResult` wire shape (`prUrl`, `execution_memory_*`, etc.)                                                                                                                         |
+| `workers/orchestrator/src/__tests__/services/task-dispatcher/webhook-callbacks.test.ts`   | Pin the canonical-field → `TaskResult` mapping and preserve the webhook wire contract                                                                                                                                                        |
+| `workers/orchestrator/src/services/task-dispatcher/prompts.ts`                            | Remove the "EXECUTION MEMORY REPORTING FAILURE" resume-prompt branch; re-home the `CompletionAgentType` type and `getLast50Lines` helper imports onto whatever module survives the `completion-verifier.ts` rewrite                          |
+| `workers/orchestrator/src/services/task-dispatcher/metrics.ts`                            | Update imports: `CompletionVerifierVerdict` and `ExecutionAgentData` now come from `completion-verifier/contracts.ts` (or the surviving types module); adjust `prepareComplianceValidationInput` to consume the canonical parsed field shape |
+| `workers/orchestrator/src/services/agent-compliance-validator.ts`                         | Update the `ExecutionAgentData` import to point at the new canonical types module and retain the `ExecutionAgentClaims = Omit<ExecutionAgentData, 'agentType'>` alias                                                                        |
+| `workers/orchestrator/src/services/task-dispatcher/decide-outcome.ts`                     | Simplify: drop `retry-verifier`/`fail-verifier` outcome variants (no LLM to fail)                                                                                                                                                            |
 
 ### Deleted files
 
@@ -157,7 +159,7 @@ No whole-file deletions are required in the first cutover. Keep the resume-summa
   - Task 3.1: Rewrite `completion-verifier.ts`.
   - Task 3.2: Remove verification-only LLM helpers while preserving the resume-summary path.
   - Task 3.3: Prune `memory-validation.ts`.
-  - Task 3.4: Update `webhook-callbacks.ts` and any other consumers to the canonical parsed field names.
+  - Task 3.4: Update `webhook-callbacks.ts` and every remaining `completion-verifier` consumer to the canonical parsed field names and new type-module locations. In-scope consumers: `task-dispatcher/webhook-callbacks.ts`, `task-dispatcher/metrics.ts`, `task-dispatcher/prompts.ts`, `agent-compliance-validator.ts`.
   - Task 3.5: Drop `trace`, `verifierFailure`, `succeededModelName` from verdict.
 - **Phase 4 — Dispatcher routing.**
   - Task 4.1: Missing-block → `TASK_RUNTIME_HARD_ERROR`.
@@ -2462,7 +2464,14 @@ git push -u origin feature/deterministic-agent-final-parser
 Per the user's directive and CLAUDE.md: do NOT create a Linear issue manually — the GitHub→Linear webhook creates one automatically when the PR opens.
 
 ```bash
-gh pr create --base development --title "Deterministic AGENT_FINAL parser + contract alignment" --body "$(cat <<'EOF'
+gh pr create --base development --title "[INT-1470] Deterministic AGENT_FINAL parser + contract alignment" --body "$(cat <<'EOF'
+Fixes INT-1470
+
+- Linear: [INT-1470](https://linear.app/pbuchman/issue/INT-1470)
+- IntexuraOS Code Task: [View task](https://intexuraos.cloud/#/code-tasks/task_40be1501-7ec2-4e23-b27f-d4c3c2cee0db)
+- Worker Type: `auto`
+- Model: `default`
+
 ## Summary
 - Removes the LLM from completion verification. The verifier now deterministically parses the agent's own `*_AGENT_FINAL:` block in three synchronous stages: `locateFinalBlock` → `parseKeyValues` → `coerceFields`.
 - Aligns agent/verifier field names: rename `execution_memory_*` → `memory_*` in the execution agent prompt (dual-read alias kept for 2 releases). Every other agent already used the unprefixed form.
