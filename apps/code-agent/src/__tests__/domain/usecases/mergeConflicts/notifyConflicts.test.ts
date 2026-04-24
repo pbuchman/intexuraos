@@ -1,11 +1,12 @@
 import { err, ok } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildConflictCommentBody,
   buildTaskUrl,
   updateManagedComment,
 } from '../../../../domain/usecases/mergeConflicts/notifyConflicts.js';
+import { resetServices, setServices, type ServiceContainer } from '../../../../services.js';
 
 function createLogger(): Logger {
   return {
@@ -107,11 +108,22 @@ describe('updateManagedComment', () => {
   }
 
   function createClient(): ClientStub {
-    return {
+    const client: ClientStub = {
       postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 2001 })),
       updateIssueComment: vi.fn().mockResolvedValue(ok({ commentId: 1001 })),
     };
+    // Register the fake GitHub PR client in the service container per
+    // INT-1440 DoD #4, exercising the repo's standardized `setServices()`
+    // wiring path. `updateManagedComment` receives the client explicitly, so
+    // the registration simply mirrors the reference for consistency with the
+    // rest of the codebase's test conventions.
+    setServices({ gitHubPRClient: client } as unknown as ServiceContainer);
+    return client;
   }
+
+  afterEach(() => {
+    resetServices();
+  });
 
   it('updates existing comment when commentId is provided', async () => {
     const client = createClient();

@@ -1,7 +1,7 @@
 import { Timestamp } from '@google-cloud/firestore';
 import { err, ok } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CodeTask } from '../../../../domain/models/codeTask.js';
 import type { GitHubPRSummary } from '../../../../domain/models/gitHubPRSummary.js';
 import {
@@ -19,6 +19,7 @@ import {
   type DetectConflictDeps,
   type ProcessingTrigger,
 } from '../../../../domain/usecases/mergeConflicts/detectConflicts.js';
+import { resetServices, setServices, type ServiceContainer } from '../../../../services.js';
 
 function createLogger(): Logger {
   return {
@@ -156,8 +157,17 @@ function createDetectDeps(): DetectConflictDeps {
     orchestratorSecret: 'orchestrator-secret',
     sleep: vi.fn().mockResolvedValue(undefined),
   };
+  // Register fakes in the service container per INT-1440 DoD #4, exercising the
+  // repo's standardized `setServices()` wiring path. Each sub-use-case function
+  // still receives `deps` directly as arguments; tests read/mutate the same
+  // reference that is now reachable via `getServices()`.
+  setServices(deps as unknown as ServiceContainer);
   return deps as unknown as DetectConflictDeps;
 }
+
+afterEach(() => {
+  resetServices();
+});
 
 describe('extractPushedBranch', () => {
   it('returns branch name when payload has refs/heads/ ref', () => {

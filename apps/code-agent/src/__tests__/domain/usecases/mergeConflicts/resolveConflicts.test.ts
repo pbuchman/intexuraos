@@ -19,6 +19,7 @@ import {
   type ConflictWorkflowParams,
   type ResolveConflictDeps,
 } from '../../../../domain/usecases/mergeConflicts/resolveConflicts.js';
+import { resetServices, setServices, type ServiceContainer } from '../../../../services.js';
 
 const randomUuidSpy = vi.spyOn(globalThis.crypto, 'randomUUID');
 
@@ -134,6 +135,11 @@ function createResolveDeps(enabledWorker = true): ResolveConflictDeps {
     },
     orchestratorSecret: 'orchestrator-secret',
   };
+  // Register fakes in the service container per INT-1440 DoD #4, exercising the
+  // repo's standardized `setServices()` wiring path. The sub-use-case functions
+  // under test receive `deps` explicitly as arguments; the container
+  // registration here mirrors the same reference for any transitive lookups.
+  setServices(deps as unknown as ServiceContainer);
   return deps as unknown as ResolveConflictDeps;
 }
 
@@ -159,6 +165,7 @@ beforeEach(() => {
 
 afterEach(() => {
   randomUuidSpy.mockReset();
+  resetServices();
 });
 
 describe('predicates', () => {
