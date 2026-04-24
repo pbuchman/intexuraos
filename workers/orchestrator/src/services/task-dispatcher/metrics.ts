@@ -52,7 +52,8 @@ function asString(value: unknown): string {
 }
 
 function arrayOrStringToCsv(value: unknown): string {
-  if (Array.isArray(value)) return value.map((v) => (typeof v === 'string' ? v : String(v))).join(',');
+  if (Array.isArray(value))
+    return value.map((v) => (typeof v === 'string' ? v : String(v))).join(',');
   return asString(value);
 }
 
@@ -113,7 +114,9 @@ export async function prepareComplianceValidationInput(
       formattedTranscript,
       agentClaims: {
         outcome: asOutcome(data['outcome']),
-        superpowers_subagent_driven_dev: asUsedNotUsed(data['superpowers_subagent_driven_dev_used']),
+        superpowers_subagent_driven_dev: asUsedNotUsed(
+          data['superpowers_subagent_driven_dev_used']
+        ),
         superpowers_requesting_code_review: asUsedNotUsed(
           data['superpowers_requesting_code_review_used']
         ),

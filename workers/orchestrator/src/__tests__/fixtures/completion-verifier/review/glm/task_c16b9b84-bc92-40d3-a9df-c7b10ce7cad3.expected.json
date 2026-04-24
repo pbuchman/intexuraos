@@ -3,11 +3,7 @@
     "pr": "https://github.com/pbuchman/intexuraos/pull/1934",
     "review_id": "4169844706",
     "review_comments_posted": 0,
-    "review_types": [
-      "code_quality",
-      "architecture",
-      "test_quality"
-    ],
+    "review_types": ["code_quality", "architecture", "test_quality"],
     "requirements_tracker_updated": "yes",
     "gh_actions_status": "all passed",
     "needs_remediation": false,
@@ -21,7 +17,5 @@
     "summary": "- Clean refactor reducing gitHubDispatchService.ts from 681 to 45 lines with 4 sibling modules"
   },
   "missingRequired": [],
-  "warnings": [
-    "unknown key in AGENT_FINAL block: All 12 requirements met"
-  ]
+  "warnings": ["unknown key in AGENT_FINAL block: All 12 requirements met"]
 }

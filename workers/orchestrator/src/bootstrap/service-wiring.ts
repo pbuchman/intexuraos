@@ -37,10 +37,7 @@ import {
 import { ApiKeyValidator } from '../services/api-key-validator.js';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { CompletionControlConfig, IsolationConfig } from '../services/task-dispatcher.js';
-import {
-  ResumeSummaryExtractor,
-  getVerifierTaskId,
-} from '../services/completion-verifier.js';
+import { ResumeSummaryExtractor, getVerifierTaskId } from '../services/completion-verifier.js';
 import { TurnMetricsCollector } from '../services/turn-metrics-collector.js';
 import {
   OrchestratorAgentComplianceValidator,

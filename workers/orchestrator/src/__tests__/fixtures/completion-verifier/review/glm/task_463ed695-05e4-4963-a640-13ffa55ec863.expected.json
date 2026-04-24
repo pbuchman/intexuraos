@@ -3,10 +3,7 @@
     "pr": "https://github.com/pbuchman/intexuraos/pull/1908",
     "review_id": "4162938340",
     "review_comments_posted": 0,
-    "review_types": [
-      "code_quality",
-      "test_quality"
-    ],
+    "review_types": ["code_quality", "test_quality"],
     "requirements_tracker_updated": "yes",
     "gh_actions_status": "pending (Tests shards, E2E Tests, E2E Isolation, Lint IN_PROGRESS; Type Check, Validation, Build & Format, Terraform passed)",
     "needs_remediation": false,
@@ -14,15 +11,11 @@
       "mem_ead942e6-2f78-4c37-aa16-2670d91a6a43",
       "mem_0096b1f1-6ce2-4044-936d-057f2403ca41"
     ],
-    "memory_ids_rejected": [
-      "mem_e97d3f6f-3979-44af-8577-bbe9e43bc3fb"
-    ],
+    "memory_ids_rejected": ["mem_e97d3f6f-3979-44af-8577-bbe9e43bc3fb"],
     "memory_usage_summary": "The applicable memories confirmed that importance flag adjustments for WhatsApp notifications are correctly classified as SIMPLE complexity and validated the convention that interactive buttons and actionable user moments should carry `important: true`.",
     "summary": ""
   },
-  "missingRequired": [
-    "summary"
-  ],
+  "missingRequired": ["summary"],
   "warnings": [
     "unknown key in AGENT_FINAL block: Reviewed PR #1908 reducing WhatsApp notification noise by restricting `important",
     "unknown key in AGENT_FINAL block: Implementation is minimal and clean"

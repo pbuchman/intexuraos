@@ -9,9 +9,7 @@
       "mem_f1559458-c36f-499d-a02c-1cb8b7a5f141",
       "mem_4b61618c-9951-40aa-b7a9-b007cea9ca97"
     ],
-    "memory_ids_rejected": [
-      "mem_2276f69f-bc25-4696-9551-57a0268be3c4"
-    ],
+    "memory_ids_rejected": ["mem_2276f69f-bc25-4696-9551-57a0268be3c4"],
     "memory_usage_summary": "The two \"thin handler\" memories directly informed keeping the dispatcher at 55 lines with zero business logic and verifying that handler bodies were truly extracted (byte-for-byte) rather than superficially moved; the structured-implementation memory didn't apply because this was a pure structural refactor with no domain/rules/persistence layer changes.",
     "superpowers_subagent_driven_dev_used": true,
     "superpowers_requesting_code_review_used": true,

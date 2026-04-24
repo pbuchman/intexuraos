@@ -3,15 +3,11 @@
     "pr": "https://github.com/pbuchman/intexuraos/pull/1904",
     "review_id": "4162441130",
     "review_comments_posted": 0,
-    "review_types": [
-      "plan_review"
-    ],
+    "review_types": ["plan_review"],
     "requirements_tracker_updated": "yes",
     "gh_actions_status": "all passed",
     "needs_remediation": true,
-    "memory_ids_used": [
-      "mem_ead942e6-2f78-4c37-aa16-2670d91a6a43"
-    ],
+    "memory_ids_used": ["mem_ead942e6-2f78-4c37-aa16-2670d91a6a43"],
     "memory_ids_rejected": [
       "mem_e97d3f6f-3979-44af-8577-bbe9e43bc3fb",
       "mem_a7785c74-cdae-47d3-b655-46dac878af51"
