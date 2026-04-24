@@ -91,6 +91,26 @@ describe('classifyFailure', () => {
     ).toBe('retry_after_cooloff' satisfies FailureVerdict);
   });
 
+  // INT-1471: Codex usage-limit wording ("hit your usage limit", "limit · resets")
+  // must also route to retry_after_cooloff. Parity with the Claude-runtime tests
+  // above — guards against regex narrowing that would break the Codex path.
+  it('classifies Codex usage-limit TASK_RUNTIME_HARD_ERROR as retry_after_cooloff', () => {
+    const verdict = classifyFailure({
+      code: 'TASK_RUNTIME_HARD_ERROR',
+      message:
+        "Non-zero exit code: 1; Codex error: You've hit your usage limit. Upgrade to Pro.",
+    });
+    expect(verdict).toBe('retry_after_cooloff' satisfies FailureVerdict);
+  });
+
+  it('classifies Codex "limit · resets" message as retry_after_cooloff', () => {
+    const verdict = classifyFailure({
+      code: 'TASK_RUNTIME_HARD_ERROR',
+      message: 'Codex error: limit · resets 17:00 UTC',
+    });
+    expect(verdict).toBe('retry_after_cooloff' satisfies FailureVerdict);
+  });
+
   // 137 priority must still win over the broadened usage-limit phrasing.
   it('prioritizes exit 137 over "hit your limit" in TASK_RUNTIME_HARD_ERROR', () => {
     expect(
