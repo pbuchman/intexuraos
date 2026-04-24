@@ -30,7 +30,12 @@ export interface FetchLinearAgentOptions {
 
 // Callers map each LinearFetchResult kind to their own error code / log level.
 // Shapes differ per endpoint (404 → NOT_FOUND for some, 429 → RATE_LIMITED for
-// others, log level varies), so no generic mapping helper lives here.
+// others, log level varies), so only the silent-endpoint mapping is shared
+// (see `mapSilentFetchResult`); logging endpoints map inline.
+//
+// Overload contract: pass `requireData: false` as a literal to accept
+// `{ success: true }` responses with no `data` field. All other callers
+// fall through to the `requireData: true` overload.
 export function fetchLinearAgent<T>(
   options: FetchLinearAgentOptions & { requireData: false }
 ): Promise<LinearFetchResult<T | undefined>>;
@@ -84,6 +89,10 @@ export async function fetchLinearAgent<T>(
 
     const parsed = (await response.json()) as { success?: boolean; data?: unknown };
 
+    // Two paths to `invalid-body`: (1) success !== true, (2) success === true
+    // but data is absent AND caller opted in to requireData. When
+    // requireData is false, the latter is a legal `ok` response with
+    // undefined data.
     if (parsed.success !== true) {
       return { kind: 'invalid-body', body: parsed };
     }
