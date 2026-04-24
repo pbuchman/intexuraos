@@ -7,6 +7,7 @@
  * 3. Audit trail via EventDecision
  *
  * Implementation is split across sibling modules under `./unifiedEvaluator/`:
+ *  - types.ts     — shared `UnifiedEvaluator` and `UnifiedEvaluatorDeps` interfaces
  *  - criteria.ts  — deterministic pre-LLM evaluation (CI failure rule, hard rules,
  *                   remediation interception)
  *  - scoring.ts   — LLM triage flow with retry + fallback handling
