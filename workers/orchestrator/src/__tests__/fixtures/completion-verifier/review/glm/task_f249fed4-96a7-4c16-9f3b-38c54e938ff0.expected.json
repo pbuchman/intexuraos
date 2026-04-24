@@ -1,0 +1,21 @@
+{
+  "data": {
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1905",
+    "review_id": "4162497929",
+    "review_comments_posted": 0,
+    "review_types": ["code_quality", "test_quality"],
+    "requirements_tracker_updated": "yes",
+    "gh_actions_status": "pending",
+    "needs_remediation": false,
+    "memory_ids_used": [],
+    "memory_ids_rejected": [
+      "mem_c9ecfc18-e67d-4e47-894e-ebb38015cae7",
+      "mem_b349148e-2e7d-4124-b645-dff4d458a773",
+      "mem_ab28d1e2-4ed7-4045-94d2-97d753e1409b"
+    ],
+    "memory_usage_summary": "No memories were applicable to this task — all 3 were rejected as irrelevant to a read-only cleanup PR review.",
+    "summary": "* Reviewed PR #1905 — cleanup that removes 6 snapshot test wrappers + 6 .snap files (1,434 deletions)\n  * Code quality verdict: Clean — well-structured deletions, clear rationale documented\n  * Test quality verdict: Thorough coverage retained — canonical suite covers all claimed sentinels with real assertions\n  * No findings requiring remediation — this is a well-executed cleanup that improves maintainability\n  * CI checks pending (Tests, Lint, E2E) — Validation, Build, Type Check, Terraform passed"
+  },
+  "missingRequired": [],
+  "warnings": []
+}

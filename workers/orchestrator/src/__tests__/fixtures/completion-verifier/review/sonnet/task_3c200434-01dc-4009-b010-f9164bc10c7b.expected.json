@@ -1,0 +1,17 @@
+{
+  "data": {
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1903",
+    "review_id": "4162267031",
+    "review_comments_posted": 1,
+    "review_types": ["plan_review"],
+    "requirements_tracker_updated": "yes",
+    "gh_actions_status": "all passed",
+    "needs_remediation": true,
+    "memory_ids_used": [],
+    "memory_ids_rejected": [],
+    "memory_usage_summary": "",
+    "summary": "* Reviewed pure documentation PR adding Appendix A (comprehensive occurrence audit) and env var name correction to the multi-repo support plan document\n  * 🔴 Blocking finding: revision history note at line 10 is self-contradicting — both \"actual\" and \"previous revision\" env var names are printed as `INTEXURAOS_GITHUB_INSTALLATION_ID` (missing `_APP_` in the old name); the A.1 table correctly records the correction but the revision history does not\n  * ⚠️ Advisory: `token-refresher.ts` A.1 description says \"single `/secrets/github-token` path\" but the file already writes per-task paths; the real constraint (single installationId) is correct, the description is misleading\n  * All verified line-number citations are accurate (10+ spot-checked against codebase); newly surfaced `task-dispatcher.ts:859` hardcoded fallback and `MergeQueuePage.tsx:13-14` constants are genuine additions\n  * 8/9 requirements met; plan is architecturally sound and comprehensive — one documentation fix needed before merge"
+  },
+  "missingRequired": [],
+  "warnings": []
+}

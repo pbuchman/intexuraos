@@ -1,0 +1,28 @@
+{
+  "data": {
+    "outcome": "implemented",
+    "pr": "https://github.com/pbuchman/intexuraos/pull/1901",
+    "ci_evidence": "pnpm run ci:tracked successful",
+    "linear_issue": "https://linear.app/pbuchman/issue/INT-1450/remove-gemmafree-from-default-orchestrator-validation-models",
+    "review_iterations": 0,
+    "memory_ids_used": [
+      "mem_b4941702-955a-44d5-bcca-07e39e782d47",
+      "mem_2c1791f3-4aeb-47e7-95d2-4779f302696b"
+    ],
+    "memory_ids_rejected": ["mem_167ea2e4-0b35-4d3a-8222-ed0336730a10"],
+    "memory_usage_summary": "Memories [2] and [3] confirmed that orchestrator validation models are configured via env vars independently of user preferences, directing the edit to the INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS default string rather than any user-preference surface.",
+    "superpowers_subagent_driven_dev_used": true,
+    "superpowers_requesting_code_review_used": true,
+    "trivial_task": false,
+    "subagents": "implementer (edit 3 default-string locations + run CI), spec-compliance reviewer (verify exactly 3 files changed and strings match spec), code-quality reviewer (sanity-scan repo for duplicated defaults + verify README table), final holistic code-reviewer (pre-PR green-light review)",
+    "skill_sequence_proof": "superpowers:subagent-driven-development was invoked FIRST and dispatched implementer → spec-reviewer → code-quality-reviewer (see commit c3e9c5e95 on branch feature/int-1450-remove-gemma-free-from-validation-defaults); superpowers:requesting-code-review was invoked SECOND and dispatched the final code-reviewer subagent whose APPROVED output preceded the `git push` / `gh pr create` calls.",
+    "failure_reason": "",
+    "summary": "* Removed `or:google/gemma-4-31b-it:free` from the DEFAULT value of `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS`; new default is `or:google/gemma-4-31b-it,gemini-2.5-flash`.\n  * Updated three synchronized locations: `workers/orchestrator/src/start.ts`, `ecosystem.config.cjs`, and the README optional-env-vars table (plus cosmetic column-width cleanup in that single table).\n  * Operators who set the env var explicitly are unaffected — only the fallback default changes; no source logic modified.\n  * `pnpm run ci:tracked` passed; existing `parseValidationModels` tests still cover the parser; no new tests needed since the default is a string literal, not a logical branch.\n  * PR #1901 targets `development` and received spec-compliant + code-quality approved + final holistic-review approved with zero issues."
+  },
+  "missingRequired": [],
+  "warnings": [
+    "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
+    "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
+    "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"
+  ]
+}

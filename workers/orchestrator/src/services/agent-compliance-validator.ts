@@ -7,7 +7,6 @@ import { promisify } from 'node:util';
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { createLlmParseError, formatZodErrors, logLlmParseError } from '@intexuraos/llm-utils';
-import type { ExecutionAgentData } from './completion-verifier.js';
 import {
   AgentComplianceReportSchema,
   type AgentComplianceReport,
@@ -27,7 +26,22 @@ export const AGENT_COMPLIANCE_PROMPT_VERSION = '1.0.0';
 const MAX_TRANSCRIPT_TOKENS_CHARS = 720_000;
 const TEMP_COMMENT_DIR_PREFIX = 'orchestrator-compliance-validation-';
 
-export type ExecutionAgentClaims = Omit<ExecutionAgentData, 'agentType'>;
+/**
+ * Shape of the agent's self-reported claims, as passed to the compliance
+ * validator. Post-INT-1470 this is a hand-written shape instead of being
+ * derived from the retired LLM-verifier `ExecutionAgentData` type.
+ */
+export interface ExecutionAgentClaims {
+  outcome: 'implemented' | 'already_completed' | 'failed';
+  superpowers_subagent_driven_dev: 'used' | 'not used';
+  superpowers_requesting_code_review: 'used' | 'not used';
+  gh_pr_url: string;
+  failure_reason: string;
+  memory_ids_used: string;
+  memory_ids_rejected: string;
+  memory_usage_summary: string;
+  summary: string;
+}
 
 const SEVERITY_EMOJI: Record<ComplianceSeverity, string> = {
   critical: '\u{1F534} Critical',
