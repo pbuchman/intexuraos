@@ -156,8 +156,9 @@ Your LAST message must include exactly this block:
 
 \`\`\`
 EXECUTION_AGENT_FINAL:
-- Outcome: <implemented|already_completed>
-- PR: <full GitHub PR URL>
+- Outcome: <implemented|already_completed|failed>
+- PR: <full GitHub PR URL (leave empty for outcome=failed)>
+- failure_reason: <short structured reason when outcome=failed (e.g. rate_limited, non_zero_exit, missing_final_block); "n/a" otherwise>
 - CI evidence: pnpm run ci:tracked successful
 - Linear issue: <full Linear URL>
 - Review iterations: <number>
