@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the LLM-based completion verifier with a deterministic parser that extracts structured fields directly from the agent's own `*_AGENT_FINAL:` block. Align the agent/verifier field-name contract, enforce deliverable fields (`outcome`, `pr`, `summary`) as required, treat memory telemetry as warn-only, and route missing-block cases to `TASK_RUNTIME_HARD_ERROR`.
+**Goal:** Replace the LLM-based completion verifier with a deterministic parser that extracts structured fields directly from the agent's own `*_AGENT_FINAL:` block. Align the verifier with the **live prompt contract that workers actually emit today**, explicitly add any still-needed transcript-only fields to those prompts, treat memory telemetry as warn-only, and route missing-block cases to `TASK_RUNTIME_HARD_ERROR`.
 
-**Architecture:** Synchronous 3-stage pipeline — `locateFinalBlock` → `parseKeyValues` → `coerceFields`. Single source of truth for the agent contract (`contracts.ts`) consumed by both the prompt builders and the parser. The LLM is fully removed from the verification path; the verifier becomes a pure function. Tier-aware enforcement (Opus/Sonnet/auto = strict, GLM/MiniMax/codex/etc. = lenient) is driven by the existing `WORKER_TYPES.telemetryExpectation` table.
+**Architecture:** Synchronous 3-stage pipeline — `locateFinalBlock` → `parseKeyValues` → `coerceFields`. Single source of truth for the agent contract (`contracts.ts`) consumed by the prompt builders, the parser, and downstream result-mapping helpers. The LLM is fully removed from the **completion-verification** path, but the separate resume-summary helper path stays intact. Tier-aware enforcement (Opus/Sonnet/auto = strict, GLM/MiniMax/codex/etc. = lenient) is driven by the existing `WORKER_TYPES.telemetryExpectation` table.
 
 **Tech Stack:** TypeScript, Vitest, pnpm workspace (`@intexuraos/orchestrator`). No new runtime dependencies — pure regex + string parsing. Real production fixtures (130) already staged at `workers/orchestrator/src/__tests__/fixtures/completion-verifier/`.
 
@@ -34,9 +34,17 @@ Remove the LLM from the field-extraction role entirely; parse the agent's `*_AGE
 
 ### Scope boundaries
 
-- **In scope:** completion verifier rewrite, contract unification, fixture-driven tests, dispatcher adjustments for the missing-block → hard-error routing.
+- **In scope:** completion verifier rewrite, contract unification against the live prompt text, prompt additions for any fields that downstream code still depends on (`failure_reason`, `review_body`, `review_inline_comments`), fixture-driven tests, and dispatcher/result-mapping adjustments for the missing-block → hard-error routing.
 - **Out of scope:** changing the tiered `required|optional` classification in `WORKER_TYPES` (keep as-is), the `decideCompletionOutcome` state machine (keep as-is), the auto-continue resume-prompt mechanism for *deliverable* misses (keep as-is; only the memory-field branch is removed).
 - **Not shipped here:** any change to the webhook output contract. The wire format to external consumers (`execution_memory_ids_used`) is preserved.
+- **Explicit non-goal:** deleting the resume-summary LLM path. `extractResumeSummary()` still needs its prompt builder, LLM fallback helper, and summary schema until that path is redesigned separately.
+
+## Confirmed Misalignments Fixed In This Revision
+
+- The draft contract table was still keyed to legacy verifier-schema names for planning and pull-request flows. The implementation must instead start from the **live `*_AGENT_FINAL` prompt labels** (`Linear issue`, `Plan PR`, `Comment replied`, `Tracking comment ID`, etc.) and only use aliases for backward compatibility.
+- The draft deleted `prompt-builder.ts`, `llm-client.ts`, and all Zod from `schemas.ts`, but the live code still calls `extractResumeSummary()` through those modules. This plan now preserves the resume-summary path and removes only verification-specific LLM helpers.
+- The draft file map missed `workers/orchestrator/src/services/task-dispatcher/webhook-callbacks.ts`, which must be updated because the canonical parsed field names no longer match the current `agentData.gh_pr_url`-style shape.
+- The draft referenced a nonexistent `Task 2.9` and a nonexistent `execution-prompt.test.ts.snap` snapshot file. Both are corrected below so the plan points at real files and real task numbers.
 
 ---
 
@@ -70,7 +78,7 @@ workers/orchestrator/src/__tests__/fixtures/completion-verifier/
 
 Each `.txt` is the raw block exactly as it appeared in the transcript, including markdown decoration, log-driver prefixes, and code-fence wrapping where present.
 
-**Every non-trivial assertion in the new test suite is backed by one of these fixtures.** No hand-fabricated expected values. The expected field values are captured via a golden-file workflow (Task 2.9) that freezes the parser's first output on each fixture as `<taskId>.expected.json`, then asserts equality on every subsequent run.
+**Every non-trivial assertion in the new test suite is backed by one of these fixtures.** No hand-fabricated expected values. The expected field values are captured via a golden-file workflow (Task 2.4) that freezes the parser's first output on each fixture as `<taskId>.expected.json`, then asserts equality on every subsequent run.
 
 Known adversarial fixtures (covered by dedicated tests):
 
@@ -96,36 +104,37 @@ Known adversarial fixtures (covered by dedicated tests):
 | `workers/orchestrator/src/__tests__/services/completion-verifier/block-parser.test.ts` | Fixture-parametric tests + edge cases                                                                      |
 | `workers/orchestrator/src/__tests__/services/completion-verifier/contracts.test.ts`    | Contract round-trip test (agent prompt ↔ parser contract)                                                  |
 | `workers/orchestrator/src/__tests__/fixtures/completion-verifier/**/*.txt`             | 130 real production blocks (already staged by this plan PR)                                                |
-| `workers/orchestrator/src/__tests__/fixtures/completion-verifier/**/*.expected.json`   | Golden parser outputs (generated by Task 2.9)                                                              |
+| `workers/orchestrator/src/__tests__/fixtures/completion-verifier/**/*.expected.json`   | Golden parser outputs (generated by Task 2.4)                                                              |
 
 ### Modified files
 
 | Path                                                                                      | Change                                                                                                                                                |
 | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workers/orchestrator/src/services/prompts/execution-prompt.ts`                           | Rename `execution_memory_*` → `memory_*`                                                                                                              |
-| `workers/orchestrator/src/services/__tests__/__snapshots__/execution-prompt.test.ts.snap` | Accept the renamed output                                                                                                                             |
+| `workers/orchestrator/src/services/prompts/execution-prompt.ts`                           | Rename `execution_memory_*` → `memory_*` and add an explicit `failure_reason` line if the execution-failed branch keeps consuming it                  |
+| `workers/orchestrator/src/services/prompts/review-prompt.ts`                              | Add explicit `review_body` / `review_inline_comments` lines if downstream persistence continues to depend on them                                     |
+| `workers/orchestrator/src/services/__tests__/system-prompt.test.ts`                       | Extend the existing prompt-contract assertions; do **not** invent a new snapshot file                                                                 |
 | `workers/orchestrator/src/services/completion-verifier.ts`                                | Rewrite to synchronous parser-only pipeline                                                                                                           |
-| `workers/orchestrator/src/services/completion-verifier/schemas.ts`                        | Reduce to pure TypeScript interfaces; delete all Zod                                                                                                  |
+| `workers/orchestrator/src/services/completion-verifier/schemas.ts`                        | Delete only verification-era schemas; retain or move `RESUME_SUMMARY_SCHEMA` with the resume-summary path                                             |
+| `workers/orchestrator/src/services/completion-verifier/prompt-builder.ts`                 | Remove `buildVerificationPrompt`; keep or move `buildResumeSummaryPrompt`                                                                             |
+| `workers/orchestrator/src/services/completion-verifier/llm-client.ts`                     | Remove verifier-call helpers; keep or move `generateResumeSummaryWithFallback` / `extractAndParseJson` for resume summaries                          |
 | `workers/orchestrator/src/services/completion-verifier/memory-validation.ts`              | Keep `detectEmptyMemoryFields`, `isTelemetryField`, `partitionMissingFields`; delete `validateMemoryReporting` and `buildMemoryAcknowledgmentPattern` |
 | `workers/orchestrator/src/services/completion-verifier/types.ts`                          | Drop `verifierFailure`, `succeededModelName`, `trace` fields from `CompletionVerifierVerdict` (parser has no LLM)                                     |
 | `workers/orchestrator/src/services/task-dispatcher.ts`                                    | Call verifier synchronously; route `missingFinalBlock` verdicts to `TASK_RUNTIME_HARD_ERROR` classification                                           |
+| `workers/orchestrator/src/services/task-dispatcher/webhook-callbacks.ts`                  | Map the canonical parsed fields back onto the existing `TaskResult` wire shape (`prUrl`, `execution_memory_*`, etc.)                                 |
+| `workers/orchestrator/src/__tests__/services/task-dispatcher/webhook-callbacks.test.ts`   | Pin the canonical-field → `TaskResult` mapping and preserve the webhook wire contract                                                                  |
 | `workers/orchestrator/src/services/task-dispatcher/prompts.ts`                            | Remove the "EXECUTION MEMORY REPORTING FAILURE" resume-prompt branch                                                                                  |
 | `workers/orchestrator/src/services/task-dispatcher/decide-outcome.ts`                     | Simplify: drop `retry-verifier`/`fail-verifier` outcome variants (no LLM to fail)                                                                     |
 
 ### Deleted files
 
-| Path                                                                              | Reason                                             |
-| --------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `workers/orchestrator/src/services/completion-verifier/prompt-builder.ts`         | LLM extraction path removed                        |
-| `workers/orchestrator/src/services/completion-verifier/llm-client.ts`             | LLM extraction path removed                        |
-| `workers/orchestrator/src/__tests__/services/completion-verifier/schemas.test.ts` | Zod schemas gone; replaced by block-parser.test.ts |
+No whole-file deletions are required in the first cutover. Keep the resume-summary helpers alive until they are split or retired in a separate change; delete only verification-specific exports/tests once the parser path is green.
 
 ---
 
 ## Testing Strategy (Read This Before Writing Code)
 
 1. **Fixture-parametric tests are the spine.** Every fixture in `__tests__/fixtures/completion-verifier/` feeds the parser inside a single `it.each` block. If any real production block stops parsing cleanly, CI fails. This is the only acceptance gate that matters.
-2. **Golden `.expected.json` files replace hand-written expected values.** The first run of Task 2.9 writes `.expected.json` next to each `.txt`. Subsequent runs do a deep-equal check. Reviewers read the `.expected.json` files as the "contract in data form". If a parser change intentionally alters output, you regenerate the goldens in one step (Task 2.9's regen command) — the diff in the PR is the semantic change.
+2. **Golden `.expected.json` files replace hand-written expected values.** The first run of Task 2.4 writes `.expected.json` next to each `.txt`. Subsequent runs do a deep-equal check. Reviewers read the `.expected.json` files as the "contract in data form". If a parser change intentionally alters output, you regenerate the goldens in one step (Task 2.4's regen command) — the diff in the PR is the semantic change.
 3. **No mocks.** The parser is pure (string in, record out). No network, no timers, no filesystem. Integration tests that run the whole verifier pipeline use the parser directly without any LLM stub — because there is no LLM.
 4. **Negative fixtures live alongside positives.** `execution/opus/task_536a87b7-*` (false-positive marker inside a diff) is a required negative case: `locateFinalBlock` must return `null` on it.
 5. **One test per field kind.** `coerceFields` has cases for `string | url | int | bool01 | csv | enum`. Each kind has a dedicated unit test driving every branch of its coercion logic, plus one fixture that exercises the kind naturally.
@@ -136,9 +145,9 @@ Known adversarial fixtures (covered by dedicated tests):
 
 - **Phase 0 — Seed (fixtures + plan already in this PR).** No tasks; this PR lands the fixtures and the plan. Implementation begins in a follow-up PR.
 - **Phase 1 — Contract alignment (behavior-preserving).**
-  - Task 1.1: Create `contracts.ts` with the canonical field table.
-  - Task 1.2: Rename execution agent's memory fields in `execution-prompt.ts`.
-  - Task 1.3: Add `contracts.test.ts` — round-trip guarantee.
+  - Task 1.1: Create `contracts.ts` from the live prompt labels, not the legacy verifier schema keys.
+  - Task 1.2: Rename execution agent memory fields and add any still-needed prompt-emitted fields (`failure_reason`, `review_body`, `review_inline_comments`) before parser cutover.
+  - Task 1.3: Add `contracts.test.ts` plus prompt round-trip and consumer-mapping guards.
 - **Phase 2 — Parser (new module).**
   - Task 2.1: Implement `locateFinalBlock`.
   - Task 2.2: Implement `parseKeyValues`.
@@ -146,9 +155,9 @@ Known adversarial fixtures (covered by dedicated tests):
   - Task 2.4: Fixture golden-file test harness.
 - **Phase 3 — Verifier cutover.**
   - Task 3.1: Rewrite `completion-verifier.ts`.
-  - Task 3.2: Shrink `schemas.ts` to pure types.
+  - Task 3.2: Remove verification-only LLM helpers while preserving the resume-summary path.
   - Task 3.3: Prune `memory-validation.ts`.
-  - Task 3.4: Delete `prompt-builder.ts` and `llm-client.ts`.
+  - Task 3.4: Update `webhook-callbacks.ts` and any other consumers to the canonical parsed field names.
   - Task 3.5: Drop `trace`, `verifierFailure`, `succeededModelName` from verdict.
 - **Phase 4 — Dispatcher routing.**
   - Task 4.1: Missing-block → `TASK_RUNTIME_HARD_ERROR`.
@@ -171,6 +180,20 @@ Known adversarial fixtures (covered by dedicated tests):
 - Create: `workers/orchestrator/src/services/completion-verifier/contracts.ts`
 
 - [ ] **Step 1: Write the failing test first.**
+
+Before writing either the test or `contracts.ts`, audit the live completion blocks in:
+
+- `workers/orchestrator/src/services/prompts/planning-prompt.ts`
+- `workers/orchestrator/src/services/prompts/execution-prompt.ts`
+- `workers/orchestrator/src/services/prompts/review-prompt.ts`
+- `workers/orchestrator/src/services/prompts/remediation-prompt.ts`
+- `workers/orchestrator/src/services/prompts/pull-request-prompt.ts`
+
+The canonical field table must follow the **emitted `*_AGENT_FINAL` labels that exist today**, not the legacy verifier-schema keys. In particular:
+
+- Planning uses `superpowers_writing_plans_used`, `Linear issue`, `Complex task`, `Plan doc`, `Subtask URLs`, `Plan PR`, `Parallel breakdown proof`, and `Clarification message`.
+- Pull-request uses `CI evidence`, `Linear issue`, `Comment replied`, `Tracking comment ID`, `Tracking comment`, and `Total PR comments posted`.
+- `failure_reason`, `review_body`, and `review_inline_comments` are not emitted today; if downstream still needs them after LLM removal, add them to the live prompts first and then put them in `contracts.ts`.
 
 Create `workers/orchestrator/src/__tests__/services/completion-verifier/contracts.test.ts`:
 
@@ -199,13 +222,23 @@ describe('contracts — canonical field table', () => {
     expect(new Set(markers).size).toBe(markers.length);
   });
 
-  it('every contract requires outcome, pr (or linear_url for planning), and summary as deliverable fields', () => {
+  it('every contract requires the live deliverable fields for its agent', () => {
     for (const agent of expectedAgents) {
       const c: AgentContract = AGENT_CONTRACTS[agent];
       const requiredNames = c.fields.filter((f) => f.required).map((f) => f.name);
       expect(requiredNames).toContain('summary');
       if (agent === 'planning') {
-        expect(requiredNames).toContain('linear_url');
+        expect(requiredNames).toContain('linear_issue');
+        expect(c.fields.map((f) => f.name)).toContain('parallel_breakdown_proof');
+        expect(c.fields.map((f) => f.name)).toContain('clarification_message');
+      } else if (agent === 'pull_request') {
+        expect(requiredNames).toContain('pr');
+        expect(requiredNames).toContain('ci_evidence');
+        expect(requiredNames).toContain('linear_issue');
+        expect(requiredNames).toContain('comment_replied');
+        expect(requiredNames).toContain('tracking_comment_id');
+        expect(requiredNames).toContain('tracking_comment');
+        expect(requiredNames).toContain('total_pr_comments_posted');
       } else if (agent === 'review') {
         expect(requiredNames).toContain('pr');
         expect(requiredNames).toContain('review_id');
@@ -260,6 +293,17 @@ describe('contracts — canonical field table', () => {
     const summary = exec.fields.find((f) => f.name === 'memory_usage_summary');
     expect(summary?.alias).toContain('execution_memory_usage_summary');
   });
+
+  it('planning and pull_request contracts capture the current prompt-only field labels', () => {
+    const planning = AGENT_CONTRACTS.planning;
+    expect(planning.fields.find((f) => f.name === 'linear_issue')?.alias).toContain('Linear issue');
+    expect(planning.fields.find((f) => f.name === 'plan_pr')?.alias).toContain('Plan PR');
+
+    const pr = AGENT_CONTRACTS.pull_request;
+    expect(pr.fields.find((f) => f.name === 'comment_replied')?.alias).toContain('Comment replied');
+    expect(pr.fields.find((f) => f.name === 'tracking_comment_id')?.alias).toContain('Tracking comment ID');
+    expect(pr.fields.find((f) => f.name === 'total_pr_comments_posted')?.alias).toContain('Total PR comments posted');
+  });
 });
 ```
 
@@ -274,6 +318,8 @@ Expected: FAIL — module `../../../services/completion-verifier/contracts.js` n
 - [ ] **Step 3: Create the canonical contract module.**
 
 Write `workers/orchestrator/src/services/completion-verifier/contracts.ts`:
+
+**Important:** The sample below must be updated to match the audited live prompt labels before implementation. Do **not** cargo-cult the old `schemas.ts` field names.
 
 ```typescript
 import type { CompletionAgentType } from './schemas.js';
@@ -342,15 +388,16 @@ export const AGENT_CONTRACTS: Record<CompletionAgentType, AgentContract> = {
   planning: {
     marker: 'PLANNING_AGENT_FINAL:',
     fields: [
-      { name: 'outcome', kind: 'enum', required: true, enumValues: ['planned', 'unclear'] },
-      { name: 'superpowers_writing_plans', kind: 'bool01', required: false },
-      { name: 'linear_url', kind: 'url', required: true },
-      { name: 'is_complex', kind: 'bool01', required: false },
-      { name: 'has_plan_doc', kind: 'bool01', required: false },
-      { name: 'subtask_urls', kind: 'csv', required: false, emptyAliases: DEFAULT_EMPTY_ALIASES },
-      { name: 'pr_url', kind: 'url', required: false, emptyAliases: DEFAULT_EMPTY_ALIASES },
+      { name: 'outcome', alias: ['Outcome'], kind: 'enum', required: true, enumValues: ['planned', 'unclear'] },
+      { name: 'superpowers_writing_plans_used', alias: ['superpowers_writing_plans_used'], kind: 'bool01', required: true },
+      { name: 'linear_issue', alias: ['Linear issue'], kind: 'url', required: true },
+      { name: 'complex_task', alias: ['Complex task'], kind: 'bool01', required: true },
+      { name: 'plan_doc', alias: ['Plan doc'], kind: 'bool01', required: true },
+      { name: 'subtask_urls', alias: ['Subtask URLs'], kind: 'csv', required: true, emptyAliases: DEFAULT_EMPTY_ALIASES },
+      { name: 'plan_pr', alias: ['Plan PR'], kind: 'url', required: true, emptyAliases: DEFAULT_EMPTY_ALIASES },
+      { name: 'parallel_breakdown_proof', alias: ['Parallel breakdown proof'], kind: 'string', required: true, emptyAliases: DEFAULT_EMPTY_ALIASES },
       ...MEMORY_FIELDS_STANDARD,
-      { name: 'unclear_clarification', kind: 'string', required: false, emptyAliases: DEFAULT_EMPTY_ALIASES },
+      { name: 'clarification_message', alias: ['Clarification message'], kind: 'string', required: true, emptyAliases: DEFAULT_EMPTY_ALIASES },
       { name: 'summary', kind: 'string', required: true },
     ],
   },
@@ -368,6 +415,7 @@ export const AGENT_CONTRACTS: Record<CompletionAgentType, AgentContract> = {
       { name: 'trivial_task', kind: 'bool01', required: false },
       { name: 'subagents', kind: 'string', required: false, emptyAliases: DEFAULT_EMPTY_ALIASES },
       { name: 'skill_sequence_proof', alias: ['Skill sequence proof'], kind: 'string', required: false, emptyAliases: DEFAULT_EMPTY_ALIASES },
+      // Keep this field ONLY if Task 1.2 first adds it to the live execution prompt.
       { name: 'failure_reason', kind: 'string', required: false, emptyAliases: DEFAULT_EMPTY_ALIASES },
       { name: 'summary', alias: ['Summary'], kind: 'string', required: true },
     ],
@@ -382,6 +430,7 @@ export const AGENT_CONTRACTS: Record<CompletionAgentType, AgentContract> = {
       { name: 'requirements_tracker_updated', kind: 'string', required: false, emptyAliases: DEFAULT_EMPTY_ALIASES },
       { name: 'gh_actions_status', kind: 'string', required: false, emptyAliases: DEFAULT_EMPTY_ALIASES },
       { name: 'needs_remediation', kind: 'bool01', required: false },
+      // Keep these fields ONLY if Task 1.2 first adds them to the live review prompt.
       { name: 'review_body', kind: 'string', required: false, emptyAliases: DEFAULT_EMPTY_ALIASES },
       { name: 'review_inline_comments', kind: 'string', required: false, emptyAliases: DEFAULT_EMPTY_ALIASES },
       ...MEMORY_FIELDS_STANDARD,
@@ -402,8 +451,12 @@ export const AGENT_CONTRACTS: Record<CompletionAgentType, AgentContract> = {
     marker: 'PULL_REQUEST_AGENT_FINAL:',
     fields: [
       { name: 'pr', alias: ['gh_pr_url', 'PR'], kind: 'url', required: true },
-      { name: 'comments_replied', kind: 'enum', required: false, enumValues: ['yes', 'no'] },
-      { name: 'tracking_comment_id', kind: 'string', required: false, emptyAliases: DEFAULT_EMPTY_ALIASES },
+      { name: 'ci_evidence', alias: ['CI evidence'], kind: 'string', required: true },
+      { name: 'linear_issue', alias: ['Linear issue'], kind: 'url', required: true },
+      { name: 'comment_replied', alias: ['Comment replied'], kind: 'enum', required: true, enumValues: ['yes', 'no'] },
+      { name: 'tracking_comment_id', alias: ['Tracking comment ID'], kind: 'string', required: true, emptyAliases: DEFAULT_EMPTY_ALIASES },
+      { name: 'tracking_comment', alias: ['Tracking comment'], kind: 'string', required: true },
+      { name: 'total_pr_comments_posted', alias: ['Total PR comments posted'], kind: 'int', required: true },
       ...MEMORY_FIELDS_STANDARD,
       { name: 'summary', alias: ['Summary'], kind: 'string', required: true },
     ],
@@ -438,7 +491,7 @@ export const TIER_BY_WORKER: Record<WorkerType, TelemetryExpectation> = {
 pnpm --filter @intexuraos/orchestrator test -- contracts.test.ts
 ```
 
-Expected: PASS (6 tests).
+Expected: PASS (7 tests).
 
 - [ ] **Step 5: Commit.**
 
@@ -464,7 +517,7 @@ EOF
 
 **Files:**
 - Modify: `workers/orchestrator/src/services/prompts/execution-prompt.ts:164-166`
-- Modify: `workers/orchestrator/src/services/__tests__/__snapshots__/execution-prompt.test.ts.snap`
+- Modify: `workers/orchestrator/src/services/prompts/review-prompt.ts` (only if keeping `review_body` / `review_inline_comments` post-cutover)
 - Modify: `workers/orchestrator/src/services/__tests__/system-prompt.test.ts:517-519` (references the legacy names)
 
 - [ ] **Step 1: Read the current execution-prompt template to confirm exact lines.**
@@ -482,20 +535,20 @@ EXECUTION_AGENT_FINAL:
 - execution_memory_usage_summary: <brief note, or "none">
 ```
 
-- [ ] **Step 2: Add a failing regression test in `contracts.test.ts`.**
+- [ ] **Step 2: Add a failing regression test to the existing prompt tests (not a new snapshot file).**
 
-Append to `workers/orchestrator/src/__tests__/services/completion-verifier/contracts.test.ts`:
+Append to `workers/orchestrator/src/services/__tests__/system-prompt.test.ts`:
 
 ```typescript
-import { buildExecutionPrompt } from '../../../services/prompts/execution-prompt.js';
+import { executionPrompt } from '../system-prompt.js';
 
-describe('contracts — round-trip with prompt builder', () => {
+describe('executionPrompt completion block', () => {
   it('execution prompt emits canonical memory_ids_* names (no execution_ prefix)', () => {
-    const prompt = buildExecutionPrompt({
-      continuationPrNumber: undefined,
+    const prompt = executionPrompt.build({
+      taskId: 'task-1',
       linearIssueId: 'INT-0001',
-      repository: 'pbuchman/intexuraos',
-      baseBranch: 'development',
+      linearIssueLabels: [],
+      workerType: 'auto',
     });
     expect(prompt).toContain('- memory_ids_used:');
     expect(prompt).toContain('- memory_ids_rejected:');
@@ -507,12 +560,10 @@ describe('contracts — round-trip with prompt builder', () => {
 });
 ```
 
-(If `buildExecutionPrompt`'s signature differs, open `execution-prompt.ts` and match the real export. The pattern above is one PromptBuilder call; adapt to the actual API.)
-
 - [ ] **Step 3: Run the test to verify it fails.**
 
 ```bash
-pnpm --filter @intexuraos/orchestrator test -- contracts.test.ts
+pnpm --filter @intexuraos/orchestrator test -- system-prompt.test.ts
 ```
 
 Expected: FAIL — prompt still contains `execution_memory_ids_used:`.
@@ -534,13 +585,13 @@ Expected: FAIL — prompt still contains `execution_memory_ids_used:`.
 
 In the same file, locate the `version:` field on the PromptBuilder declaration and bump minor (new examples/behavior change). E.g. `version: '1.3.0'` → `version: '1.4.0'`. Rule per CLAUDE.md: "major = behavior change, minor = new examples, patch = typos." Rename is a behavior change for downstream consumers that pattern-match the field names — **bump major**. Confirm current version with `grep -n "version:" workers/orchestrator/src/services/prompts/execution-prompt.ts`.
 
-- [ ] **Step 6: Regenerate the execution-prompt snapshot.**
+- [ ] **Step 6: Re-run the existing prompt tests instead of regenerating a nonexistent snapshot.**
 
 ```bash
-pnpm --filter @intexuraos/orchestrator test -- execution-prompt.test.ts -u
+pnpm --filter @intexuraos/orchestrator test -- system-prompt.test.ts
 ```
 
-Review the regenerated `__snapshots__/execution-prompt.test.ts.snap` diff: the only changes should be the three renamed lines. Anything else means you touched more than the rename — revert and redo.
+Review the `system-prompt.test.ts` diff: the only prompt-contract changes here should be the renamed execution memory lines (plus any intentionally added explicit prompt fields such as `failure_reason` / `review_body` / `review_inline_comments` if you chose to keep those downstream dependencies).
 
 - [ ] **Step 7: Update `system-prompt.test.ts` assertions.**
 
@@ -569,7 +620,6 @@ Expected: all tests pass. Any failure in `task-dispatcher.test.ts` or `webhook-c
 
 ```bash
 git add workers/orchestrator/src/services/prompts/execution-prompt.ts \
-        workers/orchestrator/src/services/__tests__/__snapshots__/execution-prompt.test.ts.snap \
         workers/orchestrator/src/services/__tests__/system-prompt.test.ts \
         workers/orchestrator/src/__tests__/services/completion-verifier/contracts.test.ts
 git commit -m "$(cat <<'EOF'
@@ -592,6 +642,8 @@ EOF
 )"
 ```
 
+If this task also added `failure_reason`, `review_body`, or `review_inline_comments` to a live prompt, include the touched prompt file(s) in the same commit.
+
 ---
 
 ### Task 1.3: Contracts round-trip test (guards against future drift)
@@ -603,12 +655,12 @@ EOF
 
 ```typescript
 import {
-  buildPlanningPrompt,
-  buildExecutionPrompt,
-  buildReviewPrompt,
-  buildRemediationPrompt,
-  buildPullRequestPrompt,
-} from '../../../services/prompts/index.js'; // or the actual barrel — adapt.
+  planningPrompt,
+  executionPrompt,
+  reviewPrompt,
+  remediationPrompt,
+  pullRequestPrompt,
+} from '../../../services/system-prompt.js';
 
 /**
  * For every agent contract, the generated system prompt must contain
@@ -618,11 +670,11 @@ import {
  */
 describe('contracts — round-trip with every agent prompt', () => {
   const cases: Array<{ agent: string; build: () => string }> = [
-    { agent: 'planning', build: () => buildPlanningPrompt({ /* minimal valid args */ } as never) },
-    { agent: 'execution', build: () => buildExecutionPrompt({ continuationPrNumber: undefined, linearIssueId: 'INT-0001', repository: 'pbuchman/intexuraos', baseBranch: 'development' } as never) },
-    { agent: 'review', build: () => buildReviewPrompt({ /* minimal valid args */ } as never) },
-    { agent: 'remediation', build: () => buildRemediationPrompt({ /* minimal valid args */ } as never) },
-    { agent: 'pull_request', build: () => buildPullRequestPrompt({ /* minimal valid args */ } as never) },
+    { agent: 'planning', build: () => planningPrompt.build({ /* minimal valid args */ } as never) },
+    { agent: 'execution', build: () => executionPrompt.build({ /* minimal valid args */ } as never) },
+    { agent: 'review', build: () => reviewPrompt.build({ /* minimal valid args */ } as never) },
+    { agent: 'remediation', build: () => remediationPrompt.build({ /* minimal valid args */ } as never) },
+    { agent: 'pull_request', build: () => pullRequestPrompt.build({ /* minimal valid args */ } as never) },
   ];
 
   it.each(cases)('$agent prompt contains the marker and every contract field', ({ agent, build }) => {
@@ -630,10 +682,11 @@ describe('contracts — round-trip with every agent prompt', () => {
     const contract = AGENT_CONTRACTS[agent as keyof typeof AGENT_CONTRACTS];
     expect(prompt).toContain(contract.marker);
     for (const field of contract.fields) {
-      // The prompt template writes "- <name>:" somewhere in the block.
-      expect(prompt, `${agent} prompt missing field ${field.name}`).toMatch(
-        new RegExp(`- ${field.name}:`)
-      );
+      const candidates = [field.name, ...(field.alias ?? [])];
+      expect(
+        candidates.some((candidate) => prompt.includes(`- ${candidate}:`)),
+        `${agent} prompt missing field ${field.name}`
+      ).toBe(true);
     }
   });
 });
@@ -1732,32 +1785,44 @@ Expected: PASS (4 tests). Other tests referencing the removed `OrchestratorCompl
 
 - [ ] **Step 6: Commit (tests may still be broken elsewhere; fix in 3.2).**
 
-Do not commit yet. Continue to Task 3.2 first; commit the verifier rewrite together with the deletions.
+Do not commit yet. Continue to Task 3.2 first; commit the verifier rewrite together with the resume-summary-preserving trim.
 
 ---
 
-### Task 3.2: Delete `prompt-builder.ts`, `llm-client.ts`, Zod from `schemas.ts`
+### Task 3.2: Remove verification-only LLM helpers, keep resume-summary helpers
 
 **Files:**
-- Delete: `workers/orchestrator/src/services/completion-verifier/prompt-builder.ts`
-- Delete: `workers/orchestrator/src/services/completion-verifier/llm-client.ts`
-- Delete: `workers/orchestrator/src/__tests__/services/completion-verifier/schemas.test.ts`
+- Modify: `workers/orchestrator/src/services/completion-verifier/prompt-builder.ts`
+- Modify: `workers/orchestrator/src/services/completion-verifier/llm-client.ts`
+- Modify: `workers/orchestrator/src/__tests__/services/completion-verifier/prompt-builder.test.ts`
+- Modify: `workers/orchestrator/src/__tests__/services/completion-verifier/llm-client.test.ts`
+- Modify: `workers/orchestrator/src/__tests__/services/completion-verifier/schemas.test.ts`
 - Modify: `workers/orchestrator/src/services/completion-verifier/schemas.ts`
 - Modify: `workers/orchestrator/src/services/completion-verifier/memory-validation.ts`
 
-- [ ] **Step 1: Delete the LLM-era modules.**
+- [ ] **Step 1: Delete only the verification-extraction pieces.**
 
-```bash
-git rm workers/orchestrator/src/services/completion-verifier/prompt-builder.ts \
-       workers/orchestrator/src/services/completion-verifier/llm-client.ts \
-       workers/orchestrator/src/__tests__/services/completion-verifier/schemas.test.ts
-```
+Keep:
 
-- [ ] **Step 2: Rewrite `schemas.ts` to pure types only.**
+- `buildResumeSummaryPrompt`
+- `generateResumeSummaryWithFallback`
+- `extractAndParseJson`
+- `RESUME_SUMMARY_SCHEMA`
+
+Delete or inline only the verification-era pieces:
+
+- `buildVerificationPrompt`
+- `callVerificationLlm`
+- `getSchemaForAgent`
+- `toAgentData`
+
+- [ ] **Step 2: Rewrite `schemas.ts` to agent-type types plus the resume-summary schema.**
 
 Replace contents of `workers/orchestrator/src/services/completion-verifier/schemas.ts`:
 
 ```typescript
+import { z } from 'zod';
+
 /** Canonical list of agent types the verifier recognizes. */
 export type CompletionAgentType =
   | 'planning'
@@ -1766,9 +1831,13 @@ export type CompletionAgentType =
   | 'review'
   | 'remediation'
   | 'ask_agent';
+
+export const RESUME_SUMMARY_SCHEMA = z.object({
+  summary: z.string(),
+});
 ```
 
-All the `*AgentData` interfaces and `*_SCHEMA` exports disappear. Consumers reference the typed output of `coerceFields` instead (which returns `Record<string, unknown>` per the contract; a downstream helper in `contracts.ts` can narrow per agent if we later want stricter typing, but it's not required to ship).
+All the verifier-era `*AgentData` interfaces and `*_SCHEMA` exports disappear. Consumers reference the typed output of `coerceFields` instead, but the resume-summary path keeps `RESUME_SUMMARY_SCHEMA` until that path is redesigned separately.
 
 - [ ] **Step 3: Prune `memory-validation.ts`.**
 
@@ -1864,9 +1933,8 @@ git add -A workers/orchestrator/src/services/completion-verifier/ \
 git commit -m "$(cat <<'EOF'
 refactor(orchestrator): cut over completion verifier to deterministic parser
 
-- Delete prompt-builder.ts, llm-client.ts (LLM extraction path gone)
-- Delete schemas.test.ts (Zod schemas replaced by contracts.ts)
-- Shrink schemas.ts to the CompletionAgentType union only
+- Trim prompt-builder.ts / llm-client.ts to resume-summary helpers only
+- Trim schemas.ts to CompletionAgentType + RESUME_SUMMARY_SCHEMA
 - Prune memory-validation.ts: keep detectEmptyMemoryFields (updated to
   read coerced arrays), delete validateMemoryReporting +
   buildMemoryAcknowledgmentPattern
@@ -2053,7 +2121,7 @@ Expected: FAIL — the old prompt still contains these strings.
 
 - [ ] **Step 4: Remove the branch.**
 
-In `workers/orchestrator/src/services/task-dispatcher/prompts.ts`, delete the block that emits "EXECUTION MEMORY REPORTING FAILURE" and the enumeration of memory fields. The remaining resume prompt only handles deliverable misses (`outcome`, `pr`, `summary`, `linear_url`, etc.).
+In `workers/orchestrator/src/services/task-dispatcher/prompts.ts`, delete the block that emits "EXECUTION MEMORY REPORTING FAILURE" and the enumeration of memory fields. The remaining resume prompt only handles deliverable misses (`outcome`, `pr`, `summary`, `linear_issue`, `plan_pr`, etc.).
 
 Also remove the `memory_ids_used_invalid` / `memory_ids_rejected_invalid` entries from whichever set/array enumerates telemetry field names in this file — those were consumed by `validateMemoryReporting`, which no longer exists.
 
@@ -2439,7 +2507,7 @@ Before declaring this plan complete, run through this list:
 - [x] **File-path consistency:** Every file mentioned in "File Structure" appears in at least one task.
 - [x] **Commit granularity:** Each task ends with a commit; no task is so large that a reviewer can't follow it in a single diff.
 - [x] **Real-data grounding:** Every non-trivial assertion traces back to a fixture in `workers/orchestrator/src/__tests__/fixtures/completion-verifier/`.
-- [x] **No fabricated expected values:** Goldens generated from the parser itself (Task 2.9) then manually audited on 6 representative fixtures. No hand-written expected JSON.
+- [x] **No fabricated expected values:** Goldens generated from the parser itself (Task 2.4) then manually audited on 6 representative fixtures. No hand-written expected JSON.
 
 ---
 
