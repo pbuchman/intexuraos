@@ -36,11 +36,11 @@ export interface GitHubAgentEvalResult {
   reasoning: string;
 }
 
-export function formatZodErrors(error: ZodError): string {
+function formatZodErrors(error: ZodError): string {
   return error.issues.map((i) => i.message).join('; ');
 }
 
-export function validateTriageState(
+function validateTriageState(
   state: PRTriageState,
   reviewsRequested: string[],
 ): { ok: true; value: GitHubAgentTriageResult } | { ok: false; error: string } {
@@ -65,7 +65,7 @@ export function validateTriageState(
   return { ok: false, error: 'No triage tool was called. You must call either request_review or skip.' };
 }
 
-export function validateCommentTriageState(
+function validateCommentTriageState(
   state: CommentTriageState,
 ): { ok: true; value: GitHubAgentTriageResult } | { ok: false; error: string } {
   if (state.skipped) {

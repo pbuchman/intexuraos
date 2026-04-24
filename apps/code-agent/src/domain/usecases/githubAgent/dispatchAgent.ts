@@ -19,7 +19,7 @@ import { buildTriageRepairMessage } from '../../validation/buildTriageRepairMess
 import { evaluatePlanFiles } from '../../utils/planDetection.js';
 import { LLM_TOOL_REVIEW_TYPES } from '../../constants/reviewTypes.js';
 
-export const VALID_DISPATCH_TEMPLATES = ['pr_comment', 'bot_review_edit'] as const;
+const VALID_DISPATCH_TEMPLATES = ['pr_comment', 'bot_review_edit'] as const;
 
 export interface GitHubAgentDeps {
   logger: Logger;
