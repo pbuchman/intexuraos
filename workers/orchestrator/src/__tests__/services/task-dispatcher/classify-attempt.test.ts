@@ -10,16 +10,16 @@ const sessionInit =
 describe('classifyAttempt', () => {
   it('returns "ran" when Claude emitted a Session init line (exit 0)', () => {
     const logs = `${sessionInit}\n[claude] Hello world\n`;
-    expect(
-      classifyAttempt({ runtime: 'claude', logs, exitCode: 0, durationMs: 60_000 })
-    ).toEqual({ outcome: 'ran' });
+    expect(classifyAttempt({ runtime: 'claude', logs, exitCode: 0, durationMs: 60_000 })).toEqual({
+      outcome: 'ran',
+    });
   });
 
   it('returns "ran" when Claude emitted a Session init line even with non-zero exit', () => {
     const logs = `${sessionInit}\n[claude] partial output\n`;
-    expect(
-      classifyAttempt({ runtime: 'claude', logs, exitCode: 1, durationMs: 60_000 })
-    ).toEqual({ outcome: 'ran' });
+    expect(classifyAttempt({ runtime: 'claude', logs, exitCode: 1, durationMs: 60_000 })).toEqual({
+      outcome: 'ran',
+    });
   });
 
   it('returns infra_failed with container_exit_before_session_init when exitCode != 0 and no Session init', () => {
@@ -61,25 +61,25 @@ describe('classifyAttempt', () => {
 
   it('returns ran when a [tool] line appears (no session init, but Claude is producing tool events)', () => {
     const logs = '[tool] Read file=/repo/README.md\n';
-    expect(
-      classifyAttempt({ runtime: 'claude', logs, exitCode: 0, durationMs: 30_000 })
-    ).toEqual({ outcome: 'ran' });
+    expect(classifyAttempt({ runtime: 'claude', logs, exitCode: 0, durationMs: 30_000 })).toEqual({
+      outcome: 'ran',
+    });
   });
 
   it('returns ran when logs contain a stream-JSON system init event (no [claude] prefix)', () => {
     const logs =
       '2026-04-23T20:38:46.971Z {"type":"system","subtype":"init","session_id":"abc","tools":[{"name":"Read"}],"model":"claude-sonnet-4-6"}\n';
-    expect(
-      classifyAttempt({ runtime: 'claude', logs, exitCode: 0, durationMs: 60_000 })
-    ).toEqual({ outcome: 'ran' });
+    expect(classifyAttempt({ runtime: 'claude', logs, exitCode: 0, durationMs: 60_000 })).toEqual({
+      outcome: 'ran',
+    });
   });
 
   it('returns ran when logs contain a stream-JSON assistant event alone', () => {
     const logs =
       '2026-04-23T20:39:06.934Z {"type":"assistant","message":{"content":[{"type":"text","text":"hello"}]}}\n';
-    expect(
-      classifyAttempt({ runtime: 'claude', logs, exitCode: 0, durationMs: 60_000 })
-    ).toEqual({ outcome: 'ran' });
+    expect(classifyAttempt({ runtime: 'claude', logs, exitCode: 0, durationMs: 60_000 })).toEqual({
+      outcome: 'ran',
+    });
   });
 
   it('returns ran when a TaskResult with prUrl is present, even if transcript signals are missing', () => {
@@ -122,9 +122,9 @@ describe('classifyAttempt', () => {
 
   it('returns ran when a tool_use stream-JSON event is present without any other Claude signals', () => {
     const logs = '{"type":"tool_use","id":"abc","name":"Read","input":{}}';
-    expect(
-      classifyAttempt({ runtime: 'claude', logs, exitCode: 0, durationMs: 30_000 })
-    ).toEqual({ outcome: 'ran' });
+    expect(classifyAttempt({ runtime: 'claude', logs, exitCode: 0, durationMs: 30_000 })).toEqual({
+      outcome: 'ran',
+    });
   });
 
   it('firstErrorLine is truncated to 500 chars', () => {
@@ -152,27 +152,26 @@ describe('classifyAttempt', () => {
       '[entrypoint] GitHub token loaded and git credential configured\n' +
       '[codex] Session started: thread=019dc00d-fb13-7e30-b21d-a77982c54bab\n' +
       '[codex] Turn started\n' +
-      '[error] You\'ve hit your usage limit.\n' +
+      "[error] You've hit your usage limit.\n" +
       '{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit."}}\n' +
       '[entrypoint] Codex attempt finished with exit code: 1\n';
-    expect(
-      classifyAttempt({ runtime: 'codex', logs, exitCode: 1, durationMs: 4_000 })
-    ).toEqual({ outcome: 'ran' });
+    expect(classifyAttempt({ runtime: 'codex', logs, exitCode: 1, durationMs: 4_000 })).toEqual({
+      outcome: 'ran',
+    });
   });
 
   it('returns "ran" when Codex logs contain only a stream-JSON thread.started event', () => {
-    const logs =
-      '2026-04-24T17:13:54.013Z {"type":"thread.started","thread_id":"t-1"}\n';
-    expect(
-      classifyAttempt({ runtime: 'codex', logs, exitCode: 1, durationMs: 3_000 })
-    ).toEqual({ outcome: 'ran' });
+    const logs = '2026-04-24T17:13:54.013Z {"type":"thread.started","thread_id":"t-1"}\n';
+    expect(classifyAttempt({ runtime: 'codex', logs, exitCode: 1, durationMs: 3_000 })).toEqual({
+      outcome: 'ran',
+    });
   });
 
   it('returns "ran" when Codex logs contain a turn.started event', () => {
     const logs = '{"type":"turn.started"}\n';
-    expect(
-      classifyAttempt({ runtime: 'codex', logs, exitCode: 1, durationMs: 3_000 })
-    ).toEqual({ outcome: 'ran' });
+    expect(classifyAttempt({ runtime: 'codex', logs, exitCode: 1, durationMs: 3_000 })).toEqual({
+      outcome: 'ran',
+    });
   });
 
   it('uses runtime-agnostic wording in the generic fallback firstErrorLine', () => {

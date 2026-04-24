@@ -69,22 +69,14 @@ function hasCodexRanSignal(lines: readonly string[]): boolean {
   const hasCodexPrefix = lines.some((line) => {
     const trimmed = line.trimStart();
     return (
-      trimmed.startsWith('[codex]') ||
-      trimmed.startsWith('[msg]') ||
-      trimmed.startsWith('[cmd]')
+      trimmed.startsWith('[codex]') || trimmed.startsWith('[msg]') || trimmed.startsWith('[cmd]')
     );
   });
   const hasThreadStarted = lines.some((line) => line.includes('"type":"thread.started"'));
   const hasTurnStarted = lines.some((line) => line.includes('"type":"turn.started"'));
   const hasTurnCompleted = lines.some((line) => line.includes('"type":"turn.completed"'));
   const hasTurnFailed = lines.some((line) => line.includes('"type":"turn.failed"'));
-  return (
-    hasCodexPrefix ||
-    hasThreadStarted ||
-    hasTurnStarted ||
-    hasTurnCompleted ||
-    hasTurnFailed
-  );
+  return hasCodexPrefix || hasThreadStarted || hasTurnStarted || hasTurnCompleted || hasTurnFailed;
 }
 
 export function classifyAttempt(input: ClassifyAttemptInput): AttemptClassification {
