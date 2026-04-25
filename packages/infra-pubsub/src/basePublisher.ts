@@ -6,6 +6,7 @@ import { PubSub, type Topic } from '@google-cloud/pubsub';
 import { type Logger } from 'pino';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type { PublishError } from './types.js';
+import { getRequestContext } from './requestContextShim.js';
 
 /**
  * Configuration for BasePubSubPublisher.
@@ -63,7 +64,9 @@ export abstract class BasePubSubPublisher {
         `Publishing ${eventDescription} event to Pub/Sub`
       );
 
-      await topic.publishMessage({ data });
+      const attributes = buildPublishAttributes();
+
+      await topic.publishMessage({ data, attributes });
 
       this.logger.info(
         { topic: topicName, ...context },
@@ -150,4 +153,30 @@ export abstract class BasePubSubPublisher {
       message: `Failed to publish message: ${errorMessage}`,
     };
   }
+}
+
+/**
+ * Build the Pub/Sub message attributes for an outbound publish.
+ *
+ * Always sets `publisher-service` (from `INTEXURAOS_SERVICE_NAME`, falling back
+ * to `'unknown'`). When a {@link RequestContext} is active, propagates
+ * `x-request-id`, `x-correlation-id`, and `traceparent` (W3C Trace Context)
+ * so downstream subscribers can extract them via `extractCorrelation`.
+ */
+function buildPublishAttributes(): Record<string, string> {
+  const serviceName = process.env['INTEXURAOS_SERVICE_NAME'];
+  const attributes: Record<string, string> = {
+    'publisher-service': serviceName !== undefined && serviceName !== '' ? serviceName : 'unknown',
+  };
+
+  const ctx = getRequestContext();
+  if (ctx !== undefined) {
+    attributes['x-request-id'] = ctx.requestId;
+    attributes['x-correlation-id'] = ctx.correlationId;
+    if (ctx.traceId !== undefined) {
+      attributes['traceparent'] = `00-${ctx.traceId}-${ctx.parentId ?? '0000000000000000'}-01`;
+    }
+  }
+
+  return attributes;
 }
