@@ -8,14 +8,18 @@ import {
   authenticateInternalPubSub,
 } from '../auth/internalAuthStrategies.js';
 
+function noop(): void {
+  // Intentionally empty — silences logger output in tests.
+}
+
 function fakeRequest(headers: Record<string, string | undefined>): FastifyRequest {
   return {
     headers,
     log: {
-      warn: (): void => {},
-      info: (): void => {},
-      error: (): void => {},
-      debug: (): void => {},
+      warn: noop,
+      info: noop,
+      error: noop,
+      debug: noop,
     },
   } as unknown as FastifyRequest;
 }

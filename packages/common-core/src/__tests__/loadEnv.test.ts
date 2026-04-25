@@ -47,9 +47,7 @@ describe('loadEnv', () => {
   it('lists all missing keys in the thrown error', () => {
     delete process.env['LOAD_ENV_A'];
     process.env['LOAD_ENV_B'] = '';
-    expect(() => loadEnv(['LOAD_ENV_A', 'LOAD_ENV_B'] as const)).toThrow(
-      /LOAD_ENV_A, LOAD_ENV_B/
-    );
+    expect(() => loadEnv(['LOAD_ENV_A', 'LOAD_ENV_B'] as const)).toThrow(/LOAD_ENV_A, LOAD_ENV_B/);
   });
 
   it('mentions Terraform and .envrc.local in the error message', () => {

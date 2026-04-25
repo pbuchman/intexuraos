@@ -25,11 +25,7 @@ import {
 } from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
-import {
-  buildHealthResponse,
-  checkSecrets,
-  type HealthCheck,
-} from './health.js';
+import { buildHealthResponse, checkSecrets, type HealthCheck } from './health.js';
 
 /** OpenAPI server entry — `{ url, description }` from `@fastify/swagger`. */
 export interface OpenApiServer {
@@ -158,6 +154,32 @@ export async function createFastifyApp(opts: CreateFastifyAppOptions): Promise<F
         summary: 'Health check',
         description: 'Health check endpoint',
         tags: ['system'],
+        response: {
+          200: {
+            description: 'Service health status',
+            type: 'object',
+            required: ['status', 'serviceName', 'version', 'timestamp', 'checks'],
+            properties: {
+              status: { type: 'string', enum: ['ok', 'degraded', 'down'] },
+              serviceName: { type: 'string' },
+              version: { type: 'string' },
+              timestamp: { type: 'string', format: 'date-time' },
+              checks: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  required: ['name', 'status', 'latencyMs'],
+                  properties: {
+                    name: { type: 'string' },
+                    status: { type: 'string', enum: ['ok', 'degraded', 'down'] },
+                    latencyMs: { type: 'number' },
+                    details: { type: 'object', nullable: true },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     },
     async (_req, reply) => {
@@ -172,5 +194,5 @@ export async function createFastifyApp(opts: CreateFastifyAppOptions): Promise<F
     }
   );
 
-  return app;
+  return await Promise.resolve(app);
 }

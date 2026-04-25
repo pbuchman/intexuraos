@@ -61,9 +61,17 @@ function checkServerFile(appName) {
       exists = true;
     }
 
+    // Services that adopt the shared @intexuraos/http-server bootstrap
+    // (createFastifyApp) inherit /health, /openapi.json, and /docs from the
+    // helper. Detect that import so the endpoint check stays satisfied
+    // without re-inlining the bespoke registrations into every server.ts.
+    const usesSharedBootstrap = /createFastifyApp\b/.test(content);
+
     const missingEndpoints = [];
 
     for (const { path, method } of REQUIRED_ENDPOINTS) {
+      if (usesSharedBootstrap) continue;
+
       const directPattern = new RegExp(
         `app\\.(${method.toLowerCase()})\\s*\\(\\s*['"\`]${path.replace('/', '\\/')}['"\`]`,
         'i'

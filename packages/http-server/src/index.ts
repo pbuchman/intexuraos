@@ -34,7 +34,4 @@ export {
 } from './createFastifyApp.js';
 
 // Shared service lifecycle scaffold
-export {
-  startFastifyService,
-  type StartFastifyServiceOptions,
-} from './startFastifyService.js';
+export { startFastifyService, type StartFastifyServiceOptions } from './startFastifyService.js';

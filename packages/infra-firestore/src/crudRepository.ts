@@ -60,9 +60,7 @@ export function createFirestoreCrudRepository<T extends { id: string }>(
     },
     list: async (): Promise<T[]> => {
       const snap = await firestore.collection(collection).get();
-      return snap.docs.map((d) =>
-        fromFirestore(d.id, (d.data() ?? {}) as Record<string, unknown>)
-      );
+      return snap.docs.map((d) => fromFirestore(d.id, d.data() as Record<string, unknown>));
     },
     create: async (entity: T): Promise<void> => {
       await firestore.collection(collection).doc(entity.id).set(toFirestore(entity));
