@@ -55,6 +55,7 @@ const phases = [
       { name: 'terraform-secrets', script: 'verify-terraform-secrets.mjs' },
       { name: 'pubsub', script: 'verify-pubsub.mjs' },
       { name: 'logging', script: 'verify-logging.mjs' },
+      { name: 'incoming-request-logging', script: 'verify-incoming-request-logging.mjs' },
       { name: 'workspace-deps', script: 'verify-workspace-deps.mjs' },
       { name: 'migrations', script: 'verify-migrations.mjs' },
       { name: 'no-console', script: 'verify-no-console.mjs' },

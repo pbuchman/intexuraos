@@ -10,6 +10,7 @@
  * - Save result: success or failure
  */
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
+import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { processNotification, type WebhookPayload } from '../domain/notifications/index.js';
 import { webhookRequestSchema, webhookResponseSchema } from './schemas.js';
@@ -75,6 +76,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // No authentication - uses signature header instead
     },
     async (request: FastifyRequest<{ Body: WebhookPayload }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /mobile-notifications/webhooks',
+        bodyPreviewLength: 200,
+      });
+
       const requestId = request.id;
 
       // Log incoming request with headers and body
