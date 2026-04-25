@@ -13,9 +13,10 @@ const EXCLUDED_DIR = '__tests__';
  *   logger forms used across user-service routes and use-cases.
  *
  * Body matcher: `[^}]*?` non-greedy so it cannot cross a closing brace and
- *   accidentally span multiple object literals. With the `s` (dotAll) flag the
- *   `.` would match newlines, but we use `[^}]*?` deliberately to avoid that —
- *   we want multi-line matches *within a single object literal* only.
+ *   accidentally span multiple object literals. The `s` (dotAll) flag does not
+ *   affect this character class — `[^}]` already matches newlines on its own.
+ *   The flag is kept for clarity and as a safety net if the body matcher is
+ *   ever changed to use `.`.
  *
  * Bare `state` token guards:
  *   - `(?<![\w.])` lookbehind prevents matches like `state.foo`, `myState`, or
@@ -39,7 +40,7 @@ function walk(dir: string, files: string[] = []): string[] {
       if (entry === 'node_modules') continue;
       if (entry === 'dist') continue;
       walk(full, files);
-    } else if (st.isFile() && full.endsWith('.ts')) {
+    } else if (st.isFile() && full.endsWith('.ts') && !full.endsWith('.d.ts')) {
       files.push(full);
     }
   }
@@ -63,8 +64,9 @@ describe('audit: no raw state in logger payloads under apps/user-service/src', (
   it('contains no logger.<method>({ ..., state, ... }) call sites', () => {
     const files = walk(ROOT);
     const offenders: string[] = [];
-    // Use a sticky-ish global clone so we can iterate every match in the file,
-    // not just the first. The base pattern has the `s` flag; we add `g` here.
+    // Clone the pattern with the `g` flag so we can iterate every match in the
+    // file via repeated `exec()` calls, not just the first. The base pattern
+    // already carries the `s` flag, which we preserve.
     const globalPattern = new RegExp(RAW_STATE_LOGGER_PATTERN.source, 'gs');
     for (const file of files) {
       const content = readFileSync(file, 'utf8');

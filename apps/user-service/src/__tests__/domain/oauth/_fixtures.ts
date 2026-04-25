@@ -2,7 +2,7 @@
  * Shared test fixtures for OAuth use-case tests.
  *
  * NOTE: filename is `_fixtures.ts` (no `.test.ts` suffix) so vitest's default
- * `**\/*.test.ts` pattern does not collect this file as a test module.
+ * test-collection glob pattern does not pick it up as a test module.
  */
 
 import type { Logger } from '@intexuraos/common-core';
