@@ -638,15 +638,16 @@ describe('chat-agent routes', () => {
 
   describe('IP rate limiting', () => {
     it('returns 429 after exceeding the per-IP request budget on /guest-session', async () => {
-      // Budget defined in route schema: 10/min. Use a unique remote address
-      // so this test doesn't interfere with the per-IP budgets shared by the
-      // other tests in this file.
+      // Budget defined in route schema: 10/min. trustProxy: true makes
+      // Fastify resolve req.ip from X-Forwarded-For; pass the header explicitly
+      // since light-my-request's remoteAddress doesn't always propagate to
+      // proxy-addr's resolution in the inject pipeline.
       const responses: number[] = [];
       for (let i = 0; i < 15; i++) {
         const r = await app.inject({
           method: 'POST',
           url: '/guest-session',
-          remoteAddress: '203.0.113.7',
+          headers: { 'x-forwarded-for': '203.0.113.7' },
         });
         responses.push(r.statusCode);
       }
