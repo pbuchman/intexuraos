@@ -1,5 +1,7 @@
-// TODO(INT-1538-S2): delete this file and import from @intexuraos/common-core/tracing
-//                    once S2 lands. The shim exists ONLY for parallel execution of S3.
+// TODO(INT-1538-S2): delete this file once
+// `packages/common-core/src/tracing/requestContext.ts` lands; replace the
+// type-only re-export in index.ts with an import from common-core. The
+// shim exists ONLY for parallel execution of S3 with S2.
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 

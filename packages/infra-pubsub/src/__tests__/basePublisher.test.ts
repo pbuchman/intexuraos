@@ -174,7 +174,7 @@ describe('BasePubSubPublisher', () => {
       expect(call.attributes['traceparent']).toBe(`00-${traceId}-${parentId}-01`);
     });
 
-    it('uses 0000000000000000 parent when traceId is set but parentId is absent', async () => {
+    it('generates a fresh non-zero parent-id when traceId is set but parentId is absent', async () => {
       const traceId = 't'.repeat(32);
       await runWithRequestContext({ requestId: 'r-1', correlationId: 'r-1', traceId }, async () => {
         await publisher.publish('test-topic', { data: 'test' }, {});
@@ -183,7 +183,10 @@ describe('BasePubSubPublisher', () => {
       const call = mockPublishMessage.mock.calls[0]?.[0] as {
         attributes: Record<string, string>;
       };
-      expect(call.attributes['traceparent']).toBe(`00-${traceId}-0000000000000000-01`);
+      const traceparent = call.attributes['traceparent'];
+      expect(traceparent).toMatch(new RegExp(`^00-${traceId}-[0-9a-f]{16}-01$`));
+      const parentSegment = traceparent?.split('-')[2];
+      expect(parentSegment).not.toBe('0000000000000000');
     });
 
     it('omits correlation attributes outside any request context but keeps publisher-service', async () => {
@@ -220,10 +223,6 @@ describe('BasePubSubPublisher', () => {
     });
 
     it('falls back to "unknown" for publisher-service when env var is absent', async () => {
-      vi.stubEnv('INTEXURAOS_SERVICE_NAME', '');
-      // empty string from stubEnv still returns '' from process.env, which is falsy for ??;
-      // re-stub by deleting
-      vi.unstubAllEnvs();
       const original = process.env['INTEXURAOS_SERVICE_NAME'];
       delete process.env['INTEXURAOS_SERVICE_NAME'];
       try {
@@ -235,6 +234,8 @@ describe('BasePubSubPublisher', () => {
       } finally {
         if (original !== undefined) {
           process.env['INTEXURAOS_SERVICE_NAME'] = original;
+        } else {
+          delete process.env['INTEXURAOS_SERVICE_NAME'];
         }
       }
     });
