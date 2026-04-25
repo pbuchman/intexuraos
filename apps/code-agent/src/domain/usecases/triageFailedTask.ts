@@ -17,6 +17,10 @@ import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import { classifyFailure } from '../utils/classifyFailure.js';
 import { autoRetryTask, type AutoRetryTaskRequest } from './autoRetryTask.js';
 import { buildFailureTriagePrompt, parseTriageResponse } from '../prompts/failureTriagePrompt.js';
+import {
+  buildCooloffRetryPrompt,
+  parseCooloffResponse,
+} from '../prompts/cooloffRetryPrompt.js';
 import { loadConfig } from '../../config.js';
 
 export type TriageAction = 'retried' | 'retried_after_cooloff' | 'permanent_failure';
@@ -83,7 +87,20 @@ export async function triageFailedTask(
     };
   }
 
-  // Step 4b: Attempt auto-retry
+  // Step 4b: Resolve cooloff schedule if the classifier asked for retry_after_cooloff.
+  let cooloffSchedule: CooloffSchedule | undefined;
+  if (verdict === 'retry_after_cooloff') {
+    cooloffSchedule = await resolveCooloffSchedule(deps, task, taskError, new Date());
+  }
+
+  const retryRequest: AutoRetryTaskRequest = {
+    failedTask: task,
+    failedWorkerLocation: task.workerLocation,
+    reason: `${taskError.code}: ${taskError.message}`.slice(0, 200),
+    ...(cooloffSchedule !== undefined && { cooloffSchedule }),
+  };
+
+  // Step 4c: Attempt auto-retry
   const retryResult = await autoRetryTask(
     { logger, codeTaskRepo, taskEnqueueService, whatsappNotifier, orchestratorSecret: deps.orchestratorSecret },
     retryRequest

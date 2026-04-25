@@ -132,6 +132,28 @@ export function activeByLinearIssue(
     .where('status', 'in', ACTIVE_TASK_STATUSES);
 }
 
+/**
+ * Dispatched or running task for a Linear issue (limit 2).
+ *
+ * [INT-1560 Fix B] Used by `drainTaskQueue` to defer review-side candidates
+ * when a non-self sibling on the same Linear issue is actively executing.
+ * Excludes `queued` (uses `DISPATCHED_OR_RUNNING_STATUSES`, not
+ * `ACTIVE_TASK_STATUSES`) so two queued reviews on the same Linear issue
+ * cannot deadlock — only a true running planning/execution sibling blocks.
+ *
+ * Limit 2 (not 1) so the caller can filter the candidate's own document
+ * out and still report a sibling if one exists.
+ */
+export function dispatchedOrRunningForLinearIssue(
+  collection: CollectionReference,
+  linearIssueId: string
+): Query {
+  return collection
+    .where('linearIssueId', '==', linearIssueId)
+    .where('status', 'in', DISPATCHED_OR_RUNNING_STATUSES)
+    .limit(2);
+}
+
 /** Recent tasks for a Linear issue (createdAt desc). */
 export function recentByLinearIssue(
   collection: CollectionReference,
