@@ -1199,6 +1199,80 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
     },
 
+    hasOtherDispatchedOrRunningForLinearIssue: async (
+      taskId: string,
+      linearIssueId: string,
+    ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>> => {
+      try {
+        // Use DISPATCHED_OR_RUNNING_STATUSES (NOT ACTIVE_TASK_STATUSES) — including 'queued'
+        // would deadlock two queued reviews on the same Linear issue (each blocking the other).
+        const snapshot = await collection
+          .where('linearIssueId', '==', linearIssueId)
+          .where('status', 'in', DISPATCHED_OR_RUNNING_STATUSES)
+          .get();
+
+        // Exclude the candidate's own document from the results.
+        const sibling = snapshot.docs.find((doc) => doc.id !== taskId);
+        if (sibling === undefined) {
+          return ok({ hasActive: false });
+        }
+        return ok({ hasActive: true, taskId: sibling.id });
+      } catch (error) {
+        logger.error(
+          { error, taskId, linearIssueId },
+          'Failed to check non-self dispatched/running task for Linear issue',
+        );
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    claimForDispatch: async (
+      taskId: string,
+    ): Promise<Result<
+      | { claimed: true }
+      | { claimed: false; alreadyClaimed: true }
+      | { claimed: false; notFound: true },
+      RepositoryError
+    >> => {
+      const docRef = collection.doc(taskId);
+      try {
+        const outcome = await firestore.runTransaction(
+          async (
+            txn,
+          ): Promise<
+            | { claimed: true }
+            | { claimed: false; alreadyClaimed: true }
+            | { claimed: false; notFound: true }
+          > => {
+            const snap = await txn.get(docRef);
+            if (!snap.exists) {
+              return { claimed: false, notFound: true };
+            }
+            const data = snap.data() ?? {};
+            if (data['status'] !== 'queued') {
+              return { claimed: false, alreadyClaimed: true };
+            }
+            txn.update(docRef, {
+              status: 'dispatched',
+              dispatchedAt: Timestamp.fromDate(new Date()),
+              updatedAt: Timestamp.fromDate(new Date()),
+            });
+            return { claimed: true };
+          },
+        );
+        return ok(outcome);
+      } catch (error) {
+        logger.error({ error, taskId }, 'Failed to claim task for dispatch');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
     findLatestExecutionTaskByPR: async (
       repository: string,
       prNumber: number
