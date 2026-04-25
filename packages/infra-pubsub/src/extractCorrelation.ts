@@ -8,11 +8,11 @@
 import { randomUUID } from 'node:crypto';
 import type { RequestContext } from './requestContextShim.js';
 
-export type PubSubAttributes = Record<string, string> | null | undefined;
+export type InboundPubSubAttributes = Record<string, string> | null | undefined;
 
 const TRACEPARENT_RE = /^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$/;
 
-export function extractCorrelation(attributes: PubSubAttributes): RequestContext {
+export function extractCorrelation(attributes: InboundPubSubAttributes): RequestContext {
   const attrs: Record<string, string> = attributes ?? {};
 
   const rawRequestId = attrs['x-request-id'];

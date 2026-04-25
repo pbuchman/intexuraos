@@ -36,4 +36,23 @@ describe('requestContextShim', () => {
     });
     expect(getRequestContext()).toBeUndefined();
   });
+
+  it('isolates contexts across concurrent runWithRequestContext calls', async () => {
+    const ctxA: RequestContext = { requestId: 'r-A', correlationId: 'c-A' };
+    const ctxB: RequestContext = { requestId: 'r-B', correlationId: 'c-B' };
+
+    const captureAfterMicrotask = async (ctx: RequestContext): Promise<string | undefined> =>
+      runWithRequestContext(ctx, async () => {
+        await Promise.resolve();
+        return getRequestContext()?.requestId;
+      });
+
+    const [seenA, seenB] = await Promise.all([
+      captureAfterMicrotask(ctxA),
+      captureAfterMicrotask(ctxB),
+    ]);
+
+    expect(seenA).toBe('r-A');
+    expect(seenB).toBe('r-B');
+  });
 });
