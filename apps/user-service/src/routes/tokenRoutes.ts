@@ -87,6 +87,11 @@ export const tokenRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'POST /auth/refresh',
+        bodyPreviewLength: 200,
+      });
+
       // Validate configuration
       const config = loadAuth0Config();
       if (config === null) {
@@ -120,11 +125,6 @@ export const tokenRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           auth0Client,
           logger: {
             warn: (obj, msg): void => {
-      logIncomingRequest(request, {
-        message: 'POST /auth/refresh',
-        bodyPreviewLength: 200,
-      });
-
               fastify.log.warn(obj, msg);
             },
           },
