@@ -56,7 +56,9 @@ export function createErrorHandler(
         captureException(error);
       }
 
-      reply.status(status);
+      // `reply.fail()` (from `@intexuraos/common-http`'s Fastify augmentation)
+      // already calls `.status(ERROR_HTTP_STATUS[code]).send(...)` internally,
+      // so we do not set the status here.
       await reply.fail(error.code, error.message, undefined, error.details);
       return;
     }
@@ -67,7 +69,8 @@ export function createErrorHandler(
       captureException(error);
     }
 
-    reply.status(500);
+    // `reply.fail('INTERNAL_ERROR', ...)` resolves to status 500 via
+    // `ERROR_HTTP_STATUS` — no explicit `reply.status(...)` needed.
     await reply.fail('INTERNAL_ERROR', 'Internal Server Error');
   };
 }

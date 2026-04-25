@@ -37,16 +37,17 @@ function createMockRequest(): {
 }
 
 describe('createErrorHandler', () => {
-  it('returns the typed status, code, message, and details for IntexuraOSError', async () => {
+  it('returns the typed code, message, and details for IntexuraOSError', async () => {
     const handler = createErrorHandler();
-    const { reply, statusFn, failFn } = createMockReply();
+    const { reply, failFn } = createMockReply();
     const { request } = createMockRequest();
 
     const err = new IntexuraOSError('NOT_FOUND', 'Resource missing', { id: '42' });
 
     await handler(err as unknown as FastifyError, request, reply);
 
-    expect(statusFn).toHaveBeenCalledWith(404);
+    // `reply.fail()` is responsible for setting the HTTP status (via
+    // `ERROR_HTTP_STATUS`); the handler itself must not call `reply.status()`.
     expect(failFn).toHaveBeenCalledWith('NOT_FOUND', 'Resource missing', undefined, { id: '42' });
   });
 
@@ -76,17 +77,16 @@ describe('createErrorHandler', () => {
     expect(captureException).toHaveBeenCalledWith(err);
   });
 
-  it('maps plain Error to a generic 500 INTERNAL_ERROR and calls captureException', async () => {
+  it('maps plain Error to a generic INTERNAL_ERROR and calls captureException', async () => {
     const captureException = vi.fn();
     const handler = createErrorHandler({ captureException });
-    const { reply, statusFn, failFn } = createMockReply();
+    const { reply, failFn } = createMockReply();
     const { request, logErrorFn } = createMockRequest();
 
     const err = new Error('boom') as FastifyError;
 
     await handler(err, request, reply);
 
-    expect(statusFn).toHaveBeenCalledWith(500);
     expect(failFn).toHaveBeenCalledWith('INTERNAL_ERROR', 'Internal Server Error');
     expect(captureException).toHaveBeenCalledWith(err);
     expect(logErrorFn).toHaveBeenCalledWith(
@@ -119,24 +119,23 @@ describe('createErrorHandler', () => {
 
   it('handles plain Error without captureException option (no throw)', async () => {
     const handler = createErrorHandler();
-    const { reply, statusFn, failFn } = createMockReply();
+    const { reply, failFn } = createMockReply();
     const { request } = createMockRequest();
 
     await handler(new Error('boom') as FastifyError, request, reply);
 
-    expect(statusFn).toHaveBeenCalledWith(500);
     expect(failFn).toHaveBeenCalledWith('INTERNAL_ERROR', 'Internal Server Error');
   });
 
   it('handles 5xx IntexuraOSError without captureException option (no throw)', async () => {
     const handler = createErrorHandler();
-    const { reply, statusFn } = createMockReply();
+    const { reply, failFn } = createMockReply();
     const { request } = createMockRequest();
 
     const err = new IntexuraOSError('INTERNAL_ERROR', 'oops');
 
     await handler(err as unknown as FastifyError, request, reply);
 
-    expect(statusFn).toHaveBeenCalledWith(500);
+    expect(failFn).toHaveBeenCalledWith('INTERNAL_ERROR', 'oops', undefined, undefined);
   });
 });
