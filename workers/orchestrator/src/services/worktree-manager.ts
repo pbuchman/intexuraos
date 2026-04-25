@@ -102,54 +102,35 @@ export class WorktreeManager {
         // Create worktree with a new branch for the task
         // Using -b creates a local branch, avoiding detached HEAD state
         // which is required for Claude to create commits and PRs
-        let stderr: string;
-        if (continuationPrBranch === undefined) {
-          ({ stderr } = await execAsync(
-            `git worktree add -b "${taskId}" "${worktreePath}" "origin/${baseBranch}"`,
-            {
-              cwd: this.config.repositoryPath,
-            }
-          ));
-        } else {
-          let continuationBranchAvailable = true;
+        let useContinuation = false;
+        if (continuationPrBranch !== undefined) {
           try {
             await execAsync(`git fetch origin "${continuationPrBranch}"`, {
               cwd: this.config.repositoryPath,
             });
+            useContinuation = true;
           } catch (fetchError: unknown) {
+            // PR merged + branch auto-deleted between submission and dispatch:
+            // fall back to base branch instead of failing the task. Network/auth
+            // failures still re-throw so the dispatcher can retry.
             const message = fetchError instanceof Error ? fetchError.message : 'Unknown error';
-            // Branch was deleted on origin (typical case: PR merged + branch
-            // auto-deleted between task submission and dispatch). Fall back to
-            // base branch so the task can still run instead of hard-failing.
-            // Other failures (network, auth) keep the original throw — caller
-            // must see them so the task can be retried.
-            if (message.includes("couldn't find remote ref")) {
-              this.logger.warn(
-                { taskId, continuationPrBranch, baseBranch },
-                'Continuation PR branch no longer exists on origin (likely merged + deleted) — falling back to base branch'
-              );
-              continuationBranchAvailable = false;
-            } else {
+            if (!message.includes("couldn't find remote ref")) {
               throw fetchError;
             }
-          }
-
-          if (continuationBranchAvailable) {
-            ({ stderr } = await execAsync(
-              `git worktree add -B "${taskId}" "${worktreePath}" "origin/${continuationPrBranch}"`,
-              {
-                cwd: this.config.repositoryPath,
-              }
-            ));
-          } else {
-            ({ stderr } = await execAsync(
-              `git worktree add -b "${taskId}" "${worktreePath}" "origin/${baseBranch}"`,
-              {
-                cwd: this.config.repositoryPath,
-              }
-            ));
+            this.logger.warn(
+              { taskId, continuationPrBranch, baseBranch },
+              'Continuation PR branch no longer exists on origin (likely merged + deleted) — falling back to base branch'
+            );
           }
         }
+
+        const addCommand =
+          useContinuation && continuationPrBranch !== undefined
+            ? `git worktree add -B "${taskId}" "${worktreePath}" "origin/${continuationPrBranch}"`
+            : `git worktree add -b "${taskId}" "${worktreePath}" "origin/${baseBranch}"`;
+        const { stderr } = await execAsync(addCommand, {
+          cwd: this.config.repositoryPath,
+        });
 
         // git worktree add outputs to stderr even on success
         if (stderr && !stderr.includes('Preparing worktree')) {
