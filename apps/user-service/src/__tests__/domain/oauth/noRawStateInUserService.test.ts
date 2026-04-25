@@ -5,8 +5,30 @@ import { join, resolve } from 'node:path';
 const ROOT = resolve(__dirname, '../../../');
 const EXCLUDED_DIR = '__tests__';
 
+/**
+ * Audit pattern explanation:
+ *
+ * Leading identifier (non-capturing): `logger`, `request.log`, `req.log`,
+ *   `reply.log`, `fastify.log`, `app.log`, or `this.logger`. This catches the
+ *   logger forms used across user-service routes and use-cases.
+ *
+ * Body matcher: `[^}]*?` non-greedy so it cannot cross a closing brace and
+ *   accidentally span multiple object literals. With the `s` (dotAll) flag the
+ *   `.` would match newlines, but we use `[^}]*?` deliberately to avoid that —
+ *   we want multi-line matches *within a single object literal* only.
+ *
+ * Bare `state` token guards:
+ *   - `(?<![\w.])` lookbehind prevents matches like `state.foo`, `myState`, or
+ *     `nestedState`.
+ *   - `(?![\w.])` lookahead prevents `stateFoo`, `state.foo`. NOTE: the `:`
+ *     character must NOT appear here — the dangerous regression form
+ *     `{ state: rawState }` (key-form) MUST be caught.
+ *
+ * The `s` flag on the regex enables dotAll so the matcher works against the
+ * full file content rather than line-by-line input.
+ */
 const RAW_STATE_LOGGER_PATTERN =
-  /logger\.(?:info|warn|error|debug|fatal|trace)\s*\(\s*\{[^}]*?(?<![\w.])state(?![\w.:])[^}]*?\}/;
+  /(?:logger|(?:request|req|reply|fastify|app)\.log|this\.logger)\.(?:info|warn|error|debug|fatal|trace)\s*\(\s*\{[^}]*?(?<![\w.])state(?![\w.])[^}]*?\}/s;
 
 function walk(dir: string, files: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -24,20 +46,40 @@ function walk(dir: string, files: string[] = []): string[] {
   return files;
 }
 
+/**
+ * Returns the 1-based line number of the given character index in `content`,
+ * computed by counting `\n` characters up to that index. Used purely for
+ * diagnostic output when the audit fires.
+ */
+function lineNumberOf(content: string, index: number): number {
+  let line = 1;
+  for (let i = 0; i < index; i++) {
+    if (content[i] === '\n') line++;
+  }
+  return line;
+}
+
 describe('audit: no raw state in logger payloads under apps/user-service/src', () => {
   it('contains no logger.<method>({ ..., state, ... }) call sites', () => {
     const files = walk(ROOT);
     const offenders: string[] = [];
+    // Use a sticky-ish global clone so we can iterate every match in the file,
+    // not just the first. The base pattern has the `s` flag; we add `g` here.
+    const globalPattern = new RegExp(RAW_STATE_LOGGER_PATTERN.source, 'gs');
     for (const file of files) {
       const content = readFileSync(file, 'utf8');
-      const lines = content.split('\n');
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i] ?? '';
-        if (RAW_STATE_LOGGER_PATTERN.test(line)) {
-          offenders.push(`${file}:${i + 1}: ${line.trim()}`);
-        }
+      globalPattern.lastIndex = 0;
+      let match: RegExpExecArray | null = globalPattern.exec(content);
+      while (match !== null) {
+        const lineNo = lineNumberOf(content, match.index);
+        const snippet = match[0].replace(/\s+/g, ' ').slice(0, 160);
+        offenders.push(`${file}:${String(lineNo)}: ${snippet}`);
+        match = globalPattern.exec(content);
       }
     }
-    expect(offenders).toEqual([]);
+    expect(
+      offenders,
+      `Found raw 'state' in logger calls:\n${offenders.join('\n')}`
+    ).toEqual([]);
   });
 });
