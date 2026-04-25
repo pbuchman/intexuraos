@@ -880,7 +880,7 @@ describe('createGptClient', () => {
   });
 
   describe('OTel span emission for generate()', () => {
-    it('emits llm.gpt.generate span with all canonical attributes on success', async () => {
+    it('emits llm.openai.generate span with all canonical attributes on success', async () => {
       mockChatCompletionsCreate.mockResolvedValue({
         choices: [{ message: { content: 'hi' } }],
         usage: { prompt_tokens: 3, completion_tokens: 4 },
@@ -899,8 +899,8 @@ describe('createGptClient', () => {
       expect(spans).toHaveLength(1);
       const span = spans[0];
       if (span === undefined) throw new Error('no span');
-      expect(span.name).toBe('llm.gpt.generate');
-      expect(span.attributes['llm.provider']).toBe('gpt');
+      expect(span.name).toBe('llm.openai.generate');
+      expect(span.attributes['llm.provider']).toBe(LlmProviders.OpenAI);
       expect(span.attributes['llm.model']).toBe(TEST_MODEL);
       expect(span.attributes['llm.input_tokens']).toBe(3);
       expect(span.attributes['llm.output_tokens']).toBe(4);

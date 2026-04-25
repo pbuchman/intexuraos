@@ -16,12 +16,12 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/llm-contract": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
     "pino": "^10.1.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@intexuraos/llm-contract": "workspace:*",
     "@opentelemetry/sdk-trace-base": "^1.30.0"
   }
 }
