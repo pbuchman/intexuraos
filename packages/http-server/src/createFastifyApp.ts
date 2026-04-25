@@ -18,6 +18,15 @@ import fastifyCors from '@fastify/cors';
 import fastifyFormbody from '@fastify/formbody';
 import fastifySwagger, { type FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
+
+/**
+ * Accepted shape of an entry in `components.schemas`. Mirrors the structural
+ * type that `@fastify/swagger` accepts at registration time without naming
+ * the (overly strict) `openapi-types` `SchemaObject` directly — that type
+ * forbids `ReferenceObject` in some positions and is incompatible with
+ * `as const` literal schemas (`required: readonly [...]`).
+ */
+export type OpenApiSchemaEntry = Record<string, unknown>;
 import {
   fastifyAuthPlugin,
   intexuraFastifyPlugin,
@@ -70,12 +79,16 @@ export interface CreateFastifyAppOptions {
   /** Service-specific route registration. */
   registerRoutes: (app: FastifyInstance) => Promise<void>;
   /**
-   * Optional OpenAPI `components.schemas` overrides/additions. Typed loosely
-   * via `Record<string, object>` so callers can supply schema objects in the
-   * shape consumed by `@fastify/swagger` without importing
-   * `openapi-types` directly.
+   * Optional OpenAPI `components.schemas` overrides/additions. Each entry is
+   * a JSON-Schema-shaped object (or `$ref` reference) accepted by
+   * `@fastify/swagger`. We type entries as `Record<string, unknown>` rather
+   * than `openapi-types`' nominal `SchemaObject` because the latter forbids
+   * `ReferenceObject` in some positions and is incompatible with the
+   * literal-readonly schemas common in app `server.ts` files
+   * (`required: readonly [...]`). `@fastify/swagger` accepts any shape that
+   * matches the OpenAPI 3.x JSON-Schema dialect at registration time.
    */
-  additionalOpenapiSchemas?: Record<string, object>;
+  additionalOpenapiSchemas?: Record<string, OpenApiSchemaEntry>;
 }
 
 /**
@@ -108,6 +121,16 @@ export async function createFastifyApp(opts: CreateFastifyAppOptions): Promise<F
   setupSentryErrorHandler(app);
   registerCoreSchemas(app);
 
+  // The openapi options shape transitively pulls in
+  // `OpenAPIV3.ComponentsObject | OpenAPIV3_1.ComponentsObject`. With
+  // `exactOptionalPropertyTypes: true` the union is non-assignable to either
+  // side because v3.0 and v3.1 disagree on `ServerVariableObject.enum` shape
+  // (tuple vs array) and several response/link/server sub-fields. Callers
+  // supply schema literals in the JSON-Schema dialect that
+  // `@fastify/swagger` actually validates at register-time. We pin the
+  // `openapi` field to v3.1 and fall through `unknown` once for the
+  // schemas — see `additionalOpenapiSchemas` JSDoc for why this is safer
+  // than naming `openapi-types` directly.
   const swaggerOptions: FastifyDynamicSwaggerOptions = {
     openapi: {
       openapi: '3.1.1',
@@ -115,12 +138,9 @@ export async function createFastifyApp(opts: CreateFastifyAppOptions): Promise<F
       servers: [...opts.openapiServers],
       tags: [...opts.openapiTags],
       ...(opts.additionalOpenapiSchemas !== undefined
-        ? // Cast through unknown to satisfy openapi-types' nominal SchemaObject
-          // shape. Callers supply schema objects in the JSON-Schema dialect
-          // already accepted by @fastify/swagger; we don't validate further.
-          {
+        ? {
             components: {
-              schemas: opts.additionalOpenapiSchemas as unknown as Record<string, never>,
+              schemas: opts.additionalOpenapiSchemas as unknown as never,
             },
           }
         : {}),
