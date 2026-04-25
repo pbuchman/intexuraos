@@ -160,11 +160,19 @@ export const chatRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const verifiedSub = verified.value.sub;
         guestSessionId = verifiedSub;
 
-        // Check rate limit keyed on the verified sub (NOT the raw header).
+        // Check rate limit keyed on the verified sub (NOT the raw header) and
+        // immediately reserve the slot. check() and record() must execute as
+        // a single synchronous block (no `await` between them) — Node.js is
+        // single-threaded between awaits, so this prevents two concurrent
+        // requests at count = N-1 from both passing check() before either
+        // records, which would let a single attacker exceed the per-sub cap
+        // by N concurrent requests. Failed LLM calls still count against the
+        // budget; that's the conservative choice given the cost-attack risk.
         const rateLimitResult = getServices().guestRateLimiter.check(verifiedSub);
         if (!rateLimitResult.ok) {
           return await reply.fail('RATE_LIMITED', rateLimitResult.error.message);
         }
+        getServices().guestRateLimiter.record(verifiedSub);
 
         userId = 'guest';
         chatClient = createChatClient({
@@ -206,10 +214,9 @@ export const chatRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         /* v8 ignore stop @preserve */
       }
 
-      // Record guest usage only after successful response
-      if (guestSessionId !== null) {
-        getServices().guestRateLimiter.record(guestSessionId);
-      }
+      // (Guest usage is recorded synchronously at admit time, above, to
+      // close a concurrent-request race that previously allowed a single
+      // attacker to exceed the per-sub cap by issuing N parallel requests.)
 
       return await reply.ok({
         response: result.value.response, // @allow-result-access -- guarded by !result.ok check above

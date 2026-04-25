@@ -547,6 +547,39 @@ describe('chat-agent routes', () => {
           await localApp.close();
         }
       });
+
+      it('blocks rotation under concurrent load: N parallel requests cannot exceed the cap', async () => {
+        // Race-window guard: previously, two concurrent requests at count = N-1
+        // could both pass check() before either record()-ed, allowing a single
+        // sub to exceed the per-sub cap by N parallel requests. The fix records
+        // synchronously after check() (before any await), so concurrent admits
+        // are serialised through the JS event loop.
+        const realLimiter = createGuestRateLimiter({ maxPerHour: 3 });
+        const current = getServices();
+        setServices({ ...current, guestRateLimiter: realLimiter });
+        const localApp = await buildServer();
+        try {
+          const token = 'fake-token-for-concurrent-sub';
+          const requests = Array.from({ length: 10 }, () =>
+            localApp.inject({
+              method: 'POST',
+              url: '/chat',
+              headers: {
+                'x-guest-session': token,
+                'x-forwarded-for': '203.0.113.100',
+              },
+              payload: { message: 'Hello' },
+            })
+          );
+          const responses = await Promise.all(requests);
+          const statuses = responses.map((r) => r.statusCode);
+          // Exactly 3 admits succeed (the cap); the rest are 429.
+          expect(statuses.filter((s) => s === 200).length).toBe(3);
+          expect(statuses.filter((s) => s === 429).length).toBe(7);
+        } finally {
+          await localApp.close();
+        }
+      });
     });
 
     describe('signed session validation', () => {
@@ -651,8 +684,10 @@ describe('chat-agent routes', () => {
         });
         responses.push(r.statusCode);
       }
-      expect(responses.filter((s) => s === 429).length).toBeGreaterThan(0);
-      expect(responses.filter((s) => s === 200).length).toBeLessThanOrEqual(10);
+      // Exact assertions: with 15 sequential requests at a 10/min cap from
+      // a single IP, exactly the first 10 succeed and the last 5 are 429s.
+      expect(responses.filter((s) => s === 200).length).toBe(10);
+      expect(responses.filter((s) => s === 429).length).toBe(5);
     });
   });
 
