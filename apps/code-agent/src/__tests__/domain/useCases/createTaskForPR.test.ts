@@ -102,7 +102,7 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
       return ok({ hasActive: false });
     },
     async claimForDispatch(): ReturnType<CodeTaskRepository['claimForDispatch']> {
-      return ok({ claimed: true });
+      return ok(true);
     },
     async deleteTask(): ReturnType<CodeTaskRepository['deleteTask']> {
       return ok(undefined);

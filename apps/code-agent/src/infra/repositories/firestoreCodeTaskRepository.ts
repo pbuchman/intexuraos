@@ -280,53 +280,23 @@ export const createFirestoreCodeTaskRepository = (deps: {
       () => docsToTasks(allNotArchived(collection)),
       {}, 'Failed to find all non-archived tasks',
     ),
-    /**
-     * [INT-1560 Fix B] Linear-issue-scoped sibling check used by drainTaskQueue
-     * to defer review-side candidates when a non-self planning/execution task is
-     * actively running on the same Linear issue. Excludes the candidate's own
-     * document from the result so a self-reference cannot self-block.
-     *
-     * Filter uses `DISPATCHED_OR_RUNNING_STATUSES` (no `queued`) to avoid the
-     * deadlock where two queued reviews on the same Linear issue see each other
-     * as "active."
-     */
     hasOtherDispatchedOrRunningForLinearIssue: (taskId, linearIssueId) => guarded(async () => {
       const snap = await dispatchedOrRunningForLinearIssue(collection, linearIssueId).get();
       const sibling = snap.docs.find((d) => d.id !== taskId);
-      const out: { hasActive: boolean; taskId?: string } = { hasActive: sibling !== undefined };
-      if (sibling !== undefined) out.taskId = sibling.id;
-      return out;
+      return sibling === undefined
+        ? { hasActive: false }
+        : { hasActive: true, taskId: sibling.id };
     }, { taskId, linearIssueId }, 'Failed to check dispatched/running sibling for Linear issue'),
-    /**
-     * [INT-1560 Fix E] Atomic queued→dispatched transition via Firestore
-     * transaction. Used by drainTaskQueue BEFORE calling the network dispatcher
-     * so that two replicas racing on the same queued task observe exactly one
-     * winner. The losing replica sees `claimed: false, alreadyClaimed: true`
-     * and continues to the next candidate instead of duplicating the dispatch.
-     *
-     * Returns:
-     *   - `claimed: true` — caller is the unique owner of this task; safe to dispatch.
-     *   - `claimed: false, alreadyClaimed: true` — task transitioned out of `queued`
-     *     before this caller's transaction won.
-     *   - `claimed: false, notFound: true` — task document does not exist.
-     *
-     * Caller is responsible for rolling the status back to `queued` if the
-     * subsequent dispatch attempt fails with a retryable error.
-     */
-    claimForDispatch: (taskId) => guarded(async () => {
-      const docRef = collection.doc(taskId);
-      return await firestore.runTransaction(async (txn) => {
+    claimForDispatch: (taskId) => guarded(
+      () => firestore.runTransaction(async (txn) => {
+        const docRef = collection.doc(taskId);
         const snap = await txn.get(docRef);
-        if (!snap.exists) {
-          return { claimed: false as const, notFound: true as const };
-        }
-        const status = snap.get('status') as string | undefined;
-        if (status !== 'queued') {
-          return { claimed: false as const, alreadyClaimed: true as const };
-        }
+        if (!snap.exists || snap.get('status') !== 'queued') return false;
         txn.update(docRef, { status: 'dispatched', dispatchedAt: new Date() });
-        return { claimed: true as const };
-      });
-    }, { taskId }, 'Failed to claim task for dispatch'),
+        return true;
+      }),
+      { taskId },
+      'Failed to claim task for dispatch',
+    ),
   };
 };
