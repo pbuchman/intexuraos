@@ -16,7 +16,7 @@ import {
   type HealthCheck,
 } from '@intexuraos/http-server';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
-import { chatRoutes } from './routes/index.js';
+import { chatRoutes, guestSessionRoutes } from './routes/index.js';
 
 const SERVICE_NAME = 'chat-agent';
 const SERVICE_VERSION = '0.1.0';
@@ -163,6 +163,7 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   // Register chat routes
   await app.register(chatRoutes);
+  await app.register(guestSessionRoutes);
 
   app.get(
     '/openapi.json',
