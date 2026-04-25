@@ -3,6 +3,7 @@
 > **Status:** investigation + plan only. No code changes shipped here.
 > **Sibling investigation:** `docs/plans/INT-1560-failed-subtasks-investigation.md` (the parser-side failure mode, which is fixed in PR #1966 — `fix(orchestrator): NDJSON-aware fallback in locateFinalBlock`).
 > **Linear issue:** _user creates on push._
+> **External validation:** independently audited by Codex (`gpt-5.5`, reasoning effort `xhigh`) on 2026-04-25. The audit confirmed 5 of 8 numbered claims, rejected 2, marked 2 as partial, and surfaced 6 additional issues. **§7 of this document records the rejections + the resulting plan corrections** — read it before implementing.
 
 ---
 
@@ -132,7 +133,9 @@ export function dispatchedOrRunningForPR(collection, repository, prNumber) {
 }
 ```
 
-Drain at `drainTaskQueue.ts:212-233` calls this and resets `queuedAt` on a hit. Planning never has `prNumber` written to its Firestore document — proven directly above — so the guard never fires for "active planning blocks new review on the same Linear issue."
+Drain at `drainTaskQueue.ts:212-233` calls this and resets `queuedAt` on a hit. Planning's `prNumber` field is **stamped only after a successful completion via `handleTaskCompletion`** — see `apps/code-agent/src/domain/usecases/handleTaskCompletion.ts:1050-1095` and `:1227-1267`, which extract `prNumber` from `result.prUrl`. While the planning task is **`running`** the field is unset, **and failed planning runs (e.g. TASK_RUNTIME_HARD_ERROR before the parser fix) never reach the success branch that writes `prNumber`** — confirmed by §2.2 where every archived planning task has `prNumber=undefined`. So during the exact window when a `synchronize` webhook is firing reviews against the in-flight planning's PR, the PR-active guard cannot match the planning task.
+
+(The initial draft of this section claimed planning tasks "NEVER" get `prNumber` stamped, which is too strong — Codex audit §7 rejection #6 cites the success-path writers. The practical implication for the bug is unchanged.)
 
 A `linearIssueId`-scoped query already exists at `task-query-builder.ts:126-133`:
 
@@ -172,9 +175,12 @@ Change the post-dispatch error handler to consult `isRetryableErrorCode`. Retrya
 import { isRetryableErrorCode } from '../utils/retryableErrors.js';
 …
 if (dispatchError.code === 'at_capacity' || isRetryableErrorCode(dispatchError.code)) {
-  // Reset queuedAt so the TTL clock starts from the moment workers become unavailable,
-  // not from when the task first entered the queue. Mirrors PR-lock-blocked branch.
-  await codeTaskRepo.update(task.id, { queuedAt: new Date() });
+  // DO NOT reset queuedAt here. The existing `at_capacity` branch leaves
+  // queuedAt untouched, and so must we — otherwise TTL never bounds the
+  // task's lifetime in the queue (Codex audit, §7 rejection #9). The
+  // existing TTL branch at drainTaskQueue.ts:247-275 fires `queue_timeout`
+  // once `now - queuedAt > config.queue.ttlMinutes` regardless of how
+  // many times we hit this branch.
   logger.info(
     { taskId: task.id, error: dispatchError, retryable: true },
     'Dispatch retryable, task remains queued'
@@ -185,8 +191,8 @@ if (dispatchError.code === 'at_capacity' || isRetryableErrorCode(dispatchError.c
 
 **Why this is safe:**
 
-* `INTEXURAOS_QUEUE_TTL_MINUTES` (`config.queue.ttlMinutes`) bounds how long a task can sit queued. The existing TTL branch (`drainTaskQueue.ts:247-275`) expires tasks past that window with `code: 'queue_timeout'` and a WhatsApp notification. Unbounded queuing is impossible by construction.
-* `at_capacity` already follows the exact same path; we are widening the set of error codes that take it.
+* `INTEXURAOS_QUEUE_TTL_MINUTES` (`config.queue.ttlMinutes`) bounds how long a task can sit queued — **only because we do NOT reset `queuedAt`**. The existing TTL branch (`drainTaskQueue.ts:247-275`) expires tasks past that window with `code: 'queue_timeout'` and a WhatsApp notification. (Initial draft of this plan proposed resetting `queuedAt`; Codex's audit caught that it would defeat the TTL — see §7. The corrected fix above does NOT reset.)
+* `at_capacity` already follows the exact same path (no `queuedAt` reset); we are widening the set of error codes that take it.
 * `RETRYABLE_ERROR_CODES` is the single authoritative classifier. Adding new retryable codes flows through automatically.
 
 **Evidence this fix helps:**
@@ -209,29 +215,34 @@ if (dispatchError.code === 'at_capacity' || isRetryableErrorCode(dispatchError.c
 ### Fix B — concurrency guard scoped to Linear issue (covers planning↔review interleave)
 
 **Scope:**
-- `apps/code-agent/src/domain/repositories/codeTaskRepository.ts` (new method)
-- `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts` (wire to `activeByLinearIssue`)
-- `apps/code-agent/src/domain/usecases/drainTaskQueue.ts:212-233` (call new method after PR guard)
+- `apps/code-agent/src/domain/repositories/codeTaskRepository.ts` (new method, OR reuse the existing `hasActiveTaskForLinearIssue` — see below)
+- `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts:132-139` (already wires `activeByLinearIssue` to a repo method named `hasActiveTaskForLinearIssue`; Codex audit confirmed)
+- `apps/code-agent/src/domain/usecases/drainTaskQueue.ts:212-233` (call after PR guard)
 
-Add `hasOtherActiveForLinearIssue(taskId, linearIssueId)` to the repository contract. Implementation runs `activeByLinearIssue(linearIssueId)` and excludes the candidate's own document. Drain calls it after the PR-active check; if a sibling task is active on the same Linear issue, defer exactly like the PR-lock branch (skip + reset `queuedAt`).
+**Narrowed semantics (post-Codex audit, see §7 partial #10 + Linear-deadlock additional issue):** the new check must be **review-side only and scoped to dispatched-or-running siblings, not all queued ones.**
+
+* **Trigger:** only when the candidate is a `review` task. Planning tasks already pass through (no need to gate them — they're the source of the lock, not the victim of it).
+* **Filter:** use `DISPATCHED_OR_RUNNING_STATUSES` (excluding `queued`), not `ACTIVE_TASK_STATUSES`. This avoids the deadlock where two queued reviews on the same Linear issue see each other as "active" and both defer forever.
+* **Excludes self:** repo method takes `(candidateId, linearIssueId)` and filters out the candidate's own document.
+* **No `queuedAt` reset:** matches Fix A's no-reset rule so TTL still bounds the queue lifetime.
 
 ```ts
 // drainTaskQueue.ts (after PR-active guard)
-if (candidate.linearIssueId !== undefined) {
-  const issueActiveResult = await codeTaskRepo.hasOtherActiveForLinearIssue(
+if (candidate.agentType === 'review' && candidate.linearIssueId !== undefined) {
+  const blocker = await codeTaskRepo.hasOtherDispatchedOrRunningForLinearIssue(
     candidate.id,
-    candidate.linearIssueId
+    candidate.linearIssueId,
   );
-  if (issueActiveResult.ok && issueActiveResult.value.hasActive) {
+  if (blocker.ok && blocker.value.hasActive) {
     logger.info(
       {
         taskId: candidate.id,
         linearIssueId: candidate.linearIssueId,
-        activeTaskId: issueActiveResult.value.taskId,
+        activeTaskId: blocker.value.taskId,
       },
-      'Skipping queued task — another task on the same Linear issue is active'
+      'Deferring review — another task on the same Linear issue is dispatched/running',
     );
-    await codeTaskRepo.update(candidate.id, { queuedAt: new Date() });
+    // Intentionally NO queuedAt reset (TTL must still apply).
     continue;
   }
 }
@@ -239,9 +250,16 @@ if (candidate.linearIssueId !== undefined) {
 
 **Why this is safe:**
 
-* Round-robin candidate ordering (`drainTaskQueue.ts:188-190`) sorts by `createdAt`. The earliest task per issue wins — usually planning at 20:44:38, ~10 minutes before the first review.
+* Round-robin candidate ordering (`drainTaskQueue.ts:188-190`) sorts by `createdAt`, so the earliest task per Linear issue still wins.
 * Tasks without `linearIssueId` (rare; direct `/tasks` API calls without a Linear backing) bypass the guard unchanged.
-* `task-dedup.ts:178` already enforces single-task-per-issue **at creation time**; drain-time enforcement is the missing dual.
+* `task-dedup.ts:170-205` already enforces single-task-per-issue at creation time — but **explicitly excludes review tasks** (Codex audit additional issue #5), which is why drain-time enforcement is needed exactly for reviews and not redundant.
+* Review-only scope means: multiple reviews against **different PRs** that happen to share a Linear issue (e.g. a refactor that opens 3 PRs each with their own review) are no longer all serialized — only when an actual planning/execution sibling is running, the review defers. Two-PR-per-issue users are not penalized.
+* Cancel-duplicate-review block at `drainTaskQueue.ts:115-167` runs first and reduces the candidate set before our guard sees it, so churn from multiple `synchronize` webhooks creating duplicate reviews on the same PR doesn't pile up.
+
+**Why the deadlock concern is solved:**
+
+* `DISPATCHED_OR_RUNNING_STATUSES = ['dispatched', 'running']` (per `task-constants.ts:11-15`). Two `queued` reviews for the same Linear issue do NOT see each other through this guard. Only a true running sibling (planning/execution) blocks.
+* Round-robin still picks the oldest queued task; if no sibling is running, the new guard is a no-op and dispatch proceeds.
 
 **Evidence this fix helps:**
 
@@ -301,12 +319,57 @@ Fixtures are written from the Firestore records queried during this investigatio
 
 ---
 
-## 6. Done criteria
+## 7. External audit (Codex `gpt-5.5` xhigh, 2026-04-25)
 
-- [ ] Fix A: `drainTaskQueue` consults `isRetryableErrorCode` for the still-queued path; truly permanent codes still fail.
-- [ ] Fix B: drain calls `hasOtherActiveForLinearIssue` (new repo method) and defers when active.
+The original draft was independently re-investigated by Codex against the wider codebase. Findings, with the resulting corrections folded into the relevant sections above:
+
+### Confirmed (5)
+
+* **Claim 1** — `drainTaskQueue.ts:509-533` finalises every non-`at_capacity` dispatch error as `failed`.
+* **Claim 2** — `taskDispatcherImpl.ts:176-193` and `:201-209` return `worker_unavailable` when no healthy probes remain.
+* **Claim 3** — `retryableErrors.ts:8-12` lists exactly `worker_unavailable` and `network_error`.
+* **Claim 4** — `isRetryableErrorCode` is consumed by `drainRetryQueue.ts:23,355,454` and `webhookDispatch.ts:223-240`, **not** by `drainTaskQueue`.
+* **Claim 5** — `dispatchedOrRunningForPR` filters `where('prNumber', '==', prNumber)` (`task-query-builder.ts:112-123`).
+* **Claim 7** — `activeByLinearIssue` exists at `task-query-builder.ts:125-133`, repo wraps it as `hasActiveTaskForLinearIssue` (`firestoreCodeTaskRepository.ts:132-139`), but `drainTaskQueue` never calls it.
+
+### Rejected (2) — corrections folded back into §2 / §3
+
+* **Claim 6 — REJECTED.** Planning tasks **can** get `prNumber` stamped via the success-path completion handlers at `handleTaskCompletion.ts:1050-1095` and `:1227-1267` (extracts from `result.prUrl`). Auto-retry copies `prNumber` from the failed task at `autoRetryTask.ts:112-130`. The original draft's "NEVER stamped" wording is too strong. **Corrected wording in §2.4:** planning tasks have `prNumber` stamped only on **successful** completion; while `running` and across **failed** completions the field stays unset. The §2.2 Firestore evidence (every archived planning task has `prNumber=undefined`) is consistent with this — those tasks all failed before reaching the success branch.
+* **Claim 9 — REJECTED.** The original draft's Fix A reset `queuedAt` on every retryable dispatch error. Codex pointed out: (a) this defeats TTL because TTL is measured from `queuedAt`; (b) the existing `at_capacity` branch at `drainTaskQueue.ts:512-515` does **not** reset, contradicting the draft's "same path" claim. **Correction folded into §3 Fix A:** removed the `queuedAt` reset; behaviour now exactly matches `at_capacity`. TTL bounds the queue lifetime as advertised.
+
+### Partial (2)
+
+* **Claim 8 — PARTIAL.** Mechanism is sound but `TASK_RUNTIME_HARD_ERROR` retry only fires when the message contains `137` OR via the `remediation.action === 'retry'` hint that the orchestrator attaches (`classifyFailure.ts:55-77`). The orchestrator **does** attach that hint at `task-dispatcher.ts:1710-1714`, so the loop still occurs — but the trigger is the remediation hint, not the error code unconditionally. Note: the "fixed in PR #1966" claim is not independently provable from current source; the merge sits in git history and the NDJSON-aware extractor exists in tree.
+* **Claim 10 — PARTIAL.** Fan-out is unaffected (children carry their own `linearIssueId`), but the original "cannot starve legitimate parallel work" was too strong: a broad Linear-issue guard would block multiple reviews for **different PRs** that happen to share one Linear issue. **Correction folded into §3 Fix B:** narrowed the guard to (i) review-side only, (ii) `DISPATCHED_OR_RUNNING_STATUSES` (excluding `queued`), so that two queued reviews on the same Linear issue cannot deadlock and reviews for distinct PRs aren't serialized.
+
+### Additional issues Codex surfaced
+
+| #   | Issue                                                                                                                                      | Citation                                                                                                             | Disposition                                                                                                                                                                                                                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `isDraining` is process-local; multi-instance code-agents can dispatch the same task twice between candidate-fetch and status-update.      | `drainTaskQueue.ts:53-98,479-507,536-551`                                                                            | **Pre-existing race; out of scope.** Filed as a separate concern (own its own `INT-XXXX`). Fix A/B do not introduce it and do not worsen it.                                                                                                                                |
+| 2   | Linear guard could deadlock on `ACTIVE_TASK_STATUSES` (which includes `queued`).                                                           | `task-constants.ts:11-15`, `task-query-builder.ts:125-133`                                                           | **Addressed in §3 Fix B narrowing.** New repo method uses `DISPATCHED_OR_RUNNING_STATUSES`.                                                                                                                                                                                 |
+| 3   | Synchronize webhooks keep creating fresh queued reviews; the new guard would defer the survivor.                                           | `drainTaskQueue.ts:115-166`, `createReviewTask.ts:296-363`                                                           | **Acceptable.** Cancel-duplicate-review at `drainTaskQueue.ts:115-167` runs first and collapses duplicates per PR before the new guard sees them. With the no-`queuedAt`-reset rule (§3 Fix A correction), TTL eventually expires the survivor if planning never completes. |
+| 4   | Auto-retry creates a fresh task with a new `queuedAt`, restarting TTL. Retry chains can live indefinitely if the failure is persistent.    | `autoRetryTask.ts:112-152`, `taskEnqueueServiceImpl.ts:75-83`                                                        | **Out of scope here; flag for a separate "auto-retry budget cap" issue.** This is the auto-retry side of the same TTL concern; not in the dispatch-failure path Fix A/B target.                                                                                             |
+| 5   | Existing dedup at `task-dedup.ts:170-205` excludes review tasks, so Fix B is **not** redundant.                                            | same                                                                                                                 | **Confirmed; clarified in §3 Fix B "Why this is safe."**                                                                                                                                                                                                                    |
+| 6   | Worker-side dispatch endpoint emits `at_capacity` / `docker_unavailable` / `auth_unavailable` / `SETUP_FAILED` — not `worker_unavailable`. | `workers/orchestrator/src/services/task-dispatcher.ts:249-257,464-491`, `workers/orchestrator/src/routes.ts:182-205` | **Confirmed; consistent with the plan.** `worker_unavailable` originates only on the code-agent dispatcher side after probe failures, not from the orchestrator HTTP API.                                                                                                   |
+
+### Net effect on the plan
+
+* Fix A is **simpler and more correct** post-audit: drop the `queuedAt` reset; rely on the existing TTL.
+* Fix B is **narrower and safer** post-audit: review-only, dispatched-or-running siblings only, no reset.
+* Fix C remains optional defence-in-depth; nothing in the audit changes its risk profile.
+* Two unrelated issues (multi-instance race, auto-retry indefinite chain) are documented but explicitly out of scope for this PR.
+
+---
+
+## 8. Done criteria
+
+- [ ] Fix A: `drainTaskQueue` consults `isRetryableErrorCode` for the still-queued path; truly permanent codes still fail. **No `queuedAt` reset** in this branch (matches `at_capacity`).
+- [ ] Fix B: drain calls a new `hasOtherDispatchedOrRunningForLinearIssue` repo method, **only on `review` candidates**, with **DISPATCHED_OR_RUNNING_STATUSES** filter; defers when a non-self sibling is running. No `queuedAt` reset.
 - [ ] Replay test asserts the INT-1529 chain ends with ≤2 tasks (not 9) under the new logic.
 - [ ] All existing `drainTaskQueue.test.ts` cases still pass.
+- [ ] New tests confirm: (a) `worker_unavailable`/`network_error` keeps task queued without resetting `queuedAt`; (b) review with running planning sibling defers; (c) two queued reviews on same Linear issue do NOT deadlock; (d) review for a different PR is unaffected when planning runs on a sibling PR's Linear issue.
 - [ ] `pnpm run verify:workspace:tracked code-agent` and `pnpm run ci:tracked` both green.
 - [ ] PR title includes `INT-XXXX`; user creates the issue on push.
 - [ ] Decision recorded: ship Fix C (defence-in-depth) now or defer.
+- [ ] Separate Linear issues filed (or referenced) for the two out-of-scope items: multi-instance dispatch race, auto-retry budget cap.
