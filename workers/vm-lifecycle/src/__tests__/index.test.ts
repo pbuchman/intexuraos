@@ -16,6 +16,7 @@ vi.mock('../logger.js', () => ({
     error: vi.fn(),
     debug: vi.fn(),
   },
+  flush: vi.fn(() => Promise.resolve()),
 }));
 
 import { startVmFunction, stopVmFunction } from '../index.js';

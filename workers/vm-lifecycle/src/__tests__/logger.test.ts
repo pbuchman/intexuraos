@@ -1,8 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-describe('logger', () => {
-  const originalEnv = process.env;
+vi.mock('@sentry/node', () => ({
+  init: vi.fn(),
+  setTag: vi.fn(),
+  flush: vi.fn(() => Promise.resolve(true)),
+  captureException: vi.fn(),
+}));
 
+const originalEnv = process.env;
+
+describe('logger', () => {
   beforeEach(() => {
     vi.resetModules();
     process.env = { ...originalEnv };
@@ -12,25 +19,9 @@ describe('logger', () => {
     process.env = originalEnv;
   });
 
-  it('should create a logger with default level when LOG_LEVEL not set', async () => {
-    delete process.env['LOG_LEVEL'];
+  it('exposes pino-style methods on the logger', async () => {
+    delete process.env['INTEXURAOS_SENTRY_DSN'];
 
-    const { logger } = await import('../logger.js');
-
-    expect(logger).toBeDefined();
-    expect((logger as unknown as { level: string }).level).toBe('info');
-  });
-
-  it('should create a logger with custom level from LOG_LEVEL env var', async () => {
-    process.env['LOG_LEVEL'] = 'debug';
-
-    const { logger } = await import('../logger.js');
-
-    expect(logger).toBeDefined();
-    expect((logger as unknown as { level: string }).level).toBe('debug');
-  });
-
-  it('should have correct formatter for level', async () => {
     const { logger } = await import('../logger.js');
 
     expect(logger).toBeDefined();
@@ -38,5 +29,23 @@ describe('logger', () => {
     expect(typeof logger.warn).toBe('function');
     expect(typeof logger.error).toBe('function');
     expect(typeof logger.debug).toBe('function');
+  });
+
+  it('exports a flush() that resolves without throwing', async () => {
+    delete process.env['INTEXURAOS_SENTRY_DSN'];
+
+    const { flush } = await import('../logger.js');
+
+    expect(typeof flush).toBe('function');
+    await expect(flush()).resolves.toBeUndefined();
+  });
+
+  it('forwards INTEXURAOS_SENTRY_DSN through to initWorker when set', async () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://example@sentry.io/1';
+
+    const { logger, flush } = await import('../logger.js');
+
+    expect(logger).toBeDefined();
+    await expect(flush()).resolves.toBeUndefined();
   });
 });

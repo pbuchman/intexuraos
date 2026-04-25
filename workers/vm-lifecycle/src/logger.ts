@@ -1,22 +1,19 @@
-import pino from 'pino';
-import { serializeError } from '@intexuraos/common-core';
+import {
+  initWorker,
+  type WorkerBootstrap,
+  type WorkerBootstrapConfig,
+} from '@intexuraos/infra-sentry';
 
-export interface Logger {
-  info(obj: object, msg?: string): void;
-  warn(obj: object, msg?: string): void;
-  error(obj: object, msg?: string): void;
-  debug(obj: object, msg?: string): void;
+const config: WorkerBootstrapConfig = {
+  serviceName: 'vm-lifecycle',
+  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+};
+const dsn = process.env['INTEXURAOS_SENTRY_DSN'];
+if (dsn !== undefined && dsn !== '') {
+  config.sentryDsn = dsn;
 }
 
-const errorSerializers = {
-  error: serializeError,
-  err: serializeError,
-};
+const bootstrap: WorkerBootstrap = initWorker(config);
 
-export const logger: Logger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  formatters: {
-    level: (label: string): { level: string } => ({ level: label }),
-  },
-  serializers: errorSerializers,
-});
+export const logger: WorkerBootstrap['logger'] = bootstrap.logger;
+export const flush: WorkerBootstrap['flush'] = bootstrap.flush;

@@ -1,6 +1,8 @@
 import { InstancesClient } from '@google-cloud/compute';
+import * as Sentry from '@sentry/node';
 import { logger } from './logger.js';
 import { VM_CONFIG } from './config.js';
+import { isExpectedStartupNetworkError } from './errors.js';
 
 export interface StopVmResult {
   success: boolean;
@@ -54,8 +56,13 @@ export async function stopVm(): Promise<StopVmResult> {
           await waitForTasksToComplete();
         }
       }
-    } catch {
-      logger.warn({}, 'Orchestrator unresponsive, proceeding with forced shutdown');
+    } catch (error) {
+      if (isExpectedStartupNetworkError(error)) {
+        logger.warn({ err: error }, 'Orchestrator unresponsive, proceeding with forced shutdown');
+      } else {
+        logger.error({ err: error }, 'Unexpected error contacting orchestrator shutdown endpoint');
+        Sentry.captureException(error);
+      }
     }
 
     const [operation] = await instancesClient.stop({
@@ -101,8 +108,13 @@ async function waitForTasksToComplete(): Promise<void> {
 
         logger.info({ running: data.running }, 'Tasks still running, waiting...');
       }
-    } catch {
-      logger.info({}, 'Orchestrator no longer responding, proceeding');
+    } catch (error) {
+      if (isExpectedStartupNetworkError(error)) {
+        logger.info({ err: error }, 'Orchestrator no longer responding, proceeding');
+      } else {
+        logger.error({ err: error }, 'Unexpected error polling orchestrator health, proceeding');
+        Sentry.captureException(error);
+      }
       return;
     }
 

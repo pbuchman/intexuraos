@@ -1,6 +1,9 @@
 import { InstancesClient } from '@google-cloud/compute';
+import * as Sentry from '@sentry/node';
+import { IntexuraOSError } from '@intexuraos/common-core';
 import { logger } from './logger.js';
 import { VM_CONFIG } from './config.js';
+import { isExpectedStartupNetworkError } from './errors.js';
 
 export interface StartVmResult {
   success: boolean;
@@ -104,7 +107,10 @@ async function waitForState(
     await sleep(5000);
   }
 
-  throw new Error(`Timeout waiting for VM to reach ${targetState} state`);
+  throw new IntexuraOSError(
+    'WORKER_UNAVAILABLE',
+    `Timeout waiting for VM to reach ${targetState} state`
+  );
 }
 
 async function pollHealth(): Promise<boolean> {
@@ -126,8 +132,13 @@ async function pollHealth(): Promise<boolean> {
         }
       }
       /* v8 ignore stop @preserve */
-    } catch {
-      // Expected during startup - VM not yet responding
+    } catch (error) {
+      if (isExpectedStartupNetworkError(error)) {
+        logger.debug({ err: error }, 'VM not yet responding (expected during startup)');
+      } else {
+        logger.error({ err: error }, 'Unexpected error during VM health poll');
+        Sentry.captureException(error);
+      }
     }
 
     logger.debug({}, 'Health check failed, retrying...');

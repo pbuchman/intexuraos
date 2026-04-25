@@ -2,7 +2,7 @@ import type { HttpFunction } from '@google-cloud/functions-framework';
 import * as functions from '@google-cloud/functions-framework';
 import { startVm } from './start-vm.js';
 import { stopVm } from './stop-vm.js';
-import { logger } from './logger.js';
+import { logger, flush } from './logger.js';
 
 function validateAuth(authHeader: string | undefined): boolean {
   const expectedToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
@@ -34,6 +34,8 @@ export const startVmFunction: HttpFunction = async (req, res): Promise<void> => 
   } else {
     res.status(503).json(result);
   }
+
+  await flush();
 };
 
 export const stopVmFunction: HttpFunction = async (req, res): Promise<void> => {
@@ -57,6 +59,8 @@ export const stopVmFunction: HttpFunction = async (req, res): Promise<void> => {
   } else {
     res.status(503).json(result);
   }
+
+  await flush();
 };
 
 functions.http('startVm', startVmFunction);
