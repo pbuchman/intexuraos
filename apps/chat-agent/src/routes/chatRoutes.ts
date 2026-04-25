@@ -134,17 +134,34 @@ export const chatRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           logger: getServices().logger,
         });
       } else {
-        // GUEST USER - use platform GLM client with rate limiting
+        // GUEST USER — require a server-signed session token. The token's
+        // verified `sub` claim is the rate-limit key; rotating the raw
+        // header value cannot bypass the limit because every fresh token
+        // must be minted via /guest-session, which is itself IP-limited.
         const sessionHeader = request.headers['x-guest-session'];
-        guestSessionId =
-          typeof sessionHeader === 'string' ? sessionHeader : null;
+        const rawToken = typeof sessionHeader === 'string' ? sessionHeader : null;
 
-        if (guestSessionId === null || guestSessionId.length === 0) {
-          return await reply.fail('UNAUTHORIZED', 'Authentication required or guest session ID missing');
+        if (rawToken === null || rawToken.length === 0) {
+          return await reply.fail(
+            'UNAUTHORIZED',
+            'Authentication required or guest session token missing'
+          );
         }
 
-        // Check rate limit
-        const rateLimitResult = getServices().guestRateLimiter.check(guestSessionId);
+        const verified = await getServices().guestSessionSigner.verify(rawToken);
+        if (!verified.ok) {
+          return await reply.fail(
+            'UNAUTHORIZED',
+            'Invalid or expired guest session token'
+          );
+        }
+
+        // @allow-result-access -- guarded by !verified.ok check above
+        const verifiedSub = verified.value.sub;
+        guestSessionId = verifiedSub;
+
+        // Check rate limit keyed on the verified sub (NOT the raw header).
+        const rateLimitResult = getServices().guestRateLimiter.check(verifiedSub);
         if (!rateLimitResult.ok) {
           return await reply.fail('RATE_LIMITED', rateLimitResult.error.message);
         }

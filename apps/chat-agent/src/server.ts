@@ -164,11 +164,14 @@ export async function buildServer(): Promise<FastifyInstance> {
     max: 60,
     timeWindow: '1 minute',
     keyGenerator: (req) => req.ip,
-    skip: (req) =>
+    // Skip OPTIONS / HEAD / health probes via the allowList — these don't
+    // count against the budget. The plugin invokes the function for every
+    // request and bypasses rate-limiting when it returns true.
+    allowList: (req): boolean =>
       req.method === 'OPTIONS' ||
       req.method === 'HEAD' ||
       req.url.startsWith('/health'),
-    errorResponseBuilder: (request, context) => {
+    errorResponseBuilder: (_req, context): Error => {
       const error = new Error(
         `Rate limit exceeded, retry in ${context.after}`
       ) as Error & { statusCode?: number; code?: string };
@@ -189,17 +192,18 @@ export async function buildServer(): Promise<FastifyInstance> {
   // errors short-circuit to a proper RATE_LIMITED response and everything else
   // continues through the Sentry path.
   const upstreamErrorHandler = app.errorHandler;
-  app.setErrorHandler(async (error, request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     const errorWithStatus = error as Error & { statusCode?: number };
     if (errorWithStatus.statusCode === 429) {
-      return await reply.fail(
+      void reply.fail(
         'RATE_LIMITED',
         errorWithStatus.message.length > 0
           ? errorWithStatus.message
           : 'Rate limit exceeded'
       );
+      return;
     }
-    return await upstreamErrorHandler(error, request, reply);
+    upstreamErrorHandler(error, request, reply);
   });
 
   registerCoreSchemas(app);
