@@ -6,7 +6,7 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import type { OAuthProvider } from '../models/OAuthConnection.js';
 import type { GoogleOAuthClient } from '../ports/GoogleOAuthClient.js';
 
@@ -46,7 +46,8 @@ export function initiateOAuthFlow(
   const state = Buffer.from(JSON.stringify(statePayload)).toString('base64url');
   const authorizationUrl = googleOAuthClient.generateAuthUrl(state, redirectUri);
 
-  logger.info({ userId, provider, state }, 'OAuth state generated for CSRF protection');
+  const stateHash = createHash('sha256').update(state).digest('hex').slice(0, 12);
+  logger.info({ userId, provider, stateHash }, 'OAuth state generated for CSRF protection');
 
   return {
     authorizationUrl,
