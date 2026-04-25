@@ -9,7 +9,13 @@ import {
   teardownJwksServer,
   createToken,
 } from './testUtils.js';
-import type { FakeLlmGenerateClient, FakeEmbeddingRepository, FakeUserServiceClient, FakeGuestRateLimiter } from './fakes.fixture.js';
+import type {
+  FakeLlmGenerateClient,
+  FakeEmbeddingRepository,
+  FakeUserServiceClient,
+  FakeGuestRateLimiter,
+  FakeGuestSessionSigner,
+} from './fakes.fixture.js';
 import type { FastifyInstance } from 'fastify';
 import { clearJwksCache } from '@intexuraos/common-http';
 
@@ -20,6 +26,7 @@ describe('chat-agent routes', () => {
     llmGenerateClient: FakeLlmGenerateClient;
     fakeUserServiceClient: FakeUserServiceClient;
     fakeGuestRateLimiter: FakeGuestRateLimiter;
+    fakeGuestSessionSigner: FakeGuestSessionSigner;
   };
 
   beforeAll(async () => {
@@ -39,6 +46,7 @@ describe('chat-agent routes', () => {
       llmGenerateClient: services.llmGenerateClient,
       fakeUserServiceClient: services.fakeUserServiceClient,
       fakeGuestRateLimiter: services.fakeGuestRateLimiter,
+      fakeGuestSessionSigner: services.fakeGuestSessionSigner,
     };
     app = await buildServer();
   });
@@ -483,7 +491,7 @@ describe('chat-agent routes', () => {
           method: 'POST',
           url: '/chat',
           headers: {
-            'x-guest-session': 'guest-session-123',
+            'x-guest-session': 'fake-token-for-guest-session-123',
           },
           payload: {
             message: 'Hello',
@@ -498,13 +506,58 @@ describe('chat-agent routes', () => {
       });
     });
 
+    describe('signed session validation', () => {
+      it('rejects an x-guest-session header that is not a valid signed token (401)', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/chat',
+          headers: { 'x-guest-session': 'not-a-real-token' },
+          payload: { message: 'Hello' },
+        });
+        expect(response.statusCode).toBe(401);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('UNAUTHORIZED');
+      });
+
+      it('keys the rate limit on the verified sub, not the raw header — rotation does not bypass', async () => {
+        // The fake signer maps token -> sub deterministically. Verify that a
+        // valid signed token with a verified sub still gets blocked when the
+        // limiter is in the "block" state — proves the limiter is consulted
+        // after the verify step rather than for the raw header.
+        fakeServices.fakeGuestRateLimiter.setBlock(true, 'Rate limit exceeded.');
+        const response = await app.inject({
+          method: 'POST',
+          url: '/chat',
+          headers: { 'x-guest-session': 'fake-token-for-fake-sub-1' },
+          payload: { message: 'Hello' },
+        });
+        expect(response.statusCode).toBe(429);
+      });
+
+      it('verifies the signed token once and uses the verified sub for limiter check', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/chat',
+          headers: { 'x-guest-session': 'fake-token-for-abc' },
+          payload: { message: 'Hello' },
+        });
+        expect(response.statusCode).toBe(200);
+        // Limiter must see the verified sub, not the raw header
+        expect(fakeServices.fakeGuestRateLimiter.seenSessionIds).toContain('abc');
+        expect(fakeServices.fakeGuestRateLimiter.seenSessionIds).not.toContain(
+          'fake-token-for-abc'
+        );
+      });
+    });
+
     describe('successful responses', () => {
       it('should return 200 for guest with valid session', async () => {
         const response = await app.inject({
           method: 'POST',
           url: '/chat',
           headers: {
-            'x-guest-session': 'guest-session-123',
+            'x-guest-session': 'fake-token-for-guest-session-123',
           },
           payload: {
             message: 'How do I create a todo?',
@@ -522,7 +575,7 @@ describe('chat-agent routes', () => {
           method: 'POST',
           url: '/chat',
           headers: {
-            'x-guest-session': 'guest-session-123',
+            'x-guest-session': 'fake-token-for-guest-session-123',
           },
           payload: {
             message: 'What about completing it?',

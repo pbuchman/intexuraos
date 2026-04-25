@@ -7,7 +7,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import { ok, err } from '@intexuraos/common-core';
+import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import * as jose from 'jose';
 
 export interface GuestSessionPayload {
@@ -81,7 +81,7 @@ export function createGuestSessionSigner(
         }
         return err({
           code: 'INVALID_SIGNATURE',
-          message: e instanceof Error ? e.message : 'Verification failed',
+          message: getErrorMessage(e, 'Verification failed'),
         });
       }
     },
