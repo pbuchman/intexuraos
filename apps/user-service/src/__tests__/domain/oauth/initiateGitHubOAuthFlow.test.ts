@@ -4,28 +4,7 @@ import { initiateGitHubOAuthFlow } from '../../../domain/oauth/usecases/initiate
 import { OAuthProviders } from '../../../domain/oauth/models/OAuthConnection.js';
 import type { GitHubOAuthClient } from '../../../domain/oauth/ports/GitHubOAuthClient.js';
 import type { Logger } from '@intexuraos/common-core';
-
-interface CapturedLog {
-  method: string;
-  obj: Record<string, unknown>;
-  msg?: string;
-}
-
-function makeFakeLogger(captured: CapturedLog[]): Logger {
-  const push = (method: string, obj: object, msg?: string): void => {
-    const entry: CapturedLog = { method, obj: obj as Record<string, unknown> };
-    if (msg !== undefined) {
-      entry.msg = msg;
-    }
-    captured.push(entry);
-  };
-  return {
-    info: (obj: object, msg?: string): void => push('info', obj, msg),
-    warn: (obj: object, msg?: string): void => push('warn', obj, msg),
-    error: (obj: object, msg?: string): void => push('error', obj, msg),
-    debug: (obj: object, msg?: string): void => push('debug', obj, msg),
-  };
-}
+import { type CapturedLog, getInfoCall, getLogObj, makeFakeLogger } from './_fixtures.js';
 
 function makeStubGitHubOAuthClient(): GitHubOAuthClient {
   return {
@@ -41,15 +20,6 @@ function makeStubGitHubOAuthClient(): GitHubOAuthClient {
       throw new Error('not used');
     },
   };
-}
-
-function getInfoCall(captured: CapturedLog[], index: number): CapturedLog {
-  const infoCalls = captured.filter((c) => c.method === 'info');
-  const entry = infoCalls[index];
-  if (entry === undefined) {
-    throw new Error(`expected info call at index ${String(index)}`);
-  }
-  return entry;
 }
 
 describe('initiateGitHubOAuthFlow', () => {
@@ -74,8 +44,9 @@ describe('initiateGitHubOAuthFlow', () => {
     );
 
     for (const entry of captured) {
-      expect('state' in entry.obj).toBe(false);
-      const serialized = JSON.stringify(entry.obj);
+      const obj = getLogObj(entry);
+      expect('state' in obj).toBe(false);
+      const serialized = JSON.stringify(obj);
       expect(serialized.includes(result.state)).toBe(false);
       expect(serialized.includes(result.state.slice(0, 16))).toBe(false);
     }
@@ -92,7 +63,7 @@ describe('initiateGitHubOAuthFlow', () => {
     );
 
     const second = getInfoCall(captured, 1);
-    const stateHash = second.obj['stateHash'];
+    const stateHash = getLogObj(second)['stateHash'];
     expect(typeof stateHash).toBe('string');
     expect(stateHash).toMatch(/^[0-9a-f]{12}$/);
     const expected = createHash('sha256').update(result.state).digest('hex').slice(0, 12);
@@ -110,10 +81,11 @@ describe('initiateGitHubOAuthFlow', () => {
     );
 
     const first = getInfoCall(captured, 0);
+    const firstObj = getLogObj(first);
     expect(first.msg).toBe('GitHub OAuth flow initiated');
-    expect(first.obj).toEqual({ userId: 'user-123', provider: OAuthProviders.GITHUB });
-    expect('state' in first.obj).toBe(false);
-    expect('stateHash' in first.obj).toBe(false);
+    expect(firstObj).toEqual({ userId: 'user-123', provider: OAuthProviders.GITHUB });
+    expect('state' in firstObj).toBe(false);
+    expect('stateHash' in firstObj).toBe(false);
   });
 
   it('preserves the second log message string verbatim', () => {
@@ -164,6 +136,6 @@ describe('initiateGitHubOAuthFlow', () => {
 
     const second = getInfoCall(captured, 1);
     const expected = createHash('sha256').update(result.state).digest('hex').slice(0, 12);
-    expect(second.obj['stateHash']).toBe(expected);
+    expect(getLogObj(second)['stateHash']).toBe(expected);
   });
 });
