@@ -15,6 +15,16 @@ export interface EnqueueTaskInput {
   taskId: string;
   /** User ID who owns the task (for WhatsApp notification). */
   userId: string;
+  /**
+   * Optional override for the `queuedAt` timestamp written to the task document.
+   *
+   * When omitted, the implementation stamps `new Date()` (current time).
+   *
+   * Used by `autoRetryTask` (INT-1560 Fix D) to carry forward the original
+   * task's `queuedAt` so the retry-chain TTL is measured from the FIRST
+   * attempt's queue entry, bounding the entire chain.
+   */
+  queuedAt?: Date;
 }
 
 export interface EnqueueManyTasksInput {
