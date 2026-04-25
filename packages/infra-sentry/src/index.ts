@@ -42,3 +42,5 @@ export {
 export { setupSentryErrorHandler } from './fastify.js';
 export { createAppLogger, type AppLoggerConfig } from './appLogger.js';
 export { createLogStream } from './logStream.js';
+export { initWorker, type WorkerBootstrapConfig, type WorkerBootstrap } from './initWorker.js';
+export { SENTRY_REDACT_KEYS, redactObject } from './redact.js';
