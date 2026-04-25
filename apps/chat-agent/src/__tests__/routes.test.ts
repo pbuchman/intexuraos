@@ -540,6 +540,25 @@ describe('chat-agent routes', () => {
     });
   });
 
+  describe('IP rate limiting', () => {
+    it('returns 429 after exceeding the per-IP request budget on /guest-session', async () => {
+      // Budget defined in route schema: 10/min. Use a unique remote address
+      // so this test doesn't interfere with the per-IP budgets shared by the
+      // other tests in this file.
+      const responses: number[] = [];
+      for (let i = 0; i < 15; i++) {
+        const r = await app.inject({
+          method: 'POST',
+          url: '/guest-session',
+          remoteAddress: '203.0.113.7',
+        });
+        responses.push(r.statusCode);
+      }
+      expect(responses.filter((s) => s === 429).length).toBeGreaterThan(0);
+      expect(responses.filter((s) => s === 200).length).toBeLessThanOrEqual(10);
+    });
+  });
+
   describe('GET /docs', () => {
     it('should serve Swagger UI', async () => {
       const response = await app.inject({
