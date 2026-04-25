@@ -222,6 +222,8 @@ export async function attachToExistingContainer(input: AttachExistingInput): Pro
     startedAt: new Date(),
   };
   const taskForensicsPath = volume.ensureTaskForensicsPath(taskId);
+  // INT-1524: snapshot pnpm-lock.yaml so resumed workers also get drift detection.
+  const lockfileSha256 = snapshotLockfile(config.worktreePath);
 
   workers.set(taskId, {
     containerId,
@@ -231,7 +233,9 @@ export async function attachToExistingContainer(input: AttachExistingInput): Pro
     taskRuntimeHomePath,
     attemptRunning: false,
     attemptLogBuffer: '',
+    worktreePath: config.worktreePath,
     ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
+    ...(lockfileSha256 !== null ? { lockfileSha256 } : {}),
   });
 
   return handle;
