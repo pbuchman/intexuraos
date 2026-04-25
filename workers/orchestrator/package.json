@@ -21,11 +21,11 @@
     "@google-cloud/firestore": "^7.10.0",
     "@google/genai": "^1.0.0",
     "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/infra-openrouter": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
     "@intexuraos/llm-utils": "workspace:*",
-    "@intexuraos/infra-openrouter": "workspace:*",
     "@octokit/core": "^6.1.0",
     "@octokit/plugin-retry": "^7.1.0",
     "async-mutex": "^0.5.0",
@@ -38,6 +38,7 @@
     "openai": "^6.15.0",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
+    "yaml": "^2.8.3",
     "zod": "^3.24.1"
   },
   "devDependencies": {
