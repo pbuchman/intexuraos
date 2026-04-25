@@ -16,7 +16,7 @@ import type {
   LifecycleProviderConfig,
 } from './worker-entry-types.js';
 import { buildWorkerEnv, resolveForensicsSeccompSecurityOpt } from './worker-env.js';
-import { snapshotLockfile } from './lockfile-guard.js';
+import { auditLockfile, snapshotLockfile } from './lockfile-guard.js';
 
 export function detectMainGitDir(worktreePath: string): string | null {
   const gitPath = path.join(worktreePath, '.git');
@@ -199,10 +199,11 @@ export interface AttachExistingInput {
   containerId: string;
   volume: DockerVolume;
   workers: Map<string, WorkerEntry>;
+  logger: Logger;
 }
 
 export async function attachToExistingContainer(input: AttachExistingInput): Promise<WorkerHandle> {
-  const { taskId, runtime, config, containerId, volume, workers } = input;
+  const { taskId, runtime, config, containerId, volume, workers, logger } = input;
   const taskSecretsPath = volume.getTaskSecretsPath(taskId);
   const taskRuntimeHomePath = volume.getTaskRuntimeHomePath(taskId, runtime);
 
@@ -224,6 +225,8 @@ export async function attachToExistingContainer(input: AttachExistingInput): Pro
   const taskForensicsPath = volume.ensureTaskForensicsPath(taskId);
   // INT-1524: snapshot pnpm-lock.yaml so resumed workers also get drift detection.
   const lockfileSha256 = snapshotLockfile(config.worktreePath);
+  // INT-1524: warn-level integrity audit — non-fatal; see auditLockfile docs.
+  auditLockfile(config.worktreePath, taskId, logger);
 
   workers.set(taskId, {
     containerId,
@@ -387,6 +390,7 @@ export async function resumeFromPreserved(input: ResumeInput): Promise<WorkerHan
       containerId: preserved.containerId,
       volume,
       workers,
+      logger,
     });
     logger.info(
       { taskId, containerId: preserved.containerId },
@@ -423,6 +427,7 @@ export async function resumeFromOrphan(input: ResumeInput): Promise<WorkerHandle
         containerId: orphanInfo.Id,
         volume,
         workers,
+        logger,
       });
       logger.info(
         { taskId, containerId: orphanInfo.Id },
@@ -605,6 +610,8 @@ export async function createWorkerOrchestration(
     };
 
     const lockfileSha256 = snapshotLockfile(worktreePath);
+    // INT-1524: warn-level integrity audit — non-fatal by design; see auditLockfile docs.
+    auditLockfile(worktreePath, taskId, logger);
     workers.set(taskId, {
       containerId: dockerContainer.id,
       handle,
