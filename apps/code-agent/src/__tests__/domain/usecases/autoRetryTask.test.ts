@@ -323,4 +323,85 @@ describe('autoRetryTask', () => {
       );
     });
   });
+
+  describe('queuedAt carry-forward (Fix D part 1)', () => {
+    it('passes failedTask.queuedAt to enqueue when queuedAt is present', async () => {
+      const t0 = new Date('2026-04-25T10:00:00.000Z');
+      const failedTask = buildTask({
+        id: 'task_orig',
+        queuedAt: Timestamp.fromDate(t0),
+      });
+
+      await autoRetryTask(buildDeps(), {
+        failedTask,
+        failedWorkerLocation: 'home-mac',
+        reason: 'worker_crashed',
+      });
+
+      expect(mockTaskEnqueueService.enqueue).toHaveBeenCalledOnce();
+      const enqueueArgs = mockTaskEnqueueService.enqueue.mock.calls[0]?.[0];
+      expect(enqueueArgs?.queuedAt).toBeInstanceOf(Date);
+      expect((enqueueArgs?.queuedAt as Date).getTime()).toBe(t0.getTime());
+    });
+
+    it('falls back to failedTask.createdAt when queuedAt is undefined', async () => {
+      const t0 = new Date('2026-04-25T09:00:00.000Z');
+      const failedTask = buildTask({
+        id: 'task_orig',
+        createdAt: Timestamp.fromDate(t0),
+        // queuedAt explicitly omitted
+      });
+
+      await autoRetryTask(buildDeps(), {
+        failedTask,
+        failedWorkerLocation: 'home-mac',
+        reason: 'worker_crashed',
+      });
+
+      expect(mockTaskEnqueueService.enqueue).toHaveBeenCalledOnce();
+      const enqueueArgs = mockTaskEnqueueService.enqueue.mock.calls[0]?.[0];
+      expect(enqueueArgs?.queuedAt).toBeInstanceOf(Date);
+      expect((enqueueArgs?.queuedAt as Date).getTime()).toBe(t0.getTime());
+    });
+  });
+
+  describe('autoRetryAttempt increment (Fix D part 2)', () => {
+    it.each([
+      { input: undefined, expected: 1 },
+      { input: 1, expected: 2 },
+      { input: 2, expected: 3 },
+    ])(
+      'increments autoRetryAttempt from $input to $expected',
+      async ({ input, expected }) => {
+        // Build a chain so countRetryDepth produces a non-zero depth matching `input` semantics
+        // For input=undefined (no prior retry chain), depth=0 → attempt=1
+        // For input=1 (one prior retry), chain is task_failed → task_prior, depth=1 → attempt=2
+        // For input=2 (two prior retries), depth=2 → attempt=3
+        const failedTaskId = 'task_failed';
+        const overrides: Partial<CodeTask> = { id: failedTaskId };
+
+        if (input === 1) {
+          overrides.retriedFrom = 'task_prior_1';
+          mockCodeTaskRepo.findById.mockResolvedValueOnce(ok(buildTask({ id: 'task_prior_1' })));
+        } else if (input === 2) {
+          overrides.retriedFrom = 'task_prior_1';
+          mockCodeTaskRepo.findById
+            .mockResolvedValueOnce(ok(buildTask({ id: 'task_prior_1', retriedFrom: 'task_prior_2' })))
+            .mockResolvedValueOnce(ok(buildTask({ id: 'task_prior_2' })));
+        }
+
+        const failedTask = buildTask(overrides);
+
+        await autoRetryTask(buildDeps(), {
+          failedTask,
+          failedWorkerLocation: 'home-mac',
+          reason: 'worker_crashed',
+        });
+
+        expect(mockCodeTaskRepo.create).toHaveBeenCalledOnce();
+        const createInput = mockCodeTaskRepo.create.mock.calls[0]?.[0];
+        expect(createInput?.autoRetryAttempt).toBe(expected);
+      },
+    );
+  });
 });

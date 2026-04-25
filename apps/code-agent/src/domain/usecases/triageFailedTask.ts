@@ -16,6 +16,7 @@ import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import { classifyFailure } from '../utils/classifyFailure.js';
 import { autoRetryTask } from './autoRetryTask.js';
 import { buildFailureTriagePrompt, parseTriageResponse } from '../prompts/failureTriagePrompt.js';
+import { loadConfig } from '../../config.js';
 
 export type TriageAction = 'retried' | 'retried_after_cooloff' | 'permanent_failure';
 
@@ -60,7 +61,23 @@ export async function triageFailedTask(
     // Fall through to retry
   }
 
-  // Step 4: Attempt auto-retry
+  // Step 4a: Auto-retry chain attempt cap (INT-1560 Fix D part 2).
+  // Checked BEFORE invoking autoRetryTask so persistently failing tasks cannot
+  // spawn indefinite retry chains. Default cap is 3 (config.autoRetry.maxAttempts).
+  const config = loadConfig();
+  const attemptsSoFar = task.autoRetryAttempt ?? 0;
+  if (attemptsSoFar >= config.autoRetry.maxAttempts) {
+    await whatsappNotifier.notifyTaskAutoRetryExhausted(task.userId, task, {
+      attempts: attemptsSoFar,
+      errorMessage: taskError.message,
+    });
+    return {
+      action: 'permanent_failure' as const,
+      reason: `Auto-retry cap reached after ${String(attemptsSoFar)} attempts (max=${String(config.autoRetry.maxAttempts)})`,
+    };
+  }
+
+  // Step 4b: Attempt auto-retry
   const retryResult = await autoRetryTask(
     { logger, codeTaskRepo, taskEnqueueService, whatsappNotifier, orchestratorSecret: deps.orchestratorSecret },
     {
