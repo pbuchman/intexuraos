@@ -1,5 +1,6 @@
 import { stripDockerHeaders } from '../log-formatter.js';
 import { AGENT_CONTRACTS, type AgentContract, type FieldSpec } from './contracts.js';
+import { extractAssistantText } from './ndjson-extractor.js';
 
 /**
  * [INT-1470] Set of all known field names + aliases from every contract,
@@ -50,12 +51,29 @@ const KNOWN_MARKER_ALTERNATION = KNOWN_MARKERS.map((m) =>
  * log-driver prefix). Markers buried inside diffs or code blocks are
  * ignored.
  *
- * Returns null if no standalone-line marker is present.
+ * Returns null if no standalone-line marker is present anywhere in the
+ * transcript — even after the [INT-1560] NDJSON-aware fallback.
+ *
+ * [INT-1560] Two-phase locate. Phase 1 runs the strict line-anchored search
+ * over the docker-header-stripped transcript exactly as before, preserving
+ * every existing fixture and external caller. Phase 2 only runs when phase
+ * 1 returns null: it parses each NDJSON line as a Claude SDK event and
+ * substitutes any extractable assistant `text` / result `result` field with
+ * its un-escaped content (`extractAssistantText`), then re-runs the strict
+ * search. This catches the production case where the agent's final block
+ * exists only as a JSON-escaped string inside an `{"type":"assistant",...}`
+ * event — captured from the live home-dev orchestrator on 2026-04-25
+ * (see `__tests__/fixtures/completion-verifier/raw-rawlogs/`).
  */
 export function locateFinalBlock(transcript: string, marker: string): string | null {
   const normalized = stripDockerHeaders(transcript);
-  const lines = normalized.split('\n');
+  const direct = locateBlockInLines(normalized.split('\n'), marker);
+  if (direct !== null) return direct;
+  const extracted = extractAssistantText(normalized);
+  return locateBlockInLines(extracted.split('\n'), marker);
+}
 
+function locateBlockInLines(lines: readonly string[], marker: string): string | null {
   // Match a line whose trimmed content is MARKER, optionally wrapped in:
   //   - leading log-driver prefix: [something]
   //   - leading opening fence: ```  or ```<lang>
