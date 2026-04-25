@@ -996,6 +996,52 @@ describe('DockerProvider', () => {
       expect(driftCall).toBeUndefined();
     });
 
+    it('emits lockfile-drift on resume path when pnpm-lock changes between attach and teardown (INT-1524)', async () => {
+      const fsModule = await import('node:fs');
+
+      // Path-keyed mock — robust against any incidental readFileSync calls.
+      let lockState = 'lock-resume-v1';
+      (fsModule.readFileSync as Mock).mockImplementation((filePath: unknown) => {
+        if (typeof filePath === 'string' && filePath.endsWith('pnpm-lock.yaml')) {
+          return Buffer.from(lockState);
+        }
+        if (
+          typeof filePath === 'string' &&
+          filePath.includes('code-worker-forensics-seccomp.json')
+        ) {
+          return '{"defaultAction":"SCMP_ACT_ERRNO","syscalls":[]}';
+        }
+        return '';
+      });
+
+      // Stand up + preserve a worker so the next createWorker takes the
+      // resumeFromPreserved → attachToExistingContainer path.
+      const initialConfig = createTestConfig({ taskId: 'resume-drift-task' });
+      await provider.createWorker(initialConfig);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('resume-drift-task');
+
+      (mockLogger.warn as Mock).mockClear();
+
+      // Resume — attachToExistingContainer captures sha('lock-resume-v1').
+      await provider.createWorker(
+        createTestConfig({
+          taskId: 'resume-drift-task',
+          continueSession: true,
+          onComplete: vi.fn(),
+        })
+      );
+      // Tamper before the run-attempt teardown fires.
+      lockState = 'lock-resume-v2-tampered';
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const driftWarnCall = (mockLogger.warn as Mock).mock.calls.find((call: unknown[]) => {
+        const ctx = call[0] as { event?: string } | undefined;
+        return ctx?.event === 'lockfile-drift';
+      });
+      expect(driftWarnCall).toBeDefined();
+    });
+
     it('recreates secrets directory and writes prompt files when restoring preserved worker', async () => {
       const fs = await import('node:fs');
       const config = createTestConfig({ taskId: 'preserved-task-2' });
