@@ -20,7 +20,7 @@ import {
 import { checkDedupLayers, generateDedupKey } from '../firestore/task-dedup.js';
 import {
   activeByLinearIssue, activeReviewForPR, allNotArchived, archivableTasks, buildListQuery,
-  dispatchedOrRunningForPR, erroredExecutionMemoryPostRun, latestAskAgentForUser,
+  dispatchedOrRunningForLinearIssue, dispatchedOrRunningForPR, erroredExecutionMemoryPostRun, latestAskAgentForUser,
   nonArchivedForUser, nonArchivedGlobal, pendingExecutionMemoryPostRun,
   plannedPlanningByLinearIssue, preservedPullRequestForPR, prTasksByCreatedAt,
   queuedOrderedByAge, recentByLinearIssue, recentRemediationForPR, scanPrWindow,
@@ -226,393 +226,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
       try { return await firestore.runTransaction((t) => operation(t)); }
       catch (error) {
         logger.error({ error }, 'Failed to run repository transaction');
-        return err({
-          code: 'FIRESTORE_ERROR',
-          message: `Firestore error: ${getErrorMessage(error)}`,
-        });
-      }
-    },
-
-    listPendingExecutionMemoryPostRun: async (limit: number): Promise<Result<CodeTask[], RepositoryError>> => {
-      try {
-        const snapshot = await collection
-          .where('agentType', 'in', ['execution', 'planning', 'review', 'remediation', 'pull_request'])
-          .where('executionMemoryPostRun.status', '==', 'pending')
-          .orderBy('completedAt', 'asc')
-          .limit(limit)
-          .get();
-
-        return ok(snapshot.docs.map((doc) =>
-          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
-        ));
-      } catch (error) {
-        logger.error({ error, limit }, 'Failed to list pending execution memory post-run tasks');
-        return err({
-          code: 'FIRESTORE_ERROR',
-          message: `Firestore error: ${getErrorMessage(error)}`,
-        });
-      }
-    },
-
-    listErroredExecutionMemoryPostRun: async (): Promise<Result<CodeTask[], RepositoryError>> => {
-      try {
-        const snapshot = await collection
-          .where('executionMemoryPostRun.status', '==', 'error')
-          .limit(50)
-          .get();
-        return ok(snapshot.docs.map((doc) =>
-          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
-        ));
-      } catch (error) {
-        logger.error({ error }, 'Failed to list errored execution memory post-run tasks');
-        return err({
-          code: 'FIRESTORE_ERROR',
-          message: `Firestore error: ${getErrorMessage(error)}`,
-        });
-      }
-    },
-
-    findByPR: async (
-      repository: string,
-      prNumber: number
-    ): Promise<Result<CodeTask | null, RepositoryError>> => {
-      try {
-        const snapshot = await collection
-          .where('repository', '==', repository)
-          .where('prNumber', '==', prNumber)
-          .orderBy('createdAt', 'desc')
-          .limit(50)
-          .get();
-
-        for (const doc of snapshot.docs) {
-          const data = doc.data();
-          if (!isMergeConflictTaskData(data)) {
-            return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
-          }
-        }
-
-        return ok(null);
-      } catch (error) {
-        logger.error({ error, repository, prNumber }, 'Failed to find task by PR');
-        return err({
-          code: 'FIRESTORE_ERROR',
-          message: `Firestore error: ${getErrorMessage(error)}`,
-        });
-      }
-    },
-
-    findActiveReviewForPR: async (
-      repository: string,
-      prNumber: number
-    ): Promise<Result<CodeTask | null, RepositoryError>> => {
-      try {
-        const snapshot = await collection
-          .where('repository', '==', repository)
-          .where('prNumber', '==', prNumber)
-          .where('agentType', '==', 'review')
-          .where('status', 'in', ACTIVE_TASK_STATUSES)
-          .limit(1)
-          .get();
-
-        if (snapshot.empty) {
-          return ok(null);
-        }
-
-        const doc = snapshot.docs[0]!;
-        return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
-      } catch (error) {
-        logger.error({ error, repository, prNumber }, 'Failed to find active review task by PR');
-        return err({
-          code: 'FIRESTORE_ERROR',
-          message: `Firestore error: ${getErrorMessage(error)}`,
-        });
-      }
-    },
-
-    hasDispatchedOrRunningForPR: async (
-      repository: string,
-      prNumber: number
-    ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>> => {
-      try {
-        const snapshot = await collection
-          .where('repository', '==', repository)
-          .where('prNumber', '==', prNumber)
-          .where('status', 'in', DISPATCHED_OR_RUNNING_STATUSES)
-          .limit(1)
-          .get();
-
-        if (snapshot.empty) {
-          return ok({ hasActive: false });
-        }
-
-        const doc = snapshot.docs[0]!;
-        return ok({ hasActive: true, taskId: doc.id });
-      } catch (error) {
-        logger.error({ error, repository, prNumber }, 'Failed to check dispatched/running task for PR');
-        return err({
-          code: 'FIRESTORE_ERROR',
-          message: `Firestore error: ${getErrorMessage(error)}`,
-        });
-      }
-    },
-
-    hasOtherDispatchedOrRunningForLinearIssue: async (
-      taskId: string,
-      linearIssueId: string,
-    ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>> => {
-      try {
-        // Use DISPATCHED_OR_RUNNING_STATUSES (NOT ACTIVE_TASK_STATUSES) — including 'queued'
-        // would deadlock two queued reviews on the same Linear issue (each blocking the other).
-        const snapshot = await collection
-          .where('linearIssueId', '==', linearIssueId)
-          .where('status', 'in', DISPATCHED_OR_RUNNING_STATUSES)
-          .get();
-
-        // Exclude the candidate's own document from the results.
-        const sibling = snapshot.docs.find((doc) => doc.id !== taskId);
-        if (sibling === undefined) {
-          return ok({ hasActive: false });
-        }
-        return ok({ hasActive: true, taskId: sibling.id });
-      } catch (error) {
-        logger.error(
-          { error, taskId, linearIssueId },
-          'Failed to check non-self dispatched/running task for Linear issue',
-        );
-        return err({
-          code: 'FIRESTORE_ERROR',
-          message: `Firestore error: ${getErrorMessage(error)}`,
-        });
-      }
-    },
-
-    claimForDispatch: async (
-      taskId: string,
-    ): Promise<Result<
-      | { claimed: true }
-      | { claimed: false; alreadyClaimed: true }
-      | { claimed: false; notFound: true },
-      RepositoryError
-    >> => {
-      const docRef = collection.doc(taskId);
-      try {
-        const outcome = await firestore.runTransaction(
-          async (
-            txn,
-          ): Promise<
-            | { claimed: true }
-            | { claimed: false; alreadyClaimed: true }
-            | { claimed: false; notFound: true }
-          > => {
-            const snap = await txn.get(docRef);
-            if (!snap.exists) {
-              return { claimed: false, notFound: true };
-            }
-            const data = snap.data() ?? {};
-            if (data['status'] !== 'queued') {
-              return { claimed: false, alreadyClaimed: true };
-            }
-            txn.update(docRef, {
-              status: 'dispatched',
-              dispatchedAt: Timestamp.fromDate(new Date()),
-              updatedAt: Timestamp.fromDate(new Date()),
-            });
-            return { claimed: true };
-          },
-        );
-        return ok(outcome);
-      } catch (error) {
-        logger.error({ error, taskId }, 'Failed to claim task for dispatch');
-        return err({
-          code: 'FIRESTORE_ERROR',
-          message: `Firestore error: ${getErrorMessage(error)}`,
-        });
-      }
-    },
-
-    findLatestExecutionTaskByPR: async (
-      repository: string,
-      prNumber: number
-    ): Promise<Result<CodeTask | null, RepositoryError>> => {
-      try {
-        // Query the newest 50 tasks for this PR and filter in-memory.
-        // Uses limit(50) instead of a Firestore inequality filter on agentType
-        // to avoid a composite index. 50 is generous — a PR would need 50+
-        // consecutive review tasks before the oldest non-review task falls
-        // outside this window.
-        const snapshot = await collection
-          .where('repository', '==', repository)
-          .where('prNumber', '==', prNumber)
-          .orderBy('createdAt', 'desc')
-          .limit(50)
-          .get();
-
-        // Find the first execution-eligible task.
-        // Excludes review, remediation, planning, and merge-conflict follow-up tasks.
-        for (const doc of snapshot.docs) {
-          const data = doc.data();
-          const agentType = data['agentType'] as string | undefined;
-          // Treat missing agentType as execution-eligible (backward compatibility)
-          if (agentType !== 'review' && agentType !== 'remediation' && agentType !== 'planning' && !isMergeConflictTaskData(data)) {
-            return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
-          }
-        }
-
-        if (snapshot.docs.length === 50) {
-          logger.warn(
-            { repository, prNumber, docsScanned: 50 },
-            'findLatestExecutionTaskByPR exhausted 50-doc window without finding an execution-eligible task',
-          );
-        }
-
-        return ok(null);
-      } catch (error) {
-        logger.error({ error, repository, prNumber }, 'Failed to find latest execution task by PR');
-        return err({
-          code: 'FIRESTORE_ERROR',
-          message: `Firestore error: ${getErrorMessage(error)}`,
-        });
-      }
-    },
-
-    findOriginTaskByPR: async (
-      repository: string,
-      prNumber: number
-    ): Promise<Result<CodeTask | null, RepositoryError>> => {
-      try {
-        // Query the newest 50 tasks for this PR and filter in-memory.
-        // Uses limit(50) instead of a Firestore inequality filter on agentType
-        // to avoid a composite index.
-        const snapshot = await collection
-          .where('repository', '==', repository)
-          .where('prNumber', '==', prNumber)
-          .orderBy('createdAt', 'desc')
-          .limit(50)
-          .get();
-
-        // Find the origin task: planning/execution preferred, pull_request as fallback
-        let pullRequestFallback: FirebaseFirestore.QueryDocumentSnapshot | null = null;
-        for (const doc of snapshot.docs) {
-          const data = doc.data();
-          const agentType = data['agentType'] as string | undefined;
-          if (agentType === 'planning' || agentType === 'execution') {
-            return ok(toCodeTask(doc as { id: string; data(): Record<string, unknown> }));
-          }
-          if (agentType === 'pull_request' && pullRequestFallback === null) {
-            pullRequestFallback = doc;
-          }
-        }
-
-        if (snapshot.docs.length === 50) {
-          logger.warn(
-            { repository, prNumber, docsScanned: 50 },
-            'findOriginTaskByPR exhausted 50-doc window without finding an origin task',
-          );
-        }
-
-        return ok(
-          pullRequestFallback !== null
-            ? toCodeTask(pullRequestFallback as { id: string; data(): Record<string, unknown> })
-            : null
-        );
-      } catch (error) {
-        logger.error({ error, repository, prNumber }, 'Failed to find origin task by PR');
-        return err({
-          code: 'FIRESTORE_ERROR',
-          message: `Firestore error: ${getErrorMessage(error)}`,
-        });
-      }
-    },
-
-    findRecentTasksByLinearIssue: async (
-      linearIssueId: string,
-      limit: number
-    ): Promise<Result<CodeTask[], RepositoryError>> => {
-      try {
-        const snapshot = await collection
-          .where('linearIssueId', '==', linearIssueId)
-          .orderBy('createdAt', 'desc')
-          .limit(limit)
-          .get();
-
-        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
-          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
-        );
-
-        return ok(tasks);
-      } catch (error) {
-        logger.error({ error, linearIssueId, limit }, 'Failed to find recent tasks by Linear issue');
-        return err({
-          code: 'FIRESTORE_ERROR',
-          message: `Firestore error: ${getErrorMessage(error)}`,
-        });
-      }
-    },
-
-    listAllNonArchived: async (userId: string): Promise<Result<CodeTask[], RepositoryError>> => {
-      try {
-        const snapshot = await collection
-          .where('userId', '==', userId)
-          .where('status', 'in', NON_ARCHIVED_STATUSES)
-          .orderBy('createdAt', 'desc')
-          .get();
-
-        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
-          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
-        );
-
-        return ok(tasks);
-      } catch (error) {
-        logger.error({ error, userId }, 'Failed to list all non-archived tasks');
-        return err({
-          code: 'FIRESTORE_ERROR',
-          message: `Firestore error: ${getErrorMessage(error)}`,
-        });
-      }
-    },
-
-    listAllNonArchivedGlobal: async (): Promise<Result<CodeTask[], RepositoryError>> => {
-      try {
-        const snapshot = await collection
-          .where('status', 'in', NON_ARCHIVED_STATUSES)
-          .orderBy('updatedAt', 'asc')
-          .get();
-
-        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
-          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
-        );
-
-        return ok(tasks);
-      } catch (error) {
-        logger.error({ error }, 'Failed to list all non-archived tasks globally');
-        return err({
-          code: 'FIRESTORE_ERROR',
-          message: `Firestore error: ${getErrorMessage(error)}`,
-        });
-      }
-    },
-
-    findAllNonArchived: async (): Promise<Result<CodeTask[], RepositoryError>> => {
-      try {
-        // Uses != 'archived' (not 'in NON_ARCHIVED_STATUSES') deliberately:
-        // this approach is future-proof — any new status added later is automatically
-        // included, ensuring the hasActive safety check in the use case always sees
-        // the complete picture. listAllNonArchivedGlobal uses 'in' for backward compat.
-        const snapshot = await collection
-          .where('status', '!=', 'archived')
-          .get();
-
-        const tasks = snapshot.docs.map((doc: QueryDocumentSnapshot) =>
-          toCodeTask(doc as { id: string; data(): Record<string, unknown> })
-        );
-
-        return ok(tasks);
-      } catch (error) {
-        logger.error({ error }, 'Failed to find all non-archived tasks');
-        return err({
-          code: 'FIRESTORE_ERROR',
-          message: `Firestore error: ${getErrorMessage(error)}`,
-        });
+        return err(firestoreError(error));
       }
     },
     listPendingExecutionMemoryPostRun: (limit) => guarded(
@@ -666,5 +280,53 @@ export const createFirestoreCodeTaskRepository = (deps: {
       () => docsToTasks(allNotArchived(collection)),
       {}, 'Failed to find all non-archived tasks',
     ),
+    /**
+     * [INT-1560 Fix B] Linear-issue-scoped sibling check used by drainTaskQueue
+     * to defer review-side candidates when a non-self planning/execution task is
+     * actively running on the same Linear issue. Excludes the candidate's own
+     * document from the result so a self-reference cannot self-block.
+     *
+     * Filter uses `DISPATCHED_OR_RUNNING_STATUSES` (no `queued`) to avoid the
+     * deadlock where two queued reviews on the same Linear issue see each other
+     * as "active."
+     */
+    hasOtherDispatchedOrRunningForLinearIssue: (taskId, linearIssueId) => guarded(async () => {
+      const snap = await dispatchedOrRunningForLinearIssue(collection, linearIssueId).get();
+      const sibling = snap.docs.find((d) => d.id !== taskId);
+      const out: { hasActive: boolean; taskId?: string } = { hasActive: sibling !== undefined };
+      if (sibling !== undefined) out.taskId = sibling.id;
+      return out;
+    }, { taskId, linearIssueId }, 'Failed to check dispatched/running sibling for Linear issue'),
+    /**
+     * [INT-1560 Fix E] Atomic queued→dispatched transition via Firestore
+     * transaction. Used by drainTaskQueue BEFORE calling the network dispatcher
+     * so that two replicas racing on the same queued task observe exactly one
+     * winner. The losing replica sees `claimed: false, alreadyClaimed: true`
+     * and continues to the next candidate instead of duplicating the dispatch.
+     *
+     * Returns:
+     *   - `claimed: true` — caller is the unique owner of this task; safe to dispatch.
+     *   - `claimed: false, alreadyClaimed: true` — task transitioned out of `queued`
+     *     before this caller's transaction won.
+     *   - `claimed: false, notFound: true` — task document does not exist.
+     *
+     * Caller is responsible for rolling the status back to `queued` if the
+     * subsequent dispatch attempt fails with a retryable error.
+     */
+    claimForDispatch: (taskId) => guarded(async () => {
+      const docRef = collection.doc(taskId);
+      return await firestore.runTransaction(async (txn) => {
+        const snap = await txn.get(docRef);
+        if (!snap.exists) {
+          return { claimed: false as const, notFound: true as const };
+        }
+        const status = snap.get('status') as string | undefined;
+        if (status !== 'queued') {
+          return { claimed: false as const, alreadyClaimed: true as const };
+        }
+        txn.update(docRef, { status: 'dispatched', dispatchedAt: new Date() });
+        return { claimed: true as const };
+      });
+    }, { taskId }, 'Failed to claim task for dispatch'),
   };
 };
