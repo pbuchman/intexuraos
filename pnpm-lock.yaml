@@ -1975,6 +1975,9 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../../packages/common-core
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       firebase-admin:
         specifier: ^13.0.0
         version: 13.6.0(encoding@0.1.13)
@@ -2097,6 +2100,9 @@ importers:
       '@intexuraos/infra-pubsub':
         specifier: workspace:*
         version: link:../../packages/infra-pubsub
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       '@speechmatics/batch-client':
         specifier: ^5.1.0
         version: 5.1.0

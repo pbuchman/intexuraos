@@ -1,12 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../logger.js', () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
+const mockLogger = vi.hoisted(() => ({
+  level: 'info',
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+  child: vi.fn(),
+}));
+
+const mockFlush = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+
+vi.mock('@intexuraos/infra-sentry', () => ({
+  initWorker: vi.fn(() => ({
+    logger: mockLogger,
+    flush: mockFlush,
+  })),
 }));
 
 const mockCleanupOldLogs = vi.hoisted(() => vi.fn());
@@ -26,6 +35,8 @@ vi.mock('@google-cloud/functions-framework', () => ({
 describe('log-cleanup Cloud Function', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    // Make logger.child() return the same mock so call assertions work transitively.
+    mockLogger.child.mockReturnValue(mockLogger);
     registeredHandlers.clear();
     vi.resetModules();
     await import('../index.js');
@@ -57,6 +68,7 @@ describe('log-cleanup Cloud Function', () => {
       data: {
         message: {
           data: Buffer.from('{}').toString('base64'),
+          attributes: { 'x-request-id': 'req-abc' },
         },
       },
     };
