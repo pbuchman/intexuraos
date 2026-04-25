@@ -1,6 +1,6 @@
 import type Docker from 'dockerode';
 import * as fs from 'node:fs';
-import type { Logger } from '@intexuraos/common-core';
+import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
 
 export interface DockerRegistryConfig {
   imageName: string;
@@ -90,7 +90,8 @@ export class DockerRegistry {
         );
       });
     } catch (error) {
-      throw new Error(
+      throw new IntexuraOSError(
+        'DOWNSTREAM_ERROR',
         `Failed to pull worker image ${imageName}: ${error instanceof Error ? error.message : String(error)}`
       );
     }

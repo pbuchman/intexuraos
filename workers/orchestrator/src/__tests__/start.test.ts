@@ -45,6 +45,7 @@ vi.mock('../bootstrap/env-config.js', () => ({
       openRouterApiKey: '',
       geminiApiKey: 'g',
       logLevel: 'info',
+      environment: 'test',
     };
   }),
 }));
@@ -135,6 +136,20 @@ vi.mock('pino', () => {
   return { default: pino };
 });
 
+// Mock initWorker so the bootstrap path doesn't touch Sentry / OTel during
+// unit tests. The mock returns a fake logger + flush so we can assert that
+// `flush` is forwarded into `main()` on the SIGTERM handoff.
+const mockFlush = vi.fn(async () => undefined);
+vi.mock('@intexuraos/infra-sentry', () => ({
+  initWorker: vi.fn(() => {
+    callOrder.push('initWorker');
+    return {
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+      flush: mockFlush,
+    };
+  }),
+}));
+
 // Skip the git `rev-parse HEAD` probe.
 vi.mock('node:child_process', async () => {
   const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process');
@@ -157,6 +172,7 @@ import {
 } from '../bootstrap/service-wiring.js';
 import { ensureRepository } from '../services/repo-manager.js';
 import { main } from '../main.js';
+import { initWorker } from '@intexuraos/infra-sentry';
 
 describe('start() — full bootstrap happy path', () => {
   beforeEach(() => {
@@ -178,7 +194,73 @@ describe('start() — full bootstrap happy path', () => {
     expect(buildOrchestratorServices).toHaveBeenCalledOnce();
     expect(validateWorkerApiKeys).toHaveBeenCalledOnce();
     expect(startCredentialRefreshLoop).toHaveBeenCalledOnce();
+    expect(initWorker).toHaveBeenCalledOnce();
     expect(main).toHaveBeenCalledOnce();
+  });
+
+  it('initializes the worker with serviceName=orchestrator and the env environment', async () => {
+    await start();
+
+    expect(initWorker).toHaveBeenCalledWith(
+      expect.objectContaining({ serviceName: 'orchestrator', environment: 'test' })
+    );
+  });
+
+  it('forwards the flush callback returned by initWorker into main()', async () => {
+    await start();
+
+    const mainArgs = vi.mocked(main).mock.calls[0];
+    expect(mainArgs).toBeDefined();
+    // 10th positional arg (index 9) is the flush callback.
+    const flushArg = mainArgs?.[9];
+    expect(flushArg).toBe(mockFlush);
+  });
+
+  it('forwards sentryDsn and release into initWorker when env supplies them', async () => {
+    // Drives the truthy arms of the conditional spreads in start.ts:
+    //   ...(env.sentryDsn !== undefined ? { sentryDsn: env.sentryDsn } : {})
+    //   ...(env.release !== undefined ? { release: env.release } : {})
+    vi.mocked(loadEnvConfig).mockReturnValueOnce({
+      repoUrl: 'https://example.com/repo.git',
+      codeAgentUrl: 'https://code-agent.test',
+      internalAuthToken: 'internal',
+      orchestratorSecret: 'secret',
+      usageWebhookUrl: 'https://usage.test',
+      githubAppId: '1',
+      githubInstallationId: '2',
+      projectId: 'proj',
+      gcpSaKeyPath: '/tmp/sa.json',
+      port: 19199,
+      capacity: 1,
+      completionMaxAttempts: 3,
+      validationModels: 'gemini-2.5-flash',
+      workerImage: 'image:latest',
+      keepContainersAlive: false,
+      workerForensicsMode: false,
+      preserveWorkerContainers: true,
+      linearApiKey: 'lin',
+      sentryAuthToken: 'sentry',
+      minimaxApiKey: 'm',
+      mimoApiKey: 'm',
+      dashscopeApiKey: 'd',
+      openRouterApiKey: '',
+      geminiApiKey: 'g',
+      logLevel: 'info',
+      environment: 'production',
+      sentryDsn: 'https://x@sentry.io/1',
+      release: 'orchestrator-00099-rev',
+    });
+
+    await start();
+
+    expect(initWorker).toHaveBeenCalledWith(
+      expect.objectContaining({
+        serviceName: 'orchestrator',
+        environment: 'production',
+        sentryDsn: 'https://x@sentry.io/1',
+        release: 'orchestrator-00099-rev',
+      })
+    );
   });
 
   it('invokes bootstrap modules in the documented order', async () => {
@@ -198,6 +280,7 @@ describe('start() — full bootstrap happy path', () => {
       'validateGcpCredentials',
       'fetchGitHubKeys',
       'ensurePortAvailable',
+      'initWorker',
       'ensureRepository',
       'buildOrchestratorServices',
       'startCredentialRefreshLoop',
@@ -253,6 +336,7 @@ describe('start() — full bootstrap happy path', () => {
       gitUserNameOverride: 'Test User',
       gitUserEmailOverride: 'test@example.com',
       logLevel: 'info',
+      environment: 'test',
     });
 
     await start();

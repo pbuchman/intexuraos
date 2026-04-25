@@ -47,6 +47,7 @@ import {
   parseValidationModels,
   buildValidationClients,
 } from '../services/validation-model-clients.js';
+import { createMetricsClient, type MetricsClient } from '../metrics.js';
 import type { BootstrapEnvConfig } from './env-config.js';
 import { logWorkerAuthStartupStatus } from './api-key-validator.js';
 import { readRepoGitConfig } from './git-identity.js';
@@ -64,9 +65,9 @@ export interface WiringInputs {
   orchestratorDir: string;
   repoPath: string;
   /** Resolved git user name for worker containers (env override ∥ host git). */
-  gitUserName: string | undefined;
+  gitUserName: string | undefined; // @allow-undefined-type -- pre-existing tri-state: undefined means "no override and no host config", which the wiring branches on explicitly
   /** Resolved git user email for worker containers. */
-  gitUserEmail: string | undefined;
+  gitUserEmail: string | undefined; // @allow-undefined-type -- pre-existing tri-state: undefined means "no override and no host config", which the wiring branches on explicitly
 }
 
 export interface WiredServices {
@@ -341,6 +342,12 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
     internalAuthToken: config.internalAuthToken,
   });
 
+  const metricsClient: MetricsClient = createMetricsClient({
+    projectId: env.projectId,
+    serviceName: 'orchestrator',
+    logger,
+  });
+
   const dispatcher = new TaskDispatcher(
     config,
     statePersistence,
@@ -353,7 +360,8 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
     isolationConfig,
     completionControl,
     turnMetricsCollector,
-    agentComplianceValidator
+    agentComplianceValidator,
+    metricsClient
   );
 
   const heartbeatManager = createHeartbeatManager(

@@ -162,4 +162,37 @@ describe('loadEnvConfig', () => {
     expect(config.repoPath).toBeUndefined();
     expect(config.gitUserNameOverride).toBeUndefined();
   });
+
+  it('forwards INTEXURAOS_ENVIRONMENT and falls back to NODE_ENV when unset', () => {
+    const explicit = loadEnvConfig(makeValidEnv({ INTEXURAOS_ENVIRONMENT: 'production' }));
+    expect(explicit.environment).toBe('production');
+
+    const fallback = loadEnvConfig(makeValidEnv({ NODE_ENV: 'staging' }));
+    expect(fallback.environment).toBe('staging');
+
+    const def = loadEnvConfig(makeValidEnv());
+    expect(def.environment).toBe('development');
+  });
+
+  it('surfaces INTEXURAOS_SENTRY_DSN, K_REVISION, and INTEXURAOS_RELEASE overrides', () => {
+    // K_REVISION wins over INTEXURAOS_RELEASE when both are present (Cloud Run
+    // injects K_REVISION on every deploy; the explicit override is for hosts
+    // that don't run on Cloud Run).
+    const cloudRun = loadEnvConfig(
+      makeValidEnv({
+        INTEXURAOS_SENTRY_DSN: 'https://example@sentry.io/1',
+        K_REVISION: 'orchestrator-00007-rev',
+        INTEXURAOS_RELEASE: 'should-not-win',
+      })
+    );
+    expect(cloudRun.sentryDsn).toBe('https://example@sentry.io/1');
+    expect(cloudRun.release).toBe('orchestrator-00007-rev');
+
+    const explicit = loadEnvConfig(makeValidEnv({ INTEXURAOS_RELEASE: 'manual-tag' }));
+    expect(explicit.release).toBe('manual-tag');
+
+    const none = loadEnvConfig(makeValidEnv());
+    expect(none.sentryDsn).toBeUndefined();
+    expect(none.release).toBeUndefined();
+  });
 });
