@@ -7,6 +7,7 @@ import {
   coerceFields,
 } from '../../../services/completion-verifier/block-parser.js';
 import { AGENT_CONTRACTS } from '../../../services/completion-verifier/contracts.js';
+import type { AgentContract } from '../../../services/completion-verifier/contracts.js';
 
 const FIXTURE_ROOT = join(__dirname, '../../fixtures/completion-verifier');
 
@@ -605,5 +606,43 @@ describe('negative fixtures', () => {
       'execution/opus/task_536a87b7-6565-4442-a446-392c33223bb0.negative.txt'
     );
     expect(locateFinalBlock(txt, 'EXECUTION_AGENT_FINAL:')).toBeNull();
+  });
+});
+
+const intOnlyContract: AgentContract = {
+  marker: 'TEST_AGENT_FINAL:',
+  fields: [{ name: 'count', kind: 'int', required: false }],
+};
+
+describe('coerceFields int leniency', () => {
+  it('accepts pure integer', () => {
+    const result = coerceFields({ count: '5' }, intOnlyContract);
+    expect(result.data['count']).toBe(5);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('extracts leading integer followed by parenthesized annotation', () => {
+    const result = coerceFields(
+      { count: '0 (review submitted as single body with no inline comments)' },
+      intOnlyContract
+    );
+    expect(result.data['count']).toBe(0);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('extracts negative leading integer with annotation', () => {
+    const result = coerceFields(
+      { count: '-3 (failed sub-checks)' },
+      intOnlyContract
+    );
+    expect(result.data['count']).toBe(-3);
+  });
+
+  it('still rejects fully non-numeric', () => {
+    const result = coerceFields({ count: 'two' }, intOnlyContract);
+    expect(result.data['count']).toBe(null);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining('not a valid int')])
+    );
   });
 });
