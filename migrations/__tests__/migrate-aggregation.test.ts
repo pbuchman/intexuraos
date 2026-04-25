@@ -284,6 +284,114 @@ describe('aggregateIndexes', () => {
     expect(result.fieldOverrides).toHaveLength(1);
     expect(result.fieldOverrides[0]).toMatchObject(override);
   });
+
+  it('drops indexes whose collectionGroup is in removedCollectionGroups (cleanup migration after source)', () => {
+    const sourceMigration = {
+      indexes: [
+        {
+          collectionGroup: 'compositeFeeds',
+          queryScope: 'COLLECTION',
+          fields: [
+            { fieldPath: 'userId', order: 'ASCENDING' },
+            { fieldPath: 'updatedAt', order: 'DESCENDING' },
+          ],
+        },
+        {
+          collectionGroup: 'tasks',
+          queryScope: 'COLLECTION',
+          fields: [
+            { fieldPath: 'status', order: 'ASCENDING' },
+            { fieldPath: 'createdAt', order: 'DESCENDING' },
+          ],
+        },
+      ],
+    };
+    const cleanupMigration = {
+      indexes: [],
+      removedCollectionGroups: ['compositeFeeds'],
+    };
+
+    const result = aggregateIndexes([sourceMigration, cleanupMigration]);
+
+    expect(result.indexes).toHaveLength(1);
+    expect(result.indexes[0]?.collectionGroup).toBe('tasks');
+  });
+
+  it('drops fieldOverrides whose collectionGroup is in removedCollectionGroups', () => {
+    const sourceMigration = {
+      fieldOverrides: [
+        {
+          collectionGroup: 'by_user',
+          fieldPath: 'userId',
+          indexes: [{ queryScope: 'COLLECTION_GROUP', order: 'ASCENDING' }],
+        },
+        {
+          collectionGroup: 'kept_group',
+          fieldPath: 'foo',
+          indexes: [{ queryScope: 'COLLECTION_GROUP', order: 'ASCENDING' }],
+        },
+      ],
+    };
+    const cleanupMigration = {
+      removedCollectionGroups: ['by_user'],
+    };
+
+    const result = aggregateIndexes([sourceMigration, cleanupMigration]);
+
+    expect(result.fieldOverrides).toHaveLength(1);
+    expect(result.fieldOverrides[0]?.collectionGroup).toBe('kept_group');
+  });
+
+  it('drops indexes regardless of cleanup migration ordering (cleanup before source)', () => {
+    const cleanupMigration = {
+      removedCollectionGroups: ['compositeFeeds'],
+    };
+    const sourceMigration = {
+      indexes: [
+        {
+          collectionGroup: 'compositeFeeds',
+          queryScope: 'COLLECTION',
+          fields: [
+            { fieldPath: 'userId', order: 'ASCENDING' },
+            { fieldPath: 'updatedAt', order: 'DESCENDING' },
+          ],
+        },
+      ],
+    };
+
+    const result = aggregateIndexes([cleanupMigration, sourceMigration]);
+
+    expect(result.indexes).toHaveLength(0);
+  });
+
+  it('unions removedCollectionGroups across multiple cleanup migrations', () => {
+    const sourceMigration = {
+      indexes: [
+        {
+          collectionGroup: 'foo',
+          queryScope: 'COLLECTION',
+          fields: [
+            { fieldPath: 'a', order: 'ASCENDING' },
+            { fieldPath: 'b', order: 'DESCENDING' },
+          ],
+        },
+        {
+          collectionGroup: 'bar',
+          queryScope: 'COLLECTION',
+          fields: [
+            { fieldPath: 'a', order: 'ASCENDING' },
+            { fieldPath: 'b', order: 'DESCENDING' },
+          ],
+        },
+      ],
+    };
+    const cleanupA = { removedCollectionGroups: ['foo'] };
+    const cleanupB = { removedCollectionGroups: ['bar'] };
+
+    const result = aggregateIndexes([sourceMigration, cleanupA, cleanupB]);
+
+    expect(result.indexes).toHaveLength(0);
+  });
 });
 
 describe('normalizeVectorFields', () => {
