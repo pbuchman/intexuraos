@@ -215,6 +215,83 @@ describe('createJwtValidator', () => {
       expect(request.user).toEqual({ userId: 'e2e-test-user', email: undefined });
     });
   });
+
+  describe('production guard', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('should throw when INTEXURAOS_ENVIRONMENT=production AND E2E_MODE=true', () => {
+      vi.stubEnv('INTEXURAOS_ENVIRONMENT', 'production');
+      vi.stubEnv('E2E_MODE', 'true');
+
+      expect(() => createJwtValidator(mockConfig, logger)).toThrow(/E2E_MODE.*production/i);
+    });
+
+    it('should return E2E mock validator when E2E_MODE=true and INTEXURAOS_ENVIRONMENT=development', async () => {
+      vi.stubEnv('INTEXURAOS_ENVIRONMENT', 'development');
+      vi.stubEnv('E2E_MODE', 'true');
+
+      const validator = createJwtValidator(mockConfig, logger);
+      const request: TestRequest = {
+        headers: { authorization: 'Bearer any-token' },
+        url: '/code/submit',
+      };
+      const reply = { fail: vi.fn().mockResolvedValue(undefined) };
+
+      await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
+
+      expect(reply.fail).not.toHaveBeenCalled();
+      expect(request.user).toEqual({ userId: 'e2e-test-user', email: undefined });
+    });
+
+    it('should return E2E mock validator when E2E_MODE=true and INTEXURAOS_ENVIRONMENT is unset', async () => {
+      vi.stubEnv('E2E_MODE', 'true');
+
+      const validator = createJwtValidator(mockConfig, logger);
+      const request: TestRequest = {
+        headers: { authorization: 'Bearer any-token' },
+        url: '/code/submit',
+      };
+      const reply = { fail: vi.fn().mockResolvedValue(undefined) };
+
+      await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
+
+      expect(reply.fail).not.toHaveBeenCalled();
+      expect(request.user).toEqual({ userId: 'e2e-test-user', email: undefined });
+    });
+
+    it('should return real Auth0 validator when INTEXURAOS_ENVIRONMENT=production AND E2E_MODE is unset', async () => {
+      vi.stubEnv('INTEXURAOS_ENVIRONMENT', 'production');
+
+      const validator = createJwtValidator(mockConfig, logger);
+      const request: TestRequest = {
+        headers: { authorization: 'Bearer some-token' },
+        url: '/code/submit',
+      };
+      const reply = { fail: vi.fn().mockResolvedValue(undefined) };
+
+      await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
+
+      expect(reply.fail).toHaveBeenCalledWith('UNAUTHORIZED', 'Invalid or expired token');
+    });
+
+    it('should return real Auth0 validator when INTEXURAOS_ENVIRONMENT=production AND E2E_MODE=false', async () => {
+      vi.stubEnv('INTEXURAOS_ENVIRONMENT', 'production');
+      vi.stubEnv('E2E_MODE', 'false');
+
+      const validator = createJwtValidator(mockConfig, logger);
+      const request: TestRequest = {
+        headers: { authorization: 'Bearer some-token' },
+        url: '/code/submit',
+      };
+      const reply = { fail: vi.fn().mockResolvedValue(undefined) };
+
+      await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
+
+      expect(reply.fail).toHaveBeenCalledWith('UNAUTHORIZED', 'Invalid or expired token');
+    });
+  });
 });
 
 describe('createE2eJwtValidator', () => {
