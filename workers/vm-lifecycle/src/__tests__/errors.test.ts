@@ -10,19 +10,32 @@ describe('isExpectedStartupNetworkError', () => {
     expect(isExpectedStartupNetworkError({})).toBe(false);
   });
 
-  it('returns true for Error with code ECONNREFUSED', () => {
-    const err = Object.assign(new Error('refused'), { code: 'ECONNREFUSED' });
+  it.each([
+    'ECONNREFUSED',
+    'ECONNRESET',
+    'ETIMEDOUT',
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'EHOSTUNREACH',
+    'ENETUNREACH',
+  ])('returns true for Error with code %s', (code) => {
+    const err = Object.assign(new Error('network error'), { code });
     expect(isExpectedStartupNetworkError(err)).toBe(true);
   });
 
-  it('returns true for Error with code ECONNRESET', () => {
-    const err = Object.assign(new Error('reset'), { code: 'ECONNRESET' });
-    expect(isExpectedStartupNetworkError(err)).toBe(true);
-  });
-
-  it('returns true for Error with code ETIMEDOUT', () => {
-    const err = Object.assign(new Error('timed out'), { code: 'ETIMEDOUT' });
-    expect(isExpectedStartupNetworkError(err)).toBe(true);
+  it.each([
+    'ECONNREFUSED',
+    'ECONNRESET',
+    'ETIMEDOUT',
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'EHOSTUNREACH',
+    'ENETUNREACH',
+  ])('returns true when error.cause is an Error with code %s', (code) => {
+    const cause = Object.assign(new Error('network error'), { code });
+    const wrapper = new TypeError('fetch failed');
+    (wrapper as Error & { cause?: unknown }).cause = cause;
+    expect(isExpectedStartupNetworkError(wrapper)).toBe(true);
   });
 
   it('returns false for Error with non-matching code', () => {
@@ -44,13 +57,6 @@ describe('isExpectedStartupNetworkError', () => {
     const err = new Error('timed out');
     err.name = 'TimeoutError';
     expect(isExpectedStartupNetworkError(err)).toBe(true);
-  });
-
-  it('returns true when error.cause is an Error with matching code', () => {
-    const cause = Object.assign(new Error('refused'), { code: 'ECONNREFUSED' });
-    const wrapper = new TypeError('fetch failed');
-    (wrapper as Error & { cause?: unknown }).cause = cause;
-    expect(isExpectedStartupNetworkError(wrapper)).toBe(true);
   });
 
   it('returns true when error.cause is an Error with AbortError name', () => {

@@ -22,6 +22,7 @@ vi.mock('../logger.js', () => ({
 import { startVmFunction, stopVmFunction } from '../index.js';
 import { startVm } from '../start-vm.js';
 import { stopVm } from '../stop-vm.js';
+import { flush } from '../logger.js';
 
 function createMockRequest(method: string, headers: Record<string, string> = {}): Request {
   return {
@@ -142,6 +143,35 @@ describe('startVmFunction', () => {
 
     expect(res.statusCode).toBe(401);
   });
+
+  it('flushes the logger on 405 early return', async () => {
+    const req = createMockRequest('GET');
+    const res = createMockResponse();
+
+    await startVmFunction(req, res);
+
+    expect(flush).toHaveBeenCalled();
+  });
+
+  it('flushes the logger on 401 early return', async () => {
+    const req = createMockRequest('POST', { 'x-internal-auth': 'Bearer wrong-token' });
+    const res = createMockResponse();
+
+    await startVmFunction(req, res);
+
+    expect(flush).toHaveBeenCalled();
+  });
+
+  it('flushes the logger when auth token is misconfigured', async () => {
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+
+    const req = createMockRequest('POST', { 'x-internal-auth': 'Bearer test-token' });
+    const res = createMockResponse();
+
+    await startVmFunction(req, res);
+
+    expect(flush).toHaveBeenCalled();
+  });
 });
 
 describe('stopVmFunction', () => {
@@ -206,5 +236,34 @@ describe('stopVmFunction', () => {
       success: false,
       message: 'Failed to stop VM: API Error',
     });
+  });
+
+  it('flushes the logger on 405 early return', async () => {
+    const req = createMockRequest('GET');
+    const res = createMockResponse();
+
+    await stopVmFunction(req, res);
+
+    expect(flush).toHaveBeenCalled();
+  });
+
+  it('flushes the logger on 401 early return', async () => {
+    const req = createMockRequest('POST', { 'x-internal-auth': 'Bearer wrong-token' });
+    const res = createMockResponse();
+
+    await stopVmFunction(req, res);
+
+    expect(flush).toHaveBeenCalled();
+  });
+
+  it('flushes the logger when auth token is misconfigured', async () => {
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+
+    const req = createMockRequest('POST', { 'x-internal-auth': 'Bearer test-token' });
+    const res = createMockResponse();
+
+    await stopVmFunction(req, res);
+
+    expect(flush).toHaveBeenCalled();
   });
 });

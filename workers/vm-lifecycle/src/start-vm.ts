@@ -78,11 +78,10 @@ export async function startVm(): Promise<StartVmResult> {
       startupDurationMs: Date.now() - startTime,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.error({ error: message }, 'Failed to start VM');
+    logger.error({ err: error }, 'Failed to start VM');
     return {
       success: false,
-      message: `Failed to start VM: ${message}`,
+      message: `Failed to start VM: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }
@@ -130,6 +129,7 @@ async function pollHealth(): Promise<boolean> {
           logger.info({}, 'VM health check passed');
           return true;
         }
+        logger.debug({ status: data.status }, 'VM not ready yet, retrying');
       }
       /* v8 ignore stop @preserve */
     } catch (error) {
@@ -141,7 +141,6 @@ async function pollHealth(): Promise<boolean> {
       }
     }
 
-    logger.debug({}, 'Health check failed, retrying...');
     await sleep(VM_CONFIG.HEALTH_POLL_INTERVAL_MS);
   }
 

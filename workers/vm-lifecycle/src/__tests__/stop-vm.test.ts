@@ -184,6 +184,22 @@ describe('stopVm', () => {
     expect(result.message).toContain('Stop operation failed');
   });
 
+  it('defaults runningTasksAtShutdown to 0 when orchestrator returns non-numeric runningTasks', async () => {
+    mockGet.mockResolvedValue([{ status: 'RUNNING' }]);
+    mockStop.mockResolvedValue([{ name: 'stop-op-bad-shape' }]);
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ status: 'acknowledged', runningTasks: 'not-a-number' }),
+    });
+
+    const result = await stopVm();
+
+    expect(result.success).toBe(true);
+    expect(result.runningTasksAtShutdown).toBe(0);
+    expect(mockStop).toHaveBeenCalledOnce();
+  });
+
   it('should proceed with shutdown when orchestrator returns non-ok response', async () => {
     mockGet.mockResolvedValue([{ status: 'RUNNING' }]);
     mockStop.mockResolvedValue([{ name: 'stop-op-456' }]);
