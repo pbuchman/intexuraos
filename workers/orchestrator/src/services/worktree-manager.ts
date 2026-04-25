@@ -111,15 +111,44 @@ export class WorktreeManager {
             }
           ));
         } else {
-          await execAsync(`git fetch origin "${continuationPrBranch}"`, {
-            cwd: this.config.repositoryPath,
-          });
-          ({ stderr } = await execAsync(
-            `git worktree add -B "${taskId}" "${worktreePath}" "origin/${continuationPrBranch}"`,
-            {
+          let continuationBranchAvailable = true;
+          try {
+            await execAsync(`git fetch origin "${continuationPrBranch}"`, {
               cwd: this.config.repositoryPath,
+            });
+          } catch (fetchError: unknown) {
+            const message = fetchError instanceof Error ? fetchError.message : 'Unknown error';
+            // Branch was deleted on origin (typical case: PR merged + branch
+            // auto-deleted between task submission and dispatch). Fall back to
+            // base branch so the task can still run instead of hard-failing.
+            // Other failures (network, auth) keep the original throw — caller
+            // must see them so the task can be retried.
+            if (message.includes("couldn't find remote ref")) {
+              this.logger.warn(
+                { taskId, continuationPrBranch, baseBranch },
+                'Continuation PR branch no longer exists on origin (likely merged + deleted) — falling back to base branch'
+              );
+              continuationBranchAvailable = false;
+            } else {
+              throw fetchError;
             }
-          ));
+          }
+
+          if (continuationBranchAvailable) {
+            ({ stderr } = await execAsync(
+              `git worktree add -B "${taskId}" "${worktreePath}" "origin/${continuationPrBranch}"`,
+              {
+                cwd: this.config.repositoryPath,
+              }
+            ));
+          } else {
+            ({ stderr } = await execAsync(
+              `git worktree add -b "${taskId}" "${worktreePath}" "origin/${baseBranch}"`,
+              {
+                cwd: this.config.repositoryPath,
+              }
+            ));
+          }
         }
 
         // git worktree add outputs to stderr even on success
