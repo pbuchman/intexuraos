@@ -65,6 +65,11 @@ export function buildWorkerEnv(input: BuildWorkerEnvInput): BuildWorkerEnvResult
     'CODE_WORKER_MODE=1',
     `WORKER_MANAGED_MODE=${providerConfig.managedAttemptsMode ? '1' : '0'}`,
     `WORKER_CONTINUE=${config.continueSession === true ? '1' : '0'}`,
+    // Defense-in-depth supply-chain protection (INT-1524). Pnpm/npm honor these
+    // — redundant with /etc/npmrc and ~/.npmrc but survives the LLM deleting
+    // either file at runtime.
+    'NPM_CONFIG_IGNORE_SCRIPTS=true',
+    'npm_config_ignore_scripts=true',
   ];
 
   if (runtime === 'claude') {

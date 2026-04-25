@@ -531,6 +531,9 @@ describe('DockerProvider', () => {
       );
       const tmpfs = createCall?.HostConfig?.Tmpfs as Record<string, string>;
       expect(tmpfs['/repo/node_modules']).toContain(`uid=${String(process.getuid?.() ?? 1000)}`);
+      const envArr = createCall?.Env as string[];
+      expect(envArr).toContain('NPM_CONFIG_IGNORE_SCRIPTS=true');
+      expect(envArr).toContain('npm_config_ignore_scripts=true');
     });
 
     it('enables crash forensics settings when forensicsMode is configured', async () => {
