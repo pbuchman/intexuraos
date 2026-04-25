@@ -109,7 +109,7 @@ describe('createMetricsClient', () => {
     const ts0 = call.timeSeries[0] as Record<string, unknown>;
     expect(ts0['metric']).toMatchObject({
       type: 'custom.googleapis.com/intexuraos/code_tasks_completed',
-      labels: { worker_type: 'cloud_run' },
+      labels: { worker_type: 'cloud_run', service_name: 'svc' },
     });
     expect(ts0['resource']).toEqual({
       type: 'global',
@@ -222,11 +222,36 @@ describe('createMetricsClient', () => {
         worker_type: 'cloud_run',
         status: 'ok',
         tenant: 't-7',
+        service_name: 'svc',
       },
     });
   });
 
-  it('flush clears buffer on success', async () => {
+  it('attaches service_name label on every emitted time series', async () => {
+    const metrics = createMetricsClient({
+      projectId: 'p1',
+      serviceName: 'orchestrator',
+      logger,
+      metricServiceClient: fakeClient,
+    });
+
+    metrics.increment(CODE_TASK_METRICS.COMPLETED, { worker_type: 'cloud_run' });
+    metrics.record(CODE_TASK_METRICS.DURATION, { worker_type: 'cloud_run' }, 100);
+
+    await metrics.flush();
+
+    const call = fakeClient.calls[0];
+    if (call === undefined) {
+      throw new Error('expected one createTimeSeries call');
+    }
+    for (const ts of call.timeSeries) {
+      const m = (ts as Record<string, unknown>)['metric'] as Record<string, unknown>;
+      const lbls = m['labels'] as Record<string, string>;
+      expect(lbls['service_name']).toBe('orchestrator');
+    }
+  });
+
+  it('counter increments accumulate into a single cumulative point per (metric,labels) tuple', async () => {
     const metrics = createMetricsClient({
       projectId: 'p1',
       serviceName: 'svc',
@@ -235,9 +260,130 @@ describe('createMetricsClient', () => {
     });
 
     metrics.increment(CODE_TASK_METRICS.COMPLETED, { worker_type: 'cloud_run' });
+    metrics.increment(CODE_TASK_METRICS.COMPLETED, { worker_type: 'cloud_run' });
+
+    await metrics.flush();
+
+    const call = fakeClient.calls[0];
+    if (call === undefined) {
+      throw new Error('expected one createTimeSeries call');
+    }
+    // Two increment() calls on the same (metric,labels) tuple → one point
+    // carrying the running total (2), not the delta (1).
+    expect(call.timeSeries).toHaveLength(1);
+    const ts0 = call.timeSeries[0] as Record<string, unknown>;
+    const points0 = ts0['points'] as Record<string, unknown>[];
+    const point0 = points0[0];
+    if (point0 === undefined) {
+      throw new Error('expected point');
+    }
+    expect(point0['value']).toEqual({ int64Value: 2 });
+  });
+
+  it('counter running total survives flush success and the next flush emits the cumulative sum', async () => {
+    const metrics = createMetricsClient({
+      projectId: 'p1',
+      serviceName: 'svc',
+      logger,
+      metricServiceClient: fakeClient,
+    });
+
+    metrics.increment(CODE_TASK_METRICS.COMPLETED, { worker_type: 'cloud_run' }, 2);
+    await metrics.flush();
+    metrics.increment(CODE_TASK_METRICS.COMPLETED, { worker_type: 'cloud_run' }, 3);
+    await metrics.flush();
+
+    expect(fakeClient.calls).toHaveLength(2);
+    const c0 = fakeClient.calls[0];
+    const c1 = fakeClient.calls[1];
+    if (c0 === undefined || c1 === undefined) {
+      throw new Error('expected two flushes');
+    }
+    const v0 = (
+      ((c0.timeSeries[0] as Record<string, unknown>)['points'] as Record<string, unknown>[])[0] as
+        | Record<string, unknown>
+        | undefined
+    )?.['value'];
+    const v1 = (
+      ((c1.timeSeries[0] as Record<string, unknown>)['points'] as Record<string, unknown>[])[0] as
+        | Record<string, unknown>
+        | undefined
+    )?.['value'];
+    expect(v0).toEqual({ int64Value: 2 });
+    // 2 + 3 = 5 (cumulative sum, not the delta).
+    expect(v1).toEqual({ int64Value: 5 });
+  });
+
+  it('counter running total survives flush failure (does NOT roll back)', async () => {
+    fakeClient.failNext = true;
+    fakeClient.failError = new Error('boom-counter');
+
+    const metrics = createMetricsClient({
+      projectId: 'p1',
+      serviceName: 'svc',
+      logger,
+      metricServiceClient: fakeClient,
+    });
+
+    metrics.increment(CODE_TASK_METRICS.COMPLETED, { worker_type: 'cloud_run' }, 4);
+    await expect(metrics.flush()).rejects.toThrow(/boom-counter/);
+
+    // Next flush succeeds; cumulative total is still 4 (not rolled back).
+    await metrics.flush();
+    expect(fakeClient.calls).toHaveLength(1);
+    const c = fakeClient.calls[0];
+    if (c === undefined) {
+      throw new Error('expected call');
+    }
+    const ts0 = c.timeSeries[0] as Record<string, unknown>;
+    const points0 = ts0['points'] as Record<string, unknown>[];
+    const point0 = points0[0];
+    if (point0 === undefined) {
+      throw new Error('expected point');
+    }
+    expect(point0['value']).toEqual({ int64Value: 4 });
+  });
+
+  it('increment on a non-counter metric buffers an independent point per call', async () => {
+    const ACTIVE: CustomMetric<{ region: string }> = {
+      name: 'active_workers',
+      type: 'gauge',
+      unit: '1',
+      description: 'Active workers',
+    };
+    const metrics = createMetricsClient({
+      projectId: 'p1',
+      serviceName: 'svc',
+      logger,
+      metricServiceClient: fakeClient,
+    });
+
+    metrics.increment(ACTIVE, { region: 'eu' });
+    metrics.increment(ACTIVE, { region: 'eu' }, 5);
+
+    await metrics.flush();
+
+    const call = fakeClient.calls[0];
+    if (call === undefined) {
+      throw new Error('expected one createTimeSeries call');
+    }
+    // Non-counter: each call buffers its own point (no accumulation).
+    expect(call.timeSeries).toHaveLength(2);
+  });
+
+  it('flush clears non-counter buffer on success', async () => {
+    const metrics = createMetricsClient({
+      projectId: 'p1',
+      serviceName: 'svc',
+      logger,
+      metricServiceClient: fakeClient,
+    });
+
+    metrics.record(CODE_TASK_METRICS.DURATION, { worker_type: 'cloud_run' }, 100);
     await metrics.flush();
     await metrics.flush();
 
+    // Distribution buffer cleared after first flush; second flush is a no-op.
     expect(fakeClient.calls).toHaveLength(1);
   });
 

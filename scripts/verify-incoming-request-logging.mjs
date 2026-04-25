@@ -39,6 +39,10 @@ function parseArgs(argv) {
       if (typeof next !== 'string' || next.length === 0) {
         throw new Error('--root requires a directory argument');
       }
+      // Reject `--root --foo` style: the value must not itself be a flag.
+      if (next.startsWith('--')) {
+        throw new Error('--root requires a non-flag directory argument');
+      }
       root = resolve(next);
       i++;
     }
@@ -94,6 +98,13 @@ function walk(dir, out) {
  * Implementation: a single hand-rolled state machine using a context
  * stack. States: code, dq (double-quote), sq (single-quote), tpl
  * (template literal), tplsub (template substitution), block, line.
+ *
+ * NOTE (INT-1568): Regex literals (`/.../flags`) are NOT masked. This is
+ * acceptable because route-handler code paths in this repo do not place
+ * regex literals in positions where their `(`, `)`, or `>` characters
+ * could confuse the route-declaration scanner (route paths are always
+ * string/template literals, never regex literals). If that invariant
+ * changes, extend this state machine with a `regex` state.
  */
 function maskNonCode(src) {
   const out = new Array(src.length);
@@ -248,7 +259,9 @@ function maskNonCode(src) {
 
 /**
  * Skip over a TypeScript generic args block starting at '<'.
- * Returns the index of the character AFTER the matching '>'.
+ * Returns the index of the character AFTER the matching '>', or -1 if
+ * the angle brackets cannot be balanced (likely an unterminated generic
+ * caused by a malformed string/comment that masking failed to handle).
  */
 function skipGenerics(masked, startIdx) {
   if (masked[startIdx] !== '<') return startIdx;
@@ -263,11 +276,13 @@ function skipGenerics(masked, startIdx) {
     }
     i++;
   }
-  return startIdx;
+  return -1;
 }
 
 /**
  * Find the matching close ')' for the '(' at openIdx in the masked source.
+ * Returns -1 if the parens cannot be balanced (likely an unterminated
+ * string/comment/generic that masking failed to handle).
  */
 function matchParen(masked, openIdx) {
   if (masked[openIdx] !== '(') return openIdx;
@@ -282,7 +297,7 @@ function matchParen(masked, openIdx) {
     }
     i++;
   }
-  return masked.length - 1;
+  return -1;
 }
 
 function lineNumberOf(src, offset) {
@@ -309,11 +324,27 @@ function scanFile(filePath, repoRoot) {
     const matchEnd = m.index + m[0].length;
     let pos = matchEnd - 1; // points at '<' or '('
     if (masked[pos] === '<') {
-      pos = skipGenerics(masked, pos);
+      const afterGen = skipGenerics(masked, pos);
+      if (afterGen === -1) {
+        const line = lineNumberOf(src, m.index);
+        violations.push(
+          `${rel}:${String(line)}: unable to balance angle brackets in route declaration — possible unterminated string/comment/generic`
+        );
+        // Cannot continue parsing this route reliably; advance to next match.
+        continue;
+      }
+      pos = afterGen;
       while (pos < masked.length && masked[pos] !== '(') pos++;
     }
     if (masked[pos] !== '(') continue;
     const close = matchParen(masked, pos);
+    if (close === -1) {
+      const line = lineNumberOf(src, m.index);
+      violations.push(
+        `${rel}:${String(line)}: unable to balance parens in route declaration — possible unterminated string/comment`
+      );
+      continue;
+    }
     const slice = src.slice(pos, close + 1);
 
     if (!slice.includes('logIncomingRequest(')) {

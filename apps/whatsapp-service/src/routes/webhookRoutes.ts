@@ -78,7 +78,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
         },
       },
       async (request: FastifyRequest, reply: FastifyReply) => {
-      logIncomingRequest(request, { message: 'GET /whatsapp/webhooks' });
+        logIncomingRequest(request, { message: 'GET /whatsapp/webhooks' });
 
         const parseResult = webhookVerifyQuerySchema.safeParse(request.query);
 

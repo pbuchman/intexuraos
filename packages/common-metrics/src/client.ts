@@ -6,6 +6,14 @@
  *
  * The underlying `MetricServiceClient` is injectable so tests can
  * substitute a fake without contacting the network.
+ *
+ * Counter semantics: Cloud Monitoring CUMULATIVE counters require
+ * monotonically-increasing values at a fixed `startTime`. We therefore
+ * maintain a running total per `(metric.name, labelsKey)` tuple inside
+ * the client and emit the CURRENT cumulative value (not the delta) on
+ * flush. The running total is updated synchronously in `increment()` and
+ * survives flush failures: the next flush re-emits the same or higher
+ * cumulative value, which is what Cloud Monitoring expects.
  */
 
 import { MetricServiceClient } from '@google-cloud/monitoring';
@@ -24,6 +32,13 @@ interface BufferedEntry {
   timestamp: number;
 }
 
+interface CounterState {
+  metric: CustomMetric;
+  labels: MetricLabel;
+  total: number;
+  timestamp: number;
+}
+
 const METRIC_KIND_MAP = {
   counter: 'CUMULATIVE',
   gauge: 'GAUGE',
@@ -32,6 +47,13 @@ const METRIC_KIND_MAP = {
 
 function nowSeconds(): number {
   return Math.floor(Date.now() / 1000);
+}
+
+function labelsKey(labels: MetricLabel): string {
+  const sortedEntries = Object.keys(labels)
+    .sort()
+    .map((k) => [k, labels[k]] as const);
+  return JSON.stringify(sortedEntries);
 }
 
 /**
@@ -52,8 +74,13 @@ export function defaultMetricServiceClientFactory(): MetricServiceClientLike {
  * triggers any GCP SDK side effects.
  */
 export function createMetricsClient(config: MetricsClientConfig): MetricsClient {
-  const { projectId, logger } = config;
+  const { projectId, serviceName, logger } = config;
+  // Buffer of NON-counter entries (gauge, distribution). Each `record()`
+  // call buffers an independent point.
   const buffer: BufferedEntry[] = [];
+  // Running cumulative totals for counter metrics, keyed by
+  // `${metric.name}::${labelsKey(labels)}`.
+  const counterTotals = new Map<string, CounterState>();
   const startTimeSeconds = nowSeconds();
 
   let resolvedClient: MetricServiceClientLike | undefined = config.metricServiceClient;
@@ -87,7 +114,7 @@ export function createMetricsClient(config: MetricsClientConfig): MetricsClient 
     return {
       metric: {
         type: `custom.googleapis.com/intexuraos/${entry.metric.name}`,
-        labels: entry.labels,
+        labels: { ...entry.labels, service_name: serviceName },
       },
       resource: {
         type: 'global',
@@ -100,6 +127,19 @@ export function createMetricsClient(config: MetricsClientConfig): MetricsClient 
 
   return {
     increment<L extends MetricLabel>(metric: CustomMetric<L>, labels: L, by = 1): void {
+      if (metric.type === 'counter') {
+        const key = `${metric.name}::${labelsKey(labels)}`;
+        const existing = counterTotals.get(key);
+        const total = (existing?.total ?? 0) + by;
+        counterTotals.set(key, {
+          metric: metric as CustomMetric,
+          labels: { ...labels },
+          total,
+          timestamp: Date.now(),
+        });
+        return;
+      }
+      // Non-counter: each call is an independent buffered point.
       buffer.push({
         metric: metric as CustomMetric,
         labels: { ...labels },
@@ -118,12 +158,22 @@ export function createMetricsClient(config: MetricsClientConfig): MetricsClient 
     },
 
     async flush(): Promise<void> {
-      if (buffer.length === 0) {
+      const counterEntries: BufferedEntry[] = [];
+      for (const state of counterTotals.values()) {
+        counterEntries.push({
+          metric: state.metric,
+          labels: state.labels,
+          value: state.total,
+          timestamp: state.timestamp,
+        });
+      }
+
+      if (buffer.length === 0 && counterEntries.length === 0) {
         return;
       }
 
       const client = getClient();
-      const timeSeries = buffer.map(buildTimeSeries);
+      const timeSeries = [...buffer, ...counterEntries].map(buildTimeSeries);
       const request = {
         name: `projects/${projectId}`,
         timeSeries,
@@ -131,9 +181,15 @@ export function createMetricsClient(config: MetricsClientConfig): MetricsClient 
 
       try {
         await client.createTimeSeries(request);
+        // Counter totals are NOT cleared — they are running totals and the
+        // next flush will re-emit at the same or higher cumulative value.
+        // Non-counter buffer is cleared on success.
         buffer.length = 0;
       } catch (err) {
         logger.error({ err }, 'metrics flush failed');
+        // Preserve non-counter buffered entries (do not clear) so the next
+        // flush retries them. Counter totals are likewise preserved (they
+        // are running totals and never rolled back).
         throw err;
       }
     },
