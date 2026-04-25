@@ -138,14 +138,6 @@ function extractCollections(filePath) {
   return collections;
 }
 
-function getServiceName(filePath) {
-  const appsMatch = filePath.match(/apps\/([^/]+)\//);
-  if (appsMatch) return appsMatch[1];
-  const workersMatch = filePath.match(/workers\/([^/]+)\//);
-  if (workersMatch) return workersMatch[1];
-  return null;
-}
-
 /**
  * Build the alias index used for both code-reference matching and ORPHAN_INDEX
  * checks. Every top-level registry key maps to itself; every subcollection and

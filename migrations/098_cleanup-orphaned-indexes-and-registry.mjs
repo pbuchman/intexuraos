@@ -44,6 +44,6 @@ export const removedCollectionGroups = [
 ];
 
 export async function up(context) {
-  context.logger?.info?.('Cleanup migration 098: deploying regenerated indexes');
+  console.log('  Cleanup migration 098: deploying regenerated indexes');
   await context.deployIndexes();
 }
