@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-import { maskNonCode } from '../verify-incoming-request-logging.mjs';
+import { maskNonCode } from '../verify-incoming-request-logging.mjs'; // @allow-missing-js -- importing from .mjs script, not a .ts source file
 
 const SCRIPT = resolve(import.meta.dirname, '..', 'verify-incoming-request-logging.mjs');
 
@@ -311,6 +311,62 @@ export const r = (fastify) => {
     expect(stdout).toMatch(/helper\.ts:.*fastify\.post/);
     // Must NOT report fastify.get from the function name
     expect(stdout).not.toMatch(/fastify\.get/);
+  });
+});
+
+describe('verifier fail-closed on malformed input', () => {
+  it('exits non-zero when a route declaration has unbalanced parens (unterminated string)', () => {
+    // The trailing string literal is intentionally unterminated, so the
+    // masker continues to EOF and the scanner cannot balance the `(` of
+    // `fastify.post(`. Note: an unterminated `'` would mask the rest of
+    // the file so we use a complete route call followed by an unclosed
+    // `(` and unterminated string in another statement on the same line.
+    const contents = `
+import { logIncomingRequest } from '@intexuraos/common-http';
+
+export const broken = (fastify) => {
+  fastify.post('/x', async (request, reply) => {
+    logIncomingRequest(request, { message: 'POST /x' });
+    const oops = "unterminated
+    return reply.ok({});
+  });
+};
+`;
+    makeRouteFile(tmpRoot, 'svc', 'broken-parens.ts', contents);
+
+    const { code, stdout } = runScript(tmpRoot);
+    expect(code).toBe(1);
+    expect(stdout).toMatch(/unable to balance (parens|angle brackets)/);
+  });
+
+  it('exits non-zero when generics cannot be balanced (unterminated template literal in generic position)', () => {
+    // A `<` opens generics, then an unterminated template literal swallows
+    // the rest of the file so the matching `>` never appears.
+    const contents = `
+import { logIncomingRequest } from '@intexuraos/common-http';
+
+export const brokenGen = (fastify) => {
+  fastify.post<{ Body: \`unterminated
+    logIncomingRequest(request, { message: 'POST /y' });
+    return reply.ok({});
+};
+`;
+    makeRouteFile(tmpRoot, 'svc', 'broken-generics.ts', contents);
+
+    const { code, stdout } = runScript(tmpRoot);
+    expect(code).toBe(1);
+    expect(stdout).toMatch(/unable to balance/);
+  });
+});
+
+describe('parseArgs', () => {
+  it('rejects --root with a flag-shaped argument', () => {
+    const res = spawnSync('node', [SCRIPT, '--root', '--foo'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    expect(res.status).not.toBe(0);
+    expect(res.stderr).toContain('--root requires a non-flag directory argument');
   });
 });
 

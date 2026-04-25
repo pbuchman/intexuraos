@@ -1,5 +1,5 @@
 project_id         = "intexuraos-prod-pbuchman"
 region             = "europe-central2"
 alert_email        = "ops@example.com"
-slack_auth_token   = "xoxb-CHANGE-ME"
+slack_auth_token   = "REPLACE_ME_WITH_SLACK_BOT_TOKEN"
 slack_channel_name = "#alerts"
