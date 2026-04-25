@@ -60,3 +60,11 @@ export {
 
 // Internal service-to-service auth
 export { type InternalAuthResult, validateInternalAuth } from './auth/internalAuth.js';
+
+// Shared internal auth strategies (Cloud Scheduler + Pub/Sub push)
+export {
+  authenticateInternalScheduler,
+  authenticateInternalPubSub,
+  type InternalAuthStrategy,
+  type AuthResult,
+} from './auth/internalAuthStrategies.js';
