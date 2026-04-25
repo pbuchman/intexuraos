@@ -185,6 +185,90 @@ describe('verifyCompletion — synchronous pipeline', () => {
   });
 });
 
+describe('verifyCompletion — real-rawLogs regression (NDJSON-aware fallback)', () => {
+  // Fixture captured live from the home-dev orchestrator on 2026-04-25 by
+  // instrumenting `task-dispatcher.ts` to dump the exact `rawLogs` string
+  // passed to `runVerification`. The agent emitted a perfectly valid
+  // PLANNING_AGENT_FINAL block, but inside a Claude SDK `assistant` event's
+  // `text` field — i.e. the marker exists only as the JSON-escaped string
+  // `"text":"PLANNING_AGENT_FINAL:\\n- ..."` and never appears on its own
+  // line in the raw transcript. Before this fix, the production verifier
+  // returned `kind:'hard-error'` with `code:TASK_RUNTIME_HARD_ERROR` and
+  // finalized the task as `failed` — exactly the INT-1560 Group B mode.
+  //
+  // The post-fix expectation (encoded in planning-probe-unclear.expected.json)
+  // is that the verifier's NDJSON-aware fallback in `locateFinalBlock` finds
+  // the block and `verifyCompletion` returns `kind:'parsed'` with the agent's
+  // emitted fields surfaced. The probe agent left `linear_issue` and `plan_pr`
+  // empty (no Linear issue attached to the synthetic prompt), so those two
+  // required fields are reported as `missingRequired` — *the contract is
+  // doing its job*. The bug was that the parser couldn't see the block at all.
+  const RAW_RAWLOGS_DIR = join(FIXTURE_ROOT, 'raw-rawlogs');
+  const probeRawLogs = readFileSync(
+    join(RAW_RAWLOGS_DIR, 'planning-probe-unclear.rawlogs.txt'),
+    'utf8'
+  );
+  const probeExpected = JSON.parse(
+    readFileSync(join(RAW_RAWLOGS_DIR, 'planning-probe-unclear.expected.json'), 'utf8')
+  ) as {
+    agentType: CompletionAgentType;
+    workerType: string;
+    postFixVerdict: {
+      kind: 'parsed';
+      missingRequired: string[];
+      dataAssertions: Record<string, string | boolean | number>;
+    };
+  };
+
+  it('parses the captured probe rawLogs (NDJSON-buried marker) without hard-error', () => {
+    const verdict = verifyCompletion({
+      transcript: probeRawLogs,
+      agentType: probeExpected.agentType,
+      workerType: probeExpected.workerType as never,
+      executionMemoryContext: undefined,
+      lastExitCode: 0,
+    });
+    expect(
+      verdict.kind,
+      'real-rawLogs fixture must NOT produce a hard-error after the NDJSON-aware fallback ships — that is the entire INT-1560 Group B fix'
+    ).toBe('parsed');
+    if (verdict.kind !== 'parsed') return;
+    expect(verdict.missingRequired).toEqual(probeExpected.postFixVerdict.missingRequired);
+    // Spot-check the parsed fields surfaced from the assistant text content.
+    expect(verdict.data['outcome']).toBe(probeExpected.postFixVerdict.dataAssertions['outcome']);
+    expect(verdict.data['superpowers_writing_plans_used']).toBe(
+      probeExpected.postFixVerdict.dataAssertions['superpowers_writing_plans_used']
+    );
+    expect(verdict.data['complex_task']).toBe(
+      probeExpected.postFixVerdict.dataAssertions['complex_task']
+    );
+    expect(verdict.data['plan_doc']).toBe(probeExpected.postFixVerdict.dataAssertions['plan_doc']);
+    expect(String(verdict.data['clarification_message'])).toContain(
+      String(probeExpected.postFixVerdict.dataAssertions['clarification_messageContains'])
+    );
+    expect(String(verdict.data['summary'])).toContain(
+      String(probeExpected.postFixVerdict.dataAssertions['summaryContains'])
+    );
+  });
+
+  it('regression document: confirms the marker is NOT on its own line in the raw transcript', () => {
+    // This is a documenting test, not a behavioural one. It captures the
+    // mechanism of the bug — if a future change accidentally normalises the
+    // raw transcript before it reaches the verifier, this test will fail and
+    // alert the reviewer to update the fixture or remove the documentation.
+    const rfc3339Stripped = probeRawLogs.replace(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z /gm,
+      ''
+    );
+    const ownLineMarkerRegex = /^\s*PLANNING_AGENT_FINAL:\s*$/m;
+    expect(
+      ownLineMarkerRegex.test(rfc3339Stripped),
+      'real production rawLogs must keep the AGENT_FINAL marker buried inside NDJSON; if this assertion ever fires, the fixture or the upstream pipeline changed'
+    ).toBe(false);
+    expect(rfc3339Stripped).toContain('PLANNING_AGENT_FINAL'); // substring is present
+  });
+});
+
 describe('verifyCompletion — full-fixture replay (Phase-5 regression guard)', () => {
   // Every real-production AGENT_FINAL transcript harvested into the fixture
   // corpus MUST either accept (kind='parsed' with missingRequired=[]) when
