@@ -117,6 +117,19 @@ describe('redactObject', () => {
     expect(result.items).toEqual([1, 2, 3]);
   });
 
+  it('treats class instances as opaque leaves (does not walk into them)', () => {
+    // Date / Map / Buffer etc. carry non-data prototypes. Walking them as
+    // structured payloads risks emitting synthetic keys; treat them as
+    // opaque and pass through unchanged.
+    const date = new Date('2026-01-01T00:00:00Z');
+    const map = new Map<string, string>([['password', 'secret']]);
+    const input = { createdAt: date, lookup: map, password: 'leaf-secret' };
+    const result = redactObject(input);
+    expect(result.createdAt).toBe(date);
+    expect(result.lookup).toBe(map);
+    expect(result.password).toBe('[REDACTED]');
+  });
+
   it('redacts deeply nested keys (event.breadcrumbs[*].data shape)', () => {
     const input = {
       breadcrumbs: [
