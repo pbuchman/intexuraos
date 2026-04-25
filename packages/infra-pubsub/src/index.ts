@@ -39,3 +39,6 @@ export {
 } from './calendarPreviewPublisher.js';
 
 export { type PRTriagePublisher, createPRTriagePublisher } from './prTriagePublisher.js';
+
+export { extractCorrelation, type PubSubAttributes } from './extractCorrelation.js';
+export type { RequestContext } from './requestContextShim.js';
