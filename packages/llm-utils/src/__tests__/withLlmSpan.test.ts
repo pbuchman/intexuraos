@@ -5,7 +5,7 @@ import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
 import { withLlmSpan } from '../withLlmSpan.js';
 
@@ -30,7 +30,7 @@ beforeEach(() => {
 describe('withLlmSpan', () => {
   it('records all attributes including cached_input_tokens when provided', async () => {
     const { result, durationMs } = await withLlmSpan(
-      'claude',
+      LlmProviders.Anthropic,
       () =>
         Promise.resolve({
           content: 'hi',
@@ -52,9 +52,9 @@ describe('withLlmSpan', () => {
     expect(spans).toHaveLength(1);
     const span = spans[0];
     if (span === undefined) throw new Error('no span');
-    expect(span.name).toBe('llm.claude.generate');
+    expect(span.name).toBe('llm.anthropic.generate');
     expect(span.status.code).toBe(SpanStatusCode.OK);
-    expect(span.attributes['llm.provider']).toBe('claude');
+    expect(span.attributes['llm.provider']).toBe(LlmProviders.Anthropic);
     expect(span.attributes['llm.model']).toBe('claude-sonnet-4-5');
     expect(span.attributes['llm.input_tokens']).toBe(10);
     expect(span.attributes['llm.output_tokens']).toBe(5);
@@ -65,7 +65,7 @@ describe('withLlmSpan', () => {
 
   it('omits cached_input_tokens attribute when undefined', async () => {
     await withLlmSpan(
-      'gemini',
+      LlmProviders.Google,
       () =>
         Promise.resolve({
           usage: { inputTokens: 1, outputTokens: 2, costUsd: 0 },
@@ -82,7 +82,7 @@ describe('withLlmSpan', () => {
     expect(spans).toHaveLength(1);
     const span = spans[0];
     if (span === undefined) throw new Error('no span');
-    expect(span.name).toBe('llm.gemini.generate');
+    expect(span.name).toBe('llm.google.generate');
     expect(Object.hasOwn(span.attributes, 'llm.cached_input_tokens')).toBe(false);
   });
 
@@ -90,7 +90,7 @@ describe('withLlmSpan', () => {
     const boom = new Error('boom');
     await expect(
       withLlmSpan(
-        'gpt',
+        LlmProviders.OpenAI,
         () => Promise.reject(boom),
         () => {
           throw new Error('should not be called on error path');
@@ -102,17 +102,17 @@ describe('withLlmSpan', () => {
     expect(spans).toHaveLength(1);
     const span = spans[0];
     if (span === undefined) throw new Error('no span');
-    expect(span.name).toBe('llm.gpt.generate');
+    expect(span.name).toBe('llm.openai.generate');
     expect(span.status.code).toBe(SpanStatusCode.ERROR);
     expect(span.status.message).toBe('boom');
     expect(span.attributes['llm.duration_ms']).toBeGreaterThanOrEqual(0);
-    expect(span.attributes['llm.provider']).toBe('gpt');
+    expect(span.attributes['llm.provider']).toBe(LlmProviders.OpenAI);
   });
 
   it('handles non-Error thrown values via getErrorMessage', async () => {
     await expect(
       withLlmSpan(
-        'perplexity',
+        LlmProviders.Perplexity,
         () => Promise.reject('string-error'),
         () => ({ model: 'm', inputTokens: 0, outputTokens: 0, costUsd: 0 })
       )
@@ -128,7 +128,7 @@ describe('withLlmSpan', () => {
 
   it('returns a non-negative durationMs', async () => {
     const { durationMs } = await withLlmSpan(
-      'openrouter',
+      LlmProviders.OpenRouter,
       () => Promise.resolve({ usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } }),
       ({ usage }) => ({
         model: 'or:openai/gpt-4o',

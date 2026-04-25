@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
+import { LlmProviders } from '@intexuraos/llm-contract';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
 import { trace } from '@opentelemetry/api';
 import {
@@ -453,7 +454,7 @@ describe('createClaudeClient', () => {
   });
 
   describe('OTel span emission for generate()', () => {
-    it('emits llm.claude.generate span with all canonical attributes on success', async () => {
+    it('emits llm.anthropic.generate span with all canonical attributes on success', async () => {
       mockMessagesCreate.mockResolvedValue({
         content: [{ type: 'text', text: 'hi' }],
         usage: { input_tokens: 12, output_tokens: 7 },
@@ -472,8 +473,8 @@ describe('createClaudeClient', () => {
       expect(spans).toHaveLength(1);
       const span = spans[0];
       if (span === undefined) throw new Error('no span');
-      expect(span.name).toBe('llm.claude.generate');
-      expect(span.attributes['llm.provider']).toBe('claude');
+      expect(span.name).toBe('llm.anthropic.generate');
+      expect(span.attributes['llm.provider']).toBe(LlmProviders.Anthropic);
       expect(span.attributes['llm.model']).toBe(TEST_MODEL);
       expect(span.attributes['llm.input_tokens']).toBe(12);
       expect(span.attributes['llm.output_tokens']).toBe(7);

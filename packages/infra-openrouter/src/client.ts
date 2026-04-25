@@ -281,7 +281,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       const start = Date.now();
       try {
         const { result, durationMs } = await withLlmSpan(
-          'openrouter',
+          LlmProviders.OpenRouter,
           async (): Promise<{
             content: string;
             normalized: NormalizedUsage;

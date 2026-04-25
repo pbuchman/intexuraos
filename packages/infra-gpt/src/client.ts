@@ -191,7 +191,7 @@ export function createGptClient(config: GptConfig): GptClient {
       const start = Date.now();
       try {
         const { result, durationMs } = await withLlmSpan(
-          'gpt',
+          LlmProviders.OpenAI,
           async () => {
             const response = await client.chat.completions.create({
               model,

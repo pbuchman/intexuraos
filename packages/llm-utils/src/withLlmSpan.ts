@@ -17,17 +17,18 @@
  * safe to drop into a worker before S1 (`initWorker()`) lands.
  */
 import { getErrorMessage } from '@intexuraos/common-core';
+import { type LlmProvider } from '@intexuraos/llm-contract';
 import { SpanStatusCode, trace } from '@opentelemetry/api';
 
 /**
  * Span tag names accepted by {@link withLlmSpan}. Kept as a closed union so
  * span names are a known finite set that matches the dashboards.
  *
- * NOTE: These are span/metric tag identifiers per the §6 observability
- * contract — they match SDK naming (claude/gpt/gemini) and intentionally
- * differ from the canonical `LlmProviders` enum (anthropic/openai/google).
+ * Span tags use the canonical `LlmProviders` values from
+ * `@intexuraos/llm-contract` (anthropic/openai/google/perplexity/openrouter),
+ * matching the architectural rule enforced by `verify-llm-architecture`.
  */
-export type LlmProviderName = 'claude' | 'gpt' | 'gemini' | 'perplexity' | 'openrouter';
+export type LlmProviderName = LlmProvider;
 
 /**
  * Attributes recorded on the LLM span on success. `durationMs` is filled in

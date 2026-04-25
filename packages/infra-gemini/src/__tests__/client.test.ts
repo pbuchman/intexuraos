@@ -1131,7 +1131,7 @@ describe('createGeminiClient', () => {
   });
 
   describe('OTel span emission for generate()', () => {
-    it('emits llm.gemini.generate span with all canonical attributes on success', async () => {
+    it('emits llm.google.generate span with all canonical attributes on success', async () => {
       mockGenerateContent.mockResolvedValue({
         text: 'hi',
         usageMetadata: { promptTokenCount: 6, candidatesTokenCount: 8 },
@@ -1150,8 +1150,8 @@ describe('createGeminiClient', () => {
       expect(spans).toHaveLength(1);
       const span = spans[0];
       if (span === undefined) throw new Error('no span');
-      expect(span.name).toBe('llm.gemini.generate');
-      expect(span.attributes['llm.provider']).toBe('gemini');
+      expect(span.name).toBe('llm.google.generate');
+      expect(span.attributes['llm.provider']).toBe(LlmProviders.Google);
       expect(span.attributes['llm.model']).toBe(TEST_MODEL);
       expect(span.attributes['llm.input_tokens']).toBe(6);
       expect(span.attributes['llm.output_tokens']).toBe(8);

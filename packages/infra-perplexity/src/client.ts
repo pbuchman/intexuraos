@@ -318,7 +318,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
       const start = Date.now();
       try {
         const { result, durationMs } = await withLlmSpan(
-          'perplexity',
+          LlmProviders.Perplexity,
           async (): Promise<{
             content: string;
             usage: NormalizedUsage;

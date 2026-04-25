@@ -174,7 +174,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       const start = Date.now();
       try {
         const { result, durationMs } = await withLlmSpan(
-          'claude',
+          LlmProviders.Anthropic,
           async () => {
             const response = await client.messages.create({
               model,
