@@ -4150,4 +4150,277 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value).toBeNull();
     });
   });
+
+  describe('hasOtherDispatchedOrRunningForLinearIssue', () => {
+    it('returns hasActive false when only the candidate exists', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const candidate = await repo.create(createTaskInput({
+        id: 'candidate',
+        linearIssueId: 'INT-1529',
+      }));
+      expect(candidate.ok).toBe(true);
+      if (!candidate.ok) return;
+      // Move candidate to dispatched so its self-row is in the result set.
+      await repo.update(candidate.value.id, { status: 'dispatched' });
+
+      const result = await repo.hasOtherDispatchedOrRunningForLinearIssue(
+        candidate.value.id,
+        'INT-1529',
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.hasActive).toBe(false);
+    });
+
+    it('returns hasActive true and the sibling id when a non-self sibling is dispatched', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const sibling = await repo.create(createTaskInput({
+        id: 'sibling',
+        linearIssueId: 'INT-1529',
+        prompt: 'Different prompt - sibling',
+        sanitizedPrompt: 'different prompt - sibling',
+      }));
+      expect(sibling.ok).toBe(true);
+      if (!sibling.ok) return;
+      await repo.update(sibling.value.id, { status: 'dispatched' });
+
+      const candidate = await repo.create(createTaskInput({
+        id: 'candidate',
+        linearIssueId: 'INT-1529',
+        agentType: 'review',
+        prompt: 'Different prompt - candidate',
+        sanitizedPrompt: 'different prompt - candidate',
+      }));
+      expect(candidate.ok).toBe(true);
+      if (!candidate.ok) return;
+
+      const result = await repo.hasOtherDispatchedOrRunningForLinearIssue(
+        candidate.value.id,
+        'INT-1529',
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.hasActive).toBe(true);
+      expect(result.value.taskId).toBe('sibling');
+    });
+
+    it('returns hasActive true when sibling is running', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const sibling = await repo.create(createTaskInput({
+        id: 'sibling',
+        linearIssueId: 'INT-1529',
+        prompt: 'Different prompt - sibling',
+        sanitizedPrompt: 'different prompt - sibling',
+      }));
+      expect(sibling.ok).toBe(true);
+      if (!sibling.ok) return;
+      await repo.update(sibling.value.id, { status: 'running' });
+
+      const candidate = await repo.create(createTaskInput({
+        id: 'candidate',
+        linearIssueId: 'INT-1529',
+        agentType: 'review',
+        prompt: 'Different prompt - candidate',
+        sanitizedPrompt: 'different prompt - candidate',
+      }));
+      expect(candidate.ok).toBe(true);
+      if (!candidate.ok) return;
+
+      const result = await repo.hasOtherDispatchedOrRunningForLinearIssue(
+        candidate.value.id,
+        'INT-1529',
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.hasActive).toBe(true);
+    });
+
+    it('excludes queued siblings (uses DISPATCHED_OR_RUNNING_STATUSES)', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Sibling stays queued — should NOT block candidate.
+      const sibling = await repo.create(createTaskInput({
+        id: 'sibling',
+        linearIssueId: 'INT-1529',
+        prompt: 'Different prompt - sibling',
+        sanitizedPrompt: 'different prompt - sibling',
+      }));
+      expect(sibling.ok).toBe(true);
+
+      const candidate = await repo.create(createTaskInput({
+        id: 'candidate',
+        linearIssueId: 'INT-1529',
+        agentType: 'review',
+        prompt: 'Different prompt - candidate',
+        sanitizedPrompt: 'different prompt - candidate',
+      }));
+      expect(candidate.ok).toBe(true);
+      if (!candidate.ok) return;
+
+      const result = await repo.hasOtherDispatchedOrRunningForLinearIssue(
+        candidate.value.id,
+        'INT-1529',
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.hasActive).toBe(false);
+    });
+
+    it('returns hasActive false for a different Linear issue', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const sibling = await repo.create(createTaskInput({
+        id: 'sibling',
+        linearIssueId: 'INT-9999',
+        prompt: 'Different prompt - sibling',
+        sanitizedPrompt: 'different prompt - sibling',
+      }));
+      expect(sibling.ok).toBe(true);
+      if (!sibling.ok) return;
+      await repo.update(sibling.value.id, { status: 'dispatched' });
+
+      const candidate = await repo.create(createTaskInput({
+        id: 'candidate',
+        linearIssueId: 'INT-1529',
+        agentType: 'review',
+        prompt: 'Different prompt - candidate',
+        sanitizedPrompt: 'different prompt - candidate',
+      }));
+      expect(candidate.ok).toBe(true);
+      if (!candidate.ok) return;
+
+      const result = await repo.hasOtherDispatchedOrRunningForLinearIssue(
+        candidate.value.id,
+        'INT-1529',
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.hasActive).toBe(false);
+    });
+  });
+
+  describe('claimForDispatch', () => {
+    it('claims a queued task and transitions status to dispatched', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ id: 'task-claim' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repo.claimForDispatch('task-claim');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toEqual({ claimed: true });
+
+      const after = await repo.findById('task-claim');
+      expect(after.ok).toBe(true);
+      if (!after.ok) return;
+      expect(after.value.status).toBe('dispatched');
+      expect(after.value.dispatchedAt).toBeDefined();
+    });
+
+    it('returns alreadyClaimed: true when task is already dispatched', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ id: 'task-already' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update('task-already', { status: 'dispatched' });
+
+      const result = await repo.claimForDispatch('task-already');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toEqual({ claimed: false, alreadyClaimed: true });
+    });
+
+    it('returns alreadyClaimed: true when task is running', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ id: 'task-running' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update('task-running', { status: 'running' });
+
+      const result = await repo.claimForDispatch('task-running');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toEqual({ claimed: false, alreadyClaimed: true });
+    });
+
+    it('returns notFound: true when task does not exist', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.claimForDispatch('does-not-exist');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toEqual({ claimed: false, notFound: true });
+    });
+
+    it('exactly one of two parallel claim calls wins for the same task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ id: 'task-race' }));
+      expect(created.ok).toBe(true);
+
+      const [a, b] = await Promise.all([
+        repo.claimForDispatch('task-race'),
+        repo.claimForDispatch('task-race'),
+      ]);
+
+      expect(a.ok).toBe(true);
+      expect(b.ok).toBe(true);
+      if (!a.ok || !b.ok) return;
+
+      const claimedCount = [a.value, b.value].filter((r): r is { claimed: true } => r.claimed === true).length;
+      const alreadyClaimedCount = [a.value, b.value].filter(
+        (r): r is { claimed: false; alreadyClaimed: true } =>
+          r.claimed === false && 'alreadyClaimed' in r && r.alreadyClaimed === true,
+      ).length;
+
+      expect(claimedCount).toBe(1);
+      expect(alreadyClaimedCount).toBe(1);
+    });
+  });
 });

@@ -256,6 +256,38 @@ export interface CodeTaskRepository {
   ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>>;
 
   /**
+   * Check whether a NON-self task on the same Linear issue is dispatched or running.
+   * Used by drainTaskQueue to defer review-side dispatch when planning/execution is in flight
+   * on the same Linear issue (Fix B).
+   *
+   * Excludes queued siblings (uses DISPATCHED_OR_RUNNING_STATUSES) so that two queued reviews
+   * on the same Linear issue cannot deadlock. Filters out the candidate's own document.
+   */
+  hasOtherDispatchedOrRunningForLinearIssue(
+    taskId: string,
+    linearIssueId: string,
+  ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>>;
+
+  /**
+   * Atomically claim a queued task for dispatch via a Firestore transaction.
+   * Transitions the task from `queued` → `dispatched` (with `dispatchedAt`) iff currently queued.
+   * Eliminates the multi-instance double-dispatch race (Fix E).
+   *
+   * Returns:
+   * - `{ claimed: true }` — caller now owns dispatch for this task.
+   * - `{ claimed: false, alreadyClaimed: true }` — another instance already moved it past queued.
+   * - `{ claimed: false, notFound: true }` — document does not exist.
+   */
+  claimForDispatch(
+    taskId: string,
+  ): Promise<Result<
+    | { claimed: true }
+    | { claimed: false; alreadyClaimed: true }
+    | { claimed: false; notFound: true },
+    RepositoryError
+  >>;
+
+  /**
    * Find the newest execution-eligible task for a PR.
    * Excludes review, remediation, planning, and merge-conflict follow-up tasks —
    * only returns execution or canonical pull_request tasks. Used to route
