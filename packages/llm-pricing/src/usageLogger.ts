@@ -64,6 +64,15 @@ export interface UsageLogParams {
   providerReportedUsd?: number | null;
   /** Semantic identifier for what the prompt was used for (e.g. 'linear-issue-title', 'code-worker-validation') */
   promptType?: string;
+  /**
+   * Wall-clock duration of the LLM call, in milliseconds.
+   *
+   * REQUIRED. Captured by the provider's `withLlmSpan` wrapper or computed
+   * from a `Date.now()` checkpoint on the failure path. Forwarded into the
+   * structured log line and to the configured sink so dashboards have
+   * per-call latency without relying on OTel ingest.
+   */
+  durationMs: number;
 }
 
 /**
@@ -179,6 +188,7 @@ export class UsageLogger {
         outputTokens: params.usage.outputTokens,
         totalTokens: params.usage.totalTokens,
         costUsd: params.usage.costUsd,
+        durationMs: params.durationMs,
         success: params.success,
         ...(params.errorMessage !== undefined && { errorMessage: params.errorMessage }),
         ...(params.promptType !== undefined && { promptType: params.promptType }),

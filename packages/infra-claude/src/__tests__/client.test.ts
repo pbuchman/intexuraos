@@ -1,6 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
+import { trace } from '@opentelemetry/api';
+import {
+  BasicTracerProvider,
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-base';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -10,6 +16,20 @@ const mockLogger: Logger = {
 };
 
 const mockUsageSink = new FakeUsageSink();
+
+const spanExporter = new InMemorySpanExporter();
+const tracerProvider = new BasicTracerProvider({
+  spanProcessors: [new SimpleSpanProcessor(spanExporter)],
+});
+
+beforeAll(() => {
+  trace.setGlobalTracerProvider(tracerProvider);
+});
+
+afterAll(async () => {
+  await tracerProvider.shutdown();
+  trace.disable();
+});
 
 const mockMessagesCreate = vi.fn();
 
@@ -55,6 +75,8 @@ const TEST_MODEL = 'claude-sonnet-4-20250514';
 describe('createClaudeClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    spanExporter.reset();
+    mockUsageSink.clear();
   });
 
   describe('research', () => {
@@ -428,5 +450,74 @@ describe('createClaudeClient', () => {
     expect(mockUsageLoggerLog).toHaveBeenCalledWith(
       expect.objectContaining({ promptType: 'test-prompt' })
     );
+  });
+
+  describe('OTel span emission for generate()', () => {
+    it('emits llm.claude.generate span with all canonical attributes on success', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'hi' }],
+        usage: { input_tokens: 12, output_tokens: 7 },
+      });
+
+      const client = createClaudeClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('hi', { promptType: 'test-prompt' });
+
+      const spans = spanExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      const span = spans[0];
+      if (span === undefined) throw new Error('no span');
+      expect(span.name).toBe('llm.claude.generate');
+      expect(span.attributes['llm.provider']).toBe('claude');
+      expect(span.attributes['llm.model']).toBe(TEST_MODEL);
+      expect(span.attributes['llm.input_tokens']).toBe(12);
+      expect(span.attributes['llm.output_tokens']).toBe(7);
+      expect(span.attributes['llm.cost_usd']).toBeDefined();
+      expect(span.attributes['llm.duration_ms']).toBeGreaterThanOrEqual(0);
+    });
+
+    it('passes durationMs >= 0 to usage logger on success', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'ok' }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      });
+
+      const client = createClaudeClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('ok', { promptType: 'test-prompt' });
+
+      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as { durationMs?: number };
+      expect(lastCall?.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('passes durationMs >= 0 to usage logger on error', async () => {
+      mockMessagesCreate.mockRejectedValue(new Error('boom'));
+
+      const client = createClaudeClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('ok', { promptType: 'test-prompt' });
+
+      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as {
+        durationMs?: number;
+        success?: boolean;
+      };
+      expect(lastCall?.success).toBe(false);
+      expect(lastCall?.durationMs).toBeGreaterThanOrEqual(0);
+    });
   });
 });

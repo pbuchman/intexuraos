@@ -1,7 +1,27 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
+import { trace } from '@opentelemetry/api';
+import {
+  BasicTracerProvider,
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-base';
+
+const spanExporter = new InMemorySpanExporter();
+const tracerProvider = new BasicTracerProvider({
+  spanProcessors: [new SimpleSpanProcessor(spanExporter)],
+});
+
+beforeAll(() => {
+  trace.setGlobalTracerProvider(tracerProvider);
+});
+
+afterAll(async () => {
+  await tracerProvider.shutdown();
+  trace.disable();
+});
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -45,6 +65,8 @@ const TEST_MODEL = LlmModels.Gemini25Flash;
 describe('createGeminiClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    spanExporter.reset();
+    mockUsageSink.clear();
   });
 
   it('passes usage sink to createUsageLogger', async () => {
@@ -1106,5 +1128,70 @@ describe('createGeminiClient', () => {
     await client.generate('hello', { promptType: 'test-prompt' });
 
     expect(mockUsageLoggerLog).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'user' }));
+  });
+
+  describe('OTel span emission for generate()', () => {
+    it('emits llm.gemini.generate span with all canonical attributes on success', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'hi',
+        usageMetadata: { promptTokenCount: 6, candidatesTokenCount: 8 },
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('hi', { promptType: 'test-prompt' });
+
+      const spans = spanExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      const span = spans[0];
+      if (span === undefined) throw new Error('no span');
+      expect(span.name).toBe('llm.gemini.generate');
+      expect(span.attributes['llm.provider']).toBe('gemini');
+      expect(span.attributes['llm.model']).toBe(TEST_MODEL);
+      expect(span.attributes['llm.input_tokens']).toBe(6);
+      expect(span.attributes['llm.output_tokens']).toBe(8);
+      expect(span.attributes['llm.cost_usd']).toBeDefined();
+      expect(span.attributes['llm.duration_ms']).toBeGreaterThanOrEqual(0);
+    });
+
+    it('passes durationMs >= 0 to usage logger on success', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'ok',
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+      });
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('ok', { promptType: 'test-prompt' });
+      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as { durationMs?: number };
+      expect(lastCall?.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('passes durationMs >= 0 to usage logger on error', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('boom'));
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('ok', { promptType: 'test-prompt' });
+      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as {
+        durationMs?: number;
+        success?: boolean;
+      };
+      expect(lastCall?.success).toBe(false);
+      expect(lastCall?.durationMs).toBeGreaterThanOrEqual(0);
+    });
   });
 });

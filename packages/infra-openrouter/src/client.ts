@@ -40,6 +40,7 @@ import {
   type GenerateResult,
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
+import { withLlmSpan } from '@intexuraos/llm-utils';
 import type {
   GenerateOptions,
   OpenRouterConfig,
@@ -130,6 +131,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
+    durationMs: number,
     errorMessage?: string,
     providerReportedUsd?: number | null,
     promptType?: string
@@ -141,6 +143,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       callType,
       usage,
       success,
+      durationMs,
       ...(errorMessage !== undefined && { errorMessage }),
       ...(providerReportedUsd !== undefined &&
         providerReportedUsd !== null && { providerReportedUsd }),
@@ -172,6 +175,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, OpenRouterError>> {
+      const start = Date.now();
       try {
         // Build the model ID - research uses :online suffix for web search
         const searchModel = model.endsWith(':online') ? model : `${model}:online`;
@@ -208,6 +212,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         );
 
         if (!response.ok) {
+          const durationMs = Date.now() - start;
           const errorText = await response.text();
           const apiError = new OpenRouterApiError(response.status, errorText);
           const errorMsg = getErrorMessage(apiError);
@@ -217,7 +222,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             totalTokens: 0,
             costUsd: 0,
           };
-          trackUsage('research', emptyUsage, false, errorMsg);
+          trackUsage('research', emptyUsage, false, durationMs, errorMsg);
           return err(mapOpenRouterError(apiError));
         }
 
@@ -245,10 +250,18 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           }
         }
 
-        trackUsage('research', normalized, true, undefined, providerReportedUsd);
+        trackUsage(
+          'research',
+          normalized,
+          true,
+          Date.now() - start,
+          undefined,
+          providerReportedUsd
+        );
 
         return ok({ content, sources, usage: normalized });
       } catch (error) {
+        const durationMs = Date.now() - start;
         const errorMsg = getErrorMessage(error);
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
@@ -256,7 +269,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('research', emptyUsage, false, errorMsg);
+        trackUsage('research', emptyUsage, false, durationMs, errorMsg);
         return err(mapOpenRouterError(error));
       }
     },
@@ -265,75 +278,107 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       prompt: string,
       options: GenerateOptions
     ): Promise<Result<GenerateResult, OpenRouterError>> {
+      const start = Date.now();
       try {
-        const requestBody = {
-          model, // No :online suffix for synthesis
-          messages: [
-            {
-              role: 'user',
-              content: prompt,
-            },
-          ],
-          temperature: 0.2,
-          ...(options.responseFormat !== undefined && {
-            response_format: options.responseFormat,
-          }),
-        };
+        const { result, durationMs } = await withLlmSpan(
+          'openrouter',
+          async (): Promise<{
+            content: string;
+            normalized: NormalizedUsage;
+            providerReportedUsd: number | null;
+            apiError?: OpenRouterApiError;
+          }> => {
+            const requestBody = {
+              model, // No :online suffix for synthesis
+              messages: [
+                {
+                  role: 'user',
+                  content: prompt,
+                },
+              ],
+              temperature: 0.2,
+              ...(options.responseFormat !== undefined && {
+                response_format: options.responseFormat,
+              }),
+            };
 
-        const response = await fetchWithTimeout(
-          `${API_BASE_URL}/chat/completions`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-              'HTTP-Referer': 'https://intexuraos.cloud',
-              'X-Title': APP_TITLE,
-            },
-            body: JSON.stringify(requestBody),
+            const response = await fetchWithTimeout(
+              `${API_BASE_URL}/chat/completions`,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                  'HTTP-Referer': 'https://intexuraos.cloud',
+                  'X-Title': APP_TITLE,
+                },
+                body: JSON.stringify(requestBody),
+              },
+              timeoutMs
+            );
+
+            if (!response.ok) {
+              const errorText = await response.text();
+              const apiError = new OpenRouterApiError(response.status, errorText);
+              return {
+                content: '',
+                normalized: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
+                providerReportedUsd: null,
+                apiError,
+              };
+            }
+
+            const data = (await response.json()) as OpenRouterResponse;
+            const firstChoice = data.choices[0];
+            // Handle case where choices array is empty (upstream API may return this)
+            if (firstChoice === undefined) {
+              /* v8 ignore start -- upstream: cannot verify firstChoice message structure when choices is empty @preserve */
+              return {
+                content: '',
+                normalized: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
+                providerReportedUsd: null,
+              };
+              /* v8 ignore stop @preserve */
+            }
+            const content = firstChoice.message.content;
+            const { normalized, providerReportedUsd } = extractUsage(data.usage);
+            return { content, normalized, providerReportedUsd };
           },
-          timeoutMs
+          ({ normalized }) => ({
+            model,
+            inputTokens: normalized.inputTokens,
+            outputTokens: normalized.outputTokens,
+            costUsd: normalized.costUsd,
+          })
         );
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          const apiError = new OpenRouterApiError(response.status, errorText);
-          const errorMsg = getErrorMessage(apiError);
-          const emptyUsage: NormalizedUsage = {
-            inputTokens: 0,
-            outputTokens: 0,
-            totalTokens: 0,
-            costUsd: 0,
-          };
-          trackUsage('generate', emptyUsage, false, errorMsg, undefined, options.promptType);
-          return err(mapOpenRouterError(apiError));
+        if (result.apiError !== undefined) {
+          const errorMsg = getErrorMessage(result.apiError);
+          trackUsage(
+            'generate',
+            result.normalized,
+            false,
+            durationMs,
+            errorMsg,
+            undefined,
+            options.promptType
+          );
+          return err(mapOpenRouterError(result.apiError));
         }
-
-        const data = (await response.json()) as OpenRouterResponse;
-        const firstChoice = data.choices[0];
-        // Handle case where choices array is empty (upstream API may return this)
-        if (firstChoice === undefined) {
-          /* v8 ignore start -- upstream: cannot verify firstChoice message structure when choices is empty @preserve */
-          return ok({
-            content: '',
-            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
-          });
-          /* v8 ignore stop @preserve */
-        }
-        const content = firstChoice.message.content;
-        const { normalized, providerReportedUsd } = extractUsage(data.usage);
 
         trackUsage(
           'generate',
-          normalized,
+          result.normalized,
           true,
+          durationMs,
           undefined,
-          providerReportedUsd,
+          result.providerReportedUsd,
           options.promptType
         );
 
-        return ok({ content, usage: normalized });
+        return ok({ content: result.content, usage: result.normalized });
       } catch (error) {
+        const durationMs = Date.now() - start;
         const errorMsg = getErrorMessage(error);
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
@@ -341,7 +386,15 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('generate', emptyUsage, false, errorMsg, undefined, options.promptType);
+        trackUsage(
+          'generate',
+          emptyUsage,
+          false,
+          durationMs,
+          errorMsg,
+          undefined,
+          options.promptType
+        );
         return err(mapOpenRouterError(error));
       }
     },

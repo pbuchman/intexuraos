@@ -15,6 +15,7 @@ const sampleParams: UsageLogParams = {
     costUsd: 0,
   },
   success: true,
+  durationMs: 0,
 };
 
 describe('FakeUsageSink', () => {
