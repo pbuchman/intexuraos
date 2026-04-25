@@ -14,53 +14,57 @@ function validateAuth(authHeader: string | undefined): boolean {
 }
 
 export const startVmFunction: HttpFunction = async (req, res): Promise<void> => {
-  logger.info({ method: req.method }, 'start-vm function invoked');
+  try {
+    logger.info({ method: req.method }, 'start-vm function invoked');
 
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    const authHeader = req.headers['x-internal-auth'];
+    if (!validateAuth(typeof authHeader === 'string' ? authHeader : undefined)) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const result = await startVm();
+
+    if (result.success) {
+      res.status(200).json(result);
+    } else {
+      res.status(503).json(result);
+    }
+  } finally {
+    await flush();
   }
-
-  const authHeader = req.headers['x-internal-auth'];
-  if (!validateAuth(typeof authHeader === 'string' ? authHeader : undefined)) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-
-  const result = await startVm();
-
-  if (result.success) {
-    res.status(200).json(result);
-  } else {
-    res.status(503).json(result);
-  }
-
-  await flush();
 };
 
 export const stopVmFunction: HttpFunction = async (req, res): Promise<void> => {
-  logger.info({ method: req.method }, 'stop-vm function invoked');
+  try {
+    logger.info({ method: req.method }, 'stop-vm function invoked');
 
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    const authHeader = req.headers['x-internal-auth'];
+    if (!validateAuth(typeof authHeader === 'string' ? authHeader : undefined)) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const result = await stopVm();
+
+    if (result.success) {
+      res.status(200).json(result);
+    } else {
+      res.status(503).json(result);
+    }
+  } finally {
+    await flush();
   }
-
-  const authHeader = req.headers['x-internal-auth'];
-  if (!validateAuth(typeof authHeader === 'string' ? authHeader : undefined)) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-
-  const result = await stopVm();
-
-  if (result.success) {
-    res.status(200).json(result);
-  } else {
-    res.status(503).json(result);
-  }
-
-  await flush();
 };
 
 functions.http('startVm', startVmFunction);

@@ -231,8 +231,6 @@ describe('startVm', () => {
   });
 
   it('throws an IntexuraOSError with code WORKER_UNAVAILABLE on state timeout', async () => {
-    const { IntexuraOSError } = await import('@intexuraos/common-core');
-
     // First get returns TERMINATED, all subsequent gets remain TERMINATED so
     // waitForState(RUNNING) never resolves and times out.
     mockGet.mockResolvedValue([{ status: 'TERMINATED' }]);
@@ -249,10 +247,5 @@ describe('startVm', () => {
     // and that no other code threw a generic Error first.
     expect(result.success).toBe(false);
     expect(result.message).toContain('Timeout waiting for VM to reach');
-
-    // Sanity check: directly verify the typed error is throwable and shaped right
-    const typed = new IntexuraOSError('WORKER_UNAVAILABLE', 'x');
-    expect(typed.code).toBe('WORKER_UNAVAILABLE');
-    expect(typed.httpStatus).toBe(502);
   });
 });

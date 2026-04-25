@@ -46,9 +46,11 @@ export async function stopVm(): Promise<StopVmResult> {
       if (shutdownResponse.ok) {
         const data = (await shutdownResponse.json()) as {
           status: string;
-          runningTasks: number;
+          runningTasks: unknown;
         };
-        runningTasks = data.runningTasks;
+        if (typeof data.runningTasks === 'number') {
+          runningTasks = data.runningTasks;
+        }
         logger.info({ runningTasks }, 'Orchestrator acknowledged shutdown');
 
         if (runningTasks > 0) {
@@ -79,11 +81,10 @@ export async function stopVm(): Promise<StopVmResult> {
       runningTasksAtShutdown: runningTasks,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.error({ error: message }, 'Failed to stop VM');
+    logger.error({ err: error }, 'Failed to stop VM');
     return {
       success: false,
-      message: `Failed to stop VM: ${message}`,
+      message: `Failed to stop VM: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }
