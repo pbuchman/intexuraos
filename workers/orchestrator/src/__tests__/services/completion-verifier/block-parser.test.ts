@@ -631,10 +631,7 @@ describe('coerceFields int leniency', () => {
   });
 
   it('extracts negative leading integer with annotation', () => {
-    const result = coerceFields(
-      { count: '-3 (failed sub-checks)' },
-      intOnlyContract
-    );
+    const result = coerceFields({ count: '-3 (failed sub-checks)' }, intOnlyContract);
     expect(result.data['count']).toBe(-3);
   });
 
