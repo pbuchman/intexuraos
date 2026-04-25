@@ -828,20 +828,33 @@ export async function handleTaskCompletion(
       const enforceReviewOutcome = (
         reviewResult: NonNullable<typeof result>
       ): { ok: true } | { ok: false; message: string; code: string } => {
-        if (reviewResult.review_comments_posted === undefined) {
-          return {
-            ok: false,
-            code: 'REVIEW_AGENT_ENFORCEMENT_FAILED',
-            message: 'Review enforcement requires result.review_comments_posted',
-          };
-        }
+        // [INT-1570] Soft-default review_comments_posted when review_id proves a
+        // review was actually posted. The orchestrator block-parser silently drops
+        // annotated integers (e.g. "0 (no inline comments)") and we must not fail
+        // an otherwise-successful review on bookkeeping. If review_id is missing
+        // OR present-but-non-numeric, the value is unrecoverable — hard fail.
+        const hasReviewId =
+          typeof reviewResult.review_id === 'string' && reviewResult.review_id.trim() !== '';
+        const rawCount = reviewResult.review_comments_posted;
+        const countIsValid = typeof rawCount === 'string' && /^\d+$/.test(rawCount);
 
-        if (!/^\d+$/.test(reviewResult.review_comments_posted)) {
-          return {
-            ok: false,
-            code: 'REVIEW_AGENT_ENFORCEMENT_FAILED',
-            message: 'Review enforcement requires result.review_comments_posted to be a non-negative integer string',
-          };
+        if (!countIsValid) {
+          if (hasReviewId) {
+            requestLog.warn(
+              { taskId, rawReviewCommentsPosted: rawCount },
+              'review_comments_posted missing or non-numeric; defaulting to "0" because review_id is present'
+            );
+            reviewResult.review_comments_posted = '0';
+          } else {
+            return {
+              ok: false,
+              code: 'REVIEW_AGENT_ENFORCEMENT_FAILED',
+              message:
+                rawCount === undefined
+                  ? 'Review enforcement requires result.review_comments_posted'
+                  : 'Review enforcement requires result.review_comments_posted to be a non-negative integer string',
+            };
+          }
         }
 
         const trimmedReviewTypes = reviewResult.review_types?.trim();
