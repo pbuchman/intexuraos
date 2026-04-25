@@ -3,6 +3,7 @@ import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
+import fastifyRateLimit from '@fastify/rate-limit';
 import {
   fastifyAuthPlugin,
   intexuraFastifyPlugin,
@@ -140,6 +141,9 @@ export async function buildServer(): Promise<FastifyInstance> {
             stream: createLogStream(),
           },
     disableRequestLogging: true,
+    // Cloud Run terminates TLS and forwards client IP via X-Forwarded-For;
+    // trust the proxy so request.ip resolves to the real client.
+    trustProxy: true,
   });
 
   registerQuietHealthCheckLogging(app);
@@ -149,10 +153,54 @@ export async function buildServer(): Promise<FastifyInstance> {
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'],
   });
 
+  // IP-based floor rate limit. Applies globally; per-route `config.rateLimit`
+  // overrides allow stricter limits (e.g. POST /guest-session is 10/min).
+  //
+  // The errorResponseBuilder returns the same shape as `reply.fail('RATE_LIMITED', …)`
+  // — emitted directly here because @fastify/rate-limit throws via the error path,
+  // and the global error handler set by infra-sentry rewrites unhandled errors to 500.
+  await app.register(fastifyRateLimit, {
+    global: true,
+    max: 60,
+    timeWindow: '1 minute',
+    keyGenerator: (req) => req.ip,
+    skip: (req) =>
+      req.method === 'OPTIONS' ||
+      req.method === 'HEAD' ||
+      req.url.startsWith('/health'),
+    errorResponseBuilder: (request, context) => {
+      const error = new Error(
+        `Rate limit exceeded, retry in ${context.after}`
+      ) as Error & { statusCode?: number; code?: string };
+      error.statusCode = context.statusCode;
+      error.code = 'RATE_LIMITED';
+      return error;
+    },
+  });
+
   await app.register(intexuraFastifyPlugin);
   await app.register(fastifyAuthPlugin);
 
   setupSentryErrorHandler(app as unknown as FastifyInstance);
+
+  // The Sentry error handler returns 500 for any error it doesn't specifically
+  // recognize, which would otherwise mask 429 responses thrown by
+  // @fastify/rate-limit. Wrap the previously-installed handler so rate-limit
+  // errors short-circuit to a proper RATE_LIMITED response and everything else
+  // continues through the Sentry path.
+  const upstreamErrorHandler = app.errorHandler;
+  app.setErrorHandler(async (error, request, reply) => {
+    const errorWithStatus = error as Error & { statusCode?: number };
+    if (errorWithStatus.statusCode === 429) {
+      return await reply.fail(
+        'RATE_LIMITED',
+        errorWithStatus.message.length > 0
+          ? errorWithStatus.message
+          : 'Rate limit exceeded'
+      );
+    }
+    return await upstreamErrorHandler(error, request, reply);
+  });
 
   registerCoreSchemas(app);
 
