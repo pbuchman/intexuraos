@@ -14,6 +14,17 @@ import {
 } from '../../../domain/usecases/triageFailedTask.js';
 import type { CodeTask, TaskError } from '../../../domain/models/codeTask.js';
 
+// Default config mock — individual tests override autoRetry.maxAttempts as needed.
+vi.mock('../../../config.js', () => ({
+  loadConfig: (): {
+    queue: { maxSize: number; ttlMinutes: number };
+    autoRetry: { maxAttempts: number };
+  } => ({
+    queue: { maxSize: 50, ttlMinutes: 1440 },
+    autoRetry: { maxAttempts: 3 },
+  }),
+}));
+
 describe('triageFailedTask', () => {
   let mockLogger: Logger;
   let mockCodeTaskRepo: {
@@ -370,6 +381,64 @@ describe('triageFailedTask', () => {
         task,
         { attempts: 3, errorMessage: 'Setup failed again' }
       );
+    });
+  });
+
+  describe('autoRetry attempt cap (Fix D part 2)', () => {
+    it('returns permanent_failure when autoRetryAttempt >= config.autoRetry.maxAttempts and notifies user', async () => {
+      const task = buildTask({ id: 'task_capped', autoRetryAttempt: 3 });
+      const taskError: TaskError = { code: 'SETUP_FAILED', message: 'Setup failed' };
+
+      const result = await triageFailedTask(buildDeps(), {
+        task,
+        completedAt: new Date(),
+        taskError,
+      });
+
+      expect(result.action).toBe('permanent_failure');
+      expect(result.reason).toMatch(/cap reached/i);
+      expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
+      expect(mockWhatsappNotifier.notifyTaskAutoRetryExhausted).toHaveBeenCalledOnce();
+      expect(mockWhatsappNotifier.notifyTaskAutoRetryExhausted).toHaveBeenCalledWith(
+        'user_123',
+        task,
+        { attempts: 3, errorMessage: 'Setup failed' },
+      );
+    });
+
+    it('still retries when autoRetryAttempt < config.autoRetry.maxAttempts', async () => {
+      const task = buildTask({ id: 'task_below_cap', autoRetryAttempt: 2 });
+      const taskError: TaskError = { code: 'SETUP_FAILED', message: 'Setup failed' };
+
+      const result = await triageFailedTask(buildDeps(), {
+        task,
+        completedAt: new Date(),
+        taskError,
+      });
+
+      expect(result.action).toBe('retried');
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledOnce();
+      const createInput = mockCodeTaskRepo.create.mock.calls[0]?.[0];
+      expect(createInput?.autoRetryAttempt).toBe(3);
+    });
+
+    it('returns permanent_failure (without retry) when cap reached even if classifier verdict is fail', async () => {
+      // verdict='fail' is checked before the cap, but the result must still be permanent_failure
+      // and autoRetryTask must NOT be called. Either ordering is acceptable per the plan.
+      const task = buildTask({ id: 'task_capped_fail', autoRetryAttempt: 3 });
+      const taskError: TaskError = {
+        code: 'COMPLETELY_UNKNOWN_ERROR',
+        message: 'Permanent error',
+      };
+
+      const result = await triageFailedTask(buildDeps(), {
+        task,
+        completedAt: new Date(),
+        taskError,
+      });
+
+      expect(result.action).toBe('permanent_failure');
+      expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
     });
   });
 });
