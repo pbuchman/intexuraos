@@ -36,7 +36,17 @@ interface IntexuraFastifyReply extends FastifyReply {
 export function setupSentryErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler(async (error: FastifyError, request, reply) => {
     const fastifyReply = reply as IntexuraFastifyReply;
-    const fastifyError = error as { code?: string };
+    const fastifyError = error as { code?: string; statusCode?: number };
+
+    // Rate-limit short-circuit: respond with RATE_LIMITED before logging to
+    // Sentry. 429s are expected operational events (e.g. @fastify/rate-limit),
+    // not exceptions worth capturing.
+    if (fastifyError.statusCode === 429) {
+      const message = error.message.length > 0 ? error.message : 'Rate limit exceeded';
+      reply.status(429);
+      await fastifyReply.fail('RATE_LIMITED', message);
+      return;
+    }
 
     // Log to Pino FIRST - this is our reliable error log
     request.log.error({ err: error }, 'Unhandled error');
