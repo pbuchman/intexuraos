@@ -39,7 +39,14 @@ export const SENTRY_REDACT_KEYS = [
 const REDACT_KEY_SET = new Set<string>(SENTRY_REDACT_KEYS.map((k) => k.toLowerCase()));
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  // Accept only plain object literals — class instances (Date, Map, Buffer,
+  // Error, etc.) carry non-data properties that should not be walked as
+  // structured payloads.
+  const proto = Object.getPrototypeOf(value) as object | null;
+  return proto === null || proto === Object.prototype;
 }
 
 function shouldRedactKey(key: string): boolean {

@@ -28,7 +28,7 @@
 
 import * as Sentry from '@sentry/node';
 import type { Logger } from 'pino';
-import { initSentry } from './init.js';
+import { defaultRelease, initSentry } from './init.js';
 import { createAppLogger } from './appLogger.js';
 
 export interface WorkerBootstrapConfig {
@@ -78,7 +78,7 @@ export function initWorker(cfg: WorkerBootstrapConfig): WorkerBootstrap {
   if (cfg.tracesSampleRate !== undefined) {
     sentryConfig.tracesSampleRate = cfg.tracesSampleRate;
   }
-  const release = cfg.release ?? process.env['K_REVISION'];
+  const release = cfg.release ?? defaultRelease();
   if (release !== undefined && release !== '') {
     sentryConfig.release = release;
   }

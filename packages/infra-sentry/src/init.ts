@@ -27,7 +27,18 @@ export interface SentryConfig {
 type SentryInitOptions = NonNullable<Parameters<typeof Sentry.init>[0]>;
 type SentryEvent = Parameters<NonNullable<SentryInitOptions['beforeSend']>>[0];
 
-function defaultRelease(): string | undefined {
+/**
+ * Resolve the default Sentry `release` from the runtime environment.
+ *
+ * Cloud Run injects `K_REVISION` on every revision. When unset (e.g. local
+ * dev) we leave the field undefined so Sentry can fall back to its own
+ * defaults rather than tagging events with a misleading value.
+ *
+ * Exported because `initWorker` also needs the same fallback semantics — keep
+ * the rule in one place so future additions (e.g. git-sha fallback) only need
+ * to land here.
+ */
+export function defaultRelease(): string | undefined {
   const rev = process.env['K_REVISION'];
   if (rev === undefined || rev === '') {
     return undefined;
@@ -49,6 +60,9 @@ function defaultTracesSampleRate(environment: string | undefined): number {
  */
 function buildBeforeSend(): NonNullable<SentryInitOptions['beforeSend']> {
   return (event) => {
+    // The status-code drop MUST run before redaction. `status_code` is not in
+    // `SENTRY_REDACT_KEYS` today, but reading it after `redactObject` would
+    // make the drop logic silently break if a future contributor added it.
     const statusCode = (event.contexts?.response as { status_code?: unknown } | undefined)
       ?.status_code;
     if (typeof statusCode === 'number' && statusCode < 500) {
