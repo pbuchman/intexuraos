@@ -13,8 +13,7 @@ import { writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
-import pino from 'pino';
-import { serializeError } from '@intexuraos/common-core';
+import { initWorker } from '@intexuraos/infra-sentry';
 
 import { main } from './main.js';
 import { ensureRepository } from './services/repo-manager.js';
@@ -31,8 +30,6 @@ import {
   startCredentialRefreshLoop,
 } from './bootstrap/service-wiring.js';
 import { ensureDirectoryExists } from './bootstrap/fs-utils.js';
-
-const errorSerializers = { error: serializeError, err: serializeError };
 
 function buildOrchestratorConfig(
   env: BootstrapEnvConfig,
@@ -58,30 +55,6 @@ function buildOrchestratorConfig(
   };
 }
 
-/* v8 ignore start -- module-init: bootstrap-only pino transport cannot be unit-tested without spawning worker threads @preserve */
-function createLogger(logLevel: string, logFilePath: string): pino.Logger {
-  return pino({
-    level: logLevel,
-    serializers: errorSerializers,
-    transport: {
-      targets: [
-        {
-          target: 'pino-pretty',
-          options: {
-            colorize: true,
-            singleLine: true,
-            translateTime: 'SYS:HH:MM:ss.l',
-            ignore: 'pid,hostname',
-          },
-          level: logLevel,
-        },
-        { target: 'pino/file', options: { destination: logFilePath }, level: logLevel },
-      ],
-    },
-  });
-}
-/* v8 ignore stop @preserve */
-
 /* v8 ignore start -- module-init: startup execSync call cannot be unit-tested without real git; fallback is exercised indirectly @preserve */
 function readCodeVersion(): string {
   try {
@@ -97,9 +70,14 @@ function readCodeVersion(): string {
  * `.catch` reports and exits.
  *
  * The body itself is unit-tested in `start.test.ts`, which mocks every
- * bootstrap module plus `node:fs`, `pino`, and `node:child_process`.
- * Only `createLogger` and `readCodeVersion` carry narrower v8 ignores
- * because they wrap pino's transport worker and `execSync` respectively.
+ * bootstrap module plus `node:fs`, `@intexuraos/infra-sentry`, and
+ * `node:child_process`. Only `readCodeVersion` is excluded from coverage
+ * because it wraps `execSync` directly.
+ *
+ * Logger bootstrap is delegated to `initWorker()` (INT-1565 §S5): it returns
+ * `{ logger, flush }` wired with the unified Sentry + OTel + dev streams.
+ * The `flush` callback is forwarded into `main()` so the SIGTERM handler can
+ * `await flush()` before exit.
  */
 export async function start(): Promise<void> {
   const home = homedir();
@@ -136,7 +114,12 @@ export async function start(): Promise<void> {
     logsDir,
     privateKeyPath
   );
-  const logger = createLogger(env.logLevel, join(logsDir, 'orchestrator.log'));
+  const { logger, flush } = initWorker({
+    serviceName: 'orchestrator',
+    environment: env.environment,
+    ...(env.sentryDsn !== undefined ? { sentryDsn: env.sentryDsn } : {}),
+    ...(env.release !== undefined ? { release: env.release } : {}),
+  });
 
   logger.info({ port: config.port, capacity: config.capacity }, 'Starting orchestrator');
   logger.info(
@@ -186,7 +169,8 @@ export async function start(): Promise<void> {
     services.heartbeatManager,
     logger,
     services.workerAuthRegistry,
-    services.isolationProvider
+    services.isolationProvider,
+    flush
   );
 }
 

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Logger } from '@intexuraos/common-core';
+import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
 import type { WorkerRuntime } from '../runtime/types.js';
 import type { WorkerConfig, WorkerType } from './types.js';
 import { WORKER_TYPES } from './types.js';
@@ -43,17 +43,24 @@ export function buildWorkerEnv(input: BuildWorkerEnvInput): BuildWorkerEnvResult
 
   if (runtime === 'claude') {
     if (requiredApiKeyEnvVar === undefined) {
-      throw new Error(`Worker type '${workerType}' is missing API key configuration`);
+      throw new IntexuraOSError(
+        'MISCONFIGURED',
+        `Worker type '${workerType}' is missing API key configuration`
+      );
     }
     if (apiKey === '') {
-      throw new Error(
+      throw new IntexuraOSError(
+        'MISCONFIGURED',
         `Worker type '${workerType}' requires ${requiredApiKeyEnvVar} but it is not configured`
       );
     }
   }
 
   if (runtime === 'codex' && !useSharedCodexAuth) {
-    throw new Error('Codex runtime requires sharedCodexAuthPath but it is not configured');
+    throw new IntexuraOSError(
+      'MISCONFIGURED',
+      'Codex runtime requires sharedCodexAuthPath but it is not configured'
+    );
   }
 
   const env = [

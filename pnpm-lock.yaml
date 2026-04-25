@@ -2009,6 +2009,9 @@ importers:
       '@intexuraos/infra-openrouter':
         specifier: workspace:*
         version: link:../../packages/infra-openrouter
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract

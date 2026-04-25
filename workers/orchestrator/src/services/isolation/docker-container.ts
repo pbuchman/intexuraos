@@ -1,7 +1,7 @@
 import type Docker from 'dockerode';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { Logger } from '@intexuraos/common-core';
+import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
 import type { DiscoveredContainer } from './types.js';
 
 const EXEC_INSPECT_POLL_INTERVAL_MS = 5_000;
@@ -231,7 +231,10 @@ export class DockerContainer {
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
 
-    throw new Error(`Worker readiness timeout after ${String(timeoutMs)}ms for task ${taskId}`);
+    throw new IntexuraOSError(
+      'WORKER_UNAVAILABLE',
+      `Worker readiness timeout after ${String(timeoutMs)}ms for task ${taskId}`
+    );
   }
 
   async assertManagedEntrypointSupport(
@@ -251,7 +254,8 @@ export class DockerContainer {
     const execStream = await execInstance.start({ hijack: false, stdin: false });
     const exitCode = await this.waitForExecCompletion(taskId, execInstance, execStream);
     if (exitCode !== 0) {
-      throw new Error(
+      throw new IntexuraOSError(
+        'INTERNAL_ERROR',
         'Worker image is incompatible: missing managed-attempt run-attempt entrypoint support'
       );
     }

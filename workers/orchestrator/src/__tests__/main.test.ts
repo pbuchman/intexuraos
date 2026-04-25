@@ -1645,6 +1645,89 @@ describe('main.ts', () => {
 
       // mockExit doesn't need restore - it's cleared in beforeEach
     });
+
+    it('awaits the optional flush callback before exit (INT-1565 §S5)', async () => {
+      // INT-1565 §S5: SIGTERM handler MUST await the flush() returned by
+      // initWorker() so Pino + Sentry buffers drain before the process exits.
+      const flushFn = vi.fn(async () => undefined);
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger,
+          undefined,
+          undefined,
+          flushFn
+        );
+      } catch {
+        // Expected — main() can throw from app.listen() in test setups
+      }
+
+      const onCalls = vi.mocked(process.on).mock.calls;
+      const sigtermCall = onCalls.find((call) => call[0] === 'SIGTERM');
+      const sigtermHandler = sigtermCall?.[1];
+
+      if (typeof sigtermHandler === 'function') {
+        vi.mocked(mockDispatcher.getRunningCount).mockReturnValue(0);
+        sigtermHandler();
+        // SIGTERM handler is fire-and-forget; pump fake timers + microtasks
+        // until shutdown's awaited steps (app.close, save state, flush) drain.
+        await vi.runAllTimersAsync();
+      }
+
+      expect(flushFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('logs and continues when the flush callback rejects', async () => {
+      // The flush() contract is "always resolves," but a buggy implementation
+      // must not leave the process hanging on shutdown — we wrap the call in a
+      // try/catch and log a warning.
+      const flushFn = vi.fn(async () => {
+        throw new Error('flush exploded');
+      });
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger,
+          undefined,
+          undefined,
+          flushFn
+        );
+      } catch {
+        // Expected
+      }
+
+      const onCalls = vi.mocked(process.on).mock.calls;
+      const sigtermCall = onCalls.find((call) => call[0] === 'SIGTERM');
+      const sigtermHandler = sigtermCall?.[1];
+
+      if (typeof sigtermHandler === 'function') {
+        vi.mocked(mockDispatcher.getRunningCount).mockReturnValue(0);
+        sigtermHandler();
+        await vi.runAllTimersAsync();
+      }
+
+      expect(flushFn).toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.any(Error) }),
+        'flush() raised during shutdown; continuing exit'
+      );
+    });
   });
 
   describe('main function integration', () => {

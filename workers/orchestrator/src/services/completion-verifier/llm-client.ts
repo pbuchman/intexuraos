@@ -1,4 +1,4 @@
-import type { Logger } from '@intexuraos/common-core';
+import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
 export async function generateResumeSummaryWithFallback(params: {
@@ -59,5 +59,5 @@ export function extractAndParseJson(content: string): unknown {
     return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1)) as unknown;
   }
 
-  throw new Error('LLM verifier response is not valid JSON');
+  throw new IntexuraOSError('DOWNSTREAM_ERROR', 'LLM verifier response is not valid JSON');
 }

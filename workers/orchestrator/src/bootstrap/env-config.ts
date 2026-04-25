@@ -55,6 +55,22 @@ export interface BootstrapEnvConfig {
   gitUserNameOverride?: string;
   gitUserEmailOverride?: string;
   logLevel: string;
+  /**
+   * Logical environment name forwarded to `initWorker()` (INT-1565 §S5).
+   * Used as Sentry `environment` and on log-stream tags.
+   */
+  environment: string;
+  /**
+   * Sentry DSN read from `INTEXURAOS_SENTRY_DSN`. When unset, `initWorker()`
+   * skips Sentry initialization (per `initWorker.ts`).
+   */
+  sentryDsn?: string;
+  /**
+   * Release identifier read from `K_REVISION` (Cloud Run) or
+   * `INTEXURAOS_RELEASE`. Forwarded to `initWorker()` so Sentry events tag
+   * the deployed revision.
+   */
+  release?: string;
 }
 
 /**
@@ -158,12 +174,26 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
   const openRouterApiKey = env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
 
   const logLevel = getOptionalEnv('LOG_LEVEL', 'info', env);
+  // Environment name for the unified worker bootstrap (INT-1565 §S5). The
+  // INTEXURAOS_ENVIRONMENT var is the canonical source; NODE_ENV is consulted
+  // as a fallback for dev shells that don't export it. Defaults to
+  // `development` so a missing value never crashes initWorker().
+  const environment = getOptionalEnv(
+    'INTEXURAOS_ENVIRONMENT',
+    getOptionalEnv('NODE_ENV', 'development', env),
+    env
+  );
 
   const repoPath = readOptionalString(env, 'INTEXURAOS_REPOSITORY_PATH');
   const workerForensicsBasePath = readOptionalString(env, 'INTEXURAOS_CODE_WORKER_FORENSICS_PATH');
   const githubPrivateKeyOverride = readOptionalString(env, 'INTEXURAOS_GITHUB_APP_PRIVATE_KEY');
   const gitUserNameOverride = readOptionalString(env, 'INTEXURAOS_GIT_USER_NAME');
   const gitUserEmailOverride = readOptionalString(env, 'INTEXURAOS_GIT_USER_EMAIL');
+  const sentryDsn = readOptionalString(env, 'INTEXURAOS_SENTRY_DSN');
+  // Release identifier: prefer Cloud Run's K_REVISION (auto-injected on every
+  // deploy) and fall back to an explicit override for non-Cloud-Run hosts.
+  const release =
+    readOptionalString(env, 'K_REVISION') ?? readOptionalString(env, 'INTEXURAOS_RELEASE');
 
   return {
     repoUrl,
@@ -196,5 +226,8 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
     ...(gitUserNameOverride !== undefined ? { gitUserNameOverride } : {}),
     ...(gitUserEmailOverride !== undefined ? { gitUserEmailOverride } : {}),
     logLevel,
+    environment,
+    ...(sentryDsn !== undefined ? { sentryDsn } : {}),
+    ...(release !== undefined ? { release } : {}),
   };
 }
