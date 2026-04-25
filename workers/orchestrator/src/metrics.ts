@@ -18,7 +18,14 @@ import type { Logger } from '@intexuraos/common-core';
 /** Label set for a custom metric. Mirrors `@intexuraos/common-metrics`. */
 export type MetricLabel = Record<string, string>;
 
-/** Descriptor for a custom metric. Mirrors `@intexuraos/common-metrics`. */
+/**
+ * Descriptor for a custom metric. Mirrors `@intexuraos/common-metrics`.
+ *
+ * IMPORTANT: every field on this type — including `__label` — is part of
+ * the parent plan §7 frozen contract. The S8 reconciliation commit replaces
+ * this shim with a `from '@intexuraos/common-metrics'` import; structural
+ * compatibility is required for that swap to be a no-op.
+ */
 export interface CustomMetric<L extends MetricLabel = MetricLabel> {
   readonly name: string;
   readonly type: 'counter' | 'gauge' | 'distribution';
@@ -27,7 +34,9 @@ export interface CustomMetric<L extends MetricLabel = MetricLabel> {
   /**
    * Phantom property: keeps the label type bound to the descriptor so that
    * `client.increment(METRIC, labels)` type-checks the labels argument.
-   * Never read at runtime.
+   * Never read at runtime — the field exists only to anchor `L` in the
+   * structural type. Do not strip; required for symmetry with the future
+   * `@intexuraos/common-metrics` package.
    */
   readonly __label?: L;
 }
@@ -53,7 +62,19 @@ export interface CodeTaskCompletedLabels extends MetricLabel {
   status: CodeTaskMetricStatus;
 }
 
-/** Label shape for `CODE_TASK_METRICS.FAILED`. */
+/**
+ * Label shape for `CODE_TASK_METRICS.FAILED`.
+ *
+ * `reason` is intentionally typed as a free-form `string` to mirror the
+ * underlying `MetricLabel` contract, but the dispatcher only ever sets it
+ * to one of the closed enum values `'failed' | 'interrupted' | 'cancelled'`
+ * (mapped from the four-arm `TaskStatus` discriminated union by
+ * {@link mapTerminalStatusToMetricStatus}'s caller). DO NOT widen this to
+ * carry free-form strings (e.g. `error.code`) — Cloud Monitoring custom
+ * metrics enforce a low cardinality budget on label values, and
+ * `code_tasks_failed` would explode if every distinct error code became a
+ * separate time series.
+ */
 export interface CodeTaskFailedLabels extends MetricLabel {
   reason: string;
 }

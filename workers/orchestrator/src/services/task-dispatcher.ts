@@ -2799,7 +2799,19 @@ export class TaskDispatcher {
     // so dashboards can distinguish "task ended" from "task failed". Duration
     // is recorded best-effort: when `task.startedAt` is unparseable we emit
     // a zero-valued sample so downstream histograms still see the count.
-    this.emitTerminalMetrics(task, finalStatus);
+    //
+    // Wrap in try/catch as a contract-level guard: the bundled implementations
+    // (`createMetricsClient`, `noopMetricsClient`) never throw, but the
+    // `MetricsClient` interface alone does not promise that — a hand-rolled
+    // client could, and a metrics outage MUST NOT crash task finalization.
+    try {
+      this.emitTerminalMetrics(task, finalStatus);
+    } catch (metricsError) {
+      this.logger.warn(
+        { taskId: task.taskId, err: metricsError },
+        'metrics emission failed during finalize; continuing'
+      );
+    }
 
     if (this.runningCount > 0) this.runningCount--;
     this.clearTaskTimers(task.taskId);

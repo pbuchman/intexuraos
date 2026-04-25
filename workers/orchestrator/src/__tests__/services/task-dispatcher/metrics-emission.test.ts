@@ -322,6 +322,45 @@ describe('finalizeTask metric emission (INT-1565 §S5)', () => {
     expect(value).toBeGreaterThanOrEqual(0);
   });
 
+  it('records a clamped 0 duration when the wired finalize path sees a future startedAt', async () => {
+    // Wired-path coverage for the `delta > 0 ? delta : 0` branch in
+    // computeTaskDurationMs: this is exercised in isolation by the unit test
+    // below, but we also want to confirm the dispatcher pipeline plumbs the
+    // clamped value through to `metrics.record` without rounding or sign
+    // errors. Set startedAt 1 hour in the future so finalizeTask's
+    // `task.completedAt = new Date().toISOString()` produces a negative delta.
+    const metrics = createFakeMetrics();
+    const dispatcher = buildDispatcherWithMetrics(asClient(metrics));
+    const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const task = buildTask({ taskId: 't-future-start', startedAt: future });
+
+    await (dispatcher as unknown as DispatcherInternals).finalizeTask(task, 'completed', {});
+
+    expect(metrics.record).toHaveBeenCalledTimes(1);
+    const [, , value] = metrics.record.mock.calls[0] as [unknown, unknown, number];
+    expect(value).toBe(0);
+  });
+
+  it('logs a warning and continues finalization when MetricsClient.increment throws', async () => {
+    // INT-1565 review: emitTerminalMetrics is wrapped in try/catch so a
+    // hand-rolled metrics client that throws cannot crash the finalize hot
+    // path. Use a metrics client whose increment is hard-throwing (not just
+    // recording) and assert finalize completes.
+    const throwingMetrics: MetricsClient = {
+      increment: () => {
+        throw new Error('metrics outage');
+      },
+      record: vi.fn(),
+      flush: vi.fn(async () => undefined),
+    };
+    const dispatcher = buildDispatcherWithMetrics(throwingMetrics);
+    const task = buildTask({ taskId: 't-metrics-throw' });
+
+    await expect(
+      (dispatcher as unknown as DispatcherInternals).finalizeTask(task, 'completed', {})
+    ).resolves.toBeUndefined();
+  });
+
   it('falls back to a no-op metrics client when none is injected (no throws)', async () => {
     // Constructing without the metrics arg means the no-op default kicks in.
     const dispatcher = new TaskDispatcher(
