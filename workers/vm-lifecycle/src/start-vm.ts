@@ -1,6 +1,6 @@
 import { InstancesClient } from '@google-cloud/compute';
 import * as Sentry from '@sentry/node';
-import { IntexuraOSError } from '@intexuraos/common-core';
+import { IntexuraOSError, type ErrorCode } from '@intexuraos/common-core';
 import { logger } from './logger.js';
 import { VM_CONFIG } from './config.js';
 import { isExpectedStartupNetworkError } from './errors.js';
@@ -9,6 +9,7 @@ export interface StartVmResult {
   success: boolean;
   message: string;
   startupDurationMs?: number;
+  errorCode?: ErrorCode;
 }
 
 export async function startVm(): Promise<StartVmResult> {
@@ -78,6 +79,14 @@ export async function startVm(): Promise<StartVmResult> {
       startupDurationMs: Date.now() - startTime,
     };
   } catch (error) {
+    if (error instanceof IntexuraOSError) {
+      logger.error({ err: error, code: error.code }, 'Failed to start VM');
+      return {
+        success: false,
+        message: error.message,
+        errorCode: error.code,
+      };
+    }
     logger.error({ err: error }, 'Failed to start VM');
     return {
       success: false,

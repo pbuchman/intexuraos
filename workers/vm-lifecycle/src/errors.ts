@@ -8,6 +8,15 @@ const EXPECTED_NETWORK_CODES = new Set([
   'ENETUNREACH',
 ]);
 
+function getErrorCode(e: Error): string | undefined {
+  const code = (e as Error & { code?: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
+}
+
+function getErrorCause(e: Error): unknown {
+  return (e as Error & { cause?: unknown }).cause;
+}
+
 /**
  * Heuristic: is this an expected transient network error during VM startup
  * or shutdown?
@@ -19,13 +28,13 @@ const EXPECTED_NETWORK_CODES = new Set([
 export function isExpectedStartupNetworkError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   if (error.name === 'AbortError' || error.name === 'TimeoutError') return true;
-  const code = (error as Error & { code?: unknown }).code;
-  if (typeof code === 'string' && EXPECTED_NETWORK_CODES.has(code)) return true;
+  const code = getErrorCode(error);
+  if (code !== undefined && EXPECTED_NETWORK_CODES.has(code)) return true;
   // unwrap one layer of cause (e.g., TypeError 'fetch failed' wrapping ECONNREFUSED)
-  const cause = (error as Error & { cause?: unknown }).cause;
+  const cause = getErrorCause(error);
   if (cause instanceof Error) {
-    const causeCode = (cause as Error & { code?: unknown }).code;
-    if (typeof causeCode === 'string' && EXPECTED_NETWORK_CODES.has(causeCode)) return true;
+    const causeCode = getErrorCode(cause);
+    if (causeCode !== undefined && EXPECTED_NETWORK_CODES.has(causeCode)) return true;
     if (cause.name === 'AbortError' || cause.name === 'TimeoutError') return true;
   }
   return false;
