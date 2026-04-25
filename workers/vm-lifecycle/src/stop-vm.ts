@@ -1,5 +1,6 @@
 import { InstancesClient } from '@google-cloud/compute';
 import * as Sentry from '@sentry/node';
+import { IntexuraOSError, type ErrorCode } from '@intexuraos/common-core';
 import { logger } from './logger.js';
 import { VM_CONFIG } from './config.js';
 import { isExpectedStartupNetworkError } from './errors.js';
@@ -8,6 +9,7 @@ export interface StopVmResult {
   success: boolean;
   message: string;
   runningTasksAtShutdown?: number;
+  errorCode?: ErrorCode;
 }
 
 export async function stopVm(): Promise<StopVmResult> {
@@ -81,6 +83,14 @@ export async function stopVm(): Promise<StopVmResult> {
       runningTasksAtShutdown: runningTasks,
     };
   } catch (error) {
+    if (error instanceof IntexuraOSError) {
+      logger.error({ err: error, code: error.code }, 'Failed to stop VM');
+      return {
+        success: false,
+        message: error.message,
+        errorCode: error.code,
+      };
+    }
     logger.error({ err: error }, 'Failed to stop VM');
     return {
       success: false,
@@ -111,7 +121,7 @@ async function waitForTasksToComplete(): Promise<void> {
       }
     } catch (error) {
       if (isExpectedStartupNetworkError(error)) {
-        logger.info({ err: error }, 'Orchestrator no longer responding, proceeding');
+        logger.warn({ err: error }, 'Orchestrator no longer responding, proceeding');
       } else {
         logger.error({ err: error }, 'Unexpected error polling orchestrator health, proceeding');
         Sentry.captureException(error);

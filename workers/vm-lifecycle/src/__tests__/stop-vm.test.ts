@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Sentry from '@sentry/node';
+import { IntexuraOSError } from '@intexuraos/common-core';
+import { logger } from '../logger.js';
 
 vi.mock('../logger.js', () => ({
   logger: {
@@ -51,6 +53,10 @@ describe('stopVm', () => {
     mockGet.mockReset();
     mockStop.mockReset();
     vi.mocked(Sentry.captureException).mockReset();
+    vi.mocked(logger.error).mockReset();
+    vi.mocked(logger.warn).mockReset();
+    vi.mocked(logger.info).mockReset();
+    vi.mocked(logger.debug).mockReset();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     originalFetch = globalThis.fetch;
   });
@@ -392,6 +398,31 @@ describe('stopVm', () => {
     expect(result.success).toBe(true);
     expect(mockStop).toHaveBeenCalledOnce();
     expect(Sentry.captureException).toHaveBeenCalled();
+  });
+
+  it('surfaces IntexuraOSError code on the StopVmResult and logs structured code', async () => {
+    mockGet.mockResolvedValue([{ status: 'RUNNING' }]);
+    mockStop.mockRejectedValue(
+      new IntexuraOSError('WORKER_UNAVAILABLE', 'Compute API timed out stopping VM')
+    );
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ status: 'acknowledged', runningTasks: 0 }),
+    });
+
+    const result = await stopVm();
+
+    // Outer catch unwraps the IntexuraOSError and propagates code+message,
+    // rather than the generic 'Failed to stop VM: ...' wrapping.
+    expect(result.success).toBe(false);
+    expect(result.message).toBe('Compute API timed out stopping VM');
+    expect(result.errorCode).toBe('WORKER_UNAVAILABLE');
+
+    const errorCalls = vi.mocked(logger.error).mock.calls;
+    const failedToStopCall = errorCalls.find(([, msg]) => msg === 'Failed to stop VM');
+    expect(failedToStopCall).toBeDefined();
+    expect(failedToStopCall?.[0]).toMatchObject({ code: 'WORKER_UNAVAILABLE' });
   });
 
   it('should handle graceful shutdown with running tasks that finish via running=0', async () => {

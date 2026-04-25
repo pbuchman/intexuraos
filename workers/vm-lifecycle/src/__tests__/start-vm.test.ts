@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Sentry from '@sentry/node';
+import { logger } from '../logger.js';
 
 vi.mock('../logger.js', () => ({
   logger: {
@@ -54,6 +55,10 @@ describe('startVm', () => {
     mockStart.mockReset();
     mockStop.mockReset();
     vi.mocked(Sentry.captureException).mockReset();
+    vi.mocked(logger.error).mockReset();
+    vi.mocked(logger.warn).mockReset();
+    vi.mocked(logger.info).mockReset();
+    vi.mocked(logger.debug).mockReset();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     originalFetch = globalThis.fetch;
   });
@@ -112,13 +117,29 @@ describe('startVm', () => {
     expect(result.startupDurationMs).toBeDefined();
   });
 
-  it('should call stop when VM is running but unhealthy', async () => {
-    // This test verifies that when the VM is RUNNING but health check fails,
-    // the stop method is called to initiate a restart
-    mockGet.mockResolvedValue([{ status: 'RUNNING' }]);
+  it('should restart VM when running but unhealthy: stop -> start -> health fails', async () => {
+    // Walk through the full restart path:
+    //   1) initial get -> RUNNING (triggers initial pollHealth)
+    //   2) initial pollHealth fails (status: 'starting') -> code calls stop
+    //   3) waitForState(TERMINATED) sees TERMINATED on next get
+    //   4) start is called, waitForState(RUNNING) sees RUNNING
+    //   5) final pollHealth never goes ready -> result.success === false
+    let getCallCount = 0;
+    mockGet.mockImplementation(() => {
+      getCallCount++;
+      if (getCallCount === 1) {
+        return Promise.resolve([{ status: 'RUNNING' }]);
+      }
+      if (getCallCount === 2) {
+        return Promise.resolve([{ status: 'TERMINATED' }]);
+      }
+      return Promise.resolve([{ status: 'RUNNING' }]);
+    });
     mockStop.mockResolvedValue([{ name: 'stop-op' }]);
+    mockStart.mockResolvedValue([{ name: 'start-op' }]);
 
-    // Health check always fails (returns non-ready status)
+    // Health endpoint never reports ready, so both the initial pollHealth
+    // (forcing the restart) and the final pollHealth (after start) fail.
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ status: 'starting' }),
@@ -128,10 +149,10 @@ describe('startVm', () => {
     await vi.runAllTimersAsync();
     const result = await resultPromise;
 
-    // The test will time out at waitForState(TERMINATED) since mockGet always returns RUNNING
-    // But we verify that stop was called, indicating the restart was initiated
     expect(result.success).toBe(false);
-    expect(mockStop).toHaveBeenCalled();
+    expect(result.message).toContain('timed out');
+    expect(mockStop).toHaveBeenCalledOnce();
+    expect(mockStart).toHaveBeenCalledOnce();
   });
 
   it('should return error if health check times out', async () => {
@@ -242,10 +263,17 @@ describe('startVm', () => {
     await vi.runAllTimersAsync();
     const result = await resultPromise;
 
-    // Outer catch wraps the IntexuraOSError into a failed StartVmResult; we
-    // assert behaviour by checking the message bubbled up from the typed error
-    // and that no other code threw a generic Error first.
+    // Outer catch unwraps the IntexuraOSError, surfacing its code and message
+    // verbatim on the StartVmResult so the caller can branch on errorCode.
     expect(result.success).toBe(false);
     expect(result.message).toContain('Timeout waiting for VM to reach');
+    expect(result.errorCode).toBe('WORKER_UNAVAILABLE');
+
+    // The structured logger.error call MUST include the code field so dashboards
+    // can filter by errorCode without parsing free-text messages.
+    const errorCalls = vi.mocked(logger.error).mock.calls;
+    const failedToStartCall = errorCalls.find(([, msg]) => msg === 'Failed to start VM');
+    expect(failedToStartCall).toBeDefined();
+    expect(failedToStartCall?.[0]).toMatchObject({ code: 'WORKER_UNAVAILABLE' });
   });
 });
