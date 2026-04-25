@@ -118,7 +118,6 @@ export const chatRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       let chatClient;
       let userId: string;
-      let guestSessionId: string | null = null;
 
       if (user !== null) {
         // AUTHENTICATED USER - use their LLM client
@@ -158,7 +157,6 @@ export const chatRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         // @allow-result-access -- guarded by !verified.ok check above
         const verifiedSub = verified.value.sub;
-        guestSessionId = verifiedSub;
 
         // Check rate limit keyed on the verified sub (NOT the raw header) and
         // immediately reserve the slot. check() and record() must execute as
