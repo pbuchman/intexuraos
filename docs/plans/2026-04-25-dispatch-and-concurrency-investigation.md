@@ -287,6 +287,80 @@ For every (planning, review) pair in §2.2:
 
 **Open decision:** ship A+B and skip C? Or A+B+C? Default recommendation: A+B for now, file C as a separate `tech-debt` issue tracked under "make planning's prNumber observable in Firestore."
 
+### Fix D — auto-retry chain TTL preservation (INT-1529 chains were 9 tasks long because TTL never bound the loop)
+
+**Scope:** `apps/code-agent/src/domain/usecases/autoRetryTask.ts:112-152` and `apps/code-agent/src/infra/services/taskEnqueueServiceImpl.ts:75-83`.
+
+The Codex audit caught that every auto-retry creates a brand-new task whose `enqueue()` stamps a fresh `queuedAt` (taskEnqueueServiceImpl.ts:75-83). Combined with `triageFailedTask → autoRetryTask` (triageFailedTask.ts:55-90 → autoRetryTask.ts:112-152) firing on every failed planning attempt, the retry chain has no upper bound: each link gets its own TTL window and the chain can live indefinitely. The 9-task INT-1529 chain in §2.2 is the direct consequence — Fix B serializes plan↔review *within* a chain link, but does nothing to bound the chain itself.
+
+**Two-part fix:**
+
+1. **Carry forward the original `queuedAt`.** When `autoRetryTask` creates the retry task, copy `failedTask.queuedAt` (or `failedTask.createdAt` if `queuedAt` is unset) onto the new task explicitly. `taskEnqueueService.enqueue()` already stamps `queuedAt: new Date()` unconditionally; either (a) make `enqueue` accept a caller-provided `queuedAt` override, or (b) have `autoRetryTask` write the inherited value via `codeTaskRepo.update` immediately after enqueue. Option (a) is cleaner.
+
+2. **Bound the retry attempt count per Linear-issue chain.** Store `autoRetryAttempt` (already present on the task model — see the `autoRetryAttempt: 3` field on the captured `task_11f5bc37` data). Cap at `config.autoRetry.maxAttempts` (default 3). Beyond the cap, `triageFailedTask` returns `permanent_failure` instead of attempting another retry.
+
+**Why this is in scope, not "out of scope":**
+
+* Fix A keeps tasks queued during transient outages.
+* Fix B prevents reviews from running concurrently with planning.
+* But the user's original report — "the loop of planning review that we are failing consecutively" — is the chain length. Without Fix D, even with A+B in place, a persistently failing planning task spawns indefinite retries. The 9-task chain stays 9 tasks long.
+* The audit-caught issue is a **load-bearing piece** of the fix the user explicitly asked for, not a tangential concern.
+
+**Evidence this fix helps:**
+
+* The captured INT-1529 chain has 9 tasks, with `retriedFrom` pointing back to the previous failed planning each time. The 5th retry is the one that hit `worker_unavailable` and died — by which point the issue had been re-attempted 5 times in 90 minutes.
+* With Fix D + `maxAttempts=3`, the chain caps at 3 planning attempts. With Fix A keeping the 3rd attempt queued through transient outages, total task count per issue would be ≤4 (one planning, one terminal-fail planning after retries exhausted, optionally one review).
+* The original `queuedAt` carry-forward means TTL applies across the entire chain: 30 minutes from the *first* attempt, not 30 minutes per link.
+
+**Test plan:**
+
+* Unit test in `autoRetryTask.test.ts`: failed task has `queuedAt = T0`; retry task is enqueued at `T1`; assert the retry task's `queuedAt == T0` (carried forward).
+* Unit test in `triageFailedTask.test.ts`: failedTask has `autoRetryAttempt: 3` and `maxAttempts=3`; assert verdict `permanent_failure` and no new task created.
+* Replay test extends INT-1529 fixture: assert chain caps at 3 planning tasks total, not 5+.
+
+### Fix E — atomic dispatch claim (single-instance race today, multi-instance race tomorrow)
+
+**Scope:** `apps/code-agent/src/domain/usecases/drainTaskQueue.ts:53-98` (the `isDraining` process-local flag) and `:479-551` (the dispatch-then-update sequence).
+
+The Codex audit pointed out that `isDraining` is a per-process boolean. Today on home-dev there is one orchestrator + one code-agent instance, so the race is latent. In Cloud Run with autoscaling (production), two replicas can both fetch the same queued task and both dispatch it before either updates Firestore status to `dispatched`. The current code is `dispatch → update status`, not `claim status atomically → dispatch`.
+
+**Fix:** replace the dispatch-then-update sequence with a Firestore transaction that claims the candidate by atomically transitioning its status from `queued` to `dispatched` BEFORE the network call. If the transition fails (another instance got there first), skip the candidate and pick the next.
+
+```ts
+// Replace drainTaskQueue.ts:479-507 with:
+const claimResult = await codeTaskRepo.claimForDispatch(task.id);  // Firestore txn: queued→dispatched
+if (!claimResult.ok || claimResult.value.alreadyClaimed) {
+  logger.info({ taskId: task.id }, 'Skipped — claimed by another instance');
+  continue;
+}
+// Now safe to call the network dispatcher; only one replica reaches here.
+const dispatchResult = await taskDispatcher.dispatch({ … });
+if (!dispatchResult.ok) {
+  // ... existing error handling, including Fix A's still-queued path
+  // But if we already claimed: we need to ROLL BACK to queued before returning still_busy.
+  if (dispatchError.code === 'at_capacity' || isRetryableErrorCode(dispatchError.code)) {
+    await codeTaskRepo.update(task.id, { status: 'queued' });   // release the claim
+    return ok({ action: 'still_busy', taskId: task.id });
+  }
+  // permanent codes already finalize the task as 'failed' — no rollback needed.
+}
+```
+
+**Why this is in scope:**
+
+* The user's home-dev environment is single-instance, so the bug is dormant. But the production target (Cloud Run) is autoscaling. Shipping Fix A/B without Fix E means: production traffic could double-dispatch a task and burn a worker slot uselessly, exacerbating the very capacity exhaustion the plan is trying to fix.
+* The fix is small (one new repo method, one swapped call site) and removes an entire class of duplication.
+
+**Evidence this fix helps:**
+
+* The transaction semantics of Firestore (`runTransaction`) guarantee linearizability on the document. Two replicas calling `claimForDispatch(taskId)` concurrently produce exactly one success and one `alreadyClaimed`.
+* Cloud Run's auto-scaling target for `code-agent` (per `terraform/environments/dev/main.tf` configuration) allows up to N replicas; today's flag-based guard does not extend across them.
+
+**Test plan:**
+
+* Repository test in `firestoreCodeTaskRepository.test.ts`: simulate two concurrent `claimForDispatch` calls (Promise.all on the txn); assert exactly one returns `claimed: true` and the other returns `alreadyClaimed: true`.
+* Drain integration test: two `drainTaskQueue` runs in parallel against the same `FakeCodeTaskRepository`; assert dispatcher is called exactly once.
+
 ### Verification approach (replay test)
 
 `apps/code-agent/src/__tests__/usecases/drainTaskQueue-INT1560-replay.test.ts`:
@@ -344,21 +418,21 @@ The original draft was independently re-investigated by Codex against the wider 
 
 ### Additional issues Codex surfaced
 
-| #   | Issue                                                                                                                                      | Citation                                                                                                             | Disposition                                                                                                                                                                                                                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `isDraining` is process-local; multi-instance code-agents can dispatch the same task twice between candidate-fetch and status-update.      | `drainTaskQueue.ts:53-98,479-507,536-551`                                                                            | **Pre-existing race; out of scope.** Filed as a separate concern (own its own `INT-XXXX`). Fix A/B do not introduce it and do not worsen it.                                                                                                                                |
-| 2   | Linear guard could deadlock on `ACTIVE_TASK_STATUSES` (which includes `queued`).                                                           | `task-constants.ts:11-15`, `task-query-builder.ts:125-133`                                                           | **Addressed in §3 Fix B narrowing.** New repo method uses `DISPATCHED_OR_RUNNING_STATUSES`.                                                                                                                                                                                 |
-| 3   | Synchronize webhooks keep creating fresh queued reviews; the new guard would defer the survivor.                                           | `drainTaskQueue.ts:115-166`, `createReviewTask.ts:296-363`                                                           | **Acceptable.** Cancel-duplicate-review at `drainTaskQueue.ts:115-167` runs first and collapses duplicates per PR before the new guard sees them. With the no-`queuedAt`-reset rule (§3 Fix A correction), TTL eventually expires the survivor if planning never completes. |
-| 4   | Auto-retry creates a fresh task with a new `queuedAt`, restarting TTL. Retry chains can live indefinitely if the failure is persistent.    | `autoRetryTask.ts:112-152`, `taskEnqueueServiceImpl.ts:75-83`                                                        | **Out of scope here; flag for a separate "auto-retry budget cap" issue.** This is the auto-retry side of the same TTL concern; not in the dispatch-failure path Fix A/B target.                                                                                             |
-| 5   | Existing dedup at `task-dedup.ts:170-205` excludes review tasks, so Fix B is **not** redundant.                                            | same                                                                                                                 | **Confirmed; clarified in §3 Fix B "Why this is safe."**                                                                                                                                                                                                                    |
-| 6   | Worker-side dispatch endpoint emits `at_capacity` / `docker_unavailable` / `auth_unavailable` / `SETUP_FAILED` — not `worker_unavailable`. | `workers/orchestrator/src/services/task-dispatcher.ts:249-257,464-491`, `workers/orchestrator/src/routes.ts:182-205` | **Confirmed; consistent with the plan.** `worker_unavailable` originates only on the code-agent dispatcher side after probe failures, not from the orchestrator HTTP API.                                                                                                   |
+| #   | Issue                                                                                                                                      | Citation                                                                                                             | Disposition                                                                                                                                                                                                                                                                                                                          |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | `isDraining` is process-local; multi-instance code-agents can dispatch the same task twice between candidate-fetch and status-update.      | `drainTaskQueue.ts:53-98,479-507,536-551`                                                                            | **Owned. Folded into §3 Fix E (atomic dispatch claim).** Latent on single-instance home-dev; live on multi-replica production code-agent. Removing the race is part of this PR's scope.                                                                                                                                              |
+| 2   | Linear guard could deadlock on `ACTIVE_TASK_STATUSES` (which includes `queued`).                                                           | `task-constants.ts:11-15`, `task-query-builder.ts:125-133`                                                           | **Addressed in §3 Fix B narrowing.** New repo method uses `DISPATCHED_OR_RUNNING_STATUSES`.                                                                                                                                                                                                                                          |
+| 3   | Synchronize webhooks keep creating fresh queued reviews; the new guard would defer the survivor.                                           | `drainTaskQueue.ts:115-166`, `createReviewTask.ts:296-363`                                                           | **Acceptable.** Cancel-duplicate-review at `drainTaskQueue.ts:115-167` runs first and collapses duplicates per PR before the new guard sees them. With the no-`queuedAt`-reset rule (§3 Fix A correction), TTL eventually expires the survivor if planning never completes.                                                          |
+| 4   | Auto-retry creates a fresh task with a new `queuedAt`, restarting TTL. Retry chains can live indefinitely if the failure is persistent.    | `autoRetryTask.ts:112-152`, `taskEnqueueServiceImpl.ts:75-83`                                                        | **Owned. Folded into §3 Fix D (auto-retry chain TTL preservation + per-chain attempt cap).** Without this, even with Fix A+B in place, a persistently failing planning task spawns indefinite retries — the 9-task INT-1529 chain stays 9 tasks long. Directly load-bearing for the user-reported "loop of planning review" symptom. |
+| 5   | Existing dedup at `task-dedup.ts:170-205` excludes review tasks, so Fix B is **not** redundant.                                            | same                                                                                                                 | **Confirmed; clarified in §3 Fix B "Why this is safe."**                                                                                                                                                                                                                                                                             |
+| 6   | Worker-side dispatch endpoint emits `at_capacity` / `docker_unavailable` / `auth_unavailable` / `SETUP_FAILED` — not `worker_unavailable`. | `workers/orchestrator/src/services/task-dispatcher.ts:249-257,464-491`, `workers/orchestrator/src/routes.ts:182-205` | **Confirmed; consistent with the plan.** `worker_unavailable` originates only on the code-agent dispatcher side after probe failures, not from the orchestrator HTTP API.                                                                                                                                                            |
 
 ### Net effect on the plan
 
 * Fix A is **simpler and more correct** post-audit: drop the `queuedAt` reset; rely on the existing TTL.
 * Fix B is **narrower and safer** post-audit: review-only, dispatched-or-running siblings only, no reset.
 * Fix C remains optional defence-in-depth; nothing in the audit changes its risk profile.
-* Two unrelated issues (multi-instance race, auto-retry indefinite chain) are documented but explicitly out of scope for this PR.
+* Fix D (auto-retry TTL + attempt cap) and Fix E (atomic dispatch claim) added to the PR scope. Both were caught by the audit; both are load-bearing for the user-reported symptoms.
 
 ---
 
@@ -366,10 +440,11 @@ The original draft was independently re-investigated by Codex against the wider 
 
 - [ ] Fix A: `drainTaskQueue` consults `isRetryableErrorCode` for the still-queued path; truly permanent codes still fail. **No `queuedAt` reset** in this branch (matches `at_capacity`).
 - [ ] Fix B: drain calls a new `hasOtherDispatchedOrRunningForLinearIssue` repo method, **only on `review` candidates**, with **DISPATCHED_OR_RUNNING_STATUSES** filter; defers when a non-self sibling is running. No `queuedAt` reset.
+- [ ] Fix D: `autoRetryTask` carries forward `queuedAt` from the failed task to the retry; `triageFailedTask` honors `config.autoRetry.maxAttempts` and returns `permanent_failure` once the cap is hit so retry chains terminate.
+- [ ] Fix E: `drainTaskQueue` claims the candidate via a Firestore transaction (`claimForDispatch`) before calling the dispatcher; rolls back to `queued` on retryable errors so the next drain sees the claim released.
 - [ ] Replay test asserts the INT-1529 chain ends with ≤2 tasks (not 9) under the new logic.
 - [ ] All existing `drainTaskQueue.test.ts` cases still pass.
-- [ ] New tests confirm: (a) `worker_unavailable`/`network_error` keeps task queued without resetting `queuedAt`; (b) review with running planning sibling defers; (c) two queued reviews on same Linear issue do NOT deadlock; (d) review for a different PR is unaffected when planning runs on a sibling PR's Linear issue.
+- [ ] New tests confirm: (a) `worker_unavailable`/`network_error` keeps task queued without resetting `queuedAt`; (b) review with running planning sibling defers; (c) two queued reviews on same Linear issue do NOT deadlock; (d) review for a different PR is unaffected when planning runs on a sibling PR's Linear issue; (e) auto-retry chain inherits original `queuedAt` and TTL applies across the chain; (f) two concurrent `claimForDispatch` calls produce exactly one success and one already-claimed; (g) retry attempt cap returns `permanent_failure` once `maxAttempts` is reached.
 - [ ] `pnpm run verify:workspace:tracked code-agent` and `pnpm run ci:tracked` both green.
 - [ ] PR title includes `INT-XXXX`; user creates the issue on push.
 - [ ] Decision recorded: ship Fix C (defence-in-depth) now or defer.
-- [ ] Separate Linear issues filed (or referenced) for the two out-of-scope items: multi-instance dispatch race, auto-retry budget cap.
