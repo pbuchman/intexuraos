@@ -100,9 +100,10 @@ describe('startFastifyService', () => {
   it('rethrows when listen fails', async () => {
     process.env['REQ_ENV_VAR'] = 'x';
     const app = fakeApp();
-    (app.listen as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-      new Error('boom')
-    );
+    (app.listen as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('boom'));
+    // Silence the diagnostic process.stderr.write in the failure path so
+    // test-stdout validation does not flag it as unexpected output.
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
     await expect(
       startFastifyService({
@@ -114,6 +115,9 @@ describe('startFastifyService', () => {
         host: '127.0.0.1',
       })
     ).rejects.toThrow('boom');
+
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to start x'));
+    stderrSpy.mockRestore();
   });
 
   it('falls back to PORT env when port is not provided', async () => {
@@ -148,9 +152,48 @@ describe('startFastifyService', () => {
     expect(app.listen).toHaveBeenCalledWith({ port: 8080, host: '0.0.0.0' });
   });
 
+  it('passes the Sentry DSN to initSentry when configured', async () => {
+    process.env['REQ_ENV_VAR'] = 'x';
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://example@sentry.io/1';
+    const { initSentry } = await import('@intexuraos/infra-sentry');
+    const app = fakeApp();
+    await startFastifyService({
+      serviceName: 'x',
+      requiredEnv: ['REQ_ENV_VAR'],
+      initServices: () => undefined,
+      buildServer: async () => app,
+      port: 0,
+    });
+    expect(initSentry).toHaveBeenCalledWith(
+      expect.objectContaining({ dsn: 'https://example@sentry.io/1' })
+    );
+  });
+
+  it('omits the dsn key when INTEXURAOS_SENTRY_DSN is empty', async () => {
+    process.env['REQ_ENV_VAR'] = 'x';
+    process.env['INTEXURAOS_SENTRY_DSN'] = '';
+    const { initSentry } = await import('@intexuraos/infra-sentry');
+    const app = fakeApp();
+    await startFastifyService({
+      serviceName: 'x',
+      requiredEnv: ['REQ_ENV_VAR'],
+      initServices: () => undefined,
+      buildServer: async () => app,
+      port: 0,
+    });
+    const call = (initSentry as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+    expect(call).toBeDefined();
+    expect(call).not.toHaveProperty('dsn');
+  });
+
   it('registers SIGTERM and SIGINT handlers', async () => {
     process.env['REQ_ENV_VAR'] = 'x';
-    const before = { sigterm: process.listenerCount('SIGTERM'), sigint: process.listenerCount('SIGINT') };
+    const before = {
+      sigterm: process.listenerCount('SIGTERM'),
+      sigint: process.listenerCount('SIGINT'),
+    };
     const app = fakeApp();
     await startFastifyService({
       serviceName: 'x',

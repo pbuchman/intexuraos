@@ -69,4 +69,32 @@ describe('createFirestoreCrudRepository', () => {
   it('delete is idempotent for missing documents', async () => {
     await expect(repo.delete('never-existed')).resolves.toBeUndefined();
   });
+
+  it('handles snap.data() === undefined by passing {} to fromFirestore', async () => {
+    const fakeFirestore = {
+      collection: (): {
+        doc: () => { get: () => Promise<{ exists: boolean; data: () => undefined }> };
+      } => ({
+        doc: (): { get: () => Promise<{ exists: boolean; data: () => undefined }> } => ({
+          get: async (): Promise<{ exists: boolean; data: () => undefined }> => ({
+            exists: true,
+            data: (): undefined => undefined,
+          }),
+        }),
+      }),
+    };
+    const fromFirestoreCalls: { id: string; data: Record<string, unknown> }[] = [];
+    const customRepo = createFirestoreCrudRepository<Note>({
+      firestore: fakeFirestore as unknown as Firestore,
+      collection: 'notes',
+      toFirestore: (n) => ({ title: n.title, body: n.body }),
+      fromFirestore: (id, data) => {
+        fromFirestoreCalls.push({ id, data });
+        return { id, title: '', body: '' };
+      },
+    });
+    await customRepo.get('any-id');
+    expect(fromFirestoreCalls).toHaveLength(1);
+    expect(fromFirestoreCalls[0]?.data).toEqual({});
+  });
 });

@@ -6,10 +6,26 @@
  * the expected payload shape, the `registerRoutes` callback is invoked with
  * the app, and additional health checks are merged into `/health`.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createFastifyApp } from '../createFastifyApp.js';
 import type { HealthCheck } from '../health.js';
+
+// Stub the unified log stream so the production-logger branch (covered by a
+// dedicated test below) does not actually open stdout while tests run.
+vi.mock('@intexuraos/infra-sentry', async () => {
+  const actual = await vi.importActual<typeof import('@intexuraos/infra-sentry')>(
+    '@intexuraos/infra-sentry'
+  );
+  return {
+    ...actual,
+    createLogStream: (): NodeJS.WritableStream =>
+      ({
+        write: (): boolean => true,
+      }) as unknown as NodeJS.WritableStream,
+    setupSentryErrorHandler: (): void => undefined,
+  };
+});
 
 const baseOpts = {
   serviceName: 'test-svc',
@@ -22,12 +38,18 @@ const baseOpts = {
 
 describe('createFastifyApp', () => {
   let app: FastifyInstance | null = null;
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+  });
 
   afterEach(async () => {
     if (app !== null) {
       await app.close();
       app = null;
     }
+    process.env = originalEnv;
   });
 
   it('serves /health with serviceName, version, and ok status when no secrets are required', async () => {
@@ -121,6 +143,30 @@ describe('createFastifyApp', () => {
     const res = await app.inject({ method: 'GET', url: '/health' });
     const body = res.json();
     expect(body.status).toBe('degraded');
+  });
+
+  it('uses the production logger branch with explicit LOG_LEVEL when NODE_ENV is not "test"', async () => {
+    delete process.env['NODE_ENV'];
+    process.env['LOG_LEVEL'] = 'warn';
+    app = await createFastifyApp({
+      ...baseOpts,
+      registerRoutes: async (): Promise<void> => undefined,
+    });
+    // Smoke-test that the configured logger doesn't crash on startup logging
+    // by issuing a request that goes through the regular request pipeline.
+    const res = await app.inject({ method: 'GET', url: '/health' });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('uses the production logger branch with the default "info" level when LOG_LEVEL is unset', async () => {
+    delete process.env['NODE_ENV'];
+    delete process.env['LOG_LEVEL'];
+    app = await createFastifyApp({
+      ...baseOpts,
+      registerRoutes: async (): Promise<void> => undefined,
+    });
+    const res = await app.inject({ method: 'GET', url: '/health' });
+    expect(res.statusCode).toBe(200);
   });
 
   it('honors additionalOpenapiSchemas', async () => {

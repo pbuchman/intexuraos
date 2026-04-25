@@ -27,10 +27,7 @@ export { getLogLevel } from './logging.js';
 export { loadEnv } from './loadEnv.js';
 
 // Generic service container factory (DI lifecycle)
-export {
-  createServiceContainer,
-  type ServiceContainerHandle,
-} from './serviceContainer.js';
+export { createServiceContainer, type ServiceContainerHandle } from './serviceContainer.js';
 
 // Null safety utilities
 export {
