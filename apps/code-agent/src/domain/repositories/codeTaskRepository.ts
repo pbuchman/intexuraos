@@ -256,6 +256,23 @@ export interface CodeTaskRepository {
   ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>>;
 
   /**
+   * Excludes queued siblings (uses DISPATCHED_OR_RUNNING_STATUSES) so that two queued
+   * reviews on the same Linear issue cannot deadlock. Filters out the candidate's own
+   * document.
+   */
+  hasOtherDispatchedOrRunningForLinearIssue(
+    taskId: string,
+    linearIssueId: string,
+  ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>>;
+
+  /**
+   * Atomically transitions queued → dispatched via a Firestore transaction. Returns true
+   * when this caller acquired the claim; false when the task was already past queued or
+   * does not exist. Caller must roll status back to queued on retryable dispatch failure.
+   */
+  claimForDispatch(taskId: string): Promise<Result<boolean, RepositoryError>>;
+
+  /**
    * Find the newest execution-eligible task for a PR.
    * Excludes review, remediation, planning, and merge-conflict follow-up tasks —
    * only returns execution or canonical pull_request tasks. Used to route

@@ -72,9 +72,13 @@ export class TaskEnqueueServiceImpl implements TaskEnqueueService {
       });
     }
 
-    // Step 3: Set queuedAt timestamp
+    // Step 3: Set queuedAt timestamp.
+    // If the caller provided an override (auto-retry chain TTL preservation, INT-1560 Fix D),
+    // use that value so the retry inherits the original queue-entry time. Otherwise stamp
+    // the current time as the default.
+    const queuedAt = input.queuedAt ?? new Date();
     const updateResult = await this.codeTaskRepo.update(taskId, {
-      queuedAt: new Date(),
+      queuedAt,
     });
 
     if (!updateResult.ok) {
