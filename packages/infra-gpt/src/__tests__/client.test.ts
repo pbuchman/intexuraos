@@ -944,5 +944,30 @@ describe('createGptClient', () => {
       expect(lastCall?.success).toBe(false);
       expect(lastCall?.durationMs).toBeGreaterThanOrEqual(0);
     });
+
+    it('records llm.cached_input_tokens span attribute when cached_tokens > 0', async () => {
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [{ message: { content: 'hi' } }],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 5,
+          input_tokens_details: { cached_tokens: 7 },
+        },
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('hi', { promptType: 'test-prompt' });
+
+      const spans = spanExporter.getFinishedSpans();
+      const span = spans[0];
+      if (span === undefined) throw new Error('no span');
+      expect(span.attributes['llm.cached_input_tokens']).toBe(7);
+    });
   });
 });

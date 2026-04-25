@@ -3,7 +3,7 @@ import nock from 'nock';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
-import { trace } from '@opentelemetry/api';
+import { SpanStatusCode, trace } from '@opentelemetry/api';
 import {
   BasicTracerProvider,
   InMemorySpanExporter,
@@ -1144,6 +1144,26 @@ describe('createPerplexityClient', () => {
       };
       expect(lastCall?.success).toBe(false);
       expect(lastCall?.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('records ERROR-status span when API returns non-OK HTTP status', async () => {
+      nock(API_BASE_URL).post('/chat/completions').reply(429, 'Rate limited');
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('hi', { promptType: 'test-prompt' });
+
+      const spans = spanExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      const span = spans[0];
+      if (span === undefined) throw new Error('no span');
+      expect(span.name).toBe('llm.perplexity.generate');
+      expect(span.status.code).toBe(SpanStatusCode.ERROR);
+      expect(span.attributes['llm.duration_ms']).toBeGreaterThanOrEqual(0);
     });
   });
 });
