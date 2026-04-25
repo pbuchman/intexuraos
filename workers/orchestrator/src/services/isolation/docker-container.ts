@@ -254,8 +254,11 @@ export class DockerContainer {
     const execStream = await execInstance.start({ hijack: false, stdin: false });
     const exitCode = await this.waitForExecCompletion(taskId, execInstance, execStream);
     if (exitCode !== 0) {
+      // INT-1565 review: this is an operator-configured precondition (the
+      // pulled worker image lacks a feature), not an internal failure —
+      // INVALID_WORKER (400) keeps it out of 5xx dashboards.
       throw new IntexuraOSError(
-        'INTERNAL_ERROR',
+        'INVALID_WORKER',
         'Worker image is incompatible: missing managed-attempt run-attempt entrypoint support'
       );
     }

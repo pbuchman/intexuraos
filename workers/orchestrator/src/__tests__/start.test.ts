@@ -209,11 +209,12 @@ describe('start() — full bootstrap happy path', () => {
   it('forwards the flush callback returned by initWorker into main()', async () => {
     await start();
 
+    // Assert by argument identity (not positional index) so an extra optional
+    // arg added to main()'s signature in the future does not silently move
+    // the assertion onto the wrong slot.
     const mainArgs = vi.mocked(main).mock.calls[0];
     expect(mainArgs).toBeDefined();
-    // 10th positional arg (index 9) is the flush callback.
-    const flushArg = mainArgs?.[9];
-    expect(flushArg).toBe(mockFlush);
+    expect(mainArgs).toContain(mockFlush);
   });
 
   it('forwards sentryDsn and release into initWorker when env supplies them', async () => {
