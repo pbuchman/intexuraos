@@ -249,6 +249,106 @@ describe('WorktreeManager', () => {
       expect(commands).toContain('git fetch origin "task_existing_branch"');
     });
 
+    it('should fall back to base branch when continuation PR branch no longer exists on origin', async () => {
+      // Real-world scenario: PR was merged + branch deleted between task submission
+      // and dispatch. `git fetch` fails with "couldn't find remote ref".
+      // Orchestrator should warn and create the worktree from base branch instead
+      // of failing the task outright.
+      const warnSpy = vi.spyOn(mockLogger, 'warn');
+      const commands: string[] = [];
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        commands.push(command);
+        if (command === 'git fetch origin "feature/int-1561"') {
+          throw new Error(
+            'Command failed: git fetch origin "feature/int-1561"\nfatal: couldn\'t find remote ref feature/int-1561\n'
+          );
+        }
+        if (command.includes('git worktree add')) {
+          return { stdout: '', stderr: 'Preparing worktree' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      const worktreePath = await manager.createWorktree(
+        'task-gone-branch',
+        'development',
+        'feature/int-1561'
+      );
+
+      expect(worktreePath).toBe(join(worktreeBasePath, 'task-gone-branch'));
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-gone-branch',
+          continuationPrBranch: 'feature/int-1561',
+          baseBranch: 'development',
+        }),
+        expect.stringContaining('Continuation PR branch no longer exists on origin')
+      );
+      expect(commands).toContain(
+        `git worktree add -b "task-gone-branch" "${join(worktreeBasePath, 'task-gone-branch')}" "origin/development"`
+      );
+      expect(commands.some((c) => c.includes('origin/feature/int-1561'))).toBe(false);
+      warnSpy.mockRestore();
+    });
+
+    it('should re-throw when continuation PR fetch throws a non-Error value', async () => {
+      // Covers the `: 'Unknown error'` branch of the message coercion. A
+      // non-Error throw cannot match "couldn't find remote ref", so it must
+      // re-throw rather than silently fall back.
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command === 'git fetch origin "feature/non-error"') {
+          throw 'string-thrown-not-an-error';
+        }
+        if (command.includes('git worktree add')) {
+          return { stdout: '', stderr: 'Preparing worktree' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      await expect(
+        manager.createWorktree('task-non-err-fetch', 'development', 'feature/non-error')
+      ).rejects.toThrow(/Failed to create worktree/);
+    });
+
+    it('should re-throw when continuation PR fetch fails with non-missing-ref error', async () => {
+      // Transient errors (network, auth) should not silently degrade to base
+      // branch — dispatcher needs to see the failure so the task stays queued.
+      mockExecAsyncImpl = async (
+        command: string,
+        _options: { cwd?: string; timeout?: number }
+      ): Promise<{ stdout: string; stderr: string }> => {
+        if (command === 'git fetch origin "feature/network"') {
+          throw new Error('fatal: unable to access remote: Connection reset by peer');
+        }
+        if (command.includes('git worktree add')) {
+          return { stdout: '', stderr: 'Preparing worktree' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      vi.resetModules();
+      const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+      const manager = new WM(mockConfig, mockLogger);
+
+      await expect(
+        manager.createWorktree('task-net-err', 'development', 'feature/network')
+      ).rejects.toThrow(/Connection reset by peer/);
+    });
+
     it('should reject continuation branch names with shell metacharacters', async () => {
       const commands: string[] = [];
       mockExecAsyncImpl = async (
