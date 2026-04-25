@@ -165,6 +165,8 @@ describe('EmbeddingClient', () => {
       expect(mockEmbedFn).toHaveBeenCalledWith('test query', 'custom-model');
     });
 
+    // 5 attempts with 500ms base delay use exponential backoff 500+1000+2000+4000 = 7500ms.
+    // Default vitest timeout is 5000ms which is insufficient — bump to 15000ms for headroom.
     it('should use custom retry configuration', async () => {
       const mockEmbedFn = vi.fn().mockRejectedValue(new Error('Rate limit (429)'));
       const deps: EmbeddingClientDeps = {
@@ -177,6 +179,6 @@ describe('EmbeddingClient', () => {
 
       expect(result.ok).toBe(false);
       expect(mockEmbedFn).toHaveBeenCalledTimes(5);
-    });
+    }, 15000);
   });
 });
