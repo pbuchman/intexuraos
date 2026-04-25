@@ -22,7 +22,7 @@ The plan is captured **in-place on the Linear issue description**: requirements,
    - unset env + E2E → mock validator
    - prod, no E2E → real validator
    - prod + `E2E_MODE=false` → real validator
-4. Verify with `pnpm run verify:workspace:tracked -- code-agent` then `pnpm run ci:tracked`.
+4. Verify with `pnpm run verify:workspace:tracked code-agent` then `pnpm run ci:tracked`.
 
 ## Memory Application
 
