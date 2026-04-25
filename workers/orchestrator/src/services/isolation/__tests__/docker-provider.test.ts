@@ -960,6 +960,42 @@ describe('DockerProvider', () => {
       expect(await provider.listPreservedWorkers()).toHaveLength(0);
     });
 
+    it('attach path leaves lockfileSha256 unset when worktree has no pnpm-lock.yaml (INT-1524)', async () => {
+      const fsModule = await import('node:fs');
+      const config = createTestConfig({ taskId: 'preserved-task-no-lock' });
+      await provider.createWorker(config);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await provider.preserveWorker('preserved-task-no-lock');
+
+      // Make existsSync return false specifically for pnpm-lock.yaml so the
+      // attach-time snapshot returns null and the spread-conditional skips the
+      // lockfileSha256 entry (covers the null branch on the attach path).
+      (fsModule.existsSync as Mock).mockImplementation((p: unknown) => {
+        if (typeof p === 'string' && p.endsWith('pnpm-lock.yaml')) {
+          return false;
+        }
+        return true;
+      });
+
+      try {
+        await provider.createWorker(
+          createTestConfig({
+            taskId: 'preserved-task-no-lock',
+            continueSession: true,
+          })
+        );
+      } finally {
+        (fsModule.existsSync as Mock).mockImplementation(() => true);
+      }
+
+      // No drift event because no snapshot was taken at attach time.
+      const driftCall = (mockLogger.warn as Mock).mock.calls.find((call: unknown[]) => {
+        const ctx = call[0] as { event?: string } | undefined;
+        return ctx?.event === 'lockfile-drift';
+      });
+      expect(driftCall).toBeUndefined();
+    });
+
     it('recreates secrets directory and writes prompt files when restoring preserved worker', async () => {
       const fs = await import('node:fs');
       const config = createTestConfig({ taskId: 'preserved-task-2' });
