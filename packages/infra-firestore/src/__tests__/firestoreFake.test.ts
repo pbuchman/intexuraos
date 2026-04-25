@@ -4,6 +4,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FieldValue, Timestamp } from '@google-cloud/firestore';
+import { IntexuraOSError } from '@intexuraos/common-core';
 import { createFakeFirestore, type FakeFirestore } from '../testing/firestoreFake.js';
 
 describe('FakeFirestore', () => {
@@ -191,6 +192,18 @@ describe('FakeFirestore', () => {
         expect(() => docRef.update({ name: 'Test' })).toThrow(
           'Document users/non-existent does not exist'
         );
+      });
+
+      it('throws IntexuraOSError with NOT_FOUND/404 when document does not exist', () => {
+        const docRef = db.collection('users').doc('non-existent');
+        try {
+          docRef.update({ name: 'Test' });
+          throw new Error('expected throw');
+        } catch (e) {
+          expect(e).toBeInstanceOf(IntexuraOSError);
+          expect((e as IntexuraOSError).code).toBe('NOT_FOUND');
+          expect((e as IntexuraOSError).httpStatus).toBe(404);
+        }
       });
 
       it('handles arrayUnion in update', async () => {

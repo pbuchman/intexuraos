@@ -1,4 +1,6 @@
 // apps/mobile-notifications-service/src/domain/usecases/cetDayBounds.ts
+import { IntexuraOSError } from '@intexuraos/common-core';
+
 const TZ = 'Europe/Warsaw';
 
 export interface DayBoundsSec {
@@ -14,7 +16,7 @@ export function cetDayBounds(dateIso: string): DayBoundsSec {
   const m = parts[1];
   const d = parts[2];
   if (y === undefined || m === undefined || d === undefined || Number.isNaN(y) || Number.isNaN(m) || Number.isNaN(d)) {
-    throw new Error(`cetDayBounds: invalid date ${dateIso}`);
+    throw new IntexuraOSError('INVALID_REQUEST', `cetDayBounds: invalid date ${dateIso}`);
   }
   // Find the UTC instant whose Europe/Warsaw local date is (y, m, d) at 00:00.
   // Brute-force search both sides of UTC midnight (one of ±1h, ±2h will match).
@@ -43,5 +45,5 @@ export function cetDayBounds(dateIso: string): DayBoundsSec {
       return { fromSec, toSec: fromSec + 24 * 60 * 60 };
     }
   }
-  throw new Error(`cetDayBounds: could not resolve ${dateIso} in ${TZ}`);
+  throw new IntexuraOSError('INTERNAL_ERROR', `cetDayBounds: could not resolve ${dateIso} in ${TZ}`);
 }
