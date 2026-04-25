@@ -21,7 +21,6 @@ import {
   buildCooloffRetryPrompt,
   parseCooloffResponse,
 } from '../prompts/cooloffRetryPrompt.js';
-import { loadConfig } from '../../config.js';
 
 export type TriageAction = 'retried' | 'retried_after_cooloff' | 'permanent_failure';
 
@@ -71,23 +70,6 @@ export async function triageFailedTask(
     // Fall through to retry
   }
 
-  // Step 4a: Auto-retry chain attempt cap (INT-1560 Fix D part 2).
-  // Checked BEFORE invoking autoRetryTask so persistently failing tasks cannot
-  // spawn indefinite retry chains. Default cap is 3 (config.autoRetry.maxAttempts).
-  const config = loadConfig();
-  const attemptsSoFar = task.autoRetryAttempt ?? 0;
-  if (attemptsSoFar >= config.autoRetry.maxAttempts) {
-    await whatsappNotifier.notifyTaskAutoRetryExhausted(task.userId, task, {
-      attempts: attemptsSoFar,
-      errorMessage: taskError.message,
-    });
-    return {
-      action: 'permanent_failure' as const,
-      reason: `Auto-retry cap reached after ${String(attemptsSoFar)} attempts (max=${String(config.autoRetry.maxAttempts)})`,
-    };
-  }
-
-  // Step 4b: Resolve cooloff schedule if the classifier asked for retry_after_cooloff.
   let cooloffSchedule: CooloffSchedule | undefined;
   if (verdict === 'retry_after_cooloff') {
     cooloffSchedule = await resolveCooloffSchedule(deps, task, taskError, new Date());
@@ -100,7 +82,6 @@ export async function triageFailedTask(
     ...(cooloffSchedule !== undefined && { cooloffSchedule }),
   };
 
-  // Step 4c: Attempt auto-retry
   const retryResult = await autoRetryTask(
     { logger, codeTaskRepo, taskEnqueueService, whatsappNotifier, orchestratorSecret: deps.orchestratorSecret },
     retryRequest
@@ -108,9 +89,8 @@ export async function triageFailedTask(
 
   if (!retryResult.ok) {
     if (retryResult.error.code === 'budget_exhausted') {
-      // Send exhausted notification
       await whatsappNotifier.notifyTaskAutoRetryExhausted(task.userId, task, {
-        attempts: 3,
+        attempts: retryResult.error.attempts,
         errorMessage: taskError.message,
       });
       return {

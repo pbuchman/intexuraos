@@ -135,7 +135,7 @@ describe('drainTaskQueue', () => {
       listQueuedByAge: vi.fn(),
       hasDispatchedOrRunningForPR: vi.fn().mockResolvedValue(ok({ hasActive: false })),
       hasOtherDispatchedOrRunningForLinearIssue: vi.fn().mockResolvedValue(ok({ hasActive: false })),
-      claimForDispatch: vi.fn().mockResolvedValue(ok({ claimed: true })),
+      claimForDispatch: vi.fn().mockResolvedValue(ok(true)),
       findById: vi.fn(),
       update: vi.fn(),
       countQueued: vi.fn(),
@@ -874,7 +874,7 @@ describe('drainTaskQueue', () => {
     const task = createMockTask();
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
     setupWorkerSettings();
-    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ claimed: true }));
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
     mockCodeTaskRepo.update.mockResolvedValue(ok(task));
 
     mockTaskDispatcher.dispatch.mockResolvedValue(
@@ -893,7 +893,7 @@ describe('drainTaskQueue', () => {
     const task = createMockTask();
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
     setupWorkerSettings();
-    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ claimed: true }));
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
 
     mockTaskDispatcher.dispatch.mockResolvedValue(
       err({ code: 'dispatch_failed', message: 'Bad worker response' })
@@ -922,7 +922,7 @@ describe('drainTaskQueue', () => {
     const task = createMockTask();
     mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
     setupWorkerSettings();
-    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ claimed: true }));
+    mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
 
     mockTaskDispatcher.dispatch.mockResolvedValue(
       err({ code: 'dispatch_failed', message: 'Bad worker response' })
@@ -1431,7 +1431,7 @@ describe('drainTaskQueue', () => {
       const task = createMockTask({ prNumber: 42, prBranch: 'fix/some-branch' });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ claimed: true }));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
 
       mockTaskDispatcher.dispatch.mockResolvedValue(
         err({ code: 'dispatch_failed', message: 'Bad worker response' })
@@ -1496,7 +1496,7 @@ describe('drainTaskQueue', () => {
       });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ claimed: true }));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
 
       mockTaskDispatcher.dispatch.mockResolvedValue(
         err({ code: 'dispatch_failed', message: 'Bad worker response' })
@@ -2432,7 +2432,7 @@ describe('drainTaskQueue', () => {
         });
         mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
         setupWorkerSettings();
-        mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ claimed: true }));
+        mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
         mockTaskDispatcher.dispatch.mockResolvedValue(
           err({ code, message: `Transient: ${code}` }),
         );
@@ -2476,7 +2476,7 @@ describe('drainTaskQueue', () => {
         const task = createMockTask();
         mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
         setupWorkerSettings();
-        mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ claimed: true }));
+        mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
         mockTaskDispatcher.dispatch.mockResolvedValue(
           err({ code, message: `Permanent: ${code}` }),
         );
@@ -2578,7 +2578,7 @@ describe('drainTaskQueue', () => {
           parentId: null,
         }),
       );
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ claimed: true }));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-mac' }),
       );
@@ -2618,7 +2618,7 @@ describe('drainTaskQueue', () => {
           parentId: null,
         }),
       );
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ claimed: true }));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-mac' }),
       );
@@ -2652,7 +2652,7 @@ describe('drainTaskQueue', () => {
           parentId: null,
         }),
       );
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ claimed: true }));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-mac' }),
       );
@@ -2694,7 +2694,7 @@ describe('drainTaskQueue', () => {
           parentId: null,
         }),
       );
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ claimed: true }));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-mac' }),
       );
@@ -2717,7 +2717,7 @@ describe('drainTaskQueue', () => {
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
       mockCodeTaskRepo.claimForDispatch.mockResolvedValue(
-        ok({ claimed: false, alreadyClaimed: true }),
+        ok(false),
       );
 
       const result = await drainTaskQueue(createDeps());
@@ -2751,7 +2751,7 @@ describe('drainTaskQueue', () => {
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
       mockCodeTaskRepo.claimForDispatch.mockResolvedValue(
-        ok({ claimed: false, notFound: true }),
+        ok(false),
       );
 
       const result = await drainTaskQueue(createDeps());
@@ -2767,7 +2767,7 @@ describe('drainTaskQueue', () => {
       const task = createMockTask();
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ claimed: true }));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
       mockTaskDispatcher.dispatch.mockResolvedValue(
         err({ code: 'worker_unavailable', message: 'all probes failed' }),
       );
@@ -2789,7 +2789,7 @@ describe('drainTaskQueue', () => {
       const task = createMockTask();
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ claimed: true }));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
       mockTaskDispatcher.dispatch.mockResolvedValue(
         err({ code: 'worker_unavailable', message: 'all probes failed' }),
       );
@@ -2807,7 +2807,7 @@ describe('drainTaskQueue', () => {
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ taskId: 'task-123' }),
-        'Failed to roll back claimForDispatch after retryable dispatch error',
+        'Failed to roll back claim after retryable dispatch error',
       );
     });
 
@@ -2815,7 +2815,7 @@ describe('drainTaskQueue', () => {
       const task = createMockTask();
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ claimed: true }));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
       mockTaskDispatcher.dispatch.mockResolvedValue(
         err({ code: 'dispatch_failed', message: 'bad worker response' }),
       );
@@ -2850,10 +2850,6 @@ describe('drainTaskQueue', () => {
     });
   });
 
-  // Restored after the worktree merge — the drain-side agent's branch was rooted at
-  // commit 38b712ea8 (before INT-1463 schedule-aware draining shipped to development),
-  // and the `-X theirs` merge dropped these tests. They cover lines 200, 265, 266 of
-  // drainTaskQueue.ts (the dispatchSchedule.notBeforeAt branches).
   describe('schedule-aware draining (INT-1463)', () => {
     it('skips a scheduled task that is not yet eligible without dispatching or updating it', async () => {
       const now = Date.now();
@@ -2900,7 +2896,7 @@ describe('drainTaskQueue', () => {
       });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([olderScheduled, newerUnscheduled]));
       setupWorkerSettings();
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ claimed: true }));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
 
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-mac' })
@@ -2995,7 +2991,7 @@ describe('drainTaskQueue', () => {
       });
       mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
       setupWorkerSettings();
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok({ claimed: true }));
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(true));
 
       mockTaskDispatcher.dispatch.mockResolvedValue(
         ok({ dispatched: true, workerLocation: 'home-mac' })

@@ -256,12 +256,9 @@ export interface CodeTaskRepository {
   ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>>;
 
   /**
-   * Check whether a NON-self task on the same Linear issue is dispatched or running.
-   * Used by drainTaskQueue to defer review-side dispatch when planning/execution is in flight
-   * on the same Linear issue (Fix B).
-   *
-   * Excludes queued siblings (uses DISPATCHED_OR_RUNNING_STATUSES) so that two queued reviews
-   * on the same Linear issue cannot deadlock. Filters out the candidate's own document.
+   * Excludes queued siblings (uses DISPATCHED_OR_RUNNING_STATUSES) so that two queued
+   * reviews on the same Linear issue cannot deadlock. Filters out the candidate's own
+   * document.
    */
   hasOtherDispatchedOrRunningForLinearIssue(
     taskId: string,
@@ -269,23 +266,11 @@ export interface CodeTaskRepository {
   ): Promise<Result<{ hasActive: boolean; taskId?: string }, RepositoryError>>;
 
   /**
-   * Atomically claim a queued task for dispatch via a Firestore transaction.
-   * Transitions the task from `queued` → `dispatched` (with `dispatchedAt`) iff currently queued.
-   * Eliminates the multi-instance double-dispatch race (Fix E).
-   *
-   * Returns:
-   * - `{ claimed: true }` — caller now owns dispatch for this task.
-   * - `{ claimed: false, alreadyClaimed: true }` — another instance already moved it past queued.
-   * - `{ claimed: false, notFound: true }` — document does not exist.
+   * Atomically transitions queued → dispatched via a Firestore transaction. Returns true
+   * when this caller acquired the claim; false when the task was already past queued or
+   * does not exist. Caller must roll status back to queued on retryable dispatch failure.
    */
-  claimForDispatch(
-    taskId: string,
-  ): Promise<Result<
-    | { claimed: true }
-    | { claimed: false; alreadyClaimed: true }
-    | { claimed: false; notFound: true },
-    RepositoryError
-  >>;
+  claimForDispatch(taskId: string): Promise<Result<boolean, RepositoryError>>;
 
   /**
    * Find the newest execution-eligible task for a PR.

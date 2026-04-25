@@ -233,11 +233,9 @@ export async function drainTaskQueue(
         }
       }
 
-      // Fix B: Linear-issue concurrency guard for review tasks. Defer when a non-self
-      // sibling on the same Linear issue is dispatched/running. Filtering on
-      // DISPATCHED_OR_RUNNING_STATUSES (not ACTIVE_TASK_STATUSES) avoids the deadlock
-      // where two queued reviews on the same Linear issue see each other and both stall.
-      // No `queuedAt` reset here — TTL must still bound queue lifetime.
+      // Defer reviews while a non-self sibling on the same Linear issue is
+      // dispatched/running. Excludes queued from the filter so two queued
+      // reviews on the same issue cannot both defer and deadlock.
       if (candidate.agentType === 'review' && candidate.linearIssueId !== undefined) {
         const siblingResult = await codeTaskRepo.hasOtherDispatchedOrRunningForLinearIssue(
           candidate.id,
@@ -497,16 +495,14 @@ export async function drainTaskQueue(
       return ok({ action: 'failed', taskId: task.id, locksToCleanup: buildLockCleanups(task) });
     }
 
-    // Fix E: claim the candidate atomically before the network call.
-    // The Firestore transaction transitions queued → dispatched only if currently queued.
-    // This eliminates the multi-instance double-dispatch race that the process-local
-    // `isDraining` guard cannot cover when code-agent runs with autoscaling replicas.
+    // Atomic queued→dispatched claim — the process-local isDraining guard
+    // does not cover multi-replica deployments (Cloud Run autoscaling).
     const claimResult = await codeTaskRepo.claimForDispatch(task.id);
     if (!claimResult.ok) {
       logger.error({ taskId: task.id, error: claimResult.error }, 'Failed to claim task for dispatch');
       return ok({ action: 'still_busy', taskId: task.id });
     }
-    if (!claimResult.value.claimed) {
+    if (!claimResult.value) {
       logger.info({ taskId: task.id }, 'Skipped — claimed by another instance or no longer queued');
       return ok({ action: 'still_busy', taskId: task.id });
     }
@@ -547,30 +543,26 @@ export async function drainTaskQueue(
     if (!dispatchResult.ok) {
       const dispatchError = dispatchResult.error;
 
-      // Fix A: keep task queued for at_capacity AND for any code matching isRetryableErrorCode
-      // (currently worker_unavailable, network_error). The existing at_capacity branch did not
-      // reset queuedAt, and we MUST NOT reset here either — TTL is measured from queuedAt and
-      // resetting would defeat the queue.ttlMinutes bound for retryable transient failures.
+      // Transient codes (at_capacity, worker_unavailable, network_error) keep
+      // the task queued. Do NOT reset queuedAt — TTL is measured from queuedAt
+      // and resetting would defeat the queue.ttlMinutes bound.
       if (dispatchError.code === 'at_capacity' || isRetryableErrorCode(dispatchError.code)) {
         logger.info(
           { taskId: task.id, error: dispatchError, retryable: dispatchError.code !== 'at_capacity' },
           'Dispatch transient/retryable, task remains queued',
         );
-        // Roll back the Fix E claim so the next drain cycle can pick this task up again.
-        // dispatchedAt is intentionally left set as a "last attempted" marker — the field
-        // is informational and is not used as a primary status check.
+        // Roll the claim back so the next drain cycle can re-claim. dispatchedAt
+        // is intentionally left set as a "last attempted" marker.
         const rollbackResult = await codeTaskRepo.update(task.id, { status: 'queued' });
         if (!rollbackResult.ok) {
           logger.warn(
             { taskId: task.id, error: rollbackResult.error },
-            'Failed to roll back claimForDispatch after retryable dispatch error',
+            'Failed to roll back claim after retryable dispatch error',
           );
         }
         return ok({ action: 'still_busy', taskId: task.id });
       }
 
-      // Truly permanent codes (dispatch_failed, invalid_response, worker_busy) — fail the task.
-      // No claim rollback needed: the failure path overwrites status to 'failed'.
       logger.error({ taskId: task.id, error: dispatchError }, 'Drain dispatch failed with permanent error');
       const failUpdateResult = await codeTaskRepo.update(task.id, {
         status: 'failed',
@@ -588,9 +580,8 @@ export async function drainTaskQueue(
       return ok({ action: 'failed', taskId: task.id, locksToCleanup });
     }
 
-    // Step 6: Success — finalize fields that aren't part of the atomic claim.
-    // Note: status='dispatched' and dispatchedAt are NOT written here; claimForDispatch
-    // (Fix E) already set them transactionally before the network call.
+    // status and dispatchedAt are not written here — claimForDispatch already
+    // set them transactionally before the network call.
     const cancelNonce = generateCancelNonce();
     const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 

@@ -137,7 +137,7 @@ describe('POST /webhooks/github', () => {
       findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
       hasDispatchedOrRunningForPR: vi.fn().mockResolvedValue(ok({ hasActive: false })),
       hasOtherDispatchedOrRunningForLinearIssue: vi.fn().mockResolvedValue(ok({ hasActive: false })),
-      claimForDispatch: vi.fn().mockResolvedValue(ok({ claimed: true })),
+      claimForDispatch: vi.fn().mockResolvedValue(ok(true)),
       deleteTask: vi.fn().mockResolvedValue(ok(undefined)),
       listQueuedByAge: vi.fn().mockResolvedValue(ok([])),
       listQueued: vi.fn().mockResolvedValue(ok([])),

@@ -4337,7 +4337,7 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.value).toEqual({ claimed: true });
+      expect(result.value).toBe(true);
 
       const after = await repo.findById('task-claim');
       expect(after.ok).toBe(true);
@@ -4346,7 +4346,7 @@ describe('firestoreCodeTaskRepository', () => {
       expect(after.value.dispatchedAt).toBeDefined();
     });
 
-    it('returns alreadyClaimed: true when task is already dispatched', async () => {
+    it('returns false when task is already dispatched', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -4361,10 +4361,10 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.value).toEqual({ claimed: false, alreadyClaimed: true });
+      expect(result.value).toBe(false);
     });
 
-    it('returns alreadyClaimed: true when task is running', async () => {
+    it('returns false when task is running', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -4379,10 +4379,10 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.value).toEqual({ claimed: false, alreadyClaimed: true });
+      expect(result.value).toBe(false);
     });
 
-    it('returns notFound: true when task does not exist', async () => {
+    it('returns false when task does not exist', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -4392,7 +4392,7 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.value).toEqual({ claimed: false, notFound: true });
+      expect(result.value).toBe(false);
     });
 
     it('exactly one of two parallel claim calls wins for the same task', async () => {
@@ -4413,10 +4413,9 @@ describe('firestoreCodeTaskRepository', () => {
       expect(b.ok).toBe(true);
       if (!a.ok || !b.ok) return;
 
-      const claimedCount = [a.value, b.value].filter((r): r is { claimed: true } => r.claimed === true).length;
+      const claimedCount = [a.value, b.value].filter((r): r is true => r === true).length;
       const alreadyClaimedCount = [a.value, b.value].filter(
-        (r): r is { claimed: false; alreadyClaimed: true } =>
-          r.claimed === false && 'alreadyClaimed' in r && r.alreadyClaimed === true,
+        (r): r is false => r === false,
       ).length;
 
       expect(claimedCount).toBe(1);
