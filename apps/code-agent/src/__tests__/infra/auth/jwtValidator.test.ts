@@ -217,15 +217,35 @@ describe('createJwtValidator', () => {
   });
 
   describe('production guard', () => {
+    let originalEnvironment: string | undefined;
+
+    beforeEach(() => {
+      // Test 3 ('INTEXURAOS_ENVIRONMENT is unset') must be hermetic against an
+      // ambient INTEXURAOS_ENVIRONMENT exported into the CI process — clear it
+      // here and restore in afterEach. Stubs set inside each test are still
+      // cleared by vi.unstubAllEnvs().
+      originalEnvironment = process.env['INTEXURAOS_ENVIRONMENT'];
+      delete process.env['INTEXURAOS_ENVIRONMENT'];
+    });
+
     afterEach(() => {
       vi.unstubAllEnvs();
+      if (originalEnvironment === undefined) {
+        delete process.env['INTEXURAOS_ENVIRONMENT'];
+      } else {
+        process.env['INTEXURAOS_ENVIRONMENT'] = originalEnvironment;
+      }
     });
 
     it('should throw when INTEXURAOS_ENVIRONMENT=production AND E2E_MODE=true', () => {
       vi.stubEnv('INTEXURAOS_ENVIRONMENT', 'production');
       vi.stubEnv('E2E_MODE', 'true');
 
-      expect(() => createJwtValidator(mockConfig, logger)).toThrow(/E2E_MODE.*production/i);
+      // Lock both env var names into the contract — the operator-facing
+      // message must mention each one so log-grepping from either side works.
+      expect(() => createJwtValidator(mockConfig, logger)).toThrow(/E2E_MODE/);
+      expect(() => createJwtValidator(mockConfig, logger)).toThrow(/INTEXURAOS_ENVIRONMENT/);
+      expect(() => createJwtValidator(mockConfig, logger)).toThrow(/production/);
     });
 
     it('should return E2E mock validator when E2E_MODE=true and INTEXURAOS_ENVIRONMENT=development', async () => {
