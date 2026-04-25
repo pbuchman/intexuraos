@@ -3657,23 +3657,37 @@ describe('DockerProvider', () => {
 
     it('emits lockfile-drift warning without forensics write when no forensics path (INT-1524)', async () => {
       const fsModule = await import('node:fs');
-      // Non-forensics provider so worker.taskForensicsPath stays undefined.
-      (fsModule.readFileSync as Mock).mockImplementationOnce((filePath: unknown) => {
+      // Path-keyed mock that mutates between create-time snapshot and
+      // teardown-time snapshot to simulate the LLM tampering with pnpm-lock.yaml
+      // during the attempt. Keying by path (not call order) keeps this test
+      // robust against any incidental readFileSync calls that may be added
+      // elsewhere in the create/teardown path.
+      let lockState = 'lock-v1';
+      (fsModule.readFileSync as Mock).mockImplementation((filePath: unknown) => {
         if (typeof filePath === 'string' && filePath.endsWith('pnpm-lock.yaml')) {
-          return Buffer.from('lock-v1');
+          return Buffer.from(lockState);
+        }
+        if (
+          typeof filePath === 'string' &&
+          filePath.includes('code-worker-forensics-seccomp.json')
+        ) {
+          return '{"defaultAction":"SCMP_ACT_ERRNO","syscalls":[]}';
         }
         return '';
       });
-      (fsModule.readFileSync as Mock).mockImplementationOnce((filePath: unknown) => {
-        if (typeof filePath === 'string' && filePath.endsWith('pnpm-lock.yaml')) {
-          return Buffer.from('lock-v2-tampered');
-        }
-        return '';
-      });
+      // After createWorker captures sha('lock-v1'), the teardown will read
+      // 'lock-v2-tampered' and detect drift.
+      const tamperBeforeTeardown = (): void => {
+        lockState = 'lock-v2-tampered';
+      };
 
       (fsModule.promises.writeFile as Mock).mockClear();
 
-      await provider.createWorker(createTestConfig({ onComplete: vi.fn() }));
+      const onCompleteSpy = vi.fn();
+      // Tamper as soon as the worker is created (synchronous; createWorker
+      // already snapshotted by this point).
+      await provider.createWorker(createTestConfig({ onComplete: onCompleteSpy }));
+      tamperBeforeTeardown();
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       const driftWarnCall = (mockLogger.warn as Mock).mock.calls.find((call: unknown[]) => {
@@ -3726,13 +3740,13 @@ describe('DockerProvider', () => {
         mocks.mockDocker
       );
 
-      // First readFileSync call (during createWorker -> snapshotLockfile) returns
-      // 'lock-v1'. The default mock returns '' for all other reads. After the
-      // attempt completes the teardown will call snapshotLockfile again and the
-      // default '' return will differ from the captured 'lock-v1' hash → drift.
-      (fsModule.readFileSync as Mock).mockImplementationOnce((filePath: unknown) => {
+      // Path-keyed mock that mutates between create-time and teardown-time
+      // snapshots — survives any incidental readFileSync calls that may be
+      // added elsewhere in the create/teardown path.
+      let lockState = 'lock-v1';
+      (fsModule.readFileSync as Mock).mockImplementation((filePath: unknown) => {
         if (typeof filePath === 'string' && filePath.endsWith('pnpm-lock.yaml')) {
-          return Buffer.from('lock-v1');
+          return Buffer.from(lockState);
         }
         if (
           typeof filePath === 'string' &&
@@ -3742,16 +3756,11 @@ describe('DockerProvider', () => {
         }
         return '';
       });
-      (fsModule.readFileSync as Mock).mockImplementationOnce((filePath: unknown) => {
-        if (typeof filePath === 'string' && filePath.endsWith('pnpm-lock.yaml')) {
-          return Buffer.from('lock-v2-tampered');
-        }
-        return '';
-      });
 
       (fsModule.promises.writeFile as Mock).mockClear();
 
       await forensicsProvider.createWorker(createTestConfig({ onComplete: vi.fn() }));
+      lockState = 'lock-v2-tampered';
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       const driftWarnCall = (mockLogger.warn as Mock).mock.calls.find((call: unknown[]) => {
