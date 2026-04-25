@@ -65,8 +65,6 @@ async function handleLinearWebhook(
   reply: FastifyReply
 ): Promise<unknown> {
   try {
-    logIncomingRequest(request);
-
     const services = getServices();
 
     // Extract data from webhook payload
@@ -221,7 +219,13 @@ export const linearWebhookRoutes: FastifyPluginCallback = (fastify, _opts, done)
         rawBody: true,
       },
     },
-    handleLinearWebhook
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'POST /linear/webhook',
+        bodyPreviewLength: 200,
+      });
+      return await handleLinearWebhook(request, reply);
+    }
   );
 
   done();

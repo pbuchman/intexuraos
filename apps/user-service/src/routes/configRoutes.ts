@@ -5,6 +5,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
+import { logIncomingRequest } from '@intexuraos/common-http';
 import type { AuthConfigResponse } from './schemas.js';
 import { loadAuth0Config } from './shared.js';
 
@@ -49,7 +50,9 @@ export const configRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         },
       },
     },
-    async (_request, reply) => {
+    async (request, reply) => {
+      logIncomingRequest(request, { message: 'GET /auth/config' });
+
       const config = loadAuth0Config();
       if (config === null) {
         return await reply.fail(

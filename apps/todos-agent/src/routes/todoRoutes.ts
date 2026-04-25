@@ -1,5 +1,5 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { createTodo } from '../domain/usecases/createTodo.js';
 import { getTodo } from '../domain/usecases/getTodo.js';
@@ -264,6 +264,8 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Querystring: ListTodosQuery }>, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'GET /todos' });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -315,6 +317,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Body: CreateTodoBody }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /todos',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -372,6 +379,8 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: TodoParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'GET /todos/:id' });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -427,6 +436,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request: FastifyRequest<{ Params: TodoParams; Body: UpdateTodoBody }>,
       reply: FastifyReply
     ) => {
+      logIncomingRequest(request, {
+        message: 'PATCH /todos/:id',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -485,6 +499,8 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: TodoParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'DELETE /todos/:id' });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -540,6 +556,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request: FastifyRequest<{ Params: TodoParams; Body: CreateTodoItemBody }>,
       reply: FastifyReply
     ) => {
+      logIncomingRequest(request, {
+        message: 'POST /todos/:id/items',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -601,6 +622,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request: FastifyRequest<{ Params: TodoItemParams; Body: UpdateTodoItemBody }>,
       reply: FastifyReply
     ) => {
+      logIncomingRequest(request, {
+        message: 'PATCH /todos/:id/items/:itemId',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -657,6 +683,8 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: TodoItemParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, { message: 'DELETE /todos/:id/items/:itemId' });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -711,6 +739,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request: FastifyRequest<{ Params: TodoParams; Body: ReorderItemsBody }>,
       reply: FastifyReply
     ) => {
+      logIncomingRequest(request, {
+        message: 'POST /todos/:id/items/reorder',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -764,6 +797,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: TodoParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /todos/:id/archive',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -816,6 +854,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: TodoParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /todos/:id/unarchive',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -867,6 +910,11 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: TodoParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /todos/:id/cancel',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
