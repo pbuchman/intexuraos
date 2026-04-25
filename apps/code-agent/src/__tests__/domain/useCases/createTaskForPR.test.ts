@@ -98,6 +98,12 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async hasDispatchedOrRunningForPR(): ReturnType<CodeTaskRepository['hasDispatchedOrRunningForPR']> {
       return ok({ hasActive: false });
     },
+    async hasOtherDispatchedOrRunningForLinearIssue(): ReturnType<CodeTaskRepository['hasOtherDispatchedOrRunningForLinearIssue']> {
+      return ok({ hasActive: false });
+    },
+    async claimForDispatch(): ReturnType<CodeTaskRepository['claimForDispatch']> {
+      return ok(true);
+    },
     async deleteTask(): ReturnType<CodeTaskRepository['deleteTask']> {
       return ok(undefined);
     },
