@@ -16,6 +16,7 @@ import type {
   LifecycleProviderConfig,
 } from './worker-entry-types.js';
 import { buildWorkerEnv, resolveForensicsSeccompSecurityOpt } from './worker-env.js';
+import { snapshotLockfile } from './lockfile-guard.js';
 
 export function detectMainGitDir(worktreePath: string): string | null {
   const gitPath = path.join(worktreePath, '.git');
@@ -161,6 +162,32 @@ export async function runAttemptInContainer(input: RunAttemptInput): Promise<voi
     worker.handle.status = 'failed';
     config.onComplete?.(1);
   } finally {
+    // INT-1524: detect LLM-tampered lockfile during the attempt.
+    if (worker.worktreePath !== undefined && worker.lockfileSha256 !== undefined) {
+      const currentSha = snapshotLockfile(worker.worktreePath);
+      if (currentSha !== null && currentSha !== worker.lockfileSha256) {
+        logger.warn(
+          {
+            event: 'lockfile-drift',
+            taskId,
+            before: worker.lockfileSha256,
+            after: currentSha,
+          },
+          'pnpm-lock.yaml changed during attempt — review before merging'
+        );
+        if (worker.taskForensicsPath !== undefined) {
+          try {
+            await fs.promises.writeFile(
+              path.join(worker.taskForensicsPath, 'lockfile-drift.txt'),
+              `before=${worker.lockfileSha256}\nafter=${currentSha}\n`,
+              'utf-8'
+            );
+          } catch {
+            // best-effort; never throw from teardown
+          }
+        }
+      }
+    }
     worker.attemptRunning = false;
   }
 }
@@ -573,6 +600,7 @@ export async function createWorkerOrchestration(
       startedAt: new Date(),
     };
 
+    const lockfileSha256 = snapshotLockfile(worktreePath);
     workers.set(taskId, {
       containerId: dockerContainer.id,
       handle,
@@ -581,8 +609,10 @@ export async function createWorkerOrchestration(
       taskRuntimeHomePath,
       attemptRunning: false,
       attemptLogBuffer: '',
+      worktreePath,
       ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
       ...(logStream !== undefined ? { logStream } : {}),
+      ...(lockfileSha256 !== null ? { lockfileSha256 } : {}),
     });
 
     if (providerConfig.managedAttemptsMode) {

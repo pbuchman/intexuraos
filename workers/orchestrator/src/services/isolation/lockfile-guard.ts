@@ -40,13 +40,13 @@ export function assertLockfileIntegrity(yamlContent: string): void {
         `package ${pkgKey} has no structured resolution block`
       );
     }
-    const integrity = (resolution as Record<string, unknown>).integrity;
+    const integrity = (resolution as Record<string, unknown>)['integrity'];
     if (typeof integrity !== 'string' || !integrity.startsWith('sha512-')) {
       throw new LockfileIntegrityError(
         `package ${pkgKey} missing sha512 integrity`
       );
     }
-    const tarball = (resolution as Record<string, unknown>).tarball;
+    const tarball = (resolution as Record<string, unknown>)['tarball'];
     if (typeof tarball === 'string') {
       // Allow only canonical npm registry tarballs.
       if (!/^https:\/\/registry\.npmjs\.org\//.test(tarball)) {
