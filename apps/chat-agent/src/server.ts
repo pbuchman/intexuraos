@@ -153,12 +153,15 @@ export async function buildServer(): Promise<FastifyInstance> {
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'],
   });
 
-  // IP-based floor rate limit. Applies globally; per-route `config.rateLimit`
-  // overrides allow stricter limits (e.g. POST /guest-session is 10/min).
+  // IP-based floor rate limit. Must register before route-bearing plugins so
+  // the per-route `config.rateLimit` override (e.g. /guest-session at 10/min)
+  // is detected when those routes are added later.
   //
-  // The errorResponseBuilder returns the same shape as `reply.fail('RATE_LIMITED', …)`
-  // — emitted directly here because @fastify/rate-limit throws via the error path,
-  // and the global error handler set by infra-sentry rewrites unhandled errors to 500.
+  // The plugin throws the Error returned by errorResponseBuilder; that error
+  // is handled by the unified error handler installed below, which translates
+  // statusCode === 429 into a `RATE_LIMITED` API response. We deliberately
+  // install ONE error handler (not two) to avoid Fastify's FSTWRN004
+  // warning about overriding handlers in the same scope.
   await app.register(fastifyRateLimit, {
     global: true,
     max: 60,
@@ -185,26 +188,6 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(fastifyAuthPlugin);
 
   setupSentryErrorHandler(app as unknown as FastifyInstance);
-
-  // The Sentry error handler returns 500 for any error it doesn't specifically
-  // recognize, which would otherwise mask 429 responses thrown by
-  // @fastify/rate-limit. Wrap the previously-installed handler so rate-limit
-  // errors short-circuit to a proper RATE_LIMITED response and everything else
-  // continues through the Sentry path.
-  const upstreamErrorHandler = app.errorHandler;
-  app.setErrorHandler((error, request, reply) => {
-    const errorWithStatus = error as Error & { statusCode?: number };
-    if (errorWithStatus.statusCode === 429) {
-      void reply.fail(
-        'RATE_LIMITED',
-        errorWithStatus.message.length > 0
-          ? errorWithStatus.message
-          : 'Rate limit exceeded'
-      );
-      return;
-    }
-    upstreamErrorHandler(error, request, reply);
-  });
 
   registerCoreSchemas(app);
 
