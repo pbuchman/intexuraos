@@ -345,7 +345,10 @@ describe('finalizeTask metric emission (INT-1565 §S5)', () => {
     // INT-1565 review: emitTerminalMetrics is wrapped in try/catch so a
     // hand-rolled metrics client that throws cannot crash the finalize hot
     // path. Use a metrics client whose increment is hard-throwing (not just
-    // recording) and assert finalize completes.
+    // recording) and assert finalize (a) completes and (b) emits the
+    // documented warn line — without the warn assertion, a future regression
+    // that swaps `logger.warn` for a silent swallow would not be caught.
+    const warnSpy = vi.fn();
     const throwingMetrics: MetricsClient = {
       increment: () => {
         throw new Error('metrics outage');
@@ -353,12 +356,30 @@ describe('finalizeTask metric emission (INT-1565 §S5)', () => {
       record: vi.fn(),
       flush: vi.fn(async () => undefined),
     };
-    const dispatcher = buildDispatcherWithMetrics(throwingMetrics);
+    const dispatcher = new TaskDispatcher(
+      baseConfig,
+      createStatePersistence(),
+      worktreeManager,
+      logForwarder,
+      webhookClient,
+      statusUpdateClient,
+      tokenService,
+      { ...logger, warn: warnSpy } as unknown as Logger,
+      isolationConfig,
+      completionControl,
+      undefined,
+      undefined,
+      throwingMetrics
+    );
     const task = buildTask({ taskId: 't-metrics-throw' });
 
     await expect(
       (dispatcher as unknown as DispatcherInternals).finalizeTask(task, 'completed', {})
     ).resolves.toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 't-metrics-throw', error: expect.any(Error) }),
+      'metrics emission failed during finalize; continuing'
+    );
   });
 
   it('falls back to a no-op metrics client when none is injected (no throws)', async () => {

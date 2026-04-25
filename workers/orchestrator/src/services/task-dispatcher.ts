@@ -2807,8 +2807,11 @@ export class TaskDispatcher {
     try {
       this.emitTerminalMetrics(task, finalStatus);
     } catch (metricsError) {
+      // Use the file-wide `error` log key for consistency with the ~25 other
+      // catch-and-log sites in this dispatcher; the field-name unification
+      // onto `err` is owned by INT-1538 §S2 + §S8, not §S5.
       this.logger.warn(
-        { taskId: task.taskId, err: metricsError },
+        { taskId: task.taskId, error: metricsError },
         'metrics emission failed during finalize; continuing'
       );
     }
