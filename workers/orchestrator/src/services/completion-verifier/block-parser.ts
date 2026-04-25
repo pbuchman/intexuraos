@@ -333,10 +333,14 @@ export function coerceFields(
         break;
       }
       case 'int': {
-        // Accept a pure integer literal (optional sign). Reject non-numeric
-        // tokens like "two" or "2 (no review requested)".
-        if (/^-?\d+$/.test(trimmed)) {
-          data[field.name] = Number.parseInt(trimmed, 10);
+        // Accept a pure integer literal (optional sign), OR a leading integer
+        // followed by whitespace and a parenthesized annotation, e.g.
+        // "0 (review submitted as single body with no inline comments)".
+        // Reject non-numeric tokens like "two" or "n/a".
+        const intMatch = /^(-?\d+)(?:\s+\(.*\))?$/.exec(trimmed);
+        const captured = intMatch?.[1];
+        if (captured !== undefined) {
+          data[field.name] = Number.parseInt(captured, 10);
         } else {
           data[field.name] = null;
           warnings.push(`field ${field.name} not a valid int: ${trimmed}`);
