@@ -136,6 +136,97 @@ describe('locateFinalBlock', () => {
     expect(block).not.toContain('PULL_REQUEST_AGENT_FINAL');
     expect(block).not.toContain('pr_url');
   });
+
+  // INT-1560 fix: NDJSON-aware fallback. The deployed worker invokes Claude
+  // with `--print --verbose --output-format stream-json`, so the agent's
+  // emitted text lives only inside `{"type":"assistant","message":{"content":
+  // [{"type":"text","text":"PLANNING_AGENT_FINAL:\\n..."}]}}` events. After
+  // `stripDockerHeaders`, the marker is still buried in the JSON-escaped
+  // string and never appears on its own line. The fallback path parses each
+  // JSON event and substitutes its `text`/`result` field content with real
+  // newlines so the locator can find the block.
+  it('finds the marker via NDJSON fallback when buried in an assistant text event', () => {
+    const event = JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: [
+          {
+            type: 'text',
+            text: 'PLANNING_AGENT_FINAL:\n- Outcome: planned\n- Summary: ok',
+          },
+        ],
+      },
+    });
+    const block = locateFinalBlock(event, 'PLANNING_AGENT_FINAL:');
+    expect(block).not.toBeNull();
+    expect(block).toContain('- Outcome: planned');
+  });
+
+  it('finds the marker via NDJSON fallback when only present in a result event', () => {
+    const event = JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      result: 'EXECUTION_AGENT_FINAL:\n- Outcome: implemented\n- pr: https://x/y/1\n- summary: ok',
+    });
+    const block = locateFinalBlock(event, 'EXECUTION_AGENT_FINAL:');
+    expect(block).not.toBeNull();
+    expect(block).toContain('- Outcome: implemented');
+  });
+
+  it('NDJSON fallback ignores tool_use blocks even when input mentions the marker substring', () => {
+    // A tool_use block whose JSON-input happens to mention the marker as
+    // a literal string (e.g. an Edit on a doc that quotes the prompt) must
+    // not be mistaken for an agent-emitted block. Only `text` blocks count.
+    const event = JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: [
+          {
+            type: 'tool_use',
+            id: 't1',
+            name: 'Edit',
+            input: { file_path: '/repo/x', old_string: 'PLANNING_AGENT_FINAL:', new_string: '' },
+          },
+        ],
+      },
+    });
+    expect(locateFinalBlock(event, 'PLANNING_AGENT_FINAL:')).toBeNull();
+  });
+
+  it('NDJSON fallback chooses the LAST emitted text event when multiple assistant turns exist', () => {
+    const earlier = JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'text', text: 'PLANNING_AGENT_FINAL:\n- Outcome: unclear\n- Summary: draft' },
+        ],
+      },
+    });
+    const later = JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'text', text: 'PLANNING_AGENT_FINAL:\n- Outcome: planned\n- Summary: final' },
+        ],
+      },
+    });
+    const block = locateFinalBlock([earlier, later].join('\n'), 'PLANNING_AGENT_FINAL:');
+    expect(block).not.toBeNull();
+    expect(block).toContain('- Outcome: planned');
+    expect(block).toContain('- Summary: final');
+    expect(block).not.toContain('draft');
+  });
+
+  it('strict path still wins when marker is on its own line (NDJSON fallback is a fallback)', () => {
+    // If the transcript already has the marker on its own line, the strict
+    // path returns the same result it always has — fallback is never
+    // invoked. Documented to prevent a future refactor from accidentally
+    // routing every parse through the (slower) NDJSON extractor.
+    const txt = ['PLANNING_AGENT_FINAL:', '- Outcome: planned', '- Summary: ok'].join('\n');
+    const block = locateFinalBlock(txt, 'PLANNING_AGENT_FINAL:');
+    expect(block).not.toBeNull();
+    expect(block).toContain('- Outcome: planned');
+  });
 });
 
 describe('parseKeyValues', () => {

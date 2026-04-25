@@ -17,6 +17,44 @@ import nodeFetch from 'node-fetch';
 // Each service adds SIGTERM/SIGINT listeners, and with 18+ services this exceeds the default of 10
 process.setMaxListeners(50);
 
+// localStorage polyfill — jsdom 26 in this monorepo's vitest 4 setup exposes
+// a `localStorage` object whose `clear`/`getItem`/`setItem` are not callable
+// (smoking gun: `Warning: --localstorage-file was provided without a valid
+// path` from jsdom). Tests like apps/web/src/hooks/__tests__/useDigestList
+// break with `TypeError: localStorage.clear is not a function`. Install a
+// deterministic in-memory Storage so the same test passes in every harness
+// — the per-workspace setup file isn't loaded when the root config drives
+// the run, so the polyfill must live here. No-op for non-DOM tests since
+// localStorage is unused.
+{
+  const store = new Map<string, string>();
+  const storage: Storage = {
+    get length() {
+      return store.size;
+    },
+    clear() {
+      store.clear();
+    },
+    getItem(key: string): string | null {
+      return store.has(key) ? (store.get(key) ?? null) : null;
+    },
+    key(index: number): string | null {
+      return Array.from(store.keys())[index] ?? null;
+    },
+    removeItem(key: string): void {
+      store.delete(key);
+    },
+    setItem(key: string, value: string): void {
+      store.set(key, String(value));
+    },
+  };
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: storage,
+    writable: true,
+    configurable: true,
+  });
+}
+
 // Set LOG_LEVEL to test the environment variable branch in commandsAgentClient.ts
 process.env['LOG_LEVEL'] = 'debug';
 
