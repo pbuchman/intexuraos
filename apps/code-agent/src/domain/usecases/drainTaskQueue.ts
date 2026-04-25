@@ -23,6 +23,7 @@ import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js'
 import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../utils/taskRouting.js';
 import { archiveRetriedTaskAfterDispatch } from '../utils/archiveRetriedTaskAfterDispatch.js';
 import { isMemoryEligibleAgent } from '../utils/memoryEligibility.js';
+import { isRetryableErrorCode } from '../utils/retryableErrors.js';
 import { shouldFanOut, fanOutChildTasks } from './fanOutChildTasks.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import {
@@ -228,6 +229,29 @@ export async function drainTaskQueue(
             );
           }
 
+          continue;
+        }
+      }
+
+      // Fix B: Linear-issue concurrency guard for review tasks. Defer when a non-self
+      // sibling on the same Linear issue is dispatched/running. Filtering on
+      // DISPATCHED_OR_RUNNING_STATUSES (not ACTIVE_TASK_STATUSES) avoids the deadlock
+      // where two queued reviews on the same Linear issue see each other and both stall.
+      // No `queuedAt` reset here — TTL must still bound queue lifetime.
+      if (candidate.agentType === 'review' && candidate.linearIssueId !== undefined) {
+        const siblingResult = await codeTaskRepo.hasOtherDispatchedOrRunningForLinearIssue(
+          candidate.id,
+          candidate.linearIssueId,
+        );
+        if (siblingResult.ok && siblingResult.value.hasActive) {
+          logger.info(
+            {
+              taskId: candidate.id,
+              linearIssueId: candidate.linearIssueId,
+              activeTaskId: siblingResult.value.taskId,
+            },
+            'Deferring review — another task on the same Linear issue is dispatched/running',
+          );
           continue;
         }
       }
@@ -473,6 +497,20 @@ export async function drainTaskQueue(
       return ok({ action: 'failed', taskId: task.id, locksToCleanup: buildLockCleanups(task) });
     }
 
+    // Fix E: claim the candidate atomically before the network call.
+    // The Firestore transaction transitions queued → dispatched only if currently queued.
+    // This eliminates the multi-instance double-dispatch race that the process-local
+    // `isDraining` guard cannot cover when code-agent runs with autoscaling replicas.
+    const claimResult = await codeTaskRepo.claimForDispatch(task.id);
+    if (!claimResult.ok) {
+      logger.error({ taskId: task.id, error: claimResult.error }, 'Failed to claim task for dispatch');
+      return ok({ action: 'still_busy', taskId: task.id });
+    }
+    if (!claimResult.value.claimed) {
+      logger.info({ taskId: task.id }, 'Skipped — claimed by another instance or no longer queued');
+      return ok({ action: 'still_busy', taskId: task.id });
+    }
+
     // Step 5: Attempt dispatch
     const webhookUrl = `${config.serviceUrl}/internal/webhooks/task-complete`;
 
@@ -509,14 +547,31 @@ export async function drainTaskQueue(
     if (!dispatchResult.ok) {
       const dispatchError = dispatchResult.error;
 
-      // Only at_capacity means workers are genuinely busy — task stays queued
-      if (dispatchError.code === 'at_capacity') {
-        logger.info({ taskId: task.id, error: dispatchError }, 'Workers still busy, task remains queued');
+      // Fix A: keep task queued for at_capacity AND for any code matching isRetryableErrorCode
+      // (currently worker_unavailable, network_error). The existing at_capacity branch did not
+      // reset queuedAt, and we MUST NOT reset here either — TTL is measured from queuedAt and
+      // resetting would defeat the queue.ttlMinutes bound for retryable transient failures.
+      if (dispatchError.code === 'at_capacity' || isRetryableErrorCode(dispatchError.code)) {
+        logger.info(
+          { taskId: task.id, error: dispatchError, retryable: dispatchError.code !== 'at_capacity' },
+          'Dispatch transient/retryable, task remains queued',
+        );
+        // Roll back the Fix E claim so the next drain cycle can pick this task up again.
+        // dispatchedAt is intentionally left set as a "last attempted" marker — the field
+        // is informational and is not used as a primary status check.
+        const rollbackResult = await codeTaskRepo.update(task.id, { status: 'queued' });
+        if (!rollbackResult.ok) {
+          logger.warn(
+            { taskId: task.id, error: rollbackResult.error },
+            'Failed to roll back claimForDispatch after retryable dispatch error',
+          );
+        }
         return ok({ action: 'still_busy', taskId: task.id });
       }
 
-      // Other dispatch failures (network_error, dispatch_failed, etc.) — fail the task
-      logger.error({ taskId: task.id, error: dispatchError }, 'Drain dispatch failed with non-capacity error');
+      // Truly permanent codes (dispatch_failed, invalid_response, worker_busy) — fail the task.
+      // No claim rollback needed: the failure path overwrites status to 'failed'.
+      logger.error({ taskId: task.id, error: dispatchError }, 'Drain dispatch failed with permanent error');
       const failUpdateResult = await codeTaskRepo.update(task.id, {
         status: 'failed',
         error: {
@@ -533,13 +588,13 @@ export async function drainTaskQueue(
       return ok({ action: 'failed', taskId: task.id, locksToCleanup });
     }
 
-    // Step 6: Success - update status to dispatched
+    // Step 6: Success — finalize fields that aren't part of the atomic claim.
+    // Note: status='dispatched' and dispatchedAt are NOT written here; claimForDispatch
+    // (Fix E) already set them transactionally before the network call.
     const cancelNonce = generateCancelNonce();
     const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
     const updateResult = await codeTaskRepo.update(task.id, {
-      status: 'dispatched',
-      dispatchedAt: new Date(),
       // Seed lastHeartbeat at dispatch so findZombieTasks (which uses a Firestore
       // inequality filter on lastHeartbeat) can sweep tasks that crash/fail
       // before the worker ever sends its first real heartbeat. Without this,
