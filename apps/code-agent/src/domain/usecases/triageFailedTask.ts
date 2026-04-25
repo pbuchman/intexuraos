@@ -17,10 +17,7 @@ import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import { classifyFailure } from '../utils/classifyFailure.js';
 import { autoRetryTask, type AutoRetryTaskRequest } from './autoRetryTask.js';
 import { buildFailureTriagePrompt, parseTriageResponse } from '../prompts/failureTriagePrompt.js';
-import {
-  buildCooloffRetryPrompt,
-  parseCooloffResponse,
-} from '../prompts/cooloffRetryPrompt.js';
+import { loadConfig } from '../../config.js';
 
 export type TriageAction = 'retried' | 'retried_after_cooloff' | 'permanent_failure';
 
@@ -70,20 +67,23 @@ export async function triageFailedTask(
     // Fall through to retry
   }
 
-  // Step 3b: For retry_after_cooloff, resolve the reset time (LLM or fallback).
-  let cooloffSchedule: CooloffSchedule | undefined;
-  if (verdict === 'retry_after_cooloff') {
-    cooloffSchedule = await resolveCooloffSchedule(deps, task, taskError, new Date());
+  // Step 4a: Auto-retry chain attempt cap (INT-1560 Fix D part 2).
+  // Checked BEFORE invoking autoRetryTask so persistently failing tasks cannot
+  // spawn indefinite retry chains. Default cap is 3 (config.autoRetry.maxAttempts).
+  const config = loadConfig();
+  const attemptsSoFar = task.autoRetryAttempt ?? 0;
+  if (attemptsSoFar >= config.autoRetry.maxAttempts) {
+    await whatsappNotifier.notifyTaskAutoRetryExhausted(task.userId, task, {
+      attempts: attemptsSoFar,
+      errorMessage: taskError.message,
+    });
+    return {
+      action: 'permanent_failure' as const,
+      reason: `Auto-retry cap reached after ${String(attemptsSoFar)} attempts (max=${String(config.autoRetry.maxAttempts)})`,
+    };
   }
 
-  // Step 4: Attempt auto-retry
-  const retryRequest: AutoRetryTaskRequest = {
-    failedTask: task,
-    failedWorkerLocation: task.workerLocation,
-    reason: `${taskError.code}: ${taskError.message}`.slice(0, 200),
-    ...(cooloffSchedule !== undefined && { cooloffSchedule }),
-  };
-
+  // Step 4b: Attempt auto-retry
   const retryResult = await autoRetryTask(
     { logger, codeTaskRepo, taskEnqueueService, whatsappNotifier, orchestratorSecret: deps.orchestratorSecret },
     retryRequest

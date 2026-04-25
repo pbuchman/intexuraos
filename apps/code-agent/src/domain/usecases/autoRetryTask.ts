@@ -90,11 +90,19 @@ export async function autoRetryTask(
   const { logger, codeTaskRepo, taskEnqueueService, whatsappNotifier } = deps;
   const { failedTask, failedWorkerLocation, reason, cooloffSchedule } = request;
 
-  // Step 1: Check retry budget via chain walking
+  // Step 1: Check retry budget via chain walking (defensive — covers cases where
+  // failedTask.autoRetryAttempt is missing on legacy data). Combined with the
+  // attempt counter below, the new task records the higher of the two values
+  // so the counter increases monotonically along a retry chain.
   const retryDepth = await countRetryDepth(codeTaskRepo, failedTask);
-  const attemptNumber = retryDepth + 1;
+  const chainBasedAttempt = retryDepth + 1;
+  // INT-1560 Fix D part 2: also track via the explicit autoRetryAttempt field
+  // on the failed task. When set, it reflects the chain depth without requiring
+  // a Firestore walk. Take whichever number is larger — monotonic.
+  const counterBasedAttempt = (failedTask.autoRetryAttempt ?? 0) + 1;
+  const attemptNumber = Math.max(chainBasedAttempt, counterBasedAttempt);
 
-  if (attemptNumber > MAX_AUTO_RETRY_DEPTH) {
+  if (chainBasedAttempt > MAX_AUTO_RETRY_DEPTH) {
     logger.info(
       { taskId: failedTask.id, retryDepth, maxDepth: MAX_AUTO_RETRY_DEPTH },
       'Auto-retry budget exhausted'
@@ -145,10 +153,16 @@ export async function autoRetryTask(
     return err({ code: 'internal_error' as const, message: `Failed to create auto-retry task: ${createResult.error.message}` });
   }
 
-  // Step 3: Enqueue for dispatch
+  // Step 3: Enqueue for dispatch.
+  // INT-1560 Fix D: carry forward the original `queuedAt` (or `createdAt` if unset) so
+  // the retry chain inherits the first attempt's queue-entry time. This means the queue
+  // TTL bounds the ENTIRE chain, not each link separately — preventing indefinite retry
+  // loops on persistently failing planning tasks.
+  const inheritedQueuedAt = failedTask.queuedAt?.toDate() ?? failedTask.createdAt.toDate();
   const enqueueResult = await taskEnqueueService.enqueue({
     taskId: retryTaskId,
     userId: failedTask.userId,
+    queuedAt: inheritedQueuedAt,
   });
 
   if (!enqueueResult.ok) {
