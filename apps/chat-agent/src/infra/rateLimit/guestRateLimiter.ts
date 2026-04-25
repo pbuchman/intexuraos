@@ -39,9 +39,11 @@ export function createGuestRateLimiter(config?: GuestRateLimiterConfig): GuestRa
     usage.set(sessionId, entry);
     while (usage.size > maxSessions) {
       const oldest = usage.keys().next().value;
+      /* v8 ignore start -- ts-type: Map<string, …>.keys().next().value is typed as `string | undefined` because IteratorResult<string>.value is optional, but the loop guard `usage.size > maxSessions` (with maxSessions ≥ 0) already proves the iterator yields a value. The branch is unreachable; testing it requires monkey-patching Map. @preserve */
       if (oldest === undefined) {
         break;
       }
+      /* v8 ignore stop @preserve */
       usage.delete(oldest);
     }
   }

@@ -1,7 +1,21 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import * as jose from 'jose';
 import { createGuestSessionSigner, type GuestSessionSigner } from './guestSessionSigner.js';
 
 const SECRET = 'test-secret-min-32-bytes-ok-padded-padded';
+const ISSUER = 'intexuraos-chat-agent';
+const AUDIENCE = 'intexuraos-guest-chat';
+
+/** Mint a token bypassing the signer's claim defaults so tests can exercise
+ * the verify-side defensive guards on payload shape. */
+async function mintRawToken(claims: Record<string, unknown>): Promise<string> {
+  const key = new TextEncoder().encode(SECRET);
+  return await new jose.SignJWT(claims)
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setIssuer(ISSUER)
+    .setAudience(AUDIENCE)
+    .sign(key);
+}
 
 describe('guestSessionSigner', () => {
   let signer: GuestSessionSigner;
@@ -65,5 +79,46 @@ describe('guestSessionSigner', () => {
     const a = await signer.issue();
     const b = await signer.issue();
     expect(a.sub).not.toBe(b.sub);
+  });
+
+  it('rejects a verified token whose sub claim is missing', async () => {
+    // Mint a token whose payload has no sub. jose still produces a valid signature
+    // but our signer's defensive check rejects it.
+    const token = await mintRawToken({
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    const result = await signer.verify(token);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_SIGNATURE');
+      expect(result.error.message).toBe('Missing sub');
+    }
+  });
+
+  it('rejects a verified token whose sub claim is an empty string', async () => {
+    const token = await mintRawToken({
+      sub: '',
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    const result = await signer.verify(token);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_SIGNATURE');
+      expect(result.error.message).toBe('Missing sub');
+    }
+  });
+
+  it('rejects a verified token missing iat / exp claims', async () => {
+    // Mint a token with only sub (jose lets us omit iat/exp when not chaining
+    // setIssuedAt / setExpirationTime on the builder).
+    const token = await mintRawToken({ sub: 'manual-sub' });
+    const result = await signer.verify(token);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('INVALID_SIGNATURE');
+      expect(result.error.message).toBe('Missing iat/exp');
+    }
   });
 });
