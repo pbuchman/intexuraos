@@ -135,16 +135,26 @@ export const getServices = (): ServiceContainer => handle.get();
 /**
  * Override (a portion of) the service container — primarily for tests.
  *
- * Accepts either a partial override (recommended) or a complete container.
- * If the container is not yet initialized, this auto-initializes it first
- * so tests can call `setServices({...})` without a preceding `initServices()`
- * (preserving the legacy behavior of the previous `setServices(full)` API).
+ * Production callers MUST call {@link initServices} first; calling
+ * `setServices` on an uninitialized container in production throws so
+ * genuine ordering bugs surface immediately.
+ *
+ * Test callers (NODE_ENV === 'test') may invoke this without a preceding
+ * `initServices()`. In that case we auto-initialize with the default
+ * factory and then merge the override. This preserves the legacy
+ * behavior of `setServices(fullContainer)` from before INT-1529 without
+ * requiring every existing test file to add an `initServices()` call.
+ *
+ * NOTE: the auto-init guard is gated on NODE_ENV so production code paths
+ * still throw — only the test environment gets the convenience behavior.
  */
 export const setServices = (override: Partial<ServiceContainer>): void => {
-  try {
-    handle.get();
-  } catch {
-    handle.init();
+  if (process.env['NODE_ENV'] === 'test') {
+    try {
+      handle.get();
+    } catch {
+      handle.init();
+    }
   }
   handle.set(override);
 };

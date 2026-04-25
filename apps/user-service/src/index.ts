@@ -2,11 +2,11 @@
  * user-service entry point.
  *
  * Delegates the env-validation / Sentry / DI / listen / SIGTERM lifecycle to
- * `startFastifyService` from `@intexuraos/http-server`. `loadEnv` provides
- * type-safe access to the required env variables (no `as string` casts or
- * `?? ''` fallbacks).
+ * `startFastifyService` from `@intexuraos/http-server`. `REQUIRED_ENV` is
+ * declared `as const` so future call sites that want type-safe env access
+ * via `loadEnv(REQUIRED_ENV)` get a typed `Record<...>` without re-listing
+ * the keys. `startFastifyService` validates presence before the listen.
  */
-import { loadEnv } from '@intexuraos/common-core';
 import { startFastifyService } from '@intexuraos/http-server';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
@@ -28,11 +28,6 @@ const REQUIRED_ENV = [
   'INTEXURAOS_GITHUB_OAUTH_CLIENT_ID',
   'INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET',
 ] as const;
-
-// Eagerly verify presence + narrow types for any callers downstream that want
-// `loadEnv(REQUIRED_ENV)` access. `startFastifyService` re-validates inside
-// before initSentry/listen.
-void loadEnv(REQUIRED_ENV);
 
 await startFastifyService({
   serviceName: 'user-service',
