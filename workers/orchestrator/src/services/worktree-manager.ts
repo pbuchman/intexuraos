@@ -102,25 +102,35 @@ export class WorktreeManager {
         // Create worktree with a new branch for the task
         // Using -b creates a local branch, avoiding detached HEAD state
         // which is required for Claude to create commits and PRs
-        let stderr: string;
-        if (continuationPrBranch === undefined) {
-          ({ stderr } = await execAsync(
-            `git worktree add -b "${taskId}" "${worktreePath}" "origin/${baseBranch}"`,
-            {
+        let useContinuation = false;
+        if (continuationPrBranch !== undefined) {
+          try {
+            await execAsync(`git fetch origin "${continuationPrBranch}"`, {
               cwd: this.config.repositoryPath,
+            });
+            useContinuation = true;
+          } catch (fetchError: unknown) {
+            // PR merged + branch auto-deleted between submission and dispatch:
+            // fall back to base branch instead of failing the task. Network/auth
+            // failures still re-throw so the dispatcher can retry.
+            const message = fetchError instanceof Error ? fetchError.message : 'Unknown error';
+            if (!message.includes("couldn't find remote ref")) {
+              throw fetchError;
             }
-          ));
-        } else {
-          await execAsync(`git fetch origin "${continuationPrBranch}"`, {
-            cwd: this.config.repositoryPath,
-          });
-          ({ stderr } = await execAsync(
-            `git worktree add -B "${taskId}" "${worktreePath}" "origin/${continuationPrBranch}"`,
-            {
-              cwd: this.config.repositoryPath,
-            }
-          ));
+            this.logger.warn(
+              { taskId, continuationPrBranch, baseBranch },
+              'Continuation PR branch no longer exists on origin (likely merged + deleted) — falling back to base branch'
+            );
+          }
         }
+
+        const addCommand =
+          useContinuation && continuationPrBranch !== undefined
+            ? `git worktree add -B "${taskId}" "${worktreePath}" "origin/${continuationPrBranch}"`
+            : `git worktree add -b "${taskId}" "${worktreePath}" "origin/${baseBranch}"`;
+        const { stderr } = await execAsync(addCommand, {
+          cwd: this.config.repositoryPath,
+        });
 
         // git worktree add outputs to stderr even on success
         if (stderr && !stderr.includes('Preparing worktree')) {
