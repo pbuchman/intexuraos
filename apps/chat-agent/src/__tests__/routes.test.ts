@@ -4,6 +4,8 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../server.js';
 import { setupFakeServices, resetFakeServices } from './fakes.fixture.js';
+import { setServices, getServices } from '../services.js';
+import { createGuestRateLimiter } from '../infra/rateLimit/index.js';
 import {
   setupJwksServer,
   teardownJwksServer,
@@ -503,6 +505,47 @@ describe('chat-agent routes', () => {
         expect(body.success).toBe(false);
         expect(body.error.code).toBe('RATE_LIMITED');
         expect(body.error.message).toContain('Rate limit exceeded');
+      });
+
+      it('blocks rotation: same signed token sent repeatedly hits 429 at the configured cap', async () => {
+        // AC#1 of INT-1520: guests cannot bypass rate limits by rotating the
+        // X-Guest-Session header. Verify that sending the SAME signed token to
+        // POST /chat repeatedly is capped — the limiter is keyed on the verified
+        // sub, so all four requests share one bucket. Use the real limiter
+        // (small cap to keep the test fast) instead of the fake.
+        const realLimiter = createGuestRateLimiter({ maxPerHour: 3 });
+        const current = getServices();
+        setServices({ ...current, guestRateLimiter: realLimiter });
+        const localApp = await buildServer();
+        try {
+          const token = 'fake-token-for-some-sub';
+          const statuses: number[] = [];
+          let lastBody: { success: boolean; error?: { code: string } } | null = null;
+          for (let i = 0; i < 4; i++) {
+            const response = await localApp.inject({
+              method: 'POST',
+              url: '/chat',
+              headers: {
+                'x-guest-session': token,
+                'x-forwarded-for': '203.0.113.99',
+              },
+              payload: {
+                message: 'Hello',
+              },
+            });
+            statuses.push(response.statusCode);
+            lastBody = JSON.parse(response.body) as {
+              success: boolean;
+              error?: { code: string };
+            };
+          }
+          expect(statuses.slice(0, 3)).toEqual([200, 200, 200]);
+          expect(statuses[3]).toBe(429);
+          expect(lastBody?.success).toBe(false);
+          expect(lastBody?.error?.code).toBe('RATE_LIMITED');
+        } finally {
+          await localApp.close();
+        }
       });
     });
 
