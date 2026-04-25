@@ -7,4 +7,4 @@ importers:
         version: 4.17.21
 packages:
   lodash@4.17.21:
-    resolution: {tarball: https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz}
+    resolution: { tarball: https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz }

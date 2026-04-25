@@ -3654,6 +3654,119 @@ describe('DockerProvider', () => {
         'Failed to persist attempt exec stream chunk'
       );
     });
+
+    it('emits lockfile-drift warning without forensics write when no forensics path (INT-1524)', async () => {
+      const fsModule = await import('node:fs');
+      // Non-forensics provider so worker.taskForensicsPath stays undefined.
+      (fsModule.readFileSync as Mock).mockImplementationOnce((filePath: unknown) => {
+        if (typeof filePath === 'string' && filePath.endsWith('pnpm-lock.yaml')) {
+          return Buffer.from('lock-v1');
+        }
+        return '';
+      });
+      (fsModule.readFileSync as Mock).mockImplementationOnce((filePath: unknown) => {
+        if (typeof filePath === 'string' && filePath.endsWith('pnpm-lock.yaml')) {
+          return Buffer.from('lock-v2-tampered');
+        }
+        return '';
+      });
+
+      (fsModule.promises.writeFile as Mock).mockClear();
+
+      await provider.createWorker(createTestConfig({ onComplete: vi.fn() }));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const driftWarnCall = (mockLogger.warn as Mock).mock.calls.find((call: unknown[]) => {
+        const ctx = call[0] as { event?: string } | undefined;
+        return ctx?.event === 'lockfile-drift';
+      });
+      expect(driftWarnCall).toBeDefined();
+
+      const writeFileCalls = (fsModule.promises.writeFile as Mock).mock.calls;
+      const driftWrite = writeFileCalls.find(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && (c[0] as string).endsWith('lockfile-drift.txt')
+      );
+      expect(driftWrite).toBeUndefined();
+    });
+
+    it('skips lockfile snapshot when worktree has no pnpm-lock.yaml (INT-1524)', async () => {
+      const fsModule = await import('node:fs');
+      // Make existsSync return false specifically for pnpm-lock.yaml so
+      // snapshotLockfile() returns null at create time. Other existsSync
+      // calls (.git, etc.) keep their default `true`.
+      const originalExistsSync = (fsModule.existsSync as Mock).getMockImplementation();
+      (fsModule.existsSync as Mock).mockImplementation((p: unknown) => {
+        if (typeof p === 'string' && p.endsWith('pnpm-lock.yaml')) {
+          return false;
+        }
+        return originalExistsSync ? originalExistsSync(p) : true;
+      });
+
+      try {
+        await provider.createWorker(createTestConfig({ onComplete: vi.fn() }));
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // No lockfile-drift warn emitted (snapshot returned null, so no tracking).
+        const driftCall = (mockLogger.warn as Mock).mock.calls.find((call: unknown[]) => {
+          const ctx = call[0] as { event?: string } | undefined;
+          return ctx?.event === 'lockfile-drift';
+        });
+        expect(driftCall).toBeUndefined();
+      } finally {
+        (fsModule.existsSync as Mock).mockImplementation(() => true);
+      }
+    });
+
+    it('emits lockfile-drift warning + writes lockfile-drift.txt when pnpm-lock changes (INT-1524)', async () => {
+      const fsModule = await import('node:fs');
+      const forensicsProvider = new TestableDockerProvider(
+        { forensicsMode: true, forensicsBasePath: '/tmp/forensics' },
+        mockLogger,
+        mocks.mockDocker
+      );
+
+      // First readFileSync call (during createWorker -> snapshotLockfile) returns
+      // 'lock-v1'. The default mock returns '' for all other reads. After the
+      // attempt completes the teardown will call snapshotLockfile again and the
+      // default '' return will differ from the captured 'lock-v1' hash → drift.
+      (fsModule.readFileSync as Mock).mockImplementationOnce((filePath: unknown) => {
+        if (typeof filePath === 'string' && filePath.endsWith('pnpm-lock.yaml')) {
+          return Buffer.from('lock-v1');
+        }
+        if (
+          typeof filePath === 'string' &&
+          filePath.includes('code-worker-forensics-seccomp.json')
+        ) {
+          return '{"defaultAction":"SCMP_ACT_ERRNO","syscalls":[]}';
+        }
+        return '';
+      });
+      (fsModule.readFileSync as Mock).mockImplementationOnce((filePath: unknown) => {
+        if (typeof filePath === 'string' && filePath.endsWith('pnpm-lock.yaml')) {
+          return Buffer.from('lock-v2-tampered');
+        }
+        return '';
+      });
+
+      (fsModule.promises.writeFile as Mock).mockClear();
+
+      await forensicsProvider.createWorker(createTestConfig({ onComplete: vi.fn() }));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const driftWarnCall = (mockLogger.warn as Mock).mock.calls.find((call: unknown[]) => {
+        const ctx = call[0] as { event?: string } | undefined;
+        return ctx?.event === 'lockfile-drift';
+      });
+      expect(driftWarnCall).toBeDefined();
+
+      const writeFileCalls = (fsModule.promises.writeFile as Mock).mock.calls;
+      const driftWrite = writeFileCalls.find(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && (c[0] as string).endsWith('lockfile-drift.txt')
+      );
+      expect(driftWrite).toBeDefined();
+    });
   });
 
   describe('waitForExecCompletion', () => {
