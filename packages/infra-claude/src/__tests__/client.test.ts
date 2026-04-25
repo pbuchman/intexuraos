@@ -520,5 +520,30 @@ describe('createClaudeClient', () => {
       expect(lastCall?.success).toBe(false);
       expect(lastCall?.durationMs).toBeGreaterThanOrEqual(0);
     });
+
+    it('records llm.cached_input_tokens span attribute when cache_read_input_tokens > 0', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'ok' }],
+        usage: {
+          input_tokens: 12,
+          output_tokens: 7,
+          cache_read_input_tokens: 30,
+        },
+      });
+
+      const client = createClaudeClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('ok', { promptType: 'test-prompt' });
+
+      const spans = spanExporter.getFinishedSpans();
+      const span = spans[0];
+      if (span === undefined) throw new Error('no span');
+      expect(span.attributes['llm.cached_input_tokens']).toBe(30);
+    });
   });
 });

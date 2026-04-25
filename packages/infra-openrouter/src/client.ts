@@ -286,7 +286,6 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             content: string;
             normalized: NormalizedUsage;
             providerReportedUsd: number | null;
-            apiError?: OpenRouterApiError;
           }> => {
             const requestBody = {
               model, // No :online suffix for synthesis
@@ -317,15 +316,11 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
               timeoutMs
             );
 
+            // Throw on HTTP error so withLlmSpan records ERROR status. The outer
+            // catch below maps the error and logs usage with measured duration.
             if (!response.ok) {
               const errorText = await response.text();
-              const apiError = new OpenRouterApiError(response.status, errorText);
-              return {
-                content: '',
-                normalized: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
-                providerReportedUsd: null,
-                apiError,
-              };
+              throw new OpenRouterApiError(response.status, errorText);
             }
 
             const data = (await response.json()) as OpenRouterResponse;
@@ -351,20 +346,6 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             costUsd: normalized.costUsd,
           })
         );
-
-        if (result.apiError !== undefined) {
-          const errorMsg = getErrorMessage(result.apiError);
-          trackUsage(
-            'generate',
-            result.normalized,
-            false,
-            durationMs,
-            errorMsg,
-            undefined,
-            options.promptType
-          );
-          return err(mapOpenRouterError(result.apiError));
-        }
 
         trackUsage(
           'generate',

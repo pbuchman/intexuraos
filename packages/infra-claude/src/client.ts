@@ -194,12 +194,13 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
               usageDetails.cacheCreationTokens,
               0
             );
-            return { content: text, usage };
+            return { content: text, usage, cacheReadTokens: usageDetails.cacheReadTokens };
           },
-          ({ usage }) => ({
+          ({ usage, cacheReadTokens }) => ({
             model,
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
+            ...(cacheReadTokens > 0 && { cachedInputTokens: cacheReadTokens }),
             costUsd: usage.costUsd,
           })
         );

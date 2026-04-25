@@ -322,7 +322,6 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
           async (): Promise<{
             content: string;
             usage: NormalizedUsage;
-            apiError?: PerplexityApiError;
           }> => {
             const requestBody: PerplexityRequestBody = {
               model,
@@ -349,14 +348,11 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
               timeoutMs
             );
 
+            // Throw on HTTP error so withLlmSpan records ERROR status. The outer
+            // catch below maps the error and logs usage with measured duration.
             if (!response.ok) {
               const errorText = await response.text();
-              const apiError = new PerplexityApiError(response.status, errorText);
-              return {
-                content: '',
-                usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
-                apiError,
-              };
+              throw new PerplexityApiError(response.status, errorText);
             }
 
             const data = (await response.json()) as PerplexityResponse;
@@ -371,12 +367,6 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
             costUsd: usage.costUsd,
           })
         );
-
-        if (result.apiError !== undefined) {
-          const errorMsg = getErrorMessage(result.apiError);
-          trackUsage('generate', result.usage, false, durationMs, errorMsg, options.promptType);
-          return err(mapPerplexityError(result.apiError));
-        }
 
         trackUsage('generate', result.usage, true, durationMs, undefined, options.promptType);
 

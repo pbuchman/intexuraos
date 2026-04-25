@@ -207,12 +207,13 @@ export function createGptClient(config: GptConfig): GptClient {
               0,
               usageDetails.reasoningTokens
             );
-            return { content: text, usage };
+            return { content: text, usage, cachedTokens: usageDetails.cachedTokens };
           },
-          ({ usage }) => ({
+          ({ usage, cachedTokens }) => ({
             model,
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
+            ...(cachedTokens > 0 && { cachedInputTokens: cachedTokens }),
             costUsd: usage.costUsd,
           })
         );
