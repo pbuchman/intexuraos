@@ -69,6 +69,25 @@ export function buildRequestContext(request: FastifyRequest): RequestContext {
  * Internally uses {@link AsyncLocalStorage.run} via `runWithRequestContext`,
  * invoking the Fastify `done()` callback inside the runner so the entire
  * request handler chain inherits the bound store.
+ *
+ * **Registration order matters.** Fastify executes `onRequest` hooks in the
+ * order they are registered. Call `registerRequestContext(app)` BEFORE any
+ * other hook (or plugin) that needs to read the context — in particular
+ * before route registration and before the `logIncomingRequest()` helper
+ * from `@intexuraos/common-http` is invoked inside any route handler. If
+ * registered after another hook that reads `getRequestContext()`, the read
+ * will return `undefined`.
+ *
+ * @example
+ * ```ts
+ * import Fastify from 'fastify';
+ * import { registerRequestContext } from '@intexuraos/http-server';
+ *
+ * const app = Fastify({ ... });
+ * registerRequestContext(app);          // 1) bind the context first
+ * await app.register(intexuraFastifyPlugin); // 2) then standard plugins
+ * await app.register(myRoutes);              // 3) then routes
+ * ```
  */
 export function registerRequestContext(app: FastifyInstance): void {
   app.addHook('onRequest', (request, _reply, done) => {

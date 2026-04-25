@@ -58,11 +58,20 @@ export async function fetchWithAuth<T>(
     };
 
     // Plan §4 — propagate request/correlation ids from AsyncLocalStorage when
-    // a request context is in scope. Caller-supplied headers win.
+    // a request context is in scope. Caller-supplied non-empty headers win;
+    // empty strings are treated as missing to mirror the inbound side
+    // (`buildRequestContext` in `@intexuraos/http-server`), preventing the
+    // wire from carrying a useless `x-request-id: ` header.
     const ctx = getRequestContext();
     if (ctx !== undefined) {
-      headers['x-request-id'] ??= ctx.requestId;
-      headers['x-correlation-id'] ??= ctx.correlationId;
+      const existingRequestId = headers['x-request-id'];
+      if (existingRequestId === undefined || existingRequestId === '') {
+        headers['x-request-id'] = ctx.requestId;
+      }
+      const existingCorrelationId = headers['x-correlation-id'];
+      if (existingCorrelationId === undefined || existingCorrelationId === '') {
+        headers['x-correlation-id'] = ctx.correlationId;
+      }
     }
 
     // Include traceId in legacy header if provided

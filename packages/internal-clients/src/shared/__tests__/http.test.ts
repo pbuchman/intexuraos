@@ -199,6 +199,28 @@ describe('fetchWithAuth', () => {
       expect(result.ok).toBe(true);
     });
 
+    it('replaces empty caller-supplied request/correlation headers with context values', async () => {
+      const mockData = { ok: true };
+      nock('http://localhost:3000')
+        .get('/test')
+        .matchHeader('x-request-id', 'ctx-req-fill')
+        .matchHeader('x-correlation-id', 'ctx-corr-fill')
+        .reply(200, mockData);
+
+      const result = await runWithRequestContext(
+        { requestId: 'ctx-req-fill', correlationId: 'ctx-corr-fill' },
+        () =>
+          fetchWithAuth(config, '/test', {
+            headers: {
+              'x-request-id': '',
+              'x-correlation-id': '',
+            },
+          })
+      );
+
+      expect(result.ok).toBe(true);
+    });
+
     it('omits propagation headers when no context is active', async () => {
       const mockData = { ok: true };
       // Define expected headers minimally — undefined headers must NOT be sent.
