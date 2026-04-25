@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { extractCorrelation } from '../extractCorrelation.js';
-import { runWithRequestContext, getRequestContext } from '../requestContextShim.js';
+import { runWithRequestContext, getRequestContext, getRequestId } from '../requestContextShim.js';
 
 describe('extractCorrelation', () => {
   it('uses x-request-id when present', () => {
@@ -64,5 +64,17 @@ describe('runWithRequestContext', () => {
 
   it('returns undefined outside any context', () => {
     expect(getRequestContext()).toBeUndefined();
+  });
+});
+
+describe('getRequestId', () => {
+  it('returns the requestId of the active context', () => {
+    const ctx = extractCorrelation({ 'x-request-id': 'rid-7' });
+    const seen = runWithRequestContext(ctx, () => getRequestId());
+    expect(seen).toBe('rid-7');
+  });
+
+  it('returns undefined when no context is active', () => {
+    expect(getRequestId()).toBeUndefined();
   });
 });
