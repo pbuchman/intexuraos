@@ -52,7 +52,6 @@ describe('migration 098 – cleanup orphaned indexes and registry reconcile', ()
       projectId: 'test-project',
       deployIndexes,
       deployRules,
-      logger: { info: vi.fn() },
     };
 
     await up(context);
@@ -68,7 +67,6 @@ describe('migration 098 – cleanup orphaned indexes and registry reconcile', ()
       projectId: 'test-project',
       deployIndexes,
       deployRules,
-      logger: { info: vi.fn() },
     };
 
     await up(context);
