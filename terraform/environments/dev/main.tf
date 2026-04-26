@@ -1654,8 +1654,8 @@ module "chat_agent" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/chat-agent:latest"
 
   secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_OPENAI_APP_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_APP_API_KEY"]
-    INTEXURAOS_GUEST_SESSION_SECRET  = module.secret_manager.secret_ids["INTEXURAOS_GUEST_SESSION_SECRET"]
+    INTEXURAOS_OPENAI_APP_API_KEY   = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_APP_API_KEY"]
+    INTEXURAOS_GUEST_SESSION_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GUEST_SESSION_SECRET"]
   })
   env_vars = local.common_service_env_vars
 
