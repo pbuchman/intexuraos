@@ -1,6 +1,7 @@
-import type { Result, CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import type { CodeAgentClient, CodeAgentError, TriggerCodeTaskResponse } from '../../domain/ports.js';
 
 export type { CodeAgentClient, CodeAgentError, TriggerCodeTaskResponse };

@@ -20,7 +20,7 @@ The code-worker runs inside an isolated Docker container with strict security co
 
 Each container gets a fresh repository copy (via git worktree), its own credentials, and a pre-installed dependency cache. When the task finishes, the entrypoint logs the exit code and terminates lingering child processes.
 
-**Evidence:** `workers/code-worker/entrypoint.sh`
+**Evidence:** `docker/code-worker/entrypoint.sh`
 
 ### Stage 2: Completion Verification (Gemini 2.5 Flash)
 

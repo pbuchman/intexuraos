@@ -1,3 +1,4 @@
+import { IntexuraOSError } from '@intexuraos/common-core';
 import type { ActionType } from './action.js';
 
 /**
@@ -24,7 +25,7 @@ export interface ApprovalMessage {
 /**
  * Creates a new ApprovalMessage with generated ID and timestamp.
  *
- * @throws {Error} If required fields are empty strings
+ * @throws {IntexuraOSError} INVALID_REQUEST if required fields are empty strings
  */
 export function createApprovalMessage(params: {
   wamid: string;
@@ -36,13 +37,13 @@ export function createApprovalMessage(params: {
   // Validate required fields are not empty
   // These are defensive checks - in practice, callers always provide valid values
   if (params.wamid.trim() === '') {
-    throw new Error('wamid is required');
+    throw new IntexuraOSError('INVALID_REQUEST', 'wamid is required');
   }
   if (params.actionId.trim() === '') {
-    throw new Error('actionId is required');
+    throw new IntexuraOSError('INVALID_REQUEST', 'actionId is required');
   }
   if (params.userId.trim() === '') {
-    throw new Error('userId is required');
+    throw new IntexuraOSError('INVALID_REQUEST', 'userId is required');
   }
   
 

@@ -91,19 +91,19 @@ The code-agent is the Fastify app the web UI POSTs to. It *already* stores `repo
 
 **Implication:** users cannot pick a repo. List views don't filter or group by repo. All PR links already use the `repository` field, so display-side is 80% ready; input-side is 0% ready.
 
-### 2.4 Worker runtime (`workers/code-worker/`)
+### 2.4 Worker runtime (`docker/code-worker/`)
 
 The worker Docker image is fairly repo-agnostic, but has a few monorepo-specific crutches:
 
 | File                                | Line               | Observation                                                                                                                                    |
 | ----------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workers/code-worker/Dockerfile`    | 40–41              | Custom `gh` wrapper reads `/secrets/github-token` at each call — **auth is fine for any repo** if the token has scope                          |
-| `workers/code-worker/Dockerfile`    | 50–51              | `pnpm install --frozen-lockfile` is unconditionally executed — **fails on non-pnpm repos**                                                     |
-| `workers/code-worker/Dockerfile`    | 62–66              | Claude CLI installed globally — portable                                                                                                       |
-| `workers/code-worker/Dockerfile`    | 76                 | `git clone https://github.com/obra/superpowers.git` at build — portable                                                                        |
-| `workers/code-worker/entrypoint.sh` | 47                 | Sets git credential helper — portable                                                                                                          |
-| `workers/code-worker/entrypoint.sh` | 125–131            | `cd /repo` and runs in place — portable                                                                                                        |
-| Orchestrator-side settings template | `start.ts:564–569` | Copies `workers/code-worker/config-defaults/settings.local.json` **from the target repo** — **breaks on any repo that doesn't ship this file** |
+| `docker/code-worker/Dockerfile`    | 40–41              | Custom `gh` wrapper reads `/secrets/github-token` at each call — **auth is fine for any repo** if the token has scope                          |
+| `docker/code-worker/Dockerfile`    | 50–51              | `pnpm install --frozen-lockfile` is unconditionally executed — **fails on non-pnpm repos**                                                     |
+| `docker/code-worker/Dockerfile`    | 62–66              | Claude CLI installed globally — portable                                                                                                       |
+| `docker/code-worker/Dockerfile`    | 76                 | `git clone https://github.com/obra/superpowers.git` at build — portable                                                                        |
+| `docker/code-worker/entrypoint.sh` | 47                 | Sets git credential helper — portable                                                                                                          |
+| `docker/code-worker/entrypoint.sh` | 125–131            | `cd /repo` and runs in place — portable                                                                                                        |
+| Orchestrator-side settings template | `start.ts:564–569` | Copies `docker/code-worker/config-defaults/settings.local.json` **from the target repo** — **breaks on any repo that doesn't ship this file** |
 
 **Implication:** the worker is closer to portable than the orchestrator, but the settings template must move out of the target repo, and any "pnpm bootstrap" step must become optional or repo-declared.
 
@@ -163,7 +163,7 @@ User (web)
 Key design decisions surfaced by the investigation:
 
 1. **Repo clone cache** — one directory per `(owner, repo)` under `~/.code-orchestrator/repos/<owner>__<repo>/`. The orchestrator lazily clones on first task for a repo, and runs `git fetch` before every worktree. (Per-task fresh clones would be simpler but 10–60× slower on any non-trivial repo.)
-2. **Settings template** — move `workers/code-worker/config-defaults/settings.local.json` out of the IntexuraOS repo and into the orchestrator's own code (`workers/orchestrator/config-defaults/`). The template is about the worker runtime, not about IntexuraOS. This is a **one-time breaking change** to the current bootstrap.
+2. **Settings template** — move `docker/code-worker/config-defaults/settings.local.json` out of the IntexuraOS repo and into the orchestrator's own code (`workers/orchestrator/config-defaults/`). The template is about the worker runtime, not about IntexuraOS. This is a **one-time breaking change** to the current bootstrap.
 3. **Installation token cache** — `GitHubTokenService` becomes `GitHubTokenPool` keyed by installation ID, each entry refreshed independently on its ~55-min schedule.
 4. **Per-task secrets path** — instead of a single `/secrets/github-token`, the orchestrator writes `~/.code-orchestrator/secrets/<taskId>/github-token` and bind-mounts that path into the worker. (Already half-true today; needs generalization.)
 5. **Base-branch normalization** — `WorktreeManager` must stop assuming `development`. It does already accept `baseBranch` as a parameter; the test fixture at `worktree-manager.test.ts:125` is the only place it's hardcoded. Real fix: the code-agent stores the repo's default branch at connect-time and supplies it per task.
@@ -232,12 +232,12 @@ This must be versioned (simple: accept old shape for one release, default `repoU
 
 ### 4.5 Worker runtime
 
-- `workers/code-worker/Dockerfile:50–51` — Remove the hardcoded `pnpm install`. Instead, let the worker entrypoint read a repo-declared bootstrap command from `.intexuraos/config.yaml` (or fall back to "auto-detect from lockfile").
-- `workers/code-worker/entrypoint.sh` — Add a `setup_repo` step that:
+- `docker/code-worker/Dockerfile:50–51` — Remove the hardcoded `pnpm install`. Instead, let the worker entrypoint read a repo-declared bootstrap command from `.intexuraos/config.yaml` (or fall back to "auto-detect from lockfile").
+- `docker/code-worker/entrypoint.sh` — Add a `setup_repo` step that:
   - reads `.intexuraos/config.yaml` if present,
   - detects `package.json` / `pnpm-lock.yaml` / `requirements.txt` / `go.mod` and runs the corresponding install,
   - no-ops if none of the above match (a plain docs-only repo should just work).
-- New file: `workers/orchestrator/config-defaults/settings.local.json` (moved from `workers/code-worker/config-defaults/settings.local.json`). Old location can be left as a courtesy copy for the IntexuraOS repo itself.
+- New file: `workers/orchestrator/config-defaults/settings.local.json` (moved from `docker/code-worker/config-defaults/settings.local.json`). Old location can be left as a courtesy copy for the IntexuraOS repo itself.
 
 ### 4.6 Infrastructure
 
@@ -339,6 +339,6 @@ Every claim above is traceable to a specific file:line inspected during the inve
 - Web new-task page has no selector: `apps/web/src/pages/CodeTaskNewPage.tsx` (full)
 - Task model already carries `repository`: `apps/code-agent/src/domain/model/codeTask.ts:189`
 - Flat Firestore collection: `firestore-collections.json:137–141`
-- Worker bootstrap assumes pnpm: `workers/code-worker/Dockerfile:50–51`
+- Worker bootstrap assumes pnpm: `docker/code-worker/Dockerfile:50–51`
 - Terraform is parameterized: `terraform/environments/dev/main.tf:56–76`
 - CODEOWNERS hardcoded: `.github/CODEOWNERS:5,8`

@@ -1,4 +1,4 @@
-import { hasCodeTaskLabel, hasPlanningTaskLabel } from '@intexuraos/common-core';
+import { hasCodeTaskLabel, hasPlanningTaskLabel } from '@intexuraos/linear-domain';
 import type { Logger } from 'pino';
 import type { CodeAgentClient } from '../ports.js';
 import type { LinearWebhookEvent } from '../webhookTypes.js';

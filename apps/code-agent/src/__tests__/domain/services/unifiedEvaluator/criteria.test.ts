@@ -20,6 +20,7 @@ import {
   handleCheckSuiteCIFailure,
   handleHardRules,
   shouldSkipReviewForRemediation,
+  shouldSkipReviewForFailedOrigin,
   REMEDIATION_RECENCY_MS,
 } from '../../../../domain/services/unifiedEvaluator/criteria.js';
 import { createDeps as createBaseDeps, createFakeEvent, createFakeLogger } from './_fixtures.js';
@@ -248,5 +249,52 @@ describe('criteria/shouldSkipReviewForRemediation', () => {
     const recent = Timestamp.fromMillis(Date.now() - 1000);
     const repo = createCodeTaskRepo(ok({ status: 'completed', completedAt: recent, requiresReReview: false }));
     expect(await shouldSkipReviewForRemediation(repo, 'o/r', 1, 'evt-1', logger)).toBe(true);
+  });
+});
+
+describe('criteria/shouldSkipReviewForFailedOrigin', () => {
+  let logger: Logger;
+  beforeEach(() => { logger = createFakeLogger(); });
+
+  function createCodeTaskRepo(result: unknown): CodeTaskRepository {
+    return {
+      findOriginTaskByPR: vi.fn().mockResolvedValue(result),
+    } as unknown as CodeTaskRepository;
+  }
+
+  it.each([
+    ['failed', 'execution'],
+    ['interrupted', 'execution'],
+    ['cancelled', 'execution'],
+    ['failed', 'planning'],
+    ['failed', 'pull_request'],
+  ] as const)('returns skip=true with origin metadata when status=%s, agentType=%s', async (status, agentType) => {
+    const repo = createCodeTaskRepo(ok({ id: 't-1', status, agentType }));
+    const result = await shouldSkipReviewForFailedOrigin(repo, 'o/r', 1, 'evt-1', logger);
+    expect(result).toEqual({ skip: true, origin: { taskId: 't-1', agentType, status } });
+  });
+
+  it.each([
+    ['implemented'],
+    ['planned'],
+    ['reviewed'],
+    ['queued'],
+    ['dispatched'],
+    ['running'],
+    ['archived'],
+  ] as const)('returns skip=false for non-terminal-failure status %s (allow-list: only failed|interrupted|cancelled gate)', async (status) => {
+    const repo = createCodeTaskRepo(ok({ id: 't-1', status, agentType: 'execution' }));
+    expect(await shouldSkipReviewForFailedOrigin(repo, 'o/r', 1, 'evt-1', logger)).toEqual({ skip: false });
+  });
+
+  it('returns skip=false when no origin task found', async () => {
+    const repo = createCodeTaskRepo(ok(null));
+    expect(await shouldSkipReviewForFailedOrigin(repo, 'o/r', 1, 'evt-1', logger)).toEqual({ skip: false });
+  });
+
+  it('returns skip=false and warns when repository call fails (fail-open)', async () => {
+    const repo = createCodeTaskRepo(err({ code: 'X', message: 'firestore down' }));
+    expect(await shouldSkipReviewForFailedOrigin(repo, 'o/r', 1, 'evt-1', logger)).toEqual({ skip: false });
+    expect(logger.warn).toHaveBeenCalled();
   });
 });

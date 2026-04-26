@@ -514,7 +514,7 @@ Creates isolated git worktrees per task:
 
 - `git worktree add -b "{taskId}" "{path}" "origin/{baseBranch}"` — base branch is fetched from origin first
 - Supports `continuationPrBranch` checkout for retried tasks inheriting an existing PR branch
-- Copies `.claude/settings.local.json` from `workers/code-worker/config-defaults/`
+- Copies `.claude/settings.local.json` from `docker/code-worker/config-defaults/`
 - All git operations serialized via `async-mutex` to prevent index corruption
 - Removes worktrees with `git worktree remove --force`
 - `worktreeExists()` for resume availability checks

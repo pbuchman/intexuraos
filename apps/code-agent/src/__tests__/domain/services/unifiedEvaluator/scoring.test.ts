@@ -183,6 +183,7 @@ describe('scoring/handleLlmTriage', () => {
 
   it('skips review when recent remediation indicates no re-review needed on synchronize', async () => {
     const codeTaskRepo = {
+      findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       findRecentRemediationForPR: vi.fn().mockResolvedValue(ok({
         status: 'running',
         requiresReReview: false,
@@ -211,6 +212,7 @@ describe('scoring/handleLlmTriage', () => {
 
   it('proceeds with review when remediation check fails open (no task found)', async () => {
     const codeTaskRepo = {
+      findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       findRecentRemediationForPR: vi.fn().mockResolvedValue(ok(null)),
     } as unknown as CodeTaskRepository;
     const evaluateEvent = vi.fn().mockResolvedValue(ok({
@@ -226,6 +228,114 @@ describe('scoring/handleLlmTriage', () => {
       logger,
     );
     expect(deps.createReviewTask).toHaveBeenCalled();
+  });
+
+  it('skips review when latest origin task ended in terminal failure', async () => {
+    const findOriginTaskByPR = vi.fn().mockResolvedValue(ok({
+      id: 'task-failed-1', status: 'failed', agentType: 'execution',
+    }));
+    const findRecentRemediationForPR = vi.fn().mockResolvedValue(ok(null));
+    const codeTaskRepo = { findOriginTaskByPR, findRecentRemediationForPR } as unknown as CodeTaskRepository;
+    const onReviewSkipped = vi.fn().mockResolvedValue(undefined);
+    const evaluateEvent = vi.fn().mockResolvedValue(ok({
+      triage: { action: 'request_review', reviewTypes: ['code_review'] },
+      usage: { costUsd: 0.01, model: 'claude-opus', toolCalls: [] },
+      reasoning: 'would-be review',
+    }));
+    const deps = createDeps({ evaluateEvent, codeTaskRepo, onReviewSkipped });
+    await handleLlmTriage(
+      deps,
+      createFakeEvent({ eventType: 'pull_request', action: 'synchronize' }),
+      Date.now(),
+      logger,
+    );
+    expect(deps.createReviewTask).not.toHaveBeenCalled();
+    expect(findRecentRemediationForPR).not.toHaveBeenCalled();
+    expect(deps.eventDecisionRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decidedBy: 'github_agent',
+        decision: 'skip',
+        reason: expect.stringContaining('failed_origin_no_review'),
+        llmModel: 'claude-opus',
+        llmCostUsd: 0.01,
+      }),
+    );
+    expect(deps.automationLog.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        type: 'skipped',
+        decidedBy: 'llm_triage',
+        reason: 'failed_origin_no_review',
+      }),
+      undefined,
+    );
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        originTaskId: 'task-failed-1',
+        originAgentType: 'execution',
+        originStatus: 'failed',
+      }),
+      'Skipping review: latest origin task ended in terminal failure',
+    );
+    // onReviewSkipped (which sets ready-to-merge) MUST NOT be invoked for failed origins
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onReviewSkipped).not.toHaveBeenCalled();
+  });
+
+  it('failed-origin gate fires for non-synchronize events too (issue_comment)', async () => {
+    const codeTaskRepo = {
+      findOriginTaskByPR: vi.fn().mockResolvedValue(ok({
+        id: 'task-int-1', status: 'interrupted', agentType: 'planning',
+      })),
+      findRecentRemediationForPR: vi.fn().mockResolvedValue(ok(null)),
+    } as unknown as CodeTaskRepository;
+    const evaluateEvent = vi.fn().mockResolvedValue(ok({
+      triage: { action: 'request_review', reviewTypes: ['code_review'] },
+      usage: { costUsd: 0.01, toolCalls: [] },
+      reasoning: '',
+    }));
+    const deps = createDeps({ evaluateEvent, codeTaskRepo });
+    await handleLlmTriage(
+      deps,
+      createFakeEvent({ eventType: 'issue_comment', body: 'looks good' }),
+      Date.now(),
+      logger,
+    );
+    expect(deps.createReviewTask).not.toHaveBeenCalled();
+  });
+
+  it('proceeds with review when origin task is implemented', async () => {
+    const codeTaskRepo = {
+      findOriginTaskByPR: vi.fn().mockResolvedValue(ok({
+        id: 'task-ok', status: 'implemented', agentType: 'execution',
+      })),
+      findRecentRemediationForPR: vi.fn().mockResolvedValue(ok(null)),
+    } as unknown as CodeTaskRepository;
+    const evaluateEvent = vi.fn().mockResolvedValue(ok({
+      triage: { action: 'request_review', reviewTypes: ['code_review'] },
+      usage: { costUsd: 0.01, toolCalls: [] },
+      reasoning: '',
+    }));
+    const deps = createDeps({ evaluateEvent, codeTaskRepo });
+    await handleLlmTriage(deps, createFakeEvent(), Date.now(), logger);
+    expect(deps.createReviewTask).toHaveBeenCalled();
+  });
+
+  it('proceeds (fail-open) when findOriginTaskByPR errors', async () => {
+    const codeTaskRepo = {
+      findOriginTaskByPR: vi.fn().mockResolvedValue(err({ code: 'X', message: 'firestore down' })),
+      findRecentRemediationForPR: vi.fn().mockResolvedValue(ok(null)),
+    } as unknown as CodeTaskRepository;
+    const evaluateEvent = vi.fn().mockResolvedValue(ok({
+      triage: { action: 'request_review', reviewTypes: ['code_review'] },
+      usage: { costUsd: 0.01, toolCalls: [] },
+      reasoning: '',
+    }));
+    const deps = createDeps({ evaluateEvent, codeTaskRepo });
+    await handleLlmTriage(deps, createFakeEvent(), Date.now(), logger);
+    expect(deps.createReviewTask).toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalled();
   });
 
   it('records skip for triage.action === "skip"', async () => {
@@ -334,6 +444,7 @@ describe('scoring/handleLlmTriage', () => {
 
   it('includes llmModel when usage.model is present on remediation skip', async () => {
     const codeTaskRepo = {
+      findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
       findRecentRemediationForPR: vi.fn().mockResolvedValue(ok({
         status: 'completed',
         completedAt: Timestamp.fromMillis(Date.now()),

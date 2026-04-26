@@ -3,11 +3,13 @@
   "version": "3.6.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
@@ -15,10 +17,12 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/common-http": "workspace:*",
     "@intexuraos/infra-openrouter": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
-    "@intexuraos/llm-pricing": "workspace:*"
+    "@intexuraos/llm-pricing": "workspace:*",
+    "jose": "^6.2.2"
   },
   "devDependencies": {
     "nock": "^14.0.5",
