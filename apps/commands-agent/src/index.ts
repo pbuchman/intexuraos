@@ -13,6 +13,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_PUBSUB_ACTIONS_QUEUE',
+  'INTEXURAOS_SERVICE_URL', // INT-1531: audience for Cloud Scheduler OIDC token verification
 ];
 
 validateRequiredEnv(REQUIRED_ENV);

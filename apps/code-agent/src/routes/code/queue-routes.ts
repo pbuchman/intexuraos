@@ -94,7 +94,7 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
         message: 'Received request to POST /internal/drain-queue',
       });
 
-      const authResult = authenticateInternalScheduler(request);
+      const authResult = await authenticateInternalScheduler(request);
       if (!authResult.authenticated) {
         request.log.warn('Internal auth failed for drain-queue');
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
