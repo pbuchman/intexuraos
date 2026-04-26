@@ -50,7 +50,7 @@ const ExecutionMemoryPromptContextSchema = z.object({
 
 // POST /tasks request schema
 export const CreateTaskRequestSchema = z.object({
-  taskId: z.string().min(1),
+  taskId: z.string().regex(/^task_[0-9a-f-]{36}$/i, 'taskId must match /^task_[0-9a-f-]{36}$/'),
   workerType: WorkerTypeSchema,
   prompt: z.string().min(1),
   repository: z.string().optional(),
