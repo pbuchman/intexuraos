@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { IntexuraOSError } from '@intexuraos/common-core';
 import { createApprovalMessage } from './approvalMessage.js';
 import type { ActionType } from './action.js';
 
@@ -45,5 +46,16 @@ describe('createApprovalMessage', () => {
     expect(() =>
       createApprovalMessage({ ...validParams, userId: '' })
     ).toThrow('userId is required');
+  });
+
+  it('throws IntexuraOSError with INVALID_REQUEST/400 for missing fields', () => {
+    try {
+      createApprovalMessage({ ...validParams, wamid: '' });
+      throw new Error('expected throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(IntexuraOSError);
+      expect((e as IntexuraOSError).code).toBe('INVALID_REQUEST');
+      expect((e as IntexuraOSError).httpStatus).toBe(400);
+    }
   });
 });
