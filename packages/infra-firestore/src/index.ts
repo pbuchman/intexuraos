@@ -15,6 +15,9 @@ export {
   type Firestore,
 } from './firestore.js';
 
+// Schema-version write helper
+export { withSchemaVersion, type SchemaVersionedFields } from './schemaVersion.js';
+
 // Testing utilities
 export {
   createFakeFirestore,
