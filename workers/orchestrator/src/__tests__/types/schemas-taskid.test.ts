@@ -57,4 +57,20 @@ describe('CreateTaskRequestSchema.taskId', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it('rejects 36 hex chars without dashes (not canonical UUID shape)', () => {
+    const result = CreateTaskRequestSchema.safeParse({
+      ...baseRequest,
+      taskId: 'task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects 36 dashes (not canonical UUID shape)', () => {
+    const result = CreateTaskRequestSchema.safeParse({
+      ...baseRequest,
+      taskId: 'task_------------------------------------',
+    });
+    expect(result.success).toBe(false);
+  });
 });
