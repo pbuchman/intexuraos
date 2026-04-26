@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { IntexuraOSError } from '@intexuraos/common-core';
 
 import type { SerializedTask } from '../../../domain/issueGrouping/index.js';
 import {
@@ -1252,6 +1253,18 @@ describe('cursor encoding/decoding', () => {
   it('throws on non-numeric index', () => {
     const bad = Buffer.from(JSON.stringify({ index: 'abc' })).toString('base64url');
     expect(() => decodeCursor(bad)).toThrow('Invalid cursor index');
+  });
+
+  it('throws IntexuraOSError with INVALID_REQUEST/400 on invalid cursor', () => {
+    const bad = Buffer.from(JSON.stringify({ index: -1 })).toString('base64url');
+    try {
+      decodeCursor(bad);
+      throw new Error('expected throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(IntexuraOSError);
+      expect((e as IntexuraOSError).code).toBe('INVALID_REQUEST');
+      expect((e as IntexuraOSError).httpStatus).toBe(400);
+    }
   });
 });
 

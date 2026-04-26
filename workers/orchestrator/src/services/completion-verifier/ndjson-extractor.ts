@@ -3,7 +3,7 @@
  *
  * Why this exists. The deployed worker invokes Claude with
  * `--print --verbose --output-format stream-json` (see
- * `workers/code-worker/entrypoint.sh`). The agent's emitted assistant text —
+ * `docker/code-worker/entrypoint.sh`). The agent's emitted assistant text —
  * including any `*_AGENT_FINAL:` block — therefore lives only inside Claude
  * SDK NDJSON events of the form
  *   `{"type":"assistant","message":{"content":[{"type":"text","text":"..."}]}}`

@@ -220,6 +220,24 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       emptyOutDir: true,
       sourcemap: true,
+      rollupOptions: {
+        output: {
+          manualChunks(id: string): string | undefined {
+            if (id.includes('node_modules/firebase')) return 'firebase';
+            if (id.includes('node_modules/@auth0')) return 'auth0';
+            if (id.includes('node_modules/@sentry')) return 'sentry';
+            if (id.includes('node_modules/vega') || id.includes('node_modules/vega-lite'))
+              return 'vega';
+            if (
+              id.includes('node_modules/@uiw/react-md-editor') ||
+              id.includes('node_modules/react-markdown')
+            )
+              return 'markdown';
+            if (id.includes('node_modules/@radix-ui')) return 'radix';
+            return undefined;
+          },
+        },
+      },
     },
     server: {
       allowedHosts: true,

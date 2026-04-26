@@ -1,4 +1,4 @@
-import { hasCodeTaskLabel } from '@intexuraos/common-core';
+import { hasCodeTaskLabel } from '@intexuraos/linear-domain';
 import { WORKER_TYPES } from '../isolation/types.js';
 import { type WorkerRuntime } from '../runtime/index.js';
 import type { Task } from '../../types/task.js';

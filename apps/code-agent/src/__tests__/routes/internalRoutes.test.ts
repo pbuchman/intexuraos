@@ -102,10 +102,11 @@ describe('POST /internal/merge-conflicts/reconcile', () => {
     expect(body.reopened).toBe(0);
   });
 
-  // Application-level OIDC token validation is intentionally absent: Cloud Run
-  // validates the OIDC token at the infrastructure layer before requests reach
-  // this handler. See authenticateInternalScheduler for the full security note.
-  it('returns 200 with reconcile stats when authenticated via OIDC Bearer token', async () => {
+  // INT-1531: Bearer tokens are now verified against Google's JWKS with
+  // audience = INTEXURAOS_SERVICE_URL. A non-Google "fake-oidc-token" is
+  // rejected. The OIDC happy-path is exercised in the unit test for
+  // authenticateInternalScheduler (with the verifier mocked).
+  it('returns 401 when the Bearer token is not a valid Google OIDC token', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/internal/merge-conflicts/reconcile',
@@ -114,9 +115,10 @@ describe('POST /internal/merge-conflicts/reconcile', () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body) as { processed: number };
-    expect(body.processed).toBe(0);
+    expect(response.statusCode).toBe(401);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
   it('awaits reconcile and returns its result', async () => {
@@ -516,16 +518,14 @@ describe('POST /internal/archive-stale-groups', () => {
     expect(body.durationMs).toBeGreaterThanOrEqual(0);
   });
 
-  it('returns 200 when authenticated via OIDC Bearer token', async () => {
+  it('returns 401 when Bearer token is not a valid Google OIDC token (INT-1531)', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/internal/archive-stale-groups',
       headers: { authorization: 'Bearer fake-oidc-token' },
     });
 
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body) as { totalTasksFetched: number };
-    expect(body.totalTasksFetched).toBe(0);
+    expect(response.statusCode).toBe(401);
   });
 
   it('passes staleDays from request body to use case', async () => {

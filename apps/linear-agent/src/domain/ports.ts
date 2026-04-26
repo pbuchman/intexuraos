@@ -3,7 +3,8 @@
  * These define contracts for infrastructure adapters.
  */
 
-import type { Result, CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { Result } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import type { Logger } from 'pino';
 import type {
   LinearConnection,

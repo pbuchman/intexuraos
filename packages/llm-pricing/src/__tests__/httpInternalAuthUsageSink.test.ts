@@ -96,6 +96,7 @@ const baseParams: UsageLogParams = {
     thinkingTokens: 10,
   },
   success: true,
+  durationMs: 0,
 };
 
 describe('HttpInternalAuthUsageSink', () => {
@@ -217,6 +218,7 @@ describe('HttpInternalAuthUsageSink', () => {
           costUsd: 0.005,
         },
         success: true,
+        durationMs: 0,
       };
 
       await sink.log(minimalParams);

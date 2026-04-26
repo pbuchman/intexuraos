@@ -2,12 +2,14 @@
 
 ## Overview
 
-| Environment | Domain               | Infra                 | Machine  | Deploy Target            |
-| ----------- | -------------------- | --------------------- | -------- | ------------------------ |
-| **dev**     | dev.intexuraos.cloud | PM2                   | home-dev | `~/deploy/intexuraos`    |
-| **prod**    | intexuraos.cloud     | Cloud Run / Functions | GCloud   | CI/CD via GitHub Actions |
+| Environment | Domain               | Infra                                        | Machine  | Deploy Target            |
+| ----------- | -------------------- | -------------------------------------------- | -------- | ------------------------ |
+| **dev**     | dev.intexuraos.cloud | PM2                                          | home-dev | `~/deploy/intexuraos`    |
+| **prod**    | intexuraos.cloud     | Cloud Run / Cloud Functions / GCS web bucket | GCloud   | CI/CD via GitHub Actions |
 
 **⛔ There is NO "local" environment. Only dev and prod exist. If you think about local, STOP - you are wrong.**
+
+**Single GCP project.** Both `dev.intexuraos.cloud` and `intexuraos.cloud` are served from the SAME GCP project `intexuraos-dev-pbuchman`. The `-dev-pbuchman` suffix is legacy — there is no separate prod GCP project. The dev/prod distinction is about _deployment target_ (PM2 on `home-dev` vs Cloud Run / Cloud Functions / GCS bucket in `intexuraos-dev-pbuchman`), not about project ownership. Consequently, only `terraform/environments/dev/` exists in this repo; it manages all Cloud Run services, Cloud Functions, Pub/Sub topics, secrets, and the GCS bucket that backs the prod web bundle.
 
 ## Environment Detection Signals
 
