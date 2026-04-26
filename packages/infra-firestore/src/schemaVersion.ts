@@ -26,12 +26,13 @@ export interface SchemaVersionedFields {
  * @param version The writer's current schema version (monotonically increasing
  *                integer; bumped whenever the persisted shape changes).
  * @param now     Optional override for the timestamp; defaults to
- *                `Timestamp.now()`. Provided for deterministic tests.
+ *                `Timestamp.now()` (evaluated per-call, not at module load).
+ *                Provided for deterministic tests.
  */
 export function withSchemaVersion<T extends object>(
   body: T,
   version: number,
-  now: Timestamp = Timestamp.now(),
+  now: Timestamp = Timestamp.now()
 ): T & SchemaVersionedFields {
   return { ...body, schemaVersion: version, schemaUpdatedAt: now };
 }
