@@ -379,7 +379,7 @@ export async function handleTaskCompletion(
           }
 
           if (isComplex) {
-            /* v8 ignore start -- ts-type: result field ?? fallback for optional webhook payload fields @preserve */
+            /* v8 ignore start -- ts-type: planning_subtask_urls ?? '' fallback unreachable — webhook payload always sets the field on complex-path success @preserve */
             const subtaskUrls = (planningResult.planning_subtask_urls ?? '')
             /* v8 ignore stop @preserve */
               .split(',')
@@ -427,7 +427,7 @@ export async function handleTaskCompletion(
                 }
               }
 
-              /* v8 ignore start -- ts-type: result field ?? fallback for optional webhook payload fields @preserve */
+              /* v8 ignore start -- ts-type: planning_pr_url ?? '' fallback unreachable in complex-success branch — webhook always sets pr_url after planning PR creation @preserve */
               const planningPrUrl = planningResult.planning_pr_url ?? '';
               /* v8 ignore stop @preserve */
               if (planningPrUrl !== '') {
@@ -484,7 +484,7 @@ export async function handleTaskCompletion(
                 }
               }
 
-              /* v8 ignore start -- ts-type: result field ?? fallback for optional webhook payload fields @preserve */
+              /* v8 ignore start -- ts-type: planning_pr_url ?? '' fallback unreachable in complex-fallback branch (live-fetch path) — webhook always sets pr_url after planning PR creation @preserve */
               const planningPrUrl = planningResult.planning_pr_url ?? '';
               /* v8 ignore stop @preserve */
               if (planningPrUrl !== '') {
@@ -515,7 +515,7 @@ export async function handleTaskCompletion(
           return { ok: true };
         }
 
-        /* v8 ignore start -- ts-type: result field ?? fallback for optional webhook payload fields @preserve */
+        /* v8 ignore start -- ts-type: planning_unclear_clarification + taskErrorForUnclear?.message ?? string-literal fallback unreachable — unclear-status webhook always carries one of these fields @preserve */
         const clarificationMessage =
           planningResult.planning_unclear_clarification ??
           taskErrorForUnclear?.message ??

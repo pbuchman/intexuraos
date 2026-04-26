@@ -230,115 +230,130 @@ describe('LogForwarder', () => {
   });
 
   describe('retry logic', () => {
-    it('should retry 3x on 5xx errors with exponential backoff', { timeout: 15000 }, async () => {
-      let attempts = 0;
+    it('should retry 3x on 5xx errors with exponential backoff', async () => {
+      vi.useFakeTimers();
+      try {
+        let attempts = 0;
 
-      mockFetch.mockImplementation(async () => {
-        attempts++;
-        if (attempts < 3) {
+        mockFetch.mockImplementation(async () => {
+          attempts++;
+          if (attempts < 3) {
+            return {
+              ok: false,
+              status: 500,
+              json: async () => ({}),
+            } as Response;
+          }
+          return {
+            ok: true,
+            json: async () => ({ received: true }),
+          } as Response;
+        });
+
+        const forwarder = new LogForwarder(
+          { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
+          mockLogger
+        );
+
+        const logFile = join(logBasePath, 'task-retry.log');
+        forwarder.startForwarding('task-retry', logFile);
+
+        writeFileSync(logFile, 'Test content\n');
+
+        // Advance fake time through two flush intervals (6s) plus retry backoff
+        await vi.advanceTimersByTimeAsync(7000);
+
+        // Check dropped count BEFORE stopping (state is deleted on stop)
+        expect(forwarder.getDroppedChunkCount('task-retry')).toBe(0);
+
+        await forwarder.stopForwarding('task-retry');
+
+        // Should succeed on 3rd attempt
+        expect(attempts).toBe(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should not retry on 4xx errors and log as error', async () => {
+      vi.useFakeTimers();
+      try {
+        let attempts = 0;
+        vi.mocked(mockLogger.error).mockReset();
+
+        mockFetch.mockImplementation(async () => {
+          attempts++;
+          return {
+            ok: false,
+            status: 400,
+            json: async () => ({}),
+          } as Response;
+        });
+
+        const forwarder = new LogForwarder(
+          { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
+          mockLogger
+        );
+
+        const logFile = join(logBasePath, 'task-no-retry.log');
+        forwarder.startForwarding('task-no-retry', logFile);
+
+        writeFileSync(logFile, 'Test content\n');
+
+        await vi.advanceTimersByTimeAsync(7000);
+
+        // Check dropped count - should have dropped chunks
+        expect(forwarder.getDroppedChunkCount('task-no-retry')).toBe(1);
+
+        await forwarder.stopForwarding('task-no-retry');
+
+        // Should only try once (no retry on 4xx)
+        expect(attempts).toBe(1);
+
+        // Should log 4xx as error with taskId, status, and url
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            taskId: 'task-no-retry',
+            status: 400,
+            url: expect.stringContaining('/internal/logs'),
+          }),
+          expect.stringContaining('client error')
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should drop chunks after max retries exceeded', async () => {
+      vi.useFakeTimers();
+      try {
+        mockFetch.mockImplementation(async () => {
           return {
             ok: false,
             status: 500,
             json: async () => ({}),
           } as Response;
-        }
-        return {
-          ok: true,
-          json: async () => ({ received: true }),
-        } as Response;
-      });
+        });
 
-      const forwarder = new LogForwarder(
-        { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
-        mockLogger
-      );
+        const forwarder = new LogForwarder(
+          { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
+          mockLogger
+        );
 
-      const logFile = join(logBasePath, 'task-retry.log');
-      forwarder.startForwarding('task-retry', logFile);
+        const logFile = join(logBasePath, 'task-drop.log');
+        forwarder.startForwarding('task-drop', logFile);
 
-      writeFileSync(logFile, 'Test content\n');
+        writeFileSync(logFile, 'Test\n');
 
-      // Wait for two timer intervals (6s) to ensure flush happens
-      await new Promise((resolve) => setTimeout(resolve, 7000));
+        await vi.advanceTimersByTimeAsync(7000);
 
-      // Check dropped count BEFORE stopping (state is deleted on stop)
-      expect(forwarder.getDroppedChunkCount('task-retry')).toBe(0);
+        // Check dropped count BEFORE stopping (state is deleted on stop)
+        expect(forwarder.getDroppedChunkCount('task-drop')).toBe(1);
 
-      await forwarder.stopForwarding('task-retry');
-
-      // Should succeed on 3rd attempt
-      expect(attempts).toBe(3);
-    });
-
-    it('should not retry on 4xx errors and log as error', { timeout: 15000 }, async () => {
-      let attempts = 0;
-      vi.mocked(mockLogger.error).mockReset();
-
-      mockFetch.mockImplementation(async () => {
-        attempts++;
-        return {
-          ok: false,
-          status: 400,
-          json: async () => ({}),
-        } as Response;
-      });
-
-      const forwarder = new LogForwarder(
-        { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
-        mockLogger
-      );
-
-      const logFile = join(logBasePath, 'task-no-retry.log');
-      forwarder.startForwarding('task-no-retry', logFile);
-
-      writeFileSync(logFile, 'Test content\n');
-
-      await new Promise((resolve) => setTimeout(resolve, 7000));
-
-      // Check dropped count - should have dropped chunks
-      expect(forwarder.getDroppedChunkCount('task-no-retry')).toBe(1);
-
-      await forwarder.stopForwarding('task-no-retry');
-
-      // Should only try once (no retry on 4xx)
-      expect(attempts).toBe(1);
-
-      // Should log 4xx as error with taskId, status, and url
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskId: 'task-no-retry',
-          status: 400,
-          url: expect.stringContaining('/internal/logs'),
-        }),
-        expect.stringContaining('client error')
-      );
-    });
-
-    it('should drop chunks after max retries exceeded', { timeout: 15000 }, async () => {
-      mockFetch.mockImplementation(async () => {
-        return {
-          ok: false,
-          status: 500,
-          json: async () => ({}),
-        } as Response;
-      });
-
-      const forwarder = new LogForwarder(
-        { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
-        mockLogger
-      );
-
-      const logFile = join(logBasePath, 'task-drop.log');
-      forwarder.startForwarding('task-drop', logFile);
-
-      writeFileSync(logFile, 'Test\n');
-
-      await new Promise((resolve) => setTimeout(resolve, 7000));
-
-      // Check dropped count BEFORE stopping (state is deleted on stop)
-      expect(forwarder.getDroppedChunkCount('task-drop')).toBe(1);
-
-      await forwarder.stopForwarding('task-drop');
+        await forwarder.stopForwarding('task-drop');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
@@ -524,31 +539,36 @@ describe('LogForwarder', () => {
       expect(forwarder.getDroppedChunkCount('non-existent')).toBe(0);
     });
 
-    it('should return dropped chunk count for active task', { timeout: 15000 }, async () => {
-      mockFetch.mockImplementation(async () => {
-        return {
-          ok: false,
-          status: 500,
-          json: async () => ({}),
-        } as Response;
-      });
+    it('should return dropped chunk count for active task', async () => {
+      vi.useFakeTimers();
+      try {
+        mockFetch.mockImplementation(async () => {
+          return {
+            ok: false,
+            status: 500,
+            json: async () => ({}),
+          } as Response;
+        });
 
-      const forwarder = new LogForwarder(
-        { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
-        mockLogger
-      );
+        const forwarder = new LogForwarder(
+          { logBasePath, codeAgentUrl, orchestratorSecret, internalAuthToken },
+          mockLogger
+        );
 
-      const logFile = join(logBasePath, 'task-dropped.log');
-      forwarder.startForwarding('task-dropped', logFile);
+        const logFile = join(logBasePath, 'task-dropped.log');
+        forwarder.startForwarding('task-dropped', logFile);
 
-      writeFileSync(logFile, 'Test\n');
+        writeFileSync(logFile, 'Test\n');
 
-      // Wait for polling, chunking, and retries (7s for two timer intervals)
-      await new Promise((resolve) => setTimeout(resolve, 7000));
+        // Advance fake time through polling, chunking, and retries
+        await vi.advanceTimersByTimeAsync(7000);
 
-      expect(forwarder.getDroppedChunkCount('task-dropped')).toBe(1);
+        expect(forwarder.getDroppedChunkCount('task-dropped')).toBe(1);
 
-      await forwarder.stopForwarding('task-dropped');
+        await forwarder.stopForwarding('task-dropped');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
