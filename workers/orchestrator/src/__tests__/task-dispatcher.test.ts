@@ -2348,6 +2348,72 @@ describe('TaskDispatcher', () => {
       expect(failedPayload?.error?.message).toContain('rate limited');
     });
 
+    it('INT-1576: verifier-hard-error + claudeError rate-limit → TASK_RUNTIME_HARD_ERROR preserves runtime phrase', async () => {
+      // Production scenario: Claude hits the 5-hour usage limit and exits before
+      // emitting an EXECUTION_AGENT_FINAL block. The pure verifier returns
+      // {kind:'hard-error', message:'No EXECUTION_AGENT_FINAL: block in transcript'}
+      // and the dispatcher finalizes with that message verbatim. The runtime
+      // already populated `claudeErrors` with the rate-limit phrase via the
+      // attempt_failed event — that signal must survive into the finalized
+      // error.message so downstream classifyFailure routes the failure to
+      // 'retry_after_cooloff' (i.e., the cooloff scheduler engages instead of
+      // immediately re-dispatching into the same exhausted rate-limit window).
+      vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
+        kind: 'hard-error',
+        code: 'TASK_RUNTIME_HARD_ERROR',
+        message: 'No EXECUTION_AGENT_FINAL: block in transcript',
+      });
+      const internalCheck = agentDispatcher as unknown as {
+        checkForResult: (task: unknown) => Promise<TaskResult | undefined>;
+      };
+      vi.spyOn(internalCheck, 'checkForResult').mockResolvedValue(undefined);
+      const request: CreateTaskRequest = {
+        taskId: 'int-1576-verifier-hard-error-rate-limit',
+        workerType: 'auto',
+        prompt: 'Trigger verifier-hard-error path while claudeErrors holds the rate-limit phrase',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: ['code-task'],
+        hasChildren: false,
+        agentType: 'execution',
+      };
+
+      await agentDispatcher.submitTask(request);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Feed the actual production rate-limit JSON shape so the runtime processor
+      // emits attempt_failed → claudeErrors.set(taskId, "You've hit your limit ...").
+      const createWorkerCall = vi.mocked(mockIsolationProvider.createWorker).mock.calls.at(-1);
+      const onLog = createWorkerCall?.[0]?.onLog;
+      const onComplete = createWorkerCall?.[0]?.onComplete;
+      expect(onLog).toBeDefined();
+      expect(onComplete).toBeDefined();
+      onLog?.(
+        '{"type":"result","is_error":true,"result":"You\'ve hit your limit · resets 12am (UTC)"}\n'
+      );
+      onComplete?.(1);
+
+      vi.mocked(mockIsolationProvider.isWorkerRunning).mockResolvedValue(false);
+      await vi.advanceTimersByTimeAsync(30 * 1000);
+
+      const sentCall = vi.mocked(mockWebhookClient.send).mock.calls.find((c) => {
+        const p = c[0]?.payload as { status?: string } | undefined;
+        return p?.status === 'failed';
+      });
+      const failedPayload = sentCall?.[0]?.payload as
+        | { error?: { code?: string; message?: string } }
+        | undefined;
+      expect(failedPayload?.error?.code).toBe('TASK_RUNTIME_HARD_ERROR');
+      expect(failedPayload?.error?.message).toContain('hit your limit');
+      expect(failedPayload?.error?.message).toContain('No EXECUTION_AGENT_FINAL');
+      // Mirrors the regex in apps/code-agent/src/domain/utils/classifyFailure.ts:74.
+      // If this match breaks, classifyFailure would return 'retry' instead of
+      // 'retry_after_cooloff' and the cooloff scheduler would not engage.
+      expect(failedPayload?.error?.message).toMatch(
+        /429|rate limit|hit your limit|usage limit|limit · resets/i
+      );
+    });
+
     it('INT-1457: normal-path generic runtime error + exit 1 → TASK_RUNTIME_HARD_ERROR', async () => {
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         passed: false,
