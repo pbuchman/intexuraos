@@ -22,12 +22,12 @@ packages/
   http-server/      # Fastify server factory and plugins
   infra-*/          # External service wrappers (Claude, Firestore, Gemini, etc.)
   internal-clients/ # Typed clients for service-to-service communication
-  llm-*/            # LLM utilities: audit, contract, factory, pricing, prompts, utils
+  llm-*/            # LLM utilities: contract, factory, pricing, prompts, utils
 ```
 
 ## Package Catalog
 
-The monorepo contains 22 packages:
+The monorepo contains 21 packages:
 
 ### Common Packages (leaf — no internal deps)
 
@@ -45,19 +45,19 @@ The monorepo contains 22 packages:
 
 ### Infrastructure Wrappers (`infra-*`)
 
-| Package                        | Purpose                                       |
-| ------------------------------ | --------------------------------------------- |
-| `@intexuraos/infra-claude`     | Anthropic Claude API client                   |
-| `@intexuraos/infra-firestore`  | Firestore client initialization               |
-| `@intexuraos/infra-gemini`     | Google Gemini API client                      |
-| `@intexuraos/infra-glm`        | GLM (Zhipu AI) API client                     |
-| `@intexuraos/infra-gpt`        | OpenAI GPT API client                         |
-| `@intexuraos/infra-notion`     | Notion API client wrapper                     |
-| `@intexuraos/infra-otel`       | OpenTelemetry instrumentation                 |
-| `@intexuraos/infra-perplexity` | Perplexity AI API client                      |
-| `@intexuraos/infra-pubsub`     | Google Cloud Pub/Sub client and publisher     |
-| `@intexuraos/infra-sentry`     | Sentry error tracking and `createAppLogger()` |
-| `@intexuraos/infra-whatsapp`   | WhatsApp Business API client                  |
+| Package                        | Purpose                                                |
+| ------------------------------ | ------------------------------------------------------ |
+| `@intexuraos/infra-claude`     | Anthropic Claude API client                            |
+| `@intexuraos/infra-firestore`  | Firestore client initialization                        |
+| `@intexuraos/infra-gemini`     | Google Gemini API client                               |
+| `@intexuraos/infra-gpt`        | OpenAI GPT API client                                  |
+| `@intexuraos/infra-notion`     | Notion API client wrapper                              |
+| `@intexuraos/infra-openrouter` | OpenAI-compatible client for the OpenRouter aggregator |
+| `@intexuraos/infra-otel`       | OpenTelemetry instrumentation                          |
+| `@intexuraos/infra-perplexity` | Perplexity AI API client                               |
+| `@intexuraos/infra-pubsub`     | Google Cloud Pub/Sub client and publisher              |
+| `@intexuraos/infra-sentry`     | Sentry error tracking and `createAppLogger()`          |
+| `@intexuraos/infra-whatsapp`   | WhatsApp Business API client                           |
 
 ### Service Communication
 

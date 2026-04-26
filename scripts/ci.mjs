@@ -43,6 +43,7 @@ const phases = [
     failFast: true,
     commands: [
       { name: 'package-json', script: 'verify-package-json.mjs' },
+      { name: 'package-exports', script: 'verify-package-exports.mjs' },
       { name: 'date-formatting', script: 'verify-date-formatting.mjs' },
       { name: 'boundaries', script: 'verify-boundaries.mjs' },
       { name: 'common', script: 'verify-common.mjs' },
