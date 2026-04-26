@@ -2349,15 +2349,11 @@ describe('TaskDispatcher', () => {
     });
 
     it('INT-1576: verifier-hard-error + claudeError rate-limit → TASK_RUNTIME_HARD_ERROR preserves runtime phrase', async () => {
-      // Production scenario: Claude hits the 5-hour usage limit and exits before
-      // emitting an EXECUTION_AGENT_FINAL block. The pure verifier returns
-      // {kind:'hard-error', message:'No EXECUTION_AGENT_FINAL: block in transcript'}
-      // and the dispatcher finalizes with that message verbatim. The runtime
-      // already populated `claudeErrors` with the rate-limit phrase via the
-      // attempt_failed event — that signal must survive into the finalized
-      // error.message so downstream classifyFailure routes the failure to
-      // 'retry_after_cooloff' (i.e., the cooloff scheduler engages instead of
-      // immediately re-dispatching into the same exhausted rate-limit window).
+      // When Claude exits before emitting an AGENT_FINAL block, the verifier
+      // returns hard-error with a generic "No FINAL block" message — but the
+      // runtime already captured the actual failure (e.g. rate-limit) into
+      // claudeErrors. That signal must reach error.message so downstream
+      // classifyFailure routes to 'retry_after_cooloff' instead of plain retry.
       vi.mocked(singleAttemptCompletionControl.verifier.verify).mockResolvedValueOnce({
         kind: 'hard-error',
         code: 'TASK_RUNTIME_HARD_ERROR',
