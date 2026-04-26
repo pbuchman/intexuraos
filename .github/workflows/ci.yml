@@ -354,8 +354,8 @@ jobs:
         run: |
           docker build \
             -t code-worker:test \
-            -f docker/code-worker/Dockerfile.test \
-            docker/code-worker/
+            -f workers/code-worker/Dockerfile.test \
+            workers/code-worker/
 
       - name: Create worker network
         run: |
