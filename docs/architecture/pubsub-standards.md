@@ -98,7 +98,7 @@ The wrapper translates each `AckResult` into the corresponding wire behavior:
 | `DeadLetter` without `dlqPublish` provided | treat as Nack (redeliver) and log a WARN — never silently ACK.                           |
 | Handler throws                             | reported to Sentry, re-thrown as Nack.                                                   |
 
-The wrapper also emits structured `worker_request_start` / `worker_request_ack` / `worker_request_nack` / `worker_request_dlq` log entries for every message.
+The wrapper also emits structured `worker_request_*` log entries on entry and exit (e.g. `worker_request_start`, `worker_request_ack`, `worker_request_nack`, `worker_request_dlq`) so every message has a paired start/finish trace.
 
 ### Worked example: transcription translation table
 
