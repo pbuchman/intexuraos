@@ -79,9 +79,7 @@ const phases = [
   {
     name: 'Post-Build Checks',
     parallel: false,
-    commands: [
-      { name: 'web-bundle-budget', run: 'node scripts/ci/check-web-bundle-budget.cjs' },
-    ],
+    commands: [{ name: 'web-bundle-budget', run: 'node scripts/ci/check-web-bundle-budget.cjs' }],
   },
 ];
 
