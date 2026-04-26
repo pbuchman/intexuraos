@@ -35,28 +35,28 @@ describe('validateInternalAuth — dual-token rotation', () => {
   let originalPrevious: string | undefined;
 
   beforeEach(() => {
-    originalCurrent = process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN;
-    originalPrevious = process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS;
-    delete process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN;
-    delete process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS;
+    originalCurrent = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+    originalPrevious = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS'];
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS'];
   });
 
   afterEach(() => {
     if (originalCurrent === undefined) {
-      delete process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN;
+      delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
     } else {
-      process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN = originalCurrent;
+      process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = originalCurrent;
     }
     if (originalPrevious === undefined) {
-      delete process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS;
+      delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS'];
     } else {
-      process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS = originalPrevious;
+      process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS'] = originalPrevious;
     }
   });
 
   it('accepts CURRENT token and reports tokenUsed=current', () => {
-    process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN = 'current-token';
-    process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS = 'previous-token';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'current-token';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS'] = 'previous-token';
     const { request, logger } = makeRequest('current-token');
 
     const result = validateInternalAuth(request);
@@ -66,8 +66,8 @@ describe('validateInternalAuth — dual-token rotation', () => {
   });
 
   it('accepts PREVIOUS token, reports tokenUsed=previous, and warns', () => {
-    process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN = 'current-token';
-    process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS = 'previous-token';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'current-token';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS'] = 'previous-token';
     const { request, logger } = makeRequest('previous-token');
 
     const result = validateInternalAuth(request);
@@ -78,8 +78,8 @@ describe('validateInternalAuth — dual-token rotation', () => {
   });
 
   it('rejects unknown token with token_mismatch when both are configured', () => {
-    process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN = 'current-token';
-    process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS = 'previous-token';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'current-token';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS'] = 'previous-token';
     const { request, logger } = makeRequest('garbage');
 
     const result = validateInternalAuth(request);
@@ -90,7 +90,7 @@ describe('validateInternalAuth — dual-token rotation', () => {
   });
 
   it('rejects unknown token with token_mismatch when only CURRENT is configured', () => {
-    process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN = 'current-token';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'current-token';
     const { request, logger } = makeRequest('garbage');
 
     const result = validateInternalAuth(request);
@@ -100,7 +100,7 @@ describe('validateInternalAuth — dual-token rotation', () => {
   });
 
   it('returns not_configured when CURRENT is missing, even if PREVIOUS is set', () => {
-    process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS = 'previous-token';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS'] = 'previous-token';
     const { request, logger } = makeRequest('previous-token');
 
     const result = validateInternalAuth(request);
@@ -119,8 +119,8 @@ describe('validateInternalAuth — dual-token rotation', () => {
   });
 
   it('treats empty PREVIOUS as not configured (no fallback)', () => {
-    process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN = 'current-token';
-    process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS = '';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'current-token';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS'] = '';
     const { request, logger } = makeRequest('previous-token');
 
     const result = validateInternalAuth(request);
