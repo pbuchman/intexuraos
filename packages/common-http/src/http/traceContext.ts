@@ -19,10 +19,7 @@ const storage = new AsyncLocalStorage<TraceStore>();
  * the supplied `requestId`. The scope is automatically torn down when
  * `fn` resolves (or rejects).
  */
-export function runWithRequestId<T>(
-  requestId: string,
-  fn: () => Promise<T> | T
-): Promise<T> | T {
+export function runWithRequestId<T>(requestId: string, fn: () => Promise<T> | T): Promise<T> | T {
   return storage.run({ requestId }, fn);
 }
 

@@ -53,23 +53,16 @@ export type InternalHttpClientResult<T> =
   | { ok: false; error: InternalHttpClientError };
 
 export interface InternalHttpClient {
-  request<T>(
-    args: InternalHttpClientRequest
-  ): Promise<InternalHttpClientResult<T>>;
+  request<T>(args: InternalHttpClientRequest): Promise<InternalHttpClientResult<T>>;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
-export function createInternalHttpClient(
-  cfg: InternalHttpClientConfig
-): InternalHttpClient {
+export function createInternalHttpClient(cfg: InternalHttpClientConfig): InternalHttpClient {
   const baseUrl = cfg.baseUrl.replace(/\/$/, '');
   return {
-    async request<T>(
-      args: InternalHttpClientRequest
-    ): Promise<InternalHttpClientResult<T>> {
-      const timeoutMs =
-        args.timeoutMs ?? cfg.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+    async request<T>(args: InternalHttpClientRequest): Promise<InternalHttpClientResult<T>> {
+      const timeoutMs = args.timeoutMs ?? cfg.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
       const controller = new AbortController();
       const timer = setTimeout(() => {
         controller.abort();
