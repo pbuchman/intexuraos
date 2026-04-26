@@ -1,11 +1,22 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { type Logger } from '@intexuraos/common-core';
 
-const execAsync = promisify(exec);
+const defaultExecFileAsync = promisify(execFile);
+
+/**
+ * Argv-form spawn helper signature. Untrusted inputs (branch names, paths)
+ * are passed as literal argv elements, never re-parsed by `/bin/sh`.
+ */
+export type ExecFileFn = (
+  file: string,
+  args: readonly string[],
+  options: { cwd?: string; timeout?: number }
+) => Promise<{ stdout: string; stderr: string }>;
+
 const SAFE_GIT_BRANCH_PATTERN = /^[A-Za-z0-9._/-]+$/;
 
 export interface WorktreeManagerConfig {
@@ -24,11 +35,16 @@ function assertSafeBranchName(branch: string, branchLabel: string): void {
 
 export class WorktreeManager {
   private gitLock: Promise<void> = Promise.resolve();
+  private readonly execFileFn: ExecFileFn;
 
   constructor(
     private readonly config: WorktreeManagerConfig,
-    private readonly logger: Logger
-  ) {}
+    private readonly logger: Logger,
+    execFileFn?: ExecFileFn
+  ) {
+    this.execFileFn =
+      execFileFn ?? (defaultExecFileAsync as unknown as ExecFileFn);
+  }
 
   private async withGitLock<T>(fn: () => Promise<T>): Promise<T> {
     let releaseLock: () => void = () => undefined;
@@ -83,14 +99,16 @@ export class WorktreeManager {
         // Without this, worktrees are created from whatever was last fetched at startup
         this.logger.info({ taskId, baseBranch }, 'Fetching base branch before worktree creation');
         try {
-          await execAsync(`git fetch origin "${baseBranch}" --force`, {
+          await this.execFileFn('git', ['fetch', 'origin', baseBranch, '--force'], {
             cwd: this.config.repositoryPath,
           });
           // Sync local branch ref so agents that run `git checkout -b <branch> development`
           // pick up the latest commit instead of a stale local ref
-          await execAsync(`git branch -f "${baseBranch}" "origin/${baseBranch}"`, {
-            cwd: this.config.repositoryPath,
-          });
+          await this.execFileFn(
+            'git',
+            ['branch', '-f', baseBranch, `origin/${baseBranch}`],
+            { cwd: this.config.repositoryPath }
+          );
         } catch (fetchError: unknown) {
           const message = fetchError instanceof Error ? fetchError.message : 'Unknown error';
           this.logger.warn(
@@ -105,7 +123,7 @@ export class WorktreeManager {
         let useContinuation = false;
         if (continuationPrBranch !== undefined) {
           try {
-            await execAsync(`git fetch origin "${continuationPrBranch}"`, {
+            await this.execFileFn('git', ['fetch', 'origin', continuationPrBranch], {
               cwd: this.config.repositoryPath,
             });
             useContinuation = true;
@@ -124,11 +142,18 @@ export class WorktreeManager {
           }
         }
 
-        const addCommand =
+        const addArgs: readonly string[] =
           useContinuation && continuationPrBranch !== undefined
-            ? `git worktree add -B "${taskId}" "${worktreePath}" "origin/${continuationPrBranch}"`
-            : `git worktree add -b "${taskId}" "${worktreePath}" "origin/${baseBranch}"`;
-        const { stderr } = await execAsync(addCommand, {
+            ? [
+                'worktree',
+                'add',
+                '-B',
+                taskId,
+                worktreePath,
+                `origin/${continuationPrBranch}`,
+              ]
+            : ['worktree', 'add', '-b', taskId, worktreePath, `origin/${baseBranch}`];
+        const { stderr } = await this.execFileFn('git', addArgs, {
           cwd: this.config.repositoryPath,
         });
 
@@ -170,9 +195,11 @@ export class WorktreeManager {
 
       try {
         // Remove worktree using git worktree remove
-        const { stderr } = await execAsync(`git worktree remove "${worktreePath}" --force`, {
-          cwd: this.config.repositoryPath,
-        });
+        const { stderr } = await this.execFileFn(
+          'git',
+          ['worktree', 'remove', worktreePath, '--force'],
+          { cwd: this.config.repositoryPath }
+        );
 
         if (stderr) {
           throw new Error(`Failed to remove worktree: ${stderr}`);
@@ -187,9 +214,11 @@ export class WorktreeManager {
 
   async listWorktrees(): Promise<string[]> {
     try {
-      const { stdout } = await execAsync('git worktree list --porcelain', {
-        cwd: this.config.repositoryPath,
-      });
+      const { stdout } = await this.execFileFn(
+        'git',
+        ['worktree', 'list', '--porcelain'],
+        { cwd: this.config.repositoryPath }
+      );
 
       const lines = stdout.split('\n').filter((line) => line.length > 0);
       const worktreePaths: string[] = [];
@@ -231,9 +260,11 @@ export class WorktreeManager {
   async isWorktreeRegistered(taskId: string): Promise<boolean> {
     const worktreePath = join(this.config.worktreeBasePath, taskId);
     try {
-      const { stdout } = await execAsync('git worktree list --porcelain', {
-        cwd: this.config.repositoryPath,
-      });
+      const { stdout } = await this.execFileFn(
+        'git',
+        ['worktree', 'list', '--porcelain'],
+        { cwd: this.config.repositoryPath }
+      );
       // Strict equality (not startsWith) so a sibling path like
       // `${worktreePath}-sibling` cannot false-positive as the same entry.
       // Trim trailing whitespace defensively in case git ever emits any.
@@ -279,9 +310,11 @@ export class WorktreeManager {
       );
 
       try {
-        const { stderr } = await execAsync(`git worktree repair "${worktreePath}"`, {
-          cwd: this.config.repositoryPath,
-        });
+        const { stderr } = await this.execFileFn(
+          'git',
+          ['worktree', 'repair', worktreePath],
+          { cwd: this.config.repositoryPath }
+        );
         // `git worktree repair` prints advisory messages to stderr on success
         // (e.g. "repair: ..."); treat non-empty stderr as informational unless
         // it contains a fatal marker.
@@ -300,7 +333,11 @@ export class WorktreeManager {
       // HEAD-detached and subsequent commits/pushes by the agent fail
       // silently. Surface the state so these cases are visible in logs.
       try {
-        const { stdout } = await execAsync(`git -C "${worktreePath}" symbolic-ref --quiet HEAD`);
+        const { stdout } = await this.execFileFn(
+          'git',
+          ['-C', worktreePath, 'symbolic-ref', '--quiet', 'HEAD'],
+          {}
+        );
         const branchRef = stdout.trim();
         this.logger.info(
           { taskId, worktreePath, branchRef },
