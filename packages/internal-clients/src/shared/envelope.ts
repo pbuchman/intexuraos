@@ -44,7 +44,7 @@ export function unwrapEnvelope<T>(body: unknown): EnvelopeResult<T> {
   }
 
   const env = body as Envelope<T>;
-  if (env.success === true) {
+  if (env.success) {
     if (!('data' in env)) {
       return {
         ok: false,
@@ -54,7 +54,7 @@ export function unwrapEnvelope<T>(body: unknown): EnvelopeResult<T> {
         },
       };
     }
-    return { ok: true, value: env.data as T };
+    return { ok: true, value: env.data };
   }
 
   const msg = env.error ? `${env.error.code}: ${env.error.message}` : 'unknown';
