@@ -76,6 +76,13 @@ const phases = [
       { name: 'format', run: 'pnpm run format' },
     ],
   },
+  {
+    name: 'Post-Build Checks',
+    parallel: false,
+    commands: [
+      { name: 'web-bundle-budget', run: 'node scripts/ci/check-web-bundle-budget.cjs' },
+    ],
+  },
 ];
 
 function stripAnsi(str) {

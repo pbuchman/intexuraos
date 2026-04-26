@@ -23,10 +23,12 @@ function main() {
   const config = extractFromConfig(fs.readFileSync(CONFIG_TS, 'utf-8'));
   const errors = [];
   for (const name of cloudbuild) {
-    if (!config.has(name)) errors.push(`cloudbuild fetches ${name} but config.ts does not consume it`);
+    if (!config.has(name))
+      errors.push(`cloudbuild fetches ${name} but config.ts does not consume it`);
   }
   for (const name of config) {
-    if (!cloudbuild.has(name)) errors.push(`config.ts consumes ${name} but cloudbuild does not fetch it`);
+    if (!cloudbuild.has(name))
+      errors.push(`config.ts consumes ${name} but cloudbuild does not fetch it`);
   }
   if (errors.length > 0) {
     console.error('Web env-var drift detected:');
