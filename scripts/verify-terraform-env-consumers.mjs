@@ -5,7 +5,46 @@
  * Source of truth: every INTEXURAOS_* key declared on the LHS of `=` inside any
  * `env_vars = { ... }` or `env_vars = merge(local.common_service_env_vars, { ... })`
  * block in `terraform/environments/dev/*.tf`. Also includes keys declared in
- * `local.common_service_env_vars = { ... }`.
+ * `local.common_service_env_vars = { ... }` AND keys declared in any
+ * per-service `env_vars` map nested under `locals { services = { <key> = { ... } } }`.
+ *
+ * Supported Terraform shapes
+ * --------------------------
+ *
+ * 1) Inline module body:
+ *
+ *      module "svc" {
+ *        source   = "../../modules/cloud-run-service"
+ *        env_vars = {
+ *          INTEXURAOS_FOO = "bar"
+ *        }
+ *      }
+ *
+ * 2) merge() with a common map:
+ *
+ *      module "svc" {
+ *        env_vars = merge(local.common_service_env_vars, {
+ *          INTEXURAOS_LOCAL = "x"
+ *        })
+ *      }
+ *
+ * 3) Per-service map under locals + for_each:
+ *
+ *      locals {
+ *        services = {
+ *          foo = {
+ *            name     = "intexuraos-foo"
+ *            env_vars = { INTEXURAOS_PER_SVC = "x" }
+ *          }
+ *        }
+ *      }
+ *      module "foo" {
+ *        for_each = local.services
+ *        source   = "../../modules/cloud-run-service"
+ *        env_vars = each.value.env_vars
+ *      }
+ *
+ * 4) `locals { common_service_env_vars = { ... } }` keys are ALWAYS harvested.
  *
  * Consumer rule: each unique INTEXURAOS_* name MUST appear as a literal string
  * somewhere under `apps/<svc>/src/` or `workers/<svc>/src/`. Zero matches → drift.
@@ -20,7 +59,7 @@
 
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { loadKnownDrift } from './lib/known-drift.mjs';
+import { groupByName, loadKnownDrift } from './lib/known-drift.mjs';
 
 const repoRoot = process.env.INTEXURAOS_VERIFY_REPO_ROOT
   ? resolve(process.env.INTEXURAOS_VERIFY_REPO_ROOT)
@@ -41,41 +80,101 @@ function listTfFiles(dir) {
 }
 
 /**
+ * Mask out the *interiors* of double-quoted strings on a single line by
+ * replacing each interior character with a space, leaving the quotes intact.
+ * Length and column offsets are preserved, which keeps brace tracking and
+ * line/column reporting consistent with the original file.
+ */
+function maskStrings(line) {
+  return line.replace(/"((?:[^"\\]|\\.)*)"/g, (_, inner) => `"${' '.repeat(inner.length)}"`);
+}
+
+/**
+ * Mask HCL line comments (`#...$`, `//...$`) on a line that has ALREADY had
+ * string interiors masked. This avoids treating a `//` inside a string value
+ * as a comment. Replaces every comment character with a space so column
+ * offsets stay aligned.
+ */
+function maskLineComments(strMasked) {
+  return strMasked.replace(/(#|\/\/).*$/, (m) => ' '.repeat(m.length));
+}
+
+/**
  * Walk the file line-by-line and yield env-var declarations from any block we
  * care about. We track whether we're inside an `env_vars = { ... }` block
  * (which can also be the body of a `merge(...)` second-arg map) OR inside a
- * `local.common_service_env_vars = { ... }` declaration.
+ * `local.common_service_env_vars = { ... }` declaration OR inside a
+ * per-service `env_vars = { ... }` map nested under
+ * `locals { services = { <key> = { ... } } }`.
  *
- * Brace tracking is approximate but sufficient: HCL is regular enough that
- * counting `{`/`}` on each non-string line gives correct nesting depth.
+ * Brace tracking:
+ *   - String literals are stripped FIRST so `"{"` inside a value is ignored.
+ *   - HCL line comments are stripped next so a commented-out `}` doesn't pop.
+ *   - Heredoc bodies (`<<EOT ... EOT`, `<<-EOT ... EOT`) are skipped entirely
+ *     because their content is opaque text, not HCL.
  */
 function extractTerraformEnvVars(filePath) {
   const content = readFileSync(filePath, 'utf8');
   const lines = content.split('\n');
   const declarations = []; // {name, file, line, ignoreReason|null}
 
-  // State machine over the entire file.
   let depth = 0;
   let stack = []; // stack of context tags as we descend braces
+  let heredocLabel = null; // when set, we're inside a heredoc body
+
+  // Per-frame "shape" hints:
+  //   'env'           — env_vars / common_service_env_vars / per-service env_vars body
+  //   'services'      — locals.services map body
+  //   'service-entry' — single entry inside locals.services (e.g. `foo = { ... }`)
+  //   'other'         — generic frame
+  //
+  // When we open a `{` directly after `env_vars =` we push 'env'. When we open
+  // a `{` directly after `services =` (inside a `locals` frame) we push
+  // 'services'. When the parent frame is 'services', the next `{` we see is
+  // the body of an entry, so we push 'service-entry'. From there, an
+  // `env_vars = {` triggers 'env'.
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const rawLine = lines[i];
     const lineNo = i + 1;
 
-    // Detect entering an env_vars block on this line.
-    // env_vars = { ...   OR   env_vars = merge(local.common_service_env_vars, {
-    const envVarsAssign = /\benv_vars\s*=\s*(\{|merge\s*\()/.exec(line);
+    // ── Heredoc handling ───────────────────────────────────────────────
+    if (heredocLabel !== null) {
+      // Look for the closing label on its own line (optionally indented).
+      if (new RegExp(`^\\s*${heredocLabel}\\s*$`).test(rawLine)) {
+        heredocLabel = null;
+      }
+      continue;
+    }
+    const heredocOpen = /<<-?([A-Z_][A-Z0-9_]*)\b/.exec(rawLine);
+    if (heredocOpen) {
+      // The opener line itself is real HCL (assignments etc.) — but since the
+      // body that follows is opaque, we still need to scan the opener for any
+      // env-var declarations (none usually) and process its braces. The
+      // simpler choice: process opener normally, then enter heredoc state for
+      // subsequent lines.
+      heredocLabel = heredocOpen[1];
+    }
 
-    // Detect entering common_service_env_vars block.
-    const commonAssign = /common_service_env_vars\s*=\s*\{/.exec(line);
+    // ── String + comment masking (B1, I2) ──────────────────────────────
+    // Mask string interiors first so `//` inside a quoted value isn't seen
+    // as a comment, AND so the inline-ignore regex can't match a `//` inside
+    // a string. Then mask line comments so a commented-out `}` doesn't pop.
+    // Both passes preserve column offsets (replace with spaces).
+    const stringMasked = maskStrings(rawLine);
+    const stripped = maskLineComments(stringMasked);
 
-    // First, if we're inside an env-var bearing block, scan this line for a
-    // declaration BEFORE we update depth tracking (line could close the block).
-    const insideEnvBlock = stack.some((s) => s === 'env');
+    // ── Inline ignore detection ────────────────────────────────────────
+    // Inline-ignore comments are themselves `//` comments — they live on the
+    // string-masked line BEFORE comment masking. A `//` that survives
+    // maskStrings was a real comment, not a string-embedded one.
+    const ignoreMatch = INLINE_IGNORE_PATTERN.exec(stringMasked);
+
+    // ── Detect env-var declarations on this line ───────────────────────
+    const insideEnvBlock = stack.includes('env');
     if (insideEnvBlock) {
-      const decl = ENV_VAR_LINE_PATTERN.exec(line);
+      const decl = ENV_VAR_LINE_PATTERN.exec(stripped);
       if (decl) {
-        const ignoreMatch = INLINE_IGNORE_PATTERN.exec(line);
         declarations.push({
           name: decl[1],
           file: filePath,
@@ -85,26 +184,41 @@ function extractTerraformEnvVars(filePath) {
       }
     }
 
-    // Process braces on the line, tracking stack pushes/pops.
-    // Strip strings to avoid counting `{` inside string literals.
-    const stripped = line.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+    // ── Frame detection on this line ───────────────────────────────────
+    // Detect entering an env_vars block on this line.
+    // env_vars = { ...   OR   env_vars = merge(local.common_service_env_vars, {
+    const envVarsAssign = /\benv_vars\s*=\s*(\{|merge\s*\()/.test(stripped);
+    // Detect entering common_service_env_vars block.
+    const commonAssign = /\bcommon_service_env_vars\s*=\s*\{/.test(stripped);
+    // Detect entering services-locals map: `services = {`.
+    const servicesAssign = /\bservices\s*=\s*\{/.test(stripped);
+    // Detect entering locals { ... } block (so we know our parent context).
+    const localsOpen = /^\s*locals\s*\{/.test(stripped);
 
-    let pushedThisLine = 0;
-    if (envVarsAssign || commonAssign) {
-      // Push 'env' frame for each `{` opening contributed by the assign expression.
-      // For `env_vars = { ... }` the brace is counted in the general open count below.
-      // We mark the NEXT open brace as belonging to env context.
-      pushedThisLine += 1;
-    }
+    // Pending push hints for the next opening `{` on this line.
+    let pushEnv = envVarsAssign || commonAssign ? 1 : 0;
+    let pushServices = servicesAssign ? 1 : 0;
+    let pushLocals = localsOpen ? 1 : 0;
 
     for (const ch of stripped) {
       if (ch === '{') {
-        if (pushedThisLine > 0) {
-          stack.push('env');
-          pushedThisLine -= 1;
+        let frame;
+        if (pushLocals > 0) {
+          frame = 'locals';
+          pushLocals -= 1;
+        } else if (pushEnv > 0) {
+          frame = 'env';
+          pushEnv -= 1;
+        } else if (pushServices > 0) {
+          frame = 'services';
+          pushServices -= 1;
+        } else if (stack.length > 0 && stack[stack.length - 1] === 'services') {
+          // Direct child of services map → an entry like `foo = { ... }`.
+          frame = 'service-entry';
         } else {
-          stack.push('other');
+          frame = 'other';
         }
+        stack.push(frame);
         depth += 1;
       } else if (ch === '}') {
         if (depth > 0) {
@@ -168,11 +282,7 @@ function main() {
   const corpus = buildConsumerCorpus();
 
   // Group declarations by name (a name may appear in multiple files/lines).
-  const byName = new Map();
-  for (const d of allDeclarations) {
-    if (!byName.has(d.name)) byName.set(d.name, []);
-    byName.get(d.name).push(d);
-  }
+  const byName = groupByName(allDeclarations, 'name');
 
   const drift = loadKnownDrift(repoRoot);
   const allowlist = drift.terraformEnvConsumers ?? {};
@@ -206,7 +316,7 @@ function main() {
   }
 
   if (newDrift.length === 0 && staleAllowlist.length === 0) {
-    console.log(`✓ All ${String(byName.size)} Terraform env vars have a code consumer`);
+    console.log(`✓ checked ${String(byName.size)} Terraform env vars`);
     process.exit(0);
   }
 

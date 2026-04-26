@@ -41,40 +41,56 @@ function listTfFiles(dir) {
 }
 
 /**
- * Parse the `locals { services = { key = { name = "intexuraos-foo" } } }` block(s)
- * from any .tf file. Returns a map { localKey: terraformServiceName }.
+ * Walk `src` from a `{` index and find the matching `}`. Tracks nested
+ * braces via a depth counter — sufficient for HCL where strings are unlikely
+ * to contain unescaped `{`/`}`. Returns -1 on no match.
+ */
+function matchBrace(src, openIdx) {
+  let d = 0;
+  for (let i = openIdx; i < src.length; i++) {
+    const ch = src[i];
+    if (ch === '{') d++;
+    else if (ch === '}') {
+      d--;
+      if (d === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Parse the `locals { services = { key = { name = "intexuraos-foo" ... } } }`
+ * block(s) from any .tf file. Returns a map { localKey: terraformServiceName }.
+ *
+ * Uses a brace-walker to find each entry's body (resilient to nested
+ * `env_vars = { ... }` maps inside the entry, unlike a `[^}]*?` regex).
  */
 function extractServicesLocals(files) {
   const services = new Map();
-  const localPattern = /([a-z_][a-z0-9_]*)\s*=\s*\{[^}]*?\bname\s*=\s*"(intexuraos-[a-z0-9-]+)"/gi;
 
   for (const file of files) {
     const content = readFileSync(file, 'utf8');
-    // Find services = { ... } block (greedy match across lines until matching close).
+    // Find `services = {` ... matching `}` at top level.
     const startIdx = content.indexOf('services = {');
     if (startIdx === -1) continue;
-    // Walk braces from startIdx + len('services = ') onward to find matching close.
-    const after = content.slice(startIdx);
-    const openBraceIdx = after.indexOf('{');
-    let depth = 0;
-    let endIdx = -1;
-    for (let i = openBraceIdx; i < after.length; i++) {
-      const ch = after[i];
-      if (ch === '{') depth++;
-      else if (ch === '}') {
-        depth--;
-        if (depth === 0) {
-          endIdx = i;
-          break;
-        }
-      }
-    }
+    const openBraceIdx = content.indexOf('{', startIdx);
+    const endIdx = matchBrace(content, openBraceIdx);
     if (endIdx === -1) continue;
-    const block = after.slice(openBraceIdx + 1, endIdx);
+    const block = content.slice(openBraceIdx + 1, endIdx);
 
+    // Walk each top-level entry: `key = { ... }`.
+    const entryHead = /([a-z_][a-z0-9_]*)\s*=\s*\{/g;
     let m;
-    while ((m = localPattern.exec(block)) !== null) {
-      services.set(m[1], m[2]);
+    while ((m = entryHead.exec(block)) !== null) {
+      const entryOpenIdx = block.indexOf('{', m.index);
+      const entryEnd = matchBrace(block, entryOpenIdx);
+      if (entryEnd === -1) continue;
+      entryHead.lastIndex = entryEnd;
+      const entryBody = block.slice(entryOpenIdx + 1, entryEnd);
+      const nameMatch = /\bname\s*=\s*"(intexuraos-[a-z0-9-]+)"/.exec(entryBody);
+      if (nameMatch) {
+        services.set(m[1], nameMatch[1]);
+      }
     }
   }
   return services;
@@ -85,6 +101,10 @@ function extractServicesLocals(files) {
  * For each, return the resolved Terraform service name. The name comes from
  * either inline `service_name = "intexuraos-foo"` OR
  * `service_name = local.services.<key>.name` resolved via the locals map.
+ *
+ * If neither resolves, the script FAILS LOUDLY (process.exit(1)) — silent
+ * derivation by guessing the module name was a footgun (allowed typoed
+ * Terraform to pass).
  */
 function extractCloudRunServices(files, localsMap) {
   const moduleStartPattern = /module\s+"([a-z_][a-z0-9_]*)"\s*\{/g;
@@ -97,28 +117,14 @@ function extractCloudRunServices(files, localsMap) {
       const moduleName = m[1];
       const startIdx = m.index;
       const openBraceIdx = content.indexOf('{', startIdx);
-      let depth = 0;
-      let endIdx = -1;
-      for (let i = openBraceIdx; i < content.length; i++) {
-        const ch = content[i];
-        if (ch === '{') depth++;
-        else if (ch === '}') {
-          depth--;
-          if (depth === 0) {
-            endIdx = i;
-            break;
-          }
-        }
-      }
+      const endIdx = matchBrace(content, openBraceIdx);
       if (endIdx === -1) continue;
       const block = content.slice(openBraceIdx + 1, endIdx);
-
-      // Skip nested matches (regex.lastIndex would already skip these, but defensive).
       moduleStartPattern.lastIndex = endIdx;
 
       if (!/source\s*=\s*"\.\.\/\.\.\/modules\/cloud-run-service"/.test(block)) continue;
 
-      // Resolve service name.
+      // Resolve service name. Inline literal first, then locals lookup.
       let terraformName = null;
       const inlineMatch = /service_name\s*=\s*"(intexuraos-[a-z0-9-]+)"/.exec(block);
       const localMatch = /service_name\s*=\s*local\.services\.([a-z_][a-z0-9_]*)\.name/.exec(block);
@@ -128,10 +134,15 @@ function extractCloudRunServices(files, localsMap) {
         terraformName = localsMap.get(localMatch[1]) ?? null;
       }
       if (!terraformName) {
-        // Last-ditch: derive from module name as `intexuraos-<module-name-with-dashes>`.
-        terraformName = `intexuraos-${moduleName.replace(/_/g, '-')}`;
-        // Try to find it in the locals map by key.
-        if (localsMap.has(moduleName)) terraformName = localsMap.get(moduleName);
+        const rel = file.replace(repoRoot + '/', '');
+        const lineNo = content.slice(0, startIdx).split('\n').length;
+        console.error(
+          `❌ could not resolve service_name for module "${moduleName}" in ${rel}:${String(lineNo)}`
+        );
+        console.error(
+          'FIX: set `service_name = "intexuraos-<name>"` inline OR `service_name = local.services.<key>.name` with a matching locals entry.'
+        );
+        process.exit(1);
       }
 
       const lineNo = content.slice(0, startIdx).split('\n').length;
@@ -177,10 +188,7 @@ function main() {
   const appDirs = listAppDirs();
 
   const drift = loadKnownDrift(repoRoot);
-  const ecoCoverage = drift.ecosystemCoverage ?? {
-    missingEcosystemEntry: {},
-    missingValidateRequiredEnv: {},
-  };
+  const ecoCoverage = drift.ecosystemCoverage ?? {};
   const allowlistedEco = new Set(Object.keys(ecoCoverage.missingEcosystemEntry ?? {}));
   const allowlistedValidate = new Set(Object.keys(ecoCoverage.missingValidateRequiredEnv ?? {}));
 
@@ -244,6 +252,13 @@ function main() {
   if (errors.length > 0) {
     console.error('❌ ecosystem coverage drift:');
     for (const e of errors) console.error(`  - ${e}`);
+    console.error('');
+    console.error(
+      'FIX: either add the missing entry to ecosystem.config.cjs / src/index.ts, OR add the'
+    );
+    console.error(
+      'allowlist entry to scripts/__fixtures__/known-drift.json#ecosystemCoverage with an issue reference.'
+    );
   }
   if (stale.length > 0) {
     console.error('❌ stale allowlist entries:');

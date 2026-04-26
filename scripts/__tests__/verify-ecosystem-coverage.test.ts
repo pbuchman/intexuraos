@@ -2,13 +2,10 @@
  * Tests for verify-ecosystem-coverage.mjs.
  */
 
-import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-
-const SCRIPT_PATH = join(process.cwd(), 'scripts', 'verify-ecosystem-coverage.mjs');
+import { createBaseSynthRepo, EMPTY_DRIFT, runScript } from './helpers.js';
 
 interface SynthRepo {
   root: string;
@@ -19,53 +16,29 @@ interface SynthRepo {
 }
 
 function createSynthRepo(): SynthRepo {
-  const root = mkdtempSync(join(tmpdir(), 'verify-eco-'));
-  mkdirSync(join(root, 'terraform', 'environments', 'dev'), { recursive: true });
-  mkdirSync(join(root, 'apps'), { recursive: true });
-  mkdirSync(join(root, 'scripts', '__fixtures__'), { recursive: true });
+  const base = createBaseSynthRepo('verify-eco-');
+  mkdirSync(join(base.root, 'apps'), { recursive: true });
 
   return {
-    root,
+    root: base.root,
     writeTf(content) {
-      writeFileSync(join(root, 'terraform', 'environments', 'dev', 'main.tf'), content);
+      base.writeTf('main.tf', content);
     },
     writeEcosystem(content) {
-      writeFileSync(join(root, 'ecosystem.config.cjs'), content);
+      writeFileSync(join(base.root, 'ecosystem.config.cjs'), content);
     },
     writeApp(name, indexContent) {
-      const dir = join(root, 'apps', name, 'src');
+      const dir = join(base.root, 'apps', name, 'src');
       mkdirSync(dir, { recursive: true });
       if (indexContent !== null) {
         writeFileSync(join(dir, 'index.ts'), indexContent);
       }
     },
-    writeKnownDrift(content) {
-      writeFileSync(
-        join(root, 'scripts', '__fixtures__', 'known-drift.json'),
-        JSON.stringify(content, null, 2)
-      );
-    },
+    writeKnownDrift: base.writeKnownDrift,
   };
 }
 
-function runScript(repoRoot: string): { status: number; stdout: string; stderr: string } {
-  const result = spawnSync('node', [SCRIPT_PATH], {
-    encoding: 'utf8',
-    env: { ...process.env, INTEXURAOS_VERIFY_REPO_ROOT: repoRoot },
-  });
-  if (result.error) throw result.error;
-  return {
-    status: result.status ?? 1,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
-}
-
-const EMPTY_DRIFT = {
-  terraformEnvConsumers: {},
-  ecosystemCoverage: { missingEcosystemEntry: {}, missingValidateRequiredEnv: {} },
-  terraformSecretMounts: {},
-};
+const run = (root: string) => runScript('verify-ecosystem-coverage.mjs', root);
 
 describe('verify-ecosystem-coverage', () => {
   let repo: SynthRepo;
@@ -82,7 +55,7 @@ describe('verify-ecosystem-coverage', () => {
   it('exits 0 when there are no Cloud Run services', () => {
     repo.writeTf(`module "x" { source = "../../modules/foo" }\n`);
     repo.writeEcosystem(`module.exports = { apps: [] };\n`);
-    const r = runScript(repo.root);
+    const r = run(repo.root);
     expect(r.status).toBe(0);
   });
 
@@ -101,7 +74,7 @@ module "foo_svc" {
 };
 `);
     repo.writeApp('foo-svc', `validateRequiredEnv(['X']);\n`);
-    const r = runScript(repo.root);
+    const r = run(repo.root);
     expect(r.status).toBe(0);
   });
 
@@ -117,7 +90,7 @@ module "foo_svc" {
 `);
     repo.writeEcosystem(`module.exports = { apps: [] };\n`);
     repo.writeApp('foo-svc', `validateRequiredEnv(['X']);\n`);
-    const r = runScript(repo.root);
+    const r = run(repo.root);
     expect(r.status).toBe(1);
     expect(r.stdout + r.stderr).toContain('intexuraos-foo-svc');
   });
@@ -141,7 +114,7 @@ module "foo_svc" {
         missingValidateRequiredEnv: {},
       },
     });
-    const r = runScript(repo.root);
+    const r = run(repo.root);
     expect(r.status).toBe(0);
   });
 
@@ -160,7 +133,7 @@ module "foo_svc" {
 };
 `);
     repo.writeApp('foo-svc', `// no validation\n`);
-    const r = runScript(repo.root);
+    const r = run(repo.root);
     expect(r.status).toBe(1);
     expect(r.stdout + r.stderr).toContain('apps/foo-svc');
   });
@@ -187,7 +160,7 @@ module "foo_svc" {
         missingValidateRequiredEnv: { 'apps/foo-svc': 'INT-X reason' },
       },
     });
-    const r = runScript(repo.root);
+    const r = run(repo.root);
     expect(r.status).toBe(0);
   });
 
@@ -213,7 +186,7 @@ module "foo_svc" {
         missingValidateRequiredEnv: {},
       },
     });
-    const r = runScript(repo.root);
+    const r = run(repo.root);
     expect(r.status).toBe(1);
     expect(r.stdout + r.stderr).toContain('stale allowlist');
   });
@@ -222,7 +195,65 @@ module "foo_svc" {
     repo.writeTf(`module "x" { source = "../../modules/foo" }\n`);
     repo.writeEcosystem(`module.exports = { apps: [] };\n`);
     repo.writeApp('web', `// no validateRequiredEnv but should be skipped\n`);
-    const r = runScript(repo.root);
+    const r = run(repo.root);
     expect(r.status).toBe(0);
+  });
+
+  it('parses locals.services entries with NESTED env_vars maps via brace-walker (I3)', () => {
+    // The previous regex `[^}]*?\bname` would stop at the FIRST `}` and
+    // miss `name` if it appeared after a nested `env_vars = { ... }` block.
+    // The brace-walker must handle this.
+    repo.writeTf(`
+locals {
+  services = {
+    foo_svc = {
+      env_vars = {
+        INTEXURAOS_X = "y"
+      }
+      name = "intexuraos-foo-svc"
+    }
+  }
+}
+module "foo_svc" {
+  source = "../../modules/cloud-run-service"
+  service_name = local.services.foo_svc.name
+}
+`);
+    repo.writeEcosystem(`module.exports = {
+  apps: [createServiceConfig('foo-svc', 8080)],
+};
+`);
+    repo.writeApp('foo-svc', `validateRequiredEnv(['X']);\n`);
+    const r = run(repo.root);
+    expect(r.status).toBe(0);
+  });
+
+  it('FAILS LOUDLY when service_name cannot be resolved (I4)', () => {
+    // No inline service_name and no matching locals entry → script must
+    // exit 1 with a clear "could not resolve" error rather than silently
+    // deriving from the module name.
+    repo.writeTf(`
+module "weird" {
+  source = "../../modules/cloud-run-service"
+}
+`);
+    repo.writeEcosystem(`module.exports = { apps: [] };\n`);
+    const r = run(repo.root);
+    expect(r.status).toBe(1);
+    expect(r.stdout + r.stderr).toContain('could not resolve service_name');
+    expect(r.stdout + r.stderr).toContain('weird');
+  });
+
+  it('reports the EXACT line number of the unresolvable module (N3)', () => {
+    repo.writeTf(`
+module "weird" {
+  source = "../../modules/cloud-run-service"
+}
+`);
+    repo.writeEcosystem(`module.exports = { apps: [] };\n`);
+    const r = run(repo.root);
+    expect(r.status).toBe(1);
+    // module "weird" starts at line 2 (line 1 is empty due to leading \n).
+    expect(r.stdout + r.stderr).toContain('main.tf:2');
   });
 });
