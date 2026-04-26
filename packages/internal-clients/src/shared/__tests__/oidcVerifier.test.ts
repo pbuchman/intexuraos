@@ -1,12 +1,30 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
 const verify = vi.hoisted(() => vi.fn());
-vi.mock('jose', () => ({
-  createRemoteJWKSet: (): object => ({}),
-  jwtVerify: verify,
-}));
+// Provide the real `errors` namespace from jose by partially-mocking only the
+// surface we control (createRemoteJWKSet + jwtVerify). `errors` retains the
+// real `JWTClaimValidationFailed` constructor used by the SUT.
+vi.mock('jose', async () => {
+  const actual = await vi.importActual<Record<string, unknown>>('jose');
+  return {
+    ...actual,
+    createRemoteJWKSet: (): object => ({}),
+    jwtVerify: verify,
+  };
+});
 
+import { errors as joseErrors } from 'jose';
 import { createGoogleOidcVerifier } from '../oidcVerifier.js';
+
+function makeClaimError(claim: string): Error {
+  // jose v6 signature: new JWTClaimValidationFailed(message, payload, claim, reason)
+  return new joseErrors.JWTClaimValidationFailed(
+    `unexpected ${claim} claim value`,
+    {},
+    claim,
+    'check_failed'
+  );
+}
 
 describe('createGoogleOidcVerifier', () => {
   // Reset AFTER each test, not before. Vitest 4 (4.0.17) treats a hoisted
@@ -33,10 +51,24 @@ describe('createGoogleOidcVerifier', () => {
     });
   });
 
-  it('rejects audience mismatch', async () => {
+  it('passes audience and issuer list to jose.jwtVerify', async () => {
     verify.mockResolvedValue({
-      payload: { aud: 'https://other', iss: 'https://accounts.google.com' },
+      payload: { aud: 'https://svc', iss: 'https://accounts.google.com', sub: 'x' },
     });
+    const v = createGoogleOidcVerifier({ audience: 'https://svc' });
+    await v('Bearer t');
+    expect(verify).toHaveBeenCalledWith(
+      't',
+      expect.anything(),
+      expect.objectContaining({
+        audience: 'https://svc',
+        issuer: ['https://accounts.google.com', 'accounts.google.com'],
+      })
+    );
+  });
+
+  it('maps jose claim error (aud) → audience_mismatch', async () => {
+    verify.mockRejectedValue(makeClaimError('aud'));
     const v = createGoogleOidcVerifier({ audience: 'https://svc' });
     expect(await v('Bearer t')).toEqual({
       valid: false,
@@ -44,10 +76,8 @@ describe('createGoogleOidcVerifier', () => {
     });
   });
 
-  it('rejects non-Google issuer', async () => {
-    verify.mockResolvedValue({
-      payload: { aud: 'https://svc', iss: 'https://evil.example' },
-    });
+  it('maps jose claim error (iss) → issuer_mismatch', async () => {
+    verify.mockRejectedValue(makeClaimError('iss'));
     const v = createGoogleOidcVerifier({ audience: 'https://svc' });
     expect(await v('Bearer t')).toEqual({
       valid: false,
@@ -55,16 +85,16 @@ describe('createGoogleOidcVerifier', () => {
     });
   });
 
-  it('rejects when issuer missing', async () => {
-    verify.mockResolvedValue({ payload: { aud: 'https://svc' } });
+  it('maps jose claim error with unrelated claim → verification_failed', async () => {
+    verify.mockRejectedValue(makeClaimError('exp'));
     const v = createGoogleOidcVerifier({ audience: 'https://svc' });
     expect(await v('Bearer t')).toEqual({
       valid: false,
-      reason: 'issuer_mismatch',
+      reason: 'verification_failed',
     });
   });
 
-  it('accepts verified Google token (https://accounts.google.com), uses email as subject', async () => {
+  it('accepts verified Google token, uses email as subject', async () => {
     verify.mockResolvedValue({
       payload: {
         aud: 'https://svc',
@@ -79,7 +109,7 @@ describe('createGoogleOidcVerifier', () => {
     });
   });
 
-  it('accepts verified Google token (accounts.google.com bare), falls back to sub when email missing', async () => {
+  it('falls back to sub when email is missing', async () => {
     verify.mockResolvedValue({
       payload: {
         aud: 'https://svc',
@@ -99,7 +129,7 @@ describe('createGoogleOidcVerifier', () => {
     expect(await v('Bearer t')).toEqual({ valid: true, subject: '' });
   });
 
-  it('rejects when jose throws', async () => {
+  it('rejects when jose throws non-claim error', async () => {
     verify.mockRejectedValue(new Error('bad sig'));
     const v = createGoogleOidcVerifier({ audience: 'https://svc' });
     expect(await v('Bearer t')).toEqual({
