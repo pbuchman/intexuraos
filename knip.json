@@ -21,41 +21,23 @@
     "openai",
     "fastify-server",
     "@google/genai",
-    "@auth0/auth0-react",
-    "@uiw/react-markdown-preview",
-    "@uiw/react-md-editor",
-    "highlight.js",
-    "libphonenumber-js",
     "react",
     "react-dom",
-    "react-markdown",
-    "rehype-highlight",
-    "rehype-raw",
-    "rehype-sanitize",
-    "remark-gfm",
     "vibe-kanban-web-companion",
     "lucide-react",
     "dotenv",
     "minimatch",
-    "autoprefixer",
-    "framer-motion",
-    "tailwindcss"
+    "autoprefixer"
   ],
   "workspaces": {
     ".": {
       "entry": ["scripts/**/*.mjs", "scripts/**/*.ts", "migrations/**/*.mjs"]
     },
-    "packages/*": {
-      "entry": ["src/index.ts"],
-      "project": ["src/**/*.ts"]
+    "workers/orchestrator": {
+      "entry": ["src/main.ts"]
     },
-    "apps/*": {
-      "entry": ["src/index.ts"],
-      "project": ["src/**/*.ts"]
-    },
-    "workers/*": {
-      "entry": ["src/main.ts", "src/index.ts"],
-      "project": ["src/**/*.ts"]
+    "workers/transcription": {
+      "entry": ["src/main.ts"]
     }
   }
 }

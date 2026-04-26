@@ -36,12 +36,12 @@ The pino v10 API surface used in this repository (`pino()`, `pino.Logger`,
 child loggers via `logger.child(...)`, transports, custom serializers) is
 backwards-compatible with v9. No source changes required.
 
-### `packages/infra-openrouter` openai v5 → v6
-The package consumes the openai SDK as a peer dependency now. The catalog
-range is `^6.15.0`; v5 → v6 introduced a few breaking signature changes,
-none of which the openrouter wrapper exercises (it reads
-`chat.completions.create(...)` and standard token/usage fields). Verified
-via `pnpm run typecheck` and `pnpm run test:coverage`.
+### `packages/infra-openrouter` openai dep removed entirely
+The package's pre-existing `openai: ^5.3.0` dependency was a phantom: source
+files do not import the openai SDK at all (the wrapper talks to the
+OpenRouter HTTP API directly via `fetch`; the only `openai` references are
+in OpenRouter model id strings such as `'openai/gpt-5.4'`). The dependency
+has been dropped rather than promoted to a peer.
 
 ## peerDependencies conversion
 
@@ -51,7 +51,6 @@ mirror set to `"catalog:"` so their internal tests can run:
 
 - `packages/infra-firestore`: `@google-cloud/firestore ^7.10.0`
 - `packages/infra-gpt`: `openai ^6.15.0`
-- `packages/infra-openrouter`: `openai ^6.15.0`
 - `packages/infra-pubsub`: `pino ^10.1.0`
 - `packages/infra-sentry`: `fastify ^5.2.0`, `pino ^10.1.0`
 - `packages/common-http`: `fastify ^5.1.0`, `zod ^3.24.1`
@@ -93,20 +92,26 @@ issue categories:
 Other categories (`exports`, `nsExports`, `types`, `nsTypes`,
 `enumMembers`, `duplicates`, `files`) are excluded for the SUB-D scope.
 
+Per-workspace `entry`/`project` overrides are kept minimal: knip's default
+auto-detection (root `index.ts`, package.json `main`/`bin`) covers all
+apps, packages, and most workers. Only `workers/orchestrator` and
+`workers/transcription` are explicitly listed because they boot from
+`src/main.ts` (rather than the conventional `src/index.ts`).
+
 ### `ignoreDependencies` allowlist
 
 The `ignoreDependencies` array in `knip.json` allowlists packages that
 knip cannot trace as used due to legitimate reasons:
 
-| Pattern                                                                                                                                                                                                                                                                                            | Rationale                                                                                                     |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `@intexuraos/.*`                                                                                                                                                                                                                                                                                   | Workspace packages re-export through barrel `index.ts`, plus DI container resolution that knip cannot follow. |
-| `@google-cloud/firestore`, `@google-cloud/pubsub`, `@google-cloud/monitoring`                                                                                                                                                                                                                      | Used as type-only imports in tests/migrations and through `infra-firestore` peer.                             |
-| `@google/genai`, `openai`, `fastify-server`                                                                                                                                                                                                                                                        | Indirectly consumed via factory wrappers in `infra-*` packages and DI services.                               |
-| `axios`, `blessed`, `express`, `firebase-admin`, `firebase-tools`, `vite`, `@vitejs/plugin-react`, `@vitest/coverage-v8`, `nock`, `memfs`                                                                                                                                                          | Tooling / test infra invoked outside knip's entry graph.                                                      |
-| `pino`, `pino-pretty`                                                                                                                                                                                                                                                                              | Used through transport spawning and dynamic configuration.                                                    |
-| `@auth0/auth0-react`, `@uiw/react-markdown-preview`, `@uiw/react-md-editor`, `highlight.js`, `libphonenumber-js`, `react-markdown`, `rehype-highlight`, `rehype-raw`, `rehype-sanitize`, `remark-gfm`, `vibe-kanban-web-companion`, `lucide-react`, `framer-motion`, `tailwindcss`, `autoprefixer` | `apps/web` UI/runtime/build deps not yet picked up by knip's React + Vite plugin defaults.                    |
-| `dotenv`, `minimatch`, `react`, `react-dom`                                                                                                                                                                                                                                                        | Root-level deps consumed by build/runtime/web-app-bundle path.                                                |
+| Pattern                                                                                                                                   | Rationale                                                                                                     |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `@intexuraos/.*`                                                                                                                          | Workspace packages re-export through barrel `index.ts`, plus DI container resolution that knip cannot follow. |
+| `@google-cloud/firestore`, `@google-cloud/pubsub`, `@google-cloud/monitoring`                                                             | Used as type-only imports in tests/migrations and through `infra-firestore` peer.                             |
+| `@google/genai`, `openai`, `fastify-server`                                                                                               | Indirectly consumed via factory wrappers in `infra-*` packages and DI services.                               |
+| `axios`, `blessed`, `express`, `firebase-admin`, `firebase-tools`, `vite`, `@vitejs/plugin-react`, `@vitest/coverage-v8`, `nock`, `memfs` | Tooling / test infra invoked outside knip's entry graph.                                                      |
+| `pino`, `pino-pretty`                                                                                                                     | Used through transport spawning and dynamic configuration.                                                    |
+| `vibe-kanban-web-companion`, `lucide-react`                                                                                               | `apps/web` runtime deps consumed dynamically (kanban iframe, lazy icon imports) and not seen by static graph. |
+| `dotenv`, `minimatch`, `react`, `react-dom`, `autoprefixer`                                                                               | Root-level deps consumed by build/runtime/web-app-bundle path.                                                |
 
 The allowlist is intentionally conservative: as the codebase removes the
 DI patterns or surfaces unused exports become actionable, future PRs can

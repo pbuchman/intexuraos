@@ -1778,9 +1778,6 @@ importers:
       nock:
         specifier: ^14.0.0
         version: 14.0.10
-      openai:
-        specifier: 'catalog:'
-        version: 6.16.0(ws@8.19.0)(zod@4.3.6)
 
   packages/infra-otel:
     dependencies:
