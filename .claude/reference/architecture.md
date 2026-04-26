@@ -27,9 +27,9 @@ The monorepo has three deployment modes: Cloud Run apps, Cloud Functions workers
 | ----------- | ----------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
 | Deploy      | Cloud Run                     | Cloud Functions                                                          | PM2 on VM (`home-dev` for dev; production VM for prod)                    |
 | Framework   | Fastify                       | Cloud Functions Framework                                                | Fastify                                                                   |
-| Scaling     | Min 0, persistent connections | Scale to zero, event-driven                                              | long-running, single-process                                              |
+| Scaling     | Min 0, persistent connections | Scale to zero, event-driven                                              | Long-running, single-process                                              |
 | Entry Point | `server.ts`                   | `index.ts` with `functions.cloudEvent()`                                 | `main.ts` (Fastify `app.listen`)                                          |
-| DI Pattern  | Full `services.ts` container  | Lightweight, direct dependency injection                                 | lightweight, direct dependency injection (own logger, own env validation) |
+| DI Pattern  | Full `services.ts` container  | Lightweight, direct dependency injection                                 | Lightweight, direct dependency injection (own logger, own env validation) |
 | Dockerfile  | Yes (multi-stage esbuild)     | No (zip deployment)                                                      | No (PM2-managed via `ecosystem.config.cjs`)                               |
 | Coverage    | 95% required                  | 95% required                                                             | 95% required                                                              |
 
