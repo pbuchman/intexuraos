@@ -40,6 +40,7 @@ import {
   type GenerateResult,
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
+import { withLlmSpan } from '@intexuraos/llm-utils';
 import type { GeminiConfig, GeminiError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 import { resolveVertexRedirectUrls } from './vertexUrlResolver.js';
@@ -71,6 +72,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
     callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
+    durationMs: number,
     errorMessage?: string,
     promptType?: string
   ): void {
@@ -81,6 +83,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       callType,
       usage,
       success,
+      durationMs,
       ...(errorMessage !== undefined && { errorMessage }),
       ...(ownerType !== undefined && { ownerType }),
       ...(promptType !== undefined && { promptType }),
@@ -89,6 +92,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GeminiError>> {
+      const start = Date.now();
       try {
         const response = await ai.models.generateContent({
           model,
@@ -105,10 +109,11 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
         const usage = normalizeUsage(inputTokens, outputTokens, groundingEnabled, thinkingTokens);
 
-        trackUsage('research', usage, true);
+        trackUsage('research', usage, true, Date.now() - start);
 
         return ok({ content: text, sources, usage });
       } catch (error) {
+        const durationMs = Date.now() - start;
         const errorMsg = getErrorMessage(error);
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
@@ -116,7 +121,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('research', emptyUsage, false, errorMsg);
+        trackUsage('research', emptyUsage, false, durationMs, errorMsg);
         return err(mapGeminiError(error));
       }
     },
@@ -125,18 +130,32 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       prompt: string,
       options: { promptType: string }
     ): Promise<Result<GenerateResult, GeminiError>> {
+      const start = Date.now();
       try {
-        const response = await ai.models.generateContent({ model, contents: prompt });
-        const text = response.text ?? '';
-        const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
-        const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
-        const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
-        const usage = normalizeUsage(inputTokens, outputTokens, false, thinkingTokens);
+        const { result, durationMs } = await withLlmSpan(
+          LlmProviders.Google,
+          async () => {
+            const response = await ai.models.generateContent({ model, contents: prompt });
+            const text = response.text ?? '';
+            const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
+            const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
+            const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
+            const usage = normalizeUsage(inputTokens, outputTokens, false, thinkingTokens);
+            return { content: text, usage };
+          },
+          ({ usage }) => ({
+            model,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            costUsd: usage.costUsd,
+          })
+        );
 
-        trackUsage('generate', usage, true, undefined, options.promptType);
+        trackUsage('generate', result.usage, true, durationMs, undefined, options.promptType);
 
-        return ok({ content: text, usage });
+        return ok({ content: result.content, usage: result.usage });
       } catch (error) {
+        const durationMs = Date.now() - start;
         const errorMsg = getErrorMessage(error);
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
@@ -144,7 +163,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('generate', emptyUsage, false, errorMsg, options.promptType);
+        trackUsage('generate', emptyUsage, false, durationMs, errorMsg, options.promptType);
         return err(mapGeminiError(error));
       }
     },
@@ -153,6 +172,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       prompt: string,
       _options?: ImageGenerateOptions
     ): Promise<Result<ImageGenerationResult, GeminiError>> {
+      const start = Date.now();
       try {
         const response = await ai.models.generateContent({
           model: IMAGE_MODEL,
@@ -176,10 +196,11 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
           costUsd: 0,
         };
 
-        trackUsage('image_generation', usage, true);
+        trackUsage('image_generation', usage, true, Date.now() - start);
 
         return ok({ imageData: imageBuffer, model: IMAGE_MODEL, usage });
       } catch (error) {
+        const durationMs = Date.now() - start;
         const errorMsg = getErrorMessage(error);
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
@@ -187,7 +208,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('image_generation', emptyUsage, false, errorMsg);
+        trackUsage('image_generation', emptyUsage, false, durationMs, errorMsg);
         return err(mapGeminiError(error));
       }
     },

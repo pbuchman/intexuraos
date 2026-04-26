@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LlmProviders, LlmModels } from '@intexuraos/llm-contract';
-import type { Logger } from '@intexuraos/common-core';
+import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockLogger: Logger = {
@@ -295,6 +295,91 @@ describe('llmClientFactory', () => {
         // TypeScript should know provider is 'google' or 'openrouter' here
         expect(provider === LlmProviders.Google || provider === LlmProviders.OpenRouter).toBe(true);
       }
+    });
+  });
+
+  describe('IntexuraOSError migration (INT-1564)', () => {
+    it('createLlmClient throws IntexuraOSError(INVALID_REQUEST) for unknown model', () => {
+      let captured: unknown;
+      try {
+        createLlmClient({
+          apiKey: 'test-key',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model: 'made-up-model-id' as any,
+          userId: 'user-123',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+      } catch (e) {
+        captured = e;
+      }
+      expect(captured).toBeInstanceOf(IntexuraOSError);
+      const err = captured as IntexuraOSError;
+      expect(err.code).toBe('INVALID_REQUEST');
+      expect(err.httpStatus).toBe(400);
+      expect(err.message).toContain('made-up-model-id');
+    });
+
+    it('createLlmClient throws IntexuraOSError(INVALID_REQUEST) for unsupported provider', () => {
+      let captured: unknown;
+      try {
+        createLlmClient({
+          apiKey: 'test-key',
+          model: LlmModels.ClaudeHaiku35,
+          userId: 'user-123',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+      } catch (e) {
+        captured = e;
+      }
+      expect(captured).toBeInstanceOf(IntexuraOSError);
+      const err = captured as IntexuraOSError;
+      expect(err.code).toBe('INVALID_REQUEST');
+      expect(err.httpStatus).toBe(400);
+      expect(err.message).toContain('anthropic');
+    });
+
+    it('createToolCallingClient throws IntexuraOSError(INVALID_REQUEST) for unknown model', () => {
+      let captured: unknown;
+      try {
+        createToolCallingClient({
+          apiKey: 'test-key',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model: 'made-up-model-id' as any,
+          userId: 'user-123',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+      } catch (e) {
+        captured = e;
+      }
+      expect(captured).toBeInstanceOf(IntexuraOSError);
+      const err = captured as IntexuraOSError;
+      expect(err.code).toBe('INVALID_REQUEST');
+      expect(err.httpStatus).toBe(400);
+      expect(err.message).toContain('made-up-model-id');
+    });
+
+    it('createToolCallingClient throws IntexuraOSError(INVALID_REQUEST) for unsupported provider', () => {
+      let captured: unknown;
+      try {
+        createToolCallingClient({
+          apiKey: 'test-key',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model: LlmModels.ClaudeOpus46 as any,
+          userId: 'user-123',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+      } catch (e) {
+        captured = e;
+      }
+      expect(captured).toBeInstanceOf(IntexuraOSError);
+      const err = captured as IntexuraOSError;
+      expect(err.code).toBe('INVALID_REQUEST');
+      expect(err.httpStatus).toBe(400);
+      expect(err.message).toContain('anthropic');
     });
   });
 });
