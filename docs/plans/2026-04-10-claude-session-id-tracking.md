@@ -33,7 +33,7 @@
 | `workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts` | Modify   | Assert the exec env contains `CLAUDE_SESSION_ID=<id>` for claude runtime resumes                                     |
 | `workers/orchestrator/src/services/task-dispatcher.ts`                          | Modify   | Extend the resume session-id guard from codex-only to cover claude too                                               |
 | `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`                    | Modify   | Assert claude resume rejects when `runtimeSessionId` is undefined                                                    |
-| `docker/code-worker/entrypoint.sh`                                             | Modify   | Require `CLAUDE_SESSION_ID` on claude resumes, invoke `claude --resume "$CLAUDE_SESSION_ID"` instead of `--continue` |
+| `docker/code-worker/entrypoint.sh`                                              | Modify   | Require `CLAUDE_SESSION_ID` on claude resumes, invoke `claude --resume "$CLAUDE_SESSION_ID"` instead of `--continue` |
 | `workers/orchestrator/src/services/system-prompt.ts`                            | Modify   | Update `askAgentPrompt` "Session Continuity" note to reflect the new resume mechanism; bump version to `1.2.0`       |
 | `workers/orchestrator/src/__tests__/system-prompt.test.ts`                      | Modify   | Update the ask-agent prompt assertion to match the new Session Continuity text                                       |
 
