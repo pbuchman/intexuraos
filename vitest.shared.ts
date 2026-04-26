@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig, type UserConfig } from 'vitest/config';
+import { defineConfig } from 'vitest/config';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = __dirname;
@@ -19,7 +19,7 @@ const repoRoot = __dirname;
  * `vitest.setup.ts`. The single documented exception is `e2e/vitest.config.ts`,
  * which intentionally opts out (E2E tests target real services).
  */
-export const sharedConfig: UserConfig = defineConfig({
+export const sharedConfig = defineConfig({
   resolve: {
     alias: {
       // Redirect @notionhq/client to our mock for all packages in the workspace
