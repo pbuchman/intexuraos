@@ -10,7 +10,8 @@
 import { FieldValue } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@intexuraos/infra-firestore';
 import { ok, err, getErrorMessage, type Result } from '@intexuraos/common-core';
-import type { Logger, CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { Logger } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import type {
   WorkerSettingsRepository,
   WorkerSettingsError,
