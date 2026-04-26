@@ -29,8 +29,8 @@ invariants, and detecting LLM-initiated lockfile tampering during an attempt.
 
 ## Context (read this first if you have no codebase context)
 
-**The worker container at a glance** — `workers/code-worker/`:
-- Built from `workers/code-worker/Dockerfile` (Alpine + pnpm + Claude/Codex CLIs).
+**The worker container at a glance** — `docker/code-worker/`:
+- Built from `docker/code-worker/Dockerfile` (Alpine + pnpm + Claude/Codex CLIs).
 - Started by `workers/orchestrator/` (TS service) which builds the docker run spec
   via `services/isolation/{docker-volume,worker-create,worker-env}.ts`.
 - `entrypoint.sh` runs as user `claude` (uid 1001) with these mounts:
@@ -79,13 +79,13 @@ scripts. With `noexec`, even legitimate `pnpm test` / `pnpm vitest` /
 ## File Structure
 
 **Modified files:**
-- `workers/code-worker/entrypoint.sh` — add `--ignore-scripts` to bootstrap install,
+- `docker/code-worker/entrypoint.sh` — add `--ignore-scripts` to bootstrap install,
   capture pre-attempt lockfile sha256, expose env to subsequent installs.
-- `workers/code-worker/.npmrc` *(new file, baked into image)* — sets
+- `docker/code-worker/.npmrc` *(new file, baked into image)* — sets
   `ignore-scripts=true`, `frozen-lockfile=true`, `prefer-offline=true`,
   `auto-install-peers=true`. Copied to `/home/claude/.npmrc` by Dockerfile
   so it applies to LLM-initiated invocations regardless of cwd.
-- `workers/code-worker/Dockerfile` — `COPY` the new `.npmrc` into both the
+- `docker/code-worker/Dockerfile` — `COPY` the new `.npmrc` into both the
   image's `/etc/npmrc` and `/opt/claude-defaults/.npmrc`; entrypoint copies
   the latter into `/home/claude/.npmrc` after the tmpfs is mounted.
 - `workers/orchestrator/src/services/isolation/worker-env.ts` —
@@ -162,13 +162,13 @@ scripts. With `noexec`, even legitimate `pnpm test` / `pnpm vitest` /
   bad-resolution), `worker-env.test.ts` (assert new env vars present),
   `docker-volume.test.ts` (regression on tmpfs mode string),
   `docker-provider.test.ts` (env+tmpfs assertion).
-- **Integration:** Tripwire postinstall test — `workers/code-worker/__tests__/postinstall-tripwire.test.ts`
+- **Integration:** Tripwire postinstall test — `docker/code-worker/__tests__/postinstall-tripwire.test.ts`
   (new, runs only when `RUN_DOCKER_E2E=1` so CI unaffected; verifies the dropped
   file is absent after install).
 - **Manual smoke:** Build the image locally, dispatch a no-op task, confirm
   `[entrypoint] Lockfile sha256: <hex>` line appears in container logs and that
   `pnpm install` reports `Lifecycle scripts: skipped`.
-- **Static check:** `grep -n "ignore-scripts" workers/code-worker/.npmrc` returns
+- **Static check:** `grep -n "ignore-scripts" docker/code-worker/.npmrc` returns
   the line; `grep -n "NPM_CONFIG_IGNORE_SCRIPTS" workers/orchestrator/src/services/isolation/worker-env.ts`
   returns the env push.
 
@@ -177,8 +177,8 @@ scripts. With `noexec`, even legitimate `pnpm test` / `pnpm vitest` /
 ## Task 1: Add `.npmrc` baked into the image and copied into runtime HOME
 
 **Files:**
-- Create: `workers/code-worker/.npmrc`
-- Modify: `workers/code-worker/Dockerfile` (after line 116, near `COPY ... claude.json`)
+- Create: `docker/code-worker/.npmrc`
+- Modify: `docker/code-worker/Dockerfile` (after line 116, near `COPY ... claude.json`)
 
 - [ ] **Step 1: Write the `.npmrc` content**
 
@@ -200,15 +200,15 @@ store-dir=/home/claude/pnpm-store
 
 - [ ] **Step 2: Modify the Dockerfile to bake the `.npmrc` into image defaults**
 
-After the `COPY --chown=claude:claude workers/code-worker/config-defaults/claude.json /opt/claude-defaults/.claude.json`
+After the `COPY --chown=claude:claude docker/code-worker/config-defaults/claude.json /opt/claude-defaults/.claude.json`
 line (currently line 116), add:
 
 ```dockerfile
 # Bake forced pnpm/npm defaults so lifecycle scripts cannot run from a tampered
 # lockfile. Copied from /opt/claude-defaults to /home/claude at entrypoint time
 # (because /home/claude is tmpfs-wiped on container start).
-COPY --chown=claude:claude workers/code-worker/.npmrc /opt/claude-defaults/.npmrc
-COPY --chown=claude:claude workers/code-worker/.npmrc /etc/npmrc
+COPY --chown=claude:claude docker/code-worker/.npmrc /opt/claude-defaults/.npmrc
+COPY --chown=claude:claude docker/code-worker/.npmrc /etc/npmrc
 ```
 
 The `/etc/npmrc` copy ensures protection even if the LLM `rm`s `~/.npmrc`,
@@ -216,7 +216,7 @@ because pnpm reads `/etc/npmrc` as the global config.
 
 - [ ] **Step 3: Verify the entrypoint already copies `/opt/claude-defaults` to `/home/claude`**
 
-Read `workers/code-worker/entrypoint.sh` lines 408-411. The block:
+Read `docker/code-worker/entrypoint.sh` lines 408-411. The block:
 ```bash
 if [ -d "/opt/claude-defaults" ]; then
     cp -r /opt/claude-defaults/. /home/claude/
@@ -229,7 +229,7 @@ already runs at startup, so `/opt/claude-defaults/.npmrc` will land at
 - [ ] **Step 4: Commit**
 
 ```bash
-git add workers/code-worker/.npmrc workers/code-worker/Dockerfile
+git add docker/code-worker/.npmrc docker/code-worker/Dockerfile
 git commit -m "feat(code-worker): bake ignore-scripts .npmrc into container image (INT-1524)"
 ```
 
@@ -238,7 +238,7 @@ git commit -m "feat(code-worker): bake ignore-scripts .npmrc into container imag
 ## Task 2: Force `--ignore-scripts` on the bootstrap pnpm install
 
 **Files:**
-- Modify: `workers/code-worker/entrypoint.sh:520-525`
+- Modify: `docker/code-worker/entrypoint.sh:520-525`
 
 - [ ] **Step 1: Update the bootstrap install command**
 
@@ -271,14 +271,14 @@ fi
 
 - [ ] **Step 2: Verify the bootstrap evidence header still works**
 
-`grep -n 'BOOTSTRAP_' workers/code-worker/entrypoint.sh` — confirm the
+`grep -n 'BOOTSTRAP_' docker/code-worker/entrypoint.sh` — confirm the
 `emit_bootstrap_evidence` function is unchanged so existing log parsers
 keep working.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add workers/code-worker/entrypoint.sh
+git add docker/code-worker/entrypoint.sh
 git commit -m "feat(code-worker): pass --ignore-scripts on bootstrap pnpm install + capture lockfile sha (INT-1524)"
 ```
 
@@ -372,7 +372,7 @@ add:
     // /repo/node_modules MUST stay rw,exec because pnpm-installed .bin/ shims
     // are POSIX scripts. Switching to noexec breaks pnpm test/lint/build runs.
     // Defense-in-depth against malicious lifecycle scripts is provided by
-    // ignore-scripts=true (see workers/code-worker/.npmrc and worker-env.ts).
+    // ignore-scripts=true (see docker/code-worker/.npmrc and worker-env.ts).
     expect(tmpfs['/repo/node_modules']).toContain('exec');
     expect(tmpfs['/repo/node_modules']).not.toContain('noexec');
     expect(tmpfs['/tmp']).toContain('noexec');

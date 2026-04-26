@@ -14,7 +14,7 @@ the Firestore `code_tasks` collection, the Linear issue states, and Cloud Loggin
 `intexuraos-dev-pbuchman` between `2026-04-24T20:44Z` and `2026-04-24T22:30Z`.
 
 **Tech stack involved:** `apps/code-agent` (dispatcher), `workers/orchestrator` (task-dispatcher
-+ completion-verifier), `workers/code-worker` (Docker VM that hosts the agent), Firestore
++ completion-verifier), `docker/code-worker` (Docker VM that hosts the agent), Firestore
 `code_tasks`.
 
 ---
