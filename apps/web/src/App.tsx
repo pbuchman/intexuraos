@@ -188,11 +188,11 @@ function PageLifecycleManager(): null {
 function PublicRoute({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { isAuthenticated, isLoading } = useAuth();
 
-  if (isLoading === true) {
+  if (isLoading) {
     return <FullPageSpinner />;
   }
 
-  if (isAuthenticated === true) {
+  if (isAuthenticated) {
     return <Navigate to="/inbox" replace />;
   }
 
@@ -202,7 +202,7 @@ function PublicRoute({ children }: { children: React.ReactNode }): React.JSX.Ele
 function HomeRoute(): React.JSX.Element {
   const { isAuthenticated, isLoading } = useAuth();
 
-  if (isLoading === true) {
+  if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950">
         <div className="h-12 w-12 animate-spin rounded-full border-4 border-violet-600 border-t-transparent" />
@@ -210,7 +210,7 @@ function HomeRoute(): React.JSX.Element {
     );
   }
 
-  if (isAuthenticated === true) {
+  if (isAuthenticated) {
     return <Navigate to="/inbox" replace />;
   }
 

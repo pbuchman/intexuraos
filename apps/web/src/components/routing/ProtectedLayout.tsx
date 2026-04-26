@@ -6,11 +6,11 @@ import { FullPageSpinner } from './FullPageSpinner.js';
 export function ProtectedLayout(): JSX.Element {
   const { isAuthenticated, isLoading } = useAuth();
 
-  if (isLoading === true) {
+  if (isLoading) {
     return <FullPageSpinner />;
   }
 
-  if (isAuthenticated !== true) {
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
