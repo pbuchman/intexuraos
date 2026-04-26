@@ -1,7 +1,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok } from '@intexuraos/common-core';
 import type { PublishError } from '@intexuraos/infra-pubsub';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 
 export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
   public publishedMessages: {

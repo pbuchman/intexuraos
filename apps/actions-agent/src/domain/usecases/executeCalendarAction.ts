@@ -2,7 +2,7 @@ import type { Result } from '@intexuraos/common-core';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { CalendarServiceClient, CalendarPreview } from '../ports/calendarServiceClient.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { Logger } from 'pino';
 import { formatCalendarCompletionMessage } from '../utils/formatCalendarCompletionMessage.js';
 

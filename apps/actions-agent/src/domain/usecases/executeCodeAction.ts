@@ -17,7 +17,7 @@ import { detectWorkerTypeFromMessage } from '../utils/workerTypeDetection.js';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { CodeAgentClient } from '../ports/codeAgentClient.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { Logger } from 'pino';
 import { randomUUID } from 'crypto';
 

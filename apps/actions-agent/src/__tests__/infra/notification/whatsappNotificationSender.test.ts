@@ -8,7 +8,7 @@ import { ok } from '@intexuraos/common-core';
 
 const mockPublishSendMessage = vi.fn();
 
-vi.mock('@intexuraos/infra-pubsub', () => ({
+vi.mock('@intexuraos/whatsapp-pubsub-client', () => ({
   createWhatsAppSendPublisher: vi.fn().mockReturnValue({
     publishSendMessage: mockPublishSendMessage,
   }),

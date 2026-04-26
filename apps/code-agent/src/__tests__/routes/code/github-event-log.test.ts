@@ -39,7 +39,7 @@ import { createAutoArchiveMergedTasksUseCase } from '../../../domain/usecases/au
 import { createNoOpMetricsClient, type MetricsClient } from '../../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../../infra/firestore/workerSettingsRepository.js';
 import type { TaskDispatcherService, DispatchResult } from '../../../domain/services/taskDispatcher.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { createFirestoreTurnMetricsRepository } from '../../../infra/repositories/firestoreTurnMetricsRepository.js';
 import { createFirestoreGitHubWebhookAuditEventRepository } from '../../../infra/firestore/gitHubWebhookAuditEventRepository.js';
 import { createFirestoreGitHubEventLogEntryRepository } from '../../../infra/firestore/gitHubEventLogEntryRepository.js';
@@ -232,7 +232,7 @@ describe('GitHub event log routes', () => {
       taskEnqueueService: import('../../../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../../../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../../../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     };
 
     setServices(baseServices);

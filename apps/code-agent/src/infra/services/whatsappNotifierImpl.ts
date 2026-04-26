@@ -7,7 +7,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { WhatsAppNotifier, NotificationError } from '../../domain/services/whatsappNotifier.js';
 import type { CodeTask, TaskError } from '../../domain/models/codeTask.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';

@@ -21,7 +21,7 @@ import type { Result, ServiceFeedback } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type { Action, ActionStatus } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { Logger } from 'pino';
 
 export interface ExecuteActionConfig {

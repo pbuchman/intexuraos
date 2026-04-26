@@ -8,10 +8,12 @@
 import type { Logger } from 'pino';
 import {
   createPRTriagePublisher,
-  createWhatsAppSendPublisher,
   type PRTriagePublisher,
+} from '@intexuraos/pr-triage-pubsub-client';
+import {
+  createWhatsAppSendPublisher,
   type WhatsAppSendPublisher,
-} from '@intexuraos/infra-pubsub';
+} from '@intexuraos/whatsapp-pubsub-client';
 import type { E2EMocks } from './e2eMocks.js';
 import type { ServiceConfig } from '../types.js';
 

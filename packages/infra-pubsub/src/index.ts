@@ -1,41 +1,18 @@
 /**
  * @intexuraos/infra-pubsub
  *
- * Pub/Sub infrastructure adapters for cross-service messaging.
+ * Generic Pub/Sub infrastructure: a thin wrapper around `@google-cloud/pubsub`
+ * that callers extend via {@link BasePubSubPublisher}.
+ *
+ * Domain-specific publisher factories (WhatsApp send, todos processing,
+ * calendar preview, PR triage) live in their own leaf client packages
+ * under `packages/*-pubsub-client/`.
  */
 
-export type {
-  PublishError,
-  SendMessageEvent,
-  WhatsAppInteractiveButton,
-  WhatsAppSendPublisherConfig,
-  TodoProcessingEvent,
-  TodosProcessingPublisherConfig,
-  CalendarPreviewGenerateEvent,
-  CalendarPreviewPublisherConfig,
-  PRTriageEvent,
-  PRTriagePublisherConfig,
-} from './types.js';
+export type { PublishError, PublishFailureReason } from './types.js';
 
 export {
   BasePubSubPublisher,
   type BasePubSubPublisherConfig,
   type PublishContext,
 } from './basePublisher.js';
-
-export {
-  type WhatsAppSendPublisher,
-  createWhatsAppSendPublisher,
-} from './whatsappSendPublisher.js';
-
-export {
-  type TodosProcessingPublisher,
-  createTodosProcessingPublisher,
-} from './todosProcessingPublisher.js';
-
-export {
-  type CalendarPreviewPublisher,
-  createCalendarPreviewPublisher,
-} from './calendarPreviewPublisher.js';
-
-export { type PRTriagePublisher, createPRTriagePublisher } from './prTriagePublisher.js';
