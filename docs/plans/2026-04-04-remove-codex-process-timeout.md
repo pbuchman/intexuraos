@@ -2,7 +2,7 @@
 
 ## Problem
 
-The Codex entrypoint (`workers/code-worker/entrypoint.sh`) wraps the entire `codex exec` process in a 60-second `timeout` derived from the Linear MCP `timeoutMs` config. This conflates two timeout domains:
+The Codex entrypoint (`docker/code-worker/entrypoint.sh`) wraps the entire `codex exec` process in a 60-second `timeout` derived from the Linear MCP `timeoutMs` config. This conflates two timeout domains:
 
 - **MCP client timeout**: How long a single Linear API call can take (60s — correct, stays)
 - **Process timeout**: How long the entire Codex agent session can run (60s — wrong, kills reviews mid-work)
@@ -15,7 +15,7 @@ Remove the process-level `timeout` wrapper from `run_codex_attempt()`. The MCP c
 
 ## Files Changed
 
-### 1. `workers/code-worker/entrypoint.sh`
+### 1. `docker/code-worker/entrypoint.sh`
 
 - **Remove** `read_linear_mcp_timeout_ms()` function (lines 216-233)
 - **Remove** `linear_timeout_ms` and `timeout_s` variable assignments (lines 296-298)
