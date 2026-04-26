@@ -11,13 +11,15 @@
 export {
   type HealthStatus,
   type HealthCheck,
+  type HealthCheckResult,
   type HealthResponse,
+  type RegisterHealthCheckOptions,
   checkSecrets,
-  checkFirestore,
-  checkNotionSdk,
+  secretsHealthCheck,
   computeOverallStatus,
   buildHealthResponse,
   validateRequiredEnv,
+  registerHealthCheck,
 } from './health.js';
 
 // Validation error handler

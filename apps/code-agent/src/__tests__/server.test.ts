@@ -257,6 +257,9 @@ describe('server configuration', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(body.status).toBe('ok');
-    expect(body.service).toBe('code-agent');
+    expect(body.serviceName).toBe('code-agent');
+    expect(body.version).toBe('0.0.1');
+    expect(Array.isArray(body.checks)).toBe(true);
+    expect(body.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 });

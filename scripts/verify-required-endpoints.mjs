@@ -72,6 +72,10 @@ function checkServerFile(appName) {
       const pluginPatterns = {
         '/openapi.json': /app\.swagger\(\)|fastifySwagger/,
         '/docs': /fastifySwaggerUi.*routePrefix.*\/docs/s,
+        // Services may register `/health` either inline (`app.get('/health', …)`)
+        // or via the shared `registerHealthCheck(app, …)` plugin from
+        // `@intexuraos/http-server`. Both satisfy the contract.
+        '/health': /registerHealthCheck\s*\(\s*app\b/,
       };
 
       const hasEndpoint =
