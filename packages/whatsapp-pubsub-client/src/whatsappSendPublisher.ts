@@ -3,8 +3,12 @@
  * Publishes SendMessageEvent to Pub/Sub for whatsapp-service to process.
  */
 import { type Result } from '@intexuraos/common-core';
-import { BasePubSubPublisher } from './basePublisher.js';
-import type { PublishError, SendMessageEvent, WhatsAppSendPublisherConfig } from './types.js';
+import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
+import type {
+  SendMessageEvent,
+  WhatsAppInteractiveButton,
+  WhatsAppSendPublisherConfig,
+} from './types.js';
 
 /**
  * Interface for publishing WhatsApp send message events.
@@ -19,7 +23,7 @@ export interface WhatsAppSendPublisher {
     userId: string;
     message: string;
     replyToMessageId?: string;
-    buttons?: import('./types.js').WhatsAppInteractiveButton[];
+    buttons?: WhatsAppInteractiveButton[];
     ctaUrl?: { displayText: string; url: string };
     important?: boolean;
     correlationId?: string;
@@ -41,7 +45,7 @@ class WhatsAppSendPublisherImpl extends BasePubSubPublisher implements WhatsAppS
     userId: string;
     message: string;
     replyToMessageId?: string;
-    buttons?: import('./types.js').WhatsAppInteractiveButton[];
+    buttons?: WhatsAppInteractiveButton[];
     ctaUrl?: { displayText: string; url: string };
     important?: boolean;
     correlationId?: string;

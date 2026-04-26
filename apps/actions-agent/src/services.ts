@@ -99,10 +99,7 @@ import { createCalendarServiceHttpClient } from './infra/http/calendarServiceHtt
 import { createLinearAgentHttpClient } from './infra/http/linearAgentHttpClient.js';
 import { createCodeAgentHttpClient } from './infra/http/codeAgentHttpClient.js';
 import { createActionEventPublisher, type ActionEventPublisher } from './infra/pubsub/index.js';
-import {
-  createWhatsAppSendPublisher,
-  type WhatsAppSendPublisher,
-} from '@intexuraos/infra-pubsub';
+import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 
