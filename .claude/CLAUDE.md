@@ -49,7 +49,7 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 **CI Failure:** Capture output with `tee /tmp/ci-output-*.txt`, analyze with `rg "error|FAIL" -C3`. Any failure in any workspace: fix it or ask user. Do not commit until ALL resolved.
 
-**Verification:** Run from repo root. (1) `pnpm run verify:workspace:tracked -- <app-name>`. (2) Verify `packages/*/dist/` exists. (3) `pnpm run ci:tracked` must pass. Never modify `vitest.config.ts` coverage exclusions.
+**Verification:** Run from repo root. (1) `pnpm run verify:workspace:tracked -- <app-name>`. (2) Packages export from `./src/*.ts` (source-exports default); only `infra-otel` ships `dist/` — `pnpm run verify:package-exports` enforces this. (3) `pnpm run ci:tracked` must pass. Never modify `vitest.config.ts` coverage exclusions.
 
 **Git & PR:** Commit Gate must pass before every commit. NEVER commit directly to `main` or `development` — both are protected branches (direct pushes are blocked by branch protection rules). Always create a feature branch and open a PR targeting `development`. Merge latest base branch before PR. Git worktrees NOT allowed.
 
