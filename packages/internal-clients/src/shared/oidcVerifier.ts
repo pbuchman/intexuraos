@@ -9,7 +9,7 @@
  * "audience mismatch" without re-parsing.
  */
 
-import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
+import { createRemoteJWKSet, errors as joseErrors, jwtVerify, type JWTVerifyGetKey } from 'jose';
 
 export type GoogleOidcResult =
   | { valid: true; subject: string }
@@ -24,8 +24,9 @@ export interface GoogleOidcVerifierConfig {
 }
 
 const DEFAULT_JWKS = 'https://www.googleapis.com/oauth2/v3/certs';
-// Google issues OIDC ID tokens with one of these issuers; both are valid.
-const GOOGLE_ISSUERS = new Set(['https://accounts.google.com', 'accounts.google.com']);
+// Google issues OIDC ID tokens with one of these issuers; both are valid per
+// https://developers.google.com/identity/openid-connect/openid-connect#id-token-validation
+const GOOGLE_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
 
 export type GoogleOidcVerifier = (
   authHeader: string | undefined // @allow-undefined-type -- function parameter must accept the absent-header case explicitly; ?: only works on object properties
@@ -41,17 +42,22 @@ export function createGoogleOidcVerifier(config: GoogleOidcVerifierConfig): Goog
     }
     const token = authHeader.slice('Bearer '.length);
     try {
-      const { payload } = await jwtVerify(token, jwks as JWTVerifyGetKey);
-      if (payload.aud !== config.audience) {
-        return { valid: false, reason: 'audience_mismatch' };
-      }
-      if (typeof payload.iss !== 'string' || !GOOGLE_ISSUERS.has(payload.iss)) {
-        return { valid: false, reason: 'issuer_mismatch' };
-      }
+      // Pass audience/issuer directly to jose so that array-form `aud` and
+      // multi-issuer matching are handled correctly per RFC 7519 / jose's
+      // typed JWTClaimValidationFailed errors. We map jose's claim-validation
+      // errors back to the public reason taxonomy without leaking internals.
+      const { payload } = await jwtVerify(token, jwks as JWTVerifyGetKey, {
+        audience: config.audience,
+        issuer: GOOGLE_ISSUERS,
+      });
       const email = typeof payload['email'] === 'string' ? payload['email'] : undefined;
       const subject = email ?? payload.sub ?? '';
       return { valid: true, subject };
-    } catch {
+    } catch (err: unknown) {
+      if (err instanceof joseErrors.JWTClaimValidationFailed) {
+        if (err.claim === 'aud') return { valid: false, reason: 'audience_mismatch' };
+        if (err.claim === 'iss') return { valid: false, reason: 'issuer_mismatch' };
+      }
       return { valid: false, reason: 'verification_failed' };
     }
   };

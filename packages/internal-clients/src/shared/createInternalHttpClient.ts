@@ -59,7 +59,9 @@ export interface InternalHttpClient {
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export function createInternalHttpClient(cfg: InternalHttpClientConfig): InternalHttpClient {
-  const baseUrl = cfg.baseUrl.replace(/\/$/, '');
+  // Strip any trailing slashes so callers don't accidentally double-slash
+  // when joining the path. (`'https://svc//'` + `'/foo'` → `'https://svc/foo'`.)
+  const baseUrl = cfg.baseUrl.replace(/\/+$/, '');
   return {
     async request<T>(args: InternalHttpClientRequest): Promise<InternalHttpClientResult<T>> {
       const timeoutMs = args.timeoutMs ?? cfg.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
