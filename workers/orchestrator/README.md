@@ -669,7 +669,7 @@ pnpm typecheck    # Type checking
 ```bash
 # Setup
 ./scripts/setup-worker-network.sh
-cd workers/code-worker && docker build -t code-worker:test -f Dockerfile.test .
+cd docker/code-worker && docker build -t code-worker:test -f Dockerfile.test .
 cd ../orchestrator && pnpm test:e2e
 ```
 

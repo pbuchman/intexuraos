@@ -10,7 +10,7 @@
 
 ## 1. Goal
 
-Unify bootstrap, observability, and Pub/Sub ack/nack semantics across the `workers/` layer by (a) extracting shared primitives into a new `@intexuraos/common-worker` package, (b) migrating the three true Cloud Functions (`log-cleanup`, `transcription`, `vm-lifecycle`) to consume that package, (c) adding a consumer ack/nack contract with DLQ support, (d) fixing `vm-lifecycle`'s internal-auth header format, (e) relocating `workers/code-worker` (container image, not a worker), (f) documenting that `workers/orchestrator` is a VM-hosted Fastify service, not a Cloud Function, and (g) continuing the `task-dispatcher.ts` decomposition plus shutdown-loop fix that were started in prior work.
+Unify bootstrap, observability, and Pub/Sub ack/nack semantics across the `workers/` layer by (a) extracting shared primitives into a new `@intexuraos/common-worker` package, (b) migrating the three true Cloud Functions (`log-cleanup`, `transcription`, `vm-lifecycle`) to consume that package, (c) adding a consumer ack/nack contract with DLQ support, (d) fixing `vm-lifecycle`'s internal-auth header format, (e) relocating `docker/code-worker` (container image, not a worker), (f) documenting that `workers/orchestrator` is a VM-hosted Fastify service, not a Cloud Function, and (g) continuing the `task-dispatcher.ts` decomposition plus shutdown-loop fix that were started in prior work.
 
 ## 2. Non-Goals
 
@@ -193,7 +193,7 @@ Each worker subtask's tests MUST pass against the real package once Subtask 1 me
 | C   | `workers/transcription` migration + DLQ publisher                   | `workers/transcription/**`                                                                                                                          | common-worker contract §3                      |
 | D   | `workers/vm-lifecycle` migration + auth fix + config fix            | `workers/vm-lifecycle/**`                                                                                                                           | common-worker contract §3                      |
 | E   | `workers/orchestrator` task-dispatcher decomposition + shutdown fix | `workers/orchestrator/**`                                                                                                                           | — (no common-worker dep; not a Cloud Function) |
-| F   | `code-worker` move                                                  | `docker/code-worker/**` (new), `workers/code-worker/**` (delete), `cloudbuild.yaml`, `apps/code-agent/src/infra/docker/DockerProvider.ts` image ref | —                                              |
+| F   | `code-worker` move                                                  | `docker/code-worker/**` (new), `docker/code-worker/**` (delete), `cloudbuild.yaml`, `apps/code-agent/src/infra/docker/DockerProvider.ts` image ref | —                                              |
 | G   | Terraform DLQ topics + subscription dead-letter policies            | `terraform/environments/dev/**.tf` (only new DLQ resources), `terraform/modules/**` if a new module is added                                        | Contract §3.3 topic names                      |
 | H   | Documentation + architecture reference                              | `docs/architecture/pubsub-standards.md`, `.claude/reference/architecture.md`                                                                        | Contract §3                                    |
 
@@ -808,21 +808,21 @@ The auth header format change is breaking for any external caller. Audit with `r
 
 ## 11. Subtask F — `code-worker` relocation
 
-**Owner agent:** full write access to `docker/code-worker/**`, `workers/code-worker/**` (for deletion), `cloudbuild.yaml`, and the single DockerProvider image reference.
+**Owner agent:** full write access to `docker/code-worker/**`, `docker/code-worker/**` (for deletion), `cloudbuild.yaml`, and the single DockerProvider image reference.
 
 ### Files
-- Move: `workers/code-worker/**` → `docker/code-worker/**` (preserve contents: Dockerfiles only — there is no `src/` or `package.json`).
-- Modify: Root `cloudbuild.yaml` and/or `workers/code-worker/cloudbuild.yaml` — update build context paths from `workers/code-worker` → `docker/code-worker`.
+- Move: `docker/code-worker/**` → `docker/code-worker/**` (preserve contents: Dockerfiles only — there is no `src/` or `package.json`).
+- Modify: Root `cloudbuild.yaml` and/or `docker/code-worker/cloudbuild.yaml` — update build context paths from `docker/code-worker` → `docker/code-worker`.
 - Modify: The one caller that references the image name/path — locate via `rg -n "code-worker" apps/ workers/ terraform/ cloudbuild.yaml` before editing. Expected hits: `apps/code-agent/src/infra/docker/DockerProvider.ts` (image tag only — path change does NOT affect the image name unless Cloud Build changes the artifact name).
 
 ### Step-by-step
 
-- [ ] **F.1 Audit all references to the `workers/code-worker` path.**
+- [ ] **F.1 Audit all references to the `docker/code-worker` path.**
   ```bash
-  rg -n "workers/code-worker" .
+  rg -n "docker/code-worker" .
   ```
   Record the hit list. Every hit MUST be updated in this subtask.
-- [ ] **F.2 `mkdir -p docker && git mv workers/code-worker docker/code-worker`.**
+- [ ] **F.2 `mkdir -p docker && git mv docker/code-worker docker/code-worker`.**
 - [ ] **F.3 Update every hit from step F.1.**
 - [ ] **F.4 Update `.claude/reference/architecture.md` to reflect that `docker/` is now a top-level folder for container-image-only builds.** (Coordinate with Subtask H to avoid conflict: Subtask F edits only the directory listing; Subtask H edits the deployment-modes section.)
 - [ ] **F.5 Dry-run the cloudbuild.yaml context: `gcloud builds submit --no-source --config=cloudbuild.yaml --dry-run` if available, else diff the YAML and reason about correctness.**
@@ -903,7 +903,7 @@ A single integration PR that merges all eight subtask branches is considered com
 6. Terraform `dev` and `prod` both contain `google_pubsub_topic.transcription_dlq`, `google_pubsub_topic.log_cleanup_dlq`, and `dead_letter_policy` blocks on the corresponding subscriptions.
 7. `wc -l workers/orchestrator/src/services/task-dispatcher.ts` < 400.
 8. `workers/orchestrator/src/main.ts` contains no `while (…await sleep…)` polling and threads an `AbortController` to in-flight handlers.
-9. `docker/code-worker/` exists; `workers/code-worker/` does not; `rg -n "workers/code-worker" .` returns zero matches.
+9. `docker/code-worker/` exists; `docker/code-worker/` does not; `rg -n "docker/code-worker" .` returns zero matches.
 10. `docs/architecture/pubsub-standards.md` contains a "Consumer Contract" section documenting Ack/Nack/DeadLetter.
 11. `.claude/reference/architecture.md` describes three deployment modes (Cloud Run, Cloud Functions, VM-hosted).
 12. `pnpm run ci:tracked` passes at the repo root.
