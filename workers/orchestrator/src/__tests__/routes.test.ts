@@ -1049,7 +1049,10 @@ describe('Routes', () => {
         const timestamp = String(Date.now() - 4 * 60 * 1000); // 4 minutes ago (still valid)
         const nonce = `cache-nonce-${i}`;
         const hexI = i.toString(16).padStart(12, '0');
-        const body = JSON.stringify({ ...taskPayload, taskId: `task_00000000-0000-0000-0000-${hexI}` });
+        const body = JSON.stringify({
+          ...taskPayload,
+          taskId: `task_00000000-0000-0000-0000-${hexI}`,
+        });
         const message = `${timestamp}.${nonce}.${body}`;
         const signature = createHmac('sha256', orchestratorSecret).update(message).digest('hex');
 

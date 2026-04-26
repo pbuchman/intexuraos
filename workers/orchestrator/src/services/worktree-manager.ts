@@ -42,8 +42,7 @@ export class WorktreeManager {
     private readonly logger: Logger,
     execFileFn?: ExecFileFn
   ) {
-    this.execFileFn =
-      execFileFn ?? (defaultExecFileAsync as unknown as ExecFileFn);
+    this.execFileFn = execFileFn ?? (defaultExecFileAsync as unknown as ExecFileFn);
   }
 
   private async withGitLock<T>(fn: () => Promise<T>): Promise<T> {
@@ -104,11 +103,9 @@ export class WorktreeManager {
           });
           // Sync local branch ref so agents that run `git checkout -b <branch> development`
           // pick up the latest commit instead of a stale local ref
-          await this.execFileFn(
-            'git',
-            ['branch', '-f', baseBranch, `origin/${baseBranch}`],
-            { cwd: this.config.repositoryPath }
-          );
+          await this.execFileFn('git', ['branch', '-f', baseBranch, `origin/${baseBranch}`], {
+            cwd: this.config.repositoryPath,
+          });
         } catch (fetchError: unknown) {
           const message = fetchError instanceof Error ? fetchError.message : 'Unknown error';
           this.logger.warn(
@@ -144,14 +141,7 @@ export class WorktreeManager {
 
         const addArgs: readonly string[] =
           useContinuation && continuationPrBranch !== undefined
-            ? [
-                'worktree',
-                'add',
-                '-B',
-                taskId,
-                worktreePath,
-                `origin/${continuationPrBranch}`,
-              ]
+            ? ['worktree', 'add', '-B', taskId, worktreePath, `origin/${continuationPrBranch}`]
             : ['worktree', 'add', '-b', taskId, worktreePath, `origin/${baseBranch}`];
         const { stderr } = await this.execFileFn('git', addArgs, {
           cwd: this.config.repositoryPath,
@@ -214,11 +204,9 @@ export class WorktreeManager {
 
   async listWorktrees(): Promise<string[]> {
     try {
-      const { stdout } = await this.execFileFn(
-        'git',
-        ['worktree', 'list', '--porcelain'],
-        { cwd: this.config.repositoryPath }
-      );
+      const { stdout } = await this.execFileFn('git', ['worktree', 'list', '--porcelain'], {
+        cwd: this.config.repositoryPath,
+      });
 
       const lines = stdout.split('\n').filter((line) => line.length > 0);
       const worktreePaths: string[] = [];
@@ -260,11 +248,9 @@ export class WorktreeManager {
   async isWorktreeRegistered(taskId: string): Promise<boolean> {
     const worktreePath = join(this.config.worktreeBasePath, taskId);
     try {
-      const { stdout } = await this.execFileFn(
-        'git',
-        ['worktree', 'list', '--porcelain'],
-        { cwd: this.config.repositoryPath }
-      );
+      const { stdout } = await this.execFileFn('git', ['worktree', 'list', '--porcelain'], {
+        cwd: this.config.repositoryPath,
+      });
       // Strict equality (not startsWith) so a sibling path like
       // `${worktreePath}-sibling` cannot false-positive as the same entry.
       // Trim trailing whitespace defensively in case git ever emits any.
@@ -310,11 +296,9 @@ export class WorktreeManager {
       );
 
       try {
-        const { stderr } = await this.execFileFn(
-          'git',
-          ['worktree', 'repair', worktreePath],
-          { cwd: this.config.repositoryPath }
-        );
+        const { stderr } = await this.execFileFn('git', ['worktree', 'repair', worktreePath], {
+          cwd: this.config.repositoryPath,
+        });
         // `git worktree repair` prints advisory messages to stderr on success
         // (e.g. "repair: ..."); treat non-empty stderr as informational unless
         // it contains a fatal marker.

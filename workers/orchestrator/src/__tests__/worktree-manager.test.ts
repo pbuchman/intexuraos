@@ -103,7 +103,9 @@ describe('WorktreeManager', () => {
           c.args.length === 3
       );
       expect(fetchContCall).toBeDefined();
-      const addCall = calls.find((c) => c.file === 'git' && c.args[0] === 'worktree' && c.args[1] === 'add');
+      const addCall = calls.find(
+        (c) => c.file === 'git' && c.args[0] === 'worktree' && c.args[1] === 'add'
+      );
       expect(addCall?.args).toEqual([
         'worktree',
         'add',
@@ -276,7 +278,7 @@ describe('WorktreeManager', () => {
           args.length === 3
         ) {
           throw new Error(
-            'Command failed: git fetch origin feature/int-1561\nfatal: couldn\'t find remote ref feature/int-1561\n'
+            "Command failed: git fetch origin feature/int-1561\nfatal: couldn't find remote ref feature/int-1561\n"
           );
         }
         if (file === 'git' && args[0] === 'worktree' && args[1] === 'add') {
@@ -302,7 +304,9 @@ describe('WorktreeManager', () => {
         }),
         expect.stringContaining('Continuation PR branch no longer exists on origin')
       );
-      const addCall = calls.find((c) => c.file === 'git' && c.args[0] === 'worktree' && c.args[1] === 'add');
+      const addCall = calls.find(
+        (c) => c.file === 'git' && c.args[0] === 'worktree' && c.args[1] === 'add'
+      );
       expect(addCall?.args).toEqual([
         'worktree',
         'add',
@@ -485,6 +489,14 @@ describe('WorktreeManager', () => {
       warnSpy.mockRestore();
     });
 
+    it('constructs with default execFileFn when not injected', () => {
+      // Coverage: hit the `?? defaultExecFileAsync` arm of the constructor.
+      // We don't call any methods (which would actually shell out); we only
+      // verify the constructor accepts no exec injection.
+      const manager = new WorktreeManager(mockConfig, mockLogger);
+      expect(manager).toBeInstanceOf(WorktreeManager);
+    });
+
     it('passes baseBranch as literal argv to git fetch (no shell expansion)', async () => {
       const calls: { file: string; args: readonly string[] }[] = [];
       const execFile: ExecFileFn = async (file, args) => {
@@ -499,10 +511,7 @@ describe('WorktreeManager', () => {
       // assertSafeBranchName rejects shell metacharacters; the security guarantee
       // is provided by argv-form spawn — see baseBranch fetch call below.
       const baseBranch = 'feat-x.0_release/test';
-      await manager.createWorktree(
-        'task-argv-base',
-        baseBranch
-      );
+      await manager.createWorktree('task-argv-base', baseBranch);
       const fetchCall = calls.find(
         (c) => c.file === 'git' && c.args[0] === 'fetch' && c.args[1] === 'origin'
       );
@@ -911,7 +920,10 @@ describe('WorktreeManager - git stderr error handling', () => {
   });
 
   it('should not throw when git worktree add returns "Preparing worktree" stderr', async () => {
-    const execFile: ExecFileFn = async (file, args): Promise<{ stdout: string; stderr: string }> => {
+    const execFile: ExecFileFn = async (
+      file,
+      args
+    ): Promise<{ stdout: string; stderr: string }> => {
       if (file === 'git' && args[0] === 'worktree' && args[1] === 'add') {
         // Simulate creation
         const wt = args[4];
