@@ -8,9 +8,14 @@
  *
  * Repo-level (`--local`) config takes precedence over everything in a
  * worktree — {@link readRepoGitConfig} surfaces it so callers can warn.
+ *
+ * SECURITY: Both helpers shell out via `execFileSync` (argv form, no `/bin/sh`)
+ * so callers cannot accidentally inject shell metacharacters via `key` or
+ * `repoPath`. `repoPath` is additionally constrained to absolute paths.
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+import { isAbsolute } from 'node:path';
 
 const GIT_CONFIG_TIMEOUT_MS = 5000;
 
@@ -19,10 +24,9 @@ const GIT_CONFIG_TIMEOUT_MS = 5000;
  * when unset or git is unavailable. Swallows errors — git config is a
  * best-effort lookup, not a hard dependency.
  */
-/* v8 ignore start -- module-init: shells out to `git config` at startup; not mockable without broad module mocking @preserve */
 export function readHostGitConfig(key: string): string | undefined {
   try {
-    const value = execSync(`git config ${key}`, {
+    const value = execFileSync('git', ['config', key], {
       encoding: 'utf-8',
       timeout: GIT_CONFIG_TIMEOUT_MS,
     }).trim();
@@ -38,8 +42,11 @@ export function readHostGitConfig(key: string): string | undefined {
  * passed to worker containers.
  */
 export function readRepoGitConfig(repoPath: string, key: string): string | undefined {
+  if (!isAbsolute(repoPath)) {
+    return undefined;
+  }
   try {
-    const value = execSync(`git -C ${repoPath} config --local ${key}`, {
+    const value = execFileSync('git', ['-C', repoPath, 'config', '--local', key], {
       encoding: 'utf-8',
       timeout: GIT_CONFIG_TIMEOUT_MS,
     }).trim();
@@ -48,4 +55,3 @@ export function readRepoGitConfig(repoPath: string, key: string): string | undef
     return undefined;
   }
 }
-/* v8 ignore stop @preserve */
