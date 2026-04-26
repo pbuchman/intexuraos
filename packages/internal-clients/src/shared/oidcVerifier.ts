@@ -15,11 +15,7 @@ export type GoogleOidcResult =
   | { valid: true; subject: string }
   | {
       valid: false;
-      reason:
-        | 'missing_bearer'
-        | 'audience_mismatch'
-        | 'issuer_mismatch'
-        | 'verification_failed';
+      reason: 'missing_bearer' | 'audience_mismatch' | 'issuer_mismatch' | 'verification_failed';
     };
 
 export interface GoogleOidcVerifierConfig {
@@ -29,18 +25,13 @@ export interface GoogleOidcVerifierConfig {
 
 const DEFAULT_JWKS = 'https://www.googleapis.com/oauth2/v3/certs';
 // Google issues OIDC ID tokens with one of these issuers; both are valid.
-const GOOGLE_ISSUERS = new Set([
-  'https://accounts.google.com',
-  'accounts.google.com',
-]);
+const GOOGLE_ISSUERS = new Set(['https://accounts.google.com', 'accounts.google.com']);
 
 export type GoogleOidcVerifier = (
   authHeader: string | undefined // @allow-undefined-type -- function parameter must accept the absent-header case explicitly; ?: only works on object properties
 ) => Promise<GoogleOidcResult>;
 
-export function createGoogleOidcVerifier(
-  config: GoogleOidcVerifierConfig
-): GoogleOidcVerifier {
+export function createGoogleOidcVerifier(config: GoogleOidcVerifierConfig): GoogleOidcVerifier {
   const jwks = createRemoteJWKSet(new URL(config.jwksUrl ?? DEFAULT_JWKS));
   return async function verify(
     authHeader: string | undefined // @allow-undefined-type -- function parameter must accept the absent-header case explicitly; ?: only works on object properties
@@ -54,14 +45,10 @@ export function createGoogleOidcVerifier(
       if (payload.aud !== config.audience) {
         return { valid: false, reason: 'audience_mismatch' };
       }
-      if (
-        typeof payload.iss !== 'string' ||
-        !GOOGLE_ISSUERS.has(payload.iss)
-      ) {
+      if (typeof payload.iss !== 'string' || !GOOGLE_ISSUERS.has(payload.iss)) {
         return { valid: false, reason: 'issuer_mismatch' };
       }
-      const email =
-        typeof payload['email'] === 'string' ? payload['email'] : undefined;
+      const email = typeof payload['email'] === 'string' ? payload['email'] : undefined;
       const subject = email ?? payload.sub ?? '';
       return { valid: true, subject };
     } catch {

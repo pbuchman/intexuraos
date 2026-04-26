@@ -43,9 +43,7 @@ export function validateInternalAuth(request: FastifyRequest): InternalAuthResul
 
   const previous = process.env[ENV_PREVIOUS] ?? '';
   if (previous !== '' && authHeader === previous) {
-    request.log.warn(
-      'Internal auth: PREVIOUS token accepted (rotation window active)'
-    );
+    request.log.warn('Internal auth: PREVIOUS token accepted (rotation window active)');
     return { valid: true, tokenUsed: 'previous' };
   }
 
