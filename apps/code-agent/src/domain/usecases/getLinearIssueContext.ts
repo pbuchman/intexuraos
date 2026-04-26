@@ -1,7 +1,5 @@
-import {
-  resolvePlanDocumentPathFromLinearContext,
-  type Logger,
-} from '@intexuraos/common-core';
+import { type Logger } from '@intexuraos/common-core';
+import { resolvePlanDocumentPathFromLinearContext } from '@intexuraos/code-task-domain';
 import type { LinearAgentClient, IssueContext } from '../ports/linearAgentClient.js';
 
 export interface GetLinearIssueContextDeps {

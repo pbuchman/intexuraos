@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Send, Loader2 } from 'lucide-react';
-import type { CodeTaskWorkerType } from '@intexuraos/common-core/code-task-worker-types';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain/worker-types';
 import type { TaskMode } from '@/types';
 import { formatSchedulePreview } from '@/utils/scheduledDispatch';
 import { Button } from './ui/Button.js';
