@@ -301,9 +301,9 @@ The Fastify `setErrorHandler` in `packages/http-server` MUST:
 
 ---
 
-## Notes on `workers/code-worker`
+## Notes on `docker/code-worker`
 
-`workers/code-worker` is a Docker image (no Node entry point) executed by the orchestrator to run the Claude CLI inside isolated containers. The "observability" for this worker lives inside the **orchestrator** (S5) where container stdout is forwarded via `log-forwarder.ts`. No separate subtask is needed — S5 ensures that forwarded logs carry the orchestrator's `requestId` and flow through the same Sentry/OTel pipeline.
+`docker/code-worker` is a Docker image (no Node entry point) executed by the orchestrator to run the Claude CLI inside isolated containers. The "observability" for this worker lives inside the **orchestrator** (S5) where container stdout is forwarded via `log-forwarder.ts`. No separate subtask is needed — S5 ensures that forwarded logs carry the orchestrator's `requestId` and flow through the same Sentry/OTel pipeline.
 
 ---
 

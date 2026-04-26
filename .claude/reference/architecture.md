@@ -16,6 +16,7 @@ packages/
   common-*/   → Leaf packages (Result types, HTTP helpers)
   infra-*/    → External service wrappers
 terraform/    → Infrastructure as code
+docker/       → Container images (code-worker, etc.)
 docs/         → Documentation
 ```
 

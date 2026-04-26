@@ -394,7 +394,7 @@ pnpm --filter orchestrator typecheck
 Build the test image first:
 
 ```bash
-cd workers/code-worker
+cd docker/code-worker
 docker build -t code-worker:test -f Dockerfile.test .
 cd ../..
 ```
