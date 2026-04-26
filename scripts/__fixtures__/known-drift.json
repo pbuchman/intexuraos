@@ -1,0 +1,32 @@
+{
+  "_doc": "Allowlist of pre-existing drift in Terraform↔code↔ecosystem↔Secret Manager parity. Items here MUST link to a parent issue/subtask that will remove them. CI must STILL fail if a NEW item shows up that is not in this list.",
+  "terraformEnvConsumers": {
+    "INTEXURAOS_RUNTIME": "INT-1536 Subtask F — runtime tag, surfaced in COMMON_SERVICE_ENV but not literally referenced in *.ts (read via process.env at startup wrapper)",
+    "INTEXURAOS_API_DOCS_HUB_URL": "INT-1536 Subtask C — api-docs-hub URL exposed for future consumers; will be wired in Subtask C",
+    "INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC": "INT-1536 Subtask F — dead env var, removed when orphan cleanup ships",
+    "INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC": "INT-1536 Subtask F — calendar preview topic provisioned for actions-agent but not yet wired in code"
+  },
+  "ecosystemCoverage": {
+    "missingEcosystemEntry": {
+      "intexuraos-api-docs-hub": "INT-1536 Subtask C — api-docs-hub will be added to ecosystem.config.cjs"
+    },
+    "missingValidateRequiredEnv": {
+      "apps/api-docs-hub": "INT-1536 Subtask C — api-docs-hub will gain validateRequiredEnv()"
+    }
+  },
+  "terraformSecretMounts": {
+    "INTEXURAOS_AUTH0_SPA_CLIENT_ID": "INT-1536 Subtask F — orphan, web-only secret (web app consumes via baked envs not Cloud Run mount)",
+    "INTEXURAOS_FIREBASE_PROJECT_ID": "INT-1536 Subtask F — orphan, surfaced via baked envs not mounts",
+    "INTEXURAOS_FIREBASE_API_KEY": "INT-1536 Subtask F — orphan, surfaced via baked envs not mounts",
+    "INTEXURAOS_FIREBASE_AUTH_DOMAIN": "INT-1536 Subtask F — orphan, surfaced via baked envs not mounts",
+    "INTEXURAOS_SSL_PRIVATE_KEY": "INT-1536 Subtask F — orphan, infra-only secret (web_app module consumes secret_id, not mounted as env)",
+    "INTEXURAOS_SENTRY_DSN_WEB": "INT-1536 Subtask F — orphan, web-only secret",
+    "INTEXURAOS_MIMO_APP_API_KEY": "INT-1536 Subtask F — orphan, used by orchestrator worker container only",
+    "INTEXURAOS_LINEAR_API_KEY": "INT-1536 Subtask F — orphan, passed directly to code worker containers (not Cloud Run mount)",
+    "INTEXURAOS_SENTRY_AUTH_TOKEN": "INT-1536 Subtask F — orphan, passed directly to code worker containers (not Cloud Run mount)",
+    "INTEXURAOS_GITHUB_APP_PRIVATE_KEY": "INT-1536 Subtask F — orphan, used by code worker container only",
+    "INTEXURAOS_GITHUB_APP_ID": "INT-1536 Subtask F — orphan, used by code worker container only",
+    "INTEXURAOS_GITHUB_INSTALLATION_ID": "INT-1536 Subtask F — orphan, used by code worker container only",
+    "INTEXURAOS_REPOSITORY_URL": "INT-1536 Subtask F — orphan, used by orchestrator only"
+  }
+}
