@@ -124,10 +124,7 @@ describe('createInternalHttpClient', () => {
   });
 
   it('AbortError → TIMEOUT when defaultTimeoutMs exceeded', async () => {
-    nock(BASE)
-      .get('/slow')
-      .delay(150)
-      .reply(200, { success: true, data: 'ok' });
+    nock(BASE).get('/slow').delay(150).reply(200, { success: true, data: 'ok' });
 
     const client = createInternalHttpClient({
       baseUrl: BASE,
@@ -170,6 +167,34 @@ describe('createInternalHttpClient', () => {
     }
   });
 
+  it("network failure with messageless error → NETWORK_ERROR with 'unknown' message", async () => {
+    // fetch can in principle throw any value; if it lacks `.message`, the
+    // helper falls back to the literal 'unknown'. Exercises the
+    // `error.message ?? 'unknown'` branch.
+    const messagelessError: { message?: string } = {};
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
+      throw messagelessError;
+    });
+    try {
+      const client = createInternalHttpClient({
+        baseUrl: BASE,
+        token: 'secret',
+        logger: noopLogger,
+      });
+      const result = await client.request<unknown>({
+        method: 'GET',
+        path: '/no-msg',
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+        expect(result.error.message).toBe('unknown');
+      }
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
   it('malformed envelope (non-object body) → MALFORMED_ENVELOPE', async () => {
     // Reply with JSON-encoded string so response.json() parses successfully
     // to a primitive that fails the `{success, ...}` shape check.
@@ -193,10 +218,12 @@ describe('createInternalHttpClient', () => {
   });
 
   it('envelope error path → ENVELOPE_ERROR', async () => {
-    nock(BASE).get('/err').reply(200, {
-      success: false,
-      error: { code: 'X', message: 'm' },
-    });
+    nock(BASE)
+      .get('/err')
+      .reply(200, {
+        success: false,
+        error: { code: 'X', message: 'm' },
+      });
 
     const client = createInternalHttpClient({
       baseUrl: BASE,
@@ -214,10 +241,7 @@ describe('createInternalHttpClient', () => {
   });
 
   it('extraHeaders are propagated to the outbound request', async () => {
-    nock(BASE)
-      .get('/h')
-      .matchHeader('x-foo', 'bar')
-      .reply(200, { success: true, data: 'ok' });
+    nock(BASE).get('/h').matchHeader('x-foo', 'bar').reply(200, { success: true, data: 'ok' });
 
     const client = createInternalHttpClient({
       baseUrl: BASE,
@@ -233,9 +257,7 @@ describe('createInternalHttpClient', () => {
   });
 
   it('normalizes a trailing slash on baseUrl', async () => {
-    nock(BASE)
-      .get('/internal/foo')
-      .reply(200, { success: true, data: 'ok' });
+    nock(BASE).get('/internal/foo').reply(200, { success: true, data: 'ok' });
 
     const client = createInternalHttpClient({
       baseUrl: `${BASE}/`,

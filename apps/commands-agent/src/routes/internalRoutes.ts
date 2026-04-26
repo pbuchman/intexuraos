@@ -211,7 +211,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         bodyPreviewLength: 200,
       });
 
-      const authResult = authenticateInternalScheduler(request);
+      const authResult = await authenticateInternalScheduler(request);
 
       if (!authResult.authenticated) {
         request.log.warn({ reason: 'auth_failed' }, 'Internal auth failed for retry-pending');
