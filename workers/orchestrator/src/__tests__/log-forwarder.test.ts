@@ -410,22 +410,27 @@ describe('LogForwarder', () => {
       expect(allChunks[1]?.content).toContain('short line');
     });
 
-    it('should chunk by time every 3 seconds', { timeout: 10000 }, async () => {
-      const forwarder = createMockForwarder();
-      captureUploadedChunks();
+    it('should chunk by time every 3 seconds', async () => {
+      vi.useFakeTimers();
+      try {
+        const forwarder = createMockForwarder();
+        captureUploadedChunks();
 
-      const logFile = join(logBasePath, 'task-time.log');
-      forwarder.startForwarding('task-time', logFile);
+        const logFile = join(logBasePath, 'task-time.log');
+        forwarder.startForwarding('task-time', logFile);
 
-      writeFileSync(logFile, 'Small content\n');
+        writeFileSync(logFile, 'Small content\n');
 
-      // Wait for timer-triggered flush
-      await new Promise((resolve) => setTimeout(resolve, 4 * 1000));
+        // Advance through one CHUNK_INTERVAL_MS (3s) flush plus slack
+        await vi.advanceTimersByTimeAsync(4 * 1000);
 
-      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-time');
-      expect(taskUploads.length).toBeGreaterThan(0);
+        const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-time');
+        expect(taskUploads.length).toBeGreaterThan(0);
 
-      await forwarder.stopForwarding('task-time');
+        await forwarder.stopForwarding('task-time');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should truncate chunks larger than 64KB and preserve tail', async () => {
@@ -457,42 +462,45 @@ describe('LogForwarder', () => {
   describe('size limits', () => {
     it('should stop uploading formatted chunks after 8MB total', async () => {
       vi.useFakeTimers();
-      const warnSpy = mockLogger.warn as ReturnType<typeof vi.fn>;
-      warnSpy.mockClear();
+      try {
+        const warnSpy = mockLogger.warn as ReturnType<typeof vi.fn>;
+        warnSpy.mockClear();
 
-      const forwarder = createMockForwarder();
-      captureUploadedChunks();
+        const forwarder = createMockForwarder();
+        captureUploadedChunks();
 
-      // Use appendChunk (Docker mode) for deterministic control
-      forwarder.registerTask('task-size', 'secret');
-      forwarder.appendChunk('task-size', 'init\n');
-      await forwarder.flush('task-size');
+        // Use appendChunk (Docker mode) for deterministic control
+        forwarder.registerTask('task-size', 'secret');
+        forwarder.appendChunk('task-size', 'init\n');
+        await forwarder.flush('task-size');
 
-      // Push totalBytes past the 8MB cap so the next non-force flush
-      // exercises the limit guard in flushBuffer.
-      const forwarders = (forwarder as unknown as Record<string, unknown>)['forwarders'] as Map<
-        string,
-        { totalBytes: number; timer: NodeJS.Timeout | null }
-      >;
-      const state = forwarders.get('task-size');
-      if (state !== undefined) {
-        state.totalBytes = 8 * 1024 * 1024 + 1;
+        // Push totalBytes past the 8MB cap so the next non-force flush
+        // exercises the limit guard in flushBuffer.
+        const forwarders = (forwarder as unknown as Record<string, unknown>)['forwarders'] as Map<
+          string,
+          { totalBytes: number; timer: NodeJS.Timeout | null }
+        >;
+        const state = forwarders.get('task-size');
+        if (state !== undefined) {
+          state.totalBytes = 8 * 1024 * 1024 + 1;
+        }
+
+        // Append more content — a timer-triggered (non-force) flush should drop it
+        forwarder.appendChunk('task-size', 'should-be-dropped\n');
+        await vi.advanceTimersByTimeAsync(3100); // CHUNK_INTERVAL_MS = 3000
+
+        // Verify the cap was hit: warn logged and chunk dropped
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ taskId: 'task-size' }),
+          'Max total log size reached, stopping uploads'
+        );
+        expect(forwarder.getDroppedChunkCount('task-size')).toBeGreaterThan(0);
+
+        // Clean up timer
+        if (state?.timer !== null && state?.timer !== undefined) clearInterval(state.timer);
+      } finally {
+        vi.useRealTimers();
       }
-
-      // Append more content — a timer-triggered (non-force) flush should drop it
-      forwarder.appendChunk('task-size', 'should-be-dropped\n');
-      await vi.advanceTimersByTimeAsync(3100); // CHUNK_INTERVAL_MS = 3000
-
-      // Verify the cap was hit: warn logged and chunk dropped
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: 'task-size' }),
-        'Max total log size reached, stopping uploads'
-      );
-      expect(forwarder.getDroppedChunkCount('task-size')).toBeGreaterThan(0);
-
-      // Clean up timer
-      if (state?.timer !== null && state?.timer !== undefined) clearInterval(state.timer);
-      vi.useRealTimers();
     });
   });
 
