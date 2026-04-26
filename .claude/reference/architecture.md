@@ -19,17 +19,19 @@ terraform/    → Infrastructure as code
 docs/         → Documentation
 ```
 
-## Apps vs Workers
+## Apps vs Workers vs VM-Hosted Services
 
-| Aspect      | Apps                          | Workers                                  |
-| ----------- | ----------------------------- | ---------------------------------------- |
-| Deploy      | Cloud Run                     | Cloud Functions                          |
-| Framework   | Fastify                       | Cloud Functions Framework                |
-| Scaling     | Min 0, persistent connections | Scale to zero, event-driven              |
-| Entry Point | `server.ts`                   | `index.ts` with `functions.cloudEvent()` |
-| DI Pattern  | Full `services.ts` container  | Lightweight, direct dependency injection |
-| Dockerfile  | Yes (multi-stage esbuild)     | No (zip deployment)                      |
-| Coverage    | 95% required                  | 95% required                             |
+The monorepo has three deployment modes: Cloud Run apps, Cloud Functions workers, and VM-hosted long-running services. `workers/orchestrator` is an example of the third mode — a long-running Fastify service supervised by PM2 on a VM, NOT a Cloud Function — even though it lives under `workers/`.
+
+| Aspect      | Cloud Run Apps                | Cloud Functions Workers (`log-cleanup`, `transcription`, `vm-lifecycle`) | VM-Hosted Services (`workers/orchestrator`)                               |
+| ----------- | ----------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Deploy      | Cloud Run                     | Cloud Functions                                                          | PM2 on VM (`home-dev` for dev; production VM for prod)                    |
+| Framework   | Fastify                       | Cloud Functions Framework                                                | Fastify                                                                   |
+| Scaling     | Min 0, persistent connections | Scale to zero, event-driven                                              | long-running, single-process                                              |
+| Entry Point | `server.ts`                   | `index.ts` with `functions.cloudEvent()`                                 | `main.ts` (Fastify `app.listen`)                                          |
+| DI Pattern  | Full `services.ts` container  | Lightweight, direct dependency injection                                 | lightweight, direct dependency injection (own logger, own env validation) |
+| Dockerfile  | Yes (multi-stage esbuild)     | No (zip deployment)                                                      | No (PM2-managed via `ecosystem.config.cjs`)                               |
+| Coverage    | 95% required                  | 95% required                                                             | 95% required                                                              |
 
 ## CodeTask Linear Data
 
