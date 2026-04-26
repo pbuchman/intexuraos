@@ -9,7 +9,7 @@ describe('<Modal/>', () => {
 
   it('renders children with aria-modal when open', () => {
     render(
-      <Modal open onOpenChange={() => {}} title="Hi">
+      <Modal open onOpenChange={vi.fn()} title="Hi">
         <div>body</div>
       </Modal>
     );
@@ -20,7 +20,7 @@ describe('<Modal/>', () => {
 
   it('renders description when provided', () => {
     render(
-      <Modal open onOpenChange={() => {}} title="Hi" description="A subtitle">
+      <Modal open onOpenChange={vi.fn()} title="Hi" description="A subtitle">
         <div>body</div>
       </Modal>
     );
@@ -29,7 +29,7 @@ describe('<Modal/>', () => {
 
   it('does not render dialog content when closed', () => {
     render(
-      <Modal open={false} onOpenChange={() => {}} title="Hi">
+      <Modal open={false} onOpenChange={vi.fn()} title="Hi">
         <div>body</div>
       </Modal>
     );
