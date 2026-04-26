@@ -146,6 +146,7 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_IMAGE_PUBLIC_BASE_URL ?? 'http://localhost:3000',
   },
   'commands-agent': {
+    INTEXURAOS_SERVICE_URL: 'http://localhost:8117',
     INTEXURAOS_PUBSUB_ACTIONS_QUEUE: process.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE ?? 'actions-queue',
   },
   'todos-agent': {

@@ -17,6 +17,7 @@
 
 import { FieldValue } from '@google-cloud/firestore';
 import type { CollectionReference, DocumentData, WriteResult } from '@google-cloud/firestore';
+import { IntexuraOSError } from '@intexuraos/common-core';
 
 /**
  * In-memory document storage.
@@ -561,7 +562,10 @@ class FakeDocumentReference {
     const collection = this.store.get(this.collectionName);
     const existing = collection?.get(this.docId);
     if (existing === undefined) {
-      throw new Error(`Document ${this.collectionName}/${this.docId} does not exist`);
+      throw new IntexuraOSError(
+        'NOT_FOUND',
+        `Document ${this.collectionName}/${this.docId} does not exist`
+      );
     }
     const updated = { ...existing } as Record<string, unknown>;
     for (const key of Object.keys(data)) {
@@ -725,7 +729,10 @@ class FakeTransaction {
     const existing = this.pendingWrites.get(key)?.data ?? collection?.get(docRef.id);
 
     if (existing === undefined) {
-      throw new Error(`Document ${docRef._collectionName}/${docRef.id} does not exist`);
+      throw new IntexuraOSError(
+        'NOT_FOUND',
+        `Document ${docRef._collectionName}/${docRef.id} does not exist`
+      );
     }
 
     const updated = { ...existing } as Record<string, unknown>;

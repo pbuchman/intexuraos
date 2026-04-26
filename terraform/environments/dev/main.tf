@@ -667,7 +667,11 @@ module "pubsub_srt_transcription_completed" {
 }
 
 # Topic for audio stored events (whatsapp-service → transcription Cloud Function)
-# No push subscription needed — the Cloud Function subscribes via event trigger.
+# Delivery is via an explicit push subscription (defined below) so we can attach
+# a dead_letter_policy. Cloud Functions Gen2 event triggers create their own
+# Eventarc-managed subscription that cannot have a dead_letter_policy attached
+# via Terraform — hence the function is HTTP-triggered and we wire the push
+# subscription manually.
 resource "google_pubsub_topic" "audio_stored" {
   name    = "intexuraos-audio-stored-${var.environment}"
   project = var.project_id
@@ -682,6 +686,57 @@ resource "google_pubsub_topic_iam_member" "whatsapp_publishes_audio_stored" {
   topic   = google_pubsub_topic.audio_stored.name
   role    = "roles/pubsub.publisher"
   member  = "serviceAccount:${module.iam.service_accounts["whatsapp_service"]}"
+}
+
+# Dead-letter topic for transcription audio-stored consumer (Subtask G of
+# docs/plans/2026-04-24-workers-layer-refactor.md). Messages land here when
+# Pub/Sub gives up redelivering after max_delivery_attempts on the push
+# subscription, OR when the transcription worker explicitly publishes a parse
+# failure via INTEXURAOS_PUBSUB_TRANSCRIPTION_DLQ_TOPIC (Subtask C).
+resource "google_pubsub_topic" "transcription_dlq" {
+  name    = "intexuraos-transcription-audio-stored-dlq-${var.environment}"
+  project = var.project_id
+  labels  = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
+# Pub/Sub service agent must be able to publish to the DLQ topic for the
+# subscription-level dead_letter_policy to function.
+resource "google_pubsub_topic_iam_member" "pubsub_publishes_transcription_dlq" {
+  project = var.project_id
+  topic   = google_pubsub_topic.transcription_dlq.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:service-${local.project_number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
+
+# Grant the transcription Cloud Function SA permission to publish to its DLQ
+# topic. This supports the application-level DLQ publisher implemented in
+# Subtask C (workers/transcription/src/dlq-publisher.ts).
+resource "google_pubsub_topic_iam_member" "transcription_publishes_dlq" {
+  project = var.project_id
+  topic   = google_pubsub_topic.transcription_dlq.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.transcription_function.email}"
+}
+
+# DLQ inspection subscription — pull subscription with 7-day retention for
+# manual / tooling-driven incident review. Per parent plan §5, this is the
+# anchor for a future BigQuery log sink.
+resource "google_pubsub_subscription" "transcription_dlq_inspect" {
+  name    = "intexuraos-transcription-audio-stored-dlq-${var.environment}-inspect"
+  topic   = google_pubsub_topic.transcription_dlq.id
+  project = var.project_id
+  labels  = local.common_labels
+
+  ack_deadline_seconds       = 600
+  message_retention_duration = "604800s" # 7 days
+
+  expiration_policy {
+    ttl = ""
+  }
+
+  depends_on = [google_pubsub_topic.transcription_dlq]
 }
 
 # Topic for commands ingest (whatsapp -> commands-agent)
@@ -1174,6 +1229,7 @@ module "commands_agent" {
   secrets = local.common_service_secrets
 
   env_vars = merge(local.common_service_env_vars, {
+    INTEXURAOS_SERVICE_URL          = "https://${local.services.commands_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_PUBSUB_ACTIONS_QUEUE = "intexuraos-actions-queue-${var.environment}"
   })
 
@@ -2556,7 +2612,9 @@ resource "google_cloud_scheduler_job" "vm_stop" {
 # Cloud Functions - Log Cleanup (90-day retention)
 # -----------------------------------------------------------------------------
 
-# Pub/Sub topic for log cleanup trigger
+# Pub/Sub topic for log cleanup trigger.
+# Delivery is via an explicit push subscription (defined below) so we can
+# attach a dead_letter_policy. See audio_stored above for the rationale.
 resource "google_pubsub_topic" "log_cleanup" {
   name    = "intexuraos-log-cleanup-${var.environment}"
   project = var.project_id
@@ -2571,6 +2629,45 @@ resource "google_pubsub_topic_iam_member" "scheduler_publishes_log_cleanup" {
   topic   = google_pubsub_topic.log_cleanup.name
   role    = "roles/pubsub.publisher"
   member  = "serviceAccount:${google_service_account.cloud_scheduler.email}"
+}
+
+# Dead-letter topic for log-cleanup consumer (Subtask G). Subscription-level
+# DLQ acts as defense-in-depth: even though log-cleanup has no application-
+# level DLQ publisher (Subtask B treats failure as Nack-and-redeliver), Pub/Sub
+# will forward to log_cleanup_dlq after max_delivery_attempts so we don't lose
+# visibility into chronically failing scheduled runs.
+resource "google_pubsub_topic" "log_cleanup_dlq" {
+  name    = "intexuraos-log-cleanup-dlq-${var.environment}"
+  project = var.project_id
+  labels  = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
+# Pub/Sub service agent must be able to publish to the DLQ topic for the
+# subscription-level dead_letter_policy to function.
+resource "google_pubsub_topic_iam_member" "pubsub_publishes_log_cleanup_dlq" {
+  project = var.project_id
+  topic   = google_pubsub_topic.log_cleanup_dlq.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:service-${local.project_number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
+
+# DLQ inspection subscription (mirrors transcription_dlq_inspect).
+resource "google_pubsub_subscription" "log_cleanup_dlq_inspect" {
+  name    = "intexuraos-log-cleanup-dlq-${var.environment}-inspect"
+  topic   = google_pubsub_topic.log_cleanup_dlq.id
+  project = var.project_id
+  labels  = local.common_labels
+
+  ack_deadline_seconds       = 600
+  message_retention_duration = "604800s" # 7 days
+
+  expiration_policy {
+    ttl = ""
+  }
+
+  depends_on = [google_pubsub_topic.log_cleanup_dlq]
 }
 
 module "function_log_cleanup" {
@@ -2588,8 +2685,9 @@ module "function_log_cleanup" {
   source_object   = "log-cleanup/function.zip"
   service_account = google_service_account.cloud_functions.email
 
-  trigger_type = "pubsub"
-  pubsub_topic = google_pubsub_topic.log_cleanup.id
+  # See function_transcription above for rationale on HTTP + push subscription.
+  trigger_type    = "http"
+  invoker_members = ["serviceAccount:${google_service_account.cloud_functions.email}"]
 
   timeout_seconds  = 540
   available_memory = "512M"
@@ -2612,6 +2710,51 @@ module "function_log_cleanup" {
     google_service_account.cloud_functions,
     google_pubsub_topic.log_cleanup,
     google_secret_manager_secret_iam_member.functions_internal_auth_token,
+  ]
+}
+
+# Push subscription that delivers log-cleanup events to the log-cleanup
+# Cloud Function with a dead_letter_policy.
+resource "google_pubsub_subscription" "log_cleanup_push" {
+  name    = "intexuraos-log-cleanup-${var.environment}-push"
+  topic   = google_pubsub_topic.log_cleanup.id
+  project = var.project_id
+  labels  = local.common_labels
+
+  ack_deadline_seconds       = 600 # 10 minutes — matches function timeout
+  message_retention_duration = "604800s"
+
+  push_config {
+    push_endpoint = module.function_log_cleanup.function_uri
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_functions.email
+      audience              = module.function_log_cleanup.function_uri
+    }
+
+    attributes = {
+      x-goog-version = "v1"
+    }
+  }
+
+  retry_policy {
+    minimum_backoff = "10s"
+    maximum_backoff = "600s"
+  }
+
+  dead_letter_policy {
+    dead_letter_topic     = google_pubsub_topic.log_cleanup_dlq.id
+    max_delivery_attempts = 5
+  }
+
+  expiration_policy {
+    ttl = ""
+  }
+
+  depends_on = [
+    module.function_log_cleanup,
+    google_pubsub_topic.log_cleanup_dlq,
+    google_pubsub_topic_iam_member.pubsub_publishes_log_cleanup_dlq,
   ]
 }
 
@@ -2737,8 +2880,15 @@ module "function_transcription" {
   source_object   = "transcription/function.zip"
   service_account = google_service_account.transcription_function.email
 
-  trigger_type = "pubsub"
-  pubsub_topic = google_pubsub_topic.audio_stored.id
+  # HTTP trigger + Pub/Sub push subscription (see audio_stored_push below).
+  # We do NOT use the cloud-function module's pubsub event trigger here because
+  # Cloud Functions Gen2 auto-creates the underlying Eventarc subscription and
+  # Terraform cannot attach a dead_letter_policy to it. Routing via an
+  # explicitly-managed push subscription is the only way to satisfy Subtask G's
+  # acceptance criterion that "the target subscription has a dead_letter_policy
+  # block".
+  trigger_type    = "http"
+  invoker_members = ["serviceAccount:${google_service_account.transcription_function.email}"]
 
   timeout_seconds    = 540 # 9 minutes - max for Gen2 Cloud Functions
   available_memory   = "512M"
@@ -2748,6 +2898,7 @@ module "function_transcription" {
     INTEXURAOS_ENVIRONMENT                          = var.environment
     INTEXURAOS_GCP_PROJECT_ID                       = var.project_id
     INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC = module.pubsub_transcription_completed.topic_name
+    INTEXURAOS_PUBSUB_TRANSCRIPTION_DLQ_TOPIC       = google_pubsub_topic.transcription_dlq.name
     INTEXURAOS_USER_SERVICE_URL                     = "https://${local.services.user_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_WHATSAPP_MEDIA_BUCKET                = module.whatsapp_media_bucket.bucket_name
   }
@@ -2765,12 +2916,59 @@ module "function_transcription" {
     google_storage_bucket_object.function_placeholder,
     google_service_account.transcription_function,
     google_pubsub_topic.audio_stored,
+    google_pubsub_topic.transcription_dlq,
     module.pubsub_transcription_completed,
     google_secret_manager_secret_iam_member.transcription_speechmatics,
     google_secret_manager_secret_iam_member.transcription_internal_auth,
     google_secret_manager_secret_iam_member.transcription_sentry_dsn,
     google_storage_bucket_iam_member.transcription_media_reader,
     google_project_iam_member.transcription_eventarc,
+  ]
+}
+
+# Push subscription that delivers audio-stored events to the transcription
+# Cloud Function with a dead_letter_policy. After 5 failed delivery attempts
+# Pub/Sub forwards the message to transcription_dlq for incident review.
+resource "google_pubsub_subscription" "audio_stored_push" {
+  name    = "intexuraos-audio-stored-${var.environment}-push"
+  topic   = google_pubsub_topic.audio_stored.id
+  project = var.project_id
+  labels  = local.common_labels
+
+  ack_deadline_seconds       = 600 # 10 minutes — matches transcription timeout
+  message_retention_duration = "604800s"
+
+  push_config {
+    push_endpoint = module.function_transcription.function_uri
+
+    oidc_token {
+      service_account_email = google_service_account.transcription_function.email
+      audience              = module.function_transcription.function_uri
+    }
+
+    attributes = {
+      x-goog-version = "v1"
+    }
+  }
+
+  retry_policy {
+    minimum_backoff = "10s"
+    maximum_backoff = "600s"
+  }
+
+  dead_letter_policy {
+    dead_letter_topic     = google_pubsub_topic.transcription_dlq.id
+    max_delivery_attempts = 5
+  }
+
+  expiration_policy {
+    ttl = ""
+  }
+
+  depends_on = [
+    module.function_transcription,
+    google_pubsub_topic.transcription_dlq,
+    google_pubsub_topic_iam_member.pubsub_publishes_transcription_dlq,
   ]
 }
 

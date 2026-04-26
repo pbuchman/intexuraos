@@ -1,4 +1,4 @@
-import { type Logger } from '@intexuraos/common-core';
+import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
 import type { z } from 'zod';
 import type { ExecutionMemoryRepository } from '../../repositories/executionMemoryRepository.js';
 import type { ExecutionMemoryEmbeddingClient } from '../prepareExecutionMemoryContext.js';
@@ -34,18 +34,18 @@ export async function persistMemory(
   deps: PersistMemoryDeps
 ): Promise<string> {
   if (deps.embeddingClient === undefined) {
-    throw new Error('Execution memory embedding client is not configured');
+    throw new IntexuraOSError('MISCONFIGURED', 'Execution memory embedding client is not configured');
   }
 
   const embeddingResult = await deps.embeddingClient.embed(input.memory.retrievalText);
   if (!embeddingResult.ok) {
-    throw new Error(embeddingResult.error.message);
+    throw new IntexuraOSError('INTERNAL_ERROR', embeddingResult.error.message);
   }
 
   const fingerprint = buildFingerprint(input.repository, input.memory);
   const exactMatchResult = await deps.executionMemoryRepo.findByFingerprint(input.repository, fingerprint);
   if (!exactMatchResult.ok) {
-    throw new Error(exactMatchResult.error.message);
+    throw new IntexuraOSError('INTERNAL_ERROR', exactMatchResult.error.message);
   }
 
   const exactMatch = exactMatchResult.value;
@@ -74,7 +74,7 @@ export async function persistMemory(
     status: 'active',
   });
   if (!nearDuplicateResult.ok) {
-    throw new Error(nearDuplicateResult.error.message);
+    throw new IntexuraOSError('INTERNAL_ERROR', nearDuplicateResult.error.message);
   }
 
   const mergeCandidate = nearDuplicateResult.value.find((candidate) =>
@@ -130,7 +130,7 @@ export async function persistMemory(
   });
 
   if (!createResult.ok) {
-    throw new Error(createResult.error.message);
+    throw new IntexuraOSError('INTERNAL_ERROR', createResult.error.message);
   }
 
   return createResult.value.id;
@@ -181,7 +181,7 @@ export async function updateExistingMemory(
   });
 
   if (!updateResult.ok) {
-    throw new Error(updateResult.error.message);
+    throw new IntexuraOSError('INTERNAL_ERROR', updateResult.error.message);
   }
 
   return memoryId;
