@@ -42,6 +42,12 @@ export function readHostGitConfig(key: string): string | undefined {
  * passed to worker containers.
  */
 export function readRepoGitConfig(repoPath: string, key: string): string | undefined {
+  // Defense-in-depth: silently reject relative paths so we never run
+  // `git -C <relative>` and read config from an unintended cwd. In practice,
+  // every caller passes an absolute path; this guard exists so a future
+  // caller cannot accidentally widen the surface. There is no logger here
+  // (this module is used during bootstrap before logger wiring), so the
+  // rejection is intentionally silent.
   if (!isAbsolute(repoPath)) {
     return undefined;
   }

@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { Logger } from '@intexuraos/common-core';
 import type { Task, TaskResult } from '../../types/task.js';
@@ -298,6 +299,29 @@ export function enrichResultForResumedTask(
 }
 
 /**
+ * Reads `.rebase-result.json` from the worktree, returning `'{}'` on failure.
+ *
+ * `ENOENT` is the common case (no rebase happened) and is silenced. Any other
+ * error (permission, I/O fault, etc.) is logged at debug so disk faults are
+ * visible without spamming successful no-rebase paths.
+ */
+async function readRebaseResultJson(
+  worktreePath: string,
+  readRebaseFile: CheckForResultReadFile,
+  logger: Logger
+): Promise<string> {
+  try {
+    return await readRebaseFile(join(worktreePath, '.rebase-result.json'));
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException | undefined)?.code;
+    if (code !== 'ENOENT') {
+      logger.debug({ err }, 'Failed to read .rebase-result.json (non-ENOENT)');
+    }
+    return '{}';
+  }
+}
+
+/**
  * Inspects the task worktree for a PR (via `gh pr list`/`gh pr view`) and
  * returns a TaskResult describing the produced branch/PR + optional rebase
  * outcome. Returns `undefined` when no PR is found or the git/gh calls fail.
@@ -305,6 +329,8 @@ export function enrichResultForResumedTask(
 export async function checkForResult(
   logger: Logger,
   task: Task,
+  // TODO(INT-1483 follow-up): drop the `as unknown as` once a typed wrapper
+  // around `promisify(execFile)` lands. See worktree-manager.ts for context.
   execFileFn: CheckForResultExecFile = execFileAsync as unknown as CheckForResultExecFile,
   readRebaseFile: CheckForResultReadFile = (path) => readFile(path, 'utf8')
 ): Promise<TaskResult | undefined> {
@@ -337,12 +363,7 @@ export async function checkForResult(
         String(pr.state).toUpperCase() === 'OPEN' &&
         (pr.mergedAt === null || pr.mergedAt === undefined)
       ) {
-        let rebaseOutput = '{}';
-        try {
-          rebaseOutput = await readRebaseFile(`${task.worktreePath}/.rebase-result.json`);
-        } catch {
-          rebaseOutput = '{}';
-        }
+        const rebaseOutput = await readRebaseResultJson(task.worktreePath, readRebaseFile, logger);
         const rebaseResult = parseRebaseResultOutput(rebaseOutput, task.taskId, logger);
 
         return {
@@ -400,12 +421,7 @@ export async function checkForResult(
         : undefined;
 
       // Check for rebase result
-      let rebaseOutput = '{}';
-      try {
-        rebaseOutput = await readRebaseFile(`${task.worktreePath}/.rebase-result.json`);
-      } catch {
-        rebaseOutput = '{}';
-      }
+      const rebaseOutput = await readRebaseResultJson(task.worktreePath, readRebaseFile, logger);
       const rebaseResult = parseRebaseResultOutput(rebaseOutput, task.taskId, logger);
 
       /* v8 ignore start -- ts-type: spread operator with optional rebaseResult creates type narrowing branch @preserve */

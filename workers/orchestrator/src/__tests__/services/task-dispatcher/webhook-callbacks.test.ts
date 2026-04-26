@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   sendSetupFailureWebhook,
@@ -853,29 +856,38 @@ describe('checkForResult', () => {
     // Coverage: hit the default `readRebaseFile = (path) => readFile(path, 'utf8')` arm.
     // Pass a worktreePath that does not exist so the real readFile throws ENOENT
     // and we fall through to the catch with `rebaseOutput = '{}'`.
-    const task = makeTask({
-      continuationPrNumber: 42,
-      worktreePath: '/tmp/orchestrator-test-nonexistent-path-int1483',
-    });
-    const exec = makeExec([
-      [
-        isGhPrView(42),
-        {
-          stdout: JSON.stringify({
-            url: 'https://github.com/pr/42',
-            number: 42,
-            headRefName: 'feature/int-1425',
-            title: 'Default-read fallback',
-            state: 'OPEN',
-            mergedAt: null,
-          }),
-        },
-      ],
-    ]);
-    // Omit readRebaseFile → exercises the default-arg branch in the source.
-    const result = await checkForResult(mockLogger as never, task, exec);
-    expect(result?.prUrl).toBe('https://github.com/pr/42');
-    expect(result?.rebaseResult).toBeUndefined();
+    //
+    // Use mkdtempSync to allocate a guaranteed-empty dir, then point at a
+    // non-existent subpath inside it — this avoids the previous flaky reliance
+    // on a hard-coded /tmp path that another process could conceivably create.
+    const tmpDir = mkdtempSync(join(tmpdir(), 'orchestrator-webhook-cb-test-'));
+    try {
+      const task = makeTask({
+        continuationPrNumber: 42,
+        worktreePath: join(tmpDir, 'never-here'),
+      });
+      const exec = makeExec([
+        [
+          isGhPrView(42),
+          {
+            stdout: JSON.stringify({
+              url: 'https://github.com/pr/42',
+              number: 42,
+              headRefName: 'feature/int-1425',
+              title: 'Default-read fallback',
+              state: 'OPEN',
+              mergedAt: null,
+            }),
+          },
+        ],
+      ]);
+      // Omit readRebaseFile → exercises the default-arg branch in the source.
+      const result = await checkForResult(mockLogger as never, task, exec);
+      expect(result?.prUrl).toBe('https://github.com/pr/42');
+      expect(result?.rebaseResult).toBeUndefined();
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it('returns rebase result undefined when readRebaseFile throws (continuation PR path)', async () => {

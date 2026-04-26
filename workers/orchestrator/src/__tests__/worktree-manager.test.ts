@@ -119,7 +119,7 @@ describe('WorktreeManager', () => {
     it('should fetch base branch before creating worktree', async () => {
       const calls: { file: string; args: readonly string[]; cwd?: string }[] = [];
       const execFile: ExecFileFn = async (file, args, options) => {
-        calls.push({ file, args, ...(options.cwd !== undefined ? { cwd: options.cwd } : {}) });
+        calls.push({ file, args, ...(options?.cwd !== undefined ? { cwd: options.cwd } : {}) });
         if (file === 'git' && args[0] === 'worktree' && args[1] === 'add') {
           return { stdout: '', stderr: 'Preparing worktree' };
         }
@@ -490,7 +490,7 @@ describe('WorktreeManager', () => {
     });
 
     it('constructs with default execFileFn when not injected', () => {
-      // Coverage: hit the `?? defaultExecFileAsync` arm of the constructor.
+      // coverage-only: hits the `?? defaultExecFileAsync` arm of the constructor.
       // We don't call any methods (which would actually shell out); we only
       // verify the constructor accepts no exec injection.
       const manager = new WorktreeManager(mockConfig, mockLogger);

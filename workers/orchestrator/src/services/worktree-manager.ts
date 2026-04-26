@@ -14,7 +14,7 @@ const defaultExecFileAsync = promisify(execFile);
 export type ExecFileFn = (
   file: string,
   args: readonly string[],
-  options: { cwd?: string; timeout?: number }
+  options?: { cwd?: string; timeout?: number }
 ) => Promise<{ stdout: string; stderr: string }>;
 
 const SAFE_GIT_BRANCH_PATTERN = /^[A-Za-z0-9._/-]+$/;
@@ -42,6 +42,11 @@ export class WorktreeManager {
     private readonly logger: Logger,
     execFileFn?: ExecFileFn
   ) {
+    // TODO(INT-1483 follow-up): drop the `as unknown as` once a typed wrapper
+    // around `promisify(execFile)` lands. The cast is necessary today because
+    // node's `promisify` overload set is wider than our argv-only `ExecFileFn`
+    // contract; introducing a thin typed adapter is the right fix but is out
+    // of scope for the shell-injection hardening change.
     this.execFileFn = execFileFn ?? (defaultExecFileAsync as unknown as ExecFileFn);
   }
 
@@ -320,7 +325,7 @@ export class WorktreeManager {
         const { stdout } = await this.execFileFn(
           'git',
           ['-C', worktreePath, 'symbolic-ref', '--quiet', 'HEAD'],
-          {}
+          { cwd: this.config.repositoryPath }
         );
         const branchRef = stdout.trim();
         this.logger.info(
