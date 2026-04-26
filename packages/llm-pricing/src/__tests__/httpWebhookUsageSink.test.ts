@@ -97,6 +97,7 @@ const baseParams: UsageLogParams = {
     thinkingTokens: 10,
   },
   success: true,
+  durationMs: 0,
 };
 
 describe('HttpWebhookUsageSink', () => {
@@ -224,6 +225,7 @@ describe('HttpWebhookUsageSink', () => {
           costUsd: 0.005,
         },
         success: true,
+        durationMs: 0,
       };
 
       await sink.log(minimalParams);

@@ -159,7 +159,7 @@ request logging.
 - **No Sentry / OTEL / `logIncomingRequest` in worker handlers** (Important) —
   `rg 'logIncomingRequest' workers/` → 0 matches. Only orchestrator has a bespoke
   `onResponse` structured-logger hook.
-- **`workers/code-worker` is not a worker** (Minor structural) — no `src/`, no
+- **`docker/code-worker` is not a worker** (Minor structural) — no `src/`, no
   `package.json`, only Dockerfiles. Lives in the wrong folder.
 - **`workers/orchestrator` is not a Cloud Function** (Important) — full Fastify
   server + 20 services + 8 bootstrap modules + 9-parameter `main()`. The
@@ -552,7 +552,7 @@ move internal-auth helpers to `common-http`; introduce generic CRUD repository i
 
 New `packages/common-worker` with `createWorkerLogger`, `loadRequiredEnv`,
 `withObservability` (Sentry + structured log + ack/nack), test helpers. Document and
-enforce Pub/Sub consumer contract with DLQ topics. Relocate `workers/code-worker`;
+enforce Pub/Sub consumer contract with DLQ topics. Relocate `docker/code-worker`;
 decide whether `workers/orchestrator` moves to `apps/orchestrator`. Continue
 `task-dispatcher.ts` decomposition.
 

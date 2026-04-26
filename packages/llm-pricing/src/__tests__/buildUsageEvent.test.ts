@@ -29,6 +29,7 @@ const baseParams: UsageLogParams = {
   callType: 'generate',
   usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0 },
   success: true,
+  durationMs: 0,
 };
 
 const baseSource = { service: 'linear-agent', component: 'title-gen' };
@@ -97,13 +98,14 @@ describe('buildUsageEvent', () => {
 
 describe('buildUsageEvent with promptType', () => {
   it('should include promptType in request field when provided', () => {
-    const params = {
+    const params: UsageLogParams = {
       userId: 'user-123',
       provider: LlmProviders.Google,
       model: LlmModels.Gemini25Flash,
       callType: 'generate' as const,
       usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
       success: true,
+      durationMs: 0,
       promptType: 'linear-issue-title',
     };
 
@@ -116,13 +118,14 @@ describe('buildUsageEvent with promptType', () => {
   });
 
   it('should omit promptType when not provided', () => {
-    const params = {
+    const params: UsageLogParams = {
       userId: 'user-123',
       provider: LlmProviders.Google,
       model: LlmModels.Gemini25Flash,
       callType: 'generate' as const,
       usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
       success: true,
+      durationMs: 0,
     };
 
     const event = buildUsageEvent(params, {

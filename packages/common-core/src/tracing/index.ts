@@ -3,3 +3,9 @@
  */
 
 export { TRACE_ID_HEADER, extractOrGenerateTraceId, traceIdHeaders } from './traceId.js';
+export {
+  type RequestContext,
+  runWithRequestContext,
+  getRequestContext,
+  getRequestId,
+} from './requestContext.js';

@@ -93,7 +93,7 @@ export INTEXURAOS_CODE_WORKER_IMAGE=europe-central2-docker.pkg.dev/intexuraos-de
 # Or directly from root context (Dockerfile uses root-relative COPY paths)
 docker build --no-cache --platform linux/amd64 \
   -t europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest \
-  -f workers/code-worker/Dockerfile \
+  -f docker/code-worker/Dockerfile \
   .
 ```
 
@@ -116,12 +116,12 @@ Always use `--no-cache` when the entrypoint or any COPY'd file has changed.
 
 ### Key Files
 
-| File                                  | Purpose                                               |
-| ------------------------------------- | ----------------------------------------------------- |
-| `workers/code-worker/Dockerfile`      | Production image (node:22-alpine + Claude/Codex CLIs) |
-| `workers/code-worker/Dockerfile.test` | Test image (claude-stub instead of real CLI)          |
-| `workers/code-worker/entrypoint.sh`   | Container entrypoint (dispatches Claude or Codex)     |
-| `scripts/build-worker-image.sh`       | Build + optional push helper                          |
+| File                                 | Purpose                                               |
+| ------------------------------------ | ----------------------------------------------------- |
+| `docker/code-worker/Dockerfile`      | Production image (node:22-alpine + Claude/Codex CLIs) |
+| `docker/code-worker/Dockerfile.test` | Test image (claude-stub instead of real CLI)          |
+| `docker/code-worker/entrypoint.sh`   | Container entrypoint (dispatches Claude or Codex)     |
+| `scripts/build-worker-image.sh`      | Build + optional push helper                          |
 
 ### What the Entrypoint Does
 
@@ -164,7 +164,7 @@ Set by `docker-provider.ts` when creating containers:
 ./scripts/setup-worker-network.sh
 
 # Build test image (uses claude-stub instead of real CLI)
-cd workers/code-worker
+cd docker/code-worker
 docker build -t code-worker:test -f Dockerfile.test .
 ```
 

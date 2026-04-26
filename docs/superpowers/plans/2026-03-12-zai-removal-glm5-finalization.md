@@ -11,7 +11,7 @@
 **Tech Stack:** TypeScript, Fastify, React/Vite, Firestore migrations (`migrations/*.mjs`), Vitest, pnpm, rg
 
 **Implementation rules:**
-- `glm-5` is allowed only in the code-task subsystem: `apps/code-agent/**`, `workers/orchestrator/**`, `workers/code-worker/**`, the code-task UI in `apps/web/**`, and their code-task-specific docs.
+- `glm-5` is allowed only in the code-task subsystem: `apps/code-agent/**`, `workers/orchestrator/**`, `docker/code-worker/**`, the code-task UI in `apps/web/**`, and their code-task-specific docs.
 - `glm` is allowed only as a configuration/input alias inside the code-task subsystem. Persisted documents, emitted API payloads, UI labels, and primary docs should use `glm-5`.
 - App-wide fallback clients remain Gemini-only. Do not introduce a DashScope client outside the code-task stack.
 - Firestore migration behavior is strict:
@@ -116,7 +116,7 @@
 - Modify: `workers/orchestrator/src/services/isolation/docker-provider.ts`
 - Modify: `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`
 - Modify: `workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts`
-- Modify: `workers/code-worker/entrypoint.sh`
+- Modify: `docker/code-worker/entrypoint.sh`
 - Modify: `terraform/environments/dev/main.tf`
 - Modify: `ecosystem.config.cjs`
 - Modify: `scripts/verify-env-vars.mjs`
@@ -636,7 +636,7 @@ Expected: FAIL because the stack still uses `glm`.
 - Modify: `workers/orchestrator/src/types/schemas.ts`
 - Modify: `workers/orchestrator/src/services/task-dispatcher.ts`
 - Modify: `workers/orchestrator/src/services/isolation/docker-provider.ts`
-- Modify: `workers/code-worker/entrypoint.sh`
+- Modify: `docker/code-worker/entrypoint.sh`
 
 - [ ] **Step 1: Rename the canonical code-task worker enum/value to `glm-5` and centralize the alias**
 
@@ -756,7 +756,7 @@ git add \
   workers/orchestrator/src/services/isolation/docker-provider.ts \
   workers/orchestrator/src/__tests__/task-dispatcher.test.ts \
   workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts \
-  workers/code-worker/entrypoint.sh \
+  docker/code-worker/entrypoint.sh \
   migrations/059_remove-zai-and-finalize-glm5.mjs \
   migrations/__tests__/059_remove-zai-and-finalize-glm5.test.ts
 git commit -m "refactor: finalize glm-5 worker migration"
@@ -830,7 +830,7 @@ Expected: hits only under the code-task allowlist:
 - `apps/web/src/pages/CodeTask*.tsx`
 - `apps/web/src/types/index.ts`
 - `workers/orchestrator/**`
-- `workers/code-worker/**`
+- `docker/code-worker/**`
 - `docs/services/orchestrator/**`
 - `docs/services/code-worker/**`
 

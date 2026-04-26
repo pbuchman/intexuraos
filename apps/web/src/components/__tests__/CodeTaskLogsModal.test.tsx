@@ -40,7 +40,7 @@ describe('CodeTaskLogsModal', () => {
     expect(screen.getByText('[tool] hello')).toBeInTheDocument();
   });
 
-  it('closes on escape and backdrop click', () => {
+  it('closes on escape', () => {
     const onClose = vi.fn();
     mockUseCodeTaskLogs.mockReturnValue({
       task: {
@@ -56,10 +56,28 @@ describe('CodeTaskLogsModal', () => {
 
     render(<CodeTaskLogsModal taskId="task-123" onClose={onClose} />);
 
-    fireEvent.keyDown(window, { key: 'Escape' });
+    // Radix Dialog handles Escape internally and routes through onOpenChange
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
 
-    fireEvent.click(screen.getByRole('dialog'));
-    expect(onClose).toHaveBeenCalledTimes(2);
+  it('closes on Close button click', () => {
+    const onClose = vi.fn();
+    mockUseCodeTaskLogs.mockReturnValue({
+      task: { id: 'task-123', status: 'implemented' },
+      logs: [],
+      loading: false,
+      error: null,
+      listenerHealthy: false,
+      refreshTask: vi.fn(),
+    });
+
+    render(<CodeTaskLogsModal taskId="task-123" onClose={onClose} />);
+
+    const closeButtons = screen.getAllByRole('button', { name: 'Close' });
+    const firstButton = closeButtons[0];
+    if (firstButton === undefined) throw new Error('Close button not found');
+    fireEvent.click(firstButton);
+    expect(onClose).toHaveBeenCalled();
   });
 });

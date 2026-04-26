@@ -2,10 +2,12 @@
  * Base Pub/Sub Publisher.
  * Provides common functionality for all Pub/Sub publishers.
  */
+import { randomBytes } from 'node:crypto';
 import { PubSub, type Topic } from '@google-cloud/pubsub';
 import { type Logger } from 'pino';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type { PublishError } from './types.js';
+import { getRequestContext } from './requestContextShim.js';
 
 /**
  * Configuration for BasePubSubPublisher.
@@ -63,7 +65,9 @@ export abstract class BasePubSubPublisher {
         `Publishing ${eventDescription} event to Pub/Sub`
       );
 
-      await topic.publishMessage({ data });
+      const attributes = buildPublishAttributes();
+
+      await topic.publishMessage({ data, attributes });
 
       this.logger.info(
         { topic: topicName, ...context },
@@ -150,4 +154,35 @@ export abstract class BasePubSubPublisher {
       message: `Failed to publish message: ${errorMessage}`,
     };
   }
+}
+
+/**
+ * Build the Pub/Sub message attributes for an outbound publish.
+ *
+ * Always sets `publisher-service` (from `INTEXURAOS_SERVICE_NAME`, falling back
+ * to `'unknown'`). When a {@link RequestContext} is active, propagates
+ * `x-request-id`, `x-correlation-id`, and `traceparent` (W3C Trace Context)
+ * so downstream subscribers can extract them via `extractCorrelation`.
+ */
+function buildPublishAttributes(): Record<string, string> {
+  const serviceName = process.env['INTEXURAOS_SERVICE_NAME'];
+  const attributes: Record<string, string> = {
+    'publisher-service': serviceName !== undefined && serviceName !== '' ? serviceName : 'unknown',
+  };
+
+  const ctx = getRequestContext();
+  if (ctx !== undefined) {
+    attributes['x-request-id'] = ctx.requestId;
+    attributes['x-correlation-id'] = ctx.correlationId;
+    if (ctx.traceId !== undefined) {
+      // W3C Trace Context §3.2.2.4 forbids an all-zero parent-id; receivers MUST
+      // treat such a traceparent as invalid. When the active context lacks a
+      // parentId, generate a fresh 16-hex span id rather than falling back to zeros.
+      const parentId = ctx.parentId ?? randomBytes(8).toString('hex');
+      // W3C trace-flags byte hardcoded to '01' (sampled). Until RequestContext carries traceFlags, sampled is the conservative default — receivers MAY downsample. Revisit when S2 wires real OTel context.
+      attributes['traceparent'] = `00-${ctx.traceId}-${parentId}-01`;
+    }
+  }
+
+  return attributes;
 }

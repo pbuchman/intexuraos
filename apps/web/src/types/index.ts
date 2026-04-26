@@ -1,4 +1,4 @@
-import type { CodeTaskWorkerType as SharedCodeTaskWorkerType } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType as SharedCodeTaskWorkerType } from '@intexuraos/code-task-domain/worker-types';
 import type { LlmProvider } from '@intexuraos/llm-contract';
 /**
  * API Response types matching backend response format.
@@ -182,6 +182,8 @@ export interface AppConfig {
   hellscriptAgentUrl: string;
   appSettingsServiceUrl: string;
   llmUsageServiceUrl: string;
+  imageServiceUrl: string;
+  webAgentUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
   firebaseAuthDomain: string;

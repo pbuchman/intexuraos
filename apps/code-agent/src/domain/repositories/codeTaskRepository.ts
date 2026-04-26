@@ -287,9 +287,11 @@ export interface CodeTaskRepository {
   ): Promise<Result<CodeTask | null, RepositoryError>>;
 
   /**
-   * Find the latest planning or execution origin task for a PR.
-   * Excludes review, remediation, and pull_request tasks.
-   * Used to resolve the true origin task for review-outcome labeling.
+   * Find the latest origin task for a PR. Prefers `planning` or `execution`
+   * tasks; falls back to the most recent `pull_request` task when neither
+   * exists. Excludes `review`, `remediation`, and merge-conflict follow-up
+   * tasks. Used to resolve the true origin task for review-outcome labeling
+   * and to gate review creation when the latest origin failed.
    */
   findOriginTaskByPR(
     repository: string,

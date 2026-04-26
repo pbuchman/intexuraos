@@ -1,4 +1,4 @@
-import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core';
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
 import type { ExecutionMemoryPromptContext } from '../../types/execution-memory.js';
 import type { WorkerType } from '../isolation/types.js';
 
