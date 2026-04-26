@@ -34,6 +34,13 @@ export {
 // Request ID handling
 export { REQUEST_ID_HEADER, getRequestId } from './http/requestId.js';
 
+// Trace context (AsyncLocalStorage-backed request id)
+export {
+  runWithRequestId,
+  getCurrentRequestId,
+  setCurrentRequestId,
+} from './http/traceContext.js';
+
 // Fastify plugin
 export { intexuraFastifyPlugin } from './http/fastifyPlugin.js';
 
