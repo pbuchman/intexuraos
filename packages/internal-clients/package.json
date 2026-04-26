@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/common-http": "workspace:*",
     "@intexuraos/infra-openrouter": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
