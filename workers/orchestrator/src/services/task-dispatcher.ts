@@ -1707,9 +1707,25 @@ export class TaskDispatcher {
       /* v8 ignore stop @preserve */
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
+      // [INT-1576] When the runtime captured a concrete failure phrase (e.g.
+      // Claude's "You've hit your limit · resets ...") via attempt_failed,
+      // surface it alongside the verifier's generic "No FINAL block" message.
+      // Without this, the rate-limit signal that classifyFailure looks for is
+      // dropped here and the cooloff scheduler never engages.
+      const claudeErrorForHardFailure = this.claudeErrors.get(task.taskId);
+      let hardErrorMessage = verification.message;
+      if (claudeErrorForHardFailure !== undefined && claudeErrorForHardFailure !== '') {
+        const runtimeName = this.getRuntimeDisplayName(task);
+        const runtimePrefix = buildRuntimeHardErrorMessage({
+          exitCode,
+          claudeError: claudeErrorForHardFailure,
+          runtimeName,
+        });
+        hardErrorMessage = `${runtimePrefix}; ${verification.message}`;
+      }
       const hardError: TaskError = {
         code: verification.code,
-        message: verification.message,
+        message: hardErrorMessage,
         remediation: { action: 'retry' },
       };
       await this.finalizeTask(task, 'failed', {
