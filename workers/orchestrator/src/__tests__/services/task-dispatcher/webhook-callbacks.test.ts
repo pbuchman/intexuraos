@@ -665,7 +665,7 @@ describe('enrichResultForResumedTask', () => {
 describe('checkForResult', () => {
   type ExecMatcher = (file: string, args: readonly string[]) => boolean;
   function makeExec(
-    responses: Array<[ExecMatcher, { stdout: string } | Error]>
+    responses: [ExecMatcher, { stdout: string } | Error][]
   ): CheckForResultExecFile & { calls: { file: string; args: readonly string[] }[] } {
     const calls: { file: string; args: readonly string[] }[] = [];
     const fn: CheckForResultExecFile = async (file, args) => {
@@ -688,8 +688,10 @@ describe('checkForResult', () => {
     };
   }
 
-  const isGhPrView = (n: number): ExecMatcher => (file, args) =>
-    file === 'gh' && args[0] === 'pr' && args[1] === 'view' && args[2] === String(n);
+  const isGhPrView =
+    (n: number): ExecMatcher =>
+    (file, args) =>
+      file === 'gh' && args[0] === 'pr' && args[1] === 'view' && args[2] === String(n);
   const isGhPrList: ExecMatcher = (file, args) =>
     file === 'gh' && args[0] === 'pr' && args[1] === 'list';
   const isGitBranchShowCurrent: ExecMatcher = (file, args) =>
@@ -830,7 +832,9 @@ describe('checkForResult', () => {
     const read = makeRead('{}');
     await checkForResult(mockLogger as never, task, exec, read);
 
-    const ghCall = exec.calls.find((c) => c.file === 'gh' && c.args[0] === 'pr' && c.args[1] === 'list');
+    const ghCall = exec.calls.find(
+      (c) => c.file === 'gh' && c.args[0] === 'pr' && c.args[1] === 'list'
+    );
     expect(ghCall).toBeDefined();
     // The malicious branch must be a literal element in argv, never concatenated into one string.
     expect(ghCall?.args).toEqual([
@@ -843,6 +847,35 @@ describe('checkForResult', () => {
       '--jq',
       '.',
     ]);
+  });
+
+  it('uses default readRebaseFile when not injected (real fs.readFile fails on non-existent path → undefined)', async () => {
+    // Coverage: hit the default `readRebaseFile = (path) => readFile(path, 'utf8')` arm.
+    // Pass a worktreePath that does not exist so the real readFile throws ENOENT
+    // and we fall through to the catch with `rebaseOutput = '{}'`.
+    const task = makeTask({
+      continuationPrNumber: 42,
+      worktreePath: '/tmp/orchestrator-test-nonexistent-path-int1483',
+    });
+    const exec = makeExec([
+      [
+        isGhPrView(42),
+        {
+          stdout: JSON.stringify({
+            url: 'https://github.com/pr/42',
+            number: 42,
+            headRefName: 'feature/int-1425',
+            title: 'Default-read fallback',
+            state: 'OPEN',
+            mergedAt: null,
+          }),
+        },
+      ],
+    ]);
+    // Omit readRebaseFile → exercises the default-arg branch in the source.
+    const result = await checkForResult(mockLogger as never, task, exec);
+    expect(result?.prUrl).toBe('https://github.com/pr/42');
+    expect(result?.rebaseResult).toBeUndefined();
   });
 
   it('returns rebase result undefined when readRebaseFile throws (continuation PR path)', async () => {

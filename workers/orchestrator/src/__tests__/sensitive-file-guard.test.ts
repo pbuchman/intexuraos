@@ -82,11 +82,9 @@ describe('SensitiveFileGuard', () => {
       expect(result.reverted).toEqual(['.env', 'credentials.json']);
       expect(result.remaining).toEqual(['src/index.ts']);
       expect(result.allSensitive).toBe(false);
-      expect(mockExecFileSync).toHaveBeenCalledWith(
-        'git',
-        ['checkout', 'HEAD~1', '--', '.env'],
-        { cwd: '/path/to/worktree' }
-      );
+      expect(mockExecFileSync).toHaveBeenCalledWith('git', ['checkout', 'HEAD~1', '--', '.env'], {
+        cwd: '/path/to/worktree',
+      });
       expect(mockExecFileSync).toHaveBeenCalledWith(
         'git',
         ['checkout', 'HEAD~1', '--', 'credentials.json'],
@@ -186,11 +184,9 @@ describe('SensitiveFileGuard', () => {
         ['diff', '--name-only', 'HEAD~3', 'HEAD'],
         { cwd: '/path/to/worktree', encoding: 'utf-8' }
       );
-      expect(mockExecFileSync).toHaveBeenCalledWith(
-        'git',
-        ['checkout', 'HEAD~3', '--', '.env'],
-        { cwd: '/path/to/worktree' }
-      );
+      expect(mockExecFileSync).toHaveBeenCalledWith('git', ['checkout', 'HEAD~3', '--', '.env'], {
+        cwd: '/path/to/worktree',
+      });
     });
 
     it('passes filenames containing shell metacharacters as literal argv (no shell expansion)', async () => {
@@ -209,11 +205,9 @@ describe('SensitiveFileGuard', () => {
 
       // The checkout call must receive the evil filename as a literal argv element,
       // not as part of a shell-interpreted command string.
-      expect(mockExecFileSync).toHaveBeenCalledWith(
-        'git',
-        ['checkout', 'HEAD~1', '--', evil],
-        { cwd: '/path/to/worktree' }
-      );
+      expect(mockExecFileSync).toHaveBeenCalledWith('git', ['checkout', 'HEAD~1', '--', evil], {
+        cwd: '/path/to/worktree',
+      });
     });
 
     it('passes commitCount as numeric ref, not interpolated', async () => {
