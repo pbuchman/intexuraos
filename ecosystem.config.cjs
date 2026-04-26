@@ -57,6 +57,31 @@ const COMMON_SERVICE_URLS = {
   INTEXURAOS_CRON_AGENT_URL: 'http://localhost:8130',
   INTEXURAOS_HELLSCRIPT_AGENT_URL: 'http://localhost:8131',
   INTEXURAOS_LLM_USAGE_SERVICE_URL: 'http://localhost:8132',
+  INTEXURAOS_API_DOCS_HUB_URL: 'http://localhost:8133',
+};
+
+// OpenAPI source URLs consumed by api-docs-hub. Each upstream service exposes
+// `/openapi.json` on the same port as its main HTTP server (see COMMON_SERVICE_URLS).
+const API_DOCS_HUB_OPENAPI_URLS = {
+  INTEXURAOS_USER_SERVICE_OPENAPI_URL: 'http://localhost:8110/openapi.json',
+  INTEXURAOS_NOTION_SERVICE_OPENAPI_URL: 'http://localhost:8112/openapi.json',
+  INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL: 'http://localhost:8113/openapi.json',
+  INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL: 'http://localhost:8114/openapi.json',
+  INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL: 'http://localhost:8116/openapi.json',
+  INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL: 'http://localhost:8117/openapi.json',
+  INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL: 'http://localhost:8118/openapi.json',
+  INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL: 'http://localhost:8120/openapi.json',
+  INTEXURAOS_APP_SETTINGS_SERVICE_OPENAPI_URL: 'http://localhost:8122/openapi.json',
+  INTEXURAOS_NOTES_AGENT_OPENAPI_URL: 'http://localhost:8121/openapi.json',
+  INTEXURAOS_TODOS_AGENT_OPENAPI_URL: 'http://localhost:8123/openapi.json',
+  INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL: 'http://localhost:8124/openapi.json',
+  INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL: 'http://localhost:8125/openapi.json',
+  INTEXURAOS_CHAT_AGENT_OPENAPI_URL: 'http://localhost:8129/openapi.json',
+  INTEXURAOS_CODE_AGENT_OPENAPI_URL: 'https://dev.intexuraos.cloud/api/code/openapi.json',
+  INTEXURAOS_LINEAR_AGENT_OPENAPI_URL: 'http://localhost:8126/openapi.json',
+  INTEXURAOS_WEB_AGENT_OPENAPI_URL: 'http://localhost:8127/openapi.json',
+  INTEXURAOS_CRON_AGENT_OPENAPI_URL: 'http://localhost:8130/openapi.json',
+  INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL: 'http://localhost:8131/openapi.json',
 };
 
 // Service-specific env vars (Pub/Sub topics, non-URL config)
@@ -178,6 +203,9 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
   },
+  'api-docs-hub': {
+    ...API_DOCS_HUB_OPENAPI_URLS,
+  },
 };
 
 const path = require('path');
@@ -265,6 +293,10 @@ module.exports = {
     createServiceConfig('linear-agent', 8126, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('chat-agent', 8129, { waitForService: 'http://localhost:8122/health' }),
     createServiceConfig('web-agent', 8127, { waitForService: 'http://localhost:8122/health' }),
+
+    // Aggregates `/openapi.json` from every other service — register last so
+    // upstream services have already been started by the time it boots.
+    createServiceConfig('api-docs-hub', 8133),
 
     // Web app (Vite dev server — uses proxy for /api/* routes in dev environment)
     {
