@@ -259,6 +259,81 @@ module "secret_manager" {
     expect(r.stdout + r.stderr).toContain('INTEXURAOS_HEREDOC_ORPHAN');
   });
 
+  it('counts secrets referenced via local.services.<key>.secret_refs list (Subtask E forward-compat)', () => {
+    // Subtask E Contract 2 declares `secret_refs = ["INTEXURAOS_X", ...]` as
+    // the per-service list of mounted secret names inside `local.services.<key>`.
+    // The script MUST harvest these list entries as mounted.
+    repo.writeTf(
+      'main.tf',
+      `module "secret_manager" {
+  source = "../../modules/secret-manager"
+  secrets = {
+    "INTEXURAOS_FOO" = "desc"
+  }
+}
+
+locals {
+  services = {
+    foo = {
+      name        = "intexuraos-foo"
+      secret_refs = ["INTEXURAOS_FOO"]
+    }
+  }
+}
+`
+    );
+    const r = run(repo.root);
+    expect(r.status).toBe(0);
+  });
+
+  it('flags a declared secret absent from secret_refs lists AND any secrets {} block (Subtask E forward-compat)', () => {
+    // The secret is declared but appears in NO `secret_refs = [...]` list and
+    // NO `secrets = { ... }` block. Must be reported as orphan.
+    repo.writeTf(
+      'main.tf',
+      `module "secret_manager" {
+  source = "../../modules/secret-manager"
+  secrets = {
+    "INTEXURAOS_UNREFERENCED" = "desc"
+  }
+}
+
+locals {
+  services = {
+    foo = {
+      name        = "intexuraos-foo"
+      secret_refs = ["INTEXURAOS_OTHER"]
+    }
+  }
+}
+`
+    );
+    const r = run(repo.root);
+    expect(r.status).toBe(1);
+    expect(r.stdout + r.stderr).toContain('INTEXURAOS_UNREFERENCED');
+  });
+
+  it('does not enter heredoc mode when <<EOT marker is inside a string literal (I1 string-mask)', () => {
+    // The first line contains `<<EOT` INSIDE a quoted string. Heredoc detection
+    // must run on the string-masked line so this does NOT enter heredoc mode.
+    // If it did, the secrets block below would be eaten as opaque heredoc body
+    // and the orphan declaration would be missed.
+    repo.writeTf(
+      'main.tf',
+      `module "secret_manager" {
+  source = "../../modules/secret-manager"
+  description = "uses <<EOT marker"
+  secrets = {
+    "INTEXURAOS_AFTER_FAKE_HEREDOC" = "desc"
+  }
+}
+`
+    );
+    const r = run(repo.root);
+    expect(r.status).toBe(1);
+    expect(r.stdout + r.stderr).toContain('INTEXURAOS_AFTER_FAKE_HEREDOC');
+  });
+
   it('strips HCL line comments before brace tracking (I2)', () => {
     repo.writeTf(
       'main.tf',

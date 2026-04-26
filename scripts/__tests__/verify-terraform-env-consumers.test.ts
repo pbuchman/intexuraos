@@ -320,6 +320,60 @@ module "svc" {
     expect(r.stdout + r.stderr).toContain('INTEXURAOS_AFTER_COMMENT');
   });
 
+  it('extracts extra_env_vars nested under locals.services.<key>.extra_env_vars (Subtask E forward-compat)', () => {
+    // Subtask E Contract 2 names the per-service field `extra_env_vars`.
+    // The module body has NO inline env_vars — variables are defined per-service
+    // inside locals.services.<key>.extra_env_vars. The extractor MUST pick them up.
+    repo.writeTf(
+      'services.tf',
+      `locals {
+  services = {
+    foo = {
+      name           = "intexuraos-foo"
+      extra_env_vars = {
+        INTEXURAOS_FROM_EXTRA = "x"
+      }
+    }
+  }
+}
+`
+    );
+    repo.writeTf(
+      'main.tf',
+      `module "foo" {
+  source       = "../../modules/cloud-run-service"
+  for_each     = local.services
+  service_name = each.value.name
+}
+`
+    );
+    // No consumer → drift, but the variable IS extracted (we expect it in output).
+    const r = run(repo.root);
+    expect(r.status).toBe(1);
+    expect(r.stdout + r.stderr).toContain('INTEXURAOS_FROM_EXTRA');
+  });
+
+  it('does not enter heredoc mode when <<EOT marker is inside a string literal (I1 string-mask)', () => {
+    // The first line contains `<<EOT` INSIDE a quoted string. Heredoc detection
+    // must run on the string-masked line so this does NOT enter heredoc mode.
+    // If it did, the env_vars block below would be eaten as opaque heredoc body
+    // and the orphan declaration would be missed.
+    repo.writeTf(
+      'main.tf',
+      `module "svc" {
+  source = "../../modules/cloud-run-service"
+  description = "uses <<EOT marker"
+  env_vars = {
+    INTEXURAOS_AFTER_FAKE_HEREDOC = "x"
+  }
+}
+`
+    );
+    const r = run(repo.root);
+    expect(r.status).toBe(1);
+    expect(r.stdout + r.stderr).toContain('INTEXURAOS_AFTER_FAKE_HEREDOC');
+  });
+
   it('reports "checked N" rather than "All N covered" in the success message (N4)', () => {
     repo.writeTf(
       'main.tf',

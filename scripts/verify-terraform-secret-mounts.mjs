@@ -77,7 +77,6 @@ function matchBraceSafe(src, openIdx) {
   let heredocLabel = null;
 
   // Walk each line; the opener line may contain content before openIdx.
-  let cursor = 0;
   const lines = src.split('\n');
   // Build a lookup of the absolute index of the START of each line.
   const lineStarts = [0];
@@ -105,10 +104,14 @@ function matchBraceSafe(src, openIdx) {
       }
       continue;
     }
-    const heredocOpen = /<<-?([A-Z_][A-Z0-9_]*)\b/.exec(rawLine);
+
+    const stringMasked = maskStrings(rawLine);
+    // Detect heredoc openers on the string-masked line so a `<<EOT` literal
+    // embedded in a quoted string value cannot falsely enter heredoc mode.
+    const heredocOpen = /<<-?([A-Z_][A-Z0-9_]*)\b/.exec(stringMasked);
     if (heredocOpen) heredocLabel = heredocOpen[1];
 
-    const stripped = maskLineComments(maskStrings(rawLine));
+    const stripped = maskLineComments(stringMasked);
     // For the opener line, only count braces from openIdx onward.
     const lineOffset = li === startLine ? openIdx - lineAbsStart : 0;
     for (let i = lineOffset; i < stripped.length; i++) {
@@ -121,18 +124,8 @@ function matchBraceSafe(src, openIdx) {
         }
       }
     }
-    cursor = lineAbsStart + rawLine.length;
   }
   return -1;
-}
-
-/**
- * Walk `body` and find the matching `}` for the `{` at index `openIdx` within
- * `body`. Same safety as matchBraceSafe but local to the substring (no need
- * to map line numbers).
- */
-function matchBraceLocal(body, openIdx) {
-  return matchBraceSafe(body, openIdx);
 }
 
 /**
@@ -163,7 +156,7 @@ function extractDeclaredSecrets(files) {
       const secretsMatch = /\bsecrets\s*=\s*\{/.exec(moduleBody);
       if (!secretsMatch) continue;
       const secretsOpenIdx = moduleBody.indexOf('{', secretsMatch.index);
-      const secretsEnd = matchBraceLocal(moduleBody, secretsOpenIdx);
+      const secretsEnd = matchBraceSafe(moduleBody, secretsOpenIdx);
       if (secretsEnd === -1) continue;
       const secretsBody = moduleBody.slice(secretsOpenIdx + 1, secretsEnd);
 
@@ -232,7 +225,9 @@ function extractMountedSecrets(files) {
       collectSecretsFromBody(body, mounted);
     }
 
-    // (2) Walk every `locals { ... }` block and find common_service_secrets.
+    // (2) Walk every `locals { ... }` block and find common_service_secrets,
+    //     AND harvest every `secret_refs = [ ... ]` list (Subtask E Contract 2
+    //     forward-compat: per-service `secret_refs = ["INTEXURAOS_X", ...]`).
     const localsPattern = /\blocals\s*\{/g;
     let lm;
     while ((lm = localsPattern.exec(content)) !== null) {
@@ -245,20 +240,78 @@ function extractMountedSecrets(files) {
 
       // Find common_service_secrets = { ... }.
       const cssMatch = /\bcommon_service_secrets\s*=\s*\{/.exec(body);
-      if (!cssMatch) continue;
-      const cssOpenIdx = body.indexOf('{', cssMatch.index);
-      const cssEnd = matchBraceLocal(body, cssOpenIdx);
-      if (cssEnd === -1) continue;
-      const cssBody = body.slice(cssOpenIdx + 1, cssEnd);
-      const lhsPattern = /^\s*(INTEXURAOS_[A-Z0-9_]+)\s*=/gm;
-      let lm2;
-      while ((lm2 = lhsPattern.exec(cssBody)) !== null) {
-        mounted.add(lm2[1]);
+      if (cssMatch) {
+        const cssOpenIdx = body.indexOf('{', cssMatch.index);
+        const cssEnd = matchBraceSafe(body, cssOpenIdx);
+        if (cssEnd !== -1) {
+          const cssBody = body.slice(cssOpenIdx + 1, cssEnd);
+          const lhsPattern = /^\s*(INTEXURAOS_[A-Z0-9_]+)\s*=/gm;
+          let lm2;
+          while ((lm2 = lhsPattern.exec(cssBody)) !== null) {
+            mounted.add(lm2[1]);
+          }
+        }
       }
+
+      // Harvest every `secret_refs = [ ... ]` list anywhere inside this
+      // locals block (typically nested under `services = { <key> = { ... } }`).
+      collectSecretRefsFromBody(body, mounted);
     }
   }
 
   return mounted;
+}
+
+/**
+ * Walk `body` and harvest string-literal entries from every
+ * `secret_refs = [ ... ]` list. Subtask E Contract 2 declares
+ * `secret_refs = ["INTEXURAOS_X", "INTEXURAOS_Y"]` as the per-service
+ * list of mounted secret names inside `local.services.<key>`.
+ *
+ * Brace-balancing: we walk `[ ]` depth honoring string literals and line
+ * comments so commas/brackets embedded in strings cannot fool us.
+ */
+function collectSecretRefsFromBody(body, sink) {
+  const pattern = /\bsecret_refs\s*=\s*\[/g;
+  let m;
+  while ((m = pattern.exec(body)) !== null) {
+    const openIdx = body.indexOf('[', m.index);
+    if (openIdx === -1) continue;
+    // Find the matching `]` honoring string literals so a `]` inside a
+    // string value cannot prematurely close the list.
+    let depth = 0;
+    let endIdx = -1;
+    let i = openIdx;
+    while (i < body.length) {
+      const ch = body[i];
+      if (ch === '"') {
+        // Skip the string literal entirely.
+        i++;
+        while (i < body.length && body[i] !== '"') {
+          if (body[i] === '\\' && i + 1 < body.length) i++;
+          i++;
+        }
+        i++;
+        continue;
+      }
+      if (ch === '[') depth++;
+      else if (ch === ']') {
+        depth--;
+        if (depth === 0) {
+          endIdx = i;
+          break;
+        }
+      }
+      i++;
+    }
+    if (endIdx === -1) continue;
+    const listBody = body.slice(openIdx + 1, endIdx);
+    const namePattern = /"(INTEXURAOS_[A-Z0-9_]+)"/g;
+    let nm;
+    while ((nm = namePattern.exec(listBody)) !== null) {
+      sink.add(nm[1]);
+    }
+  }
 }
 
 /**
@@ -275,7 +328,7 @@ function collectSecretsFromBody(body, sink) {
   while ((m = pattern.exec(body)) !== null) {
     if (m[1] === '{') {
       const openIdx = body.indexOf('{', m.index);
-      const end = matchBraceLocal(body, openIdx);
+      const end = matchBraceSafe(body, openIdx);
       if (end === -1) continue;
       harvestLhs(body.slice(openIdx + 1, end), sink);
     } else {
@@ -299,7 +352,7 @@ function collectSecretsFromBody(body, sink) {
       let i = 0;
       while (i < mergeBody.length) {
         if (mergeBody[i] === '{') {
-          const end = matchBraceLocal(mergeBody, i);
+          const end = matchBraceSafe(mergeBody, i);
           if (end === -1) break;
           harvestLhs(mergeBody.slice(i + 1, end), sink);
           i = end + 1;

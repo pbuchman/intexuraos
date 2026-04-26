@@ -146,15 +146,6 @@ function extractTerraformEnvVars(filePath) {
       }
       continue;
     }
-    const heredocOpen = /<<-?([A-Z_][A-Z0-9_]*)\b/.exec(rawLine);
-    if (heredocOpen) {
-      // The opener line itself is real HCL (assignments etc.) — but since the
-      // body that follows is opaque, we still need to scan the opener for any
-      // env-var declarations (none usually) and process its braces. The
-      // simpler choice: process opener normally, then enter heredoc state for
-      // subsequent lines.
-      heredocLabel = heredocOpen[1];
-    }
 
     // ── String + comment masking (B1, I2) ──────────────────────────────
     // Mask string interiors first so `//` inside a quoted value isn't seen
@@ -163,6 +154,19 @@ function extractTerraformEnvVars(filePath) {
     // Both passes preserve column offsets (replace with spaces).
     const stringMasked = maskStrings(rawLine);
     const stripped = maskLineComments(stringMasked);
+
+    // ── Heredoc opener detection ───────────────────────────────────────
+    // Detect heredoc openers on the STRING-MASKED line so a `<<EOT` literal
+    // sitting inside a quoted string value cannot falsely enter heredoc mode.
+    const heredocOpen = /<<-?([A-Z_][A-Z0-9_]*)\b/.exec(stringMasked);
+    if (heredocOpen) {
+      // The opener line itself is real HCL (assignments etc.) — but since the
+      // body that follows is opaque, we still need to scan the opener for any
+      // env-var declarations (none usually) and process its braces. The
+      // simpler choice: process opener normally, then enter heredoc state for
+      // subsequent lines.
+      heredocLabel = heredocOpen[1];
+    }
 
     // ── Inline ignore detection ────────────────────────────────────────
     // Inline-ignore comments are themselves `//` comments — they live on the
@@ -187,7 +191,10 @@ function extractTerraformEnvVars(filePath) {
     // ── Frame detection on this line ───────────────────────────────────
     // Detect entering an env_vars block on this line.
     // env_vars = { ...   OR   env_vars = merge(local.common_service_env_vars, {
-    const envVarsAssign = /\benv_vars\s*=\s*(\{|merge\s*\()/.test(stripped);
+    // Also recognize `extra_env_vars = { ... }` (Subtask E Contract 2 forward-compat).
+    // The optional `extra_` prefix needs explicit alternation because `_` is a
+    // word char, so `\b` does NOT fire between `extra` and `env_vars`.
+    const envVarsAssign = /\b(?:extra_)?env_vars\s*=\s*(\{|merge\s*\()/.test(stripped);
     // Detect entering common_service_env_vars block.
     const commonAssign = /\bcommon_service_env_vars\s*=\s*\{/.test(stripped);
     // Detect entering services-locals map: `services = {`.
