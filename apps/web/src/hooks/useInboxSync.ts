@@ -30,6 +30,14 @@ export interface UseInboxSyncResult<T> {
  * On unmount or refresh(), the active controller is aborted; in-flight
  * `poll(signal)` calls observe this via the signal. Settles after abort are
  * ignored.
+ *
+ * @remarks
+ * This hook was extracted as part of the InboxPage refactor (INT-1534) so the
+ * generic long-poll + abort + cleanup mechanics live in one tested place.
+ * `InboxPage` itself uses Firestore `onSnapshot` listeners (`useActionChanges`
+ * / `useCommandChanges`) and does NOT consume this hook today; it is shared
+ * infrastructure for any future feature that needs interval-based polling
+ * with cancellation (e.g. status pages, queue dashboards).
  */
 export function useInboxSync<T>(opts: UseInboxSyncOptions<T>): UseInboxSyncResult<T> {
   const { poll, intervalMs } = opts;
