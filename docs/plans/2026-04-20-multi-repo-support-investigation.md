@@ -97,13 +97,13 @@ The worker Docker image is fairly repo-agnostic, but has a few monorepo-specific
 
 | File                                | Line               | Observation                                                                                                                                    |
 | ----------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `docker/code-worker/Dockerfile`    | 40–41              | Custom `gh` wrapper reads `/secrets/github-token` at each call — **auth is fine for any repo** if the token has scope                          |
-| `docker/code-worker/Dockerfile`    | 50–51              | `pnpm install --frozen-lockfile` is unconditionally executed — **fails on non-pnpm repos**                                                     |
-| `docker/code-worker/Dockerfile`    | 62–66              | Claude CLI installed globally — portable                                                                                                       |
-| `docker/code-worker/Dockerfile`    | 76                 | `git clone https://github.com/obra/superpowers.git` at build — portable                                                                        |
-| `docker/code-worker/entrypoint.sh` | 47                 | Sets git credential helper — portable                                                                                                          |
-| `docker/code-worker/entrypoint.sh` | 125–131            | `cd /repo` and runs in place — portable                                                                                                        |
-| Orchestrator-side settings template | `start.ts:564–569` | Copies `docker/code-worker/config-defaults/settings.local.json` **from the target repo** — **breaks on any repo that doesn't ship this file** |
+| `docker/code-worker/Dockerfile`     | 40–41              | Custom `gh` wrapper reads `/secrets/github-token` at each call — **auth is fine for any repo** if the token has scope                          |
+| `docker/code-worker/Dockerfile`     | 50–51              | `pnpm install --frozen-lockfile` is unconditionally executed — **fails on non-pnpm repos**                                                     |
+| `docker/code-worker/Dockerfile`     | 62–66              | Claude CLI installed globally — portable                                                                                                       |
+| `docker/code-worker/Dockerfile`     | 76                 | `git clone https://github.com/obra/superpowers.git` at build — portable                                                                        |
+| `docker/code-worker/entrypoint.sh`  | 47                 | Sets git credential helper — portable                                                                                                          |
+| `docker/code-worker/entrypoint.sh`  | 125–131            | `cd /repo` and runs in place — portable                                                                                                        |
+| Orchestrator-side settings template | `start.ts:564–569` | Copies `docker/code-worker/config-defaults/settings.local.json` **from the target repo** — **breaks on any repo that doesn't ship this file**  |
 
 **Implication:** the worker is closer to portable than the orchestrator, but the settings template must move out of the target repo, and any "pnpm bootstrap" step must become optional or repo-declared.
 
