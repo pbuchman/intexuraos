@@ -1173,6 +1173,7 @@ module "commands_agent" {
   secrets = local.common_service_secrets
 
   env_vars = merge(local.common_service_env_vars, {
+    INTEXURAOS_SERVICE_URL          = "https://${local.services.commands_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_PUBSUB_ACTIONS_QUEUE = "intexuraos-actions-queue-${var.environment}"
   })
 

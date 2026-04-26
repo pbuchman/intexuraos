@@ -15,10 +15,12 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/common-http": "workspace:*",
     "@intexuraos/infra-openrouter": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
-    "@intexuraos/llm-pricing": "workspace:*"
+    "@intexuraos/llm-pricing": "workspace:*",
+    "jose": "^6.2.2"
   },
   "devDependencies": {
     "nock": "^14.0.5",
