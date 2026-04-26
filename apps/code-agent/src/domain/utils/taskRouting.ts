@@ -1,4 +1,4 @@
-import { normalizeLabel } from '@intexuraos/common-core';
+import { normalizeLabel } from '@intexuraos/linear-domain';
 import type { AgentType, CodeTask } from '../models/codeTask.js';
 import { hasCodeTaskLabel } from './labelUtils.js';
 

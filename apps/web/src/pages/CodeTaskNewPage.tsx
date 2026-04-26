@@ -1,4 +1,4 @@
-import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core/code-task-worker-types';
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain/worker-types';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, Play, Link2, Sparkles, Pencil, ClipboardList, Rocket, Clock } from 'lucide-react';

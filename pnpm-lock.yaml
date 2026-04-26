@@ -123,6 +123,9 @@ importers:
       '@fastify/swagger-ui':
         specifier: ^5.2.1
         version: 5.2.4
+      '@intexuraos/code-task-domain':
+        specifier: workspace:*
+        version: link:../../packages/code-task-domain
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../../packages/common-core
@@ -450,6 +453,9 @@ importers:
       '@google-cloud/monitoring':
         specifier: ^5.3.1
         version: 5.3.1
+      '@intexuraos/code-task-domain':
+        specifier: workspace:*
+        version: link:../../packages/code-task-domain
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../../packages/common-core
@@ -483,6 +489,9 @@ importers:
       '@intexuraos/internal-clients':
         specifier: workspace:*
         version: link:../../packages/internal-clients
+      '@intexuraos/linear-domain':
+        specifier: workspace:*
+        version: link:../../packages/linear-domain
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -826,6 +835,9 @@ importers:
       '@fastify/swagger-ui':
         specifier: ^5.2.1
         version: 5.2.4
+      '@intexuraos/code-task-domain':
+        specifier: workspace:*
+        version: link:../../packages/code-task-domain
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../../packages/common-core
@@ -853,6 +865,9 @@ importers:
       '@intexuraos/internal-clients':
         specifier: workspace:*
         version: link:../../packages/internal-clients
+      '@intexuraos/linear-domain':
+        specifier: workspace:*
+        version: link:../../packages/linear-domain
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -1342,6 +1357,9 @@ importers:
       '@auth0/auth0-react':
         specifier: ^2.2.4
         version: 2.11.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@intexuraos/code-task-domain':
+        specifier: workspace:*
+        version: link:../../packages/code-task-domain
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../../packages/common-core
@@ -1584,6 +1602,9 @@ importers:
 
   e2e:
     dependencies:
+      '@intexuraos/code-task-domain':
+        specifier: workspace:*
+        version: link:../packages/code-task-domain
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../packages/common-core
@@ -1600,6 +1621,9 @@ importers:
 
   e2e/mock-claude:
     dependencies:
+      '@intexuraos/code-task-domain':
+        specifier: workspace:*
+        version: link:../../packages/code-task-domain
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../../packages/common-core
@@ -1622,6 +1646,8 @@ importers:
       tsx:
         specifier: ^4.7.0
         version: 4.21.0
+
+  packages/code-task-domain: {}
 
   packages/common-core: {}
 
@@ -1895,6 +1921,8 @@ importers:
         specifier: ^4.0.16
         version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
+  packages/linear-domain: {}
+
   packages/llm-contract:
     dependencies:
       '@intexuraos/common-core':
@@ -1961,6 +1989,8 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
 
+  packages/service-catalog: {}
+
   tools/log-server:
     dependencies:
       express:
@@ -2009,12 +2039,18 @@ importers:
       '@google/genai':
         specifier: ^1.0.0
         version: 1.35.0(@modelcontextprotocol/sdk@1.25.2(hono@4.11.3)(zod@3.25.76))
+      '@intexuraos/code-task-domain':
+        specifier: workspace:*
+        version: link:../../packages/code-task-domain
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../../packages/common-core
       '@intexuraos/infra-openrouter':
         specifier: workspace:*
         version: link:../../packages/infra-openrouter
+      '@intexuraos/linear-domain':
+        specifier: workspace:*
+        version: link:../../packages/linear-domain
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
