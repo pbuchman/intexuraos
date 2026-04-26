@@ -1867,6 +1867,9 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
+      '@intexuraos/common-http':
+        specifier: workspace:*
+        version: link:../common-http
       '@intexuraos/infra-openrouter':
         specifier: workspace:*
         version: link:../infra-openrouter
