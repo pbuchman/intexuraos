@@ -57,7 +57,7 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 **Infrastructure:** ALL via Terraform. GCP project: `--project=intexuraos-dev-pbuchman`. SA key: `$HOME/.config/gcloud/sa-key.json`. Reference: `.claude/reference/infrastructure.md`
 
-**Environments:** dev=`dev.intexuraos.cloud` (PM2, home-dev) | prod=`intexuraos.cloud` (Cloud Run). No "local". Firestore shared. Reference: `.claude/reference/environments.md`
+**Environments:** dev=`dev.intexuraos.cloud` (PM2, home-dev) | prod=`intexuraos.cloud` (Cloud Run + Cloud Functions + GCS web bucket). No "local". Both environments are served from the SAME GCP project `intexuraos-dev-pbuchman` (the `-dev-pbuchman` suffix is legacy — there is no separate prod project). Only `terraform/environments/dev/` exists; it owns infrastructure for both domains. Firestore shared. Reference: `.claude/reference/environments.md`
 
 **Code Task Investigation:** When user pastes `dev.intexuraos.cloud/#/code-tasks/task_*` or `intexuraos.cloud/#/code-tasks/task_*` URL — use `/debug-code-task` skill. NEVER WebFetch/curl the SPA URL (hash routing returns shell HTML). Data is in Firestore `code_tasks` collection.
 
