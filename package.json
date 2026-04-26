@@ -36,7 +36,7 @@
     "test:hooks:watch": "vitest --config .claude/hooks/__tests__/vitest.config.ts",
     "build": "pnpm -r --if-present build",
     "build:all": "node scripts/build-all-services.mjs",
-    "clean": "rm -rf apps/*/dist packages/*/dist packages/*/*/dist node_modules/.cache",
+    "clean": "node scripts/clean.mjs",
     "verify:package-json": "node scripts/verify-package-json.mjs",
     "verify:package-exports": "node scripts/verify-package-exports.mjs",
     "verify:boundaries": "node scripts/verify-boundaries.mjs",

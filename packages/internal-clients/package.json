@@ -3,11 +3,13 @@
   "version": "3.6.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

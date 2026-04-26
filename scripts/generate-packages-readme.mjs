@@ -132,6 +132,28 @@ function buildGraph(packages) {
 
 function main() {
   const packages = readPackages();
+  const fsDirs = new Set(packages.map((p) => p.dir));
+
+  // Symmetric: filesystem ⊇ constants. Catches dead constants left behind when a
+  // package is removed from disk — they would silently produce a correct README
+  // but leave drifted config behind.
+  const orphanedKeys = Object.keys(CATEGORIES).filter((k) => !fsDirs.has(k));
+  if (orphanedKeys.length > 0) {
+    console.error(
+      `CATEGORIES has entries with no matching packages/<dir>: ${orphanedKeys.join(', ')}. ` +
+        'Remove them.'
+    );
+    process.exit(1);
+  }
+  const orphanedDescriptions = Object.keys(DESCRIPTIONS).filter((k) => !fsDirs.has(k));
+  if (orphanedDescriptions.length > 0) {
+    console.error(
+      `DESCRIPTIONS has entries with no matching packages/<dir>: ${orphanedDescriptions.join(', ')}. ` +
+        'Remove them.'
+    );
+    process.exit(1);
+  }
+
   const byCategory = {
     'common-http': [],
     infrastructure: [],
