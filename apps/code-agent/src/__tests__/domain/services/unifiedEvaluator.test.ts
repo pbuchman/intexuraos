@@ -1788,12 +1788,15 @@ describe('LLM retry for pull_request events', () => {
     }
 
     function createRemediationCodeTaskRepo(task: { status: string; completedAt?: Date; requiresReReview?: boolean } | null): Partial<CodeTaskRepository> {
+      const findOriginTaskByPR = vi.fn().mockResolvedValue(ok(null));
       if (task === null) {
         return {
+          findOriginTaskByPR,
           findRecentRemediationForPR: vi.fn().mockResolvedValue(ok(null)),
         };
       }
       return {
+        findOriginTaskByPR,
         findRecentRemediationForPR: vi.fn().mockResolvedValue(ok({
           id: 'task-rem-1',
           agentType: 'remediation',
@@ -2033,6 +2036,7 @@ describe('LLM retry for pull_request events', () => {
 
     it('proceeds with review when codeTaskRepo query fails', async () => {
       const codeTaskRepo: Partial<CodeTaskRepository> = {
+        findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
         findRecentRemediationForPR: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'Connection failed' })),
       };
       const deps = createFakeDeps({
