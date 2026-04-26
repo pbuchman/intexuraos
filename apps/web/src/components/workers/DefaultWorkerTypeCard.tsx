@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Card } from '@/components';
-import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core/code-task-worker-types';
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain/worker-types';
 import { WORKER_TYPE_METADATA } from './shared.js';
 
 export interface DefaultWorkerTypeCardProps {

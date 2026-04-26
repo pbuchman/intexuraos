@@ -12,7 +12,7 @@
  * - ci-failure: Creates PR with broken code to simulate CI failure
  */
 
-import type { CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import { createHmac } from 'node:crypto';
 import express from 'express';
 import { pino } from 'pino';

@@ -9,7 +9,7 @@
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import type { CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../../services.js';
 import type { JwtValidator } from '../codeRoutes.js';
