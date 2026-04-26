@@ -1630,9 +1630,6 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
-      '@intexuraos/llm-utils':
-        specifier: workspace:*
-        version: link:../llm-utils
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -1656,9 +1653,6 @@ importers:
       '@intexuraos/common-http':
         specifier: workspace:*
         version: link:../common-http
-      '@intexuraos/infra-firestore':
-        specifier: workspace:*
-        version: link:../infra-firestore
       fastify:
         specifier: ^5.1.0
         version: 5.6.2

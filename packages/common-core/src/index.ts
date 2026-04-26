@@ -78,3 +78,6 @@ export {
   type InternalApiServiceDefinition,
   type InternalApiOpenApiSource,
 } from './internalServiceCatalog.js';
+
+// Redaction helpers for logging
+export { redactToken, redactObject, SENSITIVE_FIELDS } from './redaction.js';

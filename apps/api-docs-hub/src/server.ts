@@ -3,7 +3,7 @@ import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import { intexuraFastifyPlugin, registerQuietHealthCheckLogging } from '@intexuraos/common-http';
-import { buildHealthResponse, type HealthCheck } from '@intexuraos/http-server';
+import { type HealthCheck, registerHealthCheck } from '@intexuraos/http-server';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import type { Config } from './config.js';
 
@@ -11,16 +11,18 @@ const SERVICE_NAME = 'api-docs-hub';
 const SERVICE_VERSION = '0.0.5';
 
 /**
- * Check service configuration (config.openApiSources must be non-empty).
+ * Probe service configuration: `config.openApiSources` must be non-empty
+ * for the API docs hub to serve anything useful.
  */
-function checkConfig(config: Config): HealthCheck {
-  const start = Date.now();
+function configHealthCheck(config: Config): HealthCheck {
   return {
     name: 'config',
-    status: config.openApiSources.length > 0 ? 'ok' : 'down',
-    latencyMs: Date.now() - start,
-    details: {
-      sourceCount: config.openApiSources.length,
+    check: (): Promise<{ ok: true } | { ok: false; detail?: string }> => {
+      const sourceCount = config.openApiSources.length;
+      if (sourceCount > 0) {
+        return Promise.resolve({ ok: true });
+      }
+      return Promise.resolve({ ok: false, detail: 'no OpenAPI sources configured' });
     },
   };
 }
@@ -78,14 +80,10 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   });
 
   // Health endpoint
-  app.get('/health', async (_req, reply) => {
-    const started = Date.now();
-    const checks: HealthCheck[] = [checkConfig(config)];
-
-    const response = buildHealthResponse(SERVICE_NAME, SERVICE_VERSION, checks);
-
-    void reply.header('x-health-duration-ms', String(Date.now() - started));
-    return await reply.type('application/json').send(response);
+  await registerHealthCheck(app, {
+    serviceName: SERVICE_NAME,
+    version: SERVICE_VERSION,
+    checks: [configHealthCheck(config)],
   });
 
   return await Promise.resolve(app);

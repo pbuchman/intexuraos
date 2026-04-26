@@ -21,3 +21,9 @@ export {
   type FakeFirestore,
   type FakeFirestoreConfig,
 } from './testing/index.js';
+
+// Health check — only the factory is exported; the structurally-compatible
+// `HealthCheck`/`HealthCheckOutcome` interfaces are defined locally so this
+// package does not depend on `@intexuraos/http-server`. Callers should
+// import the canonical types from `@intexuraos/http-server`.
+export { firestoreHealthCheck } from './health.js';

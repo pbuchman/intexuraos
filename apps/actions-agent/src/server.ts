@@ -9,7 +9,7 @@ import {
   registerQuietHealthCheckLogging,
 } from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
-import { buildHealthResponse, type HealthCheck } from '@intexuraos/http-server';
+import { registerHealthCheck } from '@intexuraos/http-server';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { registerRoutes } from './routes/index.js';
 
@@ -175,52 +175,11 @@ export async function buildServer(): Promise<FastifyInstance> {
     }
   );
 
-  app.get(
-    '/health',
-    {
-      schema: {
-        operationId: 'getHealth',
-        summary: 'Health check',
-        description: 'Health check endpoint',
-        tags: ['system'],
-        response: {
-          200: {
-            description: 'Service health status',
-            type: 'object',
-            required: ['status', 'serviceName', 'version', 'timestamp', 'checks'],
-            properties: {
-              status: { type: 'string', enum: ['ok', 'degraded', 'down'] },
-              serviceName: { type: 'string' },
-              version: { type: 'string' },
-              timestamp: { type: 'string', format: 'date-time' },
-              checks: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  required: ['name', 'status', 'latencyMs'],
-                  properties: {
-                    name: { type: 'string' },
-                    status: { type: 'string', enum: ['ok', 'degraded', 'down'] },
-                    latencyMs: { type: 'number' },
-                    details: { type: 'object', nullable: true },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    async (_req, reply) => {
-      const started = Date.now();
-      const checks: HealthCheck[] = [];
-
-      const response = buildHealthResponse(SERVICE_NAME, SERVICE_VERSION, checks);
-
-      void reply.header('x-health-duration-ms', String(Date.now() - started));
-      return await reply.type('application/json').send(response);
-    }
-  );
+  await registerHealthCheck(app, {
+    serviceName: SERVICE_NAME,
+    version: SERVICE_VERSION,
+    checks: [],
+  });
 
   return await Promise.resolve(app);
 }
