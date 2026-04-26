@@ -18,7 +18,7 @@
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/llm-utils": "workspace:*",
-    "pino": "^10.1.0",
-    "zod": "^3.24.1"
+    "pino": "catalog:",
+    "zod": "catalog:"
   }
 }

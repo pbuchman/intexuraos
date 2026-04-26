@@ -22,7 +22,7 @@
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
-    "fastify": "^5.1.0",
-    "pino": "^10.1.0"
+    "fastify": "catalog:",
+    "pino": "catalog:"
   }
 }

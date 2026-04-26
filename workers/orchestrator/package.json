@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^10.1.0",
-    "@google-cloud/firestore": "^7.10.0",
+    "@google-cloud/firestore": "catalog:",
     "@google/genai": "^1.0.0",
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
@@ -30,15 +30,15 @@
     "@octokit/plugin-retry": "^7.1.0",
     "async-mutex": "^0.5.0",
     "dockerode": "^4.0.9",
-    "fastify": "^5.6.2",
+    "fastify": "catalog:",
     "fastify-server": "0.0.1-alpha.1",
     "jose": "^5.9.6",
     "jsonwebtoken": "^9.0.2",
     "minimatch": "^10.1.1",
-    "openai": "^6.15.0",
-    "pino": "^9.6.0",
+    "openai": "catalog:",
+    "pino": "catalog:",
     "pino-pretty": "^13.0.0",
-    "zod": "^3.24.1"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/dockerode": "^4.0.1",

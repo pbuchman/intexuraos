@@ -20,7 +20,7 @@
     "@google-cloud/functions-framework": "^3.0.0",
     "@intexuraos/common-core": "workspace:*",
     "firebase-admin": "^13.0.0",
-    "pino": "^9.6.0"
+    "pino": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

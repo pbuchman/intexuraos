@@ -16,7 +16,12 @@
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/common-http": "workspace:*",
-    "@intexuraos/infra-firestore": "workspace:*",
+    "@intexuraos/infra-firestore": "workspace:*"
+  },
+  "peerDependencies": {
     "fastify": "^5.1.0"
+  },
+  "devDependencies": {
+    "fastify": "catalog:"
   }
 }

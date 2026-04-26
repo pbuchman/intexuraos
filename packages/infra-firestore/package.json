@@ -14,7 +14,12 @@
     "lint:local": "eslint src --max-warnings 0"
   },
   "dependencies": {
-    "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/common-core": "workspace:*"
+  },
+  "peerDependencies": {
     "@google-cloud/firestore": "^7.10.0"
+  },
+  "devDependencies": {
+    "@google-cloud/firestore": "catalog:"
   }
 }

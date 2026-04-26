@@ -30,8 +30,8 @@
     "@intexuraos/llm-prompts": "workspace:*",
     "@intexuraos/llm-utils": "workspace:*",
     "cheerio": "^1.0.0",
-    "fastify": "^5.1.0",
-    "pino": "^10.1.0"
+    "fastify": "catalog:",
+    "pino": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",

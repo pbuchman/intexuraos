@@ -27,10 +27,10 @@
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
-    "fastify": "^5.1.0",
+    "fastify": "catalog:",
     "firebase-admin": "^13.0.2",
-    "pino": "^10.1.1",
-    "zod": "^3.24.1"
+    "pino": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "nock": "^14.0.0"
