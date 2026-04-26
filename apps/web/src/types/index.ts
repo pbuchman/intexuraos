@@ -182,6 +182,8 @@ export interface AppConfig {
   hellscriptAgentUrl: string;
   appSettingsServiceUrl: string;
   llmUsageServiceUrl: string;
+  imageServiceUrl: string;
+  webAgentUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
   firebaseAuthDomain: string;
