@@ -34,9 +34,9 @@
     "@intexuraos/llm-pricing": "workspace:*",
     "@intexuraos/llm-prompts": "workspace:*",
     "@intexuraos/llm-utils": "workspace:*",
-    "fastify": "^5.1.0",
+    "fastify": "catalog:",
     "jose": "^5.9.6",
-    "pino": "^10.1.0",
-    "zod": "^3.24.1"
+    "pino": "catalog:",
+    "zod": "catalog:"
   }
 }

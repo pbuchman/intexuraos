@@ -17,10 +17,13 @@
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/llm-prompts": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
-    "@intexuraos/llm-pricing": "workspace:*",
-    "openai": "^5.3.0"
+    "@intexuraos/llm-pricing": "workspace:*"
+  },
+  "peerDependencies": {
+    "openai": "^6.15.0"
   },
   "devDependencies": {
-    "nock": "^14.0.0"
+    "nock": "^14.0.0",
+    "openai": "catalog:"
   }
 }

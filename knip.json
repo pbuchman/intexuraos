@@ -1,0 +1,61 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "include": ["dependencies", "unlisted"],
+  "ignoreDependencies": [
+    "@google-cloud/firestore",
+    "@google-cloud/pubsub",
+    "@google-cloud/monitoring",
+    "@intexuraos/.*",
+    "axios",
+    "blessed",
+    "express",
+    "firebase-admin",
+    "firebase-tools",
+    "vite",
+    "@vitejs/plugin-react",
+    "@vitest/coverage-v8",
+    "nock",
+    "memfs",
+    "pino",
+    "pino-pretty",
+    "openai",
+    "fastify-server",
+    "@google/genai",
+    "@auth0/auth0-react",
+    "@uiw/react-markdown-preview",
+    "@uiw/react-md-editor",
+    "highlight.js",
+    "libphonenumber-js",
+    "react",
+    "react-dom",
+    "react-markdown",
+    "rehype-highlight",
+    "rehype-raw",
+    "rehype-sanitize",
+    "remark-gfm",
+    "vibe-kanban-web-companion",
+    "lucide-react",
+    "dotenv",
+    "minimatch",
+    "autoprefixer",
+    "framer-motion",
+    "tailwindcss"
+  ],
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/**/*.mjs", "scripts/**/*.ts", "migrations/**/*.mjs"]
+    },
+    "packages/*": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "apps/*": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "workers/*": {
+      "entry": ["src/main.ts", "src/index.ts"],
+      "project": ["src/**/*.ts"]
+    }
+  }
+}
