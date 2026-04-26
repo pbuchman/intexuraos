@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "ci:env-lockstep": "node ../../scripts/ci/check-web-env-lockstep.cjs"
   },
   "dependencies": {
     "@auth0/auth0-react": "^2.2.4",
