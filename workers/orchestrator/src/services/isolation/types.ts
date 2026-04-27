@@ -5,7 +5,7 @@
  * Implementations may use Docker containers, VMs, or other isolation mechanisms.
  */
 
-import type { CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import type { WorkerRuntime } from '../runtime/types.js';
 
 export interface AnthropicOAuthCredentials {

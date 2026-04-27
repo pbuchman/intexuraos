@@ -20,7 +20,7 @@ import {
 import { checkDedupLayers, generateDedupKey } from '../firestore/task-dedup.js';
 import {
   activeByLinearIssue, activeReviewForPR, allNotArchived, archivableTasks, buildListQuery,
-  dispatchedOrRunningForPR, erroredExecutionMemoryPostRun, latestAskAgentForUser,
+  dispatchedOrRunningForLinearIssue, dispatchedOrRunningForPR, erroredExecutionMemoryPostRun, latestAskAgentForUser,
   nonArchivedForUser, nonArchivedGlobal, pendingExecutionMemoryPostRun,
   plannedPlanningByLinearIssue, preservedPullRequestForPR, prTasksByCreatedAt,
   queuedOrderedByAge, recentByLinearIssue, recentRemediationForPR, scanPrWindow,
@@ -279,6 +279,24 @@ export const createFirestoreCodeTaskRepository = (deps: {
     findAllNonArchived: () => guarded(
       () => docsToTasks(allNotArchived(collection)),
       {}, 'Failed to find all non-archived tasks',
+    ),
+    hasOtherDispatchedOrRunningForLinearIssue: (taskId, linearIssueId) => guarded(async () => {
+      const snap = await dispatchedOrRunningForLinearIssue(collection, linearIssueId).get();
+      const sibling = snap.docs.find((d) => d.id !== taskId);
+      return sibling === undefined
+        ? { hasActive: false }
+        : { hasActive: true, taskId: sibling.id };
+    }, { taskId, linearIssueId }, 'Failed to check dispatched/running sibling for Linear issue'),
+    claimForDispatch: (taskId) => guarded(
+      () => firestore.runTransaction(async (txn) => {
+        const docRef = collection.doc(taskId);
+        const snap = await txn.get(docRef);
+        if (!snap.exists || snap.get('status') !== 'queued') return false;
+        txn.update(docRef, { status: 'dispatched', dispatchedAt: new Date() });
+        return true;
+      }),
+      { taskId },
+      'Failed to claim task for dispatch',
     ),
   };
 };

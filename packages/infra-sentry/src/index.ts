@@ -30,6 +30,24 @@
  * ```
  *
  * All error/warn/fatal logs will now be sent to Sentry automatically.
+ *
+ * ## Workers
+ *
+ * Background workers (Cloud Functions, Pub/Sub consumers) should bootstrap
+ * via `initWorker()` instead — it wires Sentry + Pino in one call and returns
+ * a `flush()` to drain both on shutdown:
+ *
+ * ```ts
+ * import { initWorker } from '@intexuraos/infra-sentry';
+ *
+ * const { logger, flush } = initWorker({
+ *   serviceName: 'my-worker',
+ *   environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+ *   sentryDsn: process.env['INTEXURAOS_SENTRY_DSN'],
+ * });
+ *
+ * process.on('SIGTERM', () => { void flush(); });
+ * ```
  */
 
 export { initSentry, type SentryConfig } from './init.js';
@@ -42,3 +60,5 @@ export {
 export { setupSentryErrorHandler } from './fastify.js';
 export { createAppLogger, type AppLoggerConfig } from './appLogger.js';
 export { createLogStream } from './logStream.js';
+export { initWorker, type WorkerBootstrapConfig, type WorkerBootstrap } from './initWorker.js';
+export { SENTRY_REDACT_KEYS, redactObject } from './redact.js';

@@ -22,8 +22,12 @@ import { TaskEnqueueServiceImpl } from '../../../infra/services/taskEnqueueServi
 
 // Mock config
 vi.mock('../../../config.js', () => ({
-  loadConfig: (): { queue: { maxSize: number; ttlMinutes: number } } => ({
+  loadConfig: (): {
+    queue: { maxSize: number; ttlMinutes: number };
+    autoRetry: { maxAttempts: number };
+  } => ({
     queue: { maxSize: 50, ttlMinutes: 1440 },
+    autoRetry: { maxAttempts: 3 },
   }),
 }));
 
@@ -150,6 +154,44 @@ describe('TaskEnqueueServiceImpl', () => {
     expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', expect.objectContaining({
       queuedAt: expect.any(Date),
     }));
+  });
+
+  it('uses caller-provided queuedAt override when present (Fix D)', async () => {
+    const task = createMockTask();
+    const updatedTask = createMockTask({ queuedAt: Timestamp.now() });
+    mockCodeTaskRepo.findById.mockResolvedValue(ok(task));
+    mockCodeTaskRepo.countQueued.mockResolvedValue(ok(2));
+    mockCodeTaskRepo.update.mockResolvedValue(ok(updatedTask));
+
+    const overrideQueuedAt = new Date('2026-04-25T10:00:00.000Z');
+    const service = createService();
+    await service.enqueue({
+      taskId: 'task-123',
+      userId: 'user-456',
+      queuedAt: overrideQueuedAt,
+    });
+
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledWith('task-123', { queuedAt: overrideQueuedAt });
+  });
+
+  it('defaults to current time when no queuedAt override is provided (Fix D)', async () => {
+    const task = createMockTask();
+    const updatedTask = createMockTask({ queuedAt: Timestamp.now() });
+    mockCodeTaskRepo.findById.mockResolvedValue(ok(task));
+    mockCodeTaskRepo.countQueued.mockResolvedValue(ok(2));
+    mockCodeTaskRepo.update.mockResolvedValue(ok(updatedTask));
+
+    const before = Date.now();
+    const service = createService();
+    await service.enqueue({ taskId: 'task-123', userId: 'user-456' });
+    const after = Date.now();
+
+    expect(mockCodeTaskRepo.update).toHaveBeenCalledOnce();
+    const updateArgs = mockCodeTaskRepo.update.mock.calls[0]?.[1] as { queuedAt: Date };
+    expect(updateArgs.queuedAt).toBeInstanceOf(Date);
+    const stamped = updateArgs.queuedAt.getTime();
+    expect(stamped).toBeGreaterThanOrEqual(before);
+    expect(stamped).toBeLessThanOrEqual(after);
   });
 
   it('returns internal_error when countQueued fails', async () => {

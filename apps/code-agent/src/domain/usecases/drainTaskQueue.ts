@@ -23,6 +23,7 @@ import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js'
 import { ensureDispatchLabelsForAgentType, resolveTaskAgentType } from '../utils/taskRouting.js';
 import { archiveRetriedTaskAfterDispatch } from '../utils/archiveRetriedTaskAfterDispatch.js';
 import { isMemoryEligibleAgent } from '../utils/memoryEligibility.js';
+import { isRetryableErrorCode } from '../utils/retryableErrors.js';
 import { shouldFanOut, fanOutChildTasks } from './fanOutChildTasks.js';
 import type { TaskEnqueueService } from '../services/taskEnqueueService.js';
 import {
@@ -228,6 +229,27 @@ export async function drainTaskQueue(
             );
           }
 
+          continue;
+        }
+      }
+
+      // Defer reviews while a non-self sibling on the same Linear issue is
+      // dispatched/running. Excludes queued from the filter so two queued
+      // reviews on the same issue cannot both defer and deadlock.
+      if (candidate.agentType === 'review' && candidate.linearIssueId !== undefined) {
+        const siblingResult = await codeTaskRepo.hasOtherDispatchedOrRunningForLinearIssue(
+          candidate.id,
+          candidate.linearIssueId,
+        );
+        if (siblingResult.ok && siblingResult.value.hasActive) {
+          logger.info(
+            {
+              taskId: candidate.id,
+              linearIssueId: candidate.linearIssueId,
+              activeTaskId: siblingResult.value.taskId,
+            },
+            'Deferring review — another task on the same Linear issue is dispatched/running',
+          );
           continue;
         }
       }
@@ -473,6 +495,18 @@ export async function drainTaskQueue(
       return ok({ action: 'failed', taskId: task.id, locksToCleanup: buildLockCleanups(task) });
     }
 
+    // Atomic queued→dispatched claim — the process-local isDraining guard
+    // does not cover multi-replica deployments (Cloud Run autoscaling).
+    const claimResult = await codeTaskRepo.claimForDispatch(task.id);
+    if (!claimResult.ok) {
+      logger.error({ taskId: task.id, error: claimResult.error }, 'Failed to claim task for dispatch');
+      return ok({ action: 'still_busy', taskId: task.id });
+    }
+    if (!claimResult.value) {
+      logger.info({ taskId: task.id }, 'Skipped — claimed by another instance or no longer queued');
+      return ok({ action: 'still_busy', taskId: task.id });
+    }
+
     // Step 5: Attempt dispatch
     const webhookUrl = `${config.serviceUrl}/internal/webhooks/task-complete`;
 
@@ -509,14 +543,27 @@ export async function drainTaskQueue(
     if (!dispatchResult.ok) {
       const dispatchError = dispatchResult.error;
 
-      // Only at_capacity means workers are genuinely busy — task stays queued
-      if (dispatchError.code === 'at_capacity') {
-        logger.info({ taskId: task.id, error: dispatchError }, 'Workers still busy, task remains queued');
+      // Transient codes (at_capacity, worker_unavailable, network_error) keep
+      // the task queued. Do NOT reset queuedAt — TTL is measured from queuedAt
+      // and resetting would defeat the queue.ttlMinutes bound.
+      if (dispatchError.code === 'at_capacity' || isRetryableErrorCode(dispatchError.code)) {
+        logger.info(
+          { taskId: task.id, error: dispatchError, retryable: dispatchError.code !== 'at_capacity' },
+          'Dispatch transient/retryable, task remains queued',
+        );
+        // Roll the claim back so the next drain cycle can re-claim. dispatchedAt
+        // is intentionally left set as a "last attempted" marker.
+        const rollbackResult = await codeTaskRepo.update(task.id, { status: 'queued' });
+        if (!rollbackResult.ok) {
+          logger.warn(
+            { taskId: task.id, error: rollbackResult.error },
+            'Failed to roll back claim after retryable dispatch error',
+          );
+        }
         return ok({ action: 'still_busy', taskId: task.id });
       }
 
-      // Other dispatch failures (network_error, dispatch_failed, etc.) — fail the task
-      logger.error({ taskId: task.id, error: dispatchError }, 'Drain dispatch failed with non-capacity error');
+      logger.error({ taskId: task.id, error: dispatchError }, 'Drain dispatch failed with permanent error');
       const failUpdateResult = await codeTaskRepo.update(task.id, {
         status: 'failed',
         error: {
@@ -533,13 +580,12 @@ export async function drainTaskQueue(
       return ok({ action: 'failed', taskId: task.id, locksToCleanup });
     }
 
-    // Step 6: Success - update status to dispatched
+    // status and dispatchedAt are not written here — claimForDispatch already
+    // set them transactionally before the network call.
     const cancelNonce = generateCancelNonce();
     const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
     const updateResult = await codeTaskRepo.update(task.id, {
-      status: 'dispatched',
-      dispatchedAt: new Date(),
       // Seed lastHeartbeat at dispatch so findZombieTasks (which uses a Firestore
       // inequality filter on lastHeartbeat) can sweep tasks that crash/fail
       // before the worker ever sends its first real heartbeat. Without this,

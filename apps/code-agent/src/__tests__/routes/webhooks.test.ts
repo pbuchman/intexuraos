@@ -10659,6 +10659,78 @@ describe('POST /internal/webhooks/task-complete - Additional branch coverage', (
     expect(g.value.error?.message).toContain('non-negative integer');
   });
 
+  it('soft-defaults review_comments_posted to "0" when review_id is present (INT-1570)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't-int-1570-soft', webhookSecret: 'test-webhook-secret', agentType: 'review',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: {
+        pr: 'https://github.com/pbuchman/intexuraos/pull/1964',
+        review_id: '4175520278',
+        review_types: 'plan_review',
+        // review_comments_posted intentionally omitted
+      },
+    };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    // Review tasks transition to 'reviewed' (not 'completed') on success.
+    expect(g.value.status).toBe('reviewed');
+    expect(g.value.error).toBeUndefined();
+  });
+
+  it('still hard-fails review when review_id is empty string and review_comments_posted is missing (INT-1570)', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos', baseBranch: 'development', traceId: 't-int-1570-empty', webhookSecret: 'test-webhook-secret', agentType: 'review',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed');
+    const task = createResult.value;
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: {
+        review_id: '   ',
+        review_types: 'plan_review',
+      },
+    };
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+    expect(response.statusCode).toBe(200);
+    const g = await codeTaskRepo.findById(task.id);
+    expect(g.ok).toBe(true);
+    if (!g.ok) throw new Error('Failed');
+    expect(g.value.error?.code).toBe('REVIEW_AGENT_ENFORCEMENT_FAILED');
+  });
+
   it('fails execution when result is missing (no payload)', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123', prompt: 'a', sanitizedPrompt: 'a', systemPromptHash: 'default', workerType: 'auto', workerLocation: 'mac',

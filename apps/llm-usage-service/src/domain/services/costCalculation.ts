@@ -1,5 +1,6 @@
 import type { LlmProvider, ModelPricing, ImageSize } from '@intexuraos/llm-contract';
 import { LlmProviders } from '@intexuraos/llm-contract';
+import { IntexuraOSError } from '@intexuraos/common-core';
 
 /** Default image size used when only an image count is available (no per-request size). */
 const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
@@ -57,7 +58,7 @@ export function calculateCost(
       return calculateOpenRouterCost(usage, pricing);
     default: {
       const exhaustive: never = provider;
-      throw new Error(`Unsupported provider: ${String(exhaustive)}`);
+      throw new IntexuraOSError('INTERNAL_ERROR', `Unsupported provider: ${String(exhaustive)}`);
     }
   }
 }

@@ -15,6 +15,17 @@ import {
 } from '../../../domain/usecases/triageFailedTask.js';
 import type { CodeTask, TaskError } from '../../../domain/models/codeTask.js';
 
+// Default config mock — individual tests override autoRetry.maxAttempts as needed.
+vi.mock('../../../config.js', () => ({
+  loadConfig: (): {
+    queue: { maxSize: number; ttlMinutes: number };
+    autoRetry: { maxAttempts: number };
+  } => ({
+    queue: { maxSize: 50, ttlMinutes: 1440 },
+    autoRetry: { maxAttempts: 3 },
+  }),
+}));
+
 describe('triageFailedTask', () => {
   let mockLogger: Logger;
   let mockCodeTaskRepo: {
@@ -599,4 +610,5 @@ describe('triageFailedTask', () => {
       );
     });
   });
+
 });

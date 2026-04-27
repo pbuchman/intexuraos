@@ -70,13 +70,11 @@ export async function triageFailedTask(
     // Fall through to retry
   }
 
-  // Step 3b: For retry_after_cooloff, resolve the reset time (LLM or fallback).
   let cooloffSchedule: CooloffSchedule | undefined;
   if (verdict === 'retry_after_cooloff') {
     cooloffSchedule = await resolveCooloffSchedule(deps, task, taskError, new Date());
   }
 
-  // Step 4: Attempt auto-retry
   const retryRequest: AutoRetryTaskRequest = {
     failedTask: task,
     failedWorkerLocation: task.workerLocation,
@@ -91,9 +89,8 @@ export async function triageFailedTask(
 
   if (!retryResult.ok) {
     if (retryResult.error.code === 'budget_exhausted') {
-      // Send exhausted notification
       await whatsappNotifier.notifyTaskAutoRetryExhausted(task.userId, task, {
-        attempts: 3,
+        attempts: retryResult.error.attempts,
         errorMessage: taskError.message,
       });
       return {
