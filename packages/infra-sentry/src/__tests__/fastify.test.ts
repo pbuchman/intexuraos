@@ -88,6 +88,51 @@ describe('setupSentryErrorHandler', () => {
     expect(response.statusCode).toBe(500);
   });
 
+  it('responds with RATE_LIMITED for 429 errors without capturing to Sentry', async () => {
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async () => {
+      const error = new Error('Rate limit exceeded, retry in 30') as Error & {
+        statusCode?: number;
+        code?: string;
+      };
+      error.statusCode = 429;
+      error.code = 'RATE_LIMITED';
+      throw error;
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(429);
+    const body = JSON.parse(response.body) as { error: string; message: string };
+    expect(body.error).toBe('RATE_LIMITED');
+    expect(body.message).toBe('Rate limit exceeded, retry in 30');
+    // 429s are operational events, not exceptions
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a generic message when 429 error has no message', async () => {
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async () => {
+      const error = new Error('') as Error & { statusCode?: number };
+      error.statusCode = 429;
+      throw error;
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(429);
+    const body = JSON.parse(response.body) as { message: string };
+    expect(body.message).toBe('Rate limit exceeded');
+  });
+
   it('handles 404 routes without errors', async () => {
     setupSentryErrorHandler(app);
 
