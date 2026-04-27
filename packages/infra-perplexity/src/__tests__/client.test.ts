@@ -1,8 +1,28 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
+import { SpanStatusCode, trace } from '@opentelemetry/api';
+import {
+  BasicTracerProvider,
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-base';
+
+const spanExporter = new InMemorySpanExporter();
+const tracerProvider = new BasicTracerProvider({
+  spanProcessors: [new SimpleSpanProcessor(spanExporter)],
+});
+
+beforeAll(() => {
+  trace.setGlobalTracerProvider(tracerProvider);
+});
+
+afterAll(async () => {
+  await tracerProvider.shutdown();
+  trace.disable();
+});
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -86,6 +106,8 @@ describe('createPerplexityClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     nock.cleanAll();
+    spanExporter.reset();
+    mockUsageSink.clear();
   });
 
   describe('research', () => {
@@ -1054,5 +1076,94 @@ describe('createPerplexityClient', () => {
     expect(mockUsageLoggerLog).toHaveBeenCalledWith(
       expect.objectContaining({ promptType: 'test-prompt' })
     );
+  });
+
+  describe('OTel span emission for generate()', () => {
+    it('emits llm.perplexity.generate span with all canonical attributes on success', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'hi' } }],
+          usage: { prompt_tokens: 9, completion_tokens: 11, total_tokens: 20 },
+        });
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('hi', { promptType: 'test-prompt' });
+
+      const spans = spanExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      const span = spans[0];
+      if (span === undefined) throw new Error('no span');
+      expect(span.name).toBe('llm.perplexity.generate');
+      expect(span.attributes['llm.provider']).toBe(LlmProviders.Perplexity);
+      expect(span.attributes['llm.model']).toBe(TEST_MODEL);
+      expect(span.attributes['llm.input_tokens']).toBe(9);
+      expect(span.attributes['llm.output_tokens']).toBe(11);
+      expect(span.attributes['llm.cost_usd']).toBeDefined();
+      expect(span.attributes['llm.duration_ms']).toBeGreaterThanOrEqual(0);
+    });
+
+    it('passes durationMs >= 0 to usage logger on success', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        });
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('hi', { promptType: 'test-prompt' });
+      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as { durationMs?: number };
+      expect(lastCall?.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('passes durationMs >= 0 to usage logger on error', async () => {
+      nock(API_BASE_URL).post('/chat/completions').reply(500, 'boom');
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('hi', { promptType: 'test-prompt' });
+      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as {
+        durationMs?: number;
+        success?: boolean;
+      };
+      expect(lastCall?.success).toBe(false);
+      expect(lastCall?.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('records ERROR-status span when API returns non-OK HTTP status', async () => {
+      nock(API_BASE_URL).post('/chat/completions').reply(429, 'Rate limited');
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('hi', { promptType: 'test-prompt' });
+
+      const spans = spanExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      const span = spans[0];
+      if (span === undefined) throw new Error('no span');
+      expect(span.name).toBe('llm.perplexity.generate');
+      expect(span.status.code).toBe(SpanStatusCode.ERROR);
+      expect(span.attributes['llm.duration_ms']).toBeGreaterThanOrEqual(0);
+    });
   });
 });

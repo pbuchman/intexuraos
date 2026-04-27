@@ -46,7 +46,7 @@ import {
   type OwnerType,
 } from '@intexuraos/llm-contract';
 import { createOpenRouterGenerateClient } from './openRouterGenerateClient.js';
-import type { Logger, Result } from '@intexuraos/common-core';
+import { IntexuraOSError, type Logger, type Result } from '@intexuraos/common-core';
 
 /**
  * Configuration for creating an LLM client.
@@ -142,13 +142,14 @@ export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
 
   // Validate model is a known static model
   if (!isValidModel(config.model)) {
-    throw new Error(`Unsupported LLM model: ${model}`);
+    throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM model: ${model}`);
   }
 
   // Static models: check provider
   const providerForModel = getProviderForModel(config.model);
   if (providerForModel !== LlmProviders.Google) {
-    throw new Error(
+    throw new IntexuraOSError(
+      'INVALID_REQUEST',
       `Unsupported LLM provider: ${providerForModel}. Only ${LlmProviders.Google} is supported.`
     );
   }
@@ -176,13 +177,14 @@ export function createToolCallingClient(config: ToolCallingClientConfig): ToolCa
   // Validate model is supported
   if (!isValidModel(config.model)) {
     const model = config.model as string;
-    throw new Error(`Unsupported LLM model: ${model}`);
+    throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM model: ${model}`);
   }
 
   // Verify provider is Google (only supported provider for tool calling)
   const providerForModel = getProviderForModel(config.model);
   if (providerForModel !== LlmProviders.Google) {
-    throw new Error(
+    throw new IntexuraOSError(
+      'INVALID_REQUEST',
       `Tool calling not supported for provider: ${providerForModel}. Only ${LlmProviders.Google} is supported.`
     );
   }
