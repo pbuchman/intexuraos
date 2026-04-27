@@ -32,3 +32,13 @@ web_app_domain = "intexuraos.cloud"
 # Enable LLM API audit logging (logs all LLM calls to Firestore)
 audit_llms = true
 
+# Email address for monitoring alerts (set to null/omit to disable email alerts)
+# alert_email = "ops@example.com"
+
+# Slack notification channel (optional)
+#   slack_auth_token   — Slack bot OAuth token (xoxb-...) with chat:write scope.
+#                        Leave commented to skip Slack channel provisioning.
+#   slack_channel_name — Slack channel for alerts (default "#alerts").
+# slack_auth_token   = "xoxb-REPLACE_ME"
+# slack_channel_name = "#alerts"
+
