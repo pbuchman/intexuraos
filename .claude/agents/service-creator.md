@@ -197,12 +197,16 @@ You are an elite service architecture specialist for the IntexuraOS monorepo. Yo
 
 9b. **Update Web App Cloud Build** (if web frontend needs to call the new service)
 
-- Add service to `CLOUD_RUN_SERVICES` array in both `cloudbuild/cloudbuild.yaml` and `apps/web/cloudbuild.yaml`
-- Format: `"<service-name>:<ENV_VAR_SUFFIX>"` (e.g., `"calendar-agent:CALENDAR_AGENT"`)
-- URLs are fetched from Cloud Run API automatically at build time - no secrets needed
-- Update `apps/web/src/config.ts` to read and export the new URL
-- Both Cloud Build files MUST stay in sync - the web app is a static SPA that gets env vars at build time
-- Note: Backend services already get all URLs via `local.common_service_env_vars` - this is only for web frontend
+- Add a new entry to `apps/web/service-manifest.json` (single source of truth, INT-1544):
+  `{ "name": "<service-name>", "envSuffix": "<ENV_VAR_SUFFIX>" }`
+- Do **NOT** edit `apps/web/cloudbuild.yaml` directly — it now reads the manifest via `jq` at build time.
+- Until the legacy literals are migrated, ALSO add `"<service-name>:<ENV_VAR_SUFFIX>"` to:
+  - `cloudbuild/cloudbuild.yaml` `CLOUD_RUN_SERVICES=( ... )`
+  - `.github/workflows/deploy.yml` (two CLOUD_RUN_SERVICES blocks)
+- Update `apps/web/src/config.ts` to read and export the new URL.
+- URLs are fetched from Cloud Run API automatically at build time — no secrets needed.
+- CI guards: `pnpm run verify:web-service-manifest` (manifest shape + apps/web/cloudbuild.yaml has no literal); `scripts/verify-service-scaffolding.sh` adds soft checks for both the manifest entry and the cloudbuild/cloudbuild.yaml literal.
+- Note: Backend services already get all URLs via `local.common_service_env_vars` — this is only for web frontend.
 
 10. **Execute Deployment Pipeline**
 
