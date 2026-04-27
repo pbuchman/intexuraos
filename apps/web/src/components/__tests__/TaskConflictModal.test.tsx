@@ -5,8 +5,8 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { TaskConflictModal } from '../TaskConflictModal';
-import type { ConflictReason } from '../TaskConflictModal';
+import { TaskConflictModal } from '../TaskConflictModal.js';
+import type { ConflictReason } from '../TaskConflictModal.js';
 
 // Mock lucide-react icons
 vi.mock('lucide-react', () => ({
@@ -14,7 +14,7 @@ vi.mock('lucide-react', () => ({
 }));
 
 // Mock Button component
-vi.mock('../ui/Button', () => ({
+vi.mock('../ui/Button.js', () => ({
   // @allow-missing-return-type -- Test mock, not production code
   Button: ({
     children,
@@ -52,7 +52,8 @@ describe('TaskConflictModal', () => {
     it('renders modal with duplicate reason', () => {
       render(<TaskConflictModal {...defaultProps} reason="duplicate" />);
 
-      expect(screen.getByText('Similar Task Detected')).toBeInTheDocument();
+      // Title is rendered both as sr-only Dialog.Title and visible h2
+      expect(screen.getAllByText('Similar Task Detected').length).toBeGreaterThan(0);
       expect(
         screen.getByText(/A similar task was submitted in the last 5 minutes/)
       ).toBeInTheDocument();
@@ -62,7 +63,7 @@ describe('TaskConflictModal', () => {
     it('renders modal with active reason', () => {
       render(<TaskConflictModal {...defaultProps} reason="active" />);
 
-      expect(screen.getByText('Active Task Exists')).toBeInTheDocument();
+      expect(screen.getAllByText('Active Task Exists').length).toBeGreaterThan(0);
       expect(
         screen.getByText(/An active task already exists for this Linear issue/)
       ).toBeInTheDocument();
@@ -71,7 +72,7 @@ describe('TaskConflictModal', () => {
     it('renders modal with duplicate_approval reason', () => {
       render(<TaskConflictModal {...defaultProps} reason="duplicate_approval" />);
 
-      expect(screen.getByText('Already Processed')).toBeInTheDocument();
+      expect(screen.getAllByText('Already Processed').length).toBeGreaterThan(0);
       expect(
         screen.getByText(/This approval has already been processed/)
       ).toBeInTheDocument();
@@ -126,7 +127,7 @@ describe('TaskConflictModal', () => {
     it('renders when isOpen is true', () => {
       render(<TaskConflictModal {...defaultProps} isOpen={true} />);
 
-      expect(screen.getByText('Similar Task Detected')).toBeInTheDocument();
+      expect(screen.getAllByText('Similar Task Detected').length).toBeGreaterThan(0);
       expect(screen.getByRole('button', { name: 'View Existing Task' })).toBeInTheDocument();
     });
   });

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import nock from 'nock';
+import { runWithRequestContext } from '@intexuraos/common-core';
 import { fetchWithAuth } from '../http.js';
 
 describe('fetchWithAuth', () => {
@@ -155,6 +156,85 @@ describe('fetchWithAuth', () => {
       } else {
         expect.fail('Expected error result');
       }
+    });
+  });
+
+  describe('request context propagation', () => {
+    it('forwards x-request-id and x-correlation-id from the active context', async () => {
+      const mockData = { ok: true };
+      nock('http://localhost:3000')
+        .get('/test')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .matchHeader('x-request-id', 'req-ctx-1')
+        .matchHeader('x-correlation-id', 'corr-ctx-1')
+        .reply(200, mockData);
+
+      const result = await runWithRequestContext(
+        { requestId: 'req-ctx-1', correlationId: 'corr-ctx-1' },
+        () => fetchWithAuth(config, '/test')
+      );
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('does not overwrite caller-supplied request/correlation headers', async () => {
+      const mockData = { ok: true };
+      nock('http://localhost:3000')
+        .get('/test')
+        .matchHeader('x-request-id', 'caller-supplied')
+        .matchHeader('x-correlation-id', 'caller-correlation')
+        .reply(200, mockData);
+
+      const result = await runWithRequestContext(
+        { requestId: 'ctx-req', correlationId: 'ctx-corr' },
+        () =>
+          fetchWithAuth(config, '/test', {
+            headers: {
+              'x-request-id': 'caller-supplied',
+              'x-correlation-id': 'caller-correlation',
+            },
+          })
+      );
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('replaces empty caller-supplied request/correlation headers with context values', async () => {
+      const mockData = { ok: true };
+      nock('http://localhost:3000')
+        .get('/test')
+        .matchHeader('x-request-id', 'ctx-req-fill')
+        .matchHeader('x-correlation-id', 'ctx-corr-fill')
+        .reply(200, mockData);
+
+      const result = await runWithRequestContext(
+        { requestId: 'ctx-req-fill', correlationId: 'ctx-corr-fill' },
+        () =>
+          fetchWithAuth(config, '/test', {
+            headers: {
+              'x-request-id': '',
+              'x-correlation-id': '',
+            },
+          })
+      );
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('omits propagation headers when no context is active', async () => {
+      const mockData = { ok: true };
+      // Define expected headers minimally — undefined headers must NOT be sent.
+      const scope = nock('http://localhost:3000', {
+        badheaders: ['x-request-id', 'x-correlation-id'],
+      })
+        .get('/test')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockData);
+
+      const result = await fetchWithAuth(config, '/test');
+
+      expect(result.ok).toBe(true);
+      expect(scope.isDone()).toBe(true);
     });
   });
 

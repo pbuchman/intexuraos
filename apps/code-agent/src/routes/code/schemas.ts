@@ -4,7 +4,7 @@
  * Extracted from codeRoutes.ts as part of INT-1430 route split.
  * These schemas are referenced by multiple resource route files.
  */
-import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core';
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
 
 const linearIssueForDisplaySchema = {
   type: 'object',

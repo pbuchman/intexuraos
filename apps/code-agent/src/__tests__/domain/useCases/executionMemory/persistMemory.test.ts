@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ok } from '@intexuraos/common-core';
+import { ok, IntexuraOSError } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
 import { persistMemory } from '../../../../domain/usecases/executionMemory/persistMemory.js';
@@ -145,6 +145,37 @@ describe('persistMemory', () => {
     ).rejects.toThrow('Execution memory embedding client is not configured');
 
     expect(executionMemoryRepo.findByFingerprint).not.toHaveBeenCalled();
+  });
+
+  it('throws IntexuraOSError with MISCONFIGURED/503 when embedding client is missing', async () => {
+    const executionMemoryRepo = {
+      findByFingerprint: vi.fn(),
+      findNearest: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    };
+
+    try {
+      await persistMemory(
+        {
+          repository: 'pbuchman/test',
+          sourceTaskId: 'task-1',
+          sourceLinearIssueId: undefined,
+          sourceAgentType: 'execution',
+          distillationVersion: 'execution-memory-distiller@2.1.0',
+          memory: makeDistilledMemory(),
+        },
+        {
+          logger: mockLogger,
+          executionMemoryRepo,
+        },
+      );
+      throw new Error('expected throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(IntexuraOSError);
+      expect((e as IntexuraOSError).code).toBe('MISCONFIGURED');
+      expect((e as IntexuraOSError).httpStatus).toBe(503);
+    }
   });
 
   it('updates an existing memory when an exact fingerprint match is found', async () => {

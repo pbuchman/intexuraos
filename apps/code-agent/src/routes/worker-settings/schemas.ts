@@ -5,7 +5,7 @@
  * resource-specific sub-plugin can import only the schemas it needs.
  */
 
-import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core';
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
 import { MAX_WORKERS_PER_USER } from '../../domain/models/workerSettings.js';
 
 /** Body schema for `POST /code/worker-settings/workers`. */

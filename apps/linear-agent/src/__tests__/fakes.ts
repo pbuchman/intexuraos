@@ -2,7 +2,8 @@
  * Test fakes for linear-agent.
  */
 
-import { err, ok, type Result, type CodeTaskWorkerType } from '@intexuraos/common-core';
+import { err, ok, type Result } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import type {
   LinearConnectionRepository,
   LinearConnection,
