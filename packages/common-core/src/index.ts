@@ -23,6 +23,12 @@ export {
 export type { Logger } from './logging.js';
 export { getLogLevel } from './logging.js';
 
+// Typed env reader
+export { loadEnv } from './loadEnv.js';
+
+// Generic service container factory (DI lifecycle)
+export { createServiceContainer, type ServiceContainerHandle } from './serviceContainer.js';
+
 // Service feedback contract (cross-service communication)
 export type { ServiceFeedback } from './serviceFeedback.js';
 export {

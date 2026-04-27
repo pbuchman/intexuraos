@@ -67,6 +67,52 @@ async publishMyEvent(event: MyEvent): Promise<Result<void, MyDomainError>> {
 }
 ```
 
+## Consumer Contract
+
+Consumers (Cloud Functions workers triggered by Pub/Sub) MUST wrap their handlers in the `withObservability` helper from `@intexuraos/common-worker`. This guarantees uniform ack/nack semantics, structured observability logs, Sentry reporting, and correct dead-letter routing across every worker. See the package contract in [`docs/plans/2026-04-24-workers-layer-refactor.md`](../plans/2026-04-24-workers-layer-refactor.md) §3.3.
+
+### AckResult return values
+
+Handlers MUST return an `AckResult` describing the disposition of each message. The `AckDecision` enum has exactly three variants:
+
+- `AckDecision.Ack = 'ack'` — handler succeeded; Pub/Sub ACKs the message.
+- `AckDecision.Nack = 'nack'` — transient failure; Pub/Sub redelivers per the subscription's retry policy.
+- `AckDecision.DeadLetter = 'dlq'` — permanent failure (e.g., schema mismatch, unknown event type); message is published to the configured DLQ topic and ACKed.
+
+```typescript
+export interface AckResult {
+  readonly decision: AckDecision;
+  readonly reason?: string;
+}
+```
+
+### `withObservability` wrapper semantics
+
+The wrapper translates each `AckResult` into the corresponding wire behavior:
+
+| `AckDecision`                                           | Wire behavior                                                                            |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `AckDecision.Ack`                                       | resolve (Pub/Sub ACKs).                                                                  |
+| `AckDecision.Nack`                                      | throw (Pub/Sub redelivers; triggers subscription retry policy).                          |
+| `AckDecision.DeadLetter` with `dlqPublish` provided     | publish payload + reason to DLQ and resolve.                                             |
+| `AckDecision.DeadLetter` without `dlqPublish` provided  | treat as Nack (redeliver) and log a WARN — never silently ACK.                           |
+| Handler throws                                          | reported to Sentry, re-thrown as Nack.                                                   |
+
+The wrapper also emits structured `worker_request_*` log entries on entry and exit (e.g. `worker_request_start`, `worker_request_ack`, `worker_request_nack`, `worker_request_dlq`) so every message has a paired start/finish trace.
+
+### Worked example: transcription translation table
+
+The transcription worker historically used `return` (silent ACK) for every parse / schema / event-type failure, masking malformed messages from the DLQ. Under the consumer contract, each early return becomes an explicit `AckResult`:
+
+| Old behavior                                                                  | New behavior                                                               |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `messageData === undefined` → `return` (silent ACK)                           | `return { decision: AckDecision.DeadLetter, reason: 'missing_message_data' }` |
+| JSON parse throws → `return` (silent ACK)                                     | `return { decision: AckDecision.DeadLetter, reason: 'parse_error' }`       |
+| `audioEvent.type !== 'whatsapp.audio.stored'` → `return` (silent ACK)         | `return { decision: AckDecision.DeadLetter, reason: 'unexpected_event_type' }` |
+| `!isAudioStoredEvent(audioEvent)` → `return` (silent ACK)                     | `return { decision: AckDecision.DeadLetter, reason: 'invalid_event_schema' }` |
+| Successful transcription publish                                              | `return { decision: AckDecision.Ack }`                                     |
+| Transcription or downstream throws                                            | Let it propagate → `withObservability` turns into Nack (redelivery)        |
+
 ## PublishError Codes
 
 The shared `PublishError` type has three codes:

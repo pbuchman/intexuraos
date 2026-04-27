@@ -7,8 +7,8 @@
  * throttling or revision rollovers).
  */
 import { type Result } from '@intexuraos/common-core';
-import { BasePubSubPublisher } from './basePublisher.js';
-import type { PublishError, PRTriageEvent, PRTriagePublisherConfig } from './types.js';
+import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
+import type { PRTriageEvent, PRTriagePublisherConfig } from './types.js';
 
 export interface PRTriagePublisher {
   publishPRTriage(params: {

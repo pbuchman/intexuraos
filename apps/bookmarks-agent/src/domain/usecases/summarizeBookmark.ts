@@ -3,7 +3,7 @@ import { err } from '@intexuraos/common-core';
 import type { Bookmark, BookmarkError } from '../models/bookmark.js';
 import type { BookmarkRepository } from '../ports/bookmarkRepository.js';
 import type { BookmarkSummaryService } from '../ports/bookmarkSummaryService.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { updateBookmarkInternal } from './updateBookmarkInternal.js';
 
 export interface TransientError {

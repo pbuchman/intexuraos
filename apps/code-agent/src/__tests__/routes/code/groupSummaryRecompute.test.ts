@@ -34,7 +34,7 @@ import { createWorkerSettingsRepository } from '../../../infra/firestore/workerS
 import { createFirestoreTurnMetricsRepository } from '../../../infra/repositories/firestoreTurnMetricsRepository.js';
 import { createFirestoreGitHubPREventsRepository } from '../../../infra/firestore/gitHubPREventsRepository.js';
 import type { TaskDispatcherService, DispatchResult } from '../../../domain/services/taskDispatcher.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { createFakeTaskGroupSummaryRepository } from '../../fakes/fakeTaskGroupSummaryRepository.js';
 import { Timestamp } from '@google-cloud/firestore';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
