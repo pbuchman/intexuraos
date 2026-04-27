@@ -4,8 +4,7 @@ const path = require('node:path');
 
 const REPO_ROOT = path.resolve(__dirname, '../..');
 const MANIFEST =
-  process.env.WEB_ENV_LOCKSTEP_MANIFEST ??
-  path.join(REPO_ROOT, 'apps/web/service-manifest.json');
+  process.env.WEB_ENV_LOCKSTEP_MANIFEST ?? path.join(REPO_ROOT, 'apps/web/service-manifest.json');
 const CONFIG_TS =
   process.env.WEB_ENV_LOCKSTEP_CONFIG ?? path.join(REPO_ROOT, 'apps/web/src/config.ts');
 const DEPLOY_YML =
@@ -31,7 +30,7 @@ function extractFromManifest(src) {
   }
   return new Set(
     parsed.services.map((s, i) => {
-      if (!s || typeof s.envSuffix !== 'string') {
+      if (!s || typeof s.envSuffix !== 'string' || s.envSuffix.length === 0) {
         throw new Error(`service-manifest.json services[${i}] is missing string "envSuffix"`);
       }
       return `INTEXURAOS_${s.envSuffix}_URL`;
