@@ -1,0 +1,29 @@
+{
+  "agentType": "pull_request",
+  "workerType": "codex",
+  "marker": "PULL_REQUEST_AGENT_FINAL:",
+  "captureContext": {
+    "source": "live `docker exec code-worker-task_70a75a13-... codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox` against codex-cli 0.125.0 (the version baked into the production code-worker image)",
+    "captureDate": "2026-04-27",
+    "probePromptShape": "single-turn prompt asking codex to emit a fixed PULL_REQUEST_AGENT_FINAL block with all required fields populated; codex returned the block in one item.completed/agent_message envelope without invoking any tools",
+    "redactions": "thread_id replaced with all-zero UUID; trailing `codex_core::session: failed to record rollout items` stderr line is real codex output and intentionally preserved to mirror the production transcript byte-for-byte"
+  },
+  "preFixVerdict": {
+    "kind": "hard-error",
+    "code": "TASK_RUNTIME_HARD_ERROR",
+    "messageContains": "No PULL_REQUEST_AGENT_FINAL: block in transcript"
+  },
+  "postFixVerdict": {
+    "kind": "parsed",
+    "missingRequired": [],
+    "dataAssertions": {
+      "pr": "https://github.com/example/repo/pull/1",
+      "comment_replied": "yes",
+      "tracking_comment_id": "42",
+      "tracking_comment": "updated",
+      "total_pr_comments_posted": 1,
+      "ci_evidenceContains": "pnpm run ci:tracked",
+      "summaryContains": "Fixture for codex extractor"
+    }
+  }
+}

@@ -1,33 +1,37 @@
 /**
- * [INT-1560] NDJSON-aware text extractor for the completion verifier.
+ * NDJSON-aware text extractor for the completion verifier.
  *
- * Why this exists. The deployed worker invokes Claude with
- * `--print --verbose --output-format stream-json` (see
- * `docker/code-worker/entrypoint.sh`). The agent's emitted assistant text —
- * including any `*_AGENT_FINAL:` block — therefore lives only inside Claude
- * SDK NDJSON events of the form
- *   `{"type":"assistant","message":{"content":[{"type":"text","text":"..."}]}}`
- * where `text` is a JSON-escaped string with literal `\n` two-character
- * sequences instead of real newlines. After `stripDockerHeaders`, the marker
- * is still buried inside that one big JSON line and never appears on its own
- * line, so the strict line-anchored regex in `locateFinalBlock` cannot match
- * it. Production verdict before this fallback shipped: `TASK_RUNTIME_HARD_ERROR
- * — No PLANNING_AGENT_FINAL: block in transcript`, even when the agent
- * emitted a perfectly valid block.
+ * Why this exists. The verifier reads the worker's raw stdout buffer, which
+ * for both runtimes is JSONL — the marker (`*_AGENT_FINAL:`) lives inside
+ * a JSON-escaped `text` field with literal `\n` two-character sequences and
+ * never appears on its own line. The strict line-anchored regex in
+ * `locateFinalBlock` therefore cannot match it without first un-escaping
+ * the JSON.
  *
- * Confirmed live by instrumenting `task-dispatcher.ts` on home-dev to dump
- * the exact `rawLogs` passed to `runVerification` (see the
- * `planning-probe-unclear.rawlogs.txt` fixture and INT-1560 evidence notes).
+ * Two runtimes, two envelope shapes the verifier must speak:
+ *
+ * 1. [INT-1560] **Claude SDK** (`claude --print --verbose --output-format
+ *    stream-json` — see `docker/code-worker/entrypoint.sh`):
+ *      `{"type":"assistant","message":{"content":[{"type":"text","text":"..."}]}}`
+ *    or terminal:
+ *      `{"type":"result","subtype":"success","result":"..."}`
+ *    Confirmed live via `planning-probe-unclear.rawlogs.txt`.
+ *
+ * 2. **Codex** (`codex exec --json`, codex-cli 0.125.0):
+ *      `{"type":"item.completed","item":{"id":"...","type":"agent_message","text":"..."}}`
+ *    Other codex envelopes (`thread.started`, `turn.started`, `turn.completed`,
+ *    and `item.completed` for `command_execution`/`reasoning` items) carry
+ *    no agent-emitted prose and pass through. Confirmed live via
+ *    `codex-pull-request-final.rawlogs.txt` — task_70a75a13 was the
+ *    production failure that forced this branch.
  *
  * What this does. Iterates the transcript line by line. When a line parses
- * as a Claude SDK assistant message with a `text` content block, the line
- * is REPLACED by the un-escaped text (so embedded `\n` become real newlines
- * the locator can split on). Same for terminal `result` events whose
- * `result` field carries the agent's final string. All other lines —
- * non-JSON, malformed JSON, system/user/rate-limit events, assistant events
- * with only tool_use blocks — pass through unchanged. The output is
- * therefore still aligned line-for-line with the input for every line that
- * isn't an extractable text-bearing event.
+ * as one of the supported envelopes, it is REPLACED by the un-escaped text
+ * (so embedded `\n` become real newlines the locator can split on). All
+ * other lines — non-JSON, malformed JSON, system/user/rate-limit events,
+ * assistant events with only tool_use blocks, codex preamble events,
+ * codex command_execution events — pass through unchanged. Output is
+ * line-for-line aligned with input for every non-extractable line.
  */
 
 interface AssistantContentBlock {
@@ -43,6 +47,11 @@ interface AssistantEvent {
 interface ResultEvent {
   type?: unknown;
   result?: unknown;
+}
+
+interface CodexItemCompletedEvent {
+  type?: unknown;
+  item?: { type?: unknown; text?: unknown };
 }
 
 function extractFromAssistantEvent(obj: AssistantEvent): string | null {
@@ -62,6 +71,12 @@ function extractFromAssistantEvent(obj: AssistantEvent): string | null {
 function extractFromResultEvent(obj: ResultEvent): string | null {
   if (obj.type !== 'result') return null;
   return typeof obj.result === 'string' ? obj.result : null;
+}
+
+function extractFromCodexAgentMessage(obj: CodexItemCompletedEvent): string | null {
+  if (obj.type !== 'item.completed') return null;
+  if (obj.item?.type !== 'agent_message') return null;
+  return typeof obj.item.text === 'string' ? obj.item.text : null;
 }
 
 /**
@@ -91,8 +106,11 @@ export function extractAssistantText(transcript: string): string {
     // beginning with `{` cannot return a non-object literal). No null check
     // here — `null` literally serializes as `null`, not `{...}`, so it can
     // never reach this point.
-    const obj = parsed as AssistantEvent & ResultEvent;
-    const extracted = extractFromAssistantEvent(obj) ?? extractFromResultEvent(obj);
+    const obj = parsed as AssistantEvent & ResultEvent & CodexItemCompletedEvent;
+    const extracted =
+      extractFromAssistantEvent(obj) ??
+      extractFromResultEvent(obj) ??
+      extractFromCodexAgentMessage(obj);
     if (extracted === null) {
       out.push(line);
       continue;
