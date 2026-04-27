@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Timestamp } from '@google-cloud/firestore';
+import { IntexuraOSError } from '@intexuraos/common-core';
 import type { CodeTask } from '../../models/codeTask.js';
 
 export const DISTILLATION_VERSION = 'execution-memory-distiller@2.1.0';
@@ -154,7 +155,7 @@ export function parseJsonObject(response: string): unknown {
   const stripped = response.replace(/```(?:json)?\s*\n?([\s\S]*?)```/g, '$1');
   const match = /\{[\s\S]*\}/.exec(stripped);
   if (match === null) {
-    throw new Error('Response did not contain JSON');
+    throw new IntexuraOSError('INTERNAL_ERROR', 'Response did not contain JSON');
   }
   return JSON.parse(match[0]);
 }

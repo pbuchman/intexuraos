@@ -1,4 +1,4 @@
-import { CODE_TASK_WORKER_TYPES, type CodeTaskWorkerType } from '@intexuraos/common-core/code-task-worker-types';
+import { CODE_TASK_WORKER_TYPES, type CodeTaskWorkerType } from '@intexuraos/code-task-domain/worker-types';
 import type { CodeTaskExecutionMemoryContext, CodeTaskStatus, WorkerStatusTag } from '@/types';
 
 // --- Worker types (shared by TaskActions + NextSteps) ---

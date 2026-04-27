@@ -10,8 +10,9 @@
  * is the caller's responsibility — typically the Fastify route schema.
  */
 
-import type { CodeTaskWorkerType, Result } from '@intexuraos/common-core';
+import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import type {
   DefaultWorkerTypeField,
   WorkerSettingsRepository,

@@ -2419,10 +2419,10 @@ describe('codeRoutes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
-      expect(mockDetectZombieTasks).toHaveBeenCalled();
+      // INT-1531: Bearer tokens are now verified against Google's JWKS;
+      // a non-Google token is rejected.
+      expect(response.statusCode).toBe(401);
+      expect(mockDetectZombieTasks).not.toHaveBeenCalled();
     });
 
     it('returns 500 when zombie detection fails', async () => {
@@ -4323,7 +4323,7 @@ describe('codeRoutes', () => {
       expect(body.success).toBe(true);
     });
 
-    it('returns 200 when authenticated via OIDC bearer token', async () => {
+    it('returns 401 when Bearer token is not a valid Google OIDC token (INT-1531)', async () => {
       const response = await server.inject({
         method: 'POST',
         url: '/internal/drain-queue',
@@ -4333,9 +4333,7 @@ describe('codeRoutes', () => {
         payload: {},
       });
 
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
+      expect(response.statusCode).toBe(401);
     });
 
     it('returns retry queue result when retry entry is non-empty', async () => {

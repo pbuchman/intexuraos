@@ -329,7 +329,7 @@ resource "google_cloudbuild_trigger" "code_worker" {
   }
 
   ignored_files = ["**"]
-  filename      = "workers/code-worker/cloudbuild.yaml"
+  filename      = "docker/code-worker/cloudbuild.yaml"
 
   substitutions = {
     _REGION                = var.region

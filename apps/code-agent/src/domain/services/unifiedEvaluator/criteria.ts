@@ -8,7 +8,7 @@
 import type { Logger } from '@intexuraos/common-core';
 import type { GitHubPREvent } from '../../models/gitHubPREvent.js';
 import type { CodeTaskRepository } from '../../repositories/codeTaskRepository.js';
-import type { CodeTask } from '../../models/codeTask.js';
+import type { AgentType, CodeTask, TaskStatus } from '../../models/codeTask.js';
 import type { CIFailureDispatchService } from '../gitHubDispatchService.js';
 import { CIFailureRule } from '../gitHubWebhookRules.js';
 import type { UnifiedEvaluatorDeps } from './types.js';
@@ -174,4 +174,47 @@ export async function shouldSkipReviewForRemediation(
 
   // Only an explicit false suppresses a fresh review. Undefined fails open to review.
   return task.requiresReReview === false;
+}
+
+const TERMINAL_FAILURE_STATUSES = new Set<TaskStatus>(['failed', 'interrupted', 'cancelled']);
+
+export const FAILED_ORIGIN_NO_REVIEW_REASON = 'failed_origin_no_review';
+
+export type FailedOriginGateResult =
+  | { skip: false }
+  | { skip: true; origin: { taskId: string; agentType: AgentType; status: TaskStatus } };
+
+/**
+ * Suppress LLM-triggered review when the PR's latest planning/execution
+ * (or pull_request fallback) origin task ended in a terminal failure
+ * status — `failed`, `interrupted`, or `cancelled`. A retry produces a new
+ * latest origin task, so the gate self-clears once the user re-runs.
+ *
+ * Fail-open: any repo error or non-failure status returns skip=false.
+ */
+export async function shouldSkipReviewForFailedOrigin(
+  codeTaskRepo: CodeTaskRepository,
+  repository: string,
+  prNumber: number,
+  eventId: string,
+  logger: Logger,
+): Promise<FailedOriginGateResult> {
+  const result = await codeTaskRepo.findOriginTaskByPR(repository, prNumber);
+  if (!result.ok) {
+    logger.warn(
+      { eventId, error: result.error },
+      'Failed to look up origin task for failed-origin gate, proceeding with review',
+    );
+    return { skip: false };
+  }
+
+  const task: CodeTask | null = result.value;
+  if (task?.agentType === undefined || !TERMINAL_FAILURE_STATUSES.has(task.status)) {
+    return { skip: false };
+  }
+
+  return {
+    skip: true,
+    origin: { taskId: task.id, agentType: task.agentType, status: task.status },
+  };
 }

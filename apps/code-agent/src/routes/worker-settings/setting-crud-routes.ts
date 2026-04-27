@@ -14,7 +14,7 @@
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest } from '@intexuraos/common-http';
-import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core';
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
 import { getServices } from '../../services.js';
 import type { JwtValidator } from '../codeRoutes.js';
 import type {

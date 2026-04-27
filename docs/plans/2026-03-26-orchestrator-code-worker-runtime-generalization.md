@@ -103,9 +103,9 @@
   Accept `codex` in the worker type schema.
 - `workers/orchestrator/src/start.ts`
   Wire Codex auth bootstrap paths, runtime-aware secrets, and any startup validation.
-- `workers/code-worker/Dockerfile`
+- `docker/code-worker/Dockerfile`
   Keep shared image strategy; add any Codex runtime defaults or directory bootstrap required for managed use.
-- `workers/code-worker/entrypoint.sh`
+- `docker/code-worker/entrypoint.sh`
   Split shared container setup from runtime-specific attempt execution.
 - `packages/common-core/src/codeTaskWorkerTypes.ts`
   Add `codex` only after the internal runtime path is implemented and tested.
@@ -341,8 +341,8 @@
 ### Task 5: Split entrypoint into shared setup plus runtime-specific attempt execution
 
 **Files:**
-- Modify: `workers/code-worker/entrypoint.sh`
-- Modify: `workers/code-worker/Dockerfile`
+- Modify: `docker/code-worker/entrypoint.sh`
+- Modify: `docker/code-worker/Dockerfile`
 - Test: `workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts`
 
 - [ ] **Step 1: Write failing tests for runtime-specific command selection**
@@ -509,7 +509,7 @@
 - [ ] **Step 3: Commit the rollout chunk**
 
   ```bash
-  git add packages/common-core workers/orchestrator workers/code-worker apps/web apps/actions-agent docs
+  git add packages/common-core workers/orchestrator docker/code-worker apps/web apps/actions-agent docs
   git commit -m "feat(orchestrator): add codex runtime support"
   ```
 
@@ -554,7 +554,7 @@
 ### Task 10: Rename `code-worker` to `code-worker` only after functional stability
 
 **Files:**
-- Modify: `workers/code-worker/**`
+- Modify: `docker/code-worker/**`
 - Modify: `workers/orchestrator/DEPLOYMENT.md`
 - Modify: `docs/services/code-worker/**`
 - Modify: image-name references in orchestrator config/docs/scripts

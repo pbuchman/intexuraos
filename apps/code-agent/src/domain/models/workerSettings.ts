@@ -5,7 +5,7 @@
  * with per-user encrypted credentials.
  */
 
-import type { CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 
 /**
  * Worker name validation regex.

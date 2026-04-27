@@ -11,11 +11,8 @@ import { Timestamp } from '@intexuraos/infra-firestore';
 import { randomUUID } from 'node:crypto';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { authenticateInternalScheduler } from '../helpers/internalAuth.js';
-import {
-  extractOrGenerateTraceId,
-  isCodeTaskWorkerType,
-  type ErrorCode,
-} from '@intexuraos/common-core';
+import { extractOrGenerateTraceId, type ErrorCode } from '@intexuraos/common-core';
+import { isCodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { getServices } from '../../services.js';
 import { processCodeAction } from '../../domain/usecases/processCodeAction.js';
@@ -987,7 +984,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to POST /internal/code/detect-zombies',
       });
 
-      const authResult = authenticateInternalScheduler(request);
+      const authResult = await authenticateInternalScheduler(request);
       if (!authResult.authenticated) {
         request.log.warn('Internal auth failed for zombie detection');
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
@@ -1649,7 +1646,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           };
         };
 
-        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
+        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId in submit-code-task route — ?? fallback unreachable @preserve */
         const userId = request.user?.userId ?? 'unknown-user';
         /* v8 ignore stop @preserve */
 
@@ -1900,7 +1897,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         });
 
         const { codeTaskRepo, linearAgentClient } = getServices();
-        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
+        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId in list-user-tasks route — ?? fallback unreachable @preserve */
         const userId = request.user?.userId ?? 'unknown-user';
         /* v8 ignore stop @preserve */
 
@@ -2159,7 +2156,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         });
 
         const { codeTaskRepo, linearAgentClient, logger } = getServices();
-        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
+        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId in get-task-details route — ?? fallback unreachable @preserve */
         const userId = request.user?.userId ?? 'unknown-user';
         /* v8 ignore stop @preserve */
 
@@ -2261,7 +2258,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         });
 
         const { codeTaskRepo, logger } = getServices();
-        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
+        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId in delete-task route — ?? fallback unreachable @preserve */
         const userId = request.user?.userId ?? 'unknown-user';
         /* v8 ignore stop @preserve */
         const { taskId } = request.params;
@@ -2325,7 +2322,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         });
 
         const { codeTaskRepo, logger } = getServices();
-        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
+        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId in archive-task route — ?? fallback unreachable @preserve */
         const userId = request.user?.userId ?? 'unknown-user';
         /* v8 ignore stop @preserve */
         const { taskId } = request.params;
@@ -2467,7 +2464,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
         const { codeTaskRepo, taskDispatcher, statusMirrorService, workerSettingsRepo } = getServices();
         const { taskId } = request.body;
-        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
+        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId in cancel-task route — ?? fallback unreachable @preserve */
         const userId = request.user?.userId ?? 'unknown-user';
         /* v8 ignore stop @preserve */
 
@@ -2577,7 +2574,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         const { workerSettingsRepo, workerHealthProbe } = getServices();
         const userId = request.user?.userId;
 
-        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
+        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId in worker-health-get route — ?? fallback unreachable @preserve */
         if (userId === undefined || userId === '') {
           return await reply.fail('UNAUTHORIZED', 'Authentication required');
         }
@@ -2770,7 +2767,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         const { workerSettingsRepo, workerHealthProbe } = getServices();
         const userId = request.user?.userId;
 
-        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
+        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId in worker-health-refresh route — ?? fallback unreachable @preserve */
         if (userId === undefined || userId === '') {
           return await reply.fail('UNAUTHORIZED', 'Authentication required');
         }
@@ -2976,7 +2973,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           getServices();
         const userId = request.user?.userId;
 
-        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
+        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId in retry-task route — ?? fallback unreachable @preserve */
         if (userId === undefined || userId === '') {
           return await reply.fail('UNAUTHORIZED', 'Authentication required');
         }
@@ -3185,7 +3182,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           getServices();
         const userId = request.user?.userId;
 
-        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
+        /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId in start-execution-agent route — ?? fallback unreachable @preserve */
         if (userId === undefined) {
           return await reply.fail('UNAUTHORIZED', 'Authentication required');
         }

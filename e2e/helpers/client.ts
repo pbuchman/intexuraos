@@ -4,7 +4,7 @@
  * Provides axios instance configured for code-agent API.
  */
 
-import type { CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import axios, { type AxiosInstance, type AxiosError } from 'axios';
 
 /**

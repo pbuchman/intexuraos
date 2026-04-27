@@ -87,6 +87,48 @@ const CATEGORY_SPECIFIC_KEYWORDS = {
   regex: ['capture group', 'regex match'],
 };
 
+/**
+ * Validate that v8 ignore explanations are not mass-duplicated within a single file.
+ *
+ * Many duplicates of the same `(category, explanation)` tuple in one file usually
+ * indicate copy-pasted boilerplate that hides distinct testing blockers. We tolerate
+ * up to MAX_ALLOWED_DUPLICATES (3) per tuple — true repeated patterns (same fake,
+ * same regex, etc.) are realistic — but anything beyond should be refactored
+ * into a covered helper or differentiated to name the unique blocker per site.
+ */
+const MAX_ALLOWED_DUPLICATES = 3;
+
+function validateDuplicateExplanations(comments) {
+  const errors = [];
+  const byFile = new Map();
+
+  for (const comment of comments) {
+    if (comment.type === 'stop') continue;
+    if (!byFile.has(comment.file)) byFile.set(comment.file, new Map());
+    const perFile = byFile.get(comment.file);
+    const key = `${comment.category}|${(comment.explanation ?? '').trim().toLowerCase()}`;
+    if (!perFile.has(key)) perFile.set(key, []);
+    perFile.get(key).push(comment);
+  }
+
+  for (const [file, byKey] of byFile.entries()) {
+    for (const [key, group] of byKey.entries()) {
+      if (group.length > MAX_ALLOWED_DUPLICATES) {
+        const [category, explanation] = key.split('|');
+        errors.push({
+          file,
+          line: group[0].line,
+          message:
+            `Duplicate v8 ignore explanation (${group.length} copies, max ${MAX_ALLOWED_DUPLICATES}) — ` +
+            `category="${category}", explanation="${explanation}". ` +
+            `Either refactor so one block covers all branches, or differentiate explanations to name the unique blocker per site.`,
+        });
+      }
+    }
+  }
+  return { errors };
+}
+
 function validateBlockerKeywords(comments) {
   const errors = [];
 
@@ -1084,6 +1126,10 @@ async function main() {
   // Phase C-1: NEVER-valid pattern blocklist
   const { errors: neverValidErrors } = validateNeverValidPatterns(Array.from(validComments));
 
+  // Phase B-2: Duplicate-explanation detector — guards against copy-pasted boilerplate
+  // that hides distinct testing blockers under one generic explanation.
+  const { errors: duplicateErrors } = validateDuplicateExplanations(Array.from(validComments));
+
   // Phase D: Coverage cross-reference
   const coveragePath = resolve(ROOT_DIR, 'coverage/coverage-final.json');
   let coverageErrors = [];
@@ -1126,6 +1172,7 @@ async function main() {
     ...blockerErrors,
     ...patternErrors,
     ...neverValidErrors,
+    ...duplicateErrors,
     ...coverageErrors,
   ];
   const validCount = validComments.size;
@@ -1280,6 +1327,66 @@ async function selfTest() {
     1,
     '"capture group" is regex-specific, should fail for upstream'
   );
+
+  // Test: duplicate-explanation detector flags >MAX duplicates per (file, category, text)
+  console.log('Running self-tests for validateDuplicateExplanations...');
+
+  // Build MAX_ALLOWED_DUPLICATES + 1 identical entries — must fail.
+  const dupSeed = {
+    type: 'start',
+    category: 'ts-type',
+    explanation: 'conditional property assignment based on undefined check',
+    file: 'researchRoutes.ts',
+  };
+  const dupComments = [];
+  for (let i = 0; i < MAX_ALLOWED_DUPLICATES + 1; i++) {
+    dupComments.push({ ...dupSeed, line: 10 + i });
+  }
+  const dupResult = validateDuplicateExplanations(dupComments);
+  assert.equal(
+    dupResult.errors.length,
+    1,
+    `>${MAX_ALLOWED_DUPLICATES} duplicates of one explanation should fail`
+  );
+  assert.ok(
+    dupResult.errors[0].message.toLowerCase().includes('duplicate'),
+    'duplicate-explanation error message must name the violation type'
+  );
+
+  // Test: at-or-below threshold is allowed.
+  const allowedDupComments = [];
+  for (let i = 0; i < MAX_ALLOWED_DUPLICATES; i++) {
+    allowedDupComments.push({ ...dupSeed, line: 10 + i });
+  }
+  const allowedDupResult = validateDuplicateExplanations(allowedDupComments);
+  assert.equal(
+    allowedDupResult.errors.length,
+    0,
+    `${MAX_ALLOWED_DUPLICATES} copies of one explanation should pass (true repeated patterns are allowed up to the cap)`
+  );
+
+  // Test: duplicates across DIFFERENT files do not aggregate.
+  const crossFileResult = validateDuplicateExplanations([
+    { ...dupSeed, file: 'a.ts', line: 1 },
+    { ...dupSeed, file: 'b.ts', line: 1 },
+    { ...dupSeed, file: 'c.ts', line: 1 },
+    { ...dupSeed, file: 'd.ts', line: 1 },
+    { ...dupSeed, file: 'e.ts', line: 1 },
+  ]);
+  assert.equal(
+    crossFileResult.errors.length,
+    0,
+    'duplicates across different files must not aggregate'
+  );
+
+  // Test: stop comments are skipped (no explanation field).
+  const stopOnlyResult = validateDuplicateExplanations([
+    { type: 'stop', file: 'x.ts', line: 1 },
+    { type: 'stop', file: 'x.ts', line: 2 },
+    { type: 'stop', file: 'x.ts', line: 3 },
+    { type: 'stop', file: 'x.ts', line: 4 },
+  ]);
+  assert.equal(stopOnlyResult.errors.length, 0, 'stop comments must be skipped');
 
   console.log('All self-tests passed ✅');
 }
