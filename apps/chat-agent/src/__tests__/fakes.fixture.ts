@@ -22,6 +22,11 @@ import type {
   OAuthProvider,
 } from '@intexuraos/internal-clients';
 import type { GuestRateLimiter } from '../infra/rateLimit/index.js';
+import type {
+  GuestSessionSigner,
+  GuestSessionPayload,
+  GuestSessionError,
+} from '../infra/guestSession/index.js';
 
 /**
  * Fake embedding repository for testing.
@@ -267,25 +272,71 @@ export class FakeUserServiceClient implements UserServiceClient {
 export class FakeGuestRateLimiter implements GuestRateLimiter {
   private shouldBlock = false;
   private blockMessage = 'Rate limit exceeded';
+  public seenSessionIds: string[] = [];
 
   setBlock(block: boolean, message = 'Rate limit exceeded'): void {
     this.shouldBlock = block;
     this.blockMessage = message;
   }
 
-  check(_sessionId: string): Result<void, { message: string }> {
+  check(sessionId: string): Result<void, { message: string }> {
+    this.seenSessionIds.push(sessionId);
     if (this.shouldBlock) {
       return err({ message: this.blockMessage });
     }
     return ok(undefined);
   }
 
-  record(_sessionId: string): void {
-    // No-op for tests
+  record(sessionId: string): void {
+    this.seenSessionIds.push(sessionId);
   }
 
   getUsage(_sessionId: string): { count: number; remaining: number } | null {
     return { count: 0, remaining: 100 };
+  }
+}
+
+/**
+ * Fake GuestSessionSigner for testing.
+ *
+ * issue() emits a token of the form `fake-token-for-<sub>`; verify() accepts
+ * any token in that shape and reports the embedded sub. Anything else is
+ * rejected with INVALID_SIGNATURE. setNextSub() controls what issue() returns.
+ */
+export class FakeGuestSessionSigner implements GuestSessionSigner {
+  private nextSub = 'fake-sub-1';
+
+  setNextSub(sub: string): void {
+    this.nextSub = sub;
+  }
+
+  async issue(): Promise<{ token: string; sub: string; expiresAt: number }> {
+    const sub = this.nextSub;
+    return await Promise.resolve({
+      token: `fake-token-for-${sub}`,
+      sub,
+      expiresAt: Date.now() + 3_600_000,
+    });
+  }
+
+  async verify(
+    token: string
+  ): Promise<Result<GuestSessionPayload, GuestSessionError>> {
+    const prefix = 'fake-token-for-';
+    if (!token.startsWith(prefix)) {
+      return await Promise.resolve(
+        err({ code: 'INVALID_SIGNATURE' as const, message: 'fake: bad token' })
+      );
+    }
+    const sub = token.slice(prefix.length);
+    if (sub.length === 0) {
+      return await Promise.resolve(
+        err({ code: 'INVALID_SIGNATURE' as const, message: 'fake: empty sub' })
+      );
+    }
+    return await Promise.resolve(
+      ok({ sub, issuedAt: Date.now() - 1000, expiresAt: Date.now() + 3_600_000 })
+    );
   }
 }
 
@@ -297,11 +348,13 @@ export function setupFakeServices(): ServiceContainer & {
   llmGenerateClient: FakeLlmGenerateClient;
   fakeUserServiceClient: FakeUserServiceClient;
   fakeGuestRateLimiter: FakeGuestRateLimiter;
+  fakeGuestSessionSigner: FakeGuestSessionSigner;
   guestLlmClient: FakeLlmGenerateClient;
 } {
   const llmGenerateClient = new FakeLlmGenerateClient();
   const fakeUserServiceClient = new FakeUserServiceClient(llmGenerateClient);
   const fakeGuestRateLimiter = new FakeGuestRateLimiter();
+  const fakeGuestSessionSigner = new FakeGuestSessionSigner();
   const guestLlmClient = new FakeLlmGenerateClient();
 
   const services: ServiceContainer = {
@@ -312,9 +365,17 @@ export function setupFakeServices(): ServiceContainer & {
     logger: mockLogger as unknown as import('pino').Logger,
     guestRateLimiter: fakeGuestRateLimiter,
     guestLlmClient,
+    guestSessionSigner: fakeGuestSessionSigner,
   };
   setServices(services);
-  return { ...services, llmGenerateClient, fakeUserServiceClient, fakeGuestRateLimiter, guestLlmClient };
+  return {
+    ...services,
+    llmGenerateClient,
+    fakeUserServiceClient,
+    fakeGuestRateLimiter,
+    fakeGuestSessionSigner,
+    guestLlmClient,
+  };
 }
 
 /**
