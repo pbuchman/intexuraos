@@ -1,4 +1,4 @@
-import { ok, getErrorMessage, type Logger } from '@intexuraos/common-core';
+import { ok, getErrorMessage, IntexuraOSError, type Logger } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
 import { z } from 'zod';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
@@ -82,12 +82,12 @@ export async function processMemoryEntry(
 
   const logsResult = await deps.logLineRepo.listRecent(task.id, MAX_LOG_LINES);
   if (!logsResult.ok) {
-    throw new Error(logsResult.error.message);
+    throw new IntexuraOSError('INTERNAL_ERROR', logsResult.error.message);
   }
 
   const turnMetricsResult = await deps.turnMetricsRepo.listByTask(task.id);
   if (!turnMetricsResult.ok) {
-    throw new Error(turnMetricsResult.error.message);
+    throw new IntexuraOSError('INTERNAL_ERROR', turnMetricsResult.error.message);
   }
 
   const issueContextResult = task.linearIssueId !== undefined
@@ -95,7 +95,7 @@ export async function processMemoryEntry(
     : ok({ description: null, comments: [] });
 
   if (!issueContextResult.ok) {
-    throw new Error(issueContextResult.error.message);
+    throw new IntexuraOSError('INTERNAL_ERROR', issueContextResult.error.message);
   }
 
   const evaluationSummary = await evaluateApplication(task, logsResult.value, resolvedDeps);
@@ -169,7 +169,7 @@ export async function evaluateApplication(
 
   const applicationResult = await deps.executionMemoryApplicationRepo.findById(applicationId);
   if (!applicationResult.ok) {
-    throw new Error(applicationResult.error.message);
+    throw new IntexuraOSError('INTERNAL_ERROR', applicationResult.error.message);
   }
 
   const application = applicationResult.value;
@@ -217,7 +217,7 @@ export async function evaluateApplication(
 
   const evaluationResult = await deps.evaluatorClient.generate(evaluationPrompt, { promptType: 'execution-memory-evaluation' });
   if (!evaluationResult.ok) {
-    throw new Error(evaluationResult.error.message);
+    throw new IntexuraOSError('INTERNAL_ERROR', evaluationResult.error.message);
   }
 
   let parsed: z.infer<typeof EvaluationSchema>;
@@ -236,7 +236,7 @@ export async function evaluateApplication(
 
     const retryResult = await deps.evaluatorClient.generate(refinementPrompt, { promptType: 'execution-memory-evaluation-retry' });
     if (!retryResult.ok) {
-      throw new Error(retryResult.error.message);
+      throw new IntexuraOSError('INTERNAL_ERROR', retryResult.error.message);
     }
 
     parsed = EvaluationSchema.parse(parseJsonObject(retryResult.value.content));
@@ -334,7 +334,7 @@ export async function distillTask(
 
   const result = await deps.distillerClient.generate(prompt, { promptType: 'execution-memory-distillation' });
   if (!result.ok) {
-    throw new Error(result.error.message);
+    throw new IntexuraOSError('INTERNAL_ERROR', result.error.message);
   }
 
   try {
@@ -352,7 +352,7 @@ export async function distillTask(
 
     const retryResult = await deps.distillerClient.generate(refinementPrompt, { promptType: 'execution-memory-distillation-retry' });
     if (!retryResult.ok) {
-      throw new Error(retryResult.error.message);
+      throw new IntexuraOSError('INTERNAL_ERROR', retryResult.error.message);
     }
 
     return DistillationSchema.parse(parseJsonObject(retryResult.value.content));

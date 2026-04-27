@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   Archive,
   Ban,
@@ -14,6 +14,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button, ErrorBanner, Input } from '@/components';
+import { Modal } from '@/components/ui/Modal';
 import { PriorityBadge, StatusBadge } from '@/components/todos/shared.js';
 import { TodoItemRow } from '@/components/todos/TodoItemRow.js';
 import { formatDate, formatDateForInput } from '@/utils/dateFormat.js';
@@ -67,14 +68,6 @@ export function TodoModal({
   const [newItemTitle, setNewItemTitle] = useState('');
   const [addingItem, setAddingItem] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return (): void => { document.removeEventListener('keydown', handleKeyDown); };
-  }, [onClose]);
 
   const handleSave = async (): Promise<void> => {
     setSaving(true);
@@ -187,19 +180,18 @@ export function TodoModal({
   const completedCount = currentTodo.items.filter((i) => i.status === 'completed').length;
   const canArchive = currentTodo.status === 'completed' || currentTodo.status === 'cancelled';
 
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={handleBackdropClick}
+    <Modal
+      open
+      onOpenChange={(o): void => {
+        if (!o) onClose();
+      }}
+      title={isEditing ? 'Edit Todo' : 'View Todo'}
+      hideTitle
+      padded={false}
+      contentClassName="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-800"
     >
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-800">
-        <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-700">
+      <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-700">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             {isEditing ? 'Edit Todo' : 'View Todo'}
           </h2>
@@ -524,7 +516,6 @@ export function TodoModal({
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

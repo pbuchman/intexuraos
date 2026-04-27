@@ -1,10 +1,16 @@
 /**
  * Label normalization utilities for Linear issue labels.
  *
- * Re-exports from @intexuraos/common-core.
+ * Re-exports from @intexuraos/linear-domain and @intexuraos/code-task-domain.
  */
 
-import { CODE_TASK_WORKER_TYPES, normalizeLabel, hasCodeTaskLabel, hasPlanningTaskLabel, hasComplexTaskLabel } from '@intexuraos/common-core';
+import {
+  normalizeLabel,
+  hasCodeTaskLabel,
+  hasPlanningTaskLabel,
+  hasComplexTaskLabel,
+} from '@intexuraos/linear-domain';
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
 import type { WorkerType } from '../models/codeTask.js';
 
 export { hasCodeTaskLabel, hasPlanningTaskLabel, hasComplexTaskLabel };

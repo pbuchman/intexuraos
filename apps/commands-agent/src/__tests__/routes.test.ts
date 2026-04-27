@@ -973,7 +973,7 @@ describe('Commands Agent Routes', () => {
       expect(response.statusCode).toBe(401);
     });
 
-    it('accepts OIDC Bearer token authentication (Cloud Scheduler)', async () => {
+    it('rejects fake Bearer tokens (INT-1531: now verified against Google JWKS)', async () => {
       app = await buildServer();
 
       const response = await app.inject({
@@ -982,9 +982,7 @@ describe('Commands Agent Routes', () => {
         headers: { authorization: 'Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.fake-oidc-token' },
       });
 
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean };
-      expect(body.success).toBe(true);
+      expect(response.statusCode).toBe(401);
     });
 
     it('returns success with zero counts when no pending commands', async () => {

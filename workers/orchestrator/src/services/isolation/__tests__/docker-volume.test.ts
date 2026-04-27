@@ -156,7 +156,7 @@ describe('DockerVolume', () => {
     // /repo/node_modules MUST stay rw,exec because pnpm-installed .bin/ shims
     // are POSIX scripts. Switching to noexec breaks pnpm test/lint/build runs.
     // Defense-in-depth against malicious lifecycle scripts is provided by
-    // ignore-scripts=true (see workers/code-worker/.npmrc and worker-env.ts).
+    // ignore-scripts=true (see docker/code-worker/.npmrc and worker-env.ts).
     expect(tmpfs['/repo/node_modules']).toContain('exec');
     expect(tmpfs['/repo/node_modules']).not.toContain('noexec');
     expect(tmpfs['/tmp']).toContain('noexec');
