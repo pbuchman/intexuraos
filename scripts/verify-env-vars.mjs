@@ -110,8 +110,11 @@ function findTsFiles(dir, files = []) {
 function extractRequiredEnv(indexContent) {
   const vars = [];
 
-  // Extract from REQUIRED_ENV
-  const requiredEnvPattern = /const\s+REQUIRED_ENV\s*=\s*\[([\s\S]*?)\];/;
+  // Extract from REQUIRED_ENV. Supports both
+  //   const REQUIRED_ENV = [...];
+  // and the typed-loadEnv form
+  //   const REQUIRED_ENV = [...] as const;
+  const requiredEnvPattern = /const\s+REQUIRED_ENV\s*=\s*\[([\s\S]*?)\](?:\s+as\s+const)?\s*;/;
   const requiredMatch = indexContent.match(requiredEnvPattern);
   if (requiredMatch) {
     const stringPattern = /'([^']+)'/g;
