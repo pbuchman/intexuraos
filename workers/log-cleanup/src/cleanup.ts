@@ -1,4 +1,4 @@
-import { logger } from './logger.js';
+import type { Logger } from './logger.js';
 
 export interface CleanupConfig {
   codeAgentUrl: string;
@@ -65,7 +65,10 @@ export function loadConfig(): CleanupConfig {
   return config;
 }
 
-export async function cleanupOldLogs(config?: CleanupConfig): Promise<CleanupResult> {
+export async function cleanupOldLogs(
+  logger: Logger,
+  config?: CleanupConfig
+): Promise<CleanupResult> {
   const startTime = Date.now();
   /* v8 ignore start -- ts-type: config resolution fallback @preserve */
   const resolvedConfig = config ?? loadConfig();

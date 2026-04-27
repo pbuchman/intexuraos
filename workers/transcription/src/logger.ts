@@ -1,9 +1,10 @@
-import pino, { type Logger as PinoLogger } from 'pino';
-import { serializeError } from '@intexuraos/common-core';
-
 /**
- * Simplified logger interface for dependency injection.
- * Used in polling.ts, main.ts, and tests to avoid pino's full Logger type.
+ * Logger type used for dependency injection across the transcription worker.
+ *
+ * The runtime logger is bootstrapped via `initWorker()` in `index.ts` (see
+ * `@intexuraos/infra-sentry`); this module exists only to expose a structural
+ * `Logger` interface that callers (`polling.ts`, `main.ts`, providers) accept
+ * without taking a hard dependency on `pino`.
  */
 export interface Logger {
   level: string;
@@ -12,22 +13,3 @@ export interface Logger {
   error(obj: object, msg?: string): void;
   debug(obj: object, msg?: string): void;
 }
-
-const errorSerializers = {
-  error: serializeError,
-  err: serializeError,
-};
-
-/**
- * Singleton pino logger with full pino.Logger type.
- * Typed as pino.Logger for compatibility with infra-pubsub's BasePubSubPublisher.
- */
-/* v8 ignore start -- module-init: logger initialized at module load with env var fallback @preserve */
-export const logger: PinoLogger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  formatters: {
-    level: (label: string): { level: string } => ({ level: label }),
-  },
-  serializers: errorSerializers,
-});
-/* v8 ignore stop @preserve */

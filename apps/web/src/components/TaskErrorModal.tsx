@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from './ui/Button.js';
+import { Modal } from '@/components/ui/Modal';
 import type { ApiError } from '@/services/apiClient.js';
 import { getErrorConfig } from '@/services/errorConfig.js';
 
@@ -25,7 +26,7 @@ export function TaskErrorModal({
     }
   }, [isOpen]);
 
-  if (!isOpen || error === null) return null;
+  if (error === null) return null;
 
   const config = getErrorConfig(error, {
     onClose,
@@ -36,12 +37,6 @@ export function TaskErrorModal({
   });
   const Icon = config.icon;
   const message = config.getMessage(error);
-
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
 
   const handlePrimaryAction = (): void => {
     // For retry action, call the onRetry callback
@@ -83,15 +78,16 @@ export function TaskErrorModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={handleBackdropClick}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="error-modal-title"
-      aria-describedby="error-modal-description"
+    <Modal
+      open={isOpen}
+      onOpenChange={(open): void => {
+        if (!open) onClose();
+      }}
+      title={config.title}
+      hideTitle
+      padded={false}
+      contentClassName="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 flex max-h-[90vh] w-full max-w-lg flex-col rounded-xl bg-white shadow-2xl dark:bg-slate-800"
     >
-      <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-xl bg-white shadow-2xl dark:bg-slate-800">
         {/* Header */}
         <div
           className={`flex shrink-0 items-start justify-between border-b p-4 ${config.borderColor} dark:border-opacity-50`}
@@ -172,7 +168,6 @@ export function TaskErrorModal({
             {config.primaryAction?.label ?? 'Close'}
           </Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

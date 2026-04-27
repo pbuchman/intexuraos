@@ -35,3 +35,14 @@ export {
 
 // Shared service lifecycle scaffold
 export { startFastifyService, type StartFastifyServiceOptions } from './startFastifyService.js';
+
+// IntexuraOSError-aware error handler (plan §8)
+export { createErrorHandler, type CreateErrorHandlerOptions } from './errorHandler.js';
+
+// Request-context Fastify integration (plan §3)
+export {
+  registerRequestContext,
+  buildRequestContext,
+  X_REQUEST_ID,
+  X_CORRELATION_ID,
+} from './requestContext.js';

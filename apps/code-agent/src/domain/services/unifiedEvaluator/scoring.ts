@@ -12,7 +12,7 @@ import { resolveLoginForTaskCreation } from '../gitHubDispatchService.js';
 import { isReviewCommandComment, extractReviewWorkerType } from '../../utils/reviewTriage.js';
 import type { UnifiedEvaluatorDeps } from './types.js';
 import { deduplicateToolCalls, recordDecision, recordLog, resolveUserId } from './reporting.js';
-import { shouldSkipReviewForRemediation } from './criteria.js';
+import { FAILED_ORIGIN_NO_REVIEW_REASON, shouldSkipReviewForFailedOrigin, shouldSkipReviewForRemediation } from './criteria.js';
 
 /**
  * Event-type-aware fallback when LLM is unavailable or fails.
@@ -179,6 +179,47 @@ export async function handleLlmTriage(
   }
 
   if (triage.action === 'request_review') {
+    // Failed-origin gate: if the PR's latest planning/execution origin task
+    // ended in a terminal failure (failed/interrupted/cancelled), suppress the
+    // review for ANY event type. Runs before the synchronize-only remediation
+    // check so it short-circuits without an extra Firestore lookup.
+    if (deps.codeTaskRepo !== undefined) {
+      const failedOrigin = await shouldSkipReviewForFailedOrigin(
+        deps.codeTaskRepo, event.repository, event.pullRequestNumber, event.id, logger,
+      );
+      if (failedOrigin.skip) {
+        const { origin } = failedOrigin;
+        const userId = await resolveUserId(deps, event);
+        logger.info(
+          {
+            eventId: event.id,
+            originTaskId: origin.taskId,
+            originAgentType: origin.agentType,
+            originStatus: origin.status,
+          },
+          'Skipping review: latest origin task ended in terminal failure',
+        );
+        recordLog(deps, event, {
+          type: 'skipped',
+          decidedBy: 'llm_triage',
+          reason: FAILED_ORIGIN_NO_REVIEW_REASON,
+          cost: usage.costUsd,
+          reasoning,
+          toolCalls: toolCallSummaries,
+        }, userId);
+        await recordDecision(deps, event, {
+          decidedBy: 'github_agent',
+          decision: 'skip',
+          reason: `${FAILED_ORIGIN_NO_REVIEW_REASON}: latest origin task (${origin.agentType}, ${origin.status}) ended in terminal failure — retry the task before requesting review`,
+          llmCostUsd: usage.costUsd,
+          ...(usage.model !== undefined && { llmModel: usage.model }),
+          llmToolCalls: usage.toolCalls,
+          llmReasoning: reasoning,
+        }, startTime, logger);
+        return;
+      }
+    }
+
     // Synchronize remediation interception:
     // Before triggering a review for a synchronize event, check if a recent
     // remediation task already determined that no re-review is needed.

@@ -128,6 +128,7 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_QUEUE_TTL_MINUTES: process.env.INTEXURAOS_QUEUE_TTL_MINUTES ?? '1440',
     INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS: process.env.INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS ?? '3',
     INTEXURAOS_RETRY_QUEUE_TTL_MINUTES: process.env.INTEXURAOS_RETRY_QUEUE_TTL_MINUTES ?? '10',
+    INTEXURAOS_AUTO_RETRY_MAX_ATTEMPTS: process.env.INTEXURAOS_AUTO_RETRY_MAX_ATTEMPTS ?? '3',
     // INTEXURAOS_LLM_USAGE_SERVICE_URL: already in COMMON_SERVICE_URLS (http://localhost:8132)
     // INTEXURAOS_ENABLE_METRICS: not set — Cloud Monitoring disabled on home-dev (no IAM role)
   },
@@ -145,6 +146,7 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_IMAGE_PUBLIC_BASE_URL ?? 'http://localhost:3000',
   },
   'commands-agent': {
+    INTEXURAOS_SERVICE_URL: 'http://localhost:8117',
     INTEXURAOS_PUBSUB_ACTIONS_QUEUE: process.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE ?? 'actions-queue',
   },
   'todos-agent': {
