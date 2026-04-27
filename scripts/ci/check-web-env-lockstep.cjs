@@ -29,7 +29,14 @@ function extractFromManifest(src) {
   if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.services)) {
     throw new Error('service-manifest.json must have a "services" array');
   }
-  return new Set(parsed.services.map((s) => `INTEXURAOS_${s.envSuffix}_URL`));
+  return new Set(
+    parsed.services.map((s, i) => {
+      if (!s || typeof s.envSuffix !== 'string') {
+        throw new Error(`service-manifest.json services[${i}] is missing string "envSuffix"`);
+      }
+      return `INTEXURAOS_${s.envSuffix}_URL`;
+    })
+  );
 }
 
 function extractFromConfig(src) {
