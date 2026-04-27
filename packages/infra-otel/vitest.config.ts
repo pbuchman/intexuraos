@@ -1,12 +1,15 @@
-import { defineConfig } from 'vitest/config';
+import { mergeConfig, defineConfig } from 'vitest/config';
+import { sharedConfig } from '../../vitest.shared.js';
 
-export default defineConfig({
-  test: {
-    environment: 'node',
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      exclude: ['**/__tests__/**', '**/dist/**', '**/node_modules/**'],
+export default mergeConfig(
+  sharedConfig,
+  defineConfig({
+    test: {
+      environment: 'node',
+      coverage: {
+        // provider/reporter/thresholds inherited from sharedConfig
+        exclude: ['**/__tests__/**', '**/dist/**', '**/node_modules/**'],
+      },
     },
-  },
-});
+  })
+);
