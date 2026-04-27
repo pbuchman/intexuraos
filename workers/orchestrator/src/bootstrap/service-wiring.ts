@@ -12,6 +12,7 @@
 import { join } from 'node:path';
 import type { Logger } from 'pino';
 import Docker from 'dockerode';
+import { IntexuraOSError } from '@intexuraos/common-core';
 
 import { StatePersistence } from '../services/state-persistence.js';
 import { TaskDispatcher } from '../services/task-dispatcher.js';
@@ -283,7 +284,10 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
 
   const primaryEntry = validationClients[0];
   if (primaryEntry === undefined) {
-    throw new Error('INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS produced no clients');
+    throw new IntexuraOSError(
+      'MISCONFIGURED',
+      'INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS produced no clients'
+    );
   }
 
   const primaryModelName = primaryEntry.modelName;

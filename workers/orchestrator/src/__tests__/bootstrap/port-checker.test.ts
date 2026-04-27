@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createServer, type Server } from 'node:net';
+import { IntexuraOSError } from '@intexuraos/common-core';
 import { ensurePortAvailable, type PortCheckerDeps } from '../../bootstrap/port-checker.js';
 
 async function listenOnEphemeralPort(): Promise<{ server: Server; port: number }> {
@@ -74,5 +75,43 @@ describe('ensurePortAvailable', () => {
       probe: () => Promise.reject('bare string'),
     };
     await expect(ensurePortAvailable(5679, deps)).rejects.toThrow(/bare string/);
+  });
+
+  // INT-1565 acceptance: bootstrap failures must be typed `IntexuraOSError`s.
+  // The two error sites carry distinct codes so callers can distinguish a
+  // configuration problem (port chosen by operator) from an internal probe
+  // failure (e.g. `EACCES` from running unprivileged on a low port).
+  it('throws an IntexuraOSError with code MISCONFIGURED on EADDRINUSE', async () => {
+    const deps: PortCheckerDeps = {
+      probe: () => {
+        const err = new Error('bind failed') as NodeJS.ErrnoException;
+        err.code = 'EADDRINUSE';
+        return Promise.reject(err);
+      },
+    };
+    try {
+      await ensurePortAvailable(1234, deps);
+      throw new Error('expected ensurePortAvailable to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(IntexuraOSError);
+      expect((err as IntexuraOSError).code).toBe('MISCONFIGURED');
+    }
+  });
+
+  it('throws an IntexuraOSError with code INTERNAL_ERROR on other probe failures', async () => {
+    const deps: PortCheckerDeps = {
+      probe: () => {
+        const err = new Error('permission denied') as NodeJS.ErrnoException;
+        err.code = 'EACCES';
+        return Promise.reject(err);
+      },
+    };
+    try {
+      await ensurePortAvailable(5678, deps);
+      throw new Error('expected ensurePortAvailable to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(IntexuraOSError);
+      expect((err as IntexuraOSError).code).toBe('INTERNAL_ERROR');
+    }
   });
 });
