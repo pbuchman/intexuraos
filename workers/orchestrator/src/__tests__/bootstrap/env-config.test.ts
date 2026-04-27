@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { IntexuraOSError } from '@intexuraos/common-core';
 import {
   getRequiredEnv,
   getOptionalEnv,
@@ -48,6 +49,18 @@ describe('getRequiredEnv', () => {
 
   it('throws when value is empty string', () => {
     expect(() => getRequiredEnv('EMPTY', { EMPTY: '' })).toThrow(/EMPTY/);
+  });
+
+  // INT-1565 acceptance: env-config failures must be typed `IntexuraOSError`s
+  // (no plain `throw new Error(`) so start.ts can branch on `error.code`.
+  it('throws an IntexuraOSError with code MISCONFIGURED', () => {
+    try {
+      getRequiredEnv('MISSING', {});
+      throw new Error('expected getRequiredEnv to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(IntexuraOSError);
+      expect((err as IntexuraOSError).code).toBe('MISCONFIGURED');
+    }
   });
 });
 
@@ -118,6 +131,17 @@ describe('loadEnvConfig', () => {
     expect(() => loadEnvConfig(makeValidEnv({ INTEXURAOS_WORKER_CAPACITY: '0' }))).toThrow(
       /INTEXURAOS_WORKER_CAPACITY/
     );
+  });
+
+  // INT-1565 acceptance: invalid env values must be typed `IntexuraOSError`s.
+  it('throws an IntexuraOSError with code MISCONFIGURED on invalid PORT', () => {
+    try {
+      loadEnvConfig(makeValidEnv({ PORT: 'not-a-number' }));
+      throw new Error('expected loadEnvConfig to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(IntexuraOSError);
+      expect((err as IntexuraOSError).code).toBe('MISCONFIGURED');
+    }
   });
 
   it('reads boolean feature flags', () => {

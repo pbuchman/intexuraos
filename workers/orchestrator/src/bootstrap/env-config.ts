@@ -7,6 +7,7 @@
  * call in a catch handler that prints and exits.
  */
 
+import { IntexuraOSError } from '@intexuraos/common-core';
 import {
   DEFAULT_CAPACITY,
   DEFAULT_COMPLETION_MAX_ATTEMPTS,
@@ -80,7 +81,8 @@ export interface BootstrapEnvConfig {
 export function getRequiredEnv(name: string, env: EnvReader = process.env): string {
   const value = env[name];
   if (value === undefined || value === '') {
-    throw new Error(
+    throw new IntexuraOSError(
+      'MISCONFIGURED',
       `Required environment variable '${name}' is not set. ` +
         `Add to .envrc: export ${name}=<value>`
     );
@@ -109,7 +111,7 @@ function parsePositiveInt(
 ): number {
   const parsed = parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
-    throw new Error(`Invalid ${name}: ${raw}`);
+    throw new IntexuraOSError('MISCONFIGURED', `Invalid ${name}: ${raw}`);
   }
   return parsed;
 }

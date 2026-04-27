@@ -248,9 +248,27 @@ async function runStartupRecovery(
         taskId: task.taskId,
       });
 
-      // Update task status
+      // Update task status. Set `completedAt` so the duration metric
+      // emitted below has a meaningful wall-clock window (computed from
+      // `startedAt` -> `completedAt`); without it `computeTaskDurationMs`
+      // would clamp to 0 even when the task ran for hours before restart.
       task.status = 'interrupted';
+      task.completedAt = new Date().toISOString();
       await statePersistence.save(state);
+
+      // INT-1565 §S5: emit `code_tasks_*` metrics for restart-induced
+      // interruptions so the counter/duration series cover EVERY terminal
+      // transition, not just `finalizeTask()`-driven ones. Wrap in
+      // try/catch identical to the dispatcher's own emit — a metrics
+      // outage must never break startup recovery.
+      try {
+        dispatcher.emitTerminalMetrics(task, 'interrupted');
+      } catch (metricsError) {
+        logger.warn(
+          { taskId: task.taskId, error: metricsError },
+          'metrics emission failed during startup recovery; continuing'
+        );
+      }
 
       logger.info({ taskId: task.taskId }, 'Notified code-agent of interrupted task');
     } catch (error) {

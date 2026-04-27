@@ -85,6 +85,7 @@ describe('main.ts', () => {
     getCapacity: vi.fn(() => 5),
     adoptTask: vi.fn(),
     recoverPendingResumeTask: vi.fn(),
+    emitTerminalMetrics: vi.fn(),
   } as unknown as TaskDispatcher;
 
   const mockListWorkerContainers = vi.fn<() => Promise<DiscoveredContainer[]>>();
@@ -266,7 +267,82 @@ describe('main.ts', () => {
 
       expect(mockStatePersistence.save).toHaveBeenCalled();
 
+      // INT-1565 §S5: startup recovery must emit `code_tasks_*` metrics so
+      // restart-induced interruptions show up in the same series as
+      // finalize-driven transitions. The dispatcher's `emitTerminalMetrics`
+      // is the single emit path; here we assert it was invoked with
+      // `interrupted` so the counter / duration both record the transition.
+      expect(mockDispatcher.emitTerminalMetrics).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'interrupted-1', status: 'interrupted' }),
+        'interrupted'
+      );
+
       // mockExit doesn't need restore - it's cleared in beforeEach
+    });
+
+    it('should swallow metrics emit errors during startup recovery', async () => {
+      const interruptedTask = {
+        taskId: 'interrupted-metrics-throw',
+        workerType: 'opus' as const,
+        prompt: 'Test prompt',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running' as const,
+        containerId: 'session-x',
+        worktreePath: '/path/to/worktree',
+        startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
+      };
+
+      vi.mocked(mockStatePersistence.load).mockResolvedValue({
+        tasks: { 'interrupted-metrics-throw': interruptedTask },
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+
+      // Force the dispatcher's metrics emit to throw — recovery must NOT
+      // bubble this up; it must log a warn and keep notifying code-agent.
+      vi.mocked(mockDispatcher.emitTerminalMetrics).mockImplementationOnce(() => {
+        throw new Error('metrics outage');
+      });
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger
+        );
+      } catch {
+        // Expected (mockExit short-circuits the harness)
+      }
+
+      // The webhook still went out (recovery is not aborted by metrics).
+      expect(mockWebhookClient.send).toHaveBeenCalled();
+
+      // The throw was logged at warn level so a regression that swaps the
+      // emit for a silent swallow is caught.
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'interrupted-metrics-throw',
+          error: expect.any(Error),
+        }),
+        'metrics emission failed during startup recovery; continuing'
+      );
+
+      // The "Notified code-agent of interrupted task" info line still ran,
+      // proving the catch did not abort the per-task body early.
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        { taskId: 'interrupted-metrics-throw' },
+        'Notified code-agent of interrupted task'
+      );
     });
 
     it('should handle webhook send error gracefully', async () => {

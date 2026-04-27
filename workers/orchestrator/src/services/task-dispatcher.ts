@@ -3093,11 +3093,17 @@ export class TaskDispatcher {
    *   non-finite or negative durations are clamped to 0 so the distribution
    *   stays well-formed.
    *
+   * Public so the startup-recovery path in `main.ts` can also count
+   * `interrupted` transitions that bypass `finalizeTask()` (the recovery
+   * loop marks `running` tasks `interrupted` directly when their container
+   * is gone). Without this, restart-induced interruptions would be missing
+   * from the `code_tasks_*` series.
+   *
    * Emission is best-effort — `MetricsClient` swallows its own errors, but
    * we wrap the duration parse defensively because a malformed `startedAt`
    * timestamp would otherwise propagate `NaN` into the histogram.
    */
-  private emitTerminalMetrics(
+  emitTerminalMetrics(
     task: Task,
     finalStatus: 'completed' | 'failed' | 'interrupted' | 'cancelled'
   ): void {

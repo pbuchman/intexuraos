@@ -10,6 +10,7 @@
  *      the orchestrator from starting.
  */
 
+import { IntexuraOSError } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import { WORKER_TYPES } from '../services/isolation/types.js';
 import type { WorkerAuthRegistry } from '../services/worker-auth/index.js';
@@ -21,7 +22,7 @@ import type { WorkerAuthRegistry } from '../services/worker-auth/index.js';
  */
 export function validateWorkerApiKey(name: string, value: string): void {
   if (value === '' || value.trim() === '') {
-    throw new Error(`API key ${name} is empty or whitespace-only`);
+    throw new IntexuraOSError('MISCONFIGURED', `API key ${name} is empty or whitespace-only`);
   }
 }
 
