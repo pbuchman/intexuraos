@@ -6,16 +6,12 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 const SCRIPT = path.resolve(__dirname, '../check-web-env-lockstep.cjs');
 
-const CLOUDBUILD_FIXTURE = `
-steps:
-  - name: foo
-    args:
-      - |
-        CLOUD_RUN_SERVICES=(
-          "user-service:USER_SERVICE"
-          "image-service:IMAGE_SERVICE"
-        )
-`;
+const MANIFEST_FIXTURE = JSON.stringify({
+  services: [
+    { name: 'user-service', envSuffix: 'USER_SERVICE' },
+    { name: 'image-service', envSuffix: 'IMAGE_SERVICE' },
+  ],
+});
 
 const CONFIG_FIXTURE = `
 import type { AppConfig } from '@/types';
@@ -70,9 +66,9 @@ describe('check-web-env-lockstep', () => {
     return p;
   }
 
-  test('passes when cloudbuild, config, and both deploy.yml arrays agree', () => {
+  test('passes when manifest, config, and both deploy.yml arrays agree', () => {
     const r = run({
-      WEB_ENV_LOCKSTEP_CLOUDBUILD: writeFixture('cloudbuild.yaml', CLOUDBUILD_FIXTURE),
+      WEB_ENV_LOCKSTEP_MANIFEST: writeFixture('service-manifest.json', MANIFEST_FIXTURE),
       WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', CONFIG_FIXTURE),
       WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', DEPLOY_FIXTURE),
     });
@@ -80,10 +76,10 @@ describe('check-web-env-lockstep', () => {
     expect(r.stdout).toMatch(/lockstep OK/);
   });
 
-  test('fails when deploy.yml array is missing an entry that cloudbuild has', () => {
+  test('fails when deploy.yml array is missing an entry that manifest has', () => {
     const driftedDeploy = DEPLOY_FIXTURE.replaceAll('"image-service:IMAGE_SERVICE"\n', '');
     const r = run({
-      WEB_ENV_LOCKSTEP_CLOUDBUILD: writeFixture('cloudbuild.yaml', CLOUDBUILD_FIXTURE),
+      WEB_ENV_LOCKSTEP_MANIFEST: writeFixture('service-manifest.json', MANIFEST_FIXTURE),
       WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', CONFIG_FIXTURE),
       WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', driftedDeploy),
     });
@@ -104,13 +100,29 @@ describe('check-web-env-lockstep', () => {
 `
     );
     const r = run({
-      WEB_ENV_LOCKSTEP_CLOUDBUILD: writeFixture('cloudbuild.yaml', CLOUDBUILD_FIXTURE),
+      WEB_ENV_LOCKSTEP_MANIFEST: writeFixture('service-manifest.json', MANIFEST_FIXTURE),
       WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', CONFIG_FIXTURE),
       WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', partialDrift),
     });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/deploy\.yml\[1\] is missing INTEXURAOS_IMAGE_SERVICE_URL/);
     expect(r.stderr).not.toMatch(/deploy\.yml\[0\] is missing/);
+  });
+
+  test('fails when config.ts consumes an env var that the manifest does not list', () => {
+    const driftedConfig = CONFIG_FIXTURE.replace(
+      "} as AppConfig;",
+      "    extraUrl: getServiceUrl('INTEXURAOS_NOPE_SERVICE_URL', '/api/nope'),\n  } as AppConfig;"
+    );
+    const r = run({
+      WEB_ENV_LOCKSTEP_MANIFEST: writeFixture('service-manifest.json', MANIFEST_FIXTURE),
+      WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', driftedConfig),
+      WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', DEPLOY_FIXTURE),
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(
+      /config\.ts consumes INTEXURAOS_NOPE_SERVICE_URL but cloudbuild does not fetch it/
+    );
   });
 
   test('passes against the real repo files (regression guard)', () => {
