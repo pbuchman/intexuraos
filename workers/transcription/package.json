@@ -23,7 +23,7 @@
     "@intexuraos/infra-pubsub": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@speechmatics/batch-client": "^5.1.0",
-    "pino": "^9.6.0"
+    "pino": "^10.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
