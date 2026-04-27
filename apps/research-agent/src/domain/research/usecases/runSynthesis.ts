@@ -164,7 +164,7 @@ export async function runSynthesis(
     });
     if (contextResult.ok) {
       synthesisContext = contextResult.value.context;
-      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing fallback for costUsd @preserve */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess fallback for synthesis-context success-path costUsd @preserve */
       additionalCostUsd += contextResult.value.usage.costUsd ?? 0;
       /* v8 ignore stop @preserve */
       logger.info(
@@ -175,7 +175,7 @@ export async function runSynthesis(
       /* v8 ignore start -- ts-type: undefined check for optional property on error type @preserve */
       if (contextResult.error.usage !== undefined) {
       /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing fallback for costUsd @preserve */
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess fallback for synthesis-context failure-path costUsd @preserve */
         additionalCostUsd += contextResult.error.usage.costUsd ?? 0;
         /* v8 ignore stop @preserve */
         logger.error(
@@ -239,7 +239,7 @@ export async function runSynthesis(
       if (revalidation.valid) {
         processedContent = repairResult.value.content;
         attributionStatus = 'repaired';
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing fallback for costUsd @preserve */
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess fallback for attribution-repair success-path costUsd @preserve */
         additionalCostUsd += repairResult.value.usage.costUsd ?? 0;
         /* v8 ignore stop @preserve */
         logger.info(
@@ -247,7 +247,7 @@ export async function runSynthesis(
           `[4.3.3c] Attribution repair succeeded (costUsd: ${String(repairResult.value.usage.costUsd)})`
         );
       } else {
-        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing fallback for costUsd @preserve */
+        /* v8 ignore start -- ts-type: noUncheckedIndexedAccess fallback for attribution-repair partial-fix costUsd @preserve */
         additionalCostUsd += repairResult.value.usage.costUsd ?? 0;
         /* v8 ignore stop @preserve */
         logger.info({}, '[4.3.3c] Attribution repair did not fix all issues');
@@ -342,10 +342,10 @@ export async function runSynthesis(
         /* v8 ignore start -- ts-type: conditional spread depends on undefined check above @preserve */
         ? {
         /* v8 ignore stop @preserve */
-            /* v8 ignore start -- ts-type: spread filtered by condition @preserve */
+            /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for user-name on synthesis-failed event @preserve */
             ...(research.userName !== undefined && { name: research.userName }),
             /* v8 ignore stop @preserve */
-            /* v8 ignore start -- ts-type: spread filtered by condition @preserve */
+            /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for user-email on synthesis-failed event @preserve */
             ...(research.userEmail !== undefined && { email: research.userEmail }),
             /* v8 ignore stop @preserve */
           }
@@ -360,13 +360,13 @@ export async function runSynthesis(
       sharedAt: now.toISOString(),
       staticAssetsUrl: shareConfig.staticAssetsUrl,
       llmResults: research.llmResults,
-      /* v8 ignore start -- ts-type: spread filtered by condition @preserve */
+      /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for input-contexts on synthesis-completed event @preserve */
       ...(research.inputContexts !== undefined && { inputContexts: research.inputContexts }),
       /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: spread filtered by condition @preserve */
+      /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for cover-image on synthesis-completed event @preserve */
       ...(coverImage !== undefined && { coverImage }),
       /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: spread filtered by condition @preserve */
+      /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for generated-by on synthesis-completed event @preserve */
       ...(generatedBy !== undefined && { generatedBy }),
       /* v8 ignore stop @preserve */
     });

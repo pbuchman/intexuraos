@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { LlmModels } from '@intexuraos/llm-contract';
-import { createFakeImageGenerator } from '../infra/image/index.js';
+import { createFakeImageGenerator } from './fakes/FakeImageGenerator.js';
 
 describe('FakeImageGenerator', () => {
   it('generates an image with correct structure', async () => {
