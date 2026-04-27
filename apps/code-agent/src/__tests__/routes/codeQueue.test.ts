@@ -30,7 +30,7 @@ import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpCli
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import { ok } from '@intexuraos/common-core';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';

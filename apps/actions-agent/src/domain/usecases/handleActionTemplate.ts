@@ -1,5 +1,5 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
-import type { WhatsAppSendPublisher, WhatsAppInteractiveButton } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher, WhatsAppInteractiveButton } from '@intexuraos/whatsapp-pubsub-client';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
 import { shouldAutoExecute } from './shouldAutoExecute.js';

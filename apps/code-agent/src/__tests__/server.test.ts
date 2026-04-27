@@ -29,7 +29,7 @@ import type { CodeTaskRepository } from '../domain/repositories/codeTaskReposito
 import { createTaskDispatcherService } from '../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../infra/services/whatsappNotifierImpl.js';
 import { createStatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { ok } from '@intexuraos/common-core';
 import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
@@ -204,7 +204,7 @@ describe('server configuration', () => {
       taskEnqueueService: import('../domain/services/taskEnqueueService.js').TaskEnqueueService;
       mergeConflictDetector: import('../domain/services/mergeConflictDetector.js').MergeConflictDetector;
       mergeQueueWatchRepo: import('../domain/repositories/mergeQueueWatchRepository.js').MergeQueueWatchRepository;
-      prTriagePublisher: import('@intexuraos/infra-pubsub').PRTriagePublisher;
+      prTriagePublisher: import('@intexuraos/pr-triage-pubsub-client').PRTriagePublisher;
     });
 
     app = await buildServer();

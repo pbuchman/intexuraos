@@ -61,9 +61,23 @@ function checkServerFile(appName) {
       exists = true;
     }
 
+    // Services that adopt the shared @intexuraos/http-server bootstrap
+    // (createFastifyApp) inherit /health, /openapi.json, and /docs from the
+    // helper. Require an explicit named import from the canonical package +
+    // an actual call site so that comments / strings / TODOs cannot satisfy
+    // the gate by accident.
+    const importsCreateFastifyApp =
+      /import\s*\{[^}]*\bcreateFastifyApp\b[^}]*\}\s*from\s*['"]@intexuraos\/http-server['"]/.test(
+        content
+      );
+    const callsCreateFastifyApp = /\bcreateFastifyApp\s*\(/.test(content);
+    const usesSharedBootstrap = importsCreateFastifyApp && callsCreateFastifyApp;
+
     const missingEndpoints = [];
 
     for (const { path, method } of REQUIRED_ENDPOINTS) {
+      if (usesSharedBootstrap) continue;
+
       const directPattern = new RegExp(
         `app\\.(${method.toLowerCase()})\\s*\\(\\s*['"\`]${path.replace('/', '\\/')}['"\`]`,
         'i'

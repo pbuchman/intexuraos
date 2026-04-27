@@ -15,6 +15,9 @@ export {
   type Firestore,
 } from './firestore.js';
 
+// Schema-version write helper
+export { withSchemaVersion, type SchemaVersionedFields } from './schemaVersion.js';
+
 // Testing utilities
 export {
   createFakeFirestore,
@@ -27,3 +30,10 @@ export {
 // package does not depend on `@intexuraos/http-server`. Callers should
 // import the canonical types from `@intexuraos/http-server`.
 export { firestoreHealthCheck } from './health.js';
+
+// Generic CRUD repository factory
+export {
+  createFirestoreCrudRepository,
+  type CrudRepository,
+  type CrudRepositoryOptions,
+} from './crudRepository.js';

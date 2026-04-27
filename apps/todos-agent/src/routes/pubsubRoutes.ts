@@ -1,6 +1,6 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
-import type { TodoProcessingEvent } from '@intexuraos/infra-pubsub';
+import type { TodoProcessingEvent } from '@intexuraos/todos-pubsub-client';
 import { getServices } from '../services.js';
 import { processTodoCreated } from '../domain/usecases/processTodoCreated.js';
 
