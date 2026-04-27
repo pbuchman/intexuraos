@@ -518,9 +518,16 @@ pnpm config set store-dir /home/claude/pnpm-store --global
 # Install dependencies (Linux-native node_modules via shared pnpm store)
 # ------------------------------------------------------------------------------
 if [ -f "/repo/pnpm-lock.yaml" ]; then
-    echo "[entrypoint] Installing dependencies..."
+    LOCKFILE_SHA="$(sha256sum /repo/pnpm-lock.yaml | awk '{print $1}')"
+    echo "[entrypoint] Lockfile sha256: ${LOCKFILE_SHA}"
+    if [ -n "${WORKER_FORENSICS_DIR:-}" ] && [ -d "${WORKER_FORENSICS_DIR}" ]; then
+        printf '%s\n' "${LOCKFILE_SHA}" > "${WORKER_FORENSICS_DIR}/lockfile-sha256-bootstrap.txt" || true
+    fi
+    echo "[entrypoint] Installing dependencies (ignore-scripts=true)..."
     cd /repo
-    CI=true COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm install --frozen-lockfile --store-dir /home/claude/pnpm-store 2>&1
+    CI=true COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+        pnpm install --frozen-lockfile --ignore-scripts \
+        --store-dir /home/claude/pnpm-store 2>&1
     echo "[entrypoint] Dependencies installed"
 fi
 

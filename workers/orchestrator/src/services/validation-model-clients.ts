@@ -1,4 +1,4 @@
-import type { Logger } from '@intexuraos/common-core';
+import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
 import type { LLMModel } from '@intexuraos/llm-contract';
 import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
 import { HttpWebhookUsageSink } from '@intexuraos/llm-pricing';
@@ -20,7 +20,10 @@ export interface ParsedValidationModel {
 export function parseValidationModels(raw: string): ParsedValidationModel[] {
   const trimmed = raw.trim();
   if (trimmed === '') {
-    throw new Error('INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS must not be empty');
+    throw new IntexuraOSError(
+      'MISCONFIGURED',
+      'INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS must not be empty'
+    );
   }
 
   const entries = trimmed.split(',');
@@ -31,7 +34,8 @@ export function parseValidationModels(raw: string): ParsedValidationModel[] {
     const entry = entries[i]?.trim() ?? '';
     /* v8 ignore stop @preserve */
     if (entry === '') {
-      throw new Error(
+      throw new IntexuraOSError(
+        'MISCONFIGURED',
         `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS contains empty entry at position ${String(i + 1)}`
       );
     }
@@ -82,7 +86,8 @@ export function buildValidationClients(
   return config.models.map((model) => {
     if (model.provider === 'openrouter') {
       if (config.openRouterApiKey === '') {
-        throw new Error(
+        throw new IntexuraOSError(
+          'MISCONFIGURED',
           `INTEXURAOS_OPENROUTER_APP_API_KEY is required for OpenRouter validation model: ${model.modelId}`
         );
       }
@@ -109,7 +114,8 @@ export function buildValidationClients(
 
     // Gemini model
     if (config.geminiApiKey === '') {
-      throw new Error(
+      throw new IntexuraOSError(
+        'MISCONFIGURED',
         `INTEXURAOS_GEMINI_APP_API_KEY is required for Gemini validation model: ${model.modelId}`
       );
     }

@@ -12,6 +12,8 @@ export interface WorkerEntry {
   attemptLogBuffer: string;
   taskForensicsPath?: string;
   logStream?: NodeJS.ReadableStream;
+  worktreePath?: string;
+  lockfileSha256?: string;
 }
 
 export interface PreservedWorkerEntry {

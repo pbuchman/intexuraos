@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { IntexuraOSError } from '@intexuraos/common-core';
 import {
   fetchGitHubKeys,
   GITHUB_APP_PRIVATE_KEY_SECRET,
@@ -106,5 +107,21 @@ describe('fetchGitHubKeys', () => {
     const key = fetchGitHubKeys({ projectId: 'proj', cachePath: '/tmp/x.pem', override: '' }, deps);
     expect(key).toBe('PEM-FROM-GCLOUD');
     expect(execSync).toHaveBeenCalledOnce();
+  });
+
+  // INT-1565 acceptance: bootstrap failures must be typed `IntexuraOSError`s.
+  it('throws an IntexuraOSError with code MISCONFIGURED on Secret Manager failure', () => {
+    const deps = makeDeps({
+      execSync: () => {
+        throw new Error('NOT_FOUND: secret missing');
+      },
+    });
+    try {
+      fetchGitHubKeys({ projectId: 'proj', cachePath: '/tmp/x.pem' }, deps);
+      throw new Error('expected fetchGitHubKeys to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(IntexuraOSError);
+      expect((err as IntexuraOSError).code).toBe('MISCONFIGURED');
+    }
   });
 });

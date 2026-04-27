@@ -7,6 +7,7 @@
  */
 
 import { createServer, type Server } from 'node:net';
+import { IntexuraOSError } from '@intexuraos/common-core';
 
 /** Minimal injectable dependency — tests swap in an in-process fake. */
 export interface PortCheckerDeps {
@@ -48,13 +49,17 @@ export async function ensurePortAvailable(
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === 'EADDRINUSE') {
-      throw new Error(
+      throw new IntexuraOSError(
+        'MISCONFIGURED',
         `Port ${String(port)} is already in use. ` +
           `Find the process: lsof -i :${String(port)}. ` +
           `Or use a different port: export PORT=${String(port + 1)}`
       );
     }
     const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`Port ${String(port)} availability check failed: ${detail}`);
+    throw new IntexuraOSError(
+      'INTERNAL_ERROR',
+      `Port ${String(port)} availability check failed: ${detail}`
+    );
   }
 }

@@ -511,6 +511,7 @@ module "secret_manager" {
     "INTEXURAOS_CLOUDFLARE_API_TOKEN"  = "Cloudflare API token with Browser Rendering Edit permission"
     # LLM API keys
     "INTEXURAOS_OPENAI_APP_API_KEY"     = "OpenAI API key for chat-agent"
+    "INTEXURAOS_GUEST_SESSION_SECRET"   = "HS256 secret used to sign chat-agent guest session JWTs (at least 32 bytes of entropy)"
     "INTEXURAOS_MINIMAX_APP_API_KEY"    = "MiniMax API key for orchestrator worker containers"
     "INTEXURAOS_MIMO_APP_API_KEY"       = "MiMo Pro API key for orchestrator worker containers"
     "INTEXURAOS_GEMINI_APP_API_KEY"     = "Gemini API key for orchestrator completion verifier"
@@ -1709,7 +1710,8 @@ module "chat_agent" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/chat-agent:latest"
 
   secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_OPENAI_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_APP_API_KEY"]
+    INTEXURAOS_OPENAI_APP_API_KEY   = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_APP_API_KEY"]
+    INTEXURAOS_GUEST_SESSION_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GUEST_SESSION_SECRET"]
   })
   env_vars = local.common_service_env_vars
 
