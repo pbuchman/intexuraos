@@ -2136,6 +2136,9 @@ importers:
       '@octokit/plugin-retry':
         specifier: ^7.1.0
         version: 7.2.1(@octokit/core@6.1.6)
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.0
       async-mutex:
         specifier: ^0.5.0
         version: 0.5.0
