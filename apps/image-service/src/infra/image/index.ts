@@ -1,10 +1,4 @@
 export {
-  FakeImageGenerator,
-  createFakeImageGenerator,
-  type FakeImageGeneratorConfig,
-} from './FakeImageGenerator.js';
-
-export {
   OpenAIImageGenerator,
   createOpenAIImageGenerator,
   type OpenAIImageGeneratorConfig,
