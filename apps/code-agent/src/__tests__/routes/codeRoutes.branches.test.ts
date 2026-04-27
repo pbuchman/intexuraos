@@ -66,7 +66,7 @@ import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { TaskDispatcherService, DispatchResult, DispatchError } from '../../domain/services/taskDispatcher.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';

@@ -338,10 +338,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             content: ctx.content,
             addedAt: now,
           };
-          /* v8 ignore start -- ts-type: conditional property assignment based on undefined check @preserve */
+          /* v8 ignore start -- ts-type: ctx.label undefined-guard branch on save-draft route — exactOptionalPropertyTypes @preserve */
           if (ctx.label !== undefined) {
           /* v8 ignore stop @preserve */
-            /* v8 ignore start -- ts-type: conditional property assignment based on undefined check @preserve */
+            /* v8 ignore start -- ts-type: inputContext.label assignment after ctx.label undefined-guard — save-draft route @preserve */
             inputContext.label = ctx.label;
             /* v8 ignore stop @preserve */
           }
@@ -467,10 +467,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             content: ctx.content,
             addedAt: now,
           };
-          /* v8 ignore start -- ts-type: conditional property assignment based on undefined check @preserve */
+          /* v8 ignore start -- ts-type: ctx.label undefined-guard branch on update-draft route — exactOptionalPropertyTypes @preserve */
           if (ctx.label !== undefined) {
           /* v8 ignore stop @preserve */
-            /* v8 ignore start -- ts-type: conditional property assignment based on undefined check @preserve */
+            /* v8 ignore start -- ts-type: inputContext.label assignment after ctx.label undefined-guard — update-draft route @preserve */
             inputContext.label = ctx.label;
             /* v8 ignore stop @preserve */
           }
@@ -673,17 +673,17 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const params: { userId: string; limit?: number; cursor?: string } = {
         userId: user.userId,
       };
-      /* v8 ignore start -- ts-type: conditional property assignment based on undefined check @preserve */
+      /* v8 ignore start -- ts-type: query.limit undefined-guard branch on list-researches route @preserve */
       if (query.limit !== undefined) {
       /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: conditional property assignment based on undefined check @preserve */
+        /* v8 ignore start -- ts-type: params.limit assignment after query.limit undefined-guard — list-researches route @preserve */
         params.limit = query.limit;
         /* v8 ignore stop @preserve */
       }
-      /* v8 ignore start -- ts-type: conditional property assignment based on undefined check @preserve */
+      /* v8 ignore start -- ts-type: query.cursor undefined-guard branch on list-researches route @preserve */
       if (query.cursor !== undefined) {
       /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: conditional property assignment based on undefined check @preserve */
+        /* v8 ignore start -- ts-type: params.cursor assignment after query.cursor undefined-guard — list-researches route @preserve */
         params.cursor = query.cursor;
         /* v8 ignore stop @preserve */
       }
@@ -995,10 +995,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               message: 'Synthesis completed successfully',
             });
           }
-          /* v8 ignore start -- ts-type: type narrowing cannot prove error is defined after !ok check @preserve */
+          /* v8 ignore start -- ts-type: linkPreview.error narrowing after !ok — link-preview route, first guard @preserve */
           return await reply.fail('INTERNAL_ERROR', synthesisResult.error ?? 'Synthesis failed');
           /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: unreachable closing brace — type narrowing cannot prove exhaustiveness @preserve */
+        /* v8 ignore start -- ts-type: linkPreview.error narrowing after !ok — link-preview route, exhaustive-fallthrough close @preserve */
         }
         /* v8 ignore stop @preserve */
 
@@ -1025,10 +1025,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               /* v8 ignore stop @preserve */
             });
           }
-          /* v8 ignore start -- ts-type: type narrowing cannot prove error is defined after !ok check @preserve */
+          /* v8 ignore start -- ts-type: richMetadata.error narrowing after !ok — link-preview route, second guard @preserve */
           return await reply.fail('INTERNAL_ERROR', retryResult.error ?? 'Retry failed');
           /* v8 ignore stop @preserve */
-        /* v8 ignore start -- ts-type: unreachable closing brace — type narrowing cannot prove exhaustiveness @preserve */
+        /* v8 ignore start -- ts-type: richMetadata.error narrowing after !ok — link-preview route, exhaustive-fallthrough close @preserve */
         }
         /* v8 ignore stop @preserve */
 
@@ -1167,10 +1167,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (retryResult.error?.startsWith('Cannot retry from status') === true) {
           return await reply.fail('CONFLICT', retryResult.error);
         }
-        /* v8 ignore start -- ts-type: type narrowing cannot prove error is defined after !ok check @preserve */
+        /* v8 ignore start -- ts-type: fetchSource.error narrowing after !ok — fetch-source route @preserve */
         return await reply.fail('INTERNAL_ERROR', retryResult.error ?? 'Retry failed');
         /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: unreachable closing brace — type narrowing cannot prove exhaustiveness @preserve */
+      /* v8 ignore start -- ts-type: fetchSource.error narrowing after !ok — fetch-source route, exhaustive-fallthrough close @preserve */
       }
       /* v8 ignore stop @preserve */
 
@@ -1418,10 +1418,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error === 'Research is not shared') {
           return await reply.fail('CONFLICT', result.error);
         }
-        /* v8 ignore start -- ts-type: type narrowing cannot prove error is defined after !ok check @preserve */
+        /* v8 ignore start -- ts-type: researchSubmit.error narrowing after !ok — submit-research route @preserve */
         return await reply.fail('INTERNAL_ERROR', result.error ?? 'Failed to unshare');
         /* v8 ignore stop @preserve */
-      /* v8 ignore start -- ts-type: unreachable closing brace — type narrowing cannot prove exhaustiveness @preserve */
+      /* v8 ignore start -- ts-type: researchSubmit.error narrowing after !ok — submit-research route, exhaustive-fallthrough close @preserve */
       }
       /* v8 ignore stop @preserve */
 

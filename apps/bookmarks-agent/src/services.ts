@@ -14,10 +14,7 @@ import {
   createSummarizePublisher,
   type SummarizePublisher,
 } from './infra/pubsub/summarizePublisher.js';
-import {
-  createWhatsAppSendPublisher,
-  type WhatsAppSendPublisher,
-} from '@intexuraos/infra-pubsub';
+import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { createWebAgentSummaryClient } from './infra/summary/index.js';
 
 export interface ServiceContainer {

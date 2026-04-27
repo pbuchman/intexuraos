@@ -2,7 +2,7 @@ import type { Result, Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { ApprovalMessageRepository } from '../ports/approvalMessageRepository.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { ActionEventPublisher } from '../ports/actionEventPublisher.js';
 import type { ExecuteNoteActionUseCase } from './executeNoteAction.js';
 import type { ExecuteTodoActionUseCase } from './executeTodoAction.js';

@@ -19,7 +19,7 @@
 import type { FastifyPluginCallback } from 'fastify';
 import { logIncomingRequest } from '@intexuraos/common-http';
 import { getErrorMessage } from '@intexuraos/common-core';
-import type { PRTriageEvent } from '@intexuraos/infra-pubsub';
+import type { PRTriageEvent } from '@intexuraos/pr-triage-pubsub-client';
 import { getServices } from '../../services.js';
 import { authenticatePubSub, decodePubSubMessage } from './pubsubHelpers.js';
 

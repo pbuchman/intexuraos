@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { createPRTriagePublisher } from '../prTriagePublisher.js';
 import type { Logger } from 'pino';
+import { createPRTriagePublisher } from '../prTriagePublisher.js';
 
 const mockPublishMessage = vi.fn();
 
@@ -20,6 +20,8 @@ vi.mock('@google-cloud/pubsub', () => {
   };
 });
 
+// Spy-backed Logger stub so the empty-topic test can assert `logger.debug`
+// was invoked. A real `pino` logger would not expose spy methods.
 const stubLogger = (): Logger =>
   ({
     info: vi.fn(),

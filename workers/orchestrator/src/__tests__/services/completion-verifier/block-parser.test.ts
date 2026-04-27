@@ -228,6 +228,85 @@ describe('locateFinalBlock', () => {
     expect(block).not.toBeNull();
     expect(block).toContain('- Outcome: planned');
   });
+
+  // Codex `exec --json` emits a different envelope shape than the Claude SDK:
+  //   {"type":"item.completed","item":{"id":"...","type":"agent_message","text":"..."}}
+  // The marker lives in `item.text` as a JSON-escaped string with literal `\n`
+  // sequences. Live captured shape — see
+  // src/__tests__/fixtures/completion-verifier/raw-rawlogs/codex-pull-request-final.rawlogs.txt
+  it('finds the marker in a codex item.completed/agent_message envelope', () => {
+    const event = JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item_0',
+        type: 'agent_message',
+        text: 'PULL_REQUEST_AGENT_FINAL:\n- pr: https://github.com/x/y/pull/1\n- summary: ok',
+      },
+    });
+    const block = locateFinalBlock(event, 'PULL_REQUEST_AGENT_FINAL:');
+    expect(block).not.toBeNull();
+    expect(block).toContain('- pr: https://github.com/x/y/pull/1');
+  });
+
+  it.each([
+    ['PLANNING_AGENT_FINAL:', '- outcome: planned'],
+    ['EXECUTION_AGENT_FINAL:', '- outcome: implemented'],
+    ['REVIEW_AGENT_FINAL:', '- pr: https://github.com/x/y/pull/1'],
+    ['REMEDIATION_AGENT_FINAL:', '- outcome: implemented'],
+    ['PULL_REQUEST_AGENT_FINAL:', '- comment_replied: yes'],
+  ])(
+    'codex envelope works for marker %s (one extractor unlocks all agent types)',
+    (marker, sampleField) => {
+      const event = JSON.stringify({
+        type: 'item.completed',
+        item: { id: 'item_0', type: 'agent_message', text: `${marker}\n${sampleField}` },
+      });
+      const block = locateFinalBlock(event, marker);
+      expect(block).not.toBeNull();
+      expect(block).toContain(sampleField);
+    }
+  );
+
+  it('codex item.completed for command_execution does NOT spoof the marker even when the command output contains it', () => {
+    // A command whose stdout happens to mention the marker (e.g. `cat`-ing a
+    // doc) must not be mistaken for an agent-emitted block. Only
+    // `agent_message` items count.
+    const event = JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item_0',
+        type: 'command_execution',
+        command: 'cat docs/agent-spec.md',
+        aggregated_output: 'PULL_REQUEST_AGENT_FINAL:\n- pr: https://x/y/1',
+        exit_code: 0,
+        status: 'completed',
+      },
+    });
+    expect(locateFinalBlock(event, 'PULL_REQUEST_AGENT_FINAL:')).toBeNull();
+  });
+
+  it('codex envelope: LAST agent_message wins when commentary precedes the final block', () => {
+    const earlier = JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item_0',
+        type: 'agent_message',
+        text: 'Working on it…',
+      },
+    });
+    const later = JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item_1',
+        type: 'agent_message',
+        text: 'PULL_REQUEST_AGENT_FINAL:\n- pr: https://x/y/2\n- summary: final',
+      },
+    });
+    const block = locateFinalBlock([earlier, later].join('\n'), 'PULL_REQUEST_AGENT_FINAL:');
+    expect(block).not.toBeNull();
+    expect(block).toContain('- summary: final');
+    expect(block).not.toContain('Working on it');
+  });
 });
 
 describe('parseKeyValues', () => {
