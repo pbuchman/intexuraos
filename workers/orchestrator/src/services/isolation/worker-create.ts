@@ -1,7 +1,7 @@
 import type Docker from 'dockerode';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { Logger } from '@intexuraos/common-core';
+import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
 import type { WorkerRuntime } from '../runtime/types.js';
 import type { WorkerConfig, WorkerHandle, WorkerType } from './types.js';
 import { WORKER_TYPES } from './types.js';
@@ -21,7 +21,10 @@ import { auditLockfile, snapshotLockfile } from './lockfile-guard.js';
 export function detectMainGitDir(worktreePath: string): string | null {
   const gitPath = path.join(worktreePath, '.git');
   if (!fs.existsSync(gitPath)) {
-    throw new Error(`Invalid worktree: ${worktreePath} (no .git directory)`);
+    throw new IntexuraOSError(
+      'INVALID_REQUEST',
+      `Invalid worktree: ${worktreePath} (no .git directory)`
+    );
   }
   let mainGitDir: string | null = null;
   const gitStat = fs.statSync(gitPath);
@@ -483,7 +486,7 @@ export async function createWorkerOrchestration(
   const existingWorker = workers.get(taskId);
   if (existingWorker !== undefined) {
     if (config.continueSession !== true) {
-      throw new Error(`Worker already exists for task ${taskId}`);
+      throw new IntexuraOSError('CONFLICT', `Worker already exists for task ${taskId}`);
     }
     await volume.writePromptFiles(existingWorker.taskSecretsPath, systemPrompt, prompt);
     volume.ensureTaskForensicsPath(taskId);
@@ -511,7 +514,10 @@ export async function createWorkerOrchestration(
   }
 
   if (workers.size >= providerConfig.maxConcurrent) {
-    throw new Error(`Max concurrent workers (${String(providerConfig.maxConcurrent)}) reached`);
+    throw new IntexuraOSError(
+      'QUEUE_FULL',
+      `Max concurrent workers (${String(providerConfig.maxConcurrent)}) reached`
+    );
   }
 
   const mainGitDir = detectMainGitDir(worktreePath);

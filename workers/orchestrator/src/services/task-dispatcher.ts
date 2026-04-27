@@ -88,6 +88,12 @@ import {
   decideCompletionOutcome,
   type CompletionOutcome,
 } from './task-dispatcher/decide-outcome.js';
+import {
+  CODE_TASK_METRICS,
+  mapTerminalStatusToMetricStatus,
+  noopMetricsClient,
+  type MetricsClient,
+} from '../metrics.js';
 
 // Re-export module-level helpers for backward compatibility with existing imports.
 export const getTaskEventUrl = getTaskEventUrlFn;
@@ -364,6 +370,13 @@ export class TaskDispatcher {
   private readonly verifyOverride: VerifierOverrideForTests['verify'] | undefined; // @allow-undefined-type -- test-only hook; production leaves this unset to use verifyCompletion
   private readonly preserveWorkerContainers: boolean;
   private readonly activityTimeoutManager: ActivityTimeoutManager;
+  /**
+   * Custom-metrics client used to emit `code_tasks_*` on every task transition
+   * (INT-1565 §S5). Defaults to a no-op so test fixtures that don't care about
+   * metrics (and so the orchestrator running before S8 lands its
+   * `@intexuraos/common-metrics` package) cannot crash on emission.
+   */
+  private readonly metrics: MetricsClient;
 
   constructor(
     private readonly config: OrchestratorConfig,
@@ -377,8 +390,10 @@ export class TaskDispatcher {
     private readonly isolation: IsolationConfig,
     completionControl: CompletionControlConfig,
     private readonly turnMetricsCollector?: TurnMetricsCollector,
-    private readonly agentComplianceValidator?: AgentComplianceValidator
+    private readonly agentComplianceValidator?: AgentComplianceValidator,
+    metrics?: MetricsClient
   ) {
+    this.metrics = metrics ?? noopMetricsClient();
     this.completionMaxAttempts = completionControl.maxAttempts;
     // [INT-1470] Resolve which extractResumeSummary to use: prefer the
     // production-injected ResumeSummaryExtractor; fall back to the test-legacy
@@ -2790,11 +2805,35 @@ export class TaskDispatcher {
     delete task.pendingResumeStart;
     await this.saveTask(task);
 
+    // INT-1565 §S5: emit code_tasks_* metrics on every terminal transition.
+    // Counter `code_tasks_completed{status="success"|"failed"}` fires for ALL
+    // terminal statuses (interrupted/cancelled fold into "failed"); the
+    // separate `code_tasks_failed` counter tracks only non-success outcomes
+    // so dashboards can distinguish "task ended" from "task failed". Duration
+    // is recorded best-effort: when `task.startedAt` is unparseable we emit
+    // a zero-valued sample so downstream histograms still see the count.
+    //
+    // Wrap in try/catch as a contract-level guard: the bundled implementations
+    // (`createMetricsClient`, `noopMetricsClient`) never throw, but the
+    // `MetricsClient` interface alone does not promise that — a hand-rolled
+    // client could, and a metrics outage MUST NOT crash task finalization.
+    try {
+      this.emitTerminalMetrics(task, finalStatus);
+    } catch (metricsError) {
+      // Use the file-wide `error` log key for consistency with the ~25 other
+      // catch-and-log sites in this dispatcher; the field-name unification
+      // onto `err` is owned by INT-1538 §S2 + §S8, not §S5.
+      this.logger.warn(
+        { taskId: task.taskId, error: metricsError },
+        'metrics emission failed during finalize; continuing'
+      );
+    }
+
     if (this.runningCount > 0) this.runningCount--;
     this.clearTaskTimers(task.taskId);
 
     // Send task lifecycle event to code-agent (best-effort)
-    /* v8 ignore start -- ts-type: nested ternary over TaskStatus discriminated union; v8 cannot track all branch arms of chained ternary expressions despite tests exercising all statuses @preserve */
+    /* v8 ignore start -- source-map: v8 misattributed alignment on chained ternary over TaskStatus union; tests exercise every status arm but the coverage tool cannot map them onto branch counters @preserve */
     const taskLifecycleEvent =
       finalStatus === 'completed'
         ? 'task_completed'
@@ -3040,4 +3079,66 @@ export class TaskDispatcher {
       taskId
     );
   }
+
+  /**
+   * Emit the `code_tasks_*` metric family for a task that has just reached
+   * a terminal state (INT-1565 §S5).
+   *
+   * - `code_tasks_completed{status}` increments on every terminal transition.
+   * - `code_tasks_failed{reason}` increments only for non-success terminal
+   *   statuses; `reason` carries the raw status (`failed | interrupted |
+   *   cancelled`) so dashboards can distinguish operator-cancelled from
+   *   genuinely failed runs.
+   * - `code_tasks_duration{status}` records wall-clock duration in ms;
+   *   non-finite or negative durations are clamped to 0 so the distribution
+   *   stays well-formed.
+   *
+   * Public so the startup-recovery path in `main.ts` can also count
+   * `interrupted` transitions that bypass `finalizeTask()` (the recovery
+   * loop marks `running` tasks `interrupted` directly when their container
+   * is gone). Without this, restart-induced interruptions would be missing
+   * from the `code_tasks_*` series.
+   *
+   * Emission is best-effort — `MetricsClient` swallows its own errors, but
+   * we wrap the duration parse defensively because a malformed `startedAt`
+   * timestamp would otherwise propagate `NaN` into the histogram.
+   */
+  emitTerminalMetrics(
+    task: Task,
+    finalStatus: 'completed' | 'failed' | 'interrupted' | 'cancelled'
+  ): void {
+    const metricStatus = mapTerminalStatusToMetricStatus(finalStatus);
+
+    this.metrics.increment(CODE_TASK_METRICS.COMPLETED, { status: metricStatus });
+
+    if (finalStatus !== 'completed') {
+      this.metrics.increment(CODE_TASK_METRICS.FAILED, { reason: finalStatus });
+    }
+
+    const durationMs = computeTaskDurationMs(task);
+    this.metrics.record(CODE_TASK_METRICS.DURATION, { status: metricStatus }, durationMs);
+  }
+}
+
+/**
+ * Compute task wall-clock duration in milliseconds for metric emission.
+ *
+ * `task.startedAt` is an ISO string set when the task is dispatched and
+ * `task.completedAt` is set immediately before this helper is called. We
+ * parse defensively: `Date.parse` returns `NaN` for malformed input, and
+ * a zero-or-negative duration (clock skew, instant cancel) is clamped to
+ * `0` so the duration histogram stays positive.
+ */
+export function computeTaskDurationMs(task: Task): number {
+  const completedAt = task.completedAt;
+  if (completedAt === undefined) {
+    return 0;
+  }
+  const start = Date.parse(task.startedAt);
+  const end = Date.parse(completedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return 0;
+  }
+  const delta = end - start;
+  return delta > 0 ? delta : 0;
 }

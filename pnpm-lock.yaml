@@ -2237,6 +2237,9 @@ importers:
       '@intexuraos/infra-openrouter':
         specifier: workspace:*
         version: link:../../packages/infra-openrouter
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       '@intexuraos/linear-domain':
         specifier: workspace:*
         version: link:../../packages/linear-domain

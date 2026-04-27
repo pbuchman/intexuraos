@@ -2,7 +2,7 @@ import type Docker from 'dockerode';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import type { Logger } from '@intexuraos/common-core';
+import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
 import type { ContainerStatsSnapshot, ResourceUsage } from './types.js';
 import type { WorkerEntry } from './worker-entry-types.js';
 
@@ -33,7 +33,8 @@ export async function streamLogs(
   docker: Docker,
   onChunk: (chunk: string) => void
 ): Promise<void> {
-  if (worker === undefined) throw new Error(`Worker ${taskId} not found`);
+  if (worker === undefined)
+    throw new IntexuraOSError('WORKER_UNAVAILABLE', `Worker ${taskId} not found`);
   const logStream = await docker
     .getContainer(worker.containerId)
     .logs({ follow: true, stdout: true, stderr: true, timestamps: true });
@@ -85,7 +86,8 @@ export async function getResourceUsage(
   worker: WorkerEntry | undefined,
   docker: Docker
 ): Promise<ResourceUsage> {
-  if (worker === undefined) throw new Error(`Worker ${taskId} not found`);
+  if (worker === undefined)
+    throw new IntexuraOSError('WORKER_UNAVAILABLE', `Worker ${taskId} not found`);
   const stats = await docker.getContainer(worker.containerId).stats({ stream: false });
   const cpuDelta = stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
   const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
@@ -105,7 +107,8 @@ export async function copyOut(
   srcPath: string,
   destPath: string
 ): Promise<void> {
-  if (worker === undefined) throw new Error(`Worker ${taskId} not found`);
+  if (worker === undefined)
+    throw new IntexuraOSError('WORKER_UNAVAILABLE', `Worker ${taskId} not found`);
   const container = docker.getContainer(worker.containerId);
   const [tarStream] = await Promise.all([
     container.getArchive({ path: srcPath }),
