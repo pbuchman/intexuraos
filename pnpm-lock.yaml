@@ -2368,6 +2368,12 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../../packages/common-core
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
+      '@sentry/node':
+        specifier: ^8.42.0
+        version: 8.55.0
       pino:
         specifier: ^9.6.0
         version: 9.14.0
