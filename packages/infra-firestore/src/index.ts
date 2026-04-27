@@ -15,9 +15,19 @@ export {
   type Firestore,
 } from './firestore.js';
 
+// Schema-version write helper
+export { withSchemaVersion, type SchemaVersionedFields } from './schemaVersion.js';
+
 // Testing utilities
 export {
   createFakeFirestore,
   type FakeFirestore,
   type FakeFirestoreConfig,
 } from './testing/index.js';
+
+// Generic CRUD repository factory
+export {
+  createFirestoreCrudRepository,
+  type CrudRepository,
+  type CrudRepositoryOptions,
+} from './crudRepository.js';

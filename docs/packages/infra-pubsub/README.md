@@ -1,8 +1,8 @@
 # @intexuraos/infra-pubsub
 
-Cloud Pub/Sub infrastructure adapters for cross-service messaging. Provides a `BasePubSubPublisher` abstract class and concrete publisher implementations for WhatsApp messaging, todo processing, and calendar preview generation.
+Generic Pub/Sub infrastructure: a thin wrapper around `@google-cloud/pubsub` that callers extend via `BasePubSubPublisher`. Domain-specific publisher factories live in dedicated leaf client packages — see [Leaf Client Packages](#leaf-client-packages) below.
 
-**Version:** 3.3.0
+**Version:** 3.6.0
 **Node:** >=22.0.0
 **Type:** ESM
 
@@ -16,21 +16,38 @@ Cloud Pub/Sub infrastructure adapters for cross-service messaging. Provides a `B
 
 ## Architecture
 
-All publishers extend `BasePubSubPublisher`, which provides:
+`BasePubSubPublisher` provides:
 
 - Topic caching (avoids recreating topic references)
 - Structured logging for publish operations
 - Error classification (TOPIC_NOT_FOUND, PERMISSION_DENIED, PUBLISH_FAILED)
-- Graceful no-op when topic is not configured (returns success)
+- Required vs optional topic helpers (`publishToTopic` vs `publishToOptionalTopic`)
 
 ```
-BasePubSubPublisher (abstract)
-  |-- WhatsAppSendPublisherImpl    -> whatsapp-service
-  |-- TodosProcessingPublisherImpl -> todos-agent
-  |-- CalendarPreviewPublisherImpl -> calendar-agent
+@intexuraos/infra-pubsub          (this package — generic only)
+  └── BasePubSubPublisher (abstract)
+        ▲
+        │ extends
+        │
+@intexuraos/whatsapp-pubsub-client     → consumed by whatsapp-service
+@intexuraos/todos-pubsub-client        → consumed by todos-agent
+@intexuraos/calendar-pubsub-client     → consumed by calendar-agent
+@intexuraos/pr-triage-pubsub-client    → consumed by code-agent
 ```
 
-Each publisher exposes a factory function (`createXxxPublisher`) and an interface type. Services depend on the interface for testability.
+Each leaf client package exposes a factory function (`createXxxPublisher`) and an interface type. Publisher-side services depend on the relevant leaf package, never on the consumer service.
+
+## Public Surface
+
+This package exports EXACTLY the following symbols (the "frozen" generic Pub/Sub contract):
+
+- `BasePubSubPublisher` — abstract base class
+- `BasePubSubPublisherConfig` — `{ projectId, logger }`
+- `PublishContext` — `Record<string, unknown>` for log enrichment
+- `PublishError` — `{ code: PublishFailureReason, message: string }`
+- `PublishFailureReason` — `'PUBLISH_FAILED' | 'TOPIC_NOT_FOUND' | 'PERMISSION_DENIED'`
+
+Anything else (typed events, factory functions for specific topics) lives in a leaf client package.
 
 ## API Reference
 
@@ -52,7 +69,22 @@ abstract class BasePubSubPublisher {
 
   constructor(config: BasePubSubPublisherConfig);
 
+  /**
+   * Publish an event to a REQUIRED topic. Subclasses must validate at
+   * construction time that `topicName` is non-null.
+   */
   protected publishToTopic(
+    topicName: string,
+    event: unknown,
+    context: PublishContext,
+    eventDescription: string
+  ): Promise<Result<void, PublishError>>;
+
+  /**
+   * Publish to an OPTIONAL topic. Skips publish (returns ok) when
+   * `topicName === null`.
+   */
+  protected publishToOptionalTopic(
     topicName: string | null,
     event: unknown,
     context: PublishContext,
@@ -61,148 +93,57 @@ abstract class BasePubSubPublisher {
 }
 ```
 
-When `topicName` is `null`, `publishToTopic` logs a debug message and returns `ok(undefined)` without attempting to publish. This enables graceful degradation when a topic environment variable is not set.
-
-### PublishError (`types.ts`)
+### PublishError / PublishFailureReason (`types.ts`)
 
 ```typescript
+type PublishFailureReason = 'PUBLISH_FAILED' | 'TOPIC_NOT_FOUND' | 'PERMISSION_DENIED';
+
 interface PublishError {
-  code: 'PUBLISH_FAILED' | 'TOPIC_NOT_FOUND' | 'PERMISSION_DENIED';
+  code: PublishFailureReason;
   message: string;
 }
 ```
 
-### WhatsApp Send Publisher (`whatsappSendPublisher.ts`)
+## Leaf Client Packages
 
-Publishes messages for `whatsapp-service` to send via the WhatsApp Business API.
+Use these to publish typed events to the corresponding consumer service. None of them require depending on the consumer app:
 
-```typescript
-interface WhatsAppSendPublisher {
-  publishSendMessage(params: {
-    userId: string;
-    message: string;
-    replyToMessageId?: string;
-    buttons?: WhatsAppInteractiveButton[];
-    ctaUrl?: { displayText: string; url: string };
-    correlationId?: string;
-  }): Promise<Result<void, PublishError>>;
-}
+| Package                                 | Factory                          | Event type                   | Consumer           |
+| --------------------------------------- | -------------------------------- | ---------------------------- | ------------------ |
+| `@intexuraos/whatsapp-pubsub-client`    | `createWhatsAppSendPublisher`    | `whatsapp.message.send`      | `whatsapp-service` |
+| `@intexuraos/todos-pubsub-client`       | `createTodosProcessingPublisher` | `todos.processing.created`   | `todos-agent`      |
+| `@intexuraos/calendar-pubsub-client`    | `createCalendarPreviewPublisher` | `calendar.preview.generate`  | `calendar-agent`   |
+| `@intexuraos/pr-triage-pubsub-client`   | `createPRTriagePublisher`        | `code.pr.triage.requested`   | `code-agent`       |
 
-function createWhatsAppSendPublisher(config: WhatsAppSendPublisherConfig): WhatsAppSendPublisher;
-```
-
-**Event type:** `whatsapp.message.send`
-
-The publisher constructs a `SendMessageEvent` with auto-generated `correlationId` and `timestamp`. Phone number lookup happens in `whatsapp-service` using the `userId`.
-
-**Constraint:** `buttons` and `ctaUrl` are mutually exclusive — the WhatsApp API does not support both in the same message. The publisher does not enforce this constraint; it is the caller's responsibility.
+## Usage — extending `BasePubSubPublisher`
 
 ```typescript
-interface SendMessageEvent {
-  type: 'whatsapp.message.send';
-  userId: string;
-  message: string;
-  replyToMessageId?: string;
-  buttons?: WhatsAppInteractiveButton[];
-  ctaUrl?: { displayText: string; url: string };
-  correlationId: string;
-  timestamp: string;
-}
+import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
+import type { Result } from '@intexuraos/common-core';
 
-interface WhatsAppInteractiveButton {
-  type: 'reply';
-  reply: { id: string; title: string };
-}
+class MyEventPublisher extends BasePubSubPublisher {
+  constructor(
+    config: { projectId: string; topicName: string; logger: Logger },
+    private readonly topicName: string = config.topicName
+  ) {
+    super({ projectId: config.projectId, logger: config.logger });
+  }
 
-interface WhatsAppSendPublisherConfig {
-  projectId: string;
-  topicName: string;
-  logger: Logger;
+  async publishMyEvent(event: MyEvent): Promise<Result<void, PublishError>> {
+    return this.publishToTopic(
+      this.topicName,
+      event,
+      { eventId: event.id },
+      'my-event'
+    );
+  }
 }
 ```
 
-### Todos Processing Publisher (`todosProcessingPublisher.ts`)
-
-Publishes events for `todos-agent` to process newly created todos.
+## Usage — publishing via a leaf client
 
 ```typescript
-interface TodosProcessingPublisher {
-  publishTodoCreated(params: {
-    todoId: string;
-    userId: string;
-    title: string;
-    correlationId?: string;
-  }): Promise<Result<void, PublishError>>;
-}
-
-function createTodosProcessingPublisher(
-  config: TodosProcessingPublisherConfig
-): TodosProcessingPublisher;
-```
-
-**Event type:** `todos.processing.created`
-
-```typescript
-interface TodoProcessingEvent {
-  type: 'todos.processing.created';
-  todoId: string;
-  userId: string;
-  title: string;
-  correlationId: string;
-  timestamp: string;
-}
-
-interface TodosProcessingPublisherConfig {
-  projectId: string;
-  topicName: string;
-  logger: Logger;
-}
-```
-
-### Calendar Preview Publisher (`calendarPreviewPublisher.ts`)
-
-Publishes events for `calendar-agent` to generate calendar event previews from natural language.
-
-```typescript
-interface CalendarPreviewPublisher {
-  publishGeneratePreview(params: {
-    actionId: string;
-    userId: string;
-    text: string;
-    currentDate: string;
-    correlationId?: string;
-  }): Promise<Result<void, PublishError>>;
-}
-
-function createCalendarPreviewPublisher(
-  config: CalendarPreviewPublisherConfig
-): CalendarPreviewPublisher;
-```
-
-**Event type:** `calendar.preview.generate`
-
-```typescript
-interface CalendarPreviewGenerateEvent {
-  type: 'calendar.preview.generate';
-  actionId: string;
-  userId: string;
-  text: string;
-  currentDate: string;
-  correlationId: string;
-  timestamp: string;
-}
-
-interface CalendarPreviewPublisherConfig {
-  projectId: string;
-  topicName: string;
-  logger: Logger;
-}
-```
-
-## Usage
-
-```typescript
-import { createWhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import { createWhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 
 const publisher = createWhatsAppSendPublisher({
   projectId: process.env['INTEXURAOS_GCP_PROJECT_ID']!,
@@ -223,29 +164,16 @@ if (!result.ok) {
 
 ## Used By
 
-**Apps (7):** `actions-agent`, `bookmarks-agent`, `code-agent`, `commands-agent`, `research-agent`, `todos-agent`, `whatsapp-service`
+`BasePubSubPublisher` is extended by publishers across the monorepo, including:
 
-**Workers (1):** `workers/transcription`
-
-## Recent Changes
-
-| Commit     | Description                                                   |
-| ---------- | ------------------------------------------------------------- |
-| `55b959e6` | Add deep link `ctaUrl` to WhatsApp send event (code-agent)    |
-| `a41ca812` | Replace PR URL text with WhatsApp CTA URL buttons             |
-| `d0d38f53` | Address code review feedback for INT-738                      |
-| `44017d5c` | Fix ESLint OOM with batched parallel lint runner              |
-| `dfd702f1` | Add Sentry-enabled logger factory and migrate all apps        |
-| `a9847b66` | Add WhatsApp approval buttons with nonces                     |
-| `60bb9396` | Add Pub/Sub infrastructure for calendar preview               |
+- Each of the four `*-pubsub-client` leaf packages (above).
+- App-internal publishers under `apps/*/src/infra/pubsub/` (e.g. `actions-agent` action-event publisher, `bookmarks-agent` enrich/summarize publishers, `commands-agent` action-event publisher, `research-agent` analytics/llm-call/research-event publishers, `whatsapp-service` outbound-message publisher).
+- `workers/transcription` transcription-completed publisher.
 
 ## Source Files
 
-| File                              | Purpose                                      |
-| --------------------------------- | -------------------------------------------- |
-| `src/index.ts`                    | Entry point, re-exports                      |
-| `src/types.ts`                    | Event types, config interfaces, PublishError |
-| `src/basePublisher.ts`            | Abstract base publisher class                |
-| `src/whatsappSendPublisher.ts`    | WhatsApp message publishing                  |
-| `src/todosProcessingPublisher.ts` | Todo processing event publishing             |
-| `src/calendarPreviewPublisher.ts` | Calendar preview generation publishing       |
+| File                   | Purpose                                          |
+| ---------------------- | ------------------------------------------------ |
+| `src/index.ts`         | Public barrel — five symbols only                |
+| `src/types.ts`         | `PublishError`, `PublishFailureReason`           |
+| `src/basePublisher.ts` | `BasePubSubPublisher` abstract base class        |

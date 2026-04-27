@@ -1,0 +1,25 @@
+{
+  "description": "Single source of truth for Cloud Run services whose URLs are injected into the web bundle at build time. Consumed by apps/web/cloudbuild.yaml and .github/workflows/deploy.yml.",
+  "services": [
+    { "name": "user-service",                 "envSuffix": "USER_SERVICE" },
+    { "name": "whatsapp-service",             "envSuffix": "WHATSAPP_SERVICE" },
+    { "name": "notion-service",               "envSuffix": "NOTION_SERVICE" },
+    { "name": "mobile-notifications-service", "envSuffix": "MOBILE_NOTIFICATIONS_SERVICE" },
+    { "name": "research-agent",               "envSuffix": "RESEARCH_AGENT" },
+    { "name": "commands-agent",               "envSuffix": "COMMANDS_AGENT" },
+    { "name": "actions-agent",                "envSuffix": "ACTIONS_AGENT" },
+    { "name": "notes-agent",                  "envSuffix": "NOTES_AGENT" },
+    { "name": "todos-agent",                  "envSuffix": "TODOS_AGENT" },
+    { "name": "bookmarks-agent",              "envSuffix": "BOOKMARKS_AGENT" },
+    { "name": "calendar-agent",               "envSuffix": "CALENDAR_AGENT" },
+    { "name": "chat-agent",                   "envSuffix": "CHAT_AGENT" },
+    { "name": "linear-agent",                 "envSuffix": "LINEAR_AGENT" },
+    { "name": "code-agent",                   "envSuffix": "CODE_AGENT" },
+    { "name": "image-service",                "envSuffix": "IMAGE_SERVICE" },
+    { "name": "web-agent",                    "envSuffix": "WEB_AGENT" },
+    { "name": "app-settings-service",         "envSuffix": "APP_SETTINGS_SERVICE" },
+    { "name": "cron-agent",                   "envSuffix": "CRON_AGENT" },
+    { "name": "hellscript-agent",             "envSuffix": "HELLSCRIPT_AGENT" },
+    { "name": "llm-usage-service",            "envSuffix": "LLM_USAGE_SERVICE" }
+  ]
+}

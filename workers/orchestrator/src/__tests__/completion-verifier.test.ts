@@ -269,6 +269,81 @@ describe('verifyCompletion — real-rawLogs regression (NDJSON-aware fallback)',
   });
 });
 
+describe('verifyCompletion — codex exec --json regression', () => {
+  // Fixture captured live on 2026-04-27 by running
+  //   docker exec <preserved-container> codex exec --json --skip-git-repo-check \
+  //     --dangerously-bypass-approvals-and-sandbox -
+  // against codex-cli 0.125.0 (the version baked into the production code-worker
+  // image), with a tiny prompt asking codex to emit a fixed PULL_REQUEST_AGENT_FINAL
+  // block. The thread_id was sanitized to all-zeros; everything else is real
+  // codex stdout, including the trailing `codex_core::session: failed to record
+  // rollout items` stderr line that codex emits after every turn.
+  //
+  // This is the exact byte shape the verifier consumes via `getWorkerLogs()`
+  // when the orchestrator dispatches a codex worker. Before the codex extractor
+  // shipped in `ndjson-extractor.ts`, the marker was buried inside
+  //   {"type":"item.completed","item":{"type":"agent_message","text":"...\\n..."}}
+  // — a shape the INT-1560 Claude-SDK fallback did not recognize — so the
+  // verifier returned hard-error and the orchestrator finalized the task as
+  // `failed` even though codex completed cleanly. Real production failure that
+  // motivated this fixture: task_70a75a13-b0fd-4607-aec6-7d1a375af9be.
+  const RAW_RAWLOGS_DIR = join(FIXTURE_ROOT, 'raw-rawlogs');
+  const codexRawLogs = readFileSync(
+    join(RAW_RAWLOGS_DIR, 'codex-pull-request-final.rawlogs.txt'),
+    'utf8'
+  );
+  const codexExpected = JSON.parse(
+    readFileSync(join(RAW_RAWLOGS_DIR, 'codex-pull-request-final.expected.json'), 'utf8')
+  ) as {
+    agentType: CompletionAgentType;
+    workerType: string;
+    postFixVerdict: {
+      kind: 'parsed';
+      missingRequired: string[];
+      dataAssertions: Record<string, string | number | boolean>;
+    };
+  };
+
+  it('parses real codex exec --json stdout without hard-error', () => {
+    const verdict = verifyCompletion({
+      transcript: codexRawLogs,
+      agentType: codexExpected.agentType,
+      workerType: codexExpected.workerType as never,
+      executionMemoryContext: undefined,
+      lastExitCode: 0,
+    });
+    expect(
+      verdict.kind,
+      'real codex stdout fixture MUST NOT produce a hard-error after the codex extractor ships — that is the entire fix'
+    ).toBe('parsed');
+    if (verdict.kind !== 'parsed') return;
+    expect(verdict.missingRequired).toEqual(codexExpected.postFixVerdict.missingRequired);
+    const a = codexExpected.postFixVerdict.dataAssertions;
+    expect(verdict.data['pr']).toBe(a['pr']);
+    expect(verdict.data['comment_replied']).toBe(a['comment_replied']);
+    expect(verdict.data['tracking_comment_id']).toBe(a['tracking_comment_id']);
+    expect(verdict.data['tracking_comment']).toBe(a['tracking_comment']);
+    expect(verdict.data['total_pr_comments_posted']).toBe(a['total_pr_comments_posted']);
+    expect(String(verdict.data['ci_evidence'])).toContain(String(a['ci_evidenceContains']));
+    expect(String(verdict.data['summary'])).toContain(String(a['summaryContains']));
+  });
+
+  it('regression document: confirms the marker is NOT on its own line in raw codex stdout', () => {
+    // The marker exists ONLY as the JSON-escaped text inside an
+    // item.completed/agent_message envelope. If a future change starts
+    // emitting the marker on its own line in the raw bytes, this assertion
+    // will fire and remind the reviewer to refresh the fixture.
+    const ownLineMarkerRegex = /^\s*PULL_REQUEST_AGENT_FINAL:\s*$/m;
+    expect(
+      ownLineMarkerRegex.test(codexRawLogs),
+      'codex stdout must keep the marker buried inside the item.completed JSON envelope'
+    ).toBe(false);
+    expect(codexRawLogs).toContain('PULL_REQUEST_AGENT_FINAL');
+    expect(codexRawLogs).toContain('"type":"item.completed"');
+    expect(codexRawLogs).toContain('"type":"agent_message"');
+  });
+});
+
 describe('verifyCompletion — full-fixture replay (Phase-5 regression guard)', () => {
   // Every real-production AGENT_FINAL transcript harvested into the fixture
   // corpus MUST either accept (kind='parsed' with missingRequired=[]) when

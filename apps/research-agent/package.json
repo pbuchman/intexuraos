@@ -39,6 +39,7 @@
     "@intexuraos/llm-pricing": "workspace:*",
     "@intexuraos/llm-prompts": "workspace:*",
     "@intexuraos/llm-utils": "workspace:*",
+    "@intexuraos/whatsapp-pubsub-client": "workspace:*",
     "fastify": "catalog:",
     "marked": "^15.0.6",
     "pino": "catalog:",

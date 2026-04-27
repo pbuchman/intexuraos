@@ -142,4 +142,94 @@ describe('extractAssistantText — pure NDJSON-aware text extractor', () => {
     expect(result).toBe('X');
     expect(result).not.toContain('"type":"assistant"');
   });
+
+  // Codex `exec --json` (codex-cli 0.125.0) emits a different envelope from
+  // the Claude SDK. Marker-bearing envelope captured live from a real codex
+  // run on 2026-04-27:
+  //   {"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"..."}}
+  // See src/__tests__/fixtures/completion-verifier/raw-rawlogs/codex-pull-request-final.rawlogs.txt
+  describe('codex exec --json envelope support', () => {
+    it('extracts text from an agent_message item', () => {
+      const event = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          id: 'item_0',
+          type: 'agent_message',
+          text: 'PULL_REQUEST_AGENT_FINAL:\n- pr: https://x/y/1\n- summary: ok',
+        },
+      });
+      const lines = extractAssistantText(event).split('\n');
+      expect(lines).toContain('PULL_REQUEST_AGENT_FINAL:');
+      expect(lines).toContain('- pr: https://x/y/1');
+      expect(lines).toContain('- summary: ok');
+    });
+
+    it('does not extract from command_execution items (no false-positive on stdout text)', () => {
+      const event = JSON.stringify({
+        type: 'item.completed',
+        item: {
+          id: 'item_0',
+          type: 'command_execution',
+          command: 'cat README.md',
+          aggregated_output: 'PULL_REQUEST_AGENT_FINAL:\n- pr: https://x/y/1',
+          exit_code: 0,
+          status: 'completed',
+        },
+      });
+      // The aggregated_output field contains the marker substring, but a
+      // command_execution item is NOT an agent message — pass through so the
+      // locator never sees it on its own line.
+      expect(extractAssistantText(event)).toBe(event);
+    });
+
+    it('passes through preamble envelopes (thread.started, turn.started, turn.completed)', () => {
+      const events = [
+        JSON.stringify({
+          type: 'thread.started',
+          thread_id: '00000000-0000-0000-0000-000000000000',
+        }),
+        JSON.stringify({ type: 'turn.started' }),
+        JSON.stringify({
+          type: 'turn.completed',
+          usage: { input_tokens: 100, output_tokens: 10 },
+        }),
+      ];
+      const input = events.join('\n');
+      expect(extractAssistantText(input)).toBe(input);
+    });
+
+    it('emits multiple agent_message texts on separate lines when commentary precedes the final block', () => {
+      const events = [
+        JSON.stringify({
+          type: 'item.completed',
+          item: { id: 'item_0', type: 'agent_message', text: 'Working on it…' },
+        }),
+        JSON.stringify({
+          type: 'item.completed',
+          item: {
+            id: 'item_1',
+            type: 'agent_message',
+            text: 'PULL_REQUEST_AGENT_FINAL:\n- summary: final',
+          },
+        }),
+      ];
+      const lines = extractAssistantText(events.join('\n')).split('\n');
+      expect(lines).toContain('Working on it…');
+      expect(lines).toContain('PULL_REQUEST_AGENT_FINAL:');
+      expect(lines).toContain('- summary: final');
+    });
+
+    it('passes through agent_message item with non-string text (defensive against contract drift)', () => {
+      const event = JSON.stringify({
+        type: 'item.completed',
+        item: { id: 'item_0', type: 'agent_message', text: 42 },
+      });
+      expect(extractAssistantText(event)).toBe(event);
+    });
+
+    it('passes through item.completed envelope missing the item field entirely', () => {
+      const event = JSON.stringify({ type: 'item.completed' });
+      expect(extractAssistantText(event)).toBe(event);
+    });
+  });
 });
