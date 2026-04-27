@@ -47,7 +47,7 @@ function validateTriageState(
   const dedupedReviewTypes = [...new Set(reviewsRequested)];
 
   if (state.skipped) {
-    /* v8 ignore start -- ts-type: Zod safeParse ?? fallback unreachable — LLM output pre-validated @preserve */
+    /* v8 ignore start -- ts-type: TriageSkipSchema.safeParse !success branch unreachable — schema mirrors caller-validated literal action='skip' @preserve */
     const parsed = TriageSkipSchema.safeParse({ action: 'skip', reason: state.skipReason ?? '' });
     if (!parsed.success) return { ok: false, error: formatZodErrors(parsed.error) };
     /* v8 ignore stop @preserve */
@@ -55,7 +55,7 @@ function validateTriageState(
   }
 
   if (dedupedReviewTypes.length > 0) {
-    /* v8 ignore start -- ts-type: Zod safeParse ?? fallback unreachable — LLM output pre-validated @preserve */
+    /* v8 ignore start -- ts-type: TriageReviewSchema.safeParse !success branch unreachable — Set→Array reviewTypes is non-empty by guard above @preserve */
     const parsed = TriageReviewSchema.safeParse({ action: 'request_review', reviewTypes: dedupedReviewTypes });
     if (!parsed.success) return { ok: false, error: formatZodErrors(parsed.error) };
     /* v8 ignore stop @preserve */
@@ -69,7 +69,7 @@ function validateCommentTriageState(
   state: CommentTriageState,
 ): { ok: true; value: GitHubAgentTriageResult } | { ok: false; error: string } {
   if (state.skipped) {
-    /* v8 ignore start -- ts-type: Zod safeParse ?? fallback unreachable — LLM output pre-validated @preserve */
+    /* v8 ignore start -- ts-type: TriageSkipSchema.safeParse !success branch unreachable in comment-triage path — same skip schema as PR-triage path @preserve */
     const parsed = TriageSkipSchema.safeParse({ action: 'skip', reason: state.skipReason ?? '' });
     if (!parsed.success) return { ok: false, error: formatZodErrors(parsed.error) };
     /* v8 ignore stop @preserve */
@@ -78,7 +78,7 @@ function validateCommentTriageState(
 
   const dedupedReviewTypes = [...new Set(state.reviewTypes)];
   if (dedupedReviewTypes.length > 0) {
-    /* v8 ignore start -- ts-type: Zod safeParse ?? fallback unreachable — LLM output pre-validated @preserve */
+    /* v8 ignore start -- ts-type: TriageReviewSchema.safeParse !success branch unreachable in comment-triage path — Set→Array reviewTypes is non-empty by guard above @preserve */
     const parsed = TriageReviewSchema.safeParse({ action: 'request_review', reviewTypes: dedupedReviewTypes });
     if (!parsed.success) return { ok: false, error: formatZodErrors(parsed.error) };
     /* v8 ignore stop @preserve */
