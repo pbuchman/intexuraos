@@ -1,55 +1,88 @@
 # @intexuraos/code-task-domain
 
-Code-task domain primitives shared across IntexuraOS services: the worker-type catalogue, runtime guards, and plan-document path resolution.
+Code-task domain primitives shared across IntexuraOS services: the canonical worker-type catalog, runtime guards, and Linear-context plan-document path resolution.
 
-**Package:** `@intexuraos/code-task-domain` | **Type:** ESM | **Node:** >=22.0.0
+**Node:** >=22.0.0
+**Type:** ESM
+**Dependencies:** None (leaf domain package)
 
-## Overview
+## Why It Exists
 
-Several services (`code-agent`, `orchestrator`, `linear-agent`, `commands-agent`) need to agree on:
-
-- Which worker types exist for code tasks (`auto`, `claude`, `codex`, `cursor`, ...).
-- How to map a Linear context (issue identifier, branch, PR title) to the canonical plan document path under `docs/plans/`.
-
-This package is the single source of truth for those values. It is a leaf package with zero infrastructure dependencies — depend on it freely from any layer (apps, workers, packages).
+Multiple services (`code-agent`, `linear-agent`, `workers/orchestrator`) need to agree on (a) which worker types are valid and (b) how to extract the canonical plan-document path from a Linear issue. Before this package, these were duplicated as inline string unions and ad-hoc regexes — drift between services caused dispatch routing bugs and missing-plan failures. `code-task-domain` collapses both concerns into one source of truth.
 
 ## Exports
 
-| Symbol                                     | Source file              | Purpose                                                                                          |
-| ------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------ |
-| `CODE_TASK_WORKER_TYPES`                   | `codeTaskWorkerTypes.ts` | Readonly tuple of supported worker-type identifiers.                                             |
-| `isCodeTaskWorkerType`                     | `codeTaskWorkerTypes.ts` | Type-guard narrowing an arbitrary string to `CodeTaskWorkerType`.                                |
-| `CodeTaskWorkerType`                       | `codeTaskWorkerTypes.ts` | Union type derived from `CODE_TASK_WORKER_TYPES`.                                                |
-| `resolvePlanDocumentPathFromLinearContext` | `planPathResolver.ts`    | Maps a `PlanResolutionContext` to the conventional `docs/plans/<INT-XXX>-<slug>.md` path.        |
-| `PlanResolutionContext`                    | `planPathResolver.ts`    | Input shape for the resolver: `{ linearIssueIdentifier?, prTitle?, branchName? }`.               |
+| Entry Point   | Path                             | Contents                                              |
+| ------------- | -------------------------------- | ----------------------------------------------------- |
+| Main          | `.` (index)                      | Re-exports both worker-type catalog and plan resolver |
+| Worker types  | `./worker-types`                 | Just the worker-type catalog (lighter import)         |
+
+## API Reference
+
+### Worker Types (`codeTaskWorkerTypes.ts`)
+
+```typescript
+const CODE_TASK_WORKER_TYPES = [
+  'auto',
+  'opus',
+  'sonnet',
+  'minimax',
+  'mimo-pro',
+  'glm',
+  'qwen',
+  'kimi',
+  'codex',
+  'codex-xhigh',
+  'openrouter-free',
+] as const;
+
+type CodeTaskWorkerType = (typeof CODE_TASK_WORKER_TYPES)[number];
+
+function isCodeTaskWorkerType(value: string): value is CodeTaskWorkerType;
+```
+
+`isCodeTaskWorkerType` is the runtime guard used at every service boundary that accepts a worker-type string (HTTP routes, Pub/Sub messages, `@worker` directive parsing). When the catalog grows, callers stay correct without any sweeping rewrite.
+
+### Plan Document Path Resolution (`planPathResolver.ts`)
+
+```typescript
+interface PlanResolutionContext {
+  description: string | undefined;
+  comments: { body: string }[];
+}
+
+function resolvePlanDocumentPathFromLinearContext(
+  context: PlanResolutionContext,
+): string | undefined;
+```
+
+Extracts a `docs/plans/*.md` path from a Linear issue's description and comments. Resolution order:
+
+1. Canonical `Plan document: docs/plans/...` line in the description.
+2. Canonical line in any comment (most-recent first by caller convention).
+3. Fallback: any `docs/plans/*.md` mention anywhere in the description.
+4. Fallback: any such mention in any comment.
+
+The resolver normalizes paths via `posix.normalize`, rejects absolute paths, parent-directory traversal, and anything outside `docs/plans/*.md` — preventing path-injection attacks via Linear content.
 
 ## Usage
 
-```ts
+```typescript
 import {
-  CODE_TASK_WORKER_TYPES,
   isCodeTaskWorkerType,
   resolvePlanDocumentPathFromLinearContext,
 } from '@intexuraos/code-task-domain';
 
 if (!isCodeTaskWorkerType(input)) {
-  throw new Error(`Unknown worker type: ${input}. Allowed: ${CODE_TASK_WORKER_TYPES.join(', ')}`);
+  return err({ code: 'INVALID_WORKER_TYPE' });
 }
 
 const planPath = resolvePlanDocumentPathFromLinearContext({
-  linearIssueIdentifier: 'INT-1557',
-  prTitle: '[INT-1557] Slim http-server',
+  description: issue.description,
+  comments: issue.comments,
 });
 ```
 
-## Build Output
+## Layering
 
-This package follows the **source-exports default** — `package.json#exports` points at `./src/index.ts`, no `dist/` is emitted. See [`docs/architecture/package-build-output.md`](../../architecture/package-build-output.md).
-
-## Testing
-
-```bash
-pnpm vitest run packages/code-task-domain
-```
-
-Tests cover the worker-type guard table and the plan-path resolution rules (issue identifier, branch fallback, PR-title fallback, slugification).
+This package is a **leaf** in the domain layer — no infra, no I/O, no Result wrapping. Both consumers (apps, workers) compose it with their own logger, repositories, and service container.

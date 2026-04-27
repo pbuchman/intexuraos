@@ -1,5 +1,5 @@
 /**
- * Bootstrap log-shape test for the log-cleanup worker.
+ * Bootstrap log-shape test for the transcription worker.
  *
  * Asserts that the unified logger bootstrap (initWorker + child bindings) emits
  * the required `service`, `requestId`, and `release` fields on every line —
@@ -41,16 +41,16 @@ function makeCapturingLogger(captured: CapturedLine[]): pino.Logger {
   return pino({ level: 'trace' }, stream);
 }
 
-describe('log-cleanup logger bootstrap', () => {
+describe('transcription logger bootstrap', () => {
   it('binds service + release at module init and requestId per invocation', async () => {
     const captured: CapturedLine[] = [];
     const baseLogger = makeCapturingLogger(captured);
 
     // Mirror what index.ts does at cold start.
     const release = '2026-04-25-test';
-    const logger = baseLogger.child({ service: 'log-cleanup', release });
+    const logger = baseLogger.child({ service: 'transcription', release });
 
-    // Mirror what handleCleanupLogs does per-invocation.
+    // Mirror what handleAudioStored does per-invocation.
     const ctx = extractCorrelation({ 'x-request-id': 'req-fixed-1' });
     await runWithRequestContext(ctx, () => {
       const reqLogger = logger.child({ requestId: ctx.requestId });
@@ -62,7 +62,7 @@ describe('log-cleanup logger bootstrap', () => {
 
     expect(captured).toHaveLength(3);
     for (const line of captured) {
-      expect(line.service).toBe('log-cleanup');
+      expect(line.service).toBe('transcription');
       expect(line.release).toBe(release);
       expect(line.requestId).toBe('req-fixed-1');
     }
@@ -71,7 +71,7 @@ describe('log-cleanup logger bootstrap', () => {
   it('generates a fresh requestId when attributes lack one', async () => {
     const captured: CapturedLine[] = [];
     const baseLogger = makeCapturingLogger(captured);
-    const logger = baseLogger.child({ service: 'log-cleanup', release: 'rev-x' });
+    const logger = baseLogger.child({ service: 'transcription', release: 'rev-x' });
 
     const ctx = extractCorrelation({});
     await runWithRequestContext(ctx, () => {
@@ -82,7 +82,7 @@ describe('log-cleanup logger bootstrap', () => {
 
     expect(captured).toHaveLength(1);
     const line = captured[0];
-    expect(line?.service).toBe('log-cleanup');
+    expect(line?.service).toBe('transcription');
     expect(line?.release).toBe('rev-x');
     expect(typeof line?.requestId).toBe('string');
     expect((line?.requestId ?? '').length).toBeGreaterThan(0);
