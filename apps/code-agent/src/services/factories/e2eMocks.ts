@@ -7,7 +7,8 @@
 
 import { ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
-import type { PRTriagePublisher, WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { PRTriagePublisher } from '@intexuraos/pr-triage-pubsub-client';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { IssueContext, LinearAgentClient, LinearAgentError } from '../../domain/ports/linearAgentClient.js';
 

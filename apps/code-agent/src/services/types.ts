@@ -7,7 +7,7 @@
 import type { Logger } from 'pino';
 import type { Firestore } from '@google-cloud/firestore';
 import type { Result } from '@intexuraos/common-core';
-import type { PRTriagePublisher } from '@intexuraos/infra-pubsub';
+import type { PRTriagePublisher } from '@intexuraos/pr-triage-pubsub-client';
 import type { ToolCallingClient } from '@intexuraos/llm-contract';
 import type { EmbeddingClient } from '@intexuraos/infra-gpt';
 import type { UserServiceClient, UsageServiceClient } from '@intexuraos/internal-clients';
