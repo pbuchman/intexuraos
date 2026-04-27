@@ -5,10 +5,7 @@
  */
 
 import type { Logger } from 'pino';
-import {
-  createWhatsAppSendPublisher,
-  type WhatsAppSendPublisher,
-} from '@intexuraos/infra-pubsub';
+import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { ok, type Result } from '@intexuraos/common-core';
 import type { NotificationError, NotificationSender } from '../../domain/research/index.js';
 

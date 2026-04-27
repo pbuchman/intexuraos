@@ -32,6 +32,7 @@
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
+    "@intexuraos/whatsapp-pubsub-client": "workspace:*",
     "fastify": "^5.1.0",
     "pino": "^10.1.0",
     "zod": "^3.24.1"

@@ -1,5 +1,5 @@
 import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type {
   DigestNotificationError,
   DigestNotifier,

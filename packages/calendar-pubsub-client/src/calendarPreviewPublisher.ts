@@ -3,12 +3,8 @@
  * Publishes CalendarPreviewGenerateEvent to Pub/Sub for calendar-agent to process.
  */
 import { type Result } from '@intexuraos/common-core';
-import { BasePubSubPublisher } from './basePublisher.js';
-import type {
-  PublishError,
-  CalendarPreviewGenerateEvent,
-  CalendarPreviewPublisherConfig,
-} from './types.js';
+import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
+import type { CalendarPreviewGenerateEvent, CalendarPreviewPublisherConfig } from './types.js';
 
 /**
  * Interface for publishing calendar preview generation events.

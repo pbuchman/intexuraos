@@ -3,8 +3,8 @@
  * Publishes TodoProcessingEvent to Pub/Sub for todos-agent to process.
  */
 import { type Result } from '@intexuraos/common-core';
-import { BasePubSubPublisher } from './basePublisher.js';
-import type { PublishError, TodoProcessingEvent, TodosProcessingPublisherConfig } from './types.js';
+import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
+import type { TodoProcessingEvent, TodosProcessingPublisherConfig } from './types.js';
 
 /**
  * Interface for publishing todos processing events.

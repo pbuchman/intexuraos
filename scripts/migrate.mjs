@@ -57,6 +57,16 @@ function aggregateIndexes(migrations) {
   const seenIndexes = new Set();
   const seenOverrides = new Set();
 
+  // Build the union of removed collection groups across ALL migrations first,
+  // so order does not matter (a cleanup migration may appear before or after
+  // the source migration that introduced the collection group).
+  const removedCollectionGroups = new Set();
+  for (const migration of migrations) {
+    for (const group of migration.removedCollectionGroups ?? []) {
+      removedCollectionGroups.add(group);
+    }
+  }
+
   for (const migration of migrations) {
     for (const index of migration.indexes ?? []) {
       // Skip single-field indexes - Firestore creates them automatically
@@ -84,7 +94,17 @@ function aggregateIndexes(migrations) {
     }
   }
 
-  return { indexes: allIndexes, fieldOverrides: allFieldOverrides };
+  // Filter both sets by the unioned removedCollectionGroups. Doing this AFTER
+  // dedup keeps the existing dedup logic untouched and makes the orphan-cleanup
+  // semantics independent of migration ordering.
+  const filteredIndexes = allIndexes.filter(
+    (index) => !removedCollectionGroups.has(index.collectionGroup)
+  );
+  const filteredFieldOverrides = allFieldOverrides.filter(
+    (override) => !removedCollectionGroups.has(override.collectionGroup)
+  );
+
+  return { indexes: filteredIndexes, fieldOverrides: filteredFieldOverrides };
 }
 
 function aggregateRules(migrations) {
@@ -186,6 +206,7 @@ function parseArgs() {
     status: false,
     dryRun: false,
     project: null,
+    writeArtifactsOnly: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -196,6 +217,8 @@ function parseArgs() {
       options.dryRun = true;
     } else if (arg === '--project' && args[i + 1]) {
       options.project = args[++i];
+    } else if (arg === '--write-artifacts-only') {
+      options.writeArtifactsOnly = true;
     }
   }
 
@@ -253,6 +276,7 @@ async function discoverMigrations() {
       up: module.up,
       indexes: module.indexes ?? [],
       fieldOverrides: module.fieldOverrides ?? [],
+      removedCollectionGroups: module.removedCollectionGroups ?? [],
       rules: module.rules ?? {},
     });
   }
@@ -372,6 +396,19 @@ async function showStatus(migrations, applied) {
 
 async function main() {
   const options = parseArgs();
+
+  if (options.writeArtifactsOnly) {
+    console.log('\nFirestore Migration Runner');
+    console.log('[WRITE-ARTIFACTS-ONLY MODE]');
+    console.log('');
+
+    const migrations = await discoverMigrations();
+    const stats = generateFirestoreConfig(migrations);
+    console.log(`✓ Wrote firestore.indexes.json (${stats.indexCount} indexes)`);
+    console.log(`✓ Wrote firestore.rules (${stats.collectionCount} collection rules)`);
+    return;
+  }
+
   const projectId = getProjectId(options);
 
   console.log(`\nFirestore Migration Runner`);

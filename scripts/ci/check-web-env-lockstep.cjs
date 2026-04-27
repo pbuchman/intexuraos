@@ -3,8 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const REPO_ROOT = path.resolve(__dirname, '../..');
-const CLOUDBUILD =
-  process.env.WEB_ENV_LOCKSTEP_CLOUDBUILD ?? path.join(REPO_ROOT, 'apps/web/cloudbuild.yaml');
+const MANIFEST =
+  process.env.WEB_ENV_LOCKSTEP_MANIFEST ?? path.join(REPO_ROOT, 'apps/web/service-manifest.json');
 const CONFIG_TS =
   process.env.WEB_ENV_LOCKSTEP_CONFIG ?? path.join(REPO_ROOT, 'apps/web/src/config.ts');
 const DEPLOY_YML =
@@ -14,11 +14,28 @@ function extractCloudRunSuffixes(arrayBody) {
   return [...arrayBody.matchAll(/"[^"]+:([A-Z0-9_]+)"/g)].map((x) => x[1]);
 }
 
-function extractFromCloudbuild(src) {
-  const m = src.match(/CLOUD_RUN_SERVICES=\(([\s\S]*?)\)/);
-  if (!m) throw new Error('CLOUD_RUN_SERVICES array not found in cloudbuild.yaml');
-  const suffixes = extractCloudRunSuffixes(m[1]);
-  return new Set(suffixes.map((s) => `INTEXURAOS_${s}_URL`));
+// Source of truth for the web bundle's Cloud Run URLs is
+// apps/web/service-manifest.json. apps/web/cloudbuild.yaml reads it at build
+// time via `jq`, so it cannot be regex'd here. Re-deriving from the manifest
+// keeps "what cloudbuild fetches" and "what we lockstep against" in sync.
+function extractFromManifest(src) {
+  let parsed;
+  try {
+    parsed = JSON.parse(src);
+  } catch (err) {
+    throw new Error(`service-manifest.json is not valid JSON: ${err.message}`);
+  }
+  if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.services)) {
+    throw new Error('service-manifest.json must have a "services" array');
+  }
+  return new Set(
+    parsed.services.map((s, i) => {
+      if (!s || typeof s.envSuffix !== 'string' || s.envSuffix.length === 0) {
+        throw new Error(`service-manifest.json services[${i}] is missing string "envSuffix"`);
+      }
+      return `INTEXURAOS_${s.envSuffix}_URL`;
+    })
+  );
 }
 
 function extractFromConfig(src) {
@@ -27,8 +44,11 @@ function extractFromConfig(src) {
 }
 
 // deploy.yml carries TWO independent CLOUD_RUN_SERVICES arrays (monolith-deploy
-// and per-service web-deploy). Both must agree with cloudbuild.yaml or the
-// workflow you happen to take in prod will silently bake the wrong env.
+// and per-service web-deploy). Both must agree with the manifest or the
+// workflow you happen to take in prod will silently bake the wrong env. The
+// migration of these two arrays to read from the manifest is tracked as a
+// follow-up — it requires the GitHub `workflows` permission scope (see the
+// note in scripts/verify-web-service-manifest.mjs).
 function extractFromDeployYml(src) {
   const matches = [...src.matchAll(/CLOUD_RUN_SERVICES=\(([\s\S]*?)\)/g)];
   if (matches.length === 0) throw new Error('CLOUD_RUN_SERVICES array not found in deploy.yml');
@@ -45,7 +65,7 @@ function diff(label, expected, actual) {
 }
 
 function main() {
-  const cloudbuild = extractFromCloudbuild(fs.readFileSync(CLOUDBUILD, 'utf-8'));
+  const cloudbuild = extractFromManifest(fs.readFileSync(MANIFEST, 'utf-8'));
   const config = extractFromConfig(fs.readFileSync(CONFIG_TS, 'utf-8'));
   const deployArrays = extractFromDeployYml(fs.readFileSync(DEPLOY_YML, 'utf-8'));
 
@@ -71,4 +91,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { extractFromCloudbuild, extractFromConfig, extractFromDeployYml };
+module.exports = { extractFromManifest, extractFromConfig, extractFromDeployYml };

@@ -1,20 +1,26 @@
 /**
  * Service wiring for user-service.
- * Provides dependency injection for domain adapters.
+ *
+ * Built on the shared `createServiceContainer` factory from
+ * `@intexuraos/common-core`. Public entry points (`initServices`,
+ * `getServices`, `setServices`, `resetServices`) match the canonical
+ * IntexuraOS service-container shape introduced in INT-1529.
  */
+import { createServiceContainer, type Logger } from '@intexuraos/common-core';
 import { createEncryptor, type Encryptor } from './infra/encryption.js';
-import { HttpInternalAuthUsageSink, NoopUsageSink, type UsageSink } from '@intexuraos/llm-pricing';
-import type { Logger } from '@intexuraos/common-core';
+import {
+  HttpInternalAuthUsageSink,
+  NoopUsageSink,
+  type UsageSink,
+} from '@intexuraos/llm-pricing';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { Auth0Client, AuthTokenRepository } from './domain/identity/index.js';
 import type { LlmValidator, UserSettingsRepository } from './domain/settings/index.js';
-import type { OAuthConnectionRepository, GoogleOAuthClient, GitHubOAuthClient } from './domain/oauth/index.js';
-
-/**
- * Silent logger used when no logger is provided to initializeServices.
- * LLM validation is skipped in production if logger is not available.
- */
-const silentLogger: Logger = createAppLogger({ name: 'user-service' });
+import type {
+  OAuthConnectionRepository,
+  GoogleOAuthClient,
+  GitHubOAuthClient,
+} from './domain/oauth/index.js';
 import {
   FirestoreAuthTokenRepository,
   FirestoreUserSettingsRepository,
@@ -28,9 +34,6 @@ import { LlmValidatorImpl } from './infra/llm/index.js';
 import { GoogleOAuthClientImpl } from './infra/google/index.js';
 import { GitHubOAuthClientImpl } from './infra/github/index.js';
 
-/**
- * Service container holding all adapter instances.
- */
 export interface ServiceContainer {
   authTokenRepository: AuthTokenRepository;
   userSettingsRepository: UserSettingsRepository;
@@ -42,12 +45,11 @@ export interface ServiceContainer {
   llmValidator: LlmValidator | null;
 }
 
-let container: ServiceContainer | null = null;
+/** Optional bootstrap logger; defaults to the app logger when unset. */
+export interface ServiceContainerConfig {
+  logger?: Logger;
+}
 
-/**
- * Load encryption key from environment and create encryptor.
- * Returns null if key is not configured (optional feature).
- */
 function loadEncryptor(): Encryptor | null {
   const encryptionKey = process.env['INTEXURAOS_ENCRYPTION_KEY'];
   if (encryptionKey === undefined || encryptionKey === '') {
@@ -56,53 +58,37 @@ function loadEncryptor(): Encryptor | null {
   return createEncryptor(encryptionKey);
 }
 
-/**
- * Load Google OAuth config from environment.
- * Returns null if not configured.
- */
 function loadGoogleOAuthClient(): GoogleOAuthClient | null {
   const clientId = process.env['INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID'];
   const clientSecret = process.env['INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET'];
-
-  if (clientId === undefined || clientId === '' || clientSecret === undefined || clientSecret === '') {
+  if (
+    clientId === undefined ||
+    clientId === '' ||
+    clientSecret === undefined ||
+    clientSecret === ''
+  ) {
     return null;
   }
-
   return new GoogleOAuthClientImpl({ clientId, clientSecret });
 }
 
-/**
- * Load GitHub OAuth config from environment.
- * Returns null if not configured.
- */
 function loadGitHubOAuthClient(): GitHubOAuthClient | null {
   const clientId = process.env['INTEXURAOS_GITHUB_OAUTH_CLIENT_ID'];
   const clientSecret = process.env['INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET'];
-
-  if (clientId === undefined || clientId === '' || clientSecret === undefined || clientSecret === '') {
+  if (
+    clientId === undefined ||
+    clientId === '' ||
+    clientSecret === undefined ||
+    clientSecret === ''
+  ) {
     return null;
   }
-
   return new GitHubOAuthClientImpl({ clientId, clientSecret });
 }
 
-/**
- * Get or create the service container.
- */
-export function getServices(): ServiceContainer {
-  if (container === null) {
-    throw new Error('Service container not initialized. Call initializeServices() first.');
-  }
-  return container;
-}
-
-/**
- * Initialize the service container with all dependencies.
- * @param logger - Logger for LLM validation (uses silent logger if not provided)
- */
-export function initializeServices(logger: Logger = silentLogger): void {
+function buildContainer(config?: ServiceContainerConfig): ServiceContainer {
+  const logger: Logger = config?.logger ?? createAppLogger({ name: 'user-service' });
   const auth0Config = loadAuth0ConfigFromInfra();
-  // LlmValidator is null in test environment to skip actual API calls
   const isTestEnv = process.env['NODE_ENV'] === 'test';
 
   let llmValidator: LlmValidator | null = null;
@@ -122,7 +108,7 @@ export function initializeServices(logger: Logger = silentLogger): void {
     llmValidator = new LlmValidatorImpl(logger, validatorUsageSink);
   }
 
-  container = {
+  return {
     authTokenRepository: new FirestoreAuthTokenRepository(),
     userSettingsRepository: new FirestoreUserSettingsRepository(),
     oauthConnectionRepository: new FirestoreOAuthConnectionRepository(),
@@ -134,16 +120,46 @@ export function initializeServices(logger: Logger = silentLogger): void {
   };
 }
 
-/**
- * Set a custom service container (for testing).
- */
-export function setServices(services: ServiceContainer): void {
-  container = services;
-}
+const handle = createServiceContainer<ServiceContainer, ServiceContainerConfig | undefined>(
+  buildContainer
+);
+
+/** Initialize the service container with all dependencies. */
+export const initServices = (config?: ServiceContainerConfig): void => {
+  handle.init(config);
+};
+
+/** Get the initialized container. Throws if `initServices` was not called. */
+export const getServices = (): ServiceContainer => handle.get();
 
 /**
- * Reset the service container (for testing).
+ * Override (a portion of) the service container — primarily for tests.
+ *
+ * Production callers MUST call {@link initServices} first; calling
+ * `setServices` on an uninitialized container in production throws so
+ * genuine ordering bugs surface immediately.
+ *
+ * Test callers (NODE_ENV === 'test') may invoke this without a preceding
+ * `initServices()`. In that case we auto-initialize with the default
+ * factory and then merge the override. This preserves the legacy
+ * behavior of `setServices(fullContainer)` from before INT-1529 without
+ * requiring every existing test file to add an `initServices()` call.
+ *
+ * NOTE: the auto-init guard is gated on NODE_ENV so production code paths
+ * still throw — only the test environment gets the convenience behavior.
  */
-export function resetServices(): void {
-  container = null;
-}
+export const setServices = (override: Partial<ServiceContainer>): void => {
+  if (process.env['NODE_ENV'] === 'test') {
+    try {
+      handle.get();
+    } catch {
+      handle.init();
+    }
+  }
+  handle.set(override);
+};
+
+/** Reset the container so the next `getServices` throws. */
+export const resetServices = (): void => {
+  handle.reset();
+};

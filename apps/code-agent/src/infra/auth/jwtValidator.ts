@@ -50,9 +50,24 @@ export function createJwtValidator(
   config: JwtValidatorConfig,
   logger: Logger
 ): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
-  // In E2E mode, use mock validator that accepts any token
-  if (process.env['E2E_MODE'] === 'true') {
-    logger.info('E2E_MODE enabled - using mock JWT validator');
+  const environment = process.env['INTEXURAOS_ENVIRONMENT'];
+  const e2eMode = process.env['E2E_MODE'];
+
+  // Production guard: never allow E2E_MODE to disable JWT auth in production.
+  // Throwing here causes Fastify startup to fail rather than silently bypassing auth.
+  if (environment === 'production' && e2eMode === 'true') {
+    throw new Error(
+      'Refusing to start: E2E_MODE=true is not allowed when INTEXURAOS_ENVIRONMENT=production. ' +
+        'This flag disables JWT authentication and must never be enabled in production.'
+    );
+  }
+
+  // In E2E mode (non-production), use mock validator that accepts any token
+  if (e2eMode === 'true') {
+    logger.warn(
+      { environment },
+      'E2E_MODE enabled - using mock JWT validator (authentication is disabled)'
+    );
     return createE2eJwtValidator(logger);
   }
 

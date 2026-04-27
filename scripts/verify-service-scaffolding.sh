@@ -181,10 +181,32 @@ CB_YAML="cloudbuild/cloudbuild.yaml"
 # Checklist line 1002:
 check "Build step: build-push-${SERVICE}"                "$(grep_any "build-push-${SERVICE}" "$CB_YAML")"
 check "Deploy step: deploy-${SERVICE}"                   "$(grep_any "deploy-${SERVICE}" "$CB_YAML")"
-# Web config (only if web consumes it) — SOFT:
-warn  "web CLOUD_RUN_SERVICES: ${SERVICE}:${SERVICE_UPPER}" \
-      "$(grep_any "\"${SERVICE}:${SERVICE_UPPER}\"" "$CB_YAML")" \
+# Web config — SOFT, in two locations after the apps/web manifest refactor (INT-1544):
+#   1. apps/web/service-manifest.json — single source of truth consumed by
+#      apps/web/cloudbuild.yaml at build time.
+#   2. cloudbuild/cloudbuild.yaml CLOUD_RUN_SERVICES literal — still in use by the
+#      monolith pipeline; will be migrated to read the manifest in a follow-up PR.
+WEB_MANIFEST="apps/web/service-manifest.json"
+manifest_has_service=0
+if [[ -f "$WEB_MANIFEST" ]]; then
+  if node -e '
+    const fs = require("fs");
+    const path = process.argv[1];
+    const name = process.argv[2];
+    const sfx = process.argv[3];
+    const m = JSON.parse(fs.readFileSync(path, "utf8"));
+    const ok = Array.isArray(m.services) && m.services.some(s => s && s.name === name && s.envSuffix === sfx);
+    process.exit(ok ? 0 : 1);
+  ' "$WEB_MANIFEST" "$SERVICE" "$SERVICE_UPPER" 2>/dev/null; then
+    manifest_has_service=1
+  fi
+fi
+warn  "web manifest: ${SERVICE}:${SERVICE_UPPER} in apps/web/service-manifest.json" \
+      "$manifest_has_service" \
       "soft: only required if web frontend calls this service"
+warn  "web CLOUD_RUN_SERVICES: ${SERVICE}:${SERVICE_UPPER} in cloudbuild/cloudbuild.yaml" \
+      "$(grep_any "\"${SERVICE}:${SERVICE_UPPER}\"" "$CB_YAML")" \
+      "soft: only required if web frontend calls this service (legacy literal — to be migrated to manifest)"
 
 header ".github/workflows/deploy.yml (4 required places)"
 

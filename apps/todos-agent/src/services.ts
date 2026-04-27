@@ -1,10 +1,7 @@
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { TodoRepository } from './domain/ports/todoRepository.js';
 import { FirestoreTodoRepository } from './infra/firestore/firestoreTodoRepository.js';
-import {
-  createTodosProcessingPublisher,
-  type TodosProcessingPublisher,
-} from '@intexuraos/infra-pubsub';
+import { createTodosProcessingPublisher, type TodosProcessingPublisher } from '@intexuraos/todos-pubsub-client';
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { createTodoItemExtractionService, type TodoItemExtractionService } from './infra/gemini/todoItemExtractionService.js';
 import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
