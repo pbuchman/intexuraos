@@ -16,3 +16,11 @@ export {
   formatZodErrors,
   type LlmParseErrorDetails,
 } from './parseError.js';
+
+// OTel span wrapper for LLM provider calls
+export {
+  withLlmSpan,
+  type LlmProviderName,
+  type LlmSpanAttributes,
+  type WithLlmSpanResult,
+} from './withLlmSpan.js';

@@ -38,6 +38,8 @@ export function getConfig(): AppConfig {
     hellscriptAgentUrl: getServiceUrl('INTEXURAOS_HELLSCRIPT_AGENT_URL', '/api/hellscript-agent'),
     appSettingsServiceUrl: getServiceUrl('INTEXURAOS_APP_SETTINGS_SERVICE_URL', '/api/settings'),
     llmUsageServiceUrl: getServiceUrl('INTEXURAOS_LLM_USAGE_SERVICE_URL', '/api/llm-usage'),
+    imageServiceUrl: getServiceUrl('INTEXURAOS_IMAGE_SERVICE_URL', '/api/images'),
+    webAgentUrl: getServiceUrl('INTEXURAOS_WEB_AGENT_URL', '/api/web'),
     firebaseProjectId: getEnvVar('INTEXURAOS_FIREBASE_PROJECT_ID'),
     firebaseApiKey: getEnvVar('INTEXURAOS_FIREBASE_API_KEY'),
     firebaseAuthDomain: getEnvVar('INTEXURAOS_FIREBASE_AUTH_DOMAIN'),

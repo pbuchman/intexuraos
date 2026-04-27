@@ -1,4 +1,4 @@
-import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core';
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
 import type { WorkerType } from '../models/codeTask.js';
 
 export const REVIEW_COMMAND_PREFIX = '@review';

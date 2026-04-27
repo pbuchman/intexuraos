@@ -1,4 +1,4 @@
-import type { CodeTaskWorkerType } from '@intexuraos/common-core/code-task-worker-types';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain/worker-types';
 
 export const WORKER_TYPE_METADATA: Record<CodeTaskWorkerType, { name: string; description: string }> = {
   auto: { name: 'Auto', description: 'Automatically select the best available model for the task' },

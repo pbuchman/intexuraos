@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { ok, err, type Logger } from '@intexuraos/common-core';
+import { ok, type Logger } from '@intexuraos/common-core';
 import { executeWebhookDispatch } from '../../../../domain/services/gitHubDispatch/webhookDispatch.js';
 import type { DispatchContext, WebhookDispatchServiceDeps } from '../../../../domain/services/gitHubDispatch/types.js';
 import type { GitHubPREvent } from '../../../../domain/models/gitHubPREvent.js';
@@ -8,15 +8,10 @@ import type { RuleOutcome } from '../../../../domain/services/gitHubWebhookRules
 vi.mock('../../../../domain/usecases/createTaskForPR.js', () => ({
   createTaskForPR: vi.fn(),
 }));
-vi.mock('../../../../domain/usecases/sendTaskMessage.js', () => ({
-  sendTaskMessage: vi.fn(),
-}));
 
 import { createTaskForPR } from '../../../../domain/usecases/createTaskForPR.js';
-import { sendTaskMessage } from '../../../../domain/usecases/sendTaskMessage.js';
 
 const mockedCreateTaskForPR = vi.mocked(createTaskForPR);
-const mockedSendTaskMessage = vi.mocked(sendTaskMessage);
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -93,18 +88,7 @@ describe('executeWebhookDispatch', () => {
     context = { event: baseEvent, decision, logger: mockLogger };
   });
 
-  it('returns failure when findLatestExecutionTaskByPR fails', async () => {
-    vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(
-      err({ code: 'x' as never, message: 'db down' }),
-    );
-
-    const result = await executeWebhookDispatch(deps, context);
-
-    expect(result.success).toBe(false);
-    expect(result.error).toBe('Failed to find task: db down');
-  });
-
-  it('routes to new-task when no existing task is found', async () => {
+  it('creates a new task when no prior task exists for the PR', async () => {
     mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-new' } as never));
 
     const result = await executeWebhookDispatch(deps, context);
@@ -113,44 +97,8 @@ describe('executeWebhookDispatch', () => {
     expect(mockedCreateTaskForPR).toHaveBeenCalled();
   });
 
-  it('creates a new task when PR is closed even if existing task is found', async () => {
-    const existingTask = { id: 'task-stale', userId: 'user-1' };
-    vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(existingTask as never));
-    mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-fresh' } as never));
-
-    const closedEvent: GitHubPREvent = { ...baseEvent, state: 'closed' };
-    const result = await executeWebhookDispatch(deps, { event: closedEvent, decision, logger: mockLogger });
-
-    expect(result.taskId).toBe('task-fresh');
-    expect(mockedSendTaskMessage).not.toHaveBeenCalled();
-  });
-
-  it('creates a new task when PR is merged', async () => {
-    const existingTask = { id: 'task-stale', userId: 'user-1' };
-    vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(existingTask as never));
-    mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-fresh' } as never));
-
-    const mergedEvent: GitHubPREvent = { ...baseEvent, mergedAt: new Date('2026-03-04T00:00:00Z') };
-    const result = await executeWebhookDispatch(deps, { event: mergedEvent, decision, logger: mockLogger });
-
-    expect(result.taskId).toBe('task-fresh');
-  });
-
-  it('falls back to new task when existing task is stale (worker 404)', async () => {
-    const existingTask = { id: 'task-stale', userId: 'user-1' };
-    vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(existingTask as never));
-    mockedSendTaskMessage.mockResolvedValue(
-      err({ code: 'task_not_found' as never, message: 'gone' }),
-    );
-    mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-fresh' } as never));
-
-    const result = await executeWebhookDispatch(deps, context);
-
-    expect(result).toEqual({ success: true, dispatched: true, taskId: 'task-fresh' });
-  });
-
-  it('wraps unexpected errors from task lookup', async () => {
-    vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockRejectedValue(new Error('kaboom'));
+  it('wraps unexpected errors thrown from inside handleNewTask', async () => {
+    vi.mocked(deps.codeTaskRepo.findPreservedPullRequestTask).mockRejectedValue(new Error('kaboom'));
 
     const result = await executeWebhookDispatch(deps, context);
 
@@ -160,7 +108,6 @@ describe('executeWebhookDispatch', () => {
 
   it('returns error when userLookupService is not configured for new tasks', async () => {
     const depsWithoutUserLookup = makeDeps();
-    // Force explicit undefined via destructure to bypass optional check
     const withUndef: WebhookDispatchServiceDeps = { ...depsWithoutUserLookup };
     delete (withUndef as { userLookupService?: unknown }).userLookupService;
 
@@ -168,5 +115,72 @@ describe('executeWebhookDispatch', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBe('UserLookupService not configured');
+  });
+
+  it('creates a fresh task on pull_request_review even when a prior execution task exists for the same PR', async () => {
+    const seededExecutionTask = { id: 'task_e3973762-1d5f-46d1-843f-340ab60312d5', userId: 'user-1' };
+    vi.mocked(deps.codeTaskRepo.findLatestExecutionTaskByPR).mockResolvedValue(ok(seededExecutionTask as never));
+    mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-fresh-pr' } as never));
+
+    const reviewEvent: GitHubPREvent = {
+      ...baseEvent,
+      eventType: 'pull_request_review',
+      action: 'submitted',
+      state: 'open',
+      mergedAt: null,
+    };
+    const result = await executeWebhookDispatch(deps, { event: reviewEvent, decision, logger: mockLogger });
+
+    expect(result).toEqual({ success: true, dispatched: true, taskId: 'task-fresh-pr' });
+    expect(mockedCreateTaskForPR).toHaveBeenCalled();
+  });
+
+  it('creates a new task on issue_comment without @worker mention', async () => {
+    mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-issue-comment' } as never));
+
+    const issueCommentEvent: GitHubPREvent = {
+      ...baseEvent,
+      eventType: 'issue_comment',
+      action: 'created',
+      body: 'looks great',
+    };
+    const result = await executeWebhookDispatch(deps, { event: issueCommentEvent, decision, logger: mockLogger });
+
+    expect(result).toEqual({ success: true, dispatched: true, taskId: 'task-issue-comment' });
+    const requestArg = mockedCreateTaskForPR.mock.calls[0]?.[1];
+    expect(requestArg).not.toHaveProperty('workerType');
+  });
+
+  it('forwards workerType when issue_comment carries an @worker mention', async () => {
+    mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-issue-glm' } as never));
+
+    const workerCommentEvent: GitHubPREvent = {
+      ...baseEvent,
+      eventType: 'issue_comment',
+      action: 'created',
+      body: '@worker glm please retry',
+    };
+    const result = await executeWebhookDispatch(deps, { event: workerCommentEvent, decision, logger: mockLogger });
+
+    expect(result).toEqual({ success: true, dispatched: true, taskId: 'task-issue-glm' });
+    expect(mockedCreateTaskForPR).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ workerType: 'glm' }),
+    );
+  });
+
+  it('creates a new task on pull_request_review_comment (inline diff comment)', async () => {
+    mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-inline-comment' } as never));
+
+    const inlineCommentEvent: GitHubPREvent = {
+      ...baseEvent,
+      eventType: 'pull_request_review_comment',
+      action: 'created',
+      body: 'consider extracting this',
+    };
+    const result = await executeWebhookDispatch(deps, { event: inlineCommentEvent, decision, logger: mockLogger });
+
+    expect(result).toEqual({ success: true, dispatched: true, taskId: 'task-inline-comment' });
+    expect(mockedCreateTaskForPR).toHaveBeenCalled();
   });
 });

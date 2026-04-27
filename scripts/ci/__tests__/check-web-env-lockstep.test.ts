@@ -1,0 +1,120 @@
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
+const SCRIPT = path.resolve(__dirname, '../check-web-env-lockstep.cjs');
+
+const CLOUDBUILD_FIXTURE = `
+steps:
+  - name: foo
+    args:
+      - |
+        CLOUD_RUN_SERVICES=(
+          "user-service:USER_SERVICE"
+          "image-service:IMAGE_SERVICE"
+        )
+`;
+
+const CONFIG_FIXTURE = `
+import type { AppConfig } from '@/types';
+function getServiceUrl(envVar: string, apiPath: string): string { return apiPath; }
+export function getConfig(): AppConfig {
+  return {
+    authServiceUrl: getServiceUrl('INTEXURAOS_USER_SERVICE_URL', '/api/user'),
+    imageServiceUrl: getServiceUrl('INTEXURAOS_IMAGE_SERVICE_URL', '/api/images'),
+  } as AppConfig;
+}
+`;
+
+const DEPLOY_FIXTURE = `
+jobs:
+  monolith:
+    steps:
+      - run: |
+          CLOUD_RUN_SERVICES=(
+            "user-service:USER_SERVICE"
+            "image-service:IMAGE_SERVICE"
+          )
+  individual:
+    steps:
+      - run: |
+          CLOUD_RUN_SERVICES=(
+            "user-service:USER_SERVICE"
+            "image-service:IMAGE_SERVICE"
+          )
+`;
+
+describe('check-web-env-lockstep', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'lockstep-'));
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function run(env: Record<string, string>) {
+    return spawnSync('node', [SCRIPT], {
+      encoding: 'utf-8',
+      env: { ...process.env, ...env },
+    });
+  }
+
+  function writeFixture(name: string, body: string) {
+    const p = path.join(dir, name);
+    writeFileSync(p, body);
+    return p;
+  }
+
+  test('passes when cloudbuild, config, and both deploy.yml arrays agree', () => {
+    const r = run({
+      WEB_ENV_LOCKSTEP_CLOUDBUILD: writeFixture('cloudbuild.yaml', CLOUDBUILD_FIXTURE),
+      WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', CONFIG_FIXTURE),
+      WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', DEPLOY_FIXTURE),
+    });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/lockstep OK/);
+  });
+
+  test('fails when deploy.yml array is missing an entry that cloudbuild has', () => {
+    const driftedDeploy = DEPLOY_FIXTURE.replaceAll('"image-service:IMAGE_SERVICE"\n', '');
+    const r = run({
+      WEB_ENV_LOCKSTEP_CLOUDBUILD: writeFixture('cloudbuild.yaml', CLOUDBUILD_FIXTURE),
+      WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', CONFIG_FIXTURE),
+      WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', driftedDeploy),
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/deploy\.yml\[0\] is missing INTEXURAOS_IMAGE_SERVICE_URL/);
+    expect(r.stderr).toMatch(/deploy\.yml\[1\] is missing INTEXURAOS_IMAGE_SERVICE_URL/);
+  });
+
+  test('fails when only one of the two deploy.yml arrays drifts', () => {
+    const partialDrift = DEPLOY_FIXTURE.replace(
+      /individual:[\s\S]*$/,
+      `individual:
+    steps:
+      - run: |
+          CLOUD_RUN_SERVICES=(
+            "user-service:USER_SERVICE"
+          )
+`
+    );
+    const r = run({
+      WEB_ENV_LOCKSTEP_CLOUDBUILD: writeFixture('cloudbuild.yaml', CLOUDBUILD_FIXTURE),
+      WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', CONFIG_FIXTURE),
+      WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', partialDrift),
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/deploy\.yml\[1\] is missing INTEXURAOS_IMAGE_SERVICE_URL/);
+    expect(r.stderr).not.toMatch(/deploy\.yml\[0\] is missing/);
+  });
+
+  test('passes against the real repo files (regression guard)', () => {
+    const out = execFileSync('node', [SCRIPT], { encoding: 'utf-8' });
+    expect(out).toMatch(/lockstep OK/);
+  });
+});

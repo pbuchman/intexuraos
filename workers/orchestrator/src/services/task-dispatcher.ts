@@ -1722,9 +1722,22 @@ export class TaskDispatcher {
       /* v8 ignore stop @preserve */
       await this.flushTaskLogs(task.taskId);
       await this.collectTurnMetrics(task, attempt);
+      // The runtime's rate-limit phrase is captured into `claudeErrors` via
+      // attempt_failed. Prepend it so downstream classifyFailure sees the
+      // signal it routes on; without this the cooloff scheduler never engages.
+      const claudeErrorForHardFailure = this.claudeErrors.get(task.taskId);
+      let hardErrorMessage = verification.message;
+      if (claudeErrorForHardFailure !== undefined && claudeErrorForHardFailure !== '') {
+        const runtimePrefix = buildRuntimeHardErrorMessage({
+          exitCode,
+          claudeError: claudeErrorForHardFailure,
+          runtimeName: this.getRuntimeDisplayName(task),
+        });
+        hardErrorMessage = `${runtimePrefix}; ${verification.message}`;
+      }
       const hardError: TaskError = {
         code: verification.code,
-        message: verification.message,
+        message: hardErrorMessage,
         remediation: { action: 'retry' },
       };
       await this.finalizeTask(task, 'failed', {

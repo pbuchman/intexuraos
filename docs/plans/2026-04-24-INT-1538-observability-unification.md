@@ -109,7 +109,7 @@ Consumers MUST use a new `extractCorrelation(message.attributes)` helper that re
 Every provider `generate()` call MUST be wrapped in an OTel span named `llm.<provider>.generate` with attributes:
 
 ```
-llm.provider           = 'claude' | 'gpt' | 'gemini' | 'perplexity' | 'openrouter'
+llm.provider           = 'anthropic' | 'openai' | 'google' | 'perplexity' | 'openrouter'
 llm.model              = <model-id>
 llm.input_tokens       = <number>
 llm.output_tokens      = <number>
@@ -117,6 +117,8 @@ llm.cached_input_tokens= <number>
 llm.cost_usd           = <number>
 llm.duration_ms        = <number>
 ```
+
+> **Note (post-S4 reconciliation):** The provider strings use the canonical `LlmProviders` values from `@intexuraos/llm-contract`. The original draft of this section used SDK-friendly names (`'claude' | 'gpt' | 'gemini'`); during S4 implementation that conflicted with `verify-llm-architecture` RULE-5, which forbids hardcoded provider strings outside `llm-contract`. Dashboards and Cloud Monitoring queries MUST use the canonical names listed above.
 
 `UsageLogger.record(...)` gains a `durationMs: number` field (required) persisted to Firestore `llm_usage_events`.
 
@@ -301,9 +303,9 @@ The Fastify `setErrorHandler` in `packages/http-server` MUST:
 
 ---
 
-## Notes on `workers/code-worker`
+## Notes on `docker/code-worker`
 
-`workers/code-worker` is a Docker image (no Node entry point) executed by the orchestrator to run the Claude CLI inside isolated containers. The "observability" for this worker lives inside the **orchestrator** (S5) where container stdout is forwarded via `log-forwarder.ts`. No separate subtask is needed — S5 ensures that forwarded logs carry the orchestrator's `requestId` and flow through the same Sentry/OTel pipeline.
+`docker/code-worker` is a Docker image (no Node entry point) executed by the orchestrator to run the Claude CLI inside isolated containers. The "observability" for this worker lives inside the **orchestrator** (S5) where container stdout is forwarded via `log-forwarder.ts`. No separate subtask is needed — S5 ensures that forwarded logs carry the orchestrator's `requestId` and flow through the same Sentry/OTel pipeline.
 
 ---
 

@@ -1,6 +1,8 @@
 import { InstancesClient } from '@google-cloud/compute';
-import { logger } from './logger.js';
+import { createWorkerLogger } from './__shims__/common-worker.js';
 import { VM_CONFIG } from './config.js';
+
+const logger = createWorkerLogger('vm-lifecycle');
 
 export interface StopVmResult {
   success: boolean;
