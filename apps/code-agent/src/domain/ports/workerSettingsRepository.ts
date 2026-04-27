@@ -4,7 +4,8 @@
  * Handles CRUD operations for worker configurations with encryption at rest.
  */
 
-import type { Result, CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { Result } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import type {
   UserWorkerSettings,
   WorkerConfig,

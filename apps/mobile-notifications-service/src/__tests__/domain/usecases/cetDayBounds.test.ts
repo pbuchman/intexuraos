@@ -1,5 +1,6 @@
 // apps/mobile-notifications-service/src/__tests__/domain/usecases/cetDayBounds.test.ts
 import { describe, it, expect } from 'vitest';
+import { IntexuraOSError } from '@intexuraos/common-core';
 import { cetDayBounds } from '../../../domain/usecases/cetDayBounds.js';
 
 describe('cetDayBounds', () => {
@@ -26,5 +27,16 @@ describe('cetDayBounds', () => {
   it('throws on malformed date string', () => {
     expect(() => cetDayBounds('not-a-date')).toThrow(/invalid date/);
     expect(() => cetDayBounds('2026-04')).toThrow(/invalid date/);
+  });
+
+  it('throws IntexuraOSError with INVALID_REQUEST/400 on malformed date string', () => {
+    try {
+      cetDayBounds('not-a-date');
+      throw new Error('expected throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(IntexuraOSError);
+      expect((e as IntexuraOSError).code).toBe('INVALID_REQUEST');
+      expect((e as IntexuraOSError).httpStatus).toBe(400);
+    }
   });
 });

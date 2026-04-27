@@ -411,11 +411,11 @@ If `/repo/.claude/settings.local.json` already exists, the entrypoint merges the
 PUSH=true ./scripts/build-worker-image.sh latest
 ```
 
-The build script uses Docker BuildKit with `docker buildx` for multi-architecture support. The build context is the repository root (not the worker directory), enabling `COPY` of files from `workers/code-worker/`.
+The build script uses Docker BuildKit with `docker buildx` for multi-architecture support. The build context is the repository root (not the worker directory), enabling `COPY` of files from `docker/code-worker/`.
 
 ### Cloud Build
 
-The image is built and pushed via Cloud Build using `workers/code-worker/cloudbuild.yaml`. The trigger does not fire on git push — it is invoked manually or by the daily rebuild schedule.
+The image is built and pushed via Cloud Build using `docker/code-worker/cloudbuild.yaml`. The trigger does not fire on git push — it is invoked manually or by the daily rebuild schedule.
 
 ### Daily Rebuild
 
@@ -466,7 +466,7 @@ After `container.start()`, the orchestrator polls for the `/tmp/worker-ready` ma
 ## File Structure
 
 ```
-workers/code-worker/
+docker/code-worker/
   Dockerfile                          # Production image (multi-arch: amd64+arm64)
   Dockerfile.test                     # Test image (Claude + Codex stubs)
   entrypoint.sh                       # Container entrypoint script

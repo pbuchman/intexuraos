@@ -4,7 +4,7 @@
     "pr": "https://github.com/pbuchman/intexuraos/pull/1923",
     "ci_evidence": "pnpm run ci:tracked successful",
     "linear_issue": "https://linear.app/pbuchman/issue/INT-1460/investigate-cause-of-failures-in-recent-code-tasks",
-    "review_iterations": null,
+    "review_iterations": 3,
     "memory_ids_used": [
       "mem_38685eda-9500-4d12-a4b8-d14a3cf16da6",
       "mem_fad706b7-90a2-44bd-9dc3-b28b5d312089",
@@ -22,7 +22,6 @@
   },
   "missingRequired": [],
   "warnings": [
-    "field review_iterations not a valid int: 3 (spec compliance PASS, code quality found 3 must-fix + 1 nit → fixed, final holistic review PASS with zero blockers)",
     "field memory_ids_used was read from deprecated alias execution_memory_ids_used; rename the emitter",
     "field memory_ids_rejected was read from deprecated alias execution_memory_ids_rejected; rename the emitter",
     "field memory_usage_summary was read from deprecated alias execution_memory_usage_summary; rename the emitter"

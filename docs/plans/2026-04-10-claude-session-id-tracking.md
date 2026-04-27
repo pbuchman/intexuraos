@@ -33,7 +33,7 @@
 | `workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts` | Modify   | Assert the exec env contains `CLAUDE_SESSION_ID=<id>` for claude runtime resumes                                     |
 | `workers/orchestrator/src/services/task-dispatcher.ts`                          | Modify   | Extend the resume session-id guard from codex-only to cover claude too                                               |
 | `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`                    | Modify   | Assert claude resume rejects when `runtimeSessionId` is undefined                                                    |
-| `workers/code-worker/entrypoint.sh`                                             | Modify   | Require `CLAUDE_SESSION_ID` on claude resumes, invoke `claude --resume "$CLAUDE_SESSION_ID"` instead of `--continue` |
+| `docker/code-worker/entrypoint.sh`                                              | Modify   | Require `CLAUDE_SESSION_ID` on claude resumes, invoke `claude --resume "$CLAUDE_SESSION_ID"` instead of `--continue` |
 | `workers/orchestrator/src/services/system-prompt.ts`                            | Modify   | Update `askAgentPrompt` "Session Continuity" note to reflect the new resume mechanism; bump version to `1.2.0`       |
 | `workers/orchestrator/src/__tests__/system-prompt.test.ts`                      | Modify   | Update the ask-agent prompt assertion to match the new Session Continuity text                                       |
 
@@ -379,17 +379,17 @@ EOF
 ## Task 3: Update `entrypoint.sh` to Use `--resume` Instead of `--continue`
 
 **Files:**
-- Modify: `workers/code-worker/entrypoint.sh:166-200` (`run_claude_attempt` function)
+- Modify: `docker/code-worker/entrypoint.sh:166-200` (`run_claude_attempt` function)
 
 This is the core change. Replace `--continue` with `--resume "$CLAUDE_SESSION_ID"` and add a fail-fast guard mirroring the codex one at line 259-262.
 
 - [ ] **Step 1: Understand the current claude-attempt invocation structure**
 
-Read `workers/code-worker/entrypoint.sh` lines 125-214. Note that `run_claude_attempt` has four nearly-identical invocations of `claude`: two for the `forensics_enabled` branch (with `tee` logging), two for the non-forensics branch. Each pair has a `continue_flag` variant and a fresh variant. We need to update all four.
+Read `docker/code-worker/entrypoint.sh` lines 125-214. Note that `run_claude_attempt` has four nearly-identical invocations of `claude`: two for the `forensics_enabled` branch (with `tee` logging), two for the non-forensics branch. Each pair has a `continue_flag` variant and a fresh variant. We need to update all four.
 
 - [ ] **Step 2: Add the CLAUDE_SESSION_ID guard**
 
-In `workers/code-worker/entrypoint.sh`, find the `run_claude_attempt` function. Locate the block:
+In `docker/code-worker/entrypoint.sh`, find the `run_claude_attempt` function. Locate the block:
 
 **Before (around line 166-169):**
 ```bash
@@ -485,18 +485,18 @@ else
 fi
 ```
 
-Double-check with `grep -c -- '--continue' workers/code-worker/entrypoint.sh` — the claude-specific usages should be gone (expect the codex runtime's `codex exec resume` to remain unchanged).
+Double-check with `grep -c -- '--continue' docker/code-worker/entrypoint.sh` — the claude-specific usages should be gone (expect the codex runtime's `codex exec resume` to remain unchanged).
 
 - [ ] **Step 4: Lint the shell script**
 
 ```
-cd /repo && shellcheck workers/code-worker/entrypoint.sh
+cd /repo && shellcheck docker/code-worker/entrypoint.sh
 ```
 
 Expected: No new warnings introduced. If `shellcheck` is not installed, at minimum verify the file is syntactically valid:
 
 ```
-cd /repo && bash -n workers/code-worker/entrypoint.sh
+cd /repo && bash -n docker/code-worker/entrypoint.sh
 ```
 
 - [ ] **Step 5: Rebuild the code-worker image**
@@ -507,10 +507,10 @@ The entrypoint is baked into the worker image. Rebuild it locally before the smo
 cd /repo && pnpm --filter code-worker run build:image 2>&1 | tail -20
 ```
 
-If there's no `build:image` script in `workers/code-worker/package.json`, fall back to the raw docker build referenced in `workers/orchestrator/DEPLOYMENT.md`:
+If there's no `build:image` script in `docker/code-worker/package.json`, fall back to the raw docker build referenced in `workers/orchestrator/DEPLOYMENT.md`:
 
 ```
-docker build -f workers/code-worker/Dockerfile -t code-worker:local .
+docker build -f docker/code-worker/Dockerfile -t code-worker:local .
 ```
 
 Expected: successful build. Record the resulting image tag/digest.
@@ -518,7 +518,7 @@ Expected: successful build. Record the resulting image tag/digest.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add workers/code-worker/entrypoint.sh
+git add docker/code-worker/entrypoint.sh
 git commit -m "$(cat <<'EOF'
 fix(code-worker): use --resume with explicit session id for claude resumes
 
@@ -680,7 +680,7 @@ Expected: clean restart, no startup errors.
 
 Via the web UI at `https://dev.intexuraos.cloud/#/ask-agent`, send:
 
-> "Read the file `workers/code-worker/entrypoint.sh` and tell me how many functions it defines."
+> "Read the file `docker/code-worker/entrypoint.sh` and tell me how many functions it defines."
 
 Wait for the response. Record the `task_id` from the URL.
 

@@ -52,7 +52,7 @@ describe('usageLogger', () => {
     process.env = originalEnv;
   });
 
-  const baseParams = {
+  const baseParams: UsageLogParams = {
     userId: 'user-123',
     provider: LlmProviders.Google,
     model: LlmModels.Gemini25Flash,
@@ -64,6 +64,7 @@ describe('usageLogger', () => {
       costUsd: 0.001,
     },
     success: true,
+    durationMs: 42,
   };
 
   describe('isUsageLoggingEnabled', () => {
@@ -157,10 +158,19 @@ describe('usageLogger', () => {
             outputTokens: 200,
             totalTokens: 300,
             costUsd: 0.001,
+            durationMs: 42,
             success: true,
           }),
           'LLM usage logged'
         );
+      });
+
+      it('forwards durationMs to the sink', async () => {
+        const sink = new SpyUsageSink();
+        const usageLogger = new UsageLogger({ logger: fakeLogger, sink });
+        await usageLogger.log({ ...baseParams, durationMs: 1234 });
+
+        expect(sink.log).toHaveBeenCalledWith(expect.objectContaining({ durationMs: 1234 }));
       });
 
       it('includes errorMessage when success is false', async () => {
