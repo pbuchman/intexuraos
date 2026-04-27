@@ -32,7 +32,6 @@ export {
   type OpenApiServer,
   type OpenApiTag,
   type OpenApiInfo,
-  type HealthCheckProducer,
 } from './createFastifyApp.js';
 
 // Shared service lifecycle scaffold
