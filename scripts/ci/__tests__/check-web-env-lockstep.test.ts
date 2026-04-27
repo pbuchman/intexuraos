@@ -125,6 +125,42 @@ describe('check-web-env-lockstep', () => {
     );
   });
 
+  test('fails when manifest is invalid JSON', () => {
+    const r = run({
+      WEB_ENV_LOCKSTEP_MANIFEST: writeFixture('service-manifest.json', '{ not json'),
+      WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', CONFIG_FIXTURE),
+      WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', DEPLOY_FIXTURE),
+    });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/service-manifest\.json is not valid JSON/);
+  });
+
+  test('fails when manifest is missing the services array', () => {
+    const r = run({
+      WEB_ENV_LOCKSTEP_MANIFEST: writeFixture('service-manifest.json', JSON.stringify({})),
+      WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', CONFIG_FIXTURE),
+      WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', DEPLOY_FIXTURE),
+    });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/service-manifest\.json must have a "services" array/);
+  });
+
+  test('fails when a service entry is missing envSuffix', () => {
+    const bad = JSON.stringify({
+      services: [
+        { name: 'user-service', envSuffix: 'USER_SERVICE' },
+        { name: 'image-service' },
+      ],
+    });
+    const r = run({
+      WEB_ENV_LOCKSTEP_MANIFEST: writeFixture('service-manifest.json', bad),
+      WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', CONFIG_FIXTURE),
+      WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', DEPLOY_FIXTURE),
+    });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/services\[1\] is missing string "envSuffix"/);
+  });
+
   test('passes against the real repo files (regression guard)', () => {
     const out = execFileSync('node', [SCRIPT], { encoding: 'utf-8' });
     expect(out).toMatch(/lockstep OK/);
