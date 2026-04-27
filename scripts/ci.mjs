@@ -43,6 +43,7 @@ const phases = [
     failFast: true,
     commands: [
       { name: 'package-json', script: 'verify-package-json.mjs' },
+      { name: 'package-exports', script: 'verify-package-exports.mjs' },
       { name: 'date-formatting', script: 'verify-date-formatting.mjs' },
       { name: 'dead-code', script: 'verify-dead-code.mjs' },
       { name: 'boundaries', script: 'verify-boundaries.mjs' },
@@ -65,6 +66,7 @@ const phases = [
       { name: 'error-serializers', script: 'verify-error-serializers.mjs' },
       { name: 'prompt-versions', script: 'verify-prompt-versions.mjs' },
       { name: 'llm-architecture', run: 'npx tsx scripts/verify-llm-architecture.ts' },
+      { name: 'web-env-lockstep', run: 'node scripts/ci/check-web-env-lockstep.cjs' },
     ],
   },
   {
@@ -75,6 +77,11 @@ const phases = [
       { name: 'build', run: 'pnpm run build' },
       { name: 'format', run: 'pnpm run format' },
     ],
+  },
+  {
+    name: 'Post-Build Checks',
+    parallel: false,
+    commands: [{ name: 'web-bundle-budget', run: 'node scripts/ci/check-web-bundle-budget.cjs' }],
   },
 ];
 

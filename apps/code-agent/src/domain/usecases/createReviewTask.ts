@@ -10,7 +10,8 @@
  * - systemPromptHash: 'review-auto'
  */
 
-import { err, ok, getErrorMessage, resolvePlanDocumentPathFromLinearContext, type Result, type Logger } from '@intexuraos/common-core';
+import { err, ok, getErrorMessage, type Result, type Logger } from '@intexuraos/common-core';
+import { resolvePlanDocumentPathFromLinearContext } from '@intexuraos/code-task-domain';
 import type { CodeTaskRepository, CreateTaskInput } from '../repositories/codeTaskRepository.js';
 import type { WorkerType } from '../models/codeTask.js';
 import type { UserLookupService } from '../ports/userLookupService.js';

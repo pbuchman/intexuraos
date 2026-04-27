@@ -42,7 +42,7 @@ if [ "${PUSH:-false}" = "true" ]; then
         --platform "${PLATFORMS}" \
         -t "${IMAGE_NAME}:${IMAGE_TAG}" \
         --push \
-        -f workers/code-worker/Dockerfile \
+        -f docker/code-worker/Dockerfile \
         .
     echo ""
     echo "Push complete: ${IMAGE_NAME}:${IMAGE_TAG}"
@@ -52,7 +52,7 @@ else
     docker buildx build \
         -t "${IMAGE_NAME}:${IMAGE_TAG}" \
         --load \
-        -f workers/code-worker/Dockerfile \
+        -f docker/code-worker/Dockerfile \
         .
     echo ""
     echo "Build complete: ${IMAGE_NAME}:${IMAGE_TAG}"

@@ -1,11 +1,19 @@
+import { loadRequiredEnv } from './__shims__/common-worker.js';
+
+const env = loadRequiredEnv({
+  INTEXURAOS_GCP_PROJECT_ID: { required: true },
+  INTEXURAOS_VM_ZONE: { required: true },
+  INTEXURAOS_VM_INSTANCE_NAME: { required: true },
+  INTEXURAOS_VM_HEALTH_URL: { required: true },
+  INTEXURAOS_VM_SHUTDOWN_URL: { required: true },
+});
+
 export const VM_CONFIG = {
-  PROJECT_ID: process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? 'intexuraos',
-  ZONE: process.env['INTEXURAOS_VM_ZONE'] ?? 'europe-central2-a',
-  INSTANCE_NAME: process.env['INTEXURAOS_VM_INSTANCE_NAME'] ?? 'cc-vm',
-  HEALTH_ENDPOINT:
-    process.env['INTEXURAOS_VM_HEALTH_URL'] ?? 'https://cc-vm.intexuraos.cloud/health',
-  SHUTDOWN_ENDPOINT:
-    process.env['INTEXURAOS_VM_SHUTDOWN_URL'] ?? 'https://cc-vm.intexuraos.cloud/admin/shutdown',
+  PROJECT_ID: env.INTEXURAOS_GCP_PROJECT_ID,
+  ZONE: env.INTEXURAOS_VM_ZONE,
+  INSTANCE_NAME: env.INTEXURAOS_VM_INSTANCE_NAME,
+  HEALTH_ENDPOINT: env.INTEXURAOS_VM_HEALTH_URL,
+  SHUTDOWN_ENDPOINT: env.INTEXURAOS_VM_SHUTDOWN_URL,
 
   HEALTH_POLL_INTERVAL_MS: 10_000,
   HEALTH_POLL_TIMEOUT_MS: 180_000,

@@ -7,7 +7,7 @@
  * propagate structured errors without exception handling.
  */
 
-import { err, ok, type Result } from '@intexuraos/common-core';
+import { err, ok, IntexuraOSError, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../../repositories/codeTaskRepository.js';
 import type { LinearAgentClient, IssueTreeNode } from '../../ports/linearAgentClient.js';
@@ -62,7 +62,10 @@ function assertRequestFields(request: SubmitToExecutionAgentRequest): void {
     missing.push('userId');
   }
   if (missing.length > 0) {
-    throw new Error(`prepareSubmission: missing required field(s): ${missing.join(', ')}`);
+    throw new IntexuraOSError(
+      'INVALID_REQUEST',
+      `prepareSubmission: missing required field(s): ${missing.join(', ')}`,
+    );
   }
 }
 

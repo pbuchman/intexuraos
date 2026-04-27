@@ -1,5 +1,6 @@
-import type { Result, ServiceFeedback, CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { Result, ServiceFeedback } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionServiceClient } from '../domain/ports/actionServiceClient.js';
 import type {

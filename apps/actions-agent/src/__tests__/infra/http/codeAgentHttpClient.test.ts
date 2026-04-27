@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { isOk, isErr, type CodeTaskWorkerType } from '@intexuraos/common-core';
+import { isOk, isErr } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import nock from 'nock';
 import { createCodeAgentHttpClient } from '../../../infra/http/codeAgentHttpClient.js';
 import type { CodeAgentClient } from '../../../domain/ports/codeAgentClient.js';
