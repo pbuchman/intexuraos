@@ -55,7 +55,7 @@ Codex does not execute this hook layer directly. For orchestrated Codex runs, th
 
 | Bucket                 | Owner                                         | Examples                                                                                                     | Evidence                                                           |
 | ---------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| `Codex bootstrap`      | `workers/code-worker/entrypoint.sh`           | session-start readiness, skill restore, env loading, auth setup                                              | `[entrypoint] Bootstrap evidence: ...`                             |
+| `Codex bootstrap`      | `docker/code-worker/entrypoint.sh`            | session-start readiness, skill restore, env loading, auth setup                                              | `[entrypoint] Bootstrap evidence: ...`                             |
 | `orchestrator/runtime` | prompt + completion verifier + deep validator | completion contract, CI/PR evidence, ownership/evidence checks                                               | transcript evidence, deep-validation report, final execution block |
 | `Claude-only drop`     | none                                          | edit-time hook blockers/reminders like `detect-common-patterns`, `rebuild-after-git`, `typecheck-after-edit` | explicitly omitted for Codex                                       |
 

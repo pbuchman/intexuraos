@@ -1,7 +1,29 @@
 import type { FastifyRequest } from 'fastify';
 import { validateInternalAuth } from '@intexuraos/common-http';
+import {
+  createGoogleOidcVerifier,
+  type GoogleOidcVerifier,
+} from '@intexuraos/internal-clients';
 
 export type InternalAuthStrategy = 'pubsub-oidc' | 'scheduler-oidc' | 'internal-token';
+
+let cachedVerifier: GoogleOidcVerifier | undefined;
+let cachedAudience: string | undefined;
+
+/**
+ * Lazy-initialize the verifier so that tests (which set/unset env vars per-test)
+ * always read the latest INTEXURAOS_SERVICE_URL. The factory caches the JWKS
+ * fetcher internally; we cache the returned verifier per audience so that env
+ * changes (test scenarios) invalidate the cache.
+ */
+function getVerifier(): GoogleOidcVerifier {
+  const audience = process.env['INTEXURAOS_SERVICE_URL'] ?? '';
+  if (cachedVerifier === undefined || cachedAudience !== audience) {
+    cachedAudience = audience;
+    cachedVerifier = createGoogleOidcVerifier({ audience });
+  }
+  return cachedVerifier;
+}
 
 /**
  * Authenticate a PubSub push request.
@@ -30,18 +52,31 @@ export function authenticateInternalPubSub(
 
 /**
  * Authenticate a Cloud Scheduler request.
- * - Cloud Scheduler uses OIDC tokens (validated by Cloud Run at infrastructure level)
- * - Direct service calls use `x-internal-auth` header
+ *
+ * Two paths:
+ * 1. `Authorization: Bearer <Google-signed OIDC token>` — verified against
+ *    Google's JWKS with `audience = INTEXURAOS_SERVICE_URL` (this service's
+ *    own Cloud Run URL). Used by Cloud Scheduler with OIDC tokens.
+ * 2. `x-internal-auth: <shared secret>` — fallback for direct service-to-service
+ *    calls during dev/staging.
+ *
+ * Returns `authenticated: false` for any malformed, expired, audience-mismatched,
+ * or otherwise invalid token.
  */
-export function authenticateInternalScheduler(
+export async function authenticateInternalScheduler(
   request: FastifyRequest
-): { authenticated: true; strategy: InternalAuthStrategy } | { authenticated: false } {
+): Promise<
+  | { authenticated: true; strategy: InternalAuthStrategy; subject?: string }
+  | { authenticated: false }
+> {
   const authHeader = request.headers.authorization;
-  const isOidcAuth = typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
-
-  if (isOidcAuth) {
-    // OIDC token validated by Cloud Run
-    return { authenticated: true, strategy: 'scheduler-oidc' };
+  if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    const result = await getVerifier()(authHeader);
+    if (result.valid) {
+      return { authenticated: true, strategy: 'scheduler-oidc', subject: result.subject };
+    }
+    request.log.warn({ reason: result.reason }, 'Scheduler OIDC verification failed');
+    return { authenticated: false };
   }
 
   // Direct service call: validate x-internal-auth header

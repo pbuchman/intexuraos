@@ -19,6 +19,7 @@
   "dependencies": {
     "@google-cloud/functions-framework": "^3.0.0",
     "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/infra-sentry": "workspace:*",
     "firebase-admin": "^13.0.0",
     "pino": "catalog:"
   },

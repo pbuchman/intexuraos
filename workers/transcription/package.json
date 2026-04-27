@@ -21,6 +21,7 @@
     "@google-cloud/storage": "^7.14.0",
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/infra-pubsub": "workspace:*",
+    "@intexuraos/infra-sentry": "workspace:*",
     "@speechmatics/batch-client": "^5.1.0",
     "pino": "catalog:"
   },

@@ -42,10 +42,13 @@ export class SensitiveFileGuard {
   }
 
   async checkAndRevert(worktreePath: string, commitCount: number): Promise<GuardResult> {
-    const { execSync } = await import('node:child_process');
+    const { execFileSync } = await import('node:child_process');
 
-    // Get changed files in this commit
-    const result = execSync(`git diff --name-only HEAD~${String(commitCount)} HEAD`, {
+    const baseRef = `HEAD~${String(commitCount)}`;
+
+    // Get changed files in this commit range. `git diff` accepts `HEAD~N` as a single
+    // revision token; we pass it as one argv element so no shell parses it.
+    const result = execFileSync('git', ['diff', '--name-only', baseRef, 'HEAD'], {
       cwd: worktreePath,
       encoding: 'utf-8',
     });
@@ -59,9 +62,8 @@ export class SensitiveFileGuard {
       if (this.isSensitive(file)) {
         // Revert the file
         try {
-          execSync(`git checkout HEAD~${String(commitCount)} -- "${file}"`, {
-            cwd: worktreePath,
-          });
+          // `--` separates revisions from pathspecs; `file` is a literal argv element.
+          execFileSync('git', ['checkout', baseRef, '--', file], { cwd: worktreePath });
           reverted.push(file);
         } catch (error) {
           this.logger.error({ file, error }, 'Failed to revert sensitive file');
