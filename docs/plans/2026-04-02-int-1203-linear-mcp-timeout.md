@@ -67,8 +67,8 @@
 
 | File                                                                        | Action | Responsibility                                                                                      |
 | --------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------- |
-| `docker/code-worker/entrypoint.sh`                                         | Modify | Run Codex with explicit runtime enforcement for the Linear MCP timeout and surface failure evidence |
-| `docker/code-worker/Dockerfile`                                            | Modify | Add any required runtime utility or environment support for timeout enforcement                     |
+| `docker/code-worker/entrypoint.sh`                                          | Modify | Run Codex with explicit runtime enforcement for the Linear MCP timeout and surface failure evidence |
+| `docker/code-worker/Dockerfile`                                             | Modify | Add any required runtime utility or environment support for timeout enforcement                     |
 | `workers/orchestrator/src/services/runtime/__tests__/codex-runtime.test.ts` | Modify | Assert runtime failure behavior for timed out Linear MCP calls                                      |
 | `workers/orchestrator/src/__tests__/integration.test.ts`                    | Modify | Assert end-to-end timeout completion and cleanup behavior                                           |
 | `docs/setup/11-claude-code-mcp-setup.md`                                    | Modify | Document the enforced Linear MCP timeout contract if operator-visible behavior changes              |
