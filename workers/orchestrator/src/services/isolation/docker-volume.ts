@@ -2,7 +2,7 @@ import type Docker from 'dockerode';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { Logger } from '@intexuraos/common-core';
+import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
 import type { WorkerRuntime } from '../runtime/types.js';
 
 export const PNPM_STORE_DIR_NAME = 'pnpm-store';
@@ -127,7 +127,10 @@ export class DockerVolume {
     }
 
     if (!fs.existsSync(taskRuntimeHomePath)) {
-      throw new Error(`Codex resume requires existing task-local state at ${taskRuntimeHomePath}`);
+      throw new IntexuraOSError(
+        'PRECONDITION_FAILED',
+        `Codex resume requires existing task-local state at ${taskRuntimeHomePath}`
+      );
     }
   }
 

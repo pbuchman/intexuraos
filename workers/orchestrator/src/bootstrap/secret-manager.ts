@@ -8,6 +8,7 @@
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { execSync, type ExecSyncOptions } from 'node:child_process';
+import { IntexuraOSError } from '@intexuraos/common-core';
 import { EXEC_TIMEOUT_MS } from '../types/constants.js';
 
 /** Secret name in GCP Secret Manager. Exported for error messages. */
@@ -83,7 +84,8 @@ export function fetchGitHubKeys(
     return String(raw).trim();
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(
+    throw new IntexuraOSError(
+      'MISCONFIGURED',
       `Failed to fetch secret '${GITHUB_APP_PRIVATE_KEY_SECRET}' from Secret Manager ` +
         `(project=${projectId}). Ensure the service account has ` +
         `'roles/secretmanager.secretAccessor' and the secret exists. ` +

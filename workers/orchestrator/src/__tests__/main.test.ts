@@ -85,6 +85,7 @@ describe('main.ts', () => {
     getCapacity: vi.fn(() => 5),
     adoptTask: vi.fn(),
     recoverPendingResumeTask: vi.fn(),
+    emitTerminalMetrics: vi.fn(),
   } as unknown as TaskDispatcher;
 
   const mockListWorkerContainers = vi.fn<() => Promise<DiscoveredContainer[]>>();
@@ -266,7 +267,82 @@ describe('main.ts', () => {
 
       expect(mockStatePersistence.save).toHaveBeenCalled();
 
+      // INT-1565 §S5: startup recovery must emit `code_tasks_*` metrics so
+      // restart-induced interruptions show up in the same series as
+      // finalize-driven transitions. The dispatcher's `emitTerminalMetrics`
+      // is the single emit path; here we assert it was invoked with
+      // `interrupted` so the counter / duration both record the transition.
+      expect(mockDispatcher.emitTerminalMetrics).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'interrupted-1', status: 'interrupted' }),
+        'interrupted'
+      );
+
       // mockExit doesn't need restore - it's cleared in beforeEach
+    });
+
+    it('should swallow metrics emit errors during startup recovery', async () => {
+      const interruptedTask = {
+        taskId: 'interrupted-metrics-throw',
+        workerType: 'opus' as const,
+        prompt: 'Test prompt',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        status: 'running' as const,
+        containerId: 'session-x',
+        worktreePath: '/path/to/worktree',
+        startedAt: '2025-01-26T00:00:00.000Z',
+        linearIssueLabels: [],
+      };
+
+      vi.mocked(mockStatePersistence.load).mockResolvedValue({
+        tasks: { 'interrupted-metrics-throw': interruptedTask },
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+
+      // Force the dispatcher's metrics emit to throw — recovery must NOT
+      // bubble this up; it must log a warn and keep notifying code-agent.
+      vi.mocked(mockDispatcher.emitTerminalMetrics).mockImplementationOnce(() => {
+        throw new Error('metrics outage');
+      });
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger
+        );
+      } catch {
+        // Expected (mockExit short-circuits the harness)
+      }
+
+      // The webhook still went out (recovery is not aborted by metrics).
+      expect(mockWebhookClient.send).toHaveBeenCalled();
+
+      // The throw was logged at warn level so a regression that swaps the
+      // emit for a silent swallow is caught.
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'interrupted-metrics-throw',
+          error: expect.any(Error),
+        }),
+        'metrics emission failed during startup recovery; continuing'
+      );
+
+      // The "Notified code-agent of interrupted task" info line still ran,
+      // proving the catch did not abort the per-task body early.
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        { taskId: 'interrupted-metrics-throw' },
+        'Notified code-agent of interrupted task'
+      );
     });
 
     it('should handle webhook send error gracefully', async () => {
@@ -1644,6 +1720,89 @@ describe('main.ts', () => {
       );
 
       // mockExit doesn't need restore - it's cleared in beforeEach
+    });
+
+    it('awaits the optional flush callback before exit (INT-1565 §S5)', async () => {
+      // INT-1565 §S5: SIGTERM handler MUST await the flush() returned by
+      // initWorker() so Pino + Sentry buffers drain before the process exits.
+      const flushFn = vi.fn(async () => undefined);
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger,
+          undefined,
+          undefined,
+          flushFn
+        );
+      } catch {
+        // Expected — main() can throw from app.listen() in test setups
+      }
+
+      const onCalls = vi.mocked(process.on).mock.calls;
+      const sigtermCall = onCalls.find((call) => call[0] === 'SIGTERM');
+      const sigtermHandler = sigtermCall?.[1];
+
+      if (typeof sigtermHandler === 'function') {
+        vi.mocked(mockDispatcher.getRunningCount).mockReturnValue(0);
+        sigtermHandler();
+        // SIGTERM handler is fire-and-forget; pump fake timers + microtasks
+        // until shutdown's awaited steps (app.close, save state, flush) drain.
+        await vi.runAllTimersAsync();
+      }
+
+      expect(flushFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('logs and continues when the flush callback rejects', async () => {
+      // The flush() contract is "always resolves," but a buggy implementation
+      // must not leave the process hanging on shutdown — we wrap the call in a
+      // try/catch and log a warning.
+      const flushFn = vi.fn(async () => {
+        throw new Error('flush exploded');
+      });
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger,
+          undefined,
+          undefined,
+          flushFn
+        );
+      } catch {
+        // Expected
+      }
+
+      const onCalls = vi.mocked(process.on).mock.calls;
+      const sigtermCall = onCalls.find((call) => call[0] === 'SIGTERM');
+      const sigtermHandler = sigtermCall?.[1];
+
+      if (typeof sigtermHandler === 'function') {
+        vi.mocked(mockDispatcher.getRunningCount).mockReturnValue(0);
+        sigtermHandler();
+        await vi.runAllTimersAsync();
+      }
+
+      expect(flushFn).toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.any(Error) }),
+        'flush() raised during shutdown; continuing exit'
+      );
     });
   });
 
