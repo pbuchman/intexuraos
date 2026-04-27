@@ -149,4 +149,17 @@ describe('DockerVolume', () => {
     const volume = makeVolume(mockDocker);
     expect(volume.getPnpmStorePath()).toBe(path.join('/tmp', 'pnpm-store'));
   });
+
+  it('buildTmpfs keeps exec on /repo/node_modules — required by pnpm .bin shims (INT-1524)', () => {
+    const volume = makeVolume(mockDocker);
+    const tmpfs = volume.buildTmpfs();
+    // /repo/node_modules MUST stay rw,exec because pnpm-installed .bin/ shims
+    // are POSIX scripts. Switching to noexec breaks pnpm test/lint/build runs.
+    // Defense-in-depth against malicious lifecycle scripts is provided by
+    // ignore-scripts=true (see docker/code-worker/.npmrc and worker-env.ts).
+    expect(tmpfs['/repo/node_modules']).toContain('exec');
+    expect(tmpfs['/repo/node_modules']).not.toContain('noexec');
+    expect(tmpfs['/tmp']).toContain('noexec');
+    expect(tmpfs['/home/claude']).toContain('noexec');
+  });
 });

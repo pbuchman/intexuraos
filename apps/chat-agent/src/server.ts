@@ -3,6 +3,7 @@ import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import fastifyCors from '@fastify/cors';
+import fastifyRateLimit from '@fastify/rate-limit';
 import {
   fastifyAuthPlugin,
   intexuraFastifyPlugin,
@@ -16,7 +17,7 @@ import {
   type HealthCheck,
 } from '@intexuraos/http-server';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
-import { chatRoutes } from './routes/index.js';
+import { chatRoutes, guestSessionRoutes } from './routes/index.js';
 
 const SERVICE_NAME = 'chat-agent';
 const SERVICE_VERSION = '0.1.0';
@@ -140,6 +141,9 @@ export async function buildServer(): Promise<FastifyInstance> {
             stream: createLogStream(),
           },
     disableRequestLogging: true,
+    // Cloud Run terminates TLS and forwards client IP via X-Forwarded-For;
+    // trust the proxy so request.ip resolves to the real client.
+    trustProxy: true,
   });
 
   registerQuietHealthCheckLogging(app);
@@ -147,6 +151,37 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(fastifyCors, {
     origin: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'],
+  });
+
+  // IP-based floor rate limit. Must register before route-bearing plugins so
+  // the per-route `config.rateLimit` override (e.g. /guest-session at 10/min)
+  // is detected when those routes are added later.
+  //
+  // The plugin throws the Error returned by errorResponseBuilder; that error
+  // is handled by the unified error handler installed below, which translates
+  // statusCode === 429 into a `RATE_LIMITED` API response. We deliberately
+  // install ONE error handler (not two) to avoid Fastify's FSTWRN004
+  // warning about overriding handlers in the same scope.
+  await app.register(fastifyRateLimit, {
+    global: true,
+    max: 60,
+    timeWindow: '1 minute',
+    keyGenerator: (req) => req.ip,
+    // Skip OPTIONS / HEAD / health probes via the allowList — these don't
+    // count against the budget. The plugin invokes the function for every
+    // request and bypasses rate-limiting when it returns true.
+    allowList: (req): boolean =>
+      req.method === 'OPTIONS' ||
+      req.method === 'HEAD' ||
+      req.url.startsWith('/health'),
+    errorResponseBuilder: (_req, context): Error => {
+      const error = new Error(
+        `Rate limit exceeded, retry in ${context.after}`
+      ) as Error & { statusCode?: number; code?: string };
+      error.statusCode = context.statusCode;
+      error.code = 'RATE_LIMITED';
+      return error;
+    },
   });
 
   await app.register(intexuraFastifyPlugin);
@@ -163,6 +198,7 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   // Register chat routes
   await app.register(chatRoutes);
+  await app.register(guestSessionRoutes);
 
   app.get(
     '/openapi.json',

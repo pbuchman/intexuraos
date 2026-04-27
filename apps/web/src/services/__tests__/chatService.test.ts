@@ -57,10 +57,21 @@ vi.mock('../../config', () => {
   };
 });
 
-import { sendMessage, saveSession, loadSession, clearSession, CHAT_MESSAGE_TIMEOUT_MS } from '../chatService.js';
+import {
+  sendMessage,
+  sendGuestMessage,
+  getOrCreateGuestSessionToken,
+  saveSession,
+  loadSession,
+  clearSession,
+  CHAT_MESSAGE_TIMEOUT_MS,
+} from '../chatService.js';
 import type { ChatMessage, ChatResponse, ChatSession } from '../../types/chat.js';
 
 const LOCAL_STORAGE_KEY = 'intex-chat-session';
+const GUEST_SESSION_KEY = 'intex-guest-session-token';
+const GUEST_SESSION_EXPIRES_KEY = 'intex-guest-session-expires';
+const LEGACY_GUEST_SESSION_KEY = 'intex-guest-session-id';
 
 // Mock localStorage with proper methods
 const mockLocalStorage = {
@@ -306,6 +317,180 @@ describe('chatService', () => {
 
     it('does nothing when no session exists', () => {
       expect(() => clearSession()).not.toThrow();
+    });
+  });
+
+  describe('getOrCreateGuestSessionToken', () => {
+    /** Create a minimal fetch Response mock compatible with jsdom. */
+    function mockFetchResponse(body: unknown, status: number): Response {
+      return {
+        status,
+        ok: status >= 200 && status < 300,
+        json: () => Promise.resolve(body),
+      } as unknown as Response;
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('fetches a fresh token from /guest-session and caches it', async () => {
+      const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockFetchResponse(
+          { success: true, data: { sessionToken: 'jwt.token.here', expiresAt } },
+          200
+        )
+      );
+
+      const token = await getOrCreateGuestSessionToken();
+
+      expect(token).toBe('jwt.token.here');
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'http://localhost:8129/guest-session',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+      expect(localStorage.getItem(GUEST_SESSION_KEY)).toBe('jwt.token.here');
+      expect(localStorage.getItem(GUEST_SESSION_EXPIRES_KEY)).toBe(String(expiresAt));
+    });
+
+    it('returns the cached token on a second call without fetching again', async () => {
+      const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockFetchResponse(
+          { success: true, data: { sessionToken: 'jwt.token.cached', expiresAt } },
+          200
+        )
+      );
+
+      const first = await getOrCreateGuestSessionToken();
+      const second = await getOrCreateGuestSessionToken();
+
+      expect(first).toBe('jwt.token.cached');
+      expect(second).toBe('jwt.token.cached');
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('refetches when cached token has expired (within 30s buffer)', async () => {
+      // Pre-populate cache with a token expiring in 10s — within 30s buffer
+      localStorage.setItem(GUEST_SESSION_KEY, 'expired.jwt');
+      localStorage.setItem(GUEST_SESSION_EXPIRES_KEY, String(Date.now() + 10_000));
+
+      const newExpiresAt = Date.now() + 24 * 60 * 60 * 1000;
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockFetchResponse(
+          { success: true, data: { sessionToken: 'fresh.jwt', expiresAt: newExpiresAt } },
+          200
+        )
+      );
+
+      const token = await getOrCreateGuestSessionToken();
+
+      expect(token).toBe('fresh.jwt');
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(localStorage.getItem(GUEST_SESSION_KEY)).toBe('fresh.jwt');
+    });
+
+    it('throws ApiError when response is not the success envelope', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockFetchResponse({ unexpected: 'shape' }, 500)
+      );
+
+      const { ApiError } = await import('../apiClient.js');
+      await expect(getOrCreateGuestSessionToken()).rejects.toThrow(ApiError);
+    });
+
+    it('throws ApiError with backend code when success=false', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockFetchResponse(
+          { success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests' } },
+          429
+        )
+      );
+
+      const { ApiError } = await import('../apiClient.js');
+      try {
+        await getOrCreateGuestSessionToken();
+        expect.fail('expected ApiError');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiError);
+        const apiErr = err as InstanceType<typeof ApiError>;
+        expect(apiErr.code).toBe('RATE_LIMITED');
+        expect(apiErr.message).toBe('Too many requests');
+        expect(apiErr.status).toBe(429);
+      }
+    });
+
+    it('throws ApiError when success=true but data is missing', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockFetchResponse({ success: true }, 200)
+      );
+
+      const { ApiError } = await import('../apiClient.js');
+      await expect(getOrCreateGuestSessionToken()).rejects.toThrow(ApiError);
+    });
+  });
+
+  describe('sendGuestMessage', () => {
+    /** Create a minimal fetch Response mock compatible with jsdom. */
+    function mockFetchResponse(body: unknown, status: number): Response {
+      return {
+        status,
+        ok: status >= 200 && status < 300,
+        json: () => Promise.resolve(body),
+      } as unknown as Response;
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('fetches a guest token then sends the chat message with X-Guest-Session header', async () => {
+      const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(
+          mockFetchResponse(
+            { success: true, data: { sessionToken: 'guest.jwt', expiresAt } },
+            200
+          )
+        )
+        .mockResolvedValueOnce(
+          mockFetchResponse({ success: true, data: mockResponse }, 200)
+        );
+
+      const result = await sendGuestMessage('Hello there', []);
+
+      expect(result).toEqual(mockResponse);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+      const sessionCall = fetchSpy.mock.calls[0];
+      expect(sessionCall?.[0]).toBe('http://localhost:8129/guest-session');
+
+      const chatCall = fetchSpy.mock.calls[1];
+      expect(chatCall?.[0]).toBe('http://localhost:8129/chat');
+      const chatInit = chatCall?.[1] as RequestInit;
+      const headers = chatInit.headers as Record<string, string>;
+      expect(headers['X-Guest-Session']).toBe('guest.jwt');
+      expect(headers['Content-Type']).toBe('application/json');
+    });
+  });
+
+  describe('legacy guest session key purge', () => {
+    it('removes the legacy intex-guest-session-id key on module import', async () => {
+      // The module has already been imported at the top of this file, so the
+      // purge has already run on initial load. To verify the behavior, we
+      // re-import after seeding the legacy key, using vi.resetModules.
+      localStorage.setItem(LEGACY_GUEST_SESSION_KEY, 'old-uuid');
+
+      vi.resetModules();
+      await import('../chatService.js');
+
+      expect(localStorage.getItem(LEGACY_GUEST_SESSION_KEY)).toBeNull();
     });
   });
 });
