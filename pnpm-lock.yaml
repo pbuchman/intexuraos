@@ -165,6 +165,9 @@ importers:
       '@intexuraos/llm-prompts':
         specifier: workspace:*
         version: link:../../packages/llm-prompts
+      '@intexuraos/whatsapp-pubsub-client':
+        specifier: workspace:*
+        version: link:../../packages/whatsapp-pubsub-client
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -298,6 +301,9 @@ importers:
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../../packages/llm-pricing
+      '@intexuraos/whatsapp-pubsub-client':
+        specifier: workspace:*
+        version: link:../../packages/whatsapp-pubsub-client
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -504,6 +510,12 @@ importers:
       '@intexuraos/llm-prompts':
         specifier: workspace:*
         version: link:../../packages/llm-prompts
+      '@intexuraos/pr-triage-pubsub-client':
+        specifier: workspace:*
+        version: link:../../packages/pr-triage-pubsub-client
+      '@intexuraos/whatsapp-pubsub-client':
+        specifier: workspace:*
+        version: link:../../packages/whatsapp-pubsub-client
       ajv:
         specifier: ^8.17.1
         version: 8.17.1
@@ -995,6 +1007,9 @@ importers:
       '@intexuraos/llm-prompts':
         specifier: workspace:*
         version: link:../../packages/llm-prompts
+      '@intexuraos/whatsapp-pubsub-client':
+        specifier: workspace:*
+        version: link:../../packages/whatsapp-pubsub-client
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -1180,6 +1195,9 @@ importers:
       '@intexuraos/llm-utils':
         specifier: workspace:*
         version: link:../../packages/llm-utils
+      '@intexuraos/whatsapp-pubsub-client':
+        specifier: workspace:*
+        version: link:../../packages/whatsapp-pubsub-client
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -1253,6 +1271,9 @@ importers:
       '@intexuraos/llm-utils':
         specifier: workspace:*
         version: link:../../packages/llm-utils
+      '@intexuraos/todos-pubsub-client':
+        specifier: workspace:*
+        version: link:../../packages/todos-pubsub-client
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -1652,6 +1673,25 @@ importers:
       tsx:
         specifier: ^4.7.0
         version: 4.21.0
+
+  packages/calendar-pubsub-client:
+    dependencies:
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../common-core
+      '@intexuraos/infra-pubsub':
+        specifier: workspace:*
+        version: link:../infra-pubsub
+      pino:
+        specifier: ^10.1.0
+        version: 10.1.1
+    devDependencies:
+      '@google-cloud/pubsub':
+        specifier: ^4.9.0
+        version: 4.11.0(encoding@0.1.13)
+      vitest:
+        specifier: ^4.0.16
+        version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/code-task-domain: {}
 
@@ -2074,7 +2114,64 @@ importers:
         specifier: ^1.30.0
         version: 1.30.1(@opentelemetry/api@1.9.0)
 
+  packages/pr-triage-pubsub-client:
+    dependencies:
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../common-core
+      '@intexuraos/infra-pubsub':
+        specifier: workspace:*
+        version: link:../infra-pubsub
+      pino:
+        specifier: ^10.1.0
+        version: 10.1.1
+    devDependencies:
+      '@google-cloud/pubsub':
+        specifier: ^4.9.0
+        version: 4.11.0(encoding@0.1.13)
+      vitest:
+        specifier: ^4.0.16
+        version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
+
   packages/service-catalog: {}
+
+  packages/todos-pubsub-client:
+    dependencies:
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../common-core
+      '@intexuraos/infra-pubsub':
+        specifier: workspace:*
+        version: link:../infra-pubsub
+      pino:
+        specifier: ^10.1.0
+        version: 10.1.1
+    devDependencies:
+      '@google-cloud/pubsub':
+        specifier: ^4.9.0
+        version: 4.11.0(encoding@0.1.13)
+      vitest:
+        specifier: ^4.0.16
+        version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
+
+  packages/whatsapp-pubsub-client:
+    dependencies:
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../common-core
+      '@intexuraos/infra-pubsub':
+        specifier: workspace:*
+        version: link:../infra-pubsub
+      pino:
+        specifier: ^10.1.0
+        version: 10.1.1
+    devDependencies:
+      '@google-cloud/pubsub':
+        specifier: ^4.9.0
+        version: 4.11.0(encoding@0.1.13)
+      vitest:
+        specifier: ^4.0.16
+        version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
   tools/log-server:
     dependencies:
@@ -4726,6 +4823,7 @@ packages:
       }
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-libvips-linux-arm@1.0.5':
     resolution:
@@ -4734,6 +4832,7 @@ packages:
       }
     cpu: [arm]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-libvips-linux-s390x@1.0.4':
     resolution:
@@ -4742,6 +4841,7 @@ packages:
       }
     cpu: [s390x]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-libvips-linux-x64@1.0.4':
     resolution:
@@ -4750,6 +4850,7 @@ packages:
       }
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-libvips-linux-x64@1.2.4':
     resolution:
@@ -4758,6 +4859,7 @@ packages:
       }
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-libvips-linuxmusl-arm64@1.0.4':
     resolution:
@@ -4766,6 +4868,7 @@ packages:
       }
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   '@img/sharp-libvips-linuxmusl-x64@1.0.4':
     resolution:
@@ -4774,6 +4877,7 @@ packages:
       }
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@img/sharp-linux-arm64@0.33.5':
     resolution:
@@ -4783,6 +4887,7 @@ packages:
     engines: { node: ^18.17.0 || ^20.3.0 || >=21.0.0 }
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-linux-arm@0.33.5':
     resolution:
@@ -4792,6 +4897,7 @@ packages:
     engines: { node: ^18.17.0 || ^20.3.0 || >=21.0.0 }
     cpu: [arm]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-linux-s390x@0.33.5':
     resolution:
@@ -4801,6 +4907,7 @@ packages:
     engines: { node: ^18.17.0 || ^20.3.0 || >=21.0.0 }
     cpu: [s390x]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-linux-x64@0.33.5':
     resolution:
@@ -4810,6 +4917,7 @@ packages:
     engines: { node: ^18.17.0 || ^20.3.0 || >=21.0.0 }
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-linux-x64@0.34.5':
     resolution:
@@ -4819,6 +4927,7 @@ packages:
     engines: { node: ^18.17.0 || ^20.3.0 || >=21.0.0 }
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-linuxmusl-arm64@0.33.5':
     resolution:
@@ -4828,6 +4937,7 @@ packages:
     engines: { node: ^18.17.0 || ^20.3.0 || >=21.0.0 }
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   '@img/sharp-linuxmusl-x64@0.33.5':
     resolution:
@@ -4837,6 +4947,7 @@ packages:
     engines: { node: ^18.17.0 || ^20.3.0 || >=21.0.0 }
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@img/sharp-wasm32@0.33.5':
     resolution:
@@ -6616,6 +6727,7 @@ packages:
       }
     cpu: [arm]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-arm-musleabihf@4.55.1':
     resolution:
@@ -6624,6 +6736,7 @@ packages:
       }
     cpu: [arm]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-arm64-gnu@4.55.1':
     resolution:
@@ -6632,6 +6745,7 @@ packages:
       }
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-arm64-musl@4.55.1':
     resolution:
@@ -6640,6 +6754,7 @@ packages:
       }
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-loong64-gnu@4.55.1':
     resolution:
@@ -6648,6 +6763,7 @@ packages:
       }
     cpu: [loong64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-loong64-musl@4.55.1':
     resolution:
@@ -6656,6 +6772,7 @@ packages:
       }
     cpu: [loong64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-ppc64-gnu@4.55.1':
     resolution:
@@ -6664,6 +6781,7 @@ packages:
       }
     cpu: [ppc64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-ppc64-musl@4.55.1':
     resolution:
@@ -6672,6 +6790,7 @@ packages:
       }
     cpu: [ppc64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-riscv64-gnu@4.55.1':
     resolution:
@@ -6680,6 +6799,7 @@ packages:
       }
     cpu: [riscv64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-riscv64-musl@4.55.1':
     resolution:
@@ -6688,6 +6808,7 @@ packages:
       }
     cpu: [riscv64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-s390x-gnu@4.55.1':
     resolution:
@@ -6696,6 +6817,7 @@ packages:
       }
     cpu: [s390x]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-x64-gnu@4.55.1':
     resolution:
@@ -6704,6 +6826,7 @@ packages:
       }
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-x64-musl@4.55.1':
     resolution:
@@ -6712,6 +6835,7 @@ packages:
       }
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-openbsd-x64@4.55.1':
     resolution:
@@ -6923,6 +7047,7 @@ packages:
     engines: { node: '>= 10' }
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@tailwindcss/oxide-linux-arm64-musl@4.1.18':
     resolution:
@@ -6932,6 +7057,7 @@ packages:
     engines: { node: '>= 10' }
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   '@tailwindcss/oxide-linux-x64-gnu@4.1.18':
     resolution:
@@ -6941,6 +7067,7 @@ packages:
     engines: { node: '>= 10' }
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@tailwindcss/oxide-linux-x64-musl@4.1.18':
     resolution:
@@ -6950,6 +7077,7 @@ packages:
     engines: { node: '>= 10' }
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@tailwindcss/oxide-wasm32-wasi@4.1.18':
     resolution:
@@ -11958,6 +12086,7 @@ packages:
     engines: { node: '>= 12.0.0' }
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   lightningcss-linux-arm64-musl@1.30.2:
     resolution:
@@ -11967,6 +12096,7 @@ packages:
     engines: { node: '>= 12.0.0' }
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   lightningcss-linux-x64-gnu@1.30.2:
     resolution:
@@ -11976,6 +12106,7 @@ packages:
     engines: { node: '>= 12.0.0' }
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   lightningcss-linux-x64-musl@1.30.2:
     resolution:
@@ -11985,6 +12116,7 @@ packages:
     engines: { node: '>= 12.0.0' }
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   lightningcss-win32-arm64-msvc@1.30.2:
     resolution:

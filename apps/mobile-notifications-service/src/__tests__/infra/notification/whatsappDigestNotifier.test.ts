@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ok, err, type Result } from '@intexuraos/common-core';
-import type { WhatsAppSendPublisher, PublishError } from '@intexuraos/infra-pubsub';
+import type { PublishError } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { WhatsAppDigestNotifier } from '../../../infra/notification/whatsappDigestNotifier.js';
 
 const noopLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };

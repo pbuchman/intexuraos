@@ -1,0 +1,25 @@
+{
+  "name": "@intexuraos/pr-triage-pubsub-client",
+  "version": "3.6.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/infra-pubsub": "workspace:*",
+    "pino": "^10.1.0"
+  },
+  "devDependencies": {
+    "@google-cloud/pubsub": "^4.9.0",
+    "vitest": "^4.0.16"
+  }
+}
