@@ -26,7 +26,7 @@ None. This is an infrastructure-only refactor — no HTTP routes, Pub/Sub topics
 | A. Web service manifest                | `apps/web/service-manifest.json`, `scripts/verify-web-service-manifest.mjs`                                                         | `apps/web/cloudbuild.yaml`, `.github/workflows/deploy.yml`, `scripts/ci-tracked.mjs`                                                                                                                                              | —                                                                                       |
 | B. CI enforcement scripts              | `scripts/verify-terraform-env-consumers.mjs`, `scripts/verify-ecosystem-coverage.mjs`, `scripts/verify-terraform-secret-mounts.mjs` | `scripts/verify-env-vars.mjs`, `scripts/ci-tracked.mjs`                                                                                                                                                                           | —                                                                                       |
 | C. api-docs-hub env validation         | —                                                                                                                                   | `apps/api-docs-hub/src/index.ts`, `ecosystem.config.cjs`, `scripts/verify-required-endpoints.mjs` (if applicable)                                                                                                                 | —                                                                                       |
-| D. pnpm pin + Dockerfile consolidation | `docker/Dockerfile.service`, `cloudbuild/scripts/deploy-service.sh`                                                                 | `package.json` (packageManager), all `apps/<svc>/Dockerfile` (21), all `cloudbuild/scripts/deploy-<svc>.sh` (21), `apps/web/cloudbuild.yaml` (pnpm line), `workers/code-worker/Dockerfile`, `workers/code-worker/Dockerfile.test` | — (optional: remove per-service dockerfiles once shared one is proven; keep as stage 2) |
+| D. pnpm pin + Dockerfile consolidation | `docker/Dockerfile.service`, `cloudbuild/scripts/deploy-service.sh`                                                                 | `package.json` (packageManager), all `apps/<svc>/Dockerfile` (21), all `cloudbuild/scripts/deploy-<svc>.sh` (21), `apps/web/cloudbuild.yaml` (pnpm line), `docker/code-worker/Dockerfile`, `docker/code-worker/Dockerfile.test`   | — (optional: remove per-service dockerfiles once shared one is proven; keep as stage 2) |
 | E. Terraform dev split                 | `terraform/environments/dev/services.tf`, `secrets.tf`, `iam.tf`, `pubsub.tf`, `locals.tf`                                          | `terraform/environments/dev/main.tf` (shrunk to providers + module glue)                                                                                                                                                          | —                                                                                       |
 | F. Orphan cleanup                      | —                                                                                                                                   | `terraform/environments/dev/main.tf` (remove 8 orphan secrets, dead `INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC`), `ecosystem.config.cjs` (dead env var)                                                                               | —                                                                                       |
 | G. Prod environment decision           | Either: `terraform/environments/prod/**`, OR: —                                                                                     | `.claude/CLAUDE.md`, `.claude/reference/infrastructure.md`, `.claude/reference/environments.md`                                                                                                                                   | —                                                                                       |
@@ -109,7 +109,7 @@ CMD ["node", "apps/${SERVICE}/dist/index.js"]
 
 **Consumers:** Cloud Build triggers (`cloudbuild/*.yaml`) that currently call `bash cloudbuild/scripts/deploy-<svc>.sh` are updated to call `SERVICE=<svc> bash cloudbuild/scripts/deploy-service.sh`. Per-service `apps/<svc>/Dockerfile` files are reduced to a 3-line stub that `FROM` the shared one (or deleted outright if Cloud Build allows `--file docker/Dockerfile.service`).
 
-**Out-of-scope:** `workers/code-worker/Dockerfile` keeps its own file (VM image, non-trivially different — 141 lines). Only the pnpm line is updated.
+**Out-of-scope:** `docker/code-worker/Dockerfile` keeps its own file (VM image, non-trivially different — 141 lines). Only the pnpm line is updated.
 
 ### Contract 4 — Root `packageManager` field (owner: Subtask D, gate for all Dockerfiles)
 
@@ -218,7 +218,7 @@ Each subtask below is shippable independently. All 7 run in parallel. No depende
 - Modify: all 21 `apps/<svc>/Dockerfile` (collapse to `FROM` stub OR delete and reference shared file in Cloud Build trigger)
 - Modify: all 21 `cloudbuild/scripts/deploy-<svc>.sh` (collapse to 3-line wrapper `exec bash cloudbuild/scripts/deploy-service.sh`)
 - Modify: `apps/web/cloudbuild.yaml` line 83 (`npm install -g pnpm@9` → `corepack enable && corepack prepare --activate`)
-- Modify: `workers/code-worker/Dockerfile`, `workers/code-worker/Dockerfile.test` (line 51 / 31: `pnpm@latest` → `corepack enable`)
+- Modify: `docker/code-worker/Dockerfile`, `docker/code-worker/Dockerfile.test` (line 51 / 31: `pnpm@latest` → `corepack enable`)
 
 **Steps:**
 - [ ] Run `pnpm -v` at repo root — record exact version (e.g., `10.15.0`).
@@ -236,7 +236,7 @@ Each subtask below is shippable independently. All 7 run in parallel. No depende
 - [ ] Rewrite each `cloudbuild/scripts/deploy-<svc>.sh` to a 3-line wrapper: `#!/usr/bin/env bash\nSERVICE=<svc> exec "$(dirname "$0")/deploy-service.sh"`.
 - [ ] For Dockerfiles: either (preferred) update Cloud Build triggers to use `docker/Dockerfile.service` with `--build-arg SERVICE=<svc>` and delete per-service Dockerfiles, OR (safer stage-1) rewrite each `apps/<svc>/Dockerfile` to a 2-line stub: `FROM docker/Dockerfile.service AS build\n# SERVICE=<svc> baked at build time`. Pick the safer stage-1 first; stage-2 deletion is a follow-up PR.
 - [ ] Update `apps/web/cloudbuild.yaml` line 83 to `corepack enable && corepack prepare --activate`.
-- [ ] Update `workers/code-worker/Dockerfile` line 51 and `Dockerfile.test` line 31 to `corepack enable`.
+- [ ] Update `docker/code-worker/Dockerfile` line 51 and `Dockerfile.test` line 31 to `corepack enable`.
 - [ ] Run `pnpm run ci:tracked` — expect PASS.
 - [ ] Spot-check: `docker build --build-arg SERVICE=user-service -f docker/Dockerfile.service .` — expect successful build. Same for `research-agent`.
 - [ ] Commit `refactor(docker): pin pnpm via packageManager, share Dockerfile and deploy script`.

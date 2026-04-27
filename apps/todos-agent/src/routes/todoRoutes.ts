@@ -388,7 +388,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error.code === 'NOT_FOUND') {
           return await reply.fail('NOT_FOUND', 'Todo not found');
         }
-        /* v8 ignore start -- test-infra: requireAuth guards cross-user access, FakeTodoRepository cannot simulate FORBIDDEN @preserve */
+        /* v8 ignore start -- test-infra: requireAuth guards cross-user access on get-todo route — FakeTodoRepository cannot simulate FORBIDDEN @preserve */
         if (result.error.code === 'FORBIDDEN') {
           return await reply.fail('FORBIDDEN', 'Access denied');
         }
@@ -450,7 +450,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error.code === 'NOT_FOUND') {
           return await reply.fail('NOT_FOUND', 'Todo not found');
         }
-        /* v8 ignore start -- test-infra: requireAuth guards cross-user access, FakeTodoRepository cannot simulate FORBIDDEN @preserve */
+        /* v8 ignore start -- test-infra: requireAuth guards cross-user access on update-todo route — FakeTodoRepository cannot simulate FORBIDDEN @preserve */
         if (result.error.code === 'FORBIDDEN') {
           return await reply.fail('FORBIDDEN', 'Access denied');
         }
@@ -501,7 +501,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error.code === 'NOT_FOUND') {
           return await reply.fail('NOT_FOUND', 'Todo not found');
         }
-        /* v8 ignore start -- test-infra: requireAuth guards cross-user access, FakeTodoRepository cannot simulate FORBIDDEN @preserve */
+        /* v8 ignore start -- test-infra: requireAuth guards cross-user access on delete-todo route — FakeTodoRepository cannot simulate FORBIDDEN @preserve */
         if (result.error.code === 'FORBIDDEN') {
           return await reply.fail('FORBIDDEN', 'Access denied');
         }
@@ -561,7 +561,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error.code === 'NOT_FOUND') {
           return await reply.fail('NOT_FOUND', 'Todo not found');
         }
-        /* v8 ignore start -- test-infra: requireAuth guards cross-user access, FakeTodoRepository cannot simulate FORBIDDEN @preserve */
+        /* v8 ignore start -- test-infra: requireAuth guards cross-user access on add-item route — FakeTodoRepository cannot simulate FORBIDDEN @preserve */
         if (result.error.code === 'FORBIDDEN') {
           return await reply.fail('FORBIDDEN', 'Access denied');
         }
@@ -832,7 +832,7 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (result.error.code === 'NOT_FOUND') {
           return await reply.fail('NOT_FOUND', 'Todo not found');
         }
-        /* v8 ignore start -- test-infra: requireAuth guards cross-user access, FakeTodoRepository cannot simulate FORBIDDEN @preserve */
+        /* v8 ignore start -- test-infra: requireAuth guards cross-user access on unarchive-todo route — FakeTodoRepository cannot simulate FORBIDDEN @preserve */
         if (result.error.code === 'FORBIDDEN') {
           return await reply.fail('FORBIDDEN', 'Access denied');
         }

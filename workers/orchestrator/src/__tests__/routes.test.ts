@@ -108,7 +108,7 @@ describe('Routes', () => {
   describe('POST /tasks', () => {
     it('should accept valid task with correct signature', async () => {
       const taskPayload = {
-        taskId: 'test-task',
+        taskId: 'task_00000000-0000-0000-0000-000000000001',
         workerType: 'auto',
         prompt: 'Test prompt',
         webhookUrl: 'https://example.com/webhook',
@@ -126,14 +126,14 @@ describe('Routes', () => {
 
       expect(response.statusCode).toBe(202);
       expect(response.json()).toMatchObject({
-        taskId: 'test-task',
+        taskId: 'task_00000000-0000-0000-0000-000000000001',
         status: 'accepted',
       });
     });
 
     it('should pass all optional fields through to dispatcher', async () => {
       const taskPayload = {
-        taskId: 'test-all-optional',
+        taskId: 'task_00000000-0000-0000-0000-000000000002',
         workerType: 'auto',
         prompt: 'Full payload test',
         webhookUrl: 'https://example.com/webhook',
@@ -178,7 +178,7 @@ describe('Routes', () => {
 
     it('should accept remediation as agentType', async () => {
       const taskPayload = {
-        taskId: 'test-remediation',
+        taskId: 'task_00000000-0000-0000-0000-000000000003',
         workerType: 'codex',
         prompt: 'Fix the review findings',
         webhookUrl: 'https://example.com/webhook',
@@ -198,7 +198,7 @@ describe('Routes', () => {
       expect(response.statusCode).toBe(202);
       expect(dispatcher.submitTask).toHaveBeenCalledWith(
         expect.objectContaining({
-          taskId: 'test-remediation',
+          taskId: 'task_00000000-0000-0000-0000-000000000003',
           agentType: 'remediation',
         })
       );
@@ -211,7 +211,7 @@ describe('Routes', () => {
       });
 
       const taskPayload = {
-        taskId: 'test-auth-unavailable',
+        taskId: 'task_00000000-0000-0000-0000-000000000004',
         workerType: 'codex',
         prompt: 'Test prompt',
         webhookUrl: 'https://example.com/webhook',
@@ -389,7 +389,7 @@ describe('Routes', () => {
       });
 
       const taskPayload = {
-        taskId: 'test-task',
+        taskId: 'task_00000000-0000-0000-0000-000000000006',
         workerType: 'auto',
         prompt: 'Test',
         webhookUrl: 'https://example.com/webhook',
@@ -418,7 +418,7 @@ describe('Routes', () => {
       });
 
       const taskPayload = {
-        taskId: 'test-task',
+        taskId: 'task_00000000-0000-0000-0000-000000000007',
         workerType: 'auto',
         prompt: 'Test',
         webhookUrl: 'https://example.com/webhook',
@@ -444,7 +444,7 @@ describe('Routes', () => {
       });
 
       const taskPayload = {
-        taskId: 'test-task-docker',
+        taskId: 'task_00000000-0000-0000-0000-000000000005',
         workerType: 'auto',
         prompt: 'Test',
         webhookUrl: 'https://example.com/webhook',
@@ -468,7 +468,7 @@ describe('Routes', () => {
   describe('POST /tasks — field propagation to dispatcher', () => {
     it('forwards executionMemoryContext to dispatcher.submitTask', async () => {
       const payload = {
-        taskId: 'emc-1',
+        taskId: 'task_00000000-0000-0000-0000-0000000000e1',
         workerType: 'auto',
         prompt: 'p',
         webhookUrl: 'https://example.com/hook',
@@ -505,7 +505,7 @@ describe('Routes', () => {
 
     it('forwards trackingCommentId to dispatcher.submitTask', async () => {
       const payload = {
-        taskId: 'tc-1',
+        taskId: 'task_00000000-0000-0000-0000-0000000000c1',
         workerType: 'auto',
         prompt: 'p',
         webhookUrl: 'https://example.com/hook',
@@ -524,7 +524,7 @@ describe('Routes', () => {
 
     it('forwards reviewTypes to dispatcher.submitTask', async () => {
       const payload = {
-        taskId: 'rt-1',
+        taskId: 'task_00000000-0000-0000-0000-00000000d1d1',
         workerType: 'auto',
         prompt: 'p',
         webhookUrl: 'https://example.com/hook',
@@ -543,7 +543,7 @@ describe('Routes', () => {
 
     it('forwards retriedFrom to dispatcher.submitTask', async () => {
       const payload = {
-        taskId: 'rf-1',
+        taskId: 'task_00000000-0000-0000-0000-0000000000f1',
         workerType: 'auto',
         prompt: 'p',
         webhookUrl: 'https://example.com/hook',
@@ -579,7 +579,7 @@ describe('Routes', () => {
         ],
       };
       const payload = {
-        taskId: 'e2e-1',
+        taskId: 'task_00000000-0000-0000-0000-0000000000e2',
         workerType: 'auto',
         prompt: 'p',
         webhookUrl: 'https://example.com/hook',
@@ -851,7 +851,7 @@ describe('Routes', () => {
 
     it('should reject replayed nonce', async () => {
       const taskPayload = {
-        taskId: 'test-task',
+        taskId: 'task_00000000-0000-0000-0000-000000000008',
         workerType: 'auto',
         prompt: 'Test prompt',
         webhookUrl: 'https://example.com/webhook',
@@ -1037,7 +1037,7 @@ describe('Routes', () => {
   describe('Nonce Cache Cleanup', () => {
     it('should handle large number of nonce cache entries', async () => {
       const taskPayload = {
-        taskId: 'cache-test',
+        taskId: 'task_00000000-0000-0000-0000-0000000000ca',
         workerType: 'auto',
         prompt: 'Test cache handling',
         webhookUrl: 'https://example.com/webhook',
@@ -1048,7 +1048,11 @@ describe('Routes', () => {
       for (let i = 0; i < 100; i++) {
         const timestamp = String(Date.now() - 4 * 60 * 1000); // 4 minutes ago (still valid)
         const nonce = `cache-nonce-${i}`;
-        const body = JSON.stringify({ ...taskPayload, taskId: `task-${i}` });
+        const hexI = i.toString(16).padStart(12, '0');
+        const body = JSON.stringify({
+          ...taskPayload,
+          taskId: `task_00000000-0000-0000-0000-${hexI}`,
+        });
         const message = `${timestamp}.${nonce}.${body}`;
         const signature = createHmac('sha256', orchestratorSecret).update(message).digest('hex');
 

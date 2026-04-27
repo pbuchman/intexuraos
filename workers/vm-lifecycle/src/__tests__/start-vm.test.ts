@@ -1,12 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-vi.mock('../logger.js', () => ({
-  logger: {
+vi.mock('../__shims__/common-worker.js', () => ({
+  createWorkerLogger: (): {
+    level: string;
+    info: ReturnType<typeof vi.fn>;
+    warn: ReturnType<typeof vi.fn>;
+    error: ReturnType<typeof vi.fn>;
+    debug: ReturnType<typeof vi.fn>;
+    child: () => unknown;
+  } => ({
+    level: 'info',
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
     debug: vi.fn(),
-  },
+    child: vi.fn(),
+  }),
 }));
 
 vi.mock('../config.js', () => ({

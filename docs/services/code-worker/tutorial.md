@@ -16,7 +16,7 @@ Getting started with building, testing, and running the code-worker container im
 ./scripts/build-worker-image.sh
 ```
 
-This builds a multi-arch image (amd64 + arm64) tagged as `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest` using the `workers/code-worker/Dockerfile`.
+This builds a multi-arch image (amd64 + arm64) tagged as `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest` using the `docker/code-worker/Dockerfile`.
 
 To build with a custom tag:
 
@@ -49,8 +49,8 @@ The test image replaces the real Claude and Codex CLIs with bash stubs for E2E t
 ```bash
 docker build \
   -t code-worker:test \
-  -f workers/code-worker/Dockerfile.test \
-  workers/code-worker/
+  -f docker/code-worker/Dockerfile.test \
+  docker/code-worker/
 ```
 
 ---
@@ -319,7 +319,7 @@ The E2E test suite verifies container lifecycle, mount permissions, input/output
 ### Step 7.1: Build the test image and create the network
 
 ```bash
-docker build -t code-worker:test -f workers/code-worker/Dockerfile.test workers/code-worker/
+docker build -t code-worker:test -f docker/code-worker/Dockerfile.test docker/code-worker/
 docker network create --driver bridge --subnet 172.28.0.0/16 code-worker-net 2>/dev/null || true
 ```
 
@@ -413,7 +413,7 @@ The stub streams output line-by-line to match real Codex behavior.
 ### Exercise 1: File Test
 
 ```bash
-docker build -t code-worker:test -f workers/code-worker/Dockerfile.test workers/code-worker/
+docker build -t code-worker:test -f docker/code-worker/Dockerfile.test docker/code-worker/
 mkdir -p /tmp/test-repo /tmp/test-secrets
 cd /tmp/test-repo && git init && echo "test" > README.md && git add . && git commit -m "init"
 echo "You are a test assistant." > /tmp/test-secrets/system-prompt.txt
