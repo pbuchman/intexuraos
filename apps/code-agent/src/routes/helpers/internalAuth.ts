@@ -1,32 +1,57 @@
 import type { FastifyRequest } from 'fastify';
 import { validateInternalAuth } from '@intexuraos/common-http';
+import {
+  createGoogleOidcVerifier,
+  type GoogleOidcVerifier,
+} from '@intexuraos/internal-clients';
 
 export type InternalAuthStrategy = 'scheduler-oidc' | 'internal-token';
+
+let cachedVerifier: GoogleOidcVerifier | undefined;
+let cachedAudience: string | undefined;
+
+/**
+ * Lazy-initialize the verifier so that tests (which set/unset env vars per-test)
+ * always read the latest INTEXURAOS_SERVICE_URL. The factory caches the JWKS
+ * fetcher internally; we cache the returned verifier per audience so that env
+ * changes (test scenarios) invalidate the cache.
+ */
+function getVerifier(): GoogleOidcVerifier {
+  const audience = process.env['INTEXURAOS_SERVICE_URL'] ?? '';
+  if (cachedVerifier === undefined || cachedAudience !== audience) {
+    cachedAudience = audience;
+    cachedVerifier = createGoogleOidcVerifier({ audience });
+  }
+  return cachedVerifier;
+}
 
 /**
  * Authenticate a Cloud Scheduler request.
  *
- * SECURITY NOTE: The OIDC token is NOT validated at the application layer. In production,
- * Cloud Run validates the OIDC token at the infrastructure level before the request reaches
- * this handler. In the current Terraform config, code-agent uses allow_unauthenticated=true
- * (required for external webhooks), so this OIDC trust relies on Cloud Run's ingress settings
- * and IAM invoker configuration — NOT on the Bearer header alone. If Cloud Run ingress is
- * changed to allow all traffic, endpoints using this helper would need application-level OIDC
- * validation.
+ * Two paths:
+ * 1. `Authorization: Bearer <Google-signed OIDC token>` — verified against
+ *    Google's JWKS with `audience = INTEXURAOS_SERVICE_URL` (this service's
+ *    own Cloud Run URL). Used by Cloud Scheduler with OIDC tokens.
+ * 2. `x-internal-auth: <shared secret>` — fallback for direct service-to-service
+ *    calls during dev/staging.
  *
- * For defense in depth, direct internal callers should prefer the x-internal-auth header path.
- *
- * If Cloud Run ingress is ever opened beyond IAM-invoker-only, add application-level OIDC
- * validation here (e.g., verify the token audience + issuer using jose).
+ * Returns `authenticated: false` for any malformed, expired, audience-mismatched,
+ * or otherwise invalid token.
  */
-export function authenticateInternalScheduler(
+export async function authenticateInternalScheduler(
   request: FastifyRequest
-): { authenticated: true; strategy: InternalAuthStrategy } | { authenticated: false } {
+): Promise<
+  | { authenticated: true; strategy: InternalAuthStrategy; subject?: string }
+  | { authenticated: false }
+> {
   const authHeader = request.headers.authorization;
-  const isOidcAuth = typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
-
-  if (isOidcAuth) {
-    return { authenticated: true, strategy: 'scheduler-oidc' };
+  if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    const result = await getVerifier()(authHeader);
+    if (result.valid) {
+      return { authenticated: true, strategy: 'scheduler-oidc', subject: result.subject };
+    }
+    request.log.warn({ reason: result.reason }, 'Scheduler OIDC verification failed');
+    return { authenticated: false };
   }
 
   // validateInternalAuth logs the failure reason internally; callers do not need to re-log it.

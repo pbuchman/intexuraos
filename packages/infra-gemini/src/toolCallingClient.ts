@@ -50,7 +50,12 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
 
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
-  function trackUsage(usage: NormalizedUsage, success: boolean, errorMessage?: string): void {
+  function trackUsage(
+    usage: NormalizedUsage,
+    success: boolean,
+    durationMs: number,
+    errorMessage?: string
+  ): void {
     void usageLogger.log({
       userId,
       provider: LlmProviders.Google,
@@ -58,6 +63,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
       callType: 'tool_calling',
       usage,
       success,
+      durationMs,
       ...(errorMessage !== undefined && { errorMessage }),
     });
   }
@@ -92,6 +98,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
         toolMap.set(t.name, t);
       }
 
+      const runStart = Date.now();
       let totalToolCalls = 0;
       let iteration = 0;
       let aggregatedUsage: NormalizedUsage = {
@@ -232,7 +239,12 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
 
             if (finalText === '') {
               // Empty response
-              trackUsage(aggregatedUsage, false, 'Empty response from model');
+              trackUsage(
+                aggregatedUsage,
+                false,
+                Date.now() - runStart,
+                'Empty response from model'
+              );
               return err({
                 code: 'API_ERROR',
                 message: 'Empty response from model',
@@ -256,7 +268,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
               'Tool calling: completed'
             );
 
-            trackUsage(aggregatedUsage, true);
+            trackUsage(aggregatedUsage, true, Date.now() - runStart);
 
             return ok({
               content: finalText,
@@ -288,7 +300,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
         const lastText = lastTextPart?.text ?? '';
 
         if (lastText !== '') {
-          trackUsage(aggregatedUsage, true);
+          trackUsage(aggregatedUsage, true, Date.now() - runStart);
 
           return ok({
             content: lastText,
@@ -298,14 +310,19 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
           });
         }
 
-        trackUsage(aggregatedUsage, false, 'Tool calling loop exceeded maxIterations');
+        trackUsage(
+          aggregatedUsage,
+          false,
+          Date.now() - runStart,
+          'Tool calling loop exceeded maxIterations'
+        );
         return err({
           code: 'API_ERROR',
           message: 'Tool calling loop exceeded maxIterations',
         });
       } catch (error: unknown) {
         const errorMsg = getErrorMessage(error);
-        trackUsage(aggregatedUsage, false, errorMsg);
+        trackUsage(aggregatedUsage, false, Date.now() - runStart, errorMsg);
         return err(mapGeminiError(error));
       }
     },

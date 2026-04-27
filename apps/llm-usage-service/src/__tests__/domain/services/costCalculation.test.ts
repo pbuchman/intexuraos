@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { LlmProviders } from '@intexuraos/llm-contract';
 import type { ModelPricing } from '@intexuraos/llm-contract';
+import { IntexuraOSError } from '@intexuraos/common-core';
 import { calculateCost, type UsageTokens } from '../../../domain/services/costCalculation.js';
 
 function makeUsage(overrides?: Partial<UsageTokens>): UsageTokens {
@@ -388,6 +389,19 @@ describe('calculateCost', () => {
       expect(() =>
         calculateCost('unknown' as never, usage, pricing)
       ).toThrow('Unsupported provider: unknown');
+    });
+
+    it('throws IntexuraOSError with INTERNAL_ERROR/500 for unsupported provider', () => {
+      const usage = makeUsage();
+      const pricing = makePricing();
+      try {
+        calculateCost('unknown' as never, usage, pricing);
+        throw new Error('expected throw');
+      } catch (e) {
+        expect(e).toBeInstanceOf(IntexuraOSError);
+        expect((e as IntexuraOSError).code).toBe('INTERNAL_ERROR');
+        expect((e as IntexuraOSError).httpStatus).toBe(500);
+      }
     });
   });
 });

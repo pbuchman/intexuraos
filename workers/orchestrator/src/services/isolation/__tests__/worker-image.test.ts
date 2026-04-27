@@ -3,13 +3,13 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const dockerfilePath = fileURLToPath(
-  new URL('../../../../../code-worker/Dockerfile', import.meta.url)
+  new URL('../../../../../../docker/code-worker/Dockerfile', import.meta.url)
 );
 const dockerfileTestPath = fileURLToPath(
-  new URL('../../../../../code-worker/Dockerfile.test', import.meta.url)
+  new URL('../../../../../../docker/code-worker/Dockerfile.test', import.meta.url)
 );
 const entrypointPath = fileURLToPath(
-  new URL('../../../../../code-worker/entrypoint.sh', import.meta.url)
+  new URL('../../../../../../docker/code-worker/entrypoint.sh', import.meta.url)
 );
 
 describe('code-worker image Codex skill bootstrap', () => {

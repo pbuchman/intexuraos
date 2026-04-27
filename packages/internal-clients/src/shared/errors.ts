@@ -1,4 +1,5 @@
 import type { Result } from '@intexuraos/common-core';
+import { err, getErrorMessage, getRequestContext, ok } from '@intexuraos/common-core';
 
 /**
  * Error from service client operations.
@@ -30,16 +31,23 @@ export interface ServiceClientOptions {
 /**
  * Wrapper for HTTP calls to internal services with authentication.
  *
- * Automatically includes X-Trace-Id header if traceId is provided in options.
+ * Automatically attaches the active {@link RequestContext} as outbound
+ * propagation headers when one is in scope (plan §4):
+ *
+ * - `x-request-id` — current request id (always)
+ * - `x-correlation-id` — correlation id (always; mirrors request id at the edge)
+ * - `traceparent` — emitted by `@opentelemetry/instrumentation-http` when an
+ *   active span exists; this helper does NOT synthesise one to avoid
+ *   competing with the OTel auto-instrumentation.
+ *
+ * For backwards compatibility, the legacy `X-Trace-Id` header is still set
+ * when `options.traceId` is provided.
  */
 export async function fetchWithAuth<T>(
   config: ServiceClientConfig,
   path: string,
   options?: ServiceClientOptions
 ): Promise<Result<T, ServiceClientError>> {
-  const { err, ok } = await import('@intexuraos/common-core');
-  const { getErrorMessage } = await import('@intexuraos/common-core');
-
   try {
     const headersInit = options?.headers;
 
@@ -49,7 +57,24 @@ export async function fetchWithAuth<T>(
       'X-Internal-Auth': config.internalAuthToken,
     };
 
-    // Include traceId in headers if provided
+    // Plan §4 — propagate request/correlation ids from AsyncLocalStorage when
+    // a request context is in scope. Caller-supplied non-empty headers win;
+    // empty strings are treated as missing to mirror the inbound side
+    // (`buildRequestContext` in `@intexuraos/http-server`), preventing the
+    // wire from carrying a useless `x-request-id: ` header.
+    const ctx = getRequestContext();
+    if (ctx !== undefined) {
+      const existingRequestId = headers['x-request-id'];
+      if (existingRequestId === undefined || existingRequestId === '') {
+        headers['x-request-id'] = ctx.requestId;
+      }
+      const existingCorrelationId = headers['x-correlation-id'];
+      if (existingCorrelationId === undefined || existingCorrelationId === '') {
+        headers['x-correlation-id'] = ctx.correlationId;
+      }
+    }
+
+    // Include traceId in legacy header if provided
     if (options?.traceId !== undefined) {
       headers['X-Trace-Id'] = options.traceId;
     }

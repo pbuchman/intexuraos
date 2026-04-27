@@ -82,7 +82,7 @@ describe('POST /internal/merge-queue/tick', () => {
     expect(body.data.results).toEqual([]);
   });
 
-  it('should return 200 with results when auth valid via OIDC Bearer token', async () => {
+  it('should return 401 when Bearer token is not a valid Google OIDC token (INT-1531)', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/internal/merge-queue/tick',
@@ -91,10 +91,7 @@ describe('POST /internal/merge-queue/tick', () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body) as { success: boolean; data: { results: unknown[] } };
-    expect(body.success).toBe(true);
-    expect(body.data.results).toEqual([]);
+    expect(response.statusCode).toBe(401);
   });
 
   it('should return 500 when tick use case fails', async () => {

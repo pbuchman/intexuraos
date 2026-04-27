@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CODE_TASK_WORKER_TYPES } from '@intexuraos/common-core';
+import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
 import {
   buildSystemPrompt,
   planningPrompt,

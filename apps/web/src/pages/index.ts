@@ -1,42 +1,6 @@
-export { BookmarksListPage } from './BookmarksListPage.js';
-export { CalendarPage } from './CalendarPage.js';
-export { GitHubEventLogPage } from './GitHubEventLogPage.js';
-export { HomePage } from './HomePage.js';
-export { LoginPage } from './LoginPage.js';
-export { NotionConnectionPage } from './NotionConnectionPage.js';
-export { GoogleCalendarConnectionPage } from './GoogleCalendarConnectionPage.js';
-export { GitHubConnectionPage } from './GitHubConnectionPage.js';
-export { LinearConnectionPage } from './LinearConnectionPage.js';
-export { LinearIssuesPage } from './LinearIssuesPage.js';
-export { LinearPruneCandidatesPage } from './LinearPruneCandidatesPage.js';
-export { WhatsAppConnectionPage } from './WhatsAppConnectionPage.js';
-export { WhatsAppNotesPage } from './WhatsAppNotesPage.js';
-export { MobileNotificationsConnectionPage } from './MobileNotificationsConnectionPage.js';
-export { MobileNotificationsListPage } from './MobileNotificationsListPage.js';
-export { NotificationDigestsPage } from './NotificationDigestsPage.js';
-export { NotificationDigestViewPage } from './NotificationDigestViewPage.js';
-export { NotificationDigestBackfillPage } from './NotificationDigestBackfillPage.js';
-export { ApiKeysSettingsPage } from './ApiKeysSettingsPage.js';
-export { AskAgentPage } from './AskAgentPage.js';
-export { ResearchAgentPage } from './ResearchAgentPage.js';
-export { ResearchListPage } from './ResearchListPage.js';
-export { ResearchDetailPage } from './ResearchDetailPage.js';
-export { InboxPage } from './InboxPage.js';
-export { NotesListPage } from './NotesListPage.js';
-export { ShareHistoryPage } from './ShareHistoryPage.js';
-export { ShareTargetPage } from './ShareTargetPage.js';
-export { TodosListPage } from './TodosListPage.js';
-export { LlmUsagePage } from './LlmUsagePage.js';
-export { LlmUsageViewPage } from './LlmUsageViewPage.js';
-export { LlmUsagePricingPage } from './LlmUsagePricingPage.js';
-export { CodeTasksPage } from './CodeTasksPage.js';
-export { DispatchQueuePage } from './DispatchQueuePage.js';
-export { MergeQueuePage } from './MergeQueuePage.js';
-export { CodeTaskViewPage } from './CodeTaskViewPage.js';
-export { CodeTaskNewPage } from './CodeTaskNewPage.js';
-export { WorkerSettingsPage } from './WorkerSettingsPage.js';
-export { CronSchedulesPage, CronScheduleViewPage, CronScheduleNewPage, CronExecutionsPage } from './cron-agent/index.js';
-export { HellscriptBuffersPage } from './HellscriptBuffersPage.js';
-export { HellscriptConversationPage } from './HellscriptConversationPage.js';
-export { HellscriptStylePage } from './HellscriptStylePage.js';
-export { HellscriptSamplesPage } from './HellscriptSamplesPage.js';
+// Barrel re-exports kept intentionally empty: App.tsx now imports each page
+// directly via React.lazy() to enable per-route code splitting. If a future
+// non-App.tsx consumer needs to import a page, prefer a direct path import
+// (e.g. `import { HomePage } from '@/pages/HomePage';`) so this file does not
+// become a static-import bottleneck again.
+export {};

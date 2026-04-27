@@ -11,11 +11,8 @@ import { Timestamp } from '@intexuraos/infra-firestore';
 import { randomUUID } from 'node:crypto';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { authenticateInternalScheduler } from '../helpers/internalAuth.js';
-import {
-  extractOrGenerateTraceId,
-  isCodeTaskWorkerType,
-  type ErrorCode,
-} from '@intexuraos/common-core';
+import { extractOrGenerateTraceId, type ErrorCode } from '@intexuraos/common-core';
+import { isCodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { getServices } from '../../services.js';
 import { processCodeAction } from '../../domain/usecases/processCodeAction.js';
@@ -987,7 +984,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to POST /internal/code/detect-zombies',
       });
 
-      const authResult = authenticateInternalScheduler(request);
+      const authResult = await authenticateInternalScheduler(request);
       if (!authResult.authenticated) {
         request.log.warn('Internal auth failed for zombie detection');
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');

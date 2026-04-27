@@ -22,7 +22,7 @@ describe('CreateTaskRequestSchema', () => {
     };
 
     const result = CreateTaskRequestSchema.safeParse({
-      taskId: 'task-memory-context',
+      taskId: 'task_00000000-0000-0000-0000-0000000000a1',
       workerType: 'auto',
       prompt: 'Fix callback logging and route coverage',
       webhookUrl: 'https://example.com/webhook',
@@ -47,7 +47,7 @@ describe('CreateTaskRequestSchema', () => {
     'review_finding',
   ] as const)('accepts memoryType %s', (memoryType) => {
     const result = CreateTaskRequestSchema.safeParse({
-      taskId: `task-memory-type-${memoryType}`,
+      taskId: 'task_00000000-0000-0000-0000-0000000000a2',
       workerType: 'auto',
       prompt: 'Test memory type acceptance',
       webhookUrl: 'https://example.com/webhook',
@@ -81,7 +81,7 @@ describe('CreateTaskRequestSchema', () => {
 describe('CreateTaskRequestSchema — retriedFrom', () => {
   it('accepts retriedFrom and preserves it through parse', () => {
     const result = CreateTaskRequestSchema.safeParse({
-      taskId: 't1',
+      taskId: 'task_00000000-0000-0000-0000-0000000000a3',
       workerType: 'auto',
       prompt: 'p',
       webhookUrl: 'https://example.com/hook',

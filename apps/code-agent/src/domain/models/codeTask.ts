@@ -1,4 +1,4 @@
-import type { CodeTaskWorkerType } from '@intexuraos/common-core';
+import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain';
 import { Timestamp } from '@google-cloud/firestore';
 import type { ExecutionMemoryType } from './executionMemory.js';
 import type { ExecutionMemoryApplicationCandidate } from './executionMemoryApplication.js';
