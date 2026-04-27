@@ -49,6 +49,7 @@ import {
   type ImageSize,
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
+import { withLlmSpan } from '@intexuraos/llm-utils';
 import type { GptConfig, GptError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
@@ -94,6 +95,7 @@ export function createGptClient(config: GptConfig): GptClient {
     callType: CallType,
     usage: NormalizedUsage,
     success: boolean,
+    durationMs: number,
     errorMessage?: string,
     promptType?: string
   ): void {
@@ -104,6 +106,7 @@ export function createGptClient(config: GptConfig): GptClient {
       callType,
       usage,
       success,
+      durationMs,
       ...(errorMessage !== undefined && { errorMessage }),
       ...(ownerType !== undefined && { ownerType }),
       ...(promptType !== undefined && { promptType }),
@@ -142,6 +145,7 @@ export function createGptClient(config: GptConfig): GptClient {
 
   return {
     async research(prompt: string): Promise<Result<ResearchResult, GptError>> {
+      const start = Date.now();
       try {
         const response = await client.responses.create({
           model,
@@ -163,10 +167,11 @@ export function createGptClient(config: GptConfig): GptClient {
           usageDetails.reasoningTokens
         );
 
-        trackUsage('research', usage, true);
+        trackUsage('research', usage, true, Date.now() - start);
 
         return ok({ content, sources, usage });
       } catch (error) {
+        const durationMs = Date.now() - start;
         const errorMsg = getErrorMessage(error);
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
@@ -174,7 +179,7 @@ export function createGptClient(config: GptConfig): GptClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('research', emptyUsage, false, errorMsg);
+        trackUsage('research', emptyUsage, false, durationMs, errorMsg);
         return err(mapGptError(error));
       }
     },
@@ -183,27 +188,41 @@ export function createGptClient(config: GptConfig): GptClient {
       prompt: string,
       options: GenerateOptions
     ): Promise<Result<GenerateResult, GptError>> {
+      const start = Date.now();
       try {
-        const response = await client.chat.completions.create({
-          model,
-          max_completion_tokens: MAX_TOKENS,
-          messages: [{ role: 'user', content: prompt }],
-        });
-
-        const text = response.choices[0]?.message.content ?? '';
-        const usageDetails = extractUsageDetails(response.usage);
-        const usage = normalizeUsage(
-          usageDetails.inputTokens,
-          usageDetails.outputTokens,
-          usageDetails.cachedTokens,
-          0,
-          usageDetails.reasoningTokens
+        const { result, durationMs } = await withLlmSpan(
+          LlmProviders.OpenAI,
+          async () => {
+            const response = await client.chat.completions.create({
+              model,
+              max_completion_tokens: MAX_TOKENS,
+              messages: [{ role: 'user', content: prompt }],
+            });
+            const text = response.choices[0]?.message.content ?? '';
+            const usageDetails = extractUsageDetails(response.usage);
+            const usage = normalizeUsage(
+              usageDetails.inputTokens,
+              usageDetails.outputTokens,
+              usageDetails.cachedTokens,
+              0,
+              usageDetails.reasoningTokens
+            );
+            return { content: text, usage, cachedTokens: usageDetails.cachedTokens };
+          },
+          ({ usage, cachedTokens }) => ({
+            model,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            ...(cachedTokens > 0 && { cachedInputTokens: cachedTokens }),
+            costUsd: usage.costUsd,
+          })
         );
 
-        trackUsage('generate', usage, true, undefined, options.promptType);
+        trackUsage('generate', result.usage, true, durationMs, undefined, options.promptType);
 
-        return ok({ content: text, usage });
+        return ok({ content: result.content, usage: result.usage });
       } catch (error) {
+        const durationMs = Date.now() - start;
         const errorMsg = getErrorMessage(error);
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
@@ -211,7 +230,7 @@ export function createGptClient(config: GptConfig): GptClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('generate', emptyUsage, false, errorMsg, options.promptType);
+        trackUsage('generate', emptyUsage, false, durationMs, errorMsg, options.promptType);
         return err(mapGptError(error));
       }
     },
@@ -220,6 +239,7 @@ export function createGptClient(config: GptConfig): GptClient {
       prompt: string,
       options?: ImageGenerateOptions
     ): Promise<Result<ImageGenerationResult, GptError>> {
+      const start = Date.now();
       try {
         const size: ImageSize = options?.size ?? DEFAULT_IMAGE_SIZE;
         // gpt-image-1 returns base64 data in response.data[0].b64_json by default
@@ -258,10 +278,11 @@ export function createGptClient(config: GptConfig): GptClient {
           costUsd: 0,
         };
 
-        trackUsage('image_generation', usage, true);
+        trackUsage('image_generation', usage, true, Date.now() - start);
 
         return ok({ imageData: imageBuffer, model: IMAGE_MODEL, usage });
       } catch (error) {
+        const durationMs = Date.now() - start;
         const errorMsg = getErrorMessage(error);
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
@@ -269,7 +290,7 @@ export function createGptClient(config: GptConfig): GptClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('image_generation', emptyUsage, false, errorMsg);
+        trackUsage('image_generation', emptyUsage, false, durationMs, errorMsg);
         return err(mapGptError(error));
       }
     },

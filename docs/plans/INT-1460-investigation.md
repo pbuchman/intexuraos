@@ -83,7 +83,7 @@ return worker.attemptLogBuffer === ''
 ```
 
 - `containerLogs` = RFC3339-timestamped Docker container stdout (NUL-separated stdcopy-multiplexed frames).
-- `worker.attemptLogBuffer` is populated at `workers/orchestrator/src/services/isolation/worker-create.ts:122-133` from the **dockerode exec stream** of `/entrypoint.sh run-attempt`, which is the raw stdout of `claude --print --verbose --output-format stream-json …` (see `workers/code-worker/entrypoint.sh:180-199`).
+- `worker.attemptLogBuffer` is populated at `workers/orchestrator/src/services/isolation/worker-create.ts:122-133` from the **dockerode exec stream** of `/entrypoint.sh run-attempt`, which is the raw stdout of `claude --print --verbose --output-format stream-json …` (see `docker/code-worker/entrypoint.sh:180-199`).
 
 Neither source contains `[claude] Session init` or any line beginning with `[claude]` / `[tool]`. Those prefixes are produced **in-process** by `workers/orchestrator/src/services/runtime/processors/claude-log-processor.ts:52`:
 

@@ -39,7 +39,7 @@ export const cleanupRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         message: 'Received request to POST /internal/merge-conflicts/reconcile',
       });
 
-      const authResult = authenticateInternalScheduler(request);
+      const authResult = await authenticateInternalScheduler(request);
       if (!authResult.authenticated) {
         request.log.warn('Internal auth failed for merge-conflicts reconcile');
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
@@ -63,7 +63,7 @@ export const cleanupRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         message: 'Received request to POST /internal/execution-memory/process',
       });
 
-      const authResult = authenticateInternalScheduler(request);
+      const authResult = await authenticateInternalScheduler(request);
       if (!authResult.authenticated) {
         request.log.warn('Internal auth failed for execution-memory process');
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
@@ -109,7 +109,7 @@ export const cleanupRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         message: 'Received request to POST /internal/execution-memory/sweep-errored',
       });
 
-      const authResult = authenticateInternalScheduler(request);
+      const authResult = await authenticateInternalScheduler(request);
       if (!authResult.authenticated) {
         request.log.warn('Internal auth failed for execution-memory sweep-errored');
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
@@ -142,7 +142,7 @@ export const cleanupRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         message: 'Received request to POST /internal/execution-memory/prune-stale',
       });
 
-      const authResult = authenticateInternalScheduler(request);
+      const authResult = await authenticateInternalScheduler(request);
       if (!authResult.authenticated) {
         request.log.warn('Internal auth failed for execution-memory prune-stale');
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
@@ -188,7 +188,7 @@ export const cleanupRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         message: 'Received request to POST /internal/archive-stale-groups',
       });
 
-      const authResult = authenticateInternalScheduler(request);
+      const authResult = await authenticateInternalScheduler(request);
       if (!authResult.authenticated) {
         request.log.warn('Internal auth failed for archive-stale-groups');
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
@@ -223,7 +223,7 @@ export const cleanupRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         message: 'Received request to POST /internal/auto-archive-merged-tasks',
       });
 
-      const authResult = authenticateInternalScheduler(request);
+      const authResult = await authenticateInternalScheduler(request);
       if (!authResult.authenticated) {
         request.log.warn('Internal auth failed for auto-archive-merged-tasks');
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');

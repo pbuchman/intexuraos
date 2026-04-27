@@ -1,5 +1,5 @@
 import { Timestamp } from '@google-cloud/firestore';
-import { getErrorMessage, type Logger, type Result } from '@intexuraos/common-core';
+import { getErrorMessage, IntexuraOSError, type Logger, type Result } from '@intexuraos/common-core';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { ExecutionMemoryType } from '../models/executionMemory.js';
 import type { ExecutionMemoryApplicationCandidate } from '../models/executionMemoryApplication.js';
@@ -503,7 +503,7 @@ function parseJsonObject(response: string): unknown {
   const stripped = response.replace(/```(?:json)?\s*\n?([\s\S]*?)```/g, '$1');
   const match = /\{[\s\S]*\}/.exec(stripped);
   if (match === null) {
-    throw new Error('Response did not contain a JSON object');
+    throw new IntexuraOSError('INTERNAL_ERROR', 'Response did not contain a JSON object');
   }
   return JSON.parse(match[0]);
 }

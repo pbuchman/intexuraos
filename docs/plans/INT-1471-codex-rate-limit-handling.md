@@ -323,7 +323,7 @@ Expected output: one match in the finalization path (the block that builds `Clas
 
 - [ ] **Step 2: Pass the runtime**
 
-Edit that call to include `runtime: task.runtime ?? 'claude'`. `Task.runtime` is `WorkerRuntime | undefined` (see `workers/orchestrator/src/types/task.ts`), and the runtime default in `workers/code-worker/entrypoint.sh` is `claude`. Mirror that default here.
+Edit that call to include `runtime: task.runtime ?? 'claude'`. `Task.runtime` is `WorkerRuntime | undefined` (see `workers/orchestrator/src/types/task.ts`), and the runtime default in `docker/code-worker/entrypoint.sh` is `claude`. Mirror that default here.
 
 Concretely, change:
 

@@ -8,6 +8,7 @@
     "test:run": "vitest --config ./vitest.config.ts --run"
   },
   "dependencies": {
+    "@intexuraos/code-task-domain": "workspace:*",
     "@intexuraos/common-core": "workspace:*",
     "axios": "^1.7.9"
   },

@@ -1,4 +1,4 @@
-import { hasCodeTaskLabel } from '@intexuraos/common-core';
+import { hasCodeTaskLabel } from '@intexuraos/linear-domain';
 import type { PromptBuilder } from './prompt-builder.js';
 import { askAgentPrompt } from './prompts/ask-agent-prompt.js';
 import { executionPrompt } from './prompts/execution-prompt.js';

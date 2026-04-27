@@ -3,15 +3,11 @@ import * as functions from '@google-cloud/functions-framework';
 import { startVm } from './start-vm.js';
 import { stopVm } from './stop-vm.js';
 import { logger, flush } from './logger.js';
+import { verifyInternalAuth } from './__shims__/common-worker.js';
 
-function validateAuth(authHeader: string | undefined): boolean {
-  const expectedToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
-  if (expectedToken === undefined || expectedToken === '') {
-    logger.error({}, 'INTEXURAOS_INTERNAL_AUTH_TOKEN not configured');
-    return false;
-  }
-  return authHeader === `Bearer ${expectedToken}`;
-}
+// Captured once at module load — Cloud Functions instance scope. Tests use
+// vi.hoisted() to set the env var before this module is imported.
+const INTERNAL_AUTH_TOKEN = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
 
 export const startVmFunction: HttpFunction = async (req, res): Promise<void> => {
   try {
@@ -22,8 +18,7 @@ export const startVmFunction: HttpFunction = async (req, res): Promise<void> => 
       return;
     }
 
-    const authHeader = req.headers['x-internal-auth'];
-    if (!validateAuth(typeof authHeader === 'string' ? authHeader : undefined)) {
+    if (!verifyInternalAuth(req.headers['x-internal-auth'], INTERNAL_AUTH_TOKEN)) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
@@ -49,8 +44,7 @@ export const stopVmFunction: HttpFunction = async (req, res): Promise<void> => {
       return;
     }
 
-    const authHeader = req.headers['x-internal-auth'];
-    if (!validateAuth(typeof authHeader === 'string' ? authHeader : undefined)) {
+    if (!verifyInternalAuth(req.headers['x-internal-auth'], INTERNAL_AUTH_TOKEN)) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }

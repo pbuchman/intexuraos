@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cleanupOldLogs, loadConfig, type CleanupConfig } from '../cleanup.js';
+import type { Logger } from '../logger.js';
 
-vi.mock('../logger.js', () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}));
+const mockLogger: Logger = {
+  level: 'info',
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+};
 
 describe('loadConfig', () => {
   const originalEnv = process.env;
@@ -101,7 +101,7 @@ describe('cleanupOldLogs', () => {
         }),
     });
 
-    await cleanupOldLogs(createConfig());
+    await cleanupOldLogs(mockLogger, createConfig());
 
     expect(mockFetch).toHaveBeenCalledWith(
       'http://code-agent/internal/tasks/cleanup-logs',
@@ -126,6 +126,7 @@ describe('cleanupOldLogs', () => {
     });
 
     await cleanupOldLogs(
+      mockLogger,
       createConfig({
         retentionDays: 30,
         batchSize: 250,
@@ -153,7 +154,7 @@ describe('cleanupOldLogs', () => {
         }),
     });
 
-    const result = await cleanupOldLogs(createConfig());
+    const result = await cleanupOldLogs(mockLogger, createConfig());
 
     expect(result.success).toBe(true);
     expect(result.tasksProcessed).toBe(10);
@@ -169,7 +170,7 @@ describe('cleanupOldLogs', () => {
       text: () => Promise.resolve('Internal Server Error'),
     });
 
-    const result = await cleanupOldLogs(createConfig());
+    const result = await cleanupOldLogs(mockLogger, createConfig());
 
     expect(result.success).toBe(false);
     expect(result.message).toContain('API returned 500');
@@ -186,7 +187,7 @@ describe('cleanupOldLogs', () => {
         }),
     });
 
-    const result = await cleanupOldLogs(createConfig());
+    const result = await cleanupOldLogs(mockLogger, createConfig());
 
     expect(result.success).toBe(false);
     expect(result.message).toBe('Database connection failed');
@@ -195,7 +196,7 @@ describe('cleanupOldLogs', () => {
   it('should return error when fetch throws', async () => {
     mockFetch.mockRejectedValue(new Error('Network error'));
 
-    const result = await cleanupOldLogs(createConfig());
+    const result = await cleanupOldLogs(mockLogger, createConfig());
 
     expect(result.success).toBe(false);
     expect(result.message).toBe('Network error');
@@ -204,7 +205,7 @@ describe('cleanupOldLogs', () => {
   it('should handle non-Error exceptions', async () => {
     mockFetch.mockRejectedValue('String error');
 
-    const result = await cleanupOldLogs(createConfig());
+    const result = await cleanupOldLogs(mockLogger, createConfig());
 
     expect(result.success).toBe(false);
     expect(result.message).toBe('String error');
@@ -216,7 +217,7 @@ describe('cleanupOldLogs', () => {
       json: () => Promise.resolve({ success: true }),
     });
 
-    const result = await cleanupOldLogs(createConfig());
+    const result = await cleanupOldLogs(mockLogger, createConfig());
 
     expect(result.success).toBe(false);
     expect(result.message).toBe('API returned success but no data');
@@ -232,7 +233,7 @@ describe('cleanupOldLogs', () => {
         }),
     });
 
-    const result = await cleanupOldLogs(createConfig());
+    const result = await cleanupOldLogs(mockLogger, createConfig());
 
     expect(result.success).toBe(false);
     expect(result.message).toBe('Unknown API error');
@@ -248,7 +249,7 @@ describe('cleanupOldLogs', () => {
         }),
     });
 
-    await cleanupOldLogs(createConfig());
+    await cleanupOldLogs(mockLogger, createConfig());
 
     const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(callArgs[1].body as string) as Record<string, unknown>;
