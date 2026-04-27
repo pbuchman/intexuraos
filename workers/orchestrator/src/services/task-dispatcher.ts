@@ -746,7 +746,7 @@ export class TaskDispatcher {
         ...(request.continuationPrBranch !== undefined && {
           continuationPrBranch: request.continuationPrBranch,
         }),
-        /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
+        /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for reviewTypes in dispatchPlanReview request payload @preserve */
         ...(request.reviewTypes !== undefined && { reviewTypes: request.reviewTypes }),
         /* v8 ignore stop @preserve */
         startedAt: new Date().toISOString(),
@@ -1243,7 +1243,7 @@ export class TaskDispatcher {
       void (async (): Promise<void> => {
         try {
           const task = await this.getTask(taskId);
-          /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
+          /* v8 ignore start -- source-map: claude-runtime detached settimeout closure — branch misattributed by v8 (claude success notify path) @preserve */
           if (task !== null && task.status === 'running') {
             this.logger.warn({ taskId }, 'Task approaching 5-hour timeout');
           }
@@ -1262,7 +1262,7 @@ export class TaskDispatcher {
       void (async (): Promise<void> => {
         try {
           const task = await this.getTask(taskId);
-          /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
+          /* v8 ignore start -- source-map: claude-runtime detached settimeout closure — branch misattributed by v8 (claude failure notify path) @preserve */
           if (task?.status !== 'running') {
             return;
           }
@@ -1360,7 +1360,7 @@ export class TaskDispatcher {
     }
 
     const task = await this.getTask(taskId);
-    /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
+    /* v8 ignore start -- source-map: claude-runtime detached settimeout closure — branch misattributed by v8 (claude finalize fallback) @preserve */
     if (task?.status !== 'running') {
       return;
     }
@@ -1387,7 +1387,7 @@ export class TaskDispatcher {
         message: `Worker unresponsive after ${String(MAX_INACTIVITY_RESTARTS)} consecutive inactivity restarts`,
         remediation: { action: 'retry' },
       };
-      /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
+      /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for result on finalizeTask in claude-runtime hard-error path @preserve */
       await this.finalizeTask(task, 'failed', {
         ...(result !== undefined && { result }),
         error,
@@ -1462,7 +1462,7 @@ export class TaskDispatcher {
     // Re-fetch to avoid race with completion monitor: if status is no longer
     // 'running', the task was finalized by another handler and we must bail out.
     const reloadedTask = await this.getTask(taskId);
-    /* v8 ignore start -- source-map: branch inside void async setTimeout callback misattributed by v8 coverage instrumentation even when exercised by fake timer tests @preserve */
+    /* v8 ignore start -- source-map: codex-runtime detached settimeout closure — branch misattributed by v8 (codex finalize fallback) @preserve */
     if (reloadedTask?.status !== 'running') {
       this.logger.debug({ taskId }, 'Inactivity restart bailed out: task no longer running');
       return;
@@ -1486,7 +1486,7 @@ export class TaskDispatcher {
         remediation: { action: 'retry' },
       };
       const result = await this.checkForResult(task);
-      /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
+      /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for result on finalizeTask in codex-runtime hard-error path @preserve */
       await this.finalizeTask(task, 'failed', {
         ...(result !== undefined && { result }),
         error,
@@ -2510,7 +2510,7 @@ export class TaskDispatcher {
       taskId: task.taskId,
       worktreePath: task.worktreePath,
       prompt: params.prompt,
-      /* v8 ignore start -- ts-type: conditional spread for exact optional property types @preserve */
+      /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for systemPrompt linear-issue + worker-model fields in workerConfig @preserve */
       systemPrompt:
         buildSystemPrompt({
           taskId: task.taskId,
