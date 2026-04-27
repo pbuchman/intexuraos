@@ -457,18 +457,18 @@ export function extractReplyContext(payload: unknown): ReplyContext | null {
   /* v8 ignore start -- ts-type: message undefined check @preserve */
   if (message === undefined) return null;
   /* v8 ignore stop @preserve */
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
+/* v8 ignore start -- ts-type: context-extraction local var assignment in extractContext — schema guarantees presence @preserve */
   const context = message.context;
   /* v8 ignore stop @preserve */
   if (context === undefined) return null;
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
+/* v8 ignore start -- ts-type: context.id typeof guard in extractContext — schema-validated string @preserve */
   if (typeof context.id !== 'string') return null;
   /* v8 ignore stop @preserve */
 
   const result: ReplyContext = {
     replyToWamid: context.id,
   };
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
+/* v8 ignore start -- ts-type: context.from optional spread in extractContext — exactOptionalPropertyTypes @preserve */
 
   if (typeof context.from === 'string') {
     result.from = context.from;
@@ -532,7 +532,7 @@ export interface ButtonResponseInfo {
  * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#button-object
  */
 export function extractButtonResponse(payload: unknown): ButtonResponseInfo | null {
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
+/* v8 ignore start -- ts-type: extractFirstValue cannot return undefined here — payload pre-validated upstream by extractButtonResponse caller @preserve */
   const value = extractFirstValue(payload);
   /* v8 ignore stop @preserve */
   const message = value?.messages?.[0];
@@ -549,7 +549,7 @@ export function extractButtonResponse(payload: unknown): ButtonResponseInfo | nu
 
   // Extract button response info
   const buttonReply = interactive.button_reply;
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
+/* v8 ignore start -- ts-type: buttonReply.id/title undefined-guard in extractButtonResponse — interactive schema enforces both fields @preserve */
   if (buttonReply.id === undefined || buttonReply.title === undefined) {
     return null;
   }
