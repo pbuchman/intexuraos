@@ -23,6 +23,19 @@ export {
 // Validation error handler
 export { createValidationErrorHandler } from './validation-handler.js';
 
+// Shared Fastify bootstrap
+export {
+  createFastifyApp,
+  type CreateFastifyAppOptions,
+  type OpenApiServer,
+  type OpenApiTag,
+  type OpenApiInfo,
+  type HealthCheckProducer,
+} from './createFastifyApp.js';
+
+// Shared service lifecycle scaffold
+export { startFastifyService, type StartFastifyServiceOptions } from './startFastifyService.js';
+
 // IntexuraOSError-aware error handler (plan §8)
 export { createErrorHandler, type CreateErrorHandlerOptions } from './errorHandler.js';
 

@@ -9,7 +9,7 @@ import type { Result } from '@intexuraos/common-core';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import type { Logger } from 'pino';
 import {
   createExecuteActionTemplate,

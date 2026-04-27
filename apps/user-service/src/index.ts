@@ -1,8 +1,15 @@
-import { initSentry } from '@intexuraos/infra-sentry';
-import { validateRequiredEnv } from '@intexuraos/http-server';
-import { getErrorMessage } from '@intexuraos/common-core';
+/**
+ * user-service entry point.
+ *
+ * Delegates the env-validation / Sentry / DI / listen / SIGTERM lifecycle to
+ * `startFastifyService` from `@intexuraos/http-server`. `REQUIRED_ENV` is
+ * declared `as const` so future call sites that want type-safe env access
+ * via `loadEnv(REQUIRED_ENV)` get a typed `Record<...>` without re-listing
+ * the keys. `startFastifyService` validates presence before the listen.
+ */
+import { startFastifyService } from '@intexuraos/http-server';
 import { buildServer } from './server.js';
-import { initializeServices } from './services.js';
+import { initServices } from './services.js';
 
 const REQUIRED_ENV = [
   'INTEXURAOS_GCP_PROJECT_ID',
@@ -20,43 +27,13 @@ const REQUIRED_ENV = [
   'INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET',
   'INTEXURAOS_GITHUB_OAUTH_CLIENT_ID',
   'INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET',
-];
+] as const;
 
-validateRequiredEnv(REQUIRED_ENV);
-
-const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
-initSentry({
-  ...(sentryDsn !== undefined ? { dsn: sentryDsn } : {}),
-  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+await startFastifyService({
   serviceName: 'user-service',
-});
-
-const PORT = Number(process.env['PORT'] ?? 8080);
-const HOST = process.env['HOST'] ?? '0.0.0.0';
-
-async function main(): Promise<void> {
-  initializeServices();
-
-  const app = await buildServer();
-
-  const close = (): void => {
-    app.close().then(
-      () => {
-        process.exit(0);
-      },
-      () => {
-        process.exit(1);
-      }
-    );
-  };
-
-  process.on('SIGTERM', close);
-  process.on('SIGINT', close);
-
-  await app.listen({ port: PORT, host: HOST });
-}
-
-main().catch((error: unknown) => {
-  process.stderr.write(`Failed to start server: ${getErrorMessage(error, String(error))}\n`);
-  process.exit(1);
+  requiredEnv: REQUIRED_ENV,
+  initServices: () => {
+    initServices();
+  },
+  buildServer,
 });

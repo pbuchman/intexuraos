@@ -137,7 +137,8 @@
     "code_tasks": {
       "owner": "code-agent",
       "description": "Code execution tasks",
-      "subcollections": ["logs", "log_lines", "turn_metrics", "compliance_reports"]
+      "subcollections": ["logs", "log_lines", "turn_metrics", "compliance_reports"],
+      "scanPaths": ["apps/code-agent/src/infra/repositories", "apps/code-agent/src/scripts"]
     },
     "user_spend": {
       "owner": "code-agent",
@@ -189,19 +190,23 @@
     },
     "execution_memories": {
       "owner": "code-agent",
-      "description": "Execution memory lessons distilled from completed code tasks with vector embeddings for similarity retrieval"
+      "description": "Execution memory lessons distilled from completed code tasks with vector embeddings for similarity retrieval",
+      "scanPaths": ["apps/code-agent/src/infra/repositories", "apps/code-agent/src/scripts"]
     },
     "execution_memory_applications": {
       "owner": "code-agent",
-      "description": "Tracks how execution memories were applied to tasks and their post-run evaluation results"
+      "description": "Tracks how execution memories were applied to tasks and their post-run evaluation results",
+      "scanPaths": ["apps/code-agent/src/infra/repositories", "apps/code-agent/src/scripts"]
     },
     "task_group_summaries": {
       "owner": "code-agent",
-      "description": "Precomputed group-level aggregates for code task issue groups (one doc per userId+linearIssueId)"
+      "description": "Precomputed group-level aggregates for code task issue groups (one doc per userId+linearIssueId)",
+      "scanPaths": ["apps/code-agent/src/infra/repositories", "apps/code-agent/src/scripts"]
     },
     "user_group_counts": {
       "owner": "code-agent",
-      "description": "Per-user group status counts for code task filter badges (active, needs-action, done, failed)"
+      "description": "Per-user group status counts for code task filter badges (active, needs-action, done, failed)",
+      "scanPaths": ["apps/code-agent/src/infra/repositories", "apps/code-agent/src/scripts"]
     },
     "cron_schedules": {
       "owner": "cron-agent",
@@ -219,7 +224,8 @@
     "hellscript_writing_config": {
       "owner": "hellscript-agent",
       "description": "User-level writing configuration with style instructions per category",
-      "subcollections": ["writing_samples"]
+      "subcollections": ["writing_samples"],
+      "indexCollectionGroups": ["hellscript_writing_config", "writing_samples"]
     },
     "llm_usage_events": {
       "owner": "llm-usage-service",

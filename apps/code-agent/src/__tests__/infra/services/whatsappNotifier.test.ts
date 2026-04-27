@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Timestamp } from '@google-cloud/firestore';
 import { ok, err } from '@intexuraos/common-core';
-import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
 import { createWhatsAppNotifier, buildTaskUrl, type WhatsAppNotifierConfig } from '../../../infra/services/whatsappNotifierImpl.js';
 import type { CodeTask, TaskError, TaskResult } from '../../../domain/models/codeTask.js';
 

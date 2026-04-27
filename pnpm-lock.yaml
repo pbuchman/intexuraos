@@ -166,6 +166,9 @@ importers:
       '@intexuraos/llm-prompts':
         specifier: workspace:*
         version: link:../../packages/llm-prompts
+      '@intexuraos/whatsapp-pubsub-client':
+        specifier: workspace:*
+        version: link:../../packages/whatsapp-pubsub-client
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -299,6 +302,9 @@ importers:
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../../packages/llm-pricing
+      '@intexuraos/whatsapp-pubsub-client':
+        specifier: workspace:*
+        version: link:../../packages/whatsapp-pubsub-client
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -384,6 +390,9 @@ importers:
       '@fastify/cors':
         specifier: ^10.0.1
         version: 10.1.0
+      '@fastify/rate-limit':
+        specifier: ^10.2.1
+        version: 10.3.0
       '@fastify/swagger':
         specifier: ^9.4.2
         version: 9.6.1
@@ -426,6 +435,9 @@ importers:
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
+      jose:
+        specifier: ^5.9.6
+        version: 5.10.0
       openai:
         specifier: ^4.0.0
         version: 4.104.0(encoding@0.1.13)(ws@8.19.0)(zod@3.25.76)
@@ -433,9 +445,6 @@ importers:
         specifier: ^10.1.0
         version: 10.1.1
     devDependencies:
-      jose:
-        specifier: ^5.9.6
-        version: 5.10.0
       vitest:
         specifier: ^3.0.0
         version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3)
@@ -505,6 +514,12 @@ importers:
       '@intexuraos/llm-prompts':
         specifier: workspace:*
         version: link:../../packages/llm-prompts
+      '@intexuraos/pr-triage-pubsub-client':
+        specifier: workspace:*
+        version: link:../../packages/pr-triage-pubsub-client
+      '@intexuraos/whatsapp-pubsub-client':
+        specifier: workspace:*
+        version: link:../../packages/whatsapp-pubsub-client
       ajv:
         specifier: ^8.17.1
         version: 8.17.1
@@ -996,6 +1011,9 @@ importers:
       '@intexuraos/llm-prompts':
         specifier: workspace:*
         version: link:../../packages/llm-prompts
+      '@intexuraos/whatsapp-pubsub-client':
+        specifier: workspace:*
+        version: link:../../packages/whatsapp-pubsub-client
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -1181,6 +1199,9 @@ importers:
       '@intexuraos/llm-utils':
         specifier: workspace:*
         version: link:../../packages/llm-utils
+      '@intexuraos/whatsapp-pubsub-client':
+        specifier: workspace:*
+        version: link:../../packages/whatsapp-pubsub-client
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -1254,6 +1275,9 @@ importers:
       '@intexuraos/llm-utils':
         specifier: workspace:*
         version: link:../../packages/llm-utils
+      '@intexuraos/todos-pubsub-client':
+        specifier: workspace:*
+        version: link:../../packages/todos-pubsub-client
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -1654,6 +1678,25 @@ importers:
         specifier: ^4.7.0
         version: 4.21.0
 
+  packages/calendar-pubsub-client:
+    dependencies:
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../common-core
+      '@intexuraos/infra-pubsub':
+        specifier: workspace:*
+        version: link:../infra-pubsub
+      pino:
+        specifier: ^10.1.0
+        version: 10.1.1
+    devDependencies:
+      '@google-cloud/pubsub':
+        specifier: ^4.9.0
+        version: 4.11.0(encoding@0.1.13)
+      vitest:
+        specifier: ^4.0.16
+        version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3)
+
   packages/code-task-domain: {}
 
   packages/common-core: {}
@@ -1683,18 +1726,39 @@ importers:
 
   packages/http-server:
     dependencies:
+      '@fastify/cors':
+        specifier: ^10.0.1
+        version: 10.1.0
+      '@fastify/formbody':
+        specifier: ^8.0.2
+        version: 8.0.2
+      '@fastify/swagger':
+        specifier: ^9.4.2
+        version: 9.6.1
+      '@fastify/swagger-ui':
+        specifier: ^5.2.1
+        version: 5.2.4
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
       '@intexuraos/common-http':
         specifier: workspace:*
         version: link:../common-http
+      '@intexuraos/http-contracts':
+        specifier: workspace:*
+        version: link:../http-contracts
       '@intexuraos/infra-firestore':
         specifier: workspace:*
         version: link:../infra-firestore
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../infra-sentry
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
+      openapi-types:
+        specifier: ^12.1.3
+        version: 12.1.3
 
   packages/infra-claude:
     dependencies:
@@ -2054,7 +2118,64 @@ importers:
         specifier: ^1.30.0
         version: 1.30.1(@opentelemetry/api@1.9.0)
 
+  packages/pr-triage-pubsub-client:
+    dependencies:
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../common-core
+      '@intexuraos/infra-pubsub':
+        specifier: workspace:*
+        version: link:../infra-pubsub
+      pino:
+        specifier: ^10.1.0
+        version: 10.1.1
+    devDependencies:
+      '@google-cloud/pubsub':
+        specifier: ^4.9.0
+        version: 4.11.0(encoding@0.1.13)
+      vitest:
+        specifier: ^4.0.16
+        version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3)
+
   packages/service-catalog: {}
+
+  packages/todos-pubsub-client:
+    dependencies:
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../common-core
+      '@intexuraos/infra-pubsub':
+        specifier: workspace:*
+        version: link:../infra-pubsub
+      pino:
+        specifier: ^10.1.0
+        version: 10.1.1
+    devDependencies:
+      '@google-cloud/pubsub':
+        specifier: ^4.9.0
+        version: 4.11.0(encoding@0.1.13)
+      vitest:
+        specifier: ^4.0.16
+        version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3)
+
+  packages/whatsapp-pubsub-client:
+    dependencies:
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../common-core
+      '@intexuraos/infra-pubsub':
+        specifier: workspace:*
+        version: link:../infra-pubsub
+      pino:
+        specifier: ^10.1.0
+        version: 10.1.1
+    devDependencies:
+      '@google-cloud/pubsub':
+        specifier: ^4.9.0
+        version: 4.11.0(encoding@0.1.13)
+      vitest:
+        specifier: ^4.0.16
+        version: 4.0.17(@opentelemetry/api@1.9.0)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3)
 
   tools/log-server:
     dependencies:
@@ -3390,6 +3511,9 @@ packages:
 
   '@fastify/proxy-addr@5.1.0':
     resolution: {integrity: sha512-INS+6gh91cLUjB+PVHfu1UqcB76Sqtpyp7bnL+FYojhjygvOPA9ctiD/JDKsyD9Xgu4hUhCSJBPig/w7duNajw==}
+
+  '@fastify/rate-limit@10.3.0':
+    resolution: {integrity: sha512-eIGkG9XKQs0nyynatApA3EVrojHOuq4l6fhB4eeCk4PIOeadvOJz9/4w3vGI44Go17uaXOWEcPkaD8kuKm7g6Q==}
 
   '@fastify/send@4.1.0':
     resolution: {integrity: sha512-TMYeQLCBSy2TOFmV95hQWkiTYgC/SEx7vMdV+wnZVX4tt8VBLKzmH8vV9OzJehV0+XBfg+WxPMt5wp+JBUKsVw==}
@@ -12057,6 +12181,12 @@ snapshots:
     dependencies:
       '@fastify/forwarded': 3.0.1
       ipaddr.js: 2.3.0
+
+  '@fastify/rate-limit@10.3.0':
+    dependencies:
+      '@lukeed/ms': 2.0.2
+      fastify-plugin: 5.1.0
+      toad-cache: 3.7.0
 
   '@fastify/send@4.1.0':
     dependencies:
