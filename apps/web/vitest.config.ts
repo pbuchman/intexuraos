@@ -1,6 +1,10 @@
-import { defineConfig } from 'vitest/config';
+import { mergeConfig, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { sharedConfig } from '../../vitest.shared.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Set up environment variables for tests
 process.env.INTEXURAOS_AUTH0_DOMAIN = 'test-domain';
@@ -31,40 +35,58 @@ process.env.INTEXURAOS_FIREBASE_API_KEY = 'test-key';
 process.env.INTEXURAOS_FIREBASE_AUTH_DOMAIN = 'test.firebaseapp.com';
 process.env.INTEXURAOS_SENTRY_DSN_WEB = 'test-dsn';
 
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      '@': resolve(__dirname, 'src'),
-      // Mock virtual:pwa-register for tests
-      'virtual:pwa-register': resolve(__dirname, 'src/__tests__/__mocks__/virtual-pwa-register.ts'),
+// Web inherits the shared base (alias for @notionhq/client + the global
+// vitest.setup.ts mocks) and adds React/jsdom-specific config.
+//
+// Coverage thresholds are intentionally cleared (web is the documented
+// UI-coverage exception per CLAUDE.md): UI tests are optional, only
+// utils/services/hooks need coverage. mergeConfig concatenates setupFiles,
+// so the web-specific setup runs alongside the global one.
+export default mergeConfig(
+  sharedConfig,
+  defineConfig({
+    plugins: [react()],
+    resolve: {
+      alias: {
+        '@': resolve(__dirname, 'src'),
+        // Mock virtual:pwa-register for tests
+        'virtual:pwa-register': resolve(
+          __dirname,
+          'src/__tests__/__mocks__/virtual-pwa-register.ts'
+        ),
+      },
     },
-  },
-  test: {
-    globals: false,
-    environment: 'jsdom',
-    include: ['src/**/__tests__/**/*.ts', 'src/**/__tests__/**/*.tsx'],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/__tests__/setup.ts', '**/__tests__/__mocks__/**'],
-    setupFiles: ['./src/__tests__/setup.ts'],
-    typecheck: {
-      enabled: false,
-    },
-    testTimeout: 10000,
-    hookTimeout: 30000,
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'json-summary', 'html'],
-      reportOnFailure: true,
-      include: ['src/**/*.ts', 'src/**/*.tsx'],
+    test: {
+      globals: false,
+      environment: 'jsdom',
+      include: ['src/**/__tests__/**/*.ts', 'src/**/__tests__/**/*.tsx'],
       exclude: [
-        '**/*.test.ts',
-        '**/*.test.tsx',
-        '**/*.spec.ts',
-        '**/*.spec.tsx',
-        '**/__tests__/**',
-        '**/index.ts',
-        '**/vite-env.d.ts',
+        '**/node_modules/**',
+        '**/dist/**',
+        '**/__tests__/setup.ts',
+        '**/__tests__/__mocks__/**',
       ],
+      // setupFiles is INTENTIONALLY appended (mergeConfig concatenates arrays);
+      // both the global mocks and the web-specific jsdom matchers run.
+      setupFiles: ['./src/__tests__/setup.ts'],
+      typecheck: {
+        enabled: false,
+      },
+      coverage: {
+        // provider/reporter inherited from sharedConfig
+        // CLAUDE.md exception: UI coverage is not enforced — clear the 95% thresholds.
+        thresholds: {},
+        include: ['src/**/*.ts', 'src/**/*.tsx'],
+        exclude: [
+          '**/*.test.ts',
+          '**/*.test.tsx',
+          '**/*.spec.ts',
+          '**/*.spec.tsx',
+          '**/__tests__/**',
+          '**/index.ts',
+          '**/vite-env.d.ts',
+        ],
+      },
     },
-  },
-});
+  })
+);
