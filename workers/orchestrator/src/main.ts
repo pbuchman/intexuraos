@@ -34,7 +34,14 @@ export async function main(
   heartbeatManager: HeartbeatManager,
   logger: Logger,
   workerAuthRegistry?: WorkerAuthRegistry,
-  isolationProvider?: IsolationProvider
+  isolationProvider?: IsolationProvider,
+  /**
+   * Flush callback returned by `initWorker()` (INT-1565 §S5). Awaited in the
+   * SIGTERM handler to drain Pino + Sentry buffers before `process.exit(0)`.
+   * Optional so tests that build `main()` without bootstrapping the logger
+   * can omit it.
+   */
+  flush?: () => Promise<void>
 ): Promise<void> {
   const app = fastify({
     logger: false,
@@ -93,6 +100,7 @@ export async function main(
       heartbeatManager,
       logger,
       isolationProvider,
+      ...(flush !== undefined ? { flush } : {}),
     });
 
     logger.info({ message: 'Orchestrator ready' });
@@ -240,9 +248,27 @@ async function runStartupRecovery(
         taskId: task.taskId,
       });
 
-      // Update task status
+      // Update task status. Set `completedAt` so the duration metric
+      // emitted below has a meaningful wall-clock window (computed from
+      // `startedAt` -> `completedAt`); without it `computeTaskDurationMs`
+      // would clamp to 0 even when the task ran for hours before restart.
       task.status = 'interrupted';
+      task.completedAt = new Date().toISOString();
       await statePersistence.save(state);
+
+      // INT-1565 §S5: emit `code_tasks_*` metrics for restart-induced
+      // interruptions so the counter/duration series cover EVERY terminal
+      // transition, not just `finalizeTask()`-driven ones. Wrap in
+      // try/catch identical to the dispatcher's own emit — a metrics
+      // outage must never break startup recovery.
+      try {
+        dispatcher.emitTerminalMetrics(task, 'interrupted');
+      } catch (metricsError) {
+        logger.warn(
+          { taskId: task.taskId, error: metricsError },
+          'metrics emission failed during startup recovery; continuing'
+        );
+      }
 
       logger.info({ taskId: task.taskId }, 'Notified code-agent of interrupted task');
     } catch (error) {
@@ -294,7 +320,13 @@ interface ShutdownHandlers {
   statePersistence: StatePersistence;
   heartbeatManager: HeartbeatManager;
   logger: Logger;
-  isolationProvider: IsolationProvider | undefined;
+  isolationProvider: IsolationProvider | undefined; // @allow-undefined-type -- pre-existing tri-state: shutdown handler differentiates "no provider configured" from "provider with cleanup hooks"
+  /**
+   * Flush callback from `initWorker()` (INT-1565 §S5). Awaited last so log
+   * lines emitted during shutdown make it to the unified Sentry/OTel sinks.
+   * `undefined` when called by tests that bypass the bootstrap logger.
+   */
+  flush?: () => Promise<void>;
 }
 
 function setupShutdownHandlers(handlers: ShutdownHandlers): void {
@@ -330,6 +362,21 @@ function setupShutdownHandlers(handlers: ShutdownHandlers): void {
     await handlers.statePersistence.save(await handlers.statePersistence.load());
 
     handlers.logger.info({ message: 'Orchestrator shutdown complete' });
+
+    // INT-1565 §S5: drain Pino + Sentry buffers before exit so the final
+    // shutdown log lines + any inflight error reports make it to the unified
+    // sinks. `flush()` is contracted to never throw, but we still wrap it so
+    // a buggy implementation cannot leave the process hanging on shutdown.
+    if (handlers.flush !== undefined) {
+      try {
+        await handlers.flush();
+      } catch (flushError) {
+        handlers.logger.warn(
+          { err: flushError },
+          'flush() raised during shutdown; continuing exit'
+        );
+      }
+    }
     exit(0);
   };
 

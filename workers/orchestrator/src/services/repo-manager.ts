@@ -2,7 +2,7 @@ import { existsSync, statSync, readFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { Logger } from '@intexuraos/common-core';
+import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
 
 const execFileAsync = promisify(execFile);
 
@@ -49,7 +49,7 @@ export async function validateRepository(
 
   // Check .git exists
   if (!existsSync(gitPath)) {
-    throw new Error(`REPOSITORY_PATH ${path} is not a git repository`);
+    throw new IntexuraOSError('INVALID_REQUEST', `REPOSITORY_PATH ${path} is not a git repository`);
   }
 
   // Check .git is a directory (not a file - worktrees have .git as a file)
@@ -58,10 +58,16 @@ export async function validateRepository(
     stat = statSync(gitPath);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to stat .git directory at ${gitPath}: ${message}`);
+    throw new IntexuraOSError(
+      'INTERNAL_ERROR',
+      `Failed to stat .git directory at ${gitPath}: ${message}`
+    );
   }
   if (!stat.isDirectory()) {
-    throw new Error(`REPOSITORY_PATH ${path} appears to be a worktree, not a main clone`);
+    throw new IntexuraOSError(
+      'INVALID_REQUEST',
+      `REPOSITORY_PATH ${path} appears to be a worktree, not a main clone`
+    );
   }
 
   // Verify remote origin matches expected URL
@@ -72,14 +78,16 @@ export async function validateRepository(
     actualUrl = stdout.trim();
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(
+    throw new IntexuraOSError(
+      'INTERNAL_ERROR',
       `Failed to get remote origin URL for repository at ${path}: ${message}\n` +
         `Ensure the repository has an 'origin' remote configured.`
     );
   }
 
   if (!urlsMatch(actualUrl, expectedUrl)) {
-    throw new Error(
+    throw new IntexuraOSError(
+      'INVALID_REQUEST',
       `REPOSITORY_PATH ${path} has wrong remote origin.\n` +
         `Expected: ${expectedUrl}\n` +
         `Actual: ${actualUrl}\n` +
@@ -96,10 +104,14 @@ export async function validateRepository(
       pkg = JSON.parse(content) as { name?: string };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Failed to read or parse package.json at ${packageJsonPath}: ${message}`);
+      throw new IntexuraOSError(
+        'INTERNAL_ERROR',
+        `Failed to read or parse package.json at ${packageJsonPath}: ${message}`
+      );
     }
     if (pkg.name !== 'intexuraos') {
-      throw new Error(
+      throw new IntexuraOSError(
+        'INVALID_REQUEST',
         `REPOSITORY_PATH ${path} does not appear to be IntexuraOS (package.json name mismatch)`
       );
     }
@@ -121,7 +133,8 @@ export async function cloneRepository(url: string, path: string, logger: Logger)
       mkdirSync(parentDir, { recursive: true });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(
+      throw new IntexuraOSError(
+        'INTERNAL_ERROR',
         `Failed to create parent directory ${parentDir} for repository clone: ${message}`
       );
     }
@@ -144,7 +157,10 @@ export async function cloneRepository(url: string, path: string, logger: Logger)
     );
     const message = execError.message ?? 'Unknown error';
     const stderrInfo = execError.stderr ? `\nGit output: ${execError.stderr.trim()}` : '';
-    throw new Error(`Failed to clone repository: ${message}${stderrInfo}`);
+    throw new IntexuraOSError(
+      'INTERNAL_ERROR',
+      `Failed to clone repository: ${message}${stderrInfo}`
+    );
   }
 }
 
@@ -170,7 +186,10 @@ export async function fetchRemote(path: string, logger: Logger): Promise<void> {
     );
     const message = execError.message ?? 'Unknown error';
     const stderrInfo = execError.stderr ? `\nGit output: ${execError.stderr.trim()}` : '';
-    throw new Error(`Failed to fetch from remote: ${message}${stderrInfo}`);
+    throw new IntexuraOSError(
+      'INTERNAL_ERROR',
+      `Failed to fetch from remote: ${message}${stderrInfo}`
+    );
   }
 }
 
@@ -201,7 +220,10 @@ export async function cleanWorktree(path: string, logger: Logger): Promise<void>
     );
     const message = execError.message ?? 'Unknown error';
     const stderrInfo = execError.stderr ? `\nGit output: ${execError.stderr.trim()}` : '';
-    throw new Error(`Failed to clean worktree: ${message}${stderrInfo}`);
+    throw new IntexuraOSError(
+      'INTERNAL_ERROR',
+      `Failed to clean worktree: ${message}${stderrInfo}`
+    );
   }
 }
 

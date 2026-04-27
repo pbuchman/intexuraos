@@ -2238,6 +2238,9 @@ importers:
       '@intexuraos/infra-openrouter':
         specifier: workspace:*
         version: link:../../packages/infra-openrouter
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       '@intexuraos/linear-domain':
         specifier: workspace:*
         version: link:../../packages/linear-domain
@@ -2366,6 +2369,12 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../../packages/common-core
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
+      '@sentry/node':
+        specifier: ^8.42.0
+        version: 8.55.0
       pino:
         specifier: 'catalog:'
         version: 10.1.1
