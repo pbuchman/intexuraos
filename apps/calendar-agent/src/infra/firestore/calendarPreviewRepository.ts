@@ -189,22 +189,22 @@ export async function updateCalendarPreview(
     if (updates.location !== undefined) {
     /* v8 ignore stop @preserve */
       updateData['location'] = updates.location;
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
+/* v8 ignore start -- ts-type: description-field narrowing — TypeScript cannot prove description guard branches differ @preserve */
     }
     if (updates.description !== undefined) {
     /* v8 ignore stop @preserve */
       updateData['description'] = updates.description;
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
+/* v8 ignore start -- ts-type: duration-field narrowing — TypeScript cannot prove duration guard branches differ @preserve */
     }
     if (updates.duration !== undefined) {
     /* v8 ignore stop @preserve */
       updateData['duration'] = updates.duration;
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
+/* v8 ignore start -- ts-type: isAllDay-field narrowing — TypeScript cannot prove isAllDay guard branches differ @preserve */
     }
     if (updates.isAllDay !== undefined) {
     /* v8 ignore stop @preserve */
       updateData['isAllDay'] = updates.isAllDay;
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
+/* v8 ignore start -- ts-type: error-field narrowing — TypeScript cannot prove error guard branches differ @preserve */
     }
     if (updates.error !== undefined) {
     /* v8 ignore stop @preserve */
