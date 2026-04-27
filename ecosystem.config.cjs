@@ -193,6 +193,8 @@ const SERVICE_ENV_MAPPINGS = {
   'chat-agent': {
     // OpenAI API key for embeddings (from .envrc)
     INTEXURAOS_OPENAI_APP_API_KEY: process.env.INTEXURAOS_OPENAI_APP_API_KEY,
+    // HS256 secret used to sign guest session JWTs (>=32 bytes; from .envrc)
+    INTEXURAOS_GUEST_SESSION_SECRET: process.env.INTEXURAOS_GUEST_SESSION_SECRET,
   },
   'llm-usage-service': {
     INTEXURAOS_ORCHESTRATOR_SECRET: process.env.INTEXURAOS_ORCHESTRATOR_SECRET,
