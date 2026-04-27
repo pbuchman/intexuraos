@@ -1,7 +1,7 @@
 import type Docker from 'dockerode';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { Logger } from '@intexuraos/common-core';
+import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
 import type { WorkerRuntime } from '../runtime/types.js';
 import type { WorkerConfig, WorkerHandle, WorkerType } from './types.js';
 import { WORKER_TYPES } from './types.js';
@@ -16,11 +16,15 @@ import type {
   LifecycleProviderConfig,
 } from './worker-entry-types.js';
 import { buildWorkerEnv, resolveForensicsSeccompSecurityOpt } from './worker-env.js';
+import { auditLockfile, snapshotLockfile } from './lockfile-guard.js';
 
 export function detectMainGitDir(worktreePath: string): string | null {
   const gitPath = path.join(worktreePath, '.git');
   if (!fs.existsSync(gitPath)) {
-    throw new Error(`Invalid worktree: ${worktreePath} (no .git directory)`);
+    throw new IntexuraOSError(
+      'INVALID_REQUEST',
+      `Invalid worktree: ${worktreePath} (no .git directory)`
+    );
   }
   let mainGitDir: string | null = null;
   const gitStat = fs.statSync(gitPath);
@@ -161,6 +165,32 @@ export async function runAttemptInContainer(input: RunAttemptInput): Promise<voi
     worker.handle.status = 'failed';
     config.onComplete?.(1);
   } finally {
+    // INT-1524: detect LLM-tampered lockfile during the attempt.
+    if (worker.worktreePath !== undefined && worker.lockfileSha256 !== undefined) {
+      const currentSha = snapshotLockfile(worker.worktreePath);
+      if (currentSha !== null && currentSha !== worker.lockfileSha256) {
+        logger.warn(
+          {
+            event: 'lockfile-drift',
+            taskId,
+            before: worker.lockfileSha256,
+            after: currentSha,
+          },
+          'pnpm-lock.yaml changed during attempt — review before merging'
+        );
+        if (worker.taskForensicsPath !== undefined) {
+          try {
+            await fs.promises.writeFile(
+              path.join(worker.taskForensicsPath, 'lockfile-drift.txt'),
+              `before=${worker.lockfileSha256}\nafter=${currentSha}\n`,
+              'utf-8'
+            );
+          } catch {
+            // best-effort; never throw from teardown
+          }
+        }
+      }
+    }
     worker.attemptRunning = false;
   }
 }
@@ -172,10 +202,11 @@ export interface AttachExistingInput {
   containerId: string;
   volume: DockerVolume;
   workers: Map<string, WorkerEntry>;
+  logger: Logger;
 }
 
 export async function attachToExistingContainer(input: AttachExistingInput): Promise<WorkerHandle> {
-  const { taskId, runtime, config, containerId, volume, workers } = input;
+  const { taskId, runtime, config, containerId, volume, workers, logger } = input;
   const taskSecretsPath = volume.getTaskSecretsPath(taskId);
   const taskRuntimeHomePath = volume.getTaskRuntimeHomePath(taskId, runtime);
 
@@ -195,6 +226,10 @@ export async function attachToExistingContainer(input: AttachExistingInput): Pro
     startedAt: new Date(),
   };
   const taskForensicsPath = volume.ensureTaskForensicsPath(taskId);
+  // INT-1524: snapshot pnpm-lock.yaml so resumed workers also get drift detection.
+  const lockfileSha256 = snapshotLockfile(config.worktreePath);
+  // INT-1524: warn-level integrity audit — non-fatal; see auditLockfile docs.
+  auditLockfile(config.worktreePath, taskId, logger);
 
   workers.set(taskId, {
     containerId,
@@ -204,7 +239,9 @@ export async function attachToExistingContainer(input: AttachExistingInput): Pro
     taskRuntimeHomePath,
     attemptRunning: false,
     attemptLogBuffer: '',
+    worktreePath: config.worktreePath,
     ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
+    ...(lockfileSha256 !== null ? { lockfileSha256 } : {}),
   });
 
   return handle;
@@ -356,6 +393,7 @@ export async function resumeFromPreserved(input: ResumeInput): Promise<WorkerHan
       containerId: preserved.containerId,
       volume,
       workers,
+      logger,
     });
     logger.info(
       { taskId, containerId: preserved.containerId },
@@ -392,6 +430,7 @@ export async function resumeFromOrphan(input: ResumeInput): Promise<WorkerHandle
         containerId: orphanInfo.Id,
         volume,
         workers,
+        logger,
       });
       logger.info(
         { taskId, containerId: orphanInfo.Id },
@@ -447,7 +486,7 @@ export async function createWorkerOrchestration(
   const existingWorker = workers.get(taskId);
   if (existingWorker !== undefined) {
     if (config.continueSession !== true) {
-      throw new Error(`Worker already exists for task ${taskId}`);
+      throw new IntexuraOSError('CONFLICT', `Worker already exists for task ${taskId}`);
     }
     await volume.writePromptFiles(existingWorker.taskSecretsPath, systemPrompt, prompt);
     volume.ensureTaskForensicsPath(taskId);
@@ -475,7 +514,10 @@ export async function createWorkerOrchestration(
   }
 
   if (workers.size >= providerConfig.maxConcurrent) {
-    throw new Error(`Max concurrent workers (${String(providerConfig.maxConcurrent)}) reached`);
+    throw new IntexuraOSError(
+      'QUEUE_FULL',
+      `Max concurrent workers (${String(providerConfig.maxConcurrent)}) reached`
+    );
   }
 
   const mainGitDir = detectMainGitDir(worktreePath);
@@ -573,6 +615,9 @@ export async function createWorkerOrchestration(
       startedAt: new Date(),
     };
 
+    const lockfileSha256 = snapshotLockfile(worktreePath);
+    // INT-1524: warn-level integrity audit — non-fatal by design; see auditLockfile docs.
+    auditLockfile(worktreePath, taskId, logger);
     workers.set(taskId, {
       containerId: dockerContainer.id,
       handle,
@@ -581,8 +626,10 @@ export async function createWorkerOrchestration(
       taskRuntimeHomePath,
       attemptRunning: false,
       attemptLogBuffer: '',
+      worktreePath,
       ...(taskForensicsPath !== null ? { taskForensicsPath } : {}),
       ...(logStream !== undefined ? { logStream } : {}),
+      ...(lockfileSha256 !== null ? { lockfileSha256 } : {}),
     });
 
     if (providerConfig.managedAttemptsMode) {

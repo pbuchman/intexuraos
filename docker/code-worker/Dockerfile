@@ -115,6 +115,13 @@ RUN mkdir -p /repo /secrets /tmp /home/claude/.claude /home/claude/.config/gclou
 # NOTE: Build context is workspace root (.), so paths are root-relative
 COPY --chown=claude:claude docker/code-worker/config-defaults/claude.json /opt/claude-defaults/.claude.json
 
+# Bake forced pnpm/npm defaults so lifecycle scripts cannot run from a tampered
+# lockfile. /opt/claude-defaults is copied into /home/claude at entrypoint
+# (because /home/claude is tmpfs-wiped on container start). /etc/npmrc is the
+# global pnpm config and survives an LLM `rm` of ~/.npmrc.
+COPY --chown=claude:claude docker/code-worker/.npmrc /opt/claude-defaults/.npmrc
+COPY --chown=claude:claude docker/code-worker/.npmrc /etc/npmrc
+
 # Hook direnv into bash so env vars auto-load when entering /repo
 RUN echo 'eval "$(direnv hook bash)"' >> /opt/claude-defaults/.bashrc
 

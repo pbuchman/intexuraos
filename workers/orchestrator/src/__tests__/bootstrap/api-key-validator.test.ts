@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Logger } from 'pino';
+import { IntexuraOSError } from '@intexuraos/common-core';
 import {
   validateWorkerApiKey,
   keySuffix,
@@ -71,6 +72,18 @@ describe('validateWorkerApiKey', () => {
 
   it('names the key in the error message', () => {
     expect(() => validateWorkerApiKey('CUSTOM_KEY', '')).toThrow(/CUSTOM_KEY/);
+  });
+
+  // INT-1565 acceptance: bootstrap failures must be typed `IntexuraOSError`s
+  // (no plain `throw new Error(`) so call sites can branch on `error.code`.
+  it('throws an IntexuraOSError with code MISCONFIGURED', () => {
+    try {
+      validateWorkerApiKey('ANTHROPIC_API_KEY', '');
+      throw new Error('expected validateWorkerApiKey to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(IntexuraOSError);
+      expect((err as IntexuraOSError).code).toBe('MISCONFIGURED');
+    }
   });
 });
 

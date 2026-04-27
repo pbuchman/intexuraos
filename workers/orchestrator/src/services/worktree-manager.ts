@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { type Logger } from '@intexuraos/common-core';
+import { type Logger, IntexuraOSError } from '@intexuraos/common-core';
 
 const defaultExecFileAsync = promisify(execFile);
 
@@ -29,7 +29,7 @@ const LOCK_TIMEOUT_MS = 10_000;
 
 function assertSafeBranchName(branch: string, branchLabel: string): void {
   if (!SAFE_GIT_BRANCH_PATTERN.test(branch)) {
-    throw new Error(`Invalid ${branchLabel} branch name: ${branch}`);
+    throw new IntexuraOSError('INVALID_REQUEST', `Invalid ${branchLabel} branch name: ${branch}`);
   }
 }
 
@@ -64,7 +64,9 @@ export class WorktreeManager {
       rejectTimeout = reject;
     });
     const timeoutId = setTimeout(() => {
-      rejectTimeout(new Error('Timed out waiting for git lock after 10s'));
+      rejectTimeout(
+        new IntexuraOSError('INTERNAL_ERROR', 'Timed out waiting for git lock after 10s')
+      );
     }, LOCK_TIMEOUT_MS);
 
     try {
@@ -92,7 +94,10 @@ export class WorktreeManager {
 
       // Check if worktree already exists
       if (await this.worktreeExists(taskId)) {
-        throw new Error(`Worktree for task ${taskId} already exists at ${worktreePath}`);
+        throw new IntexuraOSError(
+          'CONFLICT',
+          `Worktree for task ${taskId} already exists at ${worktreePath}`
+        );
       }
 
       try {
@@ -154,7 +159,7 @@ export class WorktreeManager {
 
         // git worktree add outputs to stderr even on success
         if (stderr && !stderr.includes('Preparing worktree')) {
-          throw new Error(`Failed to create worktree: ${stderr}`);
+          throw new IntexuraOSError('INTERNAL_ERROR', `Failed to create worktree: ${stderr}`);
         }
 
         // Copy settings.local.json template if provided
@@ -174,7 +179,7 @@ export class WorktreeManager {
         return worktreePath;
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        throw new Error(`Failed to create worktree: ${message}`);
+        throw new IntexuraOSError('INTERNAL_ERROR', `Failed to create worktree: ${message}`);
       }
     });
   }
@@ -185,7 +190,10 @@ export class WorktreeManager {
       this.logger.info({ taskId, worktreePath }, 'Removing worktree');
 
       if (!existsSync(worktreePath)) {
-        throw new Error(`Worktree for task ${taskId} does not exist at ${worktreePath}`);
+        throw new IntexuraOSError(
+          'NOT_FOUND',
+          `Worktree for task ${taskId} does not exist at ${worktreePath}`
+        );
       }
 
       try {
@@ -197,12 +205,12 @@ export class WorktreeManager {
         );
 
         if (stderr) {
-          throw new Error(`Failed to remove worktree: ${stderr}`);
+          throw new IntexuraOSError('INTERNAL_ERROR', `Failed to remove worktree: ${stderr}`);
         }
         this.logger.info({ taskId }, 'Worktree removed');
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        throw new Error(`Failed to remove worktree: ${message}`);
+        throw new IntexuraOSError('INTERNAL_ERROR', `Failed to remove worktree: ${message}`);
       }
     });
   }
@@ -290,7 +298,8 @@ export class WorktreeManager {
       const worktreePath = join(this.config.worktreeBasePath, taskId);
 
       if (!existsSync(worktreePath)) {
-        throw new Error(
+        throw new IntexuraOSError(
+          'NOT_FOUND',
           `Cannot repair worktree for task ${taskId}: path ${worktreePath} does not exist on disk`
         );
       }
@@ -308,12 +317,18 @@ export class WorktreeManager {
         // (e.g. "repair: ..."); treat non-empty stderr as informational unless
         // it contains a fatal marker.
         if (stderr.includes('fatal:')) {
-          throw new Error(`git worktree repair reported fatal error: ${stderr.trim()}`);
+          throw new IntexuraOSError(
+            'INTERNAL_ERROR',
+            `git worktree repair reported fatal error: ${stderr.trim()}`
+          );
         }
         this.logger.info({ taskId, worktreePath }, 'Worktree metadata repaired successfully');
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        throw new Error(`Failed to repair worktree for task ${taskId}: ${message}`);
+        throw new IntexuraOSError(
+          'INTERNAL_ERROR',
+          `Failed to repair worktree for task ${taskId}: ${message}`
+        );
       }
 
       // Diagnostic: log the post-repair HEAD state. `git worktree repair`
@@ -351,7 +366,7 @@ export class WorktreeManager {
       await writeFile(targetPath, content, 'utf-8');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Failed to copy settings.local.json: ${message}`);
+      throw new IntexuraOSError('INTERNAL_ERROR', `Failed to copy settings.local.json: ${message}`);
     }
   }
 }

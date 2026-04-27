@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { IntexuraOSError } from '@intexuraos/common-core';
 import { validateGcpCredentials, type GcpValidatorDeps } from '../../bootstrap/gcp-validator.js';
 
 function makeDeps(overrides: Partial<GcpValidatorDeps> = {}): GcpValidatorDeps {
@@ -46,5 +47,32 @@ describe('validateGcpCredentials', () => {
       },
     });
     expect(() => validateGcpCredentials('/path/sa.json', 'proj', deps)).toThrow(/bare string/);
+  });
+
+  // INT-1565 acceptance: bootstrap failures must be typed `IntexuraOSError`s.
+  it('throws an IntexuraOSError with code MISCONFIGURED on missing key', () => {
+    const deps = makeDeps({ existsSync: () => false });
+    try {
+      validateGcpCredentials('/missing/key.json', 'proj', deps);
+      throw new Error('expected validateGcpCredentials to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(IntexuraOSError);
+      expect((err as IntexuraOSError).code).toBe('MISCONFIGURED');
+    }
+  });
+
+  it('throws an IntexuraOSError with code MISCONFIGURED on auth failure', () => {
+    const deps = makeDeps({
+      execSync: () => {
+        throw new Error('gcloud: auth failed');
+      },
+    });
+    try {
+      validateGcpCredentials('/path/sa.json', 'proj', deps);
+      throw new Error('expected validateGcpCredentials to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(IntexuraOSError);
+      expect((err as IntexuraOSError).code).toBe('MISCONFIGURED');
+    }
   });
 });

@@ -15,6 +15,16 @@ vi.mock('../stop-vm.js', () => ({
   stopVm: vi.fn(),
 }));
 
+vi.mock('../logger.js', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+  flush: vi.fn(() => Promise.resolve()),
+}));
+
 vi.mock('../__shims__/common-worker.js', async () => {
   const actual = await vi.importActual<typeof import('../__shims__/common-worker.js')>(
     '../__shims__/common-worker.js'
@@ -22,28 +32,13 @@ vi.mock('../__shims__/common-worker.js', async () => {
   return {
     // Real verifyInternalAuth — pure function, MUST be exercised by these tests.
     verifyInternalAuth: actual.verifyInternalAuth,
-    // Stubbed logger to avoid pino IO during tests.
-    createWorkerLogger: (): {
-      level: string;
-      info: ReturnType<typeof vi.fn>;
-      warn: ReturnType<typeof vi.fn>;
-      error: ReturnType<typeof vi.fn>;
-      debug: ReturnType<typeof vi.fn>;
-      child: () => unknown;
-    } => ({
-      level: 'info',
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
-      child: vi.fn(),
-    }),
   };
 });
 
 import { startVmFunction, stopVmFunction } from '../index.js';
 import { startVm } from '../start-vm.js';
 import { stopVm } from '../stop-vm.js';
+import { flush } from '../logger.js';
 
 function createMockRequest(method: string, headers: Record<string, string> = {}): Request {
   return {
@@ -82,7 +77,8 @@ function createMockResponse(): MockResponse {
 
 describe('startVmFunction', () => {
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.mocked(startVm).mockReset();
+    vi.mocked(flush).mockClear();
   });
 
   it('should reject non-POST requests', async () => {
@@ -163,11 +159,45 @@ describe('startVmFunction', () => {
       message: 'Failed to start VM: Quota exceeded',
     });
   });
+
+  it('flushes the logger on 405 early return', async () => {
+    const req = createMockRequest('GET');
+    const res = createMockResponse();
+
+    await startVmFunction(req, res);
+
+    expect(flush).toHaveBeenCalled();
+  });
+
+  it('flushes the logger on 401 early return', async () => {
+    const req = createMockRequest('POST', { 'x-internal-auth': 'wrong-token' });
+    const res = createMockResponse();
+
+    await startVmFunction(req, res);
+
+    expect(flush).toHaveBeenCalled();
+  });
+
+  it('flushes the logger after a successful invocation', async () => {
+    vi.mocked(startVm).mockResolvedValue({
+      success: true,
+      message: 'VM started and healthy',
+      startupDurationMs: 1000,
+    });
+
+    const req = createMockRequest('POST', { 'x-internal-auth': 'test-token' });
+    const res = createMockResponse();
+
+    await startVmFunction(req, res);
+
+    expect(flush).toHaveBeenCalled();
+  });
 });
 
 describe('stopVmFunction', () => {
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.mocked(stopVm).mockReset();
+    vi.mocked(flush).mockClear();
   });
 
   it('should reject non-POST requests', async () => {
@@ -236,5 +266,38 @@ describe('stopVmFunction', () => {
       success: false,
       message: 'Failed to stop VM: API Error',
     });
+  });
+
+  it('flushes the logger on 405 early return', async () => {
+    const req = createMockRequest('GET');
+    const res = createMockResponse();
+
+    await stopVmFunction(req, res);
+
+    expect(flush).toHaveBeenCalled();
+  });
+
+  it('flushes the logger on 401 early return', async () => {
+    const req = createMockRequest('POST', { 'x-internal-auth': 'wrong-token' });
+    const res = createMockResponse();
+
+    await stopVmFunction(req, res);
+
+    expect(flush).toHaveBeenCalled();
+  });
+
+  it('flushes the logger after a successful invocation', async () => {
+    vi.mocked(stopVm).mockResolvedValue({
+      success: true,
+      message: 'VM shutdown initiated',
+      runningTasksAtShutdown: 0,
+    });
+
+    const req = createMockRequest('POST', { 'x-internal-auth': 'test-token' });
+    const res = createMockResponse();
+
+    await stopVmFunction(req, res);
+
+    expect(flush).toHaveBeenCalled();
   });
 });

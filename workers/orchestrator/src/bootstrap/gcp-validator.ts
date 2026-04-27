@@ -8,6 +8,7 @@
 
 import { existsSync } from 'node:fs';
 import { execSync, type ExecSyncOptions } from 'node:child_process';
+import { IntexuraOSError } from '@intexuraos/common-core';
 import { EXEC_TIMEOUT_MS } from '../types/constants.js';
 
 /** Minimal injectable dependencies — tests use fakes. */
@@ -34,7 +35,8 @@ export function validateGcpCredentials(
   deps: GcpValidatorDeps = defaultDeps
 ): void {
   if (!deps.existsSync(gcpSaKeyPath)) {
-    throw new Error(
+    throw new IntexuraOSError(
+      'MISCONFIGURED',
       `GCP service account key not found at ${gcpSaKeyPath}. ` +
         `Add to .envrc: export GOOGLE_APPLICATION_CREDENTIALS=<path-to-key.json>`
     );
@@ -46,7 +48,8 @@ export function validateGcpCredentials(
       { timeout: EXEC_TIMEOUT_MS, stdio: 'pipe' }
     );
   } catch (error) {
-    throw new Error(
+    throw new IntexuraOSError(
+      'MISCONFIGURED',
       `GCP authentication failed for credentials file ${gcpSaKeyPath}. ` +
         `Verify the file exists, is readable, and has correct permissions. ` +
         `Original error: ${error instanceof Error ? error.message : String(error)}`
