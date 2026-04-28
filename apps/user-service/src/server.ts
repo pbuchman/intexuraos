@@ -7,7 +7,8 @@
  * route registration is supplied via `registerRoutes`.
  */
 import type { FastifyInstance } from 'fastify';
-import { checkFirestore, createFastifyApp } from '@intexuraos/http-server';
+import { createFastifyApp } from '@intexuraos/http-server';
+import { firestoreHealthCheck } from '@intexuraos/infra-firestore';
 import { authRoutes } from './routes/routes.js';
 
 const SERVICE_NAME = 'user-service';
@@ -120,7 +121,7 @@ export async function buildServer(): Promise<FastifyInstance> {
       { name: 'auth', description: 'Device Authorization Flow helpers' },
     ],
     requiredSecrets: REQUIRED_SECRETS,
-    extraHealthChecks: [checkFirestore],
+    extraHealthChecks: [firestoreHealthCheck()],
     additionalOpenapiSchemas: ADDITIONAL_OPENAPI_SCHEMAS,
     registerRoutes: async (app) => {
       await app.register(authRoutes);

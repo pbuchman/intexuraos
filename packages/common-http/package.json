@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
-    "@intexuraos/llm-utils": "workspace:*",
     "fastify-plugin": "^5.0.1",
     "jose": "^5.9.6"
   },

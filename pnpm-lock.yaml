@@ -1711,9 +1711,6 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
-      '@intexuraos/llm-utils':
-        specifier: workspace:*
-        version: link:../llm-utils
       fastify-plugin:
         specifier: ^5.0.1
         version: 5.1.0
@@ -1753,9 +1750,6 @@ importers:
       '@intexuraos/http-contracts':
         specifier: workspace:*
         version: link:../http-contracts
-      '@intexuraos/infra-firestore':
-        specifier: workspace:*
-        version: link:../infra-firestore
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../infra-sentry
