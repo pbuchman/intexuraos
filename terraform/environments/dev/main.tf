@@ -99,6 +99,19 @@ variable "alert_email" {
   default     = null
 }
 
+variable "slack_auth_token" {
+  description = "Slack bot OAuth token (xoxb-...) for the monitoring Slack notification channel. Leave null to skip provisioning the Slack channel."
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+variable "slack_channel_name" {
+  description = "Slack channel for monitoring alerts (e.g. \"#alerts\")."
+  type        = string
+  default     = "#alerts"
+}
+
 # -----------------------------------------------------------------------------
 # Data Sources
 # -----------------------------------------------------------------------------
@@ -1929,9 +1942,11 @@ module "github_wif" {
 module "monitoring" {
   source = "../../modules/monitoring"
 
-  project_id  = var.project_id
-  environment = var.environment
-  alert_email = var.alert_email
+  project_id         = var.project_id
+  environment        = var.environment
+  alert_email        = var.alert_email
+  slack_auth_token   = var.slack_auth_token
+  slack_channel_name = var.slack_channel_name
 
   depends_on = [
     google_project_service.apis,

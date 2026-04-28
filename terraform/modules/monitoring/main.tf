@@ -542,6 +542,23 @@ resource "google_monitoring_notification_channel" "email" {
   }
 }
 
+# Slack notification channel — provisioned only when a bot token is supplied.
+# Cloud Monitoring requires the token at the `chat:write` scope; the token is
+# stored under `sensitive_labels` so Terraform does not emit it in plan output.
+resource "google_monitoring_notification_channel" "slack" {
+  count        = var.slack_auth_token != null ? 1 : 0
+  display_name = "IntexuraOS Alerts — Slack"
+  type         = "slack"
+
+  labels = {
+    channel_name = var.slack_channel_name
+  }
+
+  sensitive_labels {
+    auth_token = var.slack_auth_token
+  }
+}
+
 resource "google_monitoring_alert_policy" "llm_errors" {
   count        = var.alert_email != null ? 1 : 0
   display_name = "LLM Provider Error Rate High"

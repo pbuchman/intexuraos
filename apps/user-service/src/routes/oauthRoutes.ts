@@ -6,6 +6,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
+import { logIncomingRequest } from '@intexuraos/common-http';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { isAuth0Error, oauthTokenRequestSchema, type TokenResponse } from './schemas.js';
 import { postFormUrlEncoded, toFormUrlEncodedBody } from './httpClient.js';
@@ -83,6 +84,11 @@ export const oauthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'POST /auth/oauth/token',
+        bodyPreviewLength: 200,
+      });
+
       const config = loadAuth0Config();
       if (config === null) {
         // @allow-raw-send: OAuth2 spec requires flat { error, error_description } response
@@ -234,6 +240,8 @@ export const oauthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request, reply) => {
+      logIncomingRequest(request, { message: 'GET /auth/oauth/authorize' });
+
       const config = loadAuth0Config();
       if (config === null) {
         // @allow-raw-send: OAuth2 spec requires flat { error, error_description } response
