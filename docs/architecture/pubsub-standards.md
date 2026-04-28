@@ -104,14 +104,14 @@ The wrapper also emits structured `worker_request_*` log entries on entry and ex
 
 The transcription worker historically used `return` (silent ACK) for every parse / schema / event-type failure, masking malformed messages from the DLQ. Under the consumer contract, each early return becomes an explicit `AckResult`:
 
-| Old behavior                                                                  | New behavior                                                               |
-| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `messageData === undefined` → `return` (silent ACK)                           | `return { decision: AckDecision.DeadLetter, reason: 'missing_message_data' }` |
-| JSON parse throws → `return` (silent ACK)                                     | `return { decision: AckDecision.DeadLetter, reason: 'parse_error' }`       |
+| Old behavior                                                                  | New behavior                                                                   |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `messageData === undefined` → `return` (silent ACK)                           | `return { decision: AckDecision.DeadLetter, reason: 'missing_message_data' }`  |
+| JSON parse throws → `return` (silent ACK)                                     | `return { decision: AckDecision.DeadLetter, reason: 'parse_error' }`           |
 | `audioEvent.type !== 'whatsapp.audio.stored'` → `return` (silent ACK)         | `return { decision: AckDecision.DeadLetter, reason: 'unexpected_event_type' }` |
-| `!isAudioStoredEvent(audioEvent)` → `return` (silent ACK)                     | `return { decision: AckDecision.DeadLetter, reason: 'invalid_event_schema' }` |
-| Successful transcription publish                                              | `return { decision: AckDecision.Ack }`                                     |
-| Transcription or downstream throws                                            | Let it propagate → `withObservability` turns into Nack (redelivery)        |
+| `!isAudioStoredEvent(audioEvent)` → `return` (silent ACK)                     | `return { decision: AckDecision.DeadLetter, reason: 'invalid_event_schema' }`  |
+| Successful transcription publish                                              | `return { decision: AckDecision.Ack }`                                         |
+| Transcription or downstream throws                                            | Let it propagate → `withObservability` turns into Nack (redelivery)            |
 
 ## PublishError Codes
 
