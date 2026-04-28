@@ -45,6 +45,7 @@ const phases = [
       { name: 'package-json', script: 'verify-package-json.mjs' },
       { name: 'package-exports', script: 'verify-package-exports.mjs' },
       { name: 'date-formatting', script: 'verify-date-formatting.mjs' },
+      { name: 'dead-code', script: 'verify-dead-code.mjs' },
       { name: 'boundaries', script: 'verify-boundaries.mjs' },
       { name: 'common', script: 'verify-common.mjs' },
       { name: 'env-vars', script: 'verify-env-vars.mjs' },

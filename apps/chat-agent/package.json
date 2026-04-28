@@ -31,10 +31,10 @@
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
-    "fastify": "^5.1.0",
+    "fastify": "catalog:",
     "jose": "^5.9.6",
-    "openai": "^4.0.0",
-    "pino": "^10.1.0"
+    "openai": "catalog:",
+    "pino": "catalog:"
   },
   "devDependencies": {
     "vitest": "^3.0.0"

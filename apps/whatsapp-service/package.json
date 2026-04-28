@@ -29,10 +29,10 @@
     "@intexuraos/infra-pubsub": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/infra-whatsapp": "workspace:*",
-    "fastify": "^5.1.0",
+    "fastify": "catalog:",
     "libphonenumber-js": "^1.12.33",
-    "pino": "^10.1.0",
+    "pino": "catalog:",
     "sharp": "^0.33.5",
-    "zod": "^3.24.1"
+    "zod": "catalog:"
   }
 }

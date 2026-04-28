@@ -28,9 +28,9 @@
     "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
-    "fastify": "^5.1.0",
-    "pino": "^10.1.0",
-    "zod": "^3.24.1"
+    "fastify": "catalog:",
+    "pino": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.0.16",

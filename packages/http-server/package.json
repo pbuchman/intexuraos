@@ -21,8 +21,12 @@
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/common-http": "workspace:*",
     "@intexuraos/http-contracts": "workspace:*",
-    "@intexuraos/infra-sentry": "workspace:*",
-    "fastify": "^5.1.0",
-    "openapi-types": "^12.1.3"
+    "@intexuraos/infra-sentry": "workspace:*"
+  },
+  "peerDependencies": {
+    "fastify": "^5.1.0"
+  },
+  "devDependencies": {
+    "fastify": "catalog:"
   }
 }

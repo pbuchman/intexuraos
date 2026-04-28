@@ -18,8 +18,7 @@
     "@intexuraos/llm-prompts": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
-    "@intexuraos/llm-utils": "workspace:*",
-    "openai": "^5.3.0"
+    "@intexuraos/llm-utils": "workspace:*"
   },
   "devDependencies": {
     "@opentelemetry/api": "^1.9.0",

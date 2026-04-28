@@ -5,7 +5,7 @@ Fastify plugins, JWT auth helpers, and standard API response/redaction utilities
 ## Contract
 
 - **Layer:** http-utility
-- **Dependencies:** `@intexuraos/common-core`, `@intexuraos/llm-utils`
+- **Dependencies:** `@intexuraos/common-core`
 - **Exports:** `./src/index.ts` (source-exports — no `dist/` emission)
 
 ## Usage
