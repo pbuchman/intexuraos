@@ -35,8 +35,8 @@
     "@intexuraos/llm-prompts": "workspace:*",
     "@intexuraos/llm-utils": "workspace:*",
     "@linear/sdk": "^29.0.0",
-    "fastify": "^5.1.0",
-    "pino": "^10.1.0",
-    "zod": "^3.24.1"
+    "fastify": "catalog:",
+    "pino": "catalog:",
+    "zod": "catalog:"
   }
 }

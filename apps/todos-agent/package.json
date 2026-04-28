@@ -36,9 +36,9 @@
     "@intexuraos/llm-prompts": "workspace:*",
     "@intexuraos/llm-utils": "workspace:*",
     "@intexuraos/todos-pubsub-client": "workspace:*",
-    "fastify": "^5.1.0",
-    "pino": "^10.1.0",
-    "zod": "^3.24.1"
+    "fastify": "catalog:",
+    "pino": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

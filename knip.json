@@ -1,0 +1,43 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "include": ["dependencies", "unlisted"],
+  "ignoreDependencies": [
+    "@google-cloud/firestore",
+    "@google-cloud/pubsub",
+    "@google-cloud/monitoring",
+    "@intexuraos/.*",
+    "axios",
+    "blessed",
+    "express",
+    "firebase-admin",
+    "firebase-tools",
+    "vite",
+    "@vitejs/plugin-react",
+    "@vitest/coverage-v8",
+    "nock",
+    "memfs",
+    "pino",
+    "pino-pretty",
+    "openai",
+    "fastify-server",
+    "@google/genai",
+    "react",
+    "react-dom",
+    "vibe-kanban-web-companion",
+    "lucide-react",
+    "dotenv",
+    "minimatch",
+    "autoprefixer"
+  ],
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/**/*.mjs", "scripts/**/*.ts", "migrations/**/*.mjs"]
+    },
+    "workers/orchestrator": {
+      "entry": ["src/main.ts"]
+    },
+    "workers/transcription": {
+      "entry": ["src/main.ts"]
+    }
+  }
+}
