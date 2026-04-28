@@ -26,7 +26,7 @@ describe('api-docs-hub server', () => {
     await app.close();
   });
 
-  it('returns health status with configured source count', async () => {
+  it('returns health status with the config probe reporting ok when sources are configured', async () => {
     const response = await app.inject({
       method: 'GET',
       url: '/health',
@@ -37,18 +37,37 @@ describe('api-docs-hub server', () => {
     const body = JSON.parse(response.body);
     expect(body.serviceName).toBe('api-docs-hub');
     expect(body.version).toBe('0.0.5');
+    expect(body.status).toBe('ok');
     expect(body.checks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           name: 'config',
           status: 'ok',
-          details: expect.objectContaining({
-            sourceCount: 1,
-          }),
         }),
       ])
     );
     expect(response.headers['x-health-duration-ms']).toBeDefined();
+  });
+
+  it('reports the config probe as down with detail when no sources are configured', async () => {
+    await app.close();
+    const emptyConfig: Config = { port: 8080, host: '127.0.0.1', openApiSources: [] };
+    app = await buildServer(emptyConfig);
+    await app.ready();
+
+    const response = await app.inject({ method: 'GET', url: '/health' });
+
+    const body = JSON.parse(response.body);
+    expect(body.status).toBe('down');
+    expect(body.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'config',
+          status: 'down',
+          details: { detail: 'no OpenAPI sources configured' },
+        }),
+      ])
+    );
   });
 
   it('serves the generated OpenAPI spec and docs UI', async () => {

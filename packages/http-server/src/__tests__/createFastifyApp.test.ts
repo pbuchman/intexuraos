@@ -9,7 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createFastifyApp } from '../createFastifyApp.js';
-import type { HealthCheck } from '../health.js';
+import type { HealthCheck, HealthCheckResult } from '../health.js';
 
 // Stub the unified log stream so the production-logger branch (covered by a
 // dedicated test below) does not actually open stdout while tests run.
@@ -80,7 +80,7 @@ describe('createFastifyApp', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.status).toBe('down');
-    const secretsCheck = body.checks.find((c: HealthCheck) => c.name === 'secrets');
+    const secretsCheck = body.checks.find((c: HealthCheckResult) => c.name === 'secrets');
     expect(secretsCheck).toMatchObject({ status: 'down' });
   });
 
@@ -116,9 +116,12 @@ describe('createFastifyApp', () => {
 
   it('runs extraHealthChecks and includes their results in the response', async () => {
     let invoked = 0;
-    const extra = (): HealthCheck => {
-      invoked += 1;
-      return { name: 'custom', status: 'ok', latencyMs: 0, details: null };
+    const extra: HealthCheck = {
+      name: 'custom',
+      check: (): Promise<{ ok: true } | { ok: false; detail?: string }> => {
+        invoked += 1;
+        return Promise.resolve({ ok: true });
+      },
     };
     app = await createFastifyApp({
       ...baseOpts,
@@ -128,13 +131,16 @@ describe('createFastifyApp', () => {
     const res = await app.inject({ method: 'GET', url: '/health' });
     expect(invoked).toBe(1);
     const body = res.json();
-    const customCheck = body.checks.find((c: HealthCheck) => c.name === 'custom');
+    const customCheck = body.checks.find((c: HealthCheckResult) => c.name === 'custom');
     expect(customCheck).toMatchObject({ status: 'ok' });
   });
 
-  it('awaits async extraHealthChecks', async () => {
-    const extra = async (): Promise<HealthCheck> =>
-      Promise.resolve({ name: 'async-check', status: 'degraded', latencyMs: 7, details: null });
+  it('reports down when an extra health check fails', async () => {
+    const extra: HealthCheck = {
+      name: 'async-check',
+      check: (): Promise<{ ok: true } | { ok: false; detail?: string }> =>
+        Promise.resolve({ ok: false, detail: 'boom' }),
+    };
     app = await createFastifyApp({
       ...baseOpts,
       extraHealthChecks: [extra],
@@ -142,7 +148,7 @@ describe('createFastifyApp', () => {
     });
     const res = await app.inject({ method: 'GET', url: '/health' });
     const body = res.json();
-    expect(body.status).toBe('degraded');
+    expect(body.status).toBe('down');
   });
 
   it('uses the production logger branch with explicit LOG_LEVEL when NODE_ENV is not "test"', async () => {
