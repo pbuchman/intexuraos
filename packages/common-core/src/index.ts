@@ -43,3 +43,6 @@ export { ServiceErrorCodes, type ServiceErrorCode } from './serviceErrorCodes.js
 
 // Tracing utilities for distributed tracing
 export * from './tracing/index.js';
+
+// Redaction helpers for logging
+export { redactToken, redactObject, SENSITIVE_FIELDS } from './redaction.js';
