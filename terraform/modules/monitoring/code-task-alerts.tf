@@ -104,6 +104,8 @@ resource "google_monitoring_alert_policy" "code_tasks_failed_rate" {
   display_name = "code_tasks_failed_rate"
   combiner     = "OR"
 
+  depends_on = [google_monitoring_metric_descriptor.code_tasks_failed]
+
   documentation {
     content   = "Code task failure rate exceeded threshold (~5 failures / 15 min). Investigate orchestrator and code-agent logs."
     mime_type = "text/markdown"

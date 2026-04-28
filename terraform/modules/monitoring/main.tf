@@ -119,6 +119,20 @@ resource "google_monitoring_metric_descriptor" "code_tasks_active" {
   }
 }
 
+resource "google_monitoring_metric_descriptor" "code_tasks_failed" {
+  description  = "Number of code tasks that ended in a non-success terminal state"
+  display_name = "Code Tasks Failed"
+  type         = "custom.googleapis.com/intexuraos/code_tasks_failed"
+  metric_kind  = "CUMULATIVE"
+  value_type   = "INT64"
+
+  labels {
+    key         = "reason"
+    value_type  = "STRING"
+    description = "Terminal failure reason (failed, interrupted, cancelled)"
+  }
+}
+
 resource "google_monitoring_metric_descriptor" "code_tasks_cost_dollars" {
   description  = "Estimated cost of code tasks in dollars"
   display_name = "Code Tasks Cost"
