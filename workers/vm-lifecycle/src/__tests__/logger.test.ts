@@ -87,4 +87,26 @@ describe('logger', () => {
     if (config === undefined) throw new Error('initWorker not called');
     expect(config.sentryDsn).toBeUndefined();
   });
+
+  it('forwards INTEXURAOS_ENVIRONMENT through to initWorker when set', async () => {
+    process.env['INTEXURAOS_ENVIRONMENT'] = 'prod';
+
+    await import('../logger.js');
+
+    expect(initWorker).toHaveBeenCalledOnce();
+    const config = initWorker.mock.calls[0]?.[0];
+    if (config === undefined) throw new Error('initWorker not called');
+    expect(config.environment).toBe('prod');
+  });
+
+  it('falls back to "development" when INTEXURAOS_ENVIRONMENT is unset', async () => {
+    delete process.env['INTEXURAOS_ENVIRONMENT'];
+
+    await import('../logger.js');
+
+    expect(initWorker).toHaveBeenCalledOnce();
+    const config = initWorker.mock.calls[0]?.[0];
+    if (config === undefined) throw new Error('initWorker not called');
+    expect(config.environment).toBe('development');
+  });
 });

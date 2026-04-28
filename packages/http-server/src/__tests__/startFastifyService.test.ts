@@ -188,6 +188,38 @@ describe('startFastifyService', () => {
     expect(call).not.toHaveProperty('dsn');
   });
 
+  it('forwards INTEXURAOS_ENVIRONMENT to initSentry when set', async () => {
+    process.env['REQ_ENV_VAR'] = 'x';
+    process.env['INTEXURAOS_ENVIRONMENT'] = 'prod';
+    const { initSentry } = await import('@intexuraos/infra-sentry');
+    const app = fakeApp();
+    await startFastifyService({
+      serviceName: 'x',
+      requiredEnv: ['REQ_ENV_VAR'],
+      initServices: () => undefined,
+      buildServer: async () => app,
+      port: 0,
+    });
+    expect(initSentry).toHaveBeenCalledWith(expect.objectContaining({ environment: 'prod' }));
+  });
+
+  it('falls back to "development" environment when INTEXURAOS_ENVIRONMENT is unset', async () => {
+    process.env['REQ_ENV_VAR'] = 'x';
+    delete process.env['INTEXURAOS_ENVIRONMENT'];
+    const { initSentry } = await import('@intexuraos/infra-sentry');
+    const app = fakeApp();
+    await startFastifyService({
+      serviceName: 'x',
+      requiredEnv: ['REQ_ENV_VAR'],
+      initServices: () => undefined,
+      buildServer: async () => app,
+      port: 0,
+    });
+    expect(initSentry).toHaveBeenCalledWith(
+      expect.objectContaining({ environment: 'development' })
+    );
+  });
+
   it('registers SIGTERM and SIGINT handlers', async () => {
     process.env['REQ_ENV_VAR'] = 'x';
     const before = {
