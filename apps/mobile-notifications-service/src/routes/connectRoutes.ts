@@ -3,7 +3,7 @@
  * POST /mobile-notifications/connect - Create a new signature connection.
  */
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { createConnection } from '../domain/notifications/index.js';
 import { connectRequestSchema, connectResponseSchema } from './schemas.js';
@@ -56,6 +56,11 @@ export const connectRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Body: ConnectBody }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'POST /mobile-notifications/connect',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;

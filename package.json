@@ -49,6 +49,7 @@
     "verify:terraform-secrets": "node scripts/verify-terraform-secrets.mjs",
     "verify:pubsub": "node scripts/verify-pubsub.mjs",
     "verify:logging": "node scripts/verify-logging.mjs",
+    "verify:incoming-request-logging": "node scripts/verify-incoming-request-logging.mjs",
     "verify:workspace-deps": "node scripts/verify-workspace-deps.mjs",
     "verify:migrations": "node scripts/verify-migrations.mjs",
     "verify:no-console": "node scripts/verify-no-console.mjs",

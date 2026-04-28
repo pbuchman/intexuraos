@@ -7,7 +7,7 @@
 
 import type { FastifyPluginCallback } from 'fastify';
 import { getErrorMessage, isErr } from '@intexuraos/common-core';
-import { handleValidationError } from '@intexuraos/common-http';
+import { logIncomingRequest, handleValidationError } from '@intexuraos/common-http';
 import type { AuthTokenRepository, AuthTokens } from '../domain/identity/index.js';
 import { getServices } from '../services.js';
 import {
@@ -82,6 +82,11 @@ export const deviceRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'POST /auth/device/start',
+        bodyPreviewLength: 200,
+      });
+
       const config = loadAuth0Config();
       if (config === null) {
         return await reply.fail(
@@ -200,6 +205,11 @@ export const deviceRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'POST /auth/device/poll',
+        bodyPreviewLength: 200,
+      });
+
       const config = loadAuth0Config();
       if (config === null) {
         return await reply.fail(
