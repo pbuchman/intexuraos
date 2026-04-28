@@ -34,7 +34,7 @@ import {
 } from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
-import { buildHealthResponse, checkSecrets, type HealthCheck } from './health.js';
+import { registerHealthCheck, secretsHealthCheck, type HealthCheck } from './health.js';
 
 /** OpenAPI server entry — `{ url, description }` from `@fastify/swagger`. */
 export interface OpenApiServer {
@@ -55,9 +55,6 @@ export interface OpenApiInfo {
   version: string;
 }
 
-/** Function or value supplying a {@link HealthCheck}; resolved at /health time. */
-export type HealthCheckProducer = () => HealthCheck | Promise<HealthCheck>;
-
 export interface CreateFastifyAppOptions {
   /** Logical service name, surfaced via `/health.serviceName`. */
   serviceName: string;
@@ -74,8 +71,14 @@ export interface CreateFastifyAppOptions {
    * health check so `/health` reports `down` until they are configured.
    */
   requiredSecrets: readonly string[];
-  /** Optional additional health checks (e.g. Firestore connectivity). */
-  extraHealthChecks?: readonly HealthCheckProducer[];
+  /**
+   * Optional additional functional health-check probes (e.g. Firestore
+   * connectivity). Each probe is a `HealthCheck` with a `name` and an async
+   * `check()` returning `{ ok: true } | { ok: false; detail?: string }`. The
+   * probes are passed to `registerHealthCheck`, which runs them on every
+   * `GET /health` request, measures latency, and assembles the response.
+   */
+  extraHealthChecks?: readonly HealthCheck[];
   /** Service-specific route registration. */
   registerRoutes: (app: FastifyInstance) => Promise<void>;
   /**
@@ -166,53 +169,19 @@ export async function createFastifyApp(opts: CreateFastifyAppOptions): Promise<F
     }
   );
 
-  app.get(
-    '/health',
-    {
-      schema: {
-        operationId: 'getHealth',
-        summary: 'Health check',
-        description: 'Health check endpoint',
-        tags: ['system'],
-        response: {
-          200: {
-            description: 'Service health status',
-            type: 'object',
-            required: ['status', 'serviceName', 'version', 'timestamp', 'checks'],
-            properties: {
-              status: { type: 'string', enum: ['ok', 'degraded', 'down'] },
-              serviceName: { type: 'string' },
-              version: { type: 'string' },
-              timestamp: { type: 'string', format: 'date-time' },
-              checks: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  required: ['name', 'status', 'latencyMs'],
-                  properties: {
-                    name: { type: 'string' },
-                    status: { type: 'string', enum: ['ok', 'degraded', 'down'] },
-                    latencyMs: { type: 'number' },
-                    details: { type: 'object', nullable: true },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    async (_req, reply) => {
-      const started = Date.now();
-      const checks: HealthCheck[] = [checkSecrets([...opts.requiredSecrets])];
-      for (const producer of opts.extraHealthChecks ?? []) {
-        checks.push(await Promise.resolve(producer()));
-      }
-      const response = buildHealthResponse(opts.serviceName, opts.serviceVersion, checks);
-      void reply.header('x-health-duration-ms', String(Date.now() - started));
-      return await reply.type('application/json').send(response);
-    }
-  );
+  // Delegate `/health` to the shared `registerHealthCheck` plugin so the
+  // response shape, latency header, and OpenAPI schema stay in lock-step
+  // with the rest of the platform. The `secrets` probe is always present;
+  // services append their own probes via `extraHealthChecks`.
+  const checks: HealthCheck[] = [
+    secretsHealthCheck([...opts.requiredSecrets]),
+    ...(opts.extraHealthChecks ?? []),
+  ];
+  await registerHealthCheck(app, {
+    serviceName: opts.serviceName,
+    version: opts.serviceVersion,
+    checks,
+  });
 
   return await Promise.resolve(app);
 }
