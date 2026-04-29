@@ -364,8 +364,7 @@ export class AttemptLifecycle {
       message.length > 200 ? message.slice(0, 200) + '…' : message
     );
 
-    const prompt =
-      task.agentType === 'ask_agent' ? message : buildResumePreambleFn(task) + message;
+    const prompt = task.agentType === 'ask_agent' ? message : buildResumePreambleFn(task) + message;
     task.pendingResumeStart = {
       prompt,
       acceptedAt: new Date().toISOString(),

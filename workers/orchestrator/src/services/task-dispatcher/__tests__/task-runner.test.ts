@@ -93,17 +93,12 @@ describe('TaskRunner', () => {
 
       await runner.handleRuntimeEvents(task, events);
 
-      expect(harness.ctx.logForwarder.appendChunk).toHaveBeenCalledWith(
-        'task-1',
-        'claude line'
-      );
+      expect(harness.ctx.logForwarder.appendChunk).toHaveBeenCalledWith('task-1', 'claude line');
     });
 
     it('persists runtimeSessionId on runtime_session_started', async () => {
       const task = makeTask({ runtime: 'codex' });
-      const events: RuntimeEvent[] = [
-        { type: 'runtime_session_started', sessionId: 'sess-xyz' },
-      ];
+      const events: RuntimeEvent[] = [{ type: 'runtime_session_started', sessionId: 'sess-xyz' }];
 
       await runner.handleRuntimeEvents(task, events);
 
@@ -116,6 +111,54 @@ describe('TaskRunner', () => {
       const events: RuntimeEvent[] = [{ type: 'attempt_completed', exitCode: 0 }];
 
       await runner.handleRuntimeEvents(task, events);
+
+      expect(harness.ctx.taskExitCodes.get('task-1')).toBe(0);
+      expect(harness.ctx.attemptCompletionSignals.has('task-1')).toBe(true);
+    });
+
+    it('skips appendChunk when log event carries empty text', async () => {
+      const task = makeTask();
+      const events: RuntimeEvent[] = [{ type: 'log', text: '' }];
+
+      await runner.handleRuntimeEvents(task, events);
+
+      expect(harness.ctx.logForwarder.appendChunk).not.toHaveBeenCalled();
+      expect(harness.ctx.logForwarder.appendRawChunk).not.toHaveBeenCalled();
+    });
+
+    it('routes codex log events through appendRawChunk (preserving raw json)', async () => {
+      const task = makeTask({ runtime: 'codex' });
+      const events: RuntimeEvent[] = [{ type: 'log', text: '{"role":"assistant"}' }];
+
+      await runner.handleRuntimeEvents(task, events);
+
+      expect(harness.ctx.logForwarder.appendRawChunk).toHaveBeenCalledWith(
+        'task-1',
+        '{"role":"assistant"}'
+      );
+    });
+
+    it('does NOT persist runtimeSessionId on duplicate session_started with same id', async () => {
+      const task = makeTask({ runtime: 'codex' });
+      task.runtimeSessionId = 'sess-xyz';
+      const events: RuntimeEvent[] = [{ type: 'runtime_session_started', sessionId: 'sess-xyz' }];
+
+      await runner.handleRuntimeEvents(task, events);
+
+      // Same id → no save (only logs).
+      expect(harness.saveTask).not.toHaveBeenCalled();
+      expect(task.runtimeSessionId).toBe('sess-xyz');
+    });
+
+    it('does NOT re-record exit code when attempt_completed fires twice for the same task', async () => {
+      const task = makeTask();
+      // First signal sets the exit code + adds the completion-signal marker.
+      await runner.handleRuntimeEvents(task, [{ type: 'attempt_completed', exitCode: 0 }]);
+      expect(harness.ctx.taskExitCodes.get('task-1')).toBe(0);
+
+      // Second emission with a different exit code must be ignored — the
+      // first signal is the canonical attempt outcome.
+      await runner.handleRuntimeEvents(task, [{ type: 'attempt_completed', exitCode: 99 }]);
 
       expect(harness.ctx.taskExitCodes.get('task-1')).toBe(0);
       expect(harness.ctx.attemptCompletionSignals.has('task-1')).toBe(true);

@@ -79,9 +79,7 @@ export function makeContextHarness(initialTasks: Task[] = []): ContextHarness {
   const destroyWorker = vi.fn().mockResolvedValue(undefined);
   const isWorkerRunning = vi.fn().mockResolvedValue(true);
   const pullImage = vi.fn().mockResolvedValue('pulled-image');
-  const createWorker = vi
-    .fn()
-    .mockResolvedValue({ containerId: 'cont-abc' });
+  const createWorker = vi.fn().mockResolvedValue({ containerId: 'cont-abc' });
   const cleanupTaskSession = vi.fn().mockResolvedValue(undefined);
   const webhookSend = vi.fn().mockResolvedValue(undefined);
   const logForwarderFlushAndStop = vi.fn().mockResolvedValue(undefined);

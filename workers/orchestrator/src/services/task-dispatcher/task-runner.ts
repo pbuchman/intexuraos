@@ -264,7 +264,6 @@ export class TaskRunner {
 
     for (const event of events) {
       if (event.type === 'log') {
-        /* v8 ignore start -- upstream: event.text empty string branch requires runtime adapter to emit an empty log event; FakeIsolationProvider and both runtime fakes always produce non-empty log chunks so the empty-text skip is unreachable in unit tests @preserve */
         if (event.text !== '') {
           if (runtimeName === 'codex') {
             ctx.logForwarder.appendRawChunk(taskId, event.text);
@@ -272,23 +271,19 @@ export class TaskRunner {
             ctx.logForwarder.appendChunk(taskId, event.text);
           }
         }
-        /* v8 ignore stop @preserve */
         continue;
       }
 
       if (event.type === 'runtime_session_started') {
-        /* v8 ignore start -- upstream: runtimeSessionId equality branch requires a runtime to emit a duplicate runtime_session_started event with the same sessionId; FakeIsolationProvider emits each session id exactly once so the equal-id skip is unreachable in unit tests @preserve */
         if (task.runtimeSessionId !== event.sessionId) {
           task.runtimeSessionId = event.sessionId;
           shouldPersistTask = true;
         }
-        /* v8 ignore stop @preserve */
         ctx.logger.info({ taskId, sessionId: event.sessionId }, 'Detected runtime session start');
         continue;
       }
 
       if (event.type === 'attempt_completed') {
-        /* v8 ignore start -- upstream: attemptCompletionSignals.has guard requires runtime to emit attempt_completed twice for the same task without reset; FakeIsolationProvider emits each attempt_completed once per attempt so the duplicate-signal skip is unreachable in unit tests @preserve */
         if (!ctx.attemptCompletionSignals.has(taskId)) {
           ctx.taskExitCodes.set(taskId, event.exitCode);
           ctx.attemptCompletionSignals.add(taskId);
@@ -297,7 +292,6 @@ export class TaskRunner {
             'Detected runtime stream result; signaling attempt completion'
           );
         }
-        /* v8 ignore stop @preserve */
         continue;
       }
 

@@ -5,10 +5,7 @@ import type { SendMessageResult, SendMessageError } from '../../types/schemas.js
 import type { DispatcherContext } from './dispatcher-context.js';
 import type { AttemptLifecycle } from './attempt-lifecycle.js';
 import type { DispatchError, CancelError } from '../task-dispatcher.js';
-import {
-  checkDockerAvailability,
-  checkWorkerAuthAvailability,
-} from './preflight.js';
+import { checkDockerAvailability, checkWorkerAuthAvailability } from './preflight.js';
 
 /**
  * INT-1551 §E.6: public dispatcher operations extracted from the
@@ -148,10 +145,7 @@ export async function cancelTask(
     try {
       await ctx.logForwarder.flushAndStop(taskId);
     } catch (flushError: unknown) {
-      ctx.logger.error(
-        { taskId, error: flushError },
-        'Failed to flush logs during cancellation'
-      );
+      ctx.logger.error({ taskId, error: flushError }, 'Failed to flush logs during cancellation');
     }
     ctx.logForwarder.unregisterTask(taskId);
     ctx.isolation.tokenRefresher.unregisterTask(taskId);

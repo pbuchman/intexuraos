@@ -180,13 +180,14 @@ shutdown loop with an `AbortController` + `Promise.race` graceful drain.
 The process supervisor (systemd / LaunchAgent / PM2) MUST grant the
 orchestrator at least **32 seconds** between SIGTERM and SIGKILL — that
 gives the in-process drain (30 s) a 2 s safety margin for the `app.close()`
-+ interval cleanup + flush that bracket the race.
 
-| Supervisor                | Setting                                | Required value |
-| ------------------------- | -------------------------------------- | -------------- |
-| systemd                   | `TimeoutStopSec=` in the service unit  | `>= 32s`       |
-| macOS LaunchAgent (`launchd`) | `ExitTimeOut` plist key            | `>= 32`        |
-| PM2 (`ecosystem.config.cjs`) | `kill_timeout` (ms)                | `>= 32000`     |
+- interval cleanup + flush that bracket the race.
+
+| Supervisor                    | Setting                               | Required value |
+| ----------------------------- | ------------------------------------- | -------------- |
+| systemd                       | `TimeoutStopSec=` in the service unit | `>= 32s`       |
+| macOS LaunchAgent (`launchd`) | `ExitTimeOut` plist key               | `>= 32`        |
+| PM2 (`ecosystem.config.cjs`)  | `kill_timeout` (ms)                   | `>= 32000`     |
 
 The orchestrator is currently **not** governed by PM2 — it runs as a native
 Node.js process under systemd (Linux home-dev) or a macOS LaunchAgent. The
@@ -196,13 +197,13 @@ in that scenario.
 
 ### Diagnostic Logs
 
-| Log message                                                                       | Trigger                                            |
-| --------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `Shutdown requested` (`signal: SIGTERM\|SIGINT`)                                  | Handler entered, idempotent re-entry returns early |
-| `In-flight handlers drained` (`drainedCount: N`)                                  | Drain arm of the race won within budget            |
-| `Shutdown timeout reached; forcing exit with in-flight handlers still pending`    | Timeout arm won — handlers exceeded 30 s budget    |
-| `Orchestrator shutdown complete`                                                  | Race resolved (either arm) and flush about to run  |
-| `flush() raised during shutdown; continuing exit`                                 | Optional flush callback rejected (process still exits 0) |
+| Log message                                                                    | Trigger                                                  |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `Shutdown requested` (`signal: SIGTERM\|SIGINT`)                               | Handler entered, idempotent re-entry returns early       |
+| `In-flight handlers drained` (`drainedCount: N`)                               | Drain arm of the race won within budget                  |
+| `Shutdown timeout reached; forcing exit with in-flight handlers still pending` | Timeout arm won — handlers exceeded 30 s budget          |
+| `Orchestrator shutdown complete`                                               | Race resolved (either arm) and flush about to run        |
+| `flush() raised during shutdown; continuing exit`                              | Optional flush callback rejected (process still exits 0) |
 
 ---
 

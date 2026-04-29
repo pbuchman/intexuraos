@@ -84,10 +84,7 @@ export interface DispatcherContextDeps {
   readonly turnMetricsCollector: TurnMetricsCollector | undefined;
   readonly agentComplianceValidator: AgentComplianceValidator | undefined;
   readonly completionMaxAttempts: number;
-  readonly extractResumeSummaryFn: (
-    taskId: string,
-    rawLogs: string
-  ) => Promise<string | undefined>;
+  readonly extractResumeSummaryFn: (taskId: string, rawLogs: string) => Promise<string | undefined>;
   readonly verifyOverride: VerifierOverrideForTests['verify'] | undefined; // @allow-undefined-type -- mirrors the source field on TaskDispatcher; using `?:` would change the type identity used by sub-modules
   readonly preserveWorkerContainers: boolean;
 }

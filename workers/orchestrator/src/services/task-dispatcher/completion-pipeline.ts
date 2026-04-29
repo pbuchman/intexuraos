@@ -1,10 +1,7 @@
 import type { Task, TaskError, TaskResult } from '../../types/task.js';
 import type { CompletionAgentType, CompletionVerifierVerdict } from '../completion-verifier.js';
 import { getLast50ClaudeLines, getLast50Lines } from '../completion-verifier.js';
-import {
-  CODE_TASK_METRICS,
-  mapTerminalStatusToMetricStatus,
-} from '../../metrics.js';
+import { CODE_TASK_METRICS, mapTerminalStatusToMetricStatus } from '../../metrics.js';
 import {
   buildMissingFieldsPrompt as buildMissingFieldsPromptFn,
   getTaskEventUrl as getTaskEventUrlFn,
@@ -292,10 +289,7 @@ export class CompletionPipeline {
     );
   }
 
-  async executeComplianceValidation(
-    task: Task,
-    input: ComplianceValidationInput
-  ): Promise<void> {
+  async executeComplianceValidation(task: Task, input: ComplianceValidationInput): Promise<void> {
     await executeComplianceValidationFn(
       this.ctx.agentComplianceValidator,
       this.ctx.webhookClient,

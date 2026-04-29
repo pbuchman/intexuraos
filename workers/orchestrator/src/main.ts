@@ -382,7 +382,11 @@ function setupShutdownHandlers(handlers: ShutdownHandlers): void {
     // tracked fire-and-forget handler has resolved or rejected; the timeout
     // arm guarantees we never block longer than `SHUTDOWN_TIMEOUT_MS`.
     const inFlight = handlers.dispatcher.getInFlightPromises();
-    let timeoutHandle: NodeJS.Timeout | undefined;
+    // The Promise constructor synchronously invokes the executor, so
+    // `setTimeout` runs and assigns `timeoutHandle` before this expression
+    // returns — no `undefined` window exists. The `as` cast tells TypeScript
+    // we have a definite value (avoiding an unreachable narrowing branch).
+    let timeoutHandle!: NodeJS.Timeout;
     const timeoutPromise = new Promise<'timeout'>((resolve) => {
       timeoutHandle = setTimeout(() => {
         resolve('timeout');
@@ -394,19 +398,14 @@ function setupShutdownHandlers(handlers: ShutdownHandlers): void {
     ]);
     // Always clear the timer so the process can exit cleanly even if the
     // drain arm won the race.
-    if (timeoutHandle !== undefined) {
-      clearTimeout(timeoutHandle);
-    }
+    clearTimeout(timeoutHandle);
     if (winner === 'timeout') {
       handlers.logger.warn(
         { inFlightCount: inFlight.length },
         'Shutdown timeout reached; forcing exit with in-flight handlers still pending'
       );
     } else {
-      handlers.logger.info(
-        { drainedCount: inFlight.length },
-        'In-flight handlers drained'
-      );
+      handlers.logger.info({ drainedCount: inFlight.length }, 'In-flight handlers drained');
     }
 
     handlers.logger.info({ message: 'Orchestrator shutdown complete' });

@@ -38,10 +38,7 @@ export interface DispatcherContext {
   readonly turnMetricsCollector: TurnMetricsCollector | undefined;
   readonly agentComplianceValidator: AgentComplianceValidator | undefined;
   readonly completionMaxAttempts: number;
-  readonly extractResumeSummaryFn: (
-    taskId: string,
-    rawLogs: string
-  ) => Promise<string | undefined>;
+  readonly extractResumeSummaryFn: (taskId: string, rawLogs: string) => Promise<string | undefined>;
   readonly verifyOverride: VerifierOverrideForTests['verify'] | undefined;
   readonly preserveWorkerContainers: boolean;
 

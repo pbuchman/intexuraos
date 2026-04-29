@@ -40,16 +40,9 @@ import {
   appendTaggedTaskLog as appendTaggedTaskLogFn,
   flushTaskLogs as flushTaskLogsFn,
 } from './task-dispatcher/log-streaming.js';
-import {
-  checkForResult as checkForResultFn,
-} from './task-dispatcher/webhook-callbacks.js';
-import {
-  getRuntimeDisplayName as getRuntimeDisplayNameFn,
-} from './task-dispatcher/lifecycle.js';
-import {
-  INACTIVITY_TIMEOUT_MS,
-  MAX_INACTIVITY_RESTARTS,
-} from './task-dispatcher/retry-logic.js';
+import { checkForResult as checkForResultFn } from './task-dispatcher/webhook-callbacks.js';
+import { getRuntimeDisplayName as getRuntimeDisplayNameFn } from './task-dispatcher/lifecycle.js';
+import { INACTIVITY_TIMEOUT_MS, MAX_INACTIVITY_RESTARTS } from './task-dispatcher/retry-logic.js';
 import type { DispatcherContext } from './task-dispatcher/dispatcher-context.js';
 import { TaskRunner } from './task-dispatcher/task-runner.js';
 import { TaskTimers } from './task-dispatcher/task-timers.js';
@@ -318,8 +311,7 @@ export class TaskDispatcher {
         startCompletionMonitoring: (taskId): void => {
           this.taskTimers.startCompletionMonitoring(taskId);
         },
-        failAcceptedResume: (task, error) =>
-          this.attemptLifecycle.failAcceptedResume(task, error),
+        failAcceptedResume: (task, error) => this.attemptLifecycle.failAcceptedResume(task, error),
         getRuntimeDisplayName: (task) => getRuntimeDisplayNameFn(task),
         getDefaultRepository: () => 'pbuchman/intexuraos',
       }
@@ -505,10 +497,13 @@ export class TaskDispatcher {
     verification: CompletionVerifierVerdict,
     agentType: CompletionAgentType
   ): TaskResult {
-    return this.completionPipeline.buildResultFromVerification(task, gitResult, verification, agentType);
+    return this.completionPipeline.buildResultFromVerification(
+      task,
+      gitResult,
+      verification,
+      agentType
+    );
   }
-
-
 
   /**
    * @internal
@@ -563,7 +558,6 @@ export class TaskDispatcher {
     return parseContinuationPrOutputFn(taskId, prOutput, this.logger);
   }
 
-
   async prepareComplianceValidationInput(
     task: Task,
     finalResult: TaskResult,
@@ -576,10 +570,7 @@ export class TaskDispatcher {
     );
   }
 
-  async executeComplianceValidation(
-    task: Task,
-    input: ComplianceValidationInput
-  ): Promise<void> {
+  async executeComplianceValidation(task: Task, input: ComplianceValidationInput): Promise<void> {
     await this.completionPipeline.executeComplianceValidation(task, input);
   }
 
