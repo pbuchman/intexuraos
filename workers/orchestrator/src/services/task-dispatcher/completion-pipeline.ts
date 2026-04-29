@@ -735,9 +735,15 @@ export class CompletionPipeline {
       await this.finalizeTaskWithResult(task, completionAgentType, finalResult, keepLogOpen);
 
       if (complianceInput !== undefined) {
-        void this.executeComplianceValidation(task, complianceInput).finally(() => {
-          void this.flushAndCloseLogForwarder(task.taskId);
-        });
+        // Track on the in-flight set so SIGTERM-driven shutdown awaits the
+        // post-finalize compliance call + log-forwarder flush before exit
+        // (review I-2). Without tracking, the 30 s drain window completes
+        // immediately and the work is lost.
+        void ctx.trackInFlight(
+          this.executeComplianceValidation(task, complianceInput).finally(() => {
+            void this.flushAndCloseLogForwarder(task.taskId);
+          })
+        );
       }
       /* v8 ignore stop @preserve */
       return;

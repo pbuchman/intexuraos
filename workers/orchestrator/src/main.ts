@@ -82,6 +82,18 @@ export async function main(
 
     logger.info({ port: config.port }, 'Orchestrator HTTP server started');
 
+    // INT-1551 §E.7: top-level AbortController threaded down to TaskTimers
+    // and TaskRunner so the shutdown handler can cancel pending timers and
+    // bail out of new attempts. The signal MUST NOT short-circuit normal
+    // operation: if it never aborts, behavior is unchanged.
+    //
+    // Wired BEFORE `runStartupRecovery` so timers scheduled by
+    // `dispatcher.adoptTask`/`recoverPendingResumeTask` register their abort
+    // listeners against this controller; otherwise adopted tasks' timers
+    // would escape SIGTERM cancellation (review I-1).
+    const shutdownController = new AbortController();
+    dispatcher.setShutdownSignal(shutdownController.signal);
+
     // Run startup recovery
     await runStartupRecovery(
       statePersistence,
@@ -100,13 +112,6 @@ export async function main(
 
     // Set ready status
     serviceState.status = 'ready';
-
-    // INT-1551 §E.7: top-level AbortController threaded down to TaskTimers
-    // and TaskRunner so the shutdown handler can cancel pending timers and
-    // bail out of new attempts. The signal MUST NOT short-circuit normal
-    // operation: if it never aborts, behavior is unchanged.
-    const shutdownController = new AbortController();
-    dispatcher.setShutdownSignal(shutdownController.signal);
 
     // Handle shutdown signals
     setupShutdownHandlers({
