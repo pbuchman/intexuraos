@@ -16,7 +16,18 @@ import type { Logger } from '@intexuraos/common-core';
 const TOKEN_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const WEBHOOK_RETRY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-const SHUTDOWN_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+/**
+ * INT-1551 §E.8: graceful-shutdown drain budget. Replaces the legacy 10-min
+ * polling loop. The orchestrator currently runs under systemd (Linux home-dev)
+ * or a macOS LaunchAgent; both grant the process at least 32 s before SIGKILL,
+ * which leaves a 2 s safety margin on top of this budget. See
+ * `workers/orchestrator/DEPLOYMENT.md` "Shutdown Behavior" for the contract.
+ *
+ * If the orchestrator is ever moved into PM2 (`ecosystem.config.cjs`), the
+ * matching `kill_timeout` MUST be raised to 32_000+ ms — the default 5_000 ms
+ * is too short for in-flight worker drain to complete.
+ */
+const SHUTDOWN_TIMEOUT_MS = 30_000; // 30 seconds
 
 interface ServiceState {
   status: OrchestratorStatus;
@@ -71,6 +82,18 @@ export async function main(
 
     logger.info({ port: config.port }, 'Orchestrator HTTP server started');
 
+    // INT-1551 §E.7: top-level AbortController threaded down to TaskTimers
+    // and TaskRunner so the shutdown handler can cancel pending timers and
+    // bail out of new attempts. The signal MUST NOT short-circuit normal
+    // operation: if it never aborts, behavior is unchanged.
+    //
+    // Wired BEFORE `runStartupRecovery` so timers scheduled by
+    // `dispatcher.adoptTask`/`recoverPendingResumeTask` register their abort
+    // listeners against this controller; otherwise adopted tasks' timers
+    // would escape SIGTERM cancellation (review I-1).
+    const shutdownController = new AbortController();
+    dispatcher.setShutdownSignal(shutdownController.signal);
+
     // Run startup recovery
     await runStartupRecovery(
       statePersistence,
@@ -100,6 +123,7 @@ export async function main(
       heartbeatManager,
       logger,
       isolationProvider,
+      shutdownController,
       ...(flush !== undefined ? { flush } : {}),
     });
 
@@ -322,6 +346,11 @@ interface ShutdownHandlers {
   logger: Logger;
   isolationProvider: IsolationProvider | undefined; // @allow-undefined-type -- pre-existing tri-state: shutdown handler differentiates "no provider configured" from "provider with cleanup hooks"
   /**
+   * INT-1551 §E.7: top-level controller fired before draining in-flight
+   * handlers so `TaskTimers` and `TaskRunner` can cancel pending work.
+   */
+  shutdownController: AbortController;
+  /**
    * Flush callback from `initWorker()` (INT-1565 §S5). Awaited last so log
    * lines emitted during shutdown make it to the unified Sentry/OTel sinks.
    * `undefined` when called by tests that bypass the bootstrap logger.
@@ -348,18 +377,41 @@ function setupShutdownHandlers(handlers: ShutdownHandlers): void {
     handlers.isolationProvider?.stopHealthMonitor?.();
     handlers.heartbeatManager.stop();
 
-    // Wait for running tasks (up to timeout)
-    const startTime = Date.now();
-    while (Date.now() - startTime < SHUTDOWN_TIMEOUT_MS) {
-      const running = handlers.dispatcher.getRunningCount();
-      if (running === 0) {
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-    }
+    // INT-1551 §E.7: fire the abort signal BEFORE awaiting drain so
+    // dispatcher sub-modules see the signal and start cleaning up pending
+    // timers / refusing new worker startups while we await in-flight work.
+    handlers.shutdownController.abort();
 
-    // Save state
-    await handlers.statePersistence.save(await handlers.statePersistence.load());
+    // INT-1551 §E.7: replace the legacy `getRunningCount()` polling loop
+    // with a Promise.race. `Promise.allSettled` settles only when every
+    // tracked fire-and-forget handler has resolved or rejected; the timeout
+    // arm guarantees we never block longer than `SHUTDOWN_TIMEOUT_MS`.
+    const inFlight = handlers.dispatcher.getInFlightPromises();
+    // The Promise constructor synchronously invokes the executor, so
+    // `setTimeout` runs and assigns `timeoutHandle` before this expression
+    // returns — no `undefined` window exists. The `as` cast tells TypeScript
+    // we have a definite value (avoiding an unreachable narrowing branch).
+    let timeoutHandle!: NodeJS.Timeout;
+    const timeoutPromise = new Promise<'timeout'>((resolve) => {
+      timeoutHandle = setTimeout(() => {
+        resolve('timeout');
+      }, SHUTDOWN_TIMEOUT_MS);
+    });
+    const winner = await Promise.race([
+      Promise.allSettled(inFlight).then(() => 'drained' as const),
+      timeoutPromise,
+    ]);
+    // Always clear the timer so the process can exit cleanly even if the
+    // drain arm won the race.
+    clearTimeout(timeoutHandle);
+    if (winner === 'timeout') {
+      handlers.logger.warn(
+        { inFlightCount: inFlight.length },
+        'Shutdown timeout reached; forcing exit with in-flight handlers still pending'
+      );
+    } else {
+      handlers.logger.info({ drainedCount: inFlight.length }, 'In-flight handlers drained');
+    }
 
     handlers.logger.info({ message: 'Orchestrator shutdown complete' });
 

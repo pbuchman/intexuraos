@@ -155,6 +155,58 @@ Set by `docker-provider.ts` when creating containers:
 
 ---
 
+## Shutdown Behavior
+
+INT-1551 §E.7-§E.8 replaced the orchestrator's legacy 10-minute polling
+shutdown loop with an `AbortController` + `Promise.race` graceful drain.
+
+### Drain Budget
+
+`SHUTDOWN_TIMEOUT_MS = 30_000` (30 s) — defined in
+`workers/orchestrator/src/main.ts`. On SIGTERM / SIGINT the shutdown handler:
+
+1. Closes the Fastify HTTP server (no new requests).
+2. Clears background intervals (token refresh, webhook retry, isolation
+   periodic cleanup, isolation health monitor, heartbeat).
+3. Aborts a top-level `AbortController` threaded into `TaskDispatcher` →
+   `TaskTimers` (cancels per-task `setTimeout` / `setInterval` handles)
+   and `TaskRunner` (refuses brand-new container creations).
+4. Awaits in-flight handler promises via
+   `Promise.race([Promise.allSettled(getInFlightPromises()), 30s timeout])`.
+5. Calls the optional `flush()` (Pino + Sentry) before `process.exit(0)`.
+
+### Process-Supervisor Contract
+
+The process supervisor (systemd / LaunchAgent / PM2) MUST grant the
+orchestrator at least **32 seconds** between SIGTERM and SIGKILL — that
+gives the in-process drain (30 s) a 2 s safety margin for the `app.close()`
+
+- interval cleanup + flush that bracket the race.
+
+| Supervisor                    | Setting                               | Required value |
+| ----------------------------- | ------------------------------------- | -------------- |
+| systemd                       | `TimeoutStopSec=` in the service unit | `>= 32s`       |
+| macOS LaunchAgent (`launchd`) | `ExitTimeOut` plist key               | `>= 32`        |
+| PM2 (`ecosystem.config.cjs`)  | `kill_timeout` (ms)                   | `>= 32000`     |
+
+The orchestrator is currently **not** governed by PM2 — it runs as a native
+Node.js process under systemd (Linux home-dev) or a macOS LaunchAgent. The
+default PM2 `kill_timeout` for app services is `5000` ms, which would be
+**too short** if the orchestrator were ever migrated; raise it to `32000` ms
+in that scenario.
+
+### Diagnostic Logs
+
+| Log message                                                                    | Trigger                                                  |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `Shutdown requested` (`signal: SIGTERM\|SIGINT`)                               | Handler entered, idempotent re-entry returns early       |
+| `In-flight handlers drained` (`drainedCount: N`)                               | Drain arm of the race won within budget                  |
+| `Shutdown timeout reached; forcing exit with in-flight handlers still pending` | Timeout arm won — handlers exceeded 30 s budget          |
+| `Orchestrator shutdown complete`                                               | Race resolved (either arm) and flush about to run        |
+| `flush() raised during shutdown; continuing exit`                              | Optional flush callback rejected (process still exits 0) |
+
+---
+
 ## E2E Testing
 
 ### Prerequisites
