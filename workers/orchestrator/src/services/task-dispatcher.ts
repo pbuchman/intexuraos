@@ -11,13 +11,11 @@ import type { LogForwarder } from './log-forwarder.js';
 import type { WebhookClient } from './webhook-client.js';
 import type { StatusUpdateClient } from './status-update-client.js';
 import type { GitHubTokenService } from '../github/token-service.js';
-import type { IsolationProvider, WorkerConfig, WorkerHandle } from './isolation/types.js';
+import type { IsolationProvider } from './isolation/types.js';
 import { WORKER_TYPES } from './isolation/types.js';
 import type { TokenRefresher } from './isolation/token-refresher.js';
 import type { ApiKeyValidator } from './api-key-validator.js';
 import type { WorkerAuthProvider, WorkerAuthRegistry } from './worker-auth/index.js';
-import { buildSystemPrompt } from './system-prompt.js';
-import { stripDockerHeaders } from './log-formatter.js';
 import { ActivityTimeoutManager } from './activity-timeout-manager.js';
 import {
   type CompletionAgentType,
@@ -27,7 +25,7 @@ import {
   getLast50Lines,
   verifyCompletion,
 } from './completion-verifier.js';
-import { getRuntime, type RuntimeEvent, type WorkerRuntime } from './runtime/index.js';
+import type { RuntimeEvent, WorkerRuntime } from './runtime/index.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
 import type {
   AgentComplianceValidator,
@@ -69,19 +67,14 @@ import {
   getRuntimeDisplayName as getRuntimeDisplayNameFn,
 } from './task-dispatcher/lifecycle.js';
 import {
-  clearTaskTimers as clearTaskTimersFn,
-  TASK_TIMEOUT_WARNING_MS,
-  TASK_TIMEOUT_KILL_MS,
-  COMPLETION_CHECK_INTERVAL_MS,
-  ACTIVITY_HEARTBEAT_THRESHOLD_MS,
-  IMAGE_PULL_TIMEOUT_MS,
-  CONTAINER_CREATE_TIMEOUT_MS,
-  ZOMBIE_CLEANUP_TIMEOUT_MS,
   EVIDENCE_CAPTURE_TIMEOUT_MS,
   WORKER_DESTROY_TIMEOUT_MS,
   INACTIVITY_TIMEOUT_MS,
   MAX_INACTIVITY_RESTARTS,
 } from './task-dispatcher/retry-logic.js';
+import type { DispatcherContext } from './task-dispatcher/dispatcher-context.js';
+import { TaskRunner } from './task-dispatcher/task-runner.js';
+import { TaskTimers } from './task-dispatcher/task-timers.js';
 import { classifyAttempt, type AttemptClassification } from './task-dispatcher/classify-attempt.js';
 import { buildRuntimeHardErrorMessage } from './task-dispatcher/error-messages.js';
 import {
@@ -378,6 +371,13 @@ export class TaskDispatcher {
    */
   private readonly metrics: MetricsClient;
 
+  /** INT-1551 §E.2: per-attempt execution module. */
+  private readonly taskRunner: TaskRunner;
+  /** INT-1551 §E.3: timer/monitor lifecycle module. */
+  private readonly taskTimers: TaskTimers;
+  /** INT-1551 §10: shared state and dependency container for the sub-modules. */
+  private readonly context: DispatcherContext;
+
   constructor(
     private readonly config: OrchestratorConfig,
     private readonly statePersistence: StatePersistence,
@@ -422,6 +422,55 @@ export class TaskDispatcher {
         });
       }
     );
+
+    // INT-1551 §10: build the shared dispatcher context once and hand it to
+    // the sub-modules. The dispatcher class still owns the per-task state
+    // Maps/Sets physically; the context simply hands their references to
+    // TaskRunner / TaskTimers so they can mutate in-place.
+    this.context = {
+      logger: this.logger,
+      config: this.config,
+      isolation: this.isolation,
+      logForwarder: this.logForwarder,
+      webhookClient: this.webhookClient,
+      statusUpdateClient: this.statusUpdateClient,
+      statePersistence: this.statePersistence,
+      worktreeManager: this.worktreeManager,
+      metrics: this.metrics,
+      activityTimeoutManager: this.activityTimeoutManager,
+      turnMetricsCollector: this.turnMetricsCollector,
+      agentComplianceValidator: this.agentComplianceValidator,
+      completionMaxAttempts: this.completionMaxAttempts,
+      extractResumeSummaryFn: this.extractResumeSummaryFn,
+      verifyOverride: this.verifyOverride,
+      preserveWorkerContainers: this.preserveWorkerContainers,
+      activeTasks: this.activeTasks,
+      claudeErrors: this.claudeErrors,
+      taskExitCodes: this.taskExitCodes,
+      attemptStartedAt: this.attemptStartedAt,
+      attemptCompletionSignals: this.attemptCompletionSignals,
+      completionInProgress: this.completionInProgress,
+      inactivityRestartInProgress: this.inactivityRestartInProgress,
+      pendingMessages: this.pendingMessages,
+      lastOutputAt: this.lastOutputAt,
+      releaseSlot: (): void => {
+        if (this.runningCount > 0) this.runningCount--;
+      },
+      appendOrchestratorTaskLog: (taskId: string, message: string): void => {
+        this.appendOrchestratorTaskLog(taskId, message);
+      },
+      appendTaggedTaskLog: (taskId: string, tag: string, message: string): void => {
+        this.appendTaggedTaskLog(taskId, tag, message);
+      },
+      flushTaskLogs: (taskId: string): Promise<void> => this.flushTaskLogs(taskId),
+      handleTaskCompletion: (task: Task): Promise<void> => this.handleTaskCompletion(task),
+      checkForResult: (task: Task): Promise<TaskResult | undefined> => this.checkForResult(task),
+      saveTask: (task: Task): Promise<void> => this.saveTask(task),
+      getTask: (taskId: string): Promise<Task | null> => this.getTask(taskId),
+    };
+
+    this.taskRunner = new TaskRunner(this.context);
+    this.taskTimers = new TaskTimers(this.context);
   }
 
   private checkDockerAvailability(): Result<void, DispatchError> | null {
@@ -1239,105 +1288,11 @@ export class TaskDispatcher {
   }
 
   private scheduleTimeoutWarning(taskId: string): void {
-    const timeout = setTimeout(() => {
-      void (async (): Promise<void> => {
-        try {
-          const task = await this.getTask(taskId);
-          /* v8 ignore start -- source-map: claude-runtime detached settimeout closure — branch misattributed by v8 (claude success notify path) @preserve */
-          if (task !== null && task.status === 'running') {
-            this.logger.warn({ taskId }, 'Task approaching 5-hour timeout');
-          }
-          /* v8 ignore stop @preserve */
-        } catch (error) {
-          this.logger.error({ taskId, error }, 'Error in timeout warning callback');
-        }
-      })();
-    }, TASK_TIMEOUT_WARNING_MS);
-
-    this.activeTasks.set(`${taskId}-warning`, timeout);
+    this.taskTimers.scheduleTimeoutWarning(taskId);
   }
 
   private scheduleTimeoutKill(taskId: string): void {
-    const timeout = setTimeout(() => {
-      void (async (): Promise<void> => {
-        try {
-          const task = await this.getTask(taskId);
-          /* v8 ignore start -- source-map: claude-runtime detached settimeout closure — branch misattributed by v8 (claude failure notify path) @preserve */
-          if (task?.status !== 'running') {
-            return;
-          }
-          /* v8 ignore stop @preserve */
-
-          this.logger.warn({ taskId }, 'Task timeout - killing');
-
-          // Stop inactivity timeout early to prevent restart during hard kill
-          this.activityTimeoutManager.stop(taskId);
-
-          // Kill Docker container. Bound by WORKER_DESTROY_TIMEOUT_MS so an
-          // unresponsive docker daemon cannot wedge this callback and leave
-          // the task in 'running' status indefinitely.
-          try {
-            await withTimeout(
-              this.isolation.provider.destroyWorker(taskId),
-              WORKER_DESTROY_TIMEOUT_MS,
-              `destroyWorker timed out after ${String(WORKER_DESTROY_TIMEOUT_MS / 1000)}s`
-            );
-          } catch (destroyError) {
-            this.logger.error(
-              { taskId, error: destroyError },
-              'Failed to destroy worker during timeout kill'
-            );
-          }
-
-          try {
-            await this.logForwarder.flushAndStop(taskId);
-          } catch (flushError: unknown) {
-            this.logger.error(
-              { taskId, error: flushError },
-              'Failed to flush logs during timeout kill'
-            );
-          }
-          this.logForwarder.unregisterTask(taskId);
-          this.isolation.tokenRefresher.unregisterTask(taskId);
-          this.claudeErrors.delete(taskId);
-          this.taskExitCodes.delete(taskId);
-          this.attemptStartedAt.delete(taskId);
-          this.attemptCompletionSignals.delete(taskId);
-          this.completionInProgress.delete(taskId);
-          this.lastOutputAt.delete(taskId);
-          await this.isolation.provider.cleanupTaskSession?.(taskId);
-
-          // Check for PR
-          const result = await this.checkForResult(task);
-
-          // Update task
-          task.status = 'interrupted';
-          task.completedAt = new Date().toISOString();
-          await this.saveTask(task);
-
-          // Decrease running count
-          if (this.runningCount > 0) this.runningCount--;
-          this.clearTaskTimers(taskId);
-
-          // Send webhook
-          await this.webhookClient.send({
-            url: task.webhookUrl,
-            secret: task.webhookSecret,
-            payload: {
-              taskId,
-              status: 'interrupted',
-              result,
-              duration: new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime(),
-            },
-            taskId,
-          });
-        } catch (error) {
-          this.logger.error({ taskId, error }, 'Error in timeout kill callback');
-        }
-      })();
-    }, TASK_TIMEOUT_KILL_MS);
-
-    this.activeTasks.set(`${taskId}-kill`, timeout);
+    this.taskTimers.scheduleTimeoutKill(taskId);
   }
 
   private async handleInactivityRestart(taskId: string): Promise<void> {
@@ -1503,61 +1458,7 @@ export class TaskDispatcher {
   }
 
   private startCompletionMonitoring(taskId: string): void {
-    const checkInterval = setInterval(() => {
-      void (async (): Promise<void> => {
-        try {
-          const task = await this.getTask(taskId);
-          if (task?.status !== 'running') {
-            this.clearTaskTimers(taskId);
-            return;
-          }
-
-          // Check if Docker container is still running
-          const isRunning = await this.isolation.provider.isWorkerRunning(taskId);
-          const attemptCompleted = this.attemptCompletionSignals.has(taskId);
-
-          // Emit activity heartbeat when no Docker output for threshold duration
-          const lastActivity = this.lastOutputAt.get(taskId);
-          if (isRunning && lastActivity !== undefined) {
-            const silenceMs = Date.now() - lastActivity;
-            if (silenceMs >= ACTIVITY_HEARTBEAT_THRESHOLD_MS) {
-              const silenceSeconds = Math.round(silenceMs / 1000);
-              this.appendTaggedTaskLog(
-                taskId,
-                'system',
-                `Still processing... no output for ${String(silenceSeconds)}s`
-              );
-            }
-          }
-
-          if (!isRunning || attemptCompleted) {
-            if (this.completionInProgress.has(taskId)) {
-              return;
-            }
-            // Skip: an inactivity restart is mid-flight (old worker destroyed,
-            // new one not yet up). Running completion now would verify on the
-            // stale transcript of the killed session.
-            if (this.inactivityRestartInProgress.has(taskId)) {
-              this.logger.debug(
-                { taskId },
-                'Completion monitor tick skipped: inactivity restart in progress'
-              );
-              return;
-            }
-            this.completionInProgress.add(taskId);
-            try {
-              await this.handleTaskCompletion(task);
-            } finally {
-              this.completionInProgress.delete(taskId);
-            }
-          }
-        } catch (error) {
-          this.logger.error({ taskId, error }, 'Error in completion monitoring callback');
-        }
-      })();
-    }, COMPLETION_CHECK_INTERVAL_MS);
-
-    this.activeTasks.set(`${taskId}-monitor`, checkInterval);
+    this.taskTimers.startCompletionMonitoring(taskId);
   }
 
   private async handleTaskCompletion(task: Task): Promise<void> {
@@ -2289,8 +2190,25 @@ export class TaskDispatcher {
     return buildResumePreambleFn(task);
   }
 
-  private buildActiveGoalSection(task: Task | undefined, prompt: string): string {
+  /**
+   * @internal
+   * Preserved on the class so existing unit tests that spy via
+   * `internal.buildActiveGoalSection(...)` continue to work after the
+   * implementation moved to `task-dispatcher/prompts.ts` and the only
+   * production caller (`startWorkerAttempt`) moved to `TaskRunner`.
+   */
+  buildActiveGoalSection(task: Task | undefined, prompt: string): string {
     return buildActiveGoalSectionFn(task, prompt);
+  }
+
+  /**
+   * @internal
+   * Preserved on the class so existing unit tests that spy via
+   * `dispatcher.handleRuntimeEvents(...)` continue to work after the
+   * implementation moved to `TaskRunner`.
+   */
+  async handleRuntimeEvents(task: Task, events: RuntimeEvent[]): Promise<void> {
+    await this.taskRunner.handleRuntimeEvents(task, events);
   }
 
   /**
@@ -2470,211 +2388,7 @@ export class TaskDispatcher {
       injectActiveGoal?: boolean;
     }
   ): Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }> {
-    this.attemptCompletionSignals.delete(task.taskId);
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Starting worker attempt: continueSession=${String(params.continueSession)}`
-    );
-    const runtimeName = this.resolveTaskRuntime(task);
-    const workerTypeConfig = WORKER_TYPES[task.workerType];
-    const runtime = getRuntime(runtimeName);
-    const runtimeAttemptState = runtime.createAttemptState(task.taskId, this.logger);
-    if (params.continueSession && task.runtimeSessionId === undefined) {
-      return {
-        ok: false,
-        error: new Error(`${runtimeName} resume requires a persisted runtime session ID`),
-      };
-    }
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Worker config: type=${task.workerType} runtime=${runtimeName} model=${workerTypeConfig.model ?? 'default'} apiUrl=${workerTypeConfig.apiBaseUrl}`
-    );
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Container config: worktree=${task.worktreePath} baseBranch=${task.baseBranch}`
-    );
-    if (params.continueSession) {
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Exec command: /entrypoint.sh run-attempt (reusing existing container)`
-      );
-    } else {
-      const imageInfo = this.isolation.provider.getImageInfo?.();
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Creating new container: image=${imageInfo?.configuredRef ?? 'configured'} cmd=/entrypoint.sh`
-      );
-    }
-
-    const workerConfig: WorkerConfig = {
-      taskId: task.taskId,
-      worktreePath: task.worktreePath,
-      prompt: params.prompt,
-      /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for systemPrompt linear-issue + worker-model fields in workerConfig @preserve */
-      systemPrompt:
-        buildSystemPrompt({
-          taskId: task.taskId,
-          ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
-          ...(task.linearIssueTitle !== undefined && { linearIssueTitle: task.linearIssueTitle }),
-          taskUrl: `https://intexuraos.cloud/#/code-tasks/${task.taskId}`,
-          linearIssueLabels: task.linearIssueLabels,
-          workerType: task.workerType,
-          ...(WORKER_TYPES[task.workerType].model !== undefined && {
-            modelName: WORKER_TYPES[task.workerType].model,
-          }),
-          ...(task.agentType !== undefined && { agentType: task.agentType }),
-          ...(task.trackingCommentId !== undefined && {
-            trackingCommentId: task.trackingCommentId,
-          }),
-          ...(task.continuationPrNumber !== undefined && {
-            continuationPrNumber: task.continuationPrNumber,
-          }),
-          ...(task.continuationPrBranch !== undefined && {
-            continuationPrBranch: task.continuationPrBranch,
-          }),
-          ...(task.executionMemoryContext !== undefined && {
-            executionMemoryContext: task.executionMemoryContext,
-          }),
-          ...(task.reviewTypes !== undefined && { reviewTypes: task.reviewTypes }),
-        }) +
-        /* v8 ignore stop @preserve */
-        (params.injectActiveGoal === true ? this.buildActiveGoalSection(task, params.prompt) : ''),
-      workerType: task.workerType,
-      runtimeOverride: runtimeName,
-      ...(task.runtimeSessionId !== undefined && { runtimeSessionId: task.runtimeSessionId }),
-      secrets: this.isolation.getSecrets(),
-      gcpSaKeyPath: this.isolation.gcpSaKeyPath,
-      githubAppKeyPath: this.isolation.githubAppKeyPath,
-      continueSession: params.continueSession,
-      onLog: (chunk) => {
-        const cleaned = stripDockerHeaders(chunk);
-        this.lastOutputAt.set(task.taskId, Date.now());
-        this.activityTimeoutManager.touch(task.taskId);
-        void this.handleRuntimeEvents(task, runtime.processLogChunk(runtimeAttemptState, cleaned));
-      },
-      onComplete: (exitCode) => {
-        void this.handleRuntimeEvents(task, runtime.flushAttemptState(runtimeAttemptState));
-        this.taskExitCodes.set(task.taskId, exitCode);
-        this.attemptCompletionSignals.add(task.taskId);
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Worker attempt completed: exitCode=${String(exitCode)}`
-        );
-        this.logForwarder.flushAndStop(task.taskId).catch((error: unknown) => {
-          this.logger.error({ taskId: task.taskId, error }, 'Failed to flush logs on completion');
-        });
-      },
-    };
-
-    this.logger.info(
-      {
-        taskId: task.taskId,
-        agentType: task.agentType ?? 'default',
-        systemPromptLength: workerConfig.systemPrompt.length,
-        userPromptLength: params.prompt.length,
-      },
-      'System prompt built'
-    );
-
-    this.claudeErrors.delete(task.taskId);
-    this.taskExitCodes.delete(task.taskId);
-    this.lastOutputAt.set(task.taskId, Date.now());
-    // INT-1455: record attempt start time so the classifier can compute
-    // duration on completion. No matching delete() here — the immediate
-    // set() below replaces any stale value from a prior attempt.
-    this.attemptStartedAt.set(task.taskId, Date.now());
-
-    // Store promise to enable zombie cleanup if timeout fires mid-creation.
-    let createPromise: Promise<WorkerHandle> | undefined;
-
-    try {
-      await this.isolation.tokenRefresher.registerTask(task.taskId);
-
-      // Phase 1/2: Pull worker image (network-bound, variable latency)
-      // Only pull for new containers — continued sessions reuse existing containers.
-      if (!params.continueSession && this.isolation.provider.pullImage !== undefined) {
-        this.appendOrchestratorTaskLog(task.taskId, 'Phase 1/2: Pulling worker image...');
-        const resolvedImage = await withTimeout(
-          this.isolation.provider.pullImage(task.taskId, (message) => {
-            this.appendOrchestratorTaskLog(task.taskId, message);
-          }),
-          IMAGE_PULL_TIMEOUT_MS,
-          `Image pull timed out after ${String(IMAGE_PULL_TIMEOUT_MS / 1000)}s`
-        );
-        workerConfig.resolvedImage = resolvedImage;
-      }
-
-      // Phase 2/2: Create worker container (deterministic, ~40s)
-      if (!params.continueSession) {
-        this.appendOrchestratorTaskLog(task.taskId, 'Phase 2/2: Creating worker container...');
-      }
-      createPromise = this.isolation.provider.createWorker(workerConfig);
-
-      const handle = await withTimeout(
-        createPromise,
-        CONTAINER_CREATE_TIMEOUT_MS,
-        `Container creation timed out after ${String(CONTAINER_CREATE_TIMEOUT_MS / 1000)}s — Docker may be unresponsive`
-      );
-
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Worker container ready: containerId=${handle.containerId}`
-      );
-
-      // Best-effort: send task_started event to code-agent
-      this.webhookClient
-        .send({
-          url: getTaskEventUrl(task.webhookUrl),
-          secret: task.webhookSecret,
-          payload: {
-            taskId: task.taskId,
-            event: 'task_started',
-            attempt: task.attemptCount ?? 1,
-            workerType: task.workerType,
-          },
-          taskId: task.taskId,
-        })
-        .catch((sendError: unknown) => {
-          this.logger.warn(
-            { taskId: task.taskId, error: sendError },
-            'Failed to send task_started event (best-effort)'
-          );
-        });
-
-      this.activityTimeoutManager.start(task.taskId);
-      return { ok: true, containerId: handle.containerId };
-    } catch (error) {
-      // If the timeout fired but createWorker is still in-flight, it may
-      // eventually succeed and leave a zombie container running with no
-      // monitoring. Attach a cleanup handler to destroy it if that happens.
-      createPromise
-        ?.then((handle) => {
-          this.logger.warn(
-            { taskId: task.taskId, containerId: handle.containerId },
-            'Late container created after timeout — destroying zombie'
-          );
-          this.appendOrchestratorTaskLog(
-            task.taskId,
-            `Destroying zombie container created after timeout: ${handle.containerId}`
-          );
-          return withTimeout(
-            this.isolation.provider.destroyWorker(task.taskId),
-            ZOMBIE_CLEANUP_TIMEOUT_MS,
-            'Zombie container cleanup timed out'
-          );
-        })
-        .catch(() => {
-          // createWorker itself failed or cleanup timed out — best effort
-        });
-
-      /* v8 ignore start -- ts-type: error instanceof Error ternary creates branch; FakeIsolationProvider throws Error instances so String(error) branch is unreachable in unit tests @preserve */
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Worker start failed: ${error instanceof Error ? error.message : String(error)}`
-      );
-      /* v8 ignore stop @preserve */
-      return { ok: false, error };
-    }
+    return await this.taskRunner.startWorkerAttempt(task, params);
   }
 
   private async teardownAttempt(taskId: string, keepSession: boolean): Promise<void> {
@@ -2960,66 +2674,6 @@ export class TaskDispatcher {
     return await checkForResultFn(this.logger, task);
   }
 
-  private async handleRuntimeEvents(task: Task, events: RuntimeEvent[]): Promise<void> {
-    let shouldPersistTask = false;
-    const taskId = task.taskId;
-    const runtimeName = this.resolveTaskRuntime(task);
-
-    for (const event of events) {
-      if (event.type === 'log') {
-        /* v8 ignore start -- upstream: event.text empty string branch requires runtime adapter to emit an empty log event; FakeIsolationProvider and both runtime fakes always produce non-empty log chunks so the empty-text skip is unreachable in unit tests @preserve */
-        if (event.text !== '') {
-          if (runtimeName === 'codex') {
-            this.logForwarder.appendRawChunk(taskId, event.text);
-          } else {
-            this.logForwarder.appendChunk(taskId, event.text);
-          }
-        }
-        /* v8 ignore stop @preserve */
-        continue;
-      }
-
-      if (event.type === 'runtime_session_started') {
-        /* v8 ignore start -- upstream: runtimeSessionId equality branch requires a runtime to emit a duplicate runtime_session_started event with the same sessionId; FakeIsolationProvider emits each session id exactly once so the equal-id skip is unreachable in unit tests @preserve */
-        if (task.runtimeSessionId !== event.sessionId) {
-          task.runtimeSessionId = event.sessionId;
-          shouldPersistTask = true;
-        }
-        /* v8 ignore stop @preserve */
-        this.logger.info({ taskId, sessionId: event.sessionId }, 'Detected runtime session start');
-        continue;
-      }
-
-      if (event.type === 'attempt_completed') {
-        /* v8 ignore start -- upstream: attemptCompletionSignals.has guard requires runtime to emit attempt_completed twice for the same task without reset; FakeIsolationProvider emits each attempt_completed once per attempt so the duplicate-signal skip is unreachable in unit tests @preserve */
-        if (!this.attemptCompletionSignals.has(taskId)) {
-          this.taskExitCodes.set(taskId, event.exitCode);
-          this.attemptCompletionSignals.add(taskId);
-          this.logger.info(
-            { taskId, exitCode: event.exitCode },
-            'Detected runtime stream result; signaling attempt completion'
-          );
-        }
-        /* v8 ignore stop @preserve */
-        continue;
-      }
-
-      if (!this.attemptCompletionSignals.has(taskId)) {
-        this.taskExitCodes.set(taskId, event.exitCode);
-        this.attemptCompletionSignals.add(taskId);
-        this.logger.info(
-          { taskId, exitCode: event.exitCode },
-          'Detected runtime stream result; signaling attempt completion'
-        );
-      }
-      this.claudeErrors.set(taskId, event.errorMessage);
-    }
-
-    if (shouldPersistTask) {
-      await this.saveTask(task);
-    }
-  }
-
   private appendOrchestratorTaskLog(taskId: string, message: string): void {
     appendOrchestratorTaskLogFn(this.logForwarder, taskId, message);
   }
@@ -3071,13 +2725,7 @@ export class TaskDispatcher {
   }
 
   private clearTaskTimers(taskId: string): void {
-    clearTaskTimersFn(
-      this.activeTasks,
-      this.activityTimeoutManager,
-      this.completionInProgress,
-      this.attemptCompletionSignals,
-      taskId
-    );
+    this.taskTimers.clearTaskTimers(taskId);
   }
 
   /**
