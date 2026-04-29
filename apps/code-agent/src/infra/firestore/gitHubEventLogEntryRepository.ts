@@ -1,6 +1,6 @@
 import type { Logger } from 'pino';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { getFirestore } from '@intexuraos/infra-firestore';
+import { computeExpireAt, getFirestore, RETENTION_24H_MS } from '@intexuraos/infra-firestore';
 import type {
   CompleteGitHubEventLogEntryInput,
   CreatePendingGitHubEventLogEntryInput,
@@ -55,6 +55,7 @@ export function createFirestoreGitHubEventLogEntryRepository(deps: {
         await collection.doc(input.id).set({
           ...input,
           decisionId: null,
+          expireAt: computeExpireAt(RETENTION_24H_MS),
         });
 
         return ok({

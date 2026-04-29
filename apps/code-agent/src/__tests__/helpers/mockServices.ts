@@ -19,7 +19,6 @@ import { createLinearIssueService } from '../../domain/services/linearIssueServi
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../../domain/usecases/autoArchiveMergedTasks.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/whatsapp-pubsub-client';
@@ -218,13 +217,6 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       logger,
     }),
     detectZombieTasks: createDetectZombieTasksUseCase({
-      codeTaskRepository: createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore,
-        logger,
-      }),
-      logger,
-    }),
-    cleanupTaskLogs: createCleanupTaskLogsUseCase({
       codeTaskRepository: createFirestoreCodeTaskRepository({
         firestore: fakeFirestore,
         logger,

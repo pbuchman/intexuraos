@@ -99,7 +99,6 @@ describe('routes/code split (INT-1430) sanity', () => {
       'POST /internal/code/detect-zombies',
       'POST /internal/code/cancel-with-nonce',
       'POST /internal/code/submit-phase2',
-      'POST /internal/tasks/cleanup-logs',
       // queue-routes
       'GET /code/queue',
       'POST /internal/drain-queue',

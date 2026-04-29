@@ -65,9 +65,6 @@ case "${WORKER}" in
   vm-lifecycle)
     FUNCTIONS=("intexuraos-vm-start-${ENVIRONMENT}" "intexuraos-vm-stop-${ENVIRONMENT}")
     ;;
-  log-cleanup)
-    FUNCTIONS=("intexuraos-log-cleanup-${ENVIRONMENT}")
-    ;;
   *)
     log "WARNING: No function mapping found for worker: ${WORKER}"
     log "Source uploaded but functions not redeployed"

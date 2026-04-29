@@ -40,7 +40,6 @@ import type { StatusMirrorService } from '../../infra/services/statusMirrorServi
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
-import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
@@ -167,10 +166,6 @@ describe('POST /code/tasks/:taskId/archive', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
       archiveStaleGroups: {} as never,
       autoArchiveMergedTasks: {} as never,
       workerSettingsRepo: createWorkerSettingsRepository({
@@ -230,7 +225,6 @@ describe('POST /code/tasks/:taskId/archive', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerSettingsRepo: WorkerSettingsRepository;

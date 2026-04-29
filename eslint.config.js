@@ -964,7 +964,7 @@ export default tseslint.config(
   // Cloud Function workers: GCP SDK types are complex and cause false positives
   // These workers use @google-cloud/compute, @google-cloud/functions-framework, firebase-admin
   {
-    files: ['workers/vm-lifecycle/src/**/*.ts', 'workers/log-cleanup/src/**/*.ts'],
+    files: ['workers/vm-lifecycle/src/**/*.ts'],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',

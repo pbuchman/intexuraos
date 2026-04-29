@@ -13,7 +13,7 @@ import type {
   GitHubPREventRepository,
   RepositoryError,
 } from '../../domain/repositories/gitHubPREventRepository.js';
-import { getFirestore } from '@intexuraos/infra-firestore';
+import { computeExpireAt, getFirestore, RETENTION_24H_MS } from '@intexuraos/infra-firestore';
 
 /** Minimal structural shape used by mapDocToEvent — avoids importing @google-cloud/firestore types directly. */
 interface FirestoreDocSnapshot {
@@ -144,7 +144,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           payload: input.payload,
         };
 
-        await docRef.set(eventData);
+        await docRef.set({ ...eventData, expireAt: computeExpireAt(RETENTION_24H_MS) });
 
         return ok({
           id: eventId,

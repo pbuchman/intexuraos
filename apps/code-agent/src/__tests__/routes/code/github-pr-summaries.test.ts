@@ -34,7 +34,6 @@ import { createLinearIssueService } from '../../../domain/services/linearIssueSe
 import { createStatusMirrorService } from '../../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../../domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase } from '../../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../../infra/metrics.js';
@@ -148,7 +147,6 @@ describe('GET /code/github-pr-summaries', () => {
       statusMirrorService: createStatusMirrorService({ actionsAgentClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
@@ -201,7 +199,6 @@ describe('GET /code/github-pr-summaries', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerSettingsRepo: ReturnType<typeof createWorkerSettingsRepository>;

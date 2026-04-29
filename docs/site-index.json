@@ -403,36 +403,6 @@
       "description": "Technical-Debt documentation for linear-agent"
     },
     {
-      "path": "services/log-cleanup/features.md",
-      "title": "Log Cleanup",
-      "category": "services",
-      "description": "Features documentation for log-cleanup"
-    },
-    {
-      "path": "services/log-cleanup/technical.md",
-      "title": "Log Cleanup Worker - Technical Reference",
-      "category": "services",
-      "description": "Technical documentation for log-cleanup"
-    },
-    {
-      "path": "services/log-cleanup/tutorial.md",
-      "title": "Log Cleanup Worker - Tutorial",
-      "category": "services",
-      "description": "Tutorial documentation for log-cleanup"
-    },
-    {
-      "path": "services/log-cleanup/agent.md",
-      "title": "log-cleanup -- Agent Interface",
-      "category": "services",
-      "description": "Agent documentation for log-cleanup"
-    },
-    {
-      "path": "services/log-cleanup/technical-debt.md",
-      "title": "Log Cleanup Worker - Technical Debt",
-      "category": "services",
-      "description": "Technical-Debt documentation for log-cleanup"
-    },
-    {
       "path": "services/mobile-notifications-service/features.md",
       "title": "Mobile Notifications Service",
       "category": "services",

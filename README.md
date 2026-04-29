@@ -464,7 +464,6 @@ Full setup: **[Development Setup Guide](docs/setup/05-local-dev-with-gcp-deps.md
 | **[notion-service](docs/services/notion-service/features.md)**                             | Research export to Notion with synthesis and per-model child pages              |
 | **[web](docs/services/web/features.md)**                                                   | Real-time dashboard with code streaming, approvals, and share menu              |
 | **[vm-lifecycle](docs/services/vm-lifecycle/features.md)**                                 | Weekday auto-start/stop for coding worker machines                              |
-| **[log-cleanup](docs/services/log-cleanup/features.md)**                                   | Nightly log rotation in controlled batches                                      |
 | **[api-docs-hub](docs/services/api-docs-hub/features.md)**                                 | Unified interactive API reference for all backend services                      |
 
 </details>

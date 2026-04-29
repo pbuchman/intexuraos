@@ -42,7 +42,6 @@ import type { StatusMirrorService } from '../../infra/services/statusMirrorServi
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
-import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
@@ -183,10 +182,6 @@ describe('codeRoutes', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
@@ -246,7 +241,6 @@ describe('codeRoutes', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
-      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       archiveStaleGroups: import('../../domain/usecases/archiveStaleGroups.js').ArchiveStaleGroupsUseCase;
       autoArchiveMergedTasks: import('../../domain/usecases/autoArchiveMergedTasks.js').AutoArchiveMergedTasksUseCase;
       workerSettingsRepo: WorkerSettingsRepository;
@@ -2783,162 +2777,6 @@ describe('codeRoutes', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INTERNAL_ERROR');
-    });
-  });
-
-  describe('POST /internal/tasks/cleanup-logs', () => {
-    it('returns 200 with cleanup result', async () => {
-      const mockCleanupTaskLogs = vi.fn().mockResolvedValue({
-        ok: true,
-        value: {
-          tasksProcessed: 10,
-          tasksFailed: 1,
-          logsDeleted: 500,
-          durationMs: 2000,
-        },
-      });
-
-      setServices({
-        ...getServices(),
-        cleanupTaskLogs: mockCleanupTaskLogs as never,
-      });
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/tasks/cleanup-logs',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-        },
-        payload: {},
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
-      expect(body.data.tasksProcessed).toBe(10);
-      expect(body.data.tasksFailed).toBe(1);
-      expect(body.data.logsDeleted).toBe(500);
-      expect(body.data.durationMs).toBe(2000);
-    });
-
-    it('returns 401 when missing auth header', async () => {
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/tasks/cleanup-logs',
-        payload: {},
-      });
-
-      expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('UNAUTHORIZED');
-    });
-
-    it('returns 401 when auth header invalid', async () => {
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/tasks/cleanup-logs',
-        headers: {
-          'x-internal-auth': 'wrong-token',
-        },
-        payload: {},
-      });
-
-      expect(response.statusCode).toBe(401);
-    });
-
-    it('passes body parameters to use case', async () => {
-      const mockCleanupTaskLogs = vi.fn().mockResolvedValue({
-        ok: true,
-        value: {
-          tasksProcessed: 0,
-          tasksFailed: 0,
-          logsDeleted: 0,
-          durationMs: 100,
-        },
-      });
-
-      setServices({
-        ...getServices(),
-        cleanupTaskLogs: mockCleanupTaskLogs as never,
-      });
-
-      await server.inject({
-        method: 'POST',
-        url: '/internal/tasks/cleanup-logs',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-        },
-        payload: {
-          retentionDays: 30,
-          batchSize: 250,
-          tasksPerRun: 50,
-        },
-      });
-
-      expect(mockCleanupTaskLogs).toHaveBeenCalledWith({
-        retentionDays: 30,
-        batchSize: 250,
-        tasksPerRun: 50,
-      });
-    });
-
-    it('returns 500 when use case errors', async () => {
-      const mockCleanupTaskLogs = vi.fn().mockResolvedValue({
-        ok: false,
-        error: new Error('Cleanup failed'),
-      });
-
-      setServices({
-        ...getServices(),
-        cleanupTaskLogs: mockCleanupTaskLogs as never,
-      });
-
-      const response = await server.inject({
-        method: 'POST',
-        url: '/internal/tasks/cleanup-logs',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-        },
-        payload: {},
-      });
-
-      expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INTERNAL_ERROR');
-    });
-
-    it('uses defaults when body empty', async () => {
-      const mockCleanupTaskLogs = vi.fn().mockResolvedValue({
-        ok: true,
-        value: {
-          tasksProcessed: 0,
-          tasksFailed: 0,
-          logsDeleted: 0,
-          durationMs: 100,
-        },
-      });
-
-      setServices({
-        ...getServices(),
-        cleanupTaskLogs: mockCleanupTaskLogs as never,
-      });
-
-      await server.inject({
-        method: 'POST',
-        url: '/internal/tasks/cleanup-logs',
-        headers: {
-          'x-internal-auth': 'test-internal-token',
-        },
-        payload: {},
-      });
-
-      expect(mockCleanupTaskLogs).toHaveBeenCalledWith({
-        retentionDays: undefined,
-        batchSize: undefined,
-        tasksPerRun: undefined,
-      });
     });
   });
 

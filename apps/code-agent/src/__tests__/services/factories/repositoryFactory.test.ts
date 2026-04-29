@@ -58,7 +58,7 @@ describe('createRepositoryServices', () => {
     const methods = [
       'create', 'findById', 'findByIdForUser', 'update', 'list',
       'hasActiveTaskForLinearIssue', 'findZombieTasks',
-      'countByUserToday', 'findArchivableTasks', 'archiveTaskLogs', 'findByPR',
+      'countByUserToday', 'findByPR',
     ];
     for (const m of methods) {
       expect(typeof (repos.codeTaskRepo as unknown as Record<string, unknown>)[m]).toBe('function');

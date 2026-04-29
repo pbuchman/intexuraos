@@ -1,6 +1,6 @@
 import type { Logger } from 'pino';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { getFirestore } from '@intexuraos/infra-firestore';
+import { computeExpireAt, getFirestore, RETENTION_24H_MS } from '@intexuraos/infra-firestore';
 import type {
   CreateGitHubWebhookAuditEventInput,
   GitHubWebhookAuditEvent,
@@ -81,7 +81,7 @@ export function createFirestoreGitHubWebhookAuditEventRepository(deps: {
     ): Promise<Result<GitHubWebhookAuditEvent, GitHubWebhookAuditEventRepositoryError>> {
       try {
         const docRef = collection.doc();
-        await docRef.set(input);
+        await docRef.set({ ...input, expireAt: computeExpireAt(RETENTION_24H_MS) });
 
         return ok({
           id: docRef.id,

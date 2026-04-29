@@ -21,7 +21,6 @@ const EXPECTED_ROUTES: { method: 'GET' | 'POST' | 'PATCH' | 'DELETE'; url: strin
   { method: 'POST', url: '/internal/code/detect-zombies' },
   { method: 'POST', url: '/internal/code/cancel-with-nonce' },
   { method: 'POST', url: '/internal/code/submit-phase2' },
-  { method: 'POST', url: '/internal/tasks/cleanup-logs' },
   { method: 'POST', url: '/code/submit' },
   { method: 'GET', url: '/code/tasks' },
   { method: 'GET', url: '/code/tasks/:taskId' },
