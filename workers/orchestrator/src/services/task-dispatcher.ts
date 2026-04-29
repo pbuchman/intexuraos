@@ -1,7 +1,6 @@
 import { Mutex } from 'async-mutex';
-import { type Result, type Logger, getErrorMessage } from '@intexuraos/common-core';
+import { type Result, type Logger } from '@intexuraos/common-core';
 import type { OrchestratorConfig } from '../types/config.js';
-import { withTimeout } from '../with-timeout.js';
 import type { Task, TaskResult, TaskError } from '../types/task.js';
 import type { CreateTaskRequest } from '../types/api.js';
 import type { SendMessageResult, SendMessageError } from '../types/schemas.js';
@@ -21,17 +20,13 @@ import {
   type CompletionAgentType,
   type CompletionVerifierVerdict,
   ResumeSummaryExtractor,
-  getLast50ClaudeLines,
-  getLast50Lines,
-  verifyCompletion,
 } from './completion-verifier.js';
-import type { RuntimeEvent, WorkerRuntime } from './runtime/index.js';
+import type { RuntimeEvent } from './runtime/index.js';
 import type { TurnMetricsCollector } from './turn-metrics-collector.js';
 import type {
   AgentComplianceValidator,
   ComplianceValidationInput,
 } from './agent-compliance-validator.js';
-import { fetchDispatchMetadata } from './dispatch-metadata-client.js';
 import {
   buildMissingFieldsPrompt as buildMissingFieldsPromptFn,
   buildResumePreamble as buildResumePreambleFn,
@@ -40,210 +35,42 @@ import {
   parseContinuationPrOutput as parseContinuationPrOutputFn,
   getTaskEventUrl as getTaskEventUrlFn,
   hasFatalExitCodeField as hasFatalExitCodeFieldFn,
-  INACTIVITY_RESTART_PROMPT,
 } from './task-dispatcher/prompts.js';
 import {
   appendOrchestratorTaskLog as appendOrchestratorTaskLogFn,
   appendTaggedTaskLog as appendTaggedTaskLogFn,
   flushTaskLogs as flushTaskLogsFn,
-  flushAndCloseLogForwarder as flushAndCloseLogForwarderFn,
 } from './task-dispatcher/log-streaming.js';
 import {
-  collectTurnMetrics as collectTurnMetricsFn,
-  prepareComplianceValidationInput as prepareComplianceValidationInputFn,
-  executeComplianceValidation as executeComplianceValidationFn,
-} from './task-dispatcher/metrics.js';
-import {
-  sendSetupFailureWebhook as sendSetupFailureWebhookFn,
-  buildResultFromVerification as buildResultFromVerificationFn,
-  enrichResultForResumedTask as enrichResultForResumedTaskFn,
   checkForResult as checkForResultFn,
 } from './task-dispatcher/webhook-callbacks.js';
 import {
-  pickCompletionAgentType as pickCompletionAgentTypeFn,
-  pickAgentLabel as pickAgentLabelFn,
-  describeAgent as describeAgentFn,
-  resolveTaskRuntime as resolveTaskRuntimeFn,
   getRuntimeDisplayName as getRuntimeDisplayNameFn,
 } from './task-dispatcher/lifecycle.js';
 import {
-  EVIDENCE_CAPTURE_TIMEOUT_MS,
-  WORKER_DESTROY_TIMEOUT_MS,
   INACTIVITY_TIMEOUT_MS,
   MAX_INACTIVITY_RESTARTS,
 } from './task-dispatcher/retry-logic.js';
 import type { DispatcherContext } from './task-dispatcher/dispatcher-context.js';
 import { TaskRunner } from './task-dispatcher/task-runner.js';
 import { TaskTimers } from './task-dispatcher/task-timers.js';
-import { classifyAttempt, type AttemptClassification } from './task-dispatcher/classify-attempt.js';
-import { buildRuntimeHardErrorMessage } from './task-dispatcher/error-messages.js';
-import {
-  decideCompletionOutcome,
-  type CompletionOutcome,
-} from './task-dispatcher/decide-outcome.js';
-import {
-  CODE_TASK_METRICS,
-  mapTerminalStatusToMetricStatus,
-  noopMetricsClient,
-  type MetricsClient,
-} from '../metrics.js';
+import { CompletionPipeline } from './task-dispatcher/completion-pipeline.js';
+import { AttemptLifecycle } from './task-dispatcher/attempt-lifecycle.js';
+// Re-export so external callers continue to import from the dispatcher barrel.
+export { runVerification } from './task-dispatcher/completion-pipeline.js';
+export type {
+  LegacyVerdict,
+  VerifierOverrideForTests,
+} from './task-dispatcher/completion-pipeline.js';
+export { computeTaskDurationMs } from './task-dispatcher/completion-pipeline.js';
+import type { VerifierOverrideForTests } from './task-dispatcher/completion-pipeline.js';
+import type { AttemptClassification } from './task-dispatcher/classify-attempt.js';
+import { noopMetricsClient, type MetricsClient } from '../metrics.js';
 
 // Re-export module-level helpers for backward compatibility with existing imports.
 export const getTaskEventUrl = getTaskEventUrlFn;
 export const hasFatalExitCodeField = hasFatalExitCodeFieldFn;
 export const buildMissingFieldsPrompt = buildMissingFieldsPromptFn;
-
-/**
- * [INT-1470] Bridge a legacy test-supplied verdict shape (passed/missingFields/
- * telemetryMissingFields/verifierFailure/agentData/trace) into the new
- * discriminated {kind: 'parsed' | 'hard-error', ...} shape. Production
- * `verifyCompletion` already returns the new shape; this only fires when a
- * test override returns the old one.
- *
- * @internal Test-only shim. Not part of the stable public API — scheduled for
- * removal once every fake-verifier in task-dispatcher.test.ts emits the
- * canonical `CompletionVerifierVerdict` shape directly.
- */
-function adaptLegacyVerdictIfNeeded(
-  v: CompletionVerifierVerdict | LegacyVerdict
-): CompletionVerifierVerdict {
-  /* v8 ignore start -- upstream: only reached via test-only verifier override; production code always returns CompletionVerifierVerdict from verifyCompletion and bypasses this adapter entirely (see call site). The `'kind' in v` branch is the production short-circuit; the test fakes always return the LegacyVerdict shape so the branch-true arm is not exercised here. @preserve */
-  if ('kind' in v) return v;
-  /* v8 ignore stop @preserve */
-  // verifierFailure: route to hard-error so the dispatcher terminates rather
-  // than invoking the vanished retry-verifier branch.
-  if (v.verifierFailure) {
-    return {
-      kind: 'hard-error',
-      code: 'TASK_RUNTIME_HARD_ERROR',
-      message: 'Completion verifier unavailable (all validation models failed)',
-    };
-  }
-  // Map fatal-exit-code markers through the missingRequired field as before.
-  const data: Record<string, unknown> = {};
-  if (v.agentData !== undefined) {
-    // Strip `agentType` from the agentData object; downstream reads fields by canonical name.
-    const copy: Record<string, unknown> = {
-      ...(v.agentData as unknown as Record<string, unknown>),
-    };
-    // Map legacy boolean-ish fields to coerced bool (the new shape expects true/false).
-    const boolishMap: Record<string, string> = {
-      superpowers_writing_plans: 'superpowers_writing_plans_used',
-      superpowers_subagent_driven_dev: 'superpowers_subagent_driven_dev_used',
-      superpowers_requesting_code_review: 'superpowers_requesting_code_review_used',
-    };
-    for (const [legacyKey, canonicalKey] of Object.entries(boolishMap)) {
-      if (legacyKey in copy && !(canonicalKey in copy)) {
-        copy[canonicalKey] = copy[legacyKey] === 'used' || copy[legacyKey] === true;
-      }
-    }
-    // Map legacy PR-url naming to canonical pr.
-    if ('gh_pr_url' in copy && !('pr' in copy)) copy['pr'] = copy['gh_pr_url'];
-    if ('pr_url' in copy && !('pr' in copy)) copy['pr'] = copy['pr_url'];
-    if (!('plan_pr' in copy) && 'pr_url' in copy && copy['agentType'] === 'planning') {
-      copy['plan_pr'] = copy['pr_url'];
-    }
-    // Map legacy boolean flags to bool values.
-    const boolFields = ['is_complex', 'has_plan_doc'];
-    for (const f of boolFields) {
-      if (typeof copy[f] === 'string') copy[f] = copy[f] === '1';
-    }
-    // planning's canonical field names.
-    /* v8 ignore start -- upstream: legacy-verdict key rename maps fire only when a test fixture emits the pre-INT-1470 field names (linear_url/comments_replied/unclear_clarification); every current fake-verifier stub in task-dispatcher.test.ts emits the canonical names directly, so these mapping branches are unreachable via current tests but retained for the handful of legacy fixtures that still exist outside this workspace @preserve */
-    if ('linear_url' in copy && !('linear_issue' in copy))
-      copy['linear_issue'] = copy['linear_url'];
-    if ('comments_replied' in copy && !('comment_replied' in copy)) {
-      copy['comment_replied'] = copy['comments_replied'];
-    }
-    if ('unclear_clarification' in copy && !('clarification_message' in copy)) {
-      copy['clarification_message'] = copy['unclear_clarification'];
-    }
-    /* v8 ignore stop @preserve */
-    // outcome carries through as-is.
-    delete copy['agentType'];
-    Object.assign(data, copy);
-  }
-  // Legacy shape had an explicit `passed: boolean`. In the new shape
-  // `missingRequired.length === 0` is the signal for "deliverable OK". When
-  // the legacy verdict claimed passed=false with empty missingFields AND no
-  // agentData, it previously fell into a generic terminal-fail branch. We
-  // preserve that signal by surfacing a sentinel blocking field so the
-  // outcome policy doesn't silently accept.
-  const legacyMissing = v.missingFields;
-  /* v8 ignore start -- ts-type: LegacyVerdict types telemetryMissingFields as optional; every fake-verifier stub in the orchestrator test suite always supplies it, so the `?? []` fallback is unreachable via current tests @preserve */
-  const legacyTelemetry = v.telemetryMissingFields ?? [];
-  /* v8 ignore stop @preserve */
-  const needsFailSignal =
-    !v.passed &&
-    legacyMissing.length === 0 &&
-    legacyTelemetry.length === 0 &&
-    v.agentData === undefined;
-  return {
-    kind: 'parsed',
-    data,
-    missingRequired: needsFailSignal ? ['legacy_verifier_not_passed'] : legacyMissing,
-    telemetryMissing: legacyTelemetry,
-    warnings: [],
-  };
-}
-
-/**
- * [INT-1470] Centralized verification-step selector. Calls the test override
- * if present, otherwise runs the pure `verifyCompletion`. Exported so that
- * both branches can be exercised directly by unit tests — exposing the
- * branch in a standalone function avoids the "v8 ignore on branches is not
- * allowed" coverage rule that applies to the in-class code path.
- */
-export async function runVerification(input: {
-  verifyOverride: VerifierOverrideForTests['verify'] | undefined; // @allow-undefined-type -- positional optional hook
-  task: Task;
-  attempt: number;
-  maxAttempts: number;
-  agentType: CompletionAgentType;
-  rawLogs: string;
-  exitCode?: number;
-}): Promise<CompletionVerifierVerdict> {
-  const { verifyOverride, task, attempt, maxAttempts, agentType, rawLogs, exitCode } = input;
-  if (verifyOverride !== undefined) {
-    const overrideReturn = await verifyOverride({
-      taskId: task.taskId,
-      attempt,
-      maxAttempts,
-      agentType,
-      rawLogs,
-      ...(exitCode !== undefined && { lastExitCode: exitCode }),
-      ...(task.executionMemoryContext !== undefined && {
-        executionMemoryContext: task.executionMemoryContext,
-      }),
-    });
-    return adaptLegacyVerdictIfNeeded(overrideReturn);
-  }
-  return verifyCompletion({
-    transcript: rawLogs,
-    agentType,
-    workerType: task.workerType,
-    executionMemoryContext: task.executionMemoryContext,
-    lastExitCode: exitCode,
-  });
-}
-
-/**
- * Legacy test-only verdict shape. Production code never emits this; only
- * task-dispatcher.test.ts's fake-verifier stubs do, and the bridge in
- * `adaptLegacyVerdictIfNeeded` converts it into the canonical discriminated
- * verdict before the dispatcher consumes it. Exported so tests can type
- * their mocks against the union `CompletionVerifierVerdict | LegacyVerdict`.
- *
- * @internal Test-only. Not part of the stable public API.
- */
-export interface LegacyVerdict {
-  passed: boolean;
-  missingFields: string[];
-  telemetryMissingFields?: string[];
-  verifierFailure?: boolean;
-  agentData?: unknown;
-  trace?: { transcript: string; prompt: string; response: string };
-}
 
 export interface DispatchError {
   type:
@@ -279,32 +106,6 @@ export interface IsolationConfig {
   };
   gcpSaKeyPath: string;
   githubAppKeyPath: string;
-}
-
-/**
- * Minimal shape used by tests to override the deterministic verifier.
- * Accepts both the canonical `CompletionVerifierVerdict` shape and the
- * legacy `{passed, missingFields, …}` shape — `adaptLegacyVerdictIfNeeded`
- * bridges between them, so existing fake-verifier stubs in
- * task-dispatcher.test.ts can return either form.
- *
- * @internal Test-only. Not part of the stable public API.
- */
-export interface VerifierOverrideForTests {
-  verify: (input: {
-    taskId: string;
-    attempt: number;
-    maxAttempts: number;
-    agentType: CompletionAgentType;
-    rawLogs: string;
-    lastExitCode?: number;
-    executionMemoryContext?: import('../types/execution-memory.js').ExecutionMemoryPromptContext;
-  }) =>
-    | Promise<CompletionVerifierVerdict | LegacyVerdict>
-    | CompletionVerifierVerdict
-    | LegacyVerdict;
-  describe?: () => { enabled: boolean; provider?: string; model?: string };
-  extractResumeSummary?: (taskId: string, rawLogs: string) => Promise<string | undefined>;
 }
 
 export interface CompletionControlConfig {
@@ -375,6 +176,10 @@ export class TaskDispatcher {
   private readonly taskRunner: TaskRunner;
   /** INT-1551 §E.3: timer/monitor lifecycle module. */
   private readonly taskTimers: TaskTimers;
+  /** INT-1551 §E.5: completion verifier + finalize pipeline module. */
+  private readonly completionPipeline: CompletionPipeline;
+  /** INT-1551 §E.4: attempt setup/recovery/inactivity-restart module. */
+  private readonly attemptLifecycle: AttemptLifecycle;
   /** INT-1551 §10: shared state and dependency container for the sub-modules. */
   private readonly context: DispatcherContext;
 
@@ -467,10 +272,47 @@ export class TaskDispatcher {
       checkForResult: (task: Task): Promise<TaskResult | undefined> => this.checkForResult(task),
       saveTask: (task: Task): Promise<void> => this.saveTask(task),
       getTask: (taskId: string): Promise<Task | null> => this.getTask(taskId),
+      // Cross-module orchestration callbacks. The bound dispatcher methods
+      // (some of which delegate into the sub-modules instantiated below)
+      // are wired immediately; the sub-modules can call them safely as
+      // long as no module method runs synchronously inside the constructor.
+      startWorkerAttempt: (
+        task: Task,
+        params: { prompt: string; continueSession: boolean; injectActiveGoal?: boolean }
+      ): Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }> =>
+        this.startWorkerAttempt(task, params),
+      finalizeTask: (
+        task: Task,
+        statusParam: 'completed' | 'failed' | 'interrupted' | 'cancelled',
+        payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean },
+        keepLogForwarderOpen?: boolean
+      ): Promise<void> => this.finalizeTask(task, statusParam, payload, keepLogForwarderOpen),
+      teardownAttempt: (taskId: string, keepSession: boolean): Promise<void> =>
+        this.teardownAttempt(taskId, keepSession),
+      clearTaskTimers: (taskId: string): void => {
+        this.clearTaskTimers(taskId);
+      },
+      scheduleTimeoutWarning: (taskId: string): void => {
+        this.scheduleTimeoutWarning(taskId);
+      },
+      scheduleTimeoutKill: (taskId: string): void => {
+        this.scheduleTimeoutKill(taskId);
+      },
+      startCompletionMonitoring: (taskId: string): void => {
+        this.startCompletionMonitoring(taskId);
+      },
+      failAcceptedResume: (task: Task, error: unknown): Promise<void> =>
+        this.failAcceptedResume(task, error),
+      getRuntimeDisplayName: (task: Task): string => this.getRuntimeDisplayName(task),
+      incrementRunningCount: (): void => {
+        this.runningCount++;
+      },
     };
 
     this.taskRunner = new TaskRunner(this.context);
     this.taskTimers = new TaskTimers(this.context);
+    this.completionPipeline = new CompletionPipeline(this.context);
+    this.attemptLifecycle = new AttemptLifecycle(this.context);
   }
 
   private checkDockerAvailability(): Result<void, DispatchError> | null {
@@ -570,80 +412,7 @@ export class TaskDispatcher {
   private async rehydrateWorktreeForAdoption(
     task: Task
   ): Promise<Result<void, DispatchError> | null> {
-    let registered: boolean;
-    try {
-      registered = await this.worktreeManager.isWorktreeRegistered(task.taskId);
-    } catch (error) {
-      this.logger.error(
-        { taskId: task.taskId, error },
-        'Failed to check worktree registration during adoption'
-      );
-      // The registration check failed before we could do any cleanup. Release
-      // the capacity slot we reserved; adoptTask itself never gets a chance to.
-      // adoptTask guarantees runningCount was incremented before invoking this
-      // method, so an unconditional decrement is safe.
-      this.runningCount--;
-      return {
-        ok: false,
-        error: {
-          type: 'service_error',
-          message: 'Failed to check worktree registration for adopted task',
-          originalError: error,
-        },
-      };
-    }
-
-    if (registered) {
-      return null;
-    }
-
-    this.logger.warn(
-      { taskId: task.taskId, worktreePath: task.worktreePath },
-      'Worktree metadata missing on adoption, attempting repair'
-    );
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Worktree metadata missing on adoption, repairing: path=${task.worktreePath}`
-    );
-
-    try {
-      await this.worktreeManager.repairWorktree(task.taskId);
-      return null;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(
-        { taskId: task.taskId, worktreePath: task.worktreePath, error },
-        'git worktree repair failed during adoption — marking task as WORKTREE_LOST'
-      );
-
-      const terminalError: TaskError = {
-        code: 'WORKTREE_LOST',
-        message: `Worktree metadata missing and repair failed for ${task.worktreePath}: ${message}`,
-        // The failure is infrastructural (orchestrator host lost git
-        // metadata), not something the user can fix in their code. Signal
-        // contact_support so remediation does not present a code-edit path.
-        remediation: {
-          action: 'contact_support',
-          worktreePath: task.worktreePath,
-        },
-      };
-
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Terminal failure: WORKTREE_LOST (${terminalError.message})`
-      );
-
-      await this.finalizeTask(task, 'failed', { error: terminalError });
-
-      return {
-        ok: false,
-        error: {
-          type: 'service_error',
-          message: terminalError.message,
-          originalError: error,
-        },
-      };
-    }
+    return await this.attemptLifecycle.rehydrateWorktreeForAdoption(task);
   }
 
   async adoptTask(task: Task): Promise<Result<void, DispatchError>> {
@@ -734,153 +503,11 @@ export class TaskDispatcher {
   }
 
   private async executeTaskSetup(request: CreateTaskRequest): Promise<void> {
-    const taskId = request.taskId;
-
-    try {
-      const repository = request.repository ?? this.getDefaultRepository(request);
-      const baseBranch = request.baseBranch ?? 'development';
-
-      // Create worktree
-      let worktreePath: string;
-      try {
-        worktreePath =
-          request.continuationPrBranch === undefined
-            ? await this.worktreeManager.createWorktree(taskId, baseBranch)
-            : await this.worktreeManager.createWorktree(
-                taskId,
-                baseBranch,
-                request.continuationPrBranch
-              );
-      } catch (error) {
-        if (this.runningCount > 0) this.runningCount--;
-        await this.sendSetupFailureWebhook(request, 'Failed to create worktree', error);
-        return;
-      }
-
-      this.logForwarder.registerTask(taskId, request.webhookSecret);
-
-      // Create task object
-      const task: Task = {
-        taskId,
-        workerType: request.workerType,
-        runtime: WORKER_TYPES[request.workerType].runtime,
-        prompt: request.prompt,
-        repository,
-        baseBranch,
-        webhookUrl: request.webhookUrl,
-        webhookSecret: request.webhookSecret,
-        status: 'running',
-        worktreePath,
-        containerId: '',
-        ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
-        ...(request.linearIssueTitle !== undefined && {
-          linearIssueTitle: request.linearIssueTitle,
-        }),
-        linearIssueLabels: request.linearIssueLabels,
-        hasChildren: request.hasChildren,
-        ...(request.slug !== undefined && { slug: request.slug }),
-        ...(request.actionId !== undefined && { actionId: request.actionId }),
-        ...(request.retriedFrom !== undefined && { retriedFrom: request.retriedFrom }),
-        ...(request.agentType !== undefined && { agentType: request.agentType }),
-        ...(request.executionMemoryContext !== undefined && {
-          executionMemoryContext: request.executionMemoryContext,
-        }),
-        ...(request.trackingCommentId !== undefined && {
-          trackingCommentId: request.trackingCommentId,
-        }),
-        ...(request.prNumber !== undefined && { prNumber: request.prNumber }),
-        ...(request.continuationPrNumber !== undefined && {
-          continuationPrNumber: request.continuationPrNumber,
-        }),
-        ...(request.continuationPrBranch !== undefined && {
-          continuationPrBranch: request.continuationPrBranch,
-        }),
-        /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for reviewTypes in dispatchPlanReview request payload @preserve */
-        ...(request.reviewTypes !== undefined && { reviewTypes: request.reviewTypes }),
-        /* v8 ignore stop @preserve */
-        startedAt: new Date().toISOString(),
-        attemptCount: 1,
-        maxAttempts: this.completionMaxAttempts,
-        verificationHistory: [],
-      };
-
-      const startResult = await this.startWorkerAttempt(task, {
-        prompt: request.prompt,
-        continueSession: false,
-      });
-      if (!startResult.ok) {
-        if (this.runningCount > 0) this.runningCount--;
-        this.logger.error(
-          {
-            taskId,
-            error: startResult.error,
-            errorMessage:
-              startResult.error instanceof Error
-                ? startResult.error.message
-                : String(startResult.error),
-          },
-          'Failed to create worker container'
-        );
-        this.isolation.tokenRefresher.unregisterTask(taskId);
-        this.logForwarder.unregisterTask(taskId);
-        await this.isolation.provider.cleanupTaskSession?.(taskId);
-        this.worktreeManager.removeWorktree(taskId).catch((cleanupError: unknown) => {
-          this.logger.error(
-            { taskId, cleanupError },
-            'Failed to cleanup worktree after worker start failure'
-          );
-        });
-        await this.sendSetupFailureWebhook(
-          request,
-          'Failed to start worker container',
-          startResult.error
-        );
-        return;
-      }
-      task.containerId = startResult.containerId;
-
-      await this.saveTask(task);
-
-      this.scheduleTimeoutWarning(taskId);
-      this.scheduleTimeoutKill(taskId);
-
-      this.startCompletionMonitoring(taskId);
-      this.appendOrchestratorTaskLog(
-        taskId,
-        `Task started: id=${taskId} attempt=1/${String(this.completionMaxAttempts)} workerType=${task.workerType}`
-      );
-      if (task.linearIssueId !== undefined) {
-        this.appendOrchestratorTaskLog(
-          taskId,
-          `Linear issue: ${task.linearIssueId}${task.linearIssueTitle !== undefined ? ` — ${task.linearIssueTitle}` : ''}`
-        );
-      }
-      const promptPreview =
-        task.prompt.length > 500 ? task.prompt.slice(0, 500) + '…' : task.prompt;
-      this.appendTaggedTaskLog(taskId, 'prompt', promptPreview);
-      const agentLabel = pickAgentLabelFn(task);
-      const agentDesc = describeAgentFn(agentLabel);
-      this.appendTaggedTaskLog(taskId, 'instructions', `${agentLabel}: ${agentDesc}`);
-      this.logger.info({}, `Task started: id=${taskId} runningCount=${String(this.runningCount)}`);
-    } catch (error) {
-      if (this.runningCount > 0) this.runningCount--;
-      await this.sendSetupFailureWebhook(request, 'Failed to start task', error);
-    }
-  }
-
-  private async sendSetupFailureWebhook(
-    request: CreateTaskRequest,
-    message: string,
-    originalError: unknown
-  ): Promise<void> {
-    await sendSetupFailureWebhookFn(
-      this.webhookClient,
-      this.logger,
-      request,
-      message,
-      originalError
+    await this.attemptLifecycle.executeTaskSetup(request, (req) =>
+      this.getDefaultRepository(req)
     );
   }
+
 
   async cancelTask(taskId: string): Promise<Result<void, CancelError>> {
     const state = await this.statePersistence.load();
@@ -1132,10 +759,6 @@ export class TaskDispatcher {
     return 'pbuchman/intexuraos';
   }
 
-  private resolveTaskRuntime(task: Task): WorkerRuntime {
-    return resolveTaskRuntimeFn(task);
-  }
-
   private getRuntimeDisplayName(task: Task): string {
     return getRuntimeDisplayNameFn(task);
   }
@@ -1150,141 +773,12 @@ export class TaskDispatcher {
     taskId: string,
     message: string
   ): Promise<Result<SendMessageResult, SendMessageError> | null> {
-    const metadata = await fetchDispatchMetadata(
-      {
-        codeAgentUrl: this.config.codeAgentUrl,
-        internalAuthToken: this.config.internalAuthToken,
-      },
-      taskId
-    );
-
-    if (metadata === null) {
-      return null;
-    }
-
-    if (metadata.webhookSecret === null) {
-      return null;
-    }
-
-    if (metadata.agentType === 'review' || metadata.agentType === 'remediation') {
-      return {
-        ok: false,
-        error: {
-          type: 'invalid_agent_type',
-          message: 'Cannot send messages to review/remediation tasks',
-        },
-      };
-    }
-
-    const task: Task = {
-      taskId: metadata.taskId,
-      workerType: metadata.workerType,
-      runtime: WORKER_TYPES[metadata.workerType].runtime,
-      prompt: metadata.prompt,
-      repository: metadata.repository,
-      baseBranch: metadata.baseBranch,
-      linearIssueLabels: [],
-      webhookUrl: metadata.webhookUrl,
-      webhookSecret: metadata.webhookSecret,
-      status: 'running',
-      worktreePath: '',
-      containerId: '',
-      startedAt: new Date().toISOString(),
-      attemptCount: 1,
-      maxAttempts: this.completionMaxAttempts,
-      verificationHistory: [],
-      ...(metadata.agentType !== null && { agentType: metadata.agentType }),
-      ...(metadata.linearIssueId !== null && { linearIssueId: metadata.linearIssueId }),
-      ...(metadata.trackingCommentId !== null && {
-        trackingCommentId: metadata.trackingCommentId,
-      }),
-      ...(metadata.prNumber !== null && { prNumber: metadata.prNumber }),
-      ...(metadata.continuationPrBranch !== null && {
-        continuationPrBranch: metadata.continuationPrBranch,
-      }),
-    };
-
-    this.logForwarder.registerTask(taskId, task.webhookSecret);
-    this.appendOrchestratorTaskLog(
-      taskId,
-      'Recreating task from dispatch metadata with user message'
-    );
-    this.appendTaggedTaskLog(
-      taskId,
-      'prompt',
-      message.length > 200 ? message.slice(0, 200) + '\u2026' : message
-    );
-
-    const prompt =
-      task.agentType === 'ask_agent' ? message : this.buildResumePreamble(task) + message;
-    task.pendingResumeStart = {
-      prompt,
-      acceptedAt: new Date().toISOString(),
-    };
-    await this.saveTask(task);
-
-    this.runningCount++;
-    void this.recreateTaskFromDispatchMetadata(task).catch((error: unknown) => {
-      void this.failAcceptedResume(task, error);
-    });
-    this.logger.info({ taskId }, 'Task resume accepted after dispatch metadata recovery');
-
-    return { ok: true, value: { action: 'resumed' } };
+    return await this.attemptLifecycle.tryRecoverMissingTask(taskId, message);
   }
 
-  private async recreateTaskFromDispatchMetadata(task: Task): Promise<void> {
-    try {
-      task.worktreePath =
-        task.continuationPrBranch === undefined
-          ? await this.worktreeManager.createWorktree(task.taskId, task.baseBranch)
-          : await this.worktreeManager.createWorktree(
-              task.taskId,
-              task.baseBranch,
-              task.continuationPrBranch
-            );
-      await this.saveTask(task);
-      await this.resumeTaskWithUserMessage(task);
-    } catch (error) {
-      await this.failAcceptedResume(task, error);
-    }
-  }
 
   private async resumeTaskWithUserMessage(task: Task): Promise<void> {
-    const prompt = task.pendingResumeStart?.prompt;
-    /* v8 ignore start -- upstream: sendMessage and recoverPendingResumeTask validate pendingResumeStart before invoking this async helper; this guard cannot be reached in unit tests because callers always set pendingResumeStart before calling resumeTaskWithUserMessage @preserve */
-    if (prompt === undefined) {
-      await this.failAcceptedResume(
-        task,
-        new Error('Accepted resume is missing the persisted startup prompt')
-      );
-      return;
-    }
-    /* v8 ignore stop @preserve */
-
-    try {
-      const resumeResult = await this.startWorkerAttempt(task, {
-        prompt,
-        continueSession: true,
-        injectActiveGoal: task.agentType !== 'ask_agent',
-      });
-
-      if (!resumeResult.ok) {
-        await this.failAcceptedResume(task, resumeResult.error);
-        return;
-      }
-
-      task.containerId = resumeResult.containerId;
-      delete task.pendingResumeStart;
-      await this.saveTask(task);
-
-      this.scheduleTimeoutWarning(task.taskId);
-      this.scheduleTimeoutKill(task.taskId);
-      this.startCompletionMonitoring(task.taskId);
-
-      this.logger.info({ taskId: task.taskId }, 'Task resumed with user message');
-    } catch (error) {
-      await this.failAcceptedResume(task, error);
-    }
+    await this.attemptLifecycle.resumeTaskWithUserMessage(task);
   }
 
   private scheduleTimeoutWarning(taskId: string): void {
@@ -1296,794 +790,16 @@ export class TaskDispatcher {
   }
 
   private async handleInactivityRestart(taskId: string): Promise<void> {
-    // Mark the restart as in-flight synchronously before any await so the
-    // completion monitor cannot race and run verification on the stale
-    // transcript while destroyWorker/startWorkerAttempt are pending.
-    this.inactivityRestartInProgress.add(taskId);
-    try {
-      await this.doHandleInactivityRestart(taskId);
-    } finally {
-      this.inactivityRestartInProgress.delete(taskId);
-    }
+    await this.attemptLifecycle.handleInactivityRestart(taskId);
   }
 
-  private async doHandleInactivityRestart(taskId: string): Promise<void> {
-    // Guard: skip if completion is already in progress
-    if (this.completionInProgress.has(taskId)) {
-      this.logger.debug({ taskId }, 'Inactivity restart skipped: completion already in progress');
-      return;
-    }
-
-    const task = await this.getTask(taskId);
-    /* v8 ignore start -- source-map: claude-runtime detached settimeout closure — branch misattributed by v8 (claude finalize fallback) @preserve */
-    if (task?.status !== 'running') {
-      return;
-    }
-    /* v8 ignore stop @preserve */
-
-    const canRestart = this.activityTimeoutManager.recordRestart(taskId);
-    if (!canRestart) {
-      // Max consecutive restarts exceeded — fail the task
-      this.activityTimeoutManager.stop(taskId);
-
-      this.appendTaggedTaskLog(
-        taskId,
-        'system',
-        `Inactivity timeout: worker unresponsive after ${String(MAX_INACTIVITY_RESTARTS)} consecutive restarts — failing task`
-      );
-      this.logger.error(
-        { taskId, maxRestarts: MAX_INACTIVITY_RESTARTS },
-        'Max inactivity restarts exceeded — failing task'
-      );
-
-      const result = await this.checkForResult(task);
-      const error: TaskError = {
-        code: 'TASK_INACTIVITY_TIMEOUT',
-        message: `Worker unresponsive after ${String(MAX_INACTIVITY_RESTARTS)} consecutive inactivity restarts`,
-        remediation: { action: 'retry' },
-      };
-      /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for result on finalizeTask in claude-runtime hard-error path @preserve */
-      await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
-        error,
-      });
-      /* v8 ignore stop @preserve */
-      return;
-    }
-
-    const restartCount = this.activityTimeoutManager.getRestartCount(taskId);
-    // Note: do NOT call stop() here — it would clear the consecutive restart counter.
-    // The counter must persist across restarts. The timer is reset when
-    // startWorkerAttempt() calls activityTimeoutManager.start(), which calls
-    // clearTimer() internally before creating a new timer.
-
-    this.appendTaggedTaskLog(
-      taskId,
-      'system',
-      `Inactivity timeout: no output for ${String(INACTIVITY_TIMEOUT_MS / 1000)}s — killing worker and restarting (restart ${String(restartCount)}/${String(MAX_INACTIVITY_RESTARTS)})`
-    );
-    this.logger.info(
-      { taskId, restartCount, maxRestarts: MAX_INACTIVITY_RESTARTS },
-      'Inactivity restart triggered'
-    );
-
-    const evidenceDir = `/var/log/orchestrator/inactivity-evidence/${taskId}/`;
-    // Bound each best-effort docker call by EVIDENCE_CAPTURE_TIMEOUT_MS so a
-    // stalled container (e.g. already-exited with orphaned state) cannot wedge
-    // the restart path.
-    const [copyResult, statsResult] = await Promise.allSettled([
-      withTimeout(
-        this.isolation.provider.copyOut(taskId, '/tmp', evidenceDir),
-        EVIDENCE_CAPTURE_TIMEOUT_MS,
-        `copyOut timed out after ${String(EVIDENCE_CAPTURE_TIMEOUT_MS / 1000)}s`
-      ),
-      withTimeout(
-        this.isolation.provider.statsSnapshot(taskId),
-        EVIDENCE_CAPTURE_TIMEOUT_MS,
-        `statsSnapshot timed out after ${String(EVIDENCE_CAPTURE_TIMEOUT_MS / 1000)}s`
-      ),
-    ]);
-    if (copyResult.status === 'rejected') {
-      this.logger.warn(
-        { taskId, error: getErrorMessage(copyResult.reason) },
-        'Failed to copy /tmp evidence before inactivity kill'
-      );
-    }
-    if (statsResult.status === 'fulfilled') {
-      this.logger.warn({ taskId, stats: statsResult.value }, 'Container stats at inactivity kill');
-    } else {
-      this.logger.warn(
-        { taskId, error: getErrorMessage(statsResult.reason) },
-        'Failed to capture container stats before inactivity kill'
-      );
-    }
-
-    try {
-      await withTimeout(
-        this.isolation.provider.destroyWorker(taskId),
-        WORKER_DESTROY_TIMEOUT_MS,
-        `destroyWorker timed out after ${String(WORKER_DESTROY_TIMEOUT_MS / 1000)}s`
-      );
-    } catch (destroyError) {
-      this.logger.warn(
-        { taskId, error: destroyError },
-        'Failed to destroy worker for inactivity restart'
-      );
-    }
-    this.appendOrchestratorTaskLog(taskId, 'Worker destroyed for inactivity restart');
-
-    await this.teardownAttempt(taskId, true);
-
-    // Re-fetch to avoid race with completion monitor: if status is no longer
-    // 'running', the task was finalized by another handler and we must bail out.
-    const reloadedTask = await this.getTask(taskId);
-    /* v8 ignore start -- source-map: codex-runtime detached settimeout closure — branch misattributed by v8 (codex finalize fallback) @preserve */
-    if (reloadedTask?.status !== 'running') {
-      this.logger.debug({ taskId }, 'Inactivity restart bailed out: task no longer running');
-      return;
-    }
-    /* v8 ignore stop @preserve */
-
-    this.appendTaggedTaskLog(taskId, 'prompt', INACTIVITY_RESTART_PROMPT);
-    const startResult = await this.startWorkerAttempt(task, {
-      prompt: INACTIVITY_RESTART_PROMPT,
-      continueSession: true,
-    });
-
-    if (!startResult.ok) {
-      this.logger.error(
-        { taskId, error: startResult.error },
-        'Failed to restart worker after inactivity timeout'
-      );
-      const error: TaskError = {
-        code: 'TASK_INACTIVITY_RESTART_FAILED',
-        message: 'Failed to restart worker after inactivity timeout',
-        remediation: { action: 'retry' },
-      };
-      const result = await this.checkForResult(task);
-      /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for result on finalizeTask in codex-runtime hard-error path @preserve */
-      await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
-        error,
-      });
-      /* v8 ignore stop @preserve */
-      return;
-    }
-
-    task.containerId = startResult.containerId;
-    task.inactivityRestartCount = (task.inactivityRestartCount ?? 0) + 1;
-    await this.saveTask(task);
-
-    this.appendOrchestratorTaskLog(taskId, `Inactivity restart attempt started: taskId=${taskId}`);
-  }
 
   private startCompletionMonitoring(taskId: string): void {
     this.taskTimers.startCompletionMonitoring(taskId);
   }
 
   private async handleTaskCompletion(task: Task): Promise<void> {
-    if (task.resumedAfterSuccess === true) {
-      await this.handleResumedAfterSuccessCompletion(task);
-      return;
-    }
-
-    const attempt = task.attemptCount ?? 1;
-    const maxAttempts = task.maxAttempts ?? 5;
-    const completionAgentType: CompletionAgentType = pickCompletionAgentTypeFn(task);
-    this.attemptCompletionSignals.delete(task.taskId);
-
-    // ask_agent: skip structured completion verification — extract summary and finalize
-    if (completionAgentType === 'ask_agent') {
-      try {
-        await this.logForwarder.flushAndStop(task.taskId);
-      } catch (flushError: unknown) {
-        this.logger.error(
-          { taskId: task.taskId, error: flushError },
-          'Failed to flush logs on ask_agent task completion'
-        );
-      }
-
-      /* v8 ignore start -- upstream: pending messages delivery path requires sendMessage called on a completing ask_agent task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
-      // Check for pending messages before finalizing — user may have sent
-      // a follow-up while this attempt was completing.
-      const pendingQueue = this.pendingMessages.get(task.taskId);
-      if (pendingQueue !== undefined && pendingQueue.length > 0) {
-        this.pendingMessages.delete(task.taskId);
-        const combinedPrompt = pendingQueue.join('\n\n');
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Ask agent: delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
-        );
-        this.appendTaggedTaskLog(
-          task.taskId,
-          'prompt',
-          combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '\u2026' : combinedPrompt
-        );
-        await this.flushTaskLogs(task.taskId);
-        await this.teardownAttempt(task.taskId, true);
-        const resumeResult = await this.startWorkerAttempt(task, {
-          prompt: combinedPrompt,
-          continueSession: true,
-          injectActiveGoal: false,
-        });
-        if (resumeResult.ok) {
-          task.containerId = resumeResult.containerId;
-          await this.saveTask(task);
-          this.claudeErrors.delete(task.taskId);
-          this.taskExitCodes.delete(task.taskId);
-          this.attemptStartedAt.delete(task.taskId);
-          return;
-        }
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          'Failed to deliver queued messages, finalizing normally'
-        );
-      }
-      /* v8 ignore stop @preserve */
-
-      const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
-      const summary = getLast50ClaudeLines(rawLogs);
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Ask agent completed — skipping structured verification`
-      );
-      await this.finalizeTaskWithResult(task, 'ask_agent', { summary });
-      return;
-    }
-
-    this.logger.info(
-      {},
-      `Worker attempt finished: taskId=${task.taskId} attempt=${String(attempt)}/${String(maxAttempts)} agentType=${completionAgentType}`
-    );
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Attempt finished: attempt=${String(attempt)}/${String(maxAttempts)} agentType=${completionAgentType}`
-    );
-
-    try {
-      await this.logForwarder.flushAndStop(task.taskId);
-    } catch (flushError: unknown) {
-      this.logger.error(
-        { taskId: task.taskId, error: flushError },
-        'Failed to flush logs on task completion'
-      );
-    }
-
-    const result = await this.checkForResult(task);
-    const exitCode = this.taskExitCodes.get(task.taskId);
-    /* v8 ignore start -- ts-type: nullish coalescing and optional chaining in log statements create narrowing branches unreachable given prior type guards @preserve */
-    if (result !== undefined) {
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Result: prUrl=${result.prUrl ?? 'none'} branch=${result.branch ?? 'none'} commits=${String(result.commits ?? 0)} ciFailed=${String(result.ciFailed ?? 'unknown')}`
-      );
-    }
-    /* v8 ignore stop @preserve */
-    const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
-
-    // INT-1455: Classify the attempt before calling the verifier. An attempt
-    // that never produced Claude output must not be graded as a broken
-    // transcript — that hides the real infra failure behind a policy-looking
-    // "missing memory fields" error.
-    const attemptStart = this.attemptStartedAt.get(task.taskId);
-    const attemptDurationMs =
-      attemptStart !== undefined ? Date.now() - attemptStart : Number.POSITIVE_INFINITY;
-    const classification: AttemptClassification = classifyAttempt({
-      runtime: this.resolveTaskRuntime(task),
-      logs: rawLogs,
-      exitCode,
-      durationMs: attemptDurationMs,
-      ...(result !== undefined ? { result } : {}),
-    });
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      classification.outcome === 'ran'
-        ? `Attempt classified: ran=true`
-        : `Attempt classified: ran=false reason=${classification.subReason} exitCode=${String(exitCode)}`
-    );
-    if (classification.outcome === 'infra_failed') {
-      await this.finalizeAttemptAsInfraFailure(task, attempt, classification, result);
-      return;
-    }
-
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Running completion verification: attempt=${String(attempt)}/${String(maxAttempts)}`
-    );
-    // [INT-1470] Deterministic block parser — no LLM, no network, sync.
-    // Tests may supply `completionControl.verifier.verify` to override; production
-    // always uses the pure `verifyCompletion` function.
-    const verification = await runVerification({
-      verifyOverride: this.verifyOverride,
-      task,
-      attempt,
-      maxAttempts,
-      agentType: completionAgentType,
-      rawLogs,
-      ...(exitCode !== undefined && { exitCode }),
-    });
-
-    // Short-circuit: hard-error verdicts (missing AGENT_FINAL block, fatal exit
-    // codes 137/139) are terminal — finalize as TASK_RUNTIME_HARD_ERROR.
-    if (verification.kind === 'hard-error') {
-      this.logger.warn(
-        { taskId: task.taskId, code: verification.code, message: verification.message },
-        'Verifier hard error'
-      );
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Verifier hard error: ${verification.code} — ${verification.message}`
-      );
-      /* v8 ignore start -- upstream: FakeIsolationProvider cannot produce both `typeof exitCode === 'number'` AND `typeof exitCode !== 'number'` within a single hard-error dispatcher test — each test fixture sets exitCode to a fixed value (number or undefined), so v8 always reports one arm of this post-hard-error cleanup as uncovered even though both arms are exercised across separate tests @preserve */
-      if (typeof exitCode === 'number') {
-        task.lastExitCode = exitCode;
-      } else {
-        delete task.lastExitCode;
-      }
-      /* v8 ignore stop @preserve */
-      await this.flushTaskLogs(task.taskId);
-      await this.collectTurnMetrics(task, attempt);
-      // The runtime's rate-limit phrase is captured into `claudeErrors` via
-      // attempt_failed. Prepend it so downstream classifyFailure sees the
-      // signal it routes on; without this the cooloff scheduler never engages.
-      const claudeErrorForHardFailure = this.claudeErrors.get(task.taskId);
-      let hardErrorMessage = verification.message;
-      if (claudeErrorForHardFailure !== undefined && claudeErrorForHardFailure !== '') {
-        const runtimePrefix = buildRuntimeHardErrorMessage({
-          exitCode,
-          claudeError: claudeErrorForHardFailure,
-          runtimeName: this.getRuntimeDisplayName(task),
-        });
-        hardErrorMessage = `${runtimePrefix}; ${verification.message}`;
-      }
-      const hardError: TaskError = {
-        code: verification.code,
-        message: hardErrorMessage,
-        remediation: { action: 'retry' },
-      };
-      await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
-        error: hardError,
-      });
-      return;
-    }
-
-    // verdict.kind === 'parsed' — continue with outcome-policy routing.
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Verified: missingRequired=${String(verification.missingRequired.length)} telemetryMissing=${String(verification.telemetryMissing.length)}`
-    );
-    if (verification.missingRequired.length > 0) {
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Missing fields: ${verification.missingRequired.join(' | ')}`
-      );
-    }
-    if (verification.telemetryMissing.length > 0) {
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Telemetry missing: ${verification.telemetryMissing.join(' | ')}`
-      );
-    }
-    // [INT-1470] Transcript summary comes inline from rawLogs now that the
-    // verifier no longer bundles a trace object with its verdict.
-    const transcriptForSummary = getLast50Lines(rawLogs);
-    const transcriptLines = transcriptForSummary.split('\n').filter((l) => l.trim() !== '');
-    /* v8 ignore start -- ts-type: nullish coalescing and ternary in transcript summary narrowing; noUncheckedIndexedAccess creates unreachable else branch given filter guarantees @preserve */
-    const firstLine = transcriptLines[0] ?? '';
-    const lastLine = transcriptLines[transcriptLines.length - 1] ?? '';
-    const transcriptSummary =
-      transcriptLines.length <= 2
-        ? transcriptLines.join('\n')
-        : `${firstLine}\n  ... (${String(transcriptLines.length - 2)} lines omitted) ...\n${lastLine}`;
-    /* v8 ignore stop @preserve */
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `📋 Transcript (first + last):\n${transcriptSummary}`
-    );
-    const parsedSummary =
-      typeof verification.data['summary'] === 'string'
-        ? verification.data['summary']
-        : '(no summary parsed)';
-    this.appendOrchestratorTaskLog(task.taskId, `🤖 Parsed summary: ${parsedSummary}`);
-
-    if (typeof exitCode === 'number') {
-      task.lastExitCode = exitCode;
-    } else {
-      delete task.lastExitCode;
-    }
-    /* v8 ignore start -- ts-type: Task.verificationHistory is typed as optional on the interface but is always initialized to [] in the dispatcher when a task enters the run loop (see submitTask / resumeTask); the `?? []` fallback is unreachable in production @preserve */
-    task.verificationHistory = [
-      ...(task.verificationHistory ?? []),
-      {
-        attempt,
-        passed: verification.missingRequired.length === 0,
-        missingFields: verification.missingRequired,
-        telemetryMissingFields: verification.telemetryMissing,
-        verifierFailure: false,
-        createdAt: new Date().toISOString(),
-      },
-    ];
-    /* v8 ignore stop @preserve */
-
-    // [INT-1461/INT-1470] Route retry/accept/fail decisions through the pure policy function.
-    const tier = WORKER_TYPES[task.workerType].telemetryExpectation;
-    const outcome: CompletionOutcome = decideCompletionOutcome({
-      verdict: {
-        passed: verification.missingRequired.length === 0,
-        missingFields: verification.missingRequired,
-        telemetryMissingFields: verification.telemetryMissing,
-        agentData: verification.data,
-      },
-      tier,
-      exitCode,
-      attempt,
-      maxAttempts,
-    });
-
-    // [INT-1461] Outcome-driven dispatch. `decideCompletionOutcome` is pure; this switch
-    // performs all side effects (logging, persistence, worker restart, finalization).
-    // [INT-1470] retry-verifier / fail-verifier variants are gone — the verifier is pure
-    // and the hard-error branch above already finalized any terminal verifier failures.
-
-    if (outcome.kind === 'accept') {
-      // Execution agent explicitly reported a failed outcome — treat as terminal runtime
-      // failure. The verifier successfully parsed the transcript; the agent itself
-      // declared the task failed (e.g., rate-limited mid-work). Surface the runtime
-      // reason instead of finalizing as success.
-      const parsedOutcome =
-        typeof verification.data['outcome'] === 'string' ? verification.data['outcome'] : undefined;
-      if (task.agentType === 'execution' && parsedOutcome === 'failed') {
-        const runtimeName = this.getRuntimeDisplayName(task);
-        const claudeError = this.claudeErrors.get(task.taskId);
-        /* v8 ignore start -- ts-type: verification.data['failure_reason'] is typed as unknown under noUncheckedIndexedAccess; the `: ''` arm fires only when a test emits a non-string failure_reason, which current INT-1457 accept-case fixtures never do — they always thread failure_reason as a string @preserve */
-        const failureReason =
-          typeof verification.data['failure_reason'] === 'string'
-            ? verification.data['failure_reason']
-            : '';
-        /* v8 ignore stop @preserve */
-        const runtimePrefix = buildRuntimeHardErrorMessage({
-          exitCode,
-          claudeError,
-          runtimeName,
-        });
-        /* v8 ignore start -- upstream: accept branch runs only when exitCode is 0 or undefined, so buildRuntimeHardErrorMessage always returns '' here — the prefix-present arm is unreachable via the accept case and is exercised instead by fail-exit-override (INT-1457 combined-message test) @preserve */
-        const baseMessage =
-          runtimePrefix !== ''
-            ? `${runtimePrefix}; Execution agent reported task failed`
-            : 'Execution agent reported task failed';
-        /* v8 ignore stop @preserve */
-        /* v8 ignore start -- upstream: task-dispatcher fixtures that set execution outcome='failed' in the accept case always populate failure_reason (see INT-1457 accept-case test); the execution-agent prompt ensures failure_reason is non-empty when outcome='failed', so the empty-failure_reason arm is unreachable in this code path @preserve */
-        const message =
-          failureReason !== '' ? `${baseMessage} (reason: ${failureReason})` : baseMessage;
-        /* v8 ignore stop @preserve */
-        const error: TaskError = {
-          code: 'TASK_RUNTIME_HARD_ERROR',
-          message,
-          remediation: { action: 'retry' },
-        };
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Execution agent reported failed outcome: ${error.message}`
-        );
-        await this.flushTaskLogs(task.taskId);
-        await this.collectTurnMetrics(task, attempt);
-        await this.finalizeTask(task, 'failed', {
-          ...(result !== undefined && { result }),
-          error,
-        });
-        return;
-      }
-
-      if (outcome.telemetryAccepted) {
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Telemetry incomplete but accepted (worker=${task.workerType} tier=optional): ${verification.telemetryMissing.join(', ')}`
-        );
-        this.logger.warn(
-          {
-            taskId: task.taskId,
-            attempt,
-            workerType: task.workerType,
-            telemetryMissingFields: verification.telemetryMissing,
-          },
-          'Accepting task despite missing telemetry (optional tier)'
-        );
-        /* v8 ignore start -- ts-type: Array.at(-1) return type is T|undefined; we unconditionally pushed to verificationHistory above so lastVerification is always defined here — the undefined arm is unreachable @preserve */
-        const lastVerification = task.verificationHistory.at(-1);
-        if (lastVerification !== undefined) {
-          lastVerification.telemetryAccepted = true;
-        }
-        /* v8 ignore stop @preserve */
-      }
-
-      /* v8 ignore start -- upstream: pending messages delivery path requires sendMessage called on a completing task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
-      const pendingQueue = this.pendingMessages.get(task.taskId);
-      if (pendingQueue !== undefined && pendingQueue.length > 0) {
-        this.pendingMessages.delete(task.taskId);
-        const combinedPrompt = pendingQueue.join('\n\n');
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
-        );
-        this.appendTaggedTaskLog(
-          task.taskId,
-          'prompt',
-          combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '\u2026' : combinedPrompt
-        );
-        await this.flushTaskLogs(task.taskId);
-        await this.teardownAttempt(task.taskId, true);
-        const resumeResult = await this.startWorkerAttempt(task, {
-          prompt: combinedPrompt,
-          continueSession: true,
-          injectActiveGoal: true,
-        });
-        if (resumeResult.ok) {
-          task.containerId = resumeResult.containerId;
-          await this.saveTask(task);
-          this.claudeErrors.delete(task.taskId);
-          this.taskExitCodes.delete(task.taskId);
-          this.attemptStartedAt.delete(task.taskId);
-          return;
-        }
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Failed to deliver queued messages, finalizing normally`
-        );
-      }
-      /* v8 ignore stop @preserve */
-
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        outcome.telemetryAccepted
-          ? 'Completion accepted (telemetry incomplete, tier=optional)'
-          : 'Completion verification passed'
-      );
-      await this.flushTaskLogs(task.taskId);
-      await this.collectTurnMetrics(task, attempt);
-      const finalResult = this.buildResultFromVerification(
-        task,
-        result,
-        verification,
-        completionAgentType
-      );
-
-      // Compliance validation for execution tasks only. Tier=optional accepted tasks skip
-      // compliance because weak models that skipped telemetry will also have skipped
-      // superpowers usage — compliance would produce false failures.
-      /* v8 ignore start -- source-map: void fire-and-forget compliance validation branches misattributed by v8; detached promise created by void expression not tracked by coverage instrumentation @preserve */
-      let complianceInput: ComplianceValidationInput | undefined;
-      if (
-        !outcome.telemetryAccepted &&
-        completionAgentType === 'execution' &&
-        this.agentComplianceValidator !== undefined
-      ) {
-        complianceInput = await this.prepareComplianceValidationInput(
-          task,
-          finalResult,
-          verification
-        );
-      } else if (outcome.telemetryAccepted && completionAgentType === 'execution') {
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          'Skipping compliance validation for tier=optional accepted execution task'
-        );
-      }
-
-      const keepLogOpen = complianceInput !== undefined;
-      await this.finalizeTaskWithResult(task, completionAgentType, finalResult, keepLogOpen);
-
-      if (complianceInput !== undefined) {
-        void this.executeComplianceValidation(task, complianceInput).finally(() => {
-          void this.flushAndCloseLogForwarder(task.taskId);
-        });
-      }
-      /* v8 ignore stop @preserve */
-      return;
-    }
-
-    if (outcome.kind === 'fail-fatal-exit') {
-      // Fatal exit code (SIGKILL=137, SIGSEGV=139): do not retry — session state is corrupted.
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Fatal exit code detected (${outcome.field}); skipping retry — session state is not recoverable`
-      );
-      await this.flushTaskLogs(task.taskId);
-      await this.collectTurnMetrics(task, attempt);
-      const fatalError: TaskError = {
-        code: 'TASK_FATAL_EXIT_CODE',
-        message: `Worker process killed by signal: ${outcome.field}`,
-        remediation: { action: 'retry' },
-      };
-      await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
-        error: fatalError,
-      });
-      return;
-    }
-
-    if (outcome.kind === 'fail-exit-override') {
-      // A non-zero worker exit overrides any verifier decision. When the verifier also
-      // parsed an execution agent reporting outcome='failed', surface the combined
-      // runtime-plus-execution message (preserves INT-1457 behavior). When the runtime
-      // emitted only a concrete hard-failure message (e.g. rate limit), surface that.
-      // Otherwise report the generic exit-code override.
-      const claudeErrorForHardFailure = this.claudeErrors.get(task.taskId);
-      const hasClaudeError =
-        claudeErrorForHardFailure !== undefined && claudeErrorForHardFailure !== '';
-      const parsedOutcomeForOverride =
-        typeof verification.data['outcome'] === 'string' ? verification.data['outcome'] : undefined;
-      const isExecutionFailedOutcome =
-        verification.missingRequired.length === 0 &&
-        task.agentType === 'execution' &&
-        parsedOutcomeForOverride === 'failed';
-      let exitCodeOverrideError: TaskError;
-      if (isExecutionFailedOutcome) {
-        const runtimeName = this.getRuntimeDisplayName(task);
-        /* v8 ignore start -- ts-type: verification.data['failure_reason'] is typed as unknown under noUncheckedIndexedAccess; the `: undefined` arm fires only when a test emits a non-string failure_reason, which current fail-exit-override fixtures never do @preserve */
-        const failureReason =
-          typeof verification.data['failure_reason'] === 'string'
-            ? verification.data['failure_reason']
-            : undefined; // @allow-undefined-type -- positional fallback; callers below explicitly check for undefined vs ''
-        /* v8 ignore stop @preserve */
-        const runtimePrefix = buildRuntimeHardErrorMessage({
-          exitCode: outcome.exitCode,
-          claudeError: claudeErrorForHardFailure,
-          runtimeName,
-        });
-        /* v8 ignore start -- upstream: fail-exit-override + execution-failed combo is reached only via INT-1457 test which always sets exit=1 + claudeError (so runtimePrefix is always non-empty) and always sets failure_reason='' — the empty-runtimePrefix arm and the populated-failureReason arm are unreachable with these fakes @preserve */
-        const baseMessage =
-          runtimePrefix !== ''
-            ? `${runtimePrefix}; Execution agent reported task failed`
-            : 'Execution agent reported task failed';
-        const message =
-          failureReason !== undefined && failureReason !== ''
-            ? `${baseMessage} (reason: ${failureReason})`
-            : baseMessage;
-        /* v8 ignore stop @preserve */
-        exitCodeOverrideError = {
-          code: 'TASK_RUNTIME_HARD_ERROR',
-          message,
-          remediation: { action: 'retry' },
-        };
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Execution agent reported failed outcome: ${exitCodeOverrideError.message}`
-        );
-      } else if (hasClaudeError) {
-        /* v8 ignore start -- upstream: FakeIsolationProvider cannot populate claudeErrors mid-completion tick @preserve */
-        exitCodeOverrideError = {
-          code: 'TASK_RUNTIME_HARD_ERROR',
-          message: buildRuntimeHardErrorMessage({
-            exitCode: outcome.exitCode,
-            claudeError: claudeErrorForHardFailure,
-            runtimeName: this.getRuntimeDisplayName(task),
-          }),
-          remediation: { action: 'retry' },
-        };
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Runtime hard error: ${exitCodeOverrideError.message}`
-        );
-        /* v8 ignore stop @preserve */
-      } else {
-        exitCodeOverrideError = {
-          code: 'TASK_EXIT_CODE_OVERRIDE',
-          message: `Non-zero exit code (${String(outcome.exitCode)}) overrides verifier decision`,
-          remediation: { action: 'retry' },
-        };
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Non-zero exit code (${String(outcome.exitCode)}) overrides verifier decision`
-        );
-      }
-      await this.flushTaskLogs(task.taskId);
-      await this.collectTurnMetrics(task, attempt);
-      /* v8 ignore start -- ts-type: conditional spread for exact optional property types; FakeIsolationProvider cannot deliver a result alongside a non-zero exit code in the same fake-driven completion tick @preserve */
-      await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
-        error: exitCodeOverrideError,
-      });
-      /* v8 ignore stop @preserve */
-      return;
-    }
-
-    if (outcome.kind === 'retry') {
-      /* v8 ignore start -- upstream: FakeIsolationProvider cannot drive the missing-fields retry path in fake-driven tests — the fake always returns exitCode 0 and cannot reproduce multi-attempt verifier sequences @preserve */
-      this.logForwarder.appendChunk(task.taskId, '\n\n');
-      const nextAttempt = attempt + 1;
-      const runtimeName = this.getRuntimeDisplayName(task);
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Missing fields; re-launching ${runtimeName} (${String(nextAttempt)}/${String(maxAttempts)}): ${outcome.missingFields.join(', ')}`
-      );
-      await this.flushTaskLogs(task.taskId);
-      await this.teardownAttempt(task.taskId, true);
-
-      const resumePrompt = buildMissingFieldsPromptFn(
-        completionAgentType,
-        outcome.missingFields,
-        rawLogs,
-        task.executionMemoryContext
-      );
-      const resumePreview =
-        resumePrompt.length > 500 ? resumePrompt.slice(0, 500) + '\u2026' : resumePrompt;
-      this.appendTaggedTaskLog(task.taskId, 'prompt', `Resume prompt:\n${resumePreview}`);
-      const resumeStart = await this.startWorkerAttempt(task, {
-        prompt: resumePrompt,
-        continueSession: true,
-      });
-
-      if (resumeStart.ok) {
-        task.attemptCount = nextAttempt;
-        task.containerId = resumeStart.containerId;
-        await this.saveTask(task);
-        this.logger.info(
-          { taskId: task.taskId, attempt: nextAttempt, maxAttempts },
-          'Resumed task with follow-up attempt'
-        );
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Resume attempt started: attempt=${String(nextAttempt)}/${String(maxAttempts)}`
-        );
-        this.claudeErrors.delete(task.taskId);
-        this.taskExitCodes.delete(task.taskId);
-        this.attemptStartedAt.delete(task.taskId);
-        return;
-      }
-
-      const resumeError: TaskError = {
-        code: 'RESUME_ATTEMPT_FAILED',
-        message: `Failed to start attempt ${String(nextAttempt)}: ${String(resumeStart.error)}`,
-        remediation: { action: 'retry' },
-      };
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Terminal failure: resume start failed for attempt=${String(nextAttempt)} (${resumeError.message})`
-      );
-      await this.flushTaskLogs(task.taskId);
-      await this.collectTurnMetrics(task, attempt);
-      await this.finalizeTask(task, 'failed', {
-        ...(result !== undefined && { result }),
-        error: resumeError,
-      });
-      return;
-      /* v8 ignore stop @preserve */
-    }
-
-    // Fallback: outcome.kind === 'fail' — terminal verification failure.
-    /* v8 ignore start -- upstream: terminal failure path; FakeIsolationProvider cannot exhaust attempts in fake-driven tests @preserve */
-    // [INT-1470] Filter out the adapter's sentinel so legacy-shape verdicts
-    // with `passed: false` and no fields produce the generic "Completion
-    // verification failed" message (matching pre-INT-1470 behavior) rather
-    // than leaking the sentinel name into the error.
-    const realMissingFields = outcome.missingFields.filter(
-      (f) => f !== 'legacy_verifier_not_passed'
-    );
-    const failError: TaskError = {
-      code: 'TASK_COMPLETION_VERIFICATION_FAILED',
-      message:
-        realMissingFields.length > 0
-          ? `Missing fields: ${realMissingFields.join(', ')}`
-          : 'Completion verification failed',
-      remediation: {
-        action: 'retry',
-        ...(realMissingFields.length > 0 && {
-          manualSteps: realMissingFields,
-        }),
-      },
-    };
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Terminal failure: completion criteria not met after ${String(attempt)} attempts`
-    );
-    await this.flushTaskLogs(task.taskId);
-    await this.collectTurnMetrics(task, attempt);
-    await this.finalizeTask(task, 'failed', {
-      ...(result !== undefined && { result }),
-      error: failError,
-    });
-    /* v8 ignore stop @preserve */
+    await this.completionPipeline.handleTaskCompletion(task);
   }
 
   /**
@@ -2092,99 +808,30 @@ export class TaskDispatcher {
    * same sub-reason was observed on the previous attempt, mark the remediation
    * action as contact_support so the code-agent classifier stops looping.
    */
-  private async finalizeAttemptAsInfraFailure(
+  async finalizeAttemptAsInfraFailure(
     task: Task,
     attempt: number,
     classification: Extract<AttemptClassification, { outcome: 'infra_failed' }>,
     result: TaskResult | undefined // @allow-undefined-type -- function parameter, not optional property
   ): Promise<void> {
-    const { subReason, firstErrorLine } = classification;
-    const history = task.taskInfraFailureHistory ?? [];
-    const previous = history[history.length - 1];
-    const repeatedSubReason = previous?.subReason === subReason;
-
-    task.taskInfraFailureHistory = [
-      ...history,
-      { attempt, subReason, createdAt: new Date().toISOString() },
-    ];
-
-    if (repeatedSubReason) {
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Repeat infra failure (${subReason}) on attempt ${String(attempt)}; flipping remediation to contact_support`
-      );
-    }
-
-    // INT-1455: `remediation.action` is advisory for on-call/UI triage only.
-    // The code-agent classifyFailure() already returns 'fail' unconditionally
-    // for WORKER_INFRA_FAILURE (apps/code-agent/src/domain/utils/classifyFailure.ts),
-    // so neither 'retry' nor 'contact_support' here gates the automated retry
-    // loop. The flip exists so dashboards and webhook consumers can distinguish
-    // a first-time infra failure from a repeat of the same sub-reason after a
-    // user-driven resume.
-    const error: TaskError = {
-      code: 'WORKER_INFRA_FAILURE',
-      message: firstErrorLine,
-      remediation: repeatedSubReason
-        ? { action: 'contact_support', manualSteps: [`Repeat infra failure: ${subReason}`] }
-        : { action: 'retry', manualSteps: [`Infra failure: ${subReason}`] },
-    };
-
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Terminal failure: worker infra failure (${subReason})`
+    await this.completionPipeline.finalizeAttemptAsInfraFailure(
+      task,
+      attempt,
+      classification,
+      result
     );
-    await this.flushTaskLogs(task.taskId);
-    await this.collectTurnMetrics(task, attempt);
-    await this.finalizeTask(task, 'failed', {
-      ...(result !== undefined && { result }),
-      error,
-    });
   }
 
-  private buildResultFromVerification(
+  buildResultFromVerification(
     task: Task,
     gitResult: TaskResult | undefined, // @allow-undefined-type -- function parameter, not optional property
     verification: CompletionVerifierVerdict,
     agentType: CompletionAgentType
   ): TaskResult {
-    return buildResultFromVerificationFn(task, gitResult, verification, agentType);
+    return this.completionPipeline.buildResultFromVerification(task, gitResult, verification, agentType);
   }
 
-  private enrichResultForResumedTask(
-    task: Task,
-    result: TaskResult | undefined // @allow-undefined-type -- function parameter, not optional property
-  ): TaskResult | undefined {
-    return enrichResultForResumedTaskFn(task, result);
-  }
 
-  private async finalizeTaskWithResult(
-    task: Task,
-    agentType: CompletionAgentType,
-    finalResult: TaskResult,
-    keepLogForwarderOpen = false
-  ): Promise<void> {
-    /* v8 ignore start -- upstream: planning 'unclear' outcome requires FakeCompletionVerifier to return unclear outcome label; fake verifier always returns 'completed' outcome and cannot simulate unclear planning decisions @preserve */
-    if (agentType === 'planning' && finalResult.planning_outcome_label === 'unclear') {
-      await this.finalizeTask(
-        task,
-        'failed',
-        {
-          result: finalResult,
-          error: {
-            code: 'PLANNING_AGENT_UNCLEAR',
-            message:
-              finalResult.planning_unclear_clarification ??
-              'Planning agent reported unclear outcome',
-          },
-        },
-        keepLogForwarderOpen
-      );
-      return;
-    }
-    /* v8 ignore stop @preserve */
-    await this.finalizeTask(task, 'completed', { result: finalResult }, keepLogForwarderOpen);
-  }
 
   private buildResumePreamble(task?: Task): string {
     return buildResumePreambleFn(task);
@@ -2243,142 +890,6 @@ export class TaskDispatcher {
     return parseContinuationPrOutputFn(taskId, prOutput, this.logger);
   }
 
-  private async handleResumedAfterSuccessCompletion(task: Task): Promise<void> {
-    this.attemptCompletionSignals.delete(task.taskId);
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess nullish coalescing on attemptCount; task always has attemptCount set before this method is called @preserve */
-    const attempt = task.attemptCount ?? 1;
-    /* v8 ignore stop @preserve */
-
-    this.logger.info(
-      {},
-      `Resumed-after-success completion: taskId=${task.taskId} attempt=${String(attempt)}`
-    );
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      'Resumed-after-success completion: using loosened verification (exit code + runtime hard error only)'
-    );
-
-    try {
-      await this.logForwarder.flushAndStop(task.taskId);
-    } catch (flushError: unknown) {
-      this.logger.error(
-        { taskId: task.taskId, error: flushError },
-        'Failed to flush logs on resumed-after-success completion'
-      );
-    }
-
-    const checkResult = await this.checkForResult(task);
-    const effectiveResult = checkResult ?? task.lastSuccessResult;
-    if (checkResult === undefined && task.lastSuccessResult !== undefined) {
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        'checkForResult returned undefined, falling back to lastSuccessResult'
-      );
-    }
-    const claudeError = this.claudeErrors.get(task.taskId);
-    const exitCode = this.taskExitCodes.get(task.taskId);
-    const runtimeName = this.getRuntimeDisplayName(task);
-
-    const hasHardError =
-      (typeof exitCode === 'number' && exitCode !== 0) || claudeError !== undefined;
-
-    if (typeof exitCode === 'number') {
-      task.lastExitCode = exitCode;
-    } else {
-      delete task.lastExitCode;
-    }
-
-    /* v8 ignore start -- ts-type: nullish coalescing on verificationHistory; task always has verificationHistory initialized before this method is called @preserve */
-    task.verificationHistory = [
-      ...(task.verificationHistory ?? []),
-      {
-        attempt,
-        passed: !hasHardError,
-        missingFields: [],
-        verifierFailure: false,
-        createdAt: new Date().toISOString(),
-      },
-    ];
-    /* v8 ignore stop @preserve */
-
-    /* v8 ignore start -- upstream: hasHardError path requires non-zero exit code or claudeError set by runtime; FakeIsolationProvider cannot simulate worker process failures or runtime errors in unit tests @preserve */
-    if (hasHardError) {
-      const error: TaskError = {
-        code: 'TASK_RESUMED_HARD_ERROR',
-        message: buildRuntimeHardErrorMessage({ exitCode, claudeError, runtimeName }),
-        remediation: { action: 'retry' },
-      };
-
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Resumed-after-success hard error: ${error.message}`
-      );
-      await this.flushTaskLogs(task.taskId);
-      await this.collectTurnMetrics(task, attempt);
-      delete task.resumedAfterSuccess;
-      const enrichedErrorResult = this.enrichResultForResumedTask(task, effectiveResult);
-      await this.finalizeTask(task, 'failed', {
-        ...(enrichedErrorResult !== undefined && { result: enrichedErrorResult }),
-        error,
-      });
-      return;
-    }
-    /* v8 ignore stop @preserve */
-
-    // Check for pending messages before finalizing
-    /* v8 ignore start -- upstream: pending messages path in resumed-after-success requires sendMessage called on a completing task; timing-dependent race cannot be reproduced with fake timer sequential execution @preserve */
-    const pendingQueue = this.pendingMessages.get(task.taskId);
-    if (pendingQueue !== undefined && pendingQueue.length > 0) {
-      this.pendingMessages.delete(task.taskId);
-      const combinedPrompt = pendingQueue.join('\n\n');
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `Delivering ${String(pendingQueue.length)} queued message(s) instead of finalizing`
-      );
-      this.appendTaggedTaskLog(
-        task.taskId,
-        'prompt',
-        combinedPrompt.length > 200 ? combinedPrompt.slice(0, 200) + '\u2026' : combinedPrompt
-      );
-      await this.flushTaskLogs(task.taskId);
-      await this.teardownAttempt(task.taskId, true);
-      const resumeResult = await this.startWorkerAttempt(task, {
-        prompt: combinedPrompt,
-        continueSession: true,
-        injectActiveGoal: true,
-      });
-      if (resumeResult.ok) {
-        task.containerId = resumeResult.containerId;
-        await this.saveTask(task);
-        this.claudeErrors.delete(task.taskId);
-        this.taskExitCodes.delete(task.taskId);
-        this.attemptStartedAt.delete(task.taskId);
-        return;
-      }
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        'Failed to deliver queued messages, finalizing normally'
-      );
-    }
-    /* v8 ignore stop @preserve */
-
-    this.appendOrchestratorTaskLog(task.taskId, 'Resumed-after-success verification passed');
-    await this.flushTaskLogs(task.taskId);
-    await this.collectTurnMetrics(task, attempt);
-    delete task.resumedAfterSuccess;
-
-    const rawLogs = await this.isolation.provider.getWorkerLogs(task.taskId);
-    const geminiSummary = await this.extractResumeSummaryFn(task.taskId, rawLogs);
-
-    const enrichedResult = this.enrichResultForResumedTask(task, effectiveResult);
-    if (enrichedResult !== undefined && geminiSummary !== undefined) {
-      enrichedResult.summary = geminiSummary;
-    }
-    await this.finalizeTask(task, 'completed', {
-      ...(enrichedResult !== undefined && { result: enrichedResult }),
-      resumedCompletion: true,
-    });
-  }
 
   private async startWorkerAttempt(
     task: Task,
@@ -2392,38 +903,11 @@ export class TaskDispatcher {
   }
 
   private async teardownAttempt(taskId: string, keepSession: boolean): Promise<void> {
-    if (!keepSession) {
-      try {
-        await this.isolation.provider.destroyWorker(taskId);
-      } catch (error) {
-        this.logger.warn({ taskId, error }, 'Failed to destroy worker after attempt completion');
-      }
-      await this.isolation.provider.cleanupTaskSession?.(taskId);
-    }
+    await this.attemptLifecycle.teardownAttempt(taskId, keepSession);
   }
 
   private async failAcceptedResume(task: Task, error: unknown): Promise<void> {
-    this.logger.error(
-      { taskId: task.taskId, error },
-      'Accepted task resume failed during worker startup'
-    );
-
-    const resumeError: TaskError = {
-      code: 'RESUME_ATTEMPT_FAILED',
-      /* v8 ignore start -- ts-type: error instanceof Error ternary; failAcceptedResume always receives Error instances so String(error) branch is structurally unreachable in unit tests @preserve */
-      message: `Failed to resume task: ${error instanceof Error ? error.message : String(error)}`,
-      /* v8 ignore stop @preserve */
-      remediation: { action: 'retry' },
-    };
-
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Terminal failure: resume start failed (${resumeError.message})`
-    );
-
-    await this.finalizeTask(task, 'failed', {
-      error: resumeError,
-    });
+    await this.attemptLifecycle.failAcceptedResume(task, error);
   }
 
   private async finalizeTask(
@@ -2432,242 +916,7 @@ export class TaskDispatcher {
     payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean },
     keepLogForwarderOpen = false
   ): Promise<void> {
-    const finalStatus = statusParam;
-    const isNonPreservableAgentType =
-      task.agentType === 'review' || task.agentType === 'remediation';
-    const shouldPreserve =
-      this.preserveWorkerContainers &&
-      !isNonPreservableAgentType &&
-      (finalStatus === 'failed' || finalStatus === 'interrupted' || finalStatus === 'completed');
-    this.appendOrchestratorTaskLog(
-      task.taskId,
-      `Finalizing task: status=${finalStatus} hasResult=${String(payload.result !== undefined)} hasError=${String(payload.error !== undefined)}`
-    );
-
-    try {
-      await this.logForwarder.flush(task.taskId);
-    } catch (flushError) {
-      this.logger.error(
-        { taskId: task.taskId, error: flushError },
-        'Log flush failed during finalization'
-      );
-    }
-
-    this.appendOrchestratorTaskLog(task.taskId, `Finalizing: flushed logs`);
-    if (!keepLogForwarderOpen) {
-      this.logForwarder.close(task.taskId);
-    }
-
-    if (shouldPreserve && task.agentType === 'pull_request' && task.prNumber !== undefined) {
-      /* v8 ignore start -- source-map: optional chaining on listPreservedWorkers not tracked by v8 even though test covers both undefined and array paths @preserve */
-      const preserved = (await this.isolation.provider.listPreservedWorkers?.()) ?? [];
-      /* v8 ignore stop @preserve */
-      if (preserved.length > 0) {
-        const savedState = await this.statePersistence.load();
-        for (const p of preserved) {
-          const preservedTask = savedState.tasks[p.taskId];
-          if (
-            preservedTask?.agentType === 'pull_request' &&
-            preservedTask.prNumber === task.prNumber &&
-            preservedTask.taskId !== task.taskId
-          ) {
-            this.logger.info(
-              { oldTaskId: p.taskId, newTaskId: task.taskId, prNumber: task.prNumber },
-              'Destroying previous preserved pull_request container for same PR'
-            );
-            await this.isolation.provider.destroyWorker(p.taskId);
-          }
-        }
-      }
-    }
-    if (shouldPreserve) {
-      /* v8 ignore start -- ts-type: optional chaining + nullish coalescing on preserveWorker; IsolationProvider.preserveWorker is structurally optional but always defined by both DockerProvider and the FakeIsolationProvider, so the undefined branch is unreachable from any test entry point @preserve */
-      const preserved = (await this.isolation.provider.preserveWorker?.(task.taskId)) ?? false;
-      /* v8 ignore stop @preserve */
-      if (preserved) {
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Preserved worker container for debugging: taskId=${task.taskId} status=${finalStatus}`
-        );
-      } else {
-        this.appendOrchestratorTaskLog(
-          task.taskId,
-          `Failed to preserve worker container (no tracked worker): taskId=${task.taskId} status=${finalStatus}`
-        );
-        await this.teardownAttempt(task.taskId, false);
-      }
-    } else {
-      await this.teardownAttempt(task.taskId, false);
-    }
-    this.isolation.tokenRefresher.unregisterTask(task.taskId);
-    this.claudeErrors.delete(task.taskId);
-    this.taskExitCodes.delete(task.taskId);
-    this.attemptStartedAt.delete(task.taskId);
-    this.attemptCompletionSignals.delete(task.taskId);
-    this.pendingMessages.delete(task.taskId);
-    this.lastOutputAt.delete(task.taskId);
-
-    task.status = finalStatus;
-    task.completedAt = new Date().toISOString();
-    delete task.resumedAfterSuccess;
-    // Store result for resume-after-success fallback; clear on non-success
-    if (finalStatus === 'completed' && payload.result !== undefined) {
-      task.lastSuccessResult = payload.result;
-    } else {
-      delete task.lastSuccessResult;
-    }
-    delete task.pendingResumeStart;
-    await this.saveTask(task);
-
-    // INT-1565 §S5: emit code_tasks_* metrics on every terminal transition.
-    // Counter `code_tasks_completed{status="success"|"failed"}` fires for ALL
-    // terminal statuses (interrupted/cancelled fold into "failed"); the
-    // separate `code_tasks_failed` counter tracks only non-success outcomes
-    // so dashboards can distinguish "task ended" from "task failed". Duration
-    // is recorded best-effort: when `task.startedAt` is unparseable we emit
-    // a zero-valued sample so downstream histograms still see the count.
-    //
-    // Wrap in try/catch as a contract-level guard: the bundled implementations
-    // (`createMetricsClient`, `noopMetricsClient`) never throw, but the
-    // `MetricsClient` interface alone does not promise that — a hand-rolled
-    // client could, and a metrics outage MUST NOT crash task finalization.
-    try {
-      this.emitTerminalMetrics(task, finalStatus);
-    } catch (metricsError) {
-      // Use the file-wide `error` log key for consistency with the ~25 other
-      // catch-and-log sites in this dispatcher; the field-name unification
-      // onto `err` is owned by INT-1538 §S2 + §S8, not §S5.
-      this.logger.warn(
-        { taskId: task.taskId, error: metricsError },
-        'metrics emission failed during finalize; continuing'
-      );
-    }
-
-    if (this.runningCount > 0) this.runningCount--;
-    this.clearTaskTimers(task.taskId);
-
-    // Send task lifecycle event to code-agent (best-effort)
-    /* v8 ignore start -- source-map: v8 misattributed alignment on chained ternary over TaskStatus union; tests exercise every status arm but the coverage tool cannot map them onto branch counters @preserve */
-    const taskLifecycleEvent =
-      finalStatus === 'completed'
-        ? 'task_completed'
-        : finalStatus === 'failed'
-          ? 'task_failed'
-          : finalStatus === 'interrupted'
-            ? 'task_interrupted'
-            : undefined;
-    /* v8 ignore stop @preserve */
-
-    /* v8 ignore start -- ts-type: taskLifecycleEvent undefined branch; v8 misattributes the false branch of this conditional check despite test at line 2160 exercising finalizeTask with cancelled status @preserve */
-    if (taskLifecycleEvent !== undefined) {
-      /* v8 ignore stop @preserve */
-      const agentStatusMap: Record<string, string> = {
-        execution: 'implemented',
-        remediation: 'implemented',
-        review: 'reviewed',
-        planning: 'planned',
-      };
-      /* v8 ignore start -- ts-type: conditional spread branches for optional result/error fields; FakeWebhookClient records payloads but branch tracking for spread operators inside object literals is misattributed by v8 @preserve */
-      const taskEventPayload: Record<string, unknown> = {
-        taskId: task.taskId,
-        event: taskLifecycleEvent,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard: completedAt set above but test mocks may bypass assignment
-        ...(task.completedAt !== undefined && {
-          duration: new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime(),
-        }),
-        ...(payload.result?.prUrl !== undefined && { prUrl: payload.result.prUrl }),
-        ...(payload.result?.commitDetails !== undefined && {
-          commits: payload.result.commitDetails,
-        }),
-        ...(payload.error !== undefined && { error: payload.error }),
-        ...(task.agentType !== undefined &&
-          agentStatusMap[task.agentType] !== undefined && {
-            status: agentStatusMap[task.agentType],
-          }),
-      };
-      /* v8 ignore stop @preserve */
-
-      this.webhookClient
-        .send({
-          url: getTaskEventUrl(task.webhookUrl),
-          secret: task.webhookSecret,
-          payload: taskEventPayload,
-          taskId: task.taskId,
-        })
-        .catch((sendError: unknown) => {
-          this.logger.warn(
-            { taskId: task.taskId, error: sendError },
-            'Failed to send task lifecycle event (best-effort)'
-          );
-        });
-    }
-
-    // Commit terminal status to code-agent's Firestore BEFORE firing the
-    // legacy task-complete webhook. Code-agent's Firestore is the single
-    // source of truth for status; the webhook is demoted to side-effects
-    // (Linear labels, WhatsApp, etc.). On commit failure, log + continue —
-    // the zombie watchdog (Task 6) is the recovery path. Do NOT block
-    // finalize: Docker teardown and local state cleanup already ran.
-    const statusCommitResult = await this.statusUpdateClient.commit({
-      taskId: task.taskId,
-      status: finalStatus,
-      // Defensive fallback mirrors the line ~2505 guard: task.completedAt is
-      // set above at line 2465, but test mocks or future refactors could
-      // bypass that assignment. Avoids RangeError inside .toISOString().
-      /* v8 ignore start -- ts-type: defensive fallback for optional Task.completedAt; production path at line 2465 always sets it before reaching here, mirrors the runtime guard at line ~2505 @preserve */
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard: completedAt set above but test mocks may bypass assignment
-      completedAt: task.completedAt !== undefined ? new Date(task.completedAt) : new Date(),
-      /* v8 ignore stop @preserve */
-      ...(payload.error !== undefined && {
-        error: { code: payload.error.code, message: payload.error.message },
-      }),
-      ...(payload.result !== undefined && {
-        result: {
-          ...(payload.result.prUrl !== undefined && { prUrl: payload.result.prUrl }),
-          ...(payload.result.branch !== undefined && { branch: payload.result.branch }),
-          ...(payload.result.summary !== undefined && { summary: payload.result.summary }),
-        },
-      }),
-    });
-    if (!statusCommitResult.ok) {
-      this.logger.error(
-        {
-          taskId: task.taskId,
-          tag: 'STATUS_UPDATE_COMMIT_FAILED',
-          errorType: statusCommitResult.error.type,
-          errorMessage: statusCommitResult.error.message,
-          agentType: task.agentType,
-          prNumber: task.prNumber,
-          repository: task.repository,
-          finalStatus,
-        },
-        'Failed to commit terminal status via /internal/code-tasks/:id/status; zombie watchdog will recover'
-      );
-      this.appendOrchestratorTaskLog(
-        task.taskId,
-        `STATUS_UPDATE_COMMIT_FAILED: type=${statusCommitResult.error.type} — zombie watchdog will recover`
-      );
-    }
-
-    await this.webhookClient.send({
-      url: task.webhookUrl,
-      secret: task.webhookSecret,
-      /* v8 ignore start -- ts-type: conditional spread branches for optional result/error/resumedCompletion fields; spread operator branch tracking inside object literals is misattributed by v8 @preserve */
-      payload: {
-        taskId: task.taskId,
-        status: finalStatus,
-        ...(payload.result !== undefined && { result: payload.result }),
-        ...(payload.error !== undefined && { error: payload.error }),
-        duration: new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime(),
-        ...(payload.resumedCompletion === true && { resumedCompletion: true }),
-      },
-      /* v8 ignore stop @preserve */
-      taskId: task.taskId,
-    });
-    this.logger.info(
-      {},
-      `Task finalized: id=${task.taskId} status=${finalStatus} durationMs=${String(new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime())}`
-    );
+    await this.completionPipeline.finalizeTask(task, statusParam, payload, keepLogForwarderOpen);
   }
 
   private async checkForResult(task: Task): Promise<TaskResult | undefined> {
@@ -2686,42 +935,28 @@ export class TaskDispatcher {
     await flushTaskLogsFn(this.logForwarder, this.logger, taskId);
   }
 
-  private async collectTurnMetrics(task: Task, attempt: number): Promise<void> {
-    await collectTurnMetricsFn(this.turnMetricsCollector, this.logger, task, attempt);
-  }
 
-  private async prepareComplianceValidationInput(
+  async prepareComplianceValidationInput(
     task: Task,
     finalResult: TaskResult,
     verification: CompletionVerifierVerdict
   ): Promise<ComplianceValidationInput | undefined> {
-    return await prepareComplianceValidationInputFn(
-      this.agentComplianceValidator,
-      this.config,
-      this.logForwarder,
-      this.logger,
+    return await this.completionPipeline.prepareComplianceValidationInput(
       task,
       finalResult,
       verification
     );
   }
 
-  private async executeComplianceValidation(
+  async executeComplianceValidation(
     task: Task,
     input: ComplianceValidationInput
   ): Promise<void> {
-    await executeComplianceValidationFn(
-      this.agentComplianceValidator,
-      this.webhookClient,
-      this.logForwarder,
-      this.logger,
-      task,
-      input
-    );
+    await this.completionPipeline.executeComplianceValidation(task, input);
   }
 
-  private async flushAndCloseLogForwarder(taskId: string): Promise<void> {
-    await flushAndCloseLogForwarderFn(this.logForwarder, this.logger, taskId);
+  async flushAndCloseLogForwarder(taskId: string): Promise<void> {
+    await this.completionPipeline.flushAndCloseLogForwarder(taskId);
   }
 
   private clearTaskTimers(taskId: string): void {
@@ -2755,38 +990,6 @@ export class TaskDispatcher {
     task: Task,
     finalStatus: 'completed' | 'failed' | 'interrupted' | 'cancelled'
   ): void {
-    const metricStatus = mapTerminalStatusToMetricStatus(finalStatus);
-
-    this.metrics.increment(CODE_TASK_METRICS.COMPLETED, { status: metricStatus });
-
-    if (finalStatus !== 'completed') {
-      this.metrics.increment(CODE_TASK_METRICS.FAILED, { reason: finalStatus });
-    }
-
-    const durationMs = computeTaskDurationMs(task);
-    this.metrics.record(CODE_TASK_METRICS.DURATION, { status: metricStatus }, durationMs);
+    this.completionPipeline.emitTerminalMetrics(task, finalStatus);
   }
-}
-
-/**
- * Compute task wall-clock duration in milliseconds for metric emission.
- *
- * `task.startedAt` is an ISO string set when the task is dispatched and
- * `task.completedAt` is set immediately before this helper is called. We
- * parse defensively: `Date.parse` returns `NaN` for malformed input, and
- * a zero-or-negative duration (clock skew, instant cancel) is clamped to
- * `0` so the duration histogram stays positive.
- */
-export function computeTaskDurationMs(task: Task): number {
-  const completedAt = task.completedAt;
-  if (completedAt === undefined) {
-    return 0;
-  }
-  const start = Date.parse(task.startedAt);
-  const end = Date.parse(completedAt);
-  if (!Number.isFinite(start) || !Number.isFinite(end)) {
-    return 0;
-  }
-  const delta = end - start;
-  return delta > 0 ? delta : 0;
 }

@@ -171,6 +171,18 @@ export function makeContextHarness(initialTasks: Task[] = []): ContextHarness {
     checkForResult,
     saveTask,
     getTask: async (taskId: string) => tasks.get(taskId) ?? null,
+    startWorkerAttempt: vi.fn().mockResolvedValue({ ok: true, containerId: 'cont-abc' }),
+    finalizeTask: vi.fn().mockResolvedValue(undefined),
+    teardownAttempt: vi.fn().mockResolvedValue(undefined),
+    clearTaskTimers: vi.fn(),
+    scheduleTimeoutWarning: vi.fn(),
+    scheduleTimeoutKill: vi.fn(),
+    startCompletionMonitoring: vi.fn(),
+    failAcceptedResume: vi.fn().mockResolvedValue(undefined),
+    getRuntimeDisplayName: vi.fn().mockReturnValue('claude'),
+    incrementRunningCount: () => {
+      runningCount.value++;
+    },
   };
 
   return {

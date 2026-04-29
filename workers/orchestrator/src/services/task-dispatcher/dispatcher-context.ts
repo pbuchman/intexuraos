@@ -1,6 +1,6 @@
 import type { Logger } from '@intexuraos/common-core';
 import type { OrchestratorConfig } from '../../types/config.js';
-import type { Task, TaskResult } from '../../types/task.js';
+import type { Task, TaskError, TaskResult } from '../../types/task.js';
 import type { StatePersistence } from '../state-persistence.js';
 import type { WorktreeManager } from '../worktree-manager.js';
 import type { LogForwarder } from '../log-forwarder.js';
@@ -10,7 +10,8 @@ import type { ActivityTimeoutManager } from '../activity-timeout-manager.js';
 import type { TurnMetricsCollector } from '../turn-metrics-collector.js';
 import type { AgentComplianceValidator } from '../agent-compliance-validator.js';
 import type { MetricsClient } from '../../metrics.js';
-import type { IsolationConfig, VerifierOverrideForTests } from '../task-dispatcher.js';
+import type { IsolationConfig } from '../task-dispatcher.js';
+import type { VerifierOverrideForTests } from './completion-pipeline.js';
 
 /**
  * INT-1551 §10: shared state and dependency container for the dispatcher
@@ -88,4 +89,48 @@ export interface DispatcherContext {
    * Fetches a task by id (read-through state lookup).
    */
   getTask: (taskId: string) => Promise<Task | null>;
+
+  // --- Cross-module orchestration callbacks injected after construction
+  // (set on the same context object before sub-modules need them). ---
+  /**
+   * Starts a worker attempt. Backed by `TaskRunner.startWorkerAttempt`.
+   * Wired after the dispatcher constructs its TaskRunner.
+   */
+  startWorkerAttempt: (
+    task: Task,
+    params: { prompt: string; continueSession: boolean; injectActiveGoal?: boolean }
+  ) => Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }>;
+  /**
+   * Drives a task to its terminal state, emits webhooks, releases slot.
+   * Backed by `CompletionPipeline.finalizeTask`.
+   */
+  finalizeTask: (
+    task: Task,
+    statusParam: 'completed' | 'failed' | 'interrupted' | 'cancelled',
+    payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean },
+    keepLogForwarderOpen?: boolean
+  ) => Promise<void>;
+  /**
+   * Tears down the current worker attempt (destroy/cleanup) optionally
+   * keeping the worker session for resume. Backed by
+   * `AttemptLifecycle.teardownAttempt`.
+   */
+  teardownAttempt: (taskId: string, keepSession: boolean) => Promise<void>;
+  /**
+   * Cancels all per-task timers + clears completion-in-progress flag.
+   * Backed by `TaskTimers.clearTaskTimers`.
+   */
+  clearTaskTimers: (taskId: string) => void;
+  /** Best-effort 5h warning timer. */
+  scheduleTimeoutWarning: (taskId: string) => void;
+  /** Hard 5h kill timer. */
+  scheduleTimeoutKill: (taskId: string) => void;
+  /** 30s poll on `isWorkerRunning` + `attemptCompletionSignals`. */
+  startCompletionMonitoring: (taskId: string) => void;
+  /** Convert a resume-startup error → terminal failure. */
+  failAcceptedResume: (task: Task, error: unknown) => Promise<void>;
+  /** Runtime display-name helper for error messages. */
+  getRuntimeDisplayName: (task: Task) => string;
+  /** Increment the dispatcher's `runningCount` counter. */
+  incrementRunningCount: () => void;
 }
