@@ -9,7 +9,7 @@ import type { Logger } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type { LogChunkRepository, RepositoryError } from '../../domain/repositories/logChunkRepository.js';
 import type { LogChunk } from '../../domain/models/logChunk.js';
-import type { Firestore } from '@intexuraos/infra-firestore';
+import { computeExpireAt, RETENTION_7D_MS, type Firestore } from '@intexuraos/infra-firestore';
 
 export interface FirestoreLogChunkRepositoryDeps {
   firestore: Firestore;
@@ -31,6 +31,7 @@ export class FirestoreLogChunkRepository implements LogChunkRepository {
     }
 
     const batch = this.firestore.batch();
+    const expireAt = computeExpireAt(RETENTION_7D_MS);
 
     for (const chunk of chunks) {
       const docRef = this.firestore
@@ -44,6 +45,7 @@ export class FirestoreLogChunkRepository implements LogChunkRepository {
         content: chunk.content,
         timestamp: chunk.timestamp,
         size: chunk.size,
+        expireAt,
       });
     }
 

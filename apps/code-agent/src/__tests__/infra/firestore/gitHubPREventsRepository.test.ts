@@ -2,14 +2,21 @@
  * Tests for Firestore GitHub PR events repository.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import type { Logger } from 'pino';
+import { Timestamp } from '@google-cloud/firestore';
 import type { CreateGitHubPREventInput, GitHubPREvent } from '../../../domain/models/gitHubPREvent.js';
 
-// Mock getFirestore BEFORE importing the repository
-vi.mock('@intexuraos/infra-firestore', () => ({
-  getFirestore: vi.fn(),
-}));
+// Mock getFirestore BEFORE importing the repository — pass through other exports.
+vi.mock('@intexuraos/infra-firestore', async () => {
+  const actual = await vi.importActual<typeof import('@intexuraos/infra-firestore')>(
+    '@intexuraos/infra-firestore'
+  );
+  return {
+    ...actual,
+    getFirestore: vi.fn(),
+  };
+});
 
 import { createFirestoreGitHubPREventsRepository, readIsDraft } from '../../../infra/firestore/gitHubPREventsRepository.js';
 import { getFirestore } from '@intexuraos/infra-firestore';
@@ -74,6 +81,14 @@ function createMockQuerySnapshot(docs: unknown[]): { empty: boolean; docs: unkno
 }
 
 describe('createFirestoreGitHubPREventsRepository', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-29T00:00:00.000Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe('save()', () => {
     it('should save a new event successfully', async () => {
       const mockDocRef = {
@@ -109,6 +124,13 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         expect(mockDocRef.set).toHaveBeenCalled();
         expect(mockQuery.doc).toHaveBeenCalled();
       }
+
+      // TTL: every write carries `expireAt = now + 24h` for Firestore native TTL
+      const setPayload = mockDocRef.set.mock.calls[0]?.[0] as { expireAt?: Timestamp };
+      expect(setPayload?.expireAt).toBeInstanceOf(Timestamp);
+      expect(setPayload?.expireAt?.toMillis()).toBe(
+        new Date('2026-04-30T00:00:00.000Z').getTime()
+      );
     });
 
     it('should return DUPLICATE_EVENT error for duplicate deliveryId (deduplication)', async () => {

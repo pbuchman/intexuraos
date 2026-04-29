@@ -71,7 +71,6 @@ import { createStatusMirrorService } from '../../infra/services/statusMirrorServ
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
-import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
@@ -206,10 +205,6 @@ describe('codeRoutes branch coverage', () => {
         logger,
       }),
       detectZombieTasks: createDetectZombieTasksUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
       }),

@@ -63,7 +63,6 @@ describe('initServices', () => {
     expect(c.statusMirrorService).toBeDefined();
     expect(c.processHeartbeat).toBeDefined();
     expect(c.detectZombieTasks).toBeDefined();
-    expect(c.cleanupTaskLogs).toBeDefined();
     expect(c.archiveStaleGroups).toBeDefined();
     expect(c.autoArchiveMergedTasks).toBeDefined();
     expect(c.metricsClient).toBeDefined();

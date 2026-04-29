@@ -210,22 +210,6 @@ export interface CodeTaskRepository {
   countByUserToday(userId: string): Promise<Result<number, RepositoryError>>;
 
   /**
-   * Find tasks eligible for log archival (completed before cutoff, not yet archived).
-   */
-  findArchivableTasks(
-    cutoffDate: Date,
-    limit: number
-  ): Promise<Result<{ taskId: string }[], RepositoryError>>;
-
-  /**
-   * Archive logs for a task: delete logs subcollection and mark task as archived.
-   */
-  archiveTaskLogs(
-    taskId: string,
-    batchSize: number
-  ): Promise<Result<{ logCount: number; archivedAt: Date }, RepositoryError>>;
-
-  /**
    * Find the task that created a specific PR.
    * Excludes merge-conflict follow-up tasks so PR routing links back to the
    * canonical PR task instead of a later conflict-resolution episode (INT-465).

@@ -23,7 +23,6 @@ import { createFirestoreLogLineRepository } from '../../../infra/repositories/fi
 import { createStatusMirrorService } from '../../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../../domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase } from '../../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient } from '../../../infra/metrics.js';
@@ -202,7 +201,6 @@ describe('GET /code/issue-groups', () => {
       statusMirrorService: createStatusMirrorService({ actionsAgentClient: actionsClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: repoToUse, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: repoToUse, logger }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: repoToUse, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
@@ -321,10 +319,6 @@ describe('GET /code/issue-groups', () => {
         logger,
       }),
       detectZombieTasks: createDetectZombieTasksUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
@@ -1114,10 +1108,6 @@ describe('GET /code/issue-groups', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
       archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
@@ -1221,10 +1211,6 @@ describe('GET /code/issue-groups', () => {
         logger,
       }),
       detectZombieTasks: createDetectZombieTasksUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
@@ -1442,7 +1428,6 @@ describe('GET /code/issue-groups', () => {
         statusMirrorService: createStatusMirrorService({ actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }), logger }),
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-        cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         workerHealthProbe: mockWorkerHealthProbe,
         gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
@@ -1541,7 +1526,6 @@ describe('GET /code/issue-groups', () => {
         statusMirrorService: createStatusMirrorService({ actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }), logger }),
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-        cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         workerHealthProbe: mockWorkerHealthProbe,
         gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
@@ -1606,7 +1590,6 @@ describe('GET /code/issue-groups', () => {
         statusMirrorService: createStatusMirrorService({ actionsAgentClient: createActionsAgentClient({ baseUrl: 'http://actions-agent', internalAuthToken: 'test-token', logger }), logger }),
         processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
-        cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
         workerHealthProbe: mockWorkerHealthProbe,
         gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),
@@ -2425,7 +2408,6 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
       statusMirrorService: createStatusMirrorService({ actionsAgentClient: actionsClient, logger }),
       processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: repoToUse, logger }),
       detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: repoToUse, logger }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: repoToUse, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({ firestore: fakeFirestore as unknown as Firestore, logger }),
       workerHealthProbe: mockWorkerHealthProbe,
       gitHubPREventRepo: createFirestoreGitHubPREventsRepository({ logger }),

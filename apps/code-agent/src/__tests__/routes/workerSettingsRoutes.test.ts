@@ -38,7 +38,6 @@ import { createLinearIssueService } from '../../domain/services/linearIssueServi
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from '../../domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from '../../domain/usecases/autoArchiveMergedTasks.js';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
@@ -137,10 +136,6 @@ describe('Worker Settings Routes', () => {
         logger,
       }),
       detectZombieTasks: createDetectZombieTasksUseCase({
-        codeTaskRepository: codeTaskRepo,
-        logger,
-      }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
       }),

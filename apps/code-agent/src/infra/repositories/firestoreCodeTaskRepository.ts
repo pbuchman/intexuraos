@@ -19,7 +19,7 @@ import {
 } from '../firestore/task-serializer.js';
 import { checkDedupLayers, generateDedupKey } from '../firestore/task-dedup.js';
 import {
-  activeByLinearIssue, activeReviewForPR, allNotArchived, archivableTasks, buildListQuery,
+  activeByLinearIssue, activeReviewForPR, allNotArchived, buildListQuery,
   dispatchedOrRunningForLinearIssue, dispatchedOrRunningForPR, erroredExecutionMemoryPostRun, latestAskAgentForUser,
   nonArchivedForUser, nonArchivedGlobal, pendingExecutionMemoryPostRun,
   plannedPlanningByLinearIssue, preservedPullRequestForPR, prTasksByCreatedAt,
@@ -148,34 +148,6 @@ export const createFirestoreCodeTaskRepository = (deps: {
       )));
       return (await tasksCreatedSince(collection, userId, startOfDay).get()).size;
     }, { userId }, 'Failed to count user tasks for today'),
-    findArchivableTasks: (cutoffDate, limit) => guarded(async () =>
-      (await archivableTasks(collection, Timestamp.fromDate(cutoffDate), limit).get())
-        .docs.map((d) => ({ taskId: d.id })),
-      { cutoffDate }, 'Failed to find archivable tasks',
-    ),
-    archiveTaskLogs: (taskId, batchSize) => guarded<{ logCount: number; archivedAt: Date }>(async () => {
-      const taskRef = collection.doc(taskId);
-      if (!(await taskRef.get()).exists) {
-        return err({ code: 'NOT_FOUND', message: `Task ${taskId} not found` });
-      }
-      const wipe = async (name: string): Promise<number> => {
-        const docs = (await taskRef.collection(name).get()).docs;
-        let batch = firestore.batch();
-        let n = 0;
-        for (const d of docs) {
-          batch.delete(d.ref);
-          if (++n % batchSize === 0) { await batch.commit(); batch = firestore.batch(); }
-        }
-        if (n % batchSize !== 0) await batch.commit();
-        return docs.length;
-      };
-      const logCount = (await wipe('logs')) + (await wipe('log_lines'))
-        + (await wipe('log_entries')) + (await wipe('turn_metrics'));
-      const archivedAt = new Date();
-      await taskRef.update({ logsArchived: true, logCount, archivedAt: Timestamp.fromDate(archivedAt) });
-      logger.info({ taskId, logCount }, 'Task logs archived');
-      return ok({ logCount, archivedAt });
-    }, { taskId }, 'Failed to archive task logs', true),
     findRecentRemediationForPR: (repository, prNumber) => guarded(
       () => firstOrNull(recentRemediationForPR(collection, repository, prNumber)),
       { repository, prNumber }, 'Failed to find recent remediation task for PR',

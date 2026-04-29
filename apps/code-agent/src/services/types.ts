@@ -25,7 +25,6 @@ import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
 import type { StatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 import type { ProcessHeartbeatUseCase } from '../domain/usecases/processHeartbeat.js';
 import type { DetectZombieTasksUseCase } from '../domain/usecases/detectZombieTasks.js';
-import type { CleanupTaskLogsUseCase } from '../domain/usecases/cleanupTaskLogs.js';
 import type { ArchiveStaleGroupsUseCase } from '../domain/usecases/archiveStaleGroups.js';
 import type { AutoArchiveMergedTasksUseCase } from '../domain/usecases/autoArchiveMergedTasks.js';
 import type { MetricsClient } from '../infra/metrics.js';
@@ -69,7 +68,6 @@ export interface ServiceContainer {
   statusMirrorService: StatusMirrorService;
   processHeartbeat: ProcessHeartbeatUseCase;
   detectZombieTasks: DetectZombieTasksUseCase;
-  cleanupTaskLogs: CleanupTaskLogsUseCase;
   archiveStaleGroups: ArchiveStaleGroupsUseCase;
   autoArchiveMergedTasks: AutoArchiveMergedTasksUseCase;
   metricsClient: MetricsClient;

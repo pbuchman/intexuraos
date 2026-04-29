@@ -53,7 +53,6 @@
 # ├─────────────────────────────────────────────────────────────────────────┤
 # │ BATCH 9 - Cloud Functions Workers (parallel with Batch 1-8)             │
 # │   1. vm-lifecycle                                                       │
-# │   2. log-cleanup                                                        │
 # ├─────────────────────────────────────────────────────────────────────────┤
 # │ BATCH 10 - Web Frontend                                                 │
 # │   1. web (frontend - after all services deployed)                       │
