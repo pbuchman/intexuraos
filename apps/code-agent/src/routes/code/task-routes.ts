@@ -1314,10 +1314,6 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     }
   );
 
-  // POST /internal/tasks/cleanup-logs was removed when retention moved to
-  // native Firestore TTL (24h for GitHub events, 7d for code-task logs).
-  // See terraform/modules/firestore/ttl.tf for the replacement.
-
   // ==== Public routes (Auth0 JWT) ====
   fastify.register((fastify) => {
     fastify.addHook('onRequest', jwtValidator);

@@ -13,7 +13,6 @@
  *   (group) logs                 timestamp    < now - 7d
  *   (group) log_lines            timestamp    < now - 7d
  *   turn_metrics                 deleted via parent code_tasks.createdAt < now - 7d
- *   log_entries                  empty in production — skipped
  *
  * Usage:
  *   npx tsx apps/code-agent/src/scripts/bulkDeleteForTTLRollout.ts        # dry-run
@@ -24,13 +23,12 @@
 
 import { Firestore, Timestamp, type Query } from '@google-cloud/firestore';
 import { createAppLogger } from '@intexuraos/infra-sentry';
+import { RETENTION_24H_MS, RETENTION_7D_MS } from '@intexuraos/infra-firestore';
 
 /* v8 ignore start -- module-init: standalone bulk-delete script is never imported by test suites; cannot be unit-tested without a live Firestore connection @preserve */
 
 const logger = createAppLogger({ name: 'bulk-delete-for-ttl-rollout' });
 
-const RETENTION_24H_MS = 24 * 60 * 60 * 1000;
-const RETENTION_7D_MS = 7 * 24 * 60 * 60 * 1000;
 const BATCH_SIZE = 500;
 
 const projectId = process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? 'intexuraos-dev-pbuchman';
@@ -41,38 +39,74 @@ const fs = new Firestore({ projectId });
 interface CollectionPlan {
   label: string;
   query: () => Query;
-  isCollectionGroup: boolean;
 }
 
 async function deleteByQuery(plan: CollectionPlan): Promise<number> {
   logger.info({ label: plan.label }, 'scanning');
-  let totalDeleted = 0;
-  let more = true;
-  while (more) {
-    const snap = await plan.query().limit(BATCH_SIZE).get();
-    if (snap.size === 0) {
-      more = false;
-      break;
-    }
 
-    if (dryRun) {
-      const samplePath = snap.docs[0]?.ref.path ?? '?';
-      logger.info({ label: plan.label, count: snap.size, sample: samplePath }, '[DRY-RUN] would delete');
-      totalDeleted += snap.size;
-      // In dry-run we cannot loop forever — break after first window.
-      more = false;
-      break;
-    }
-
-    const batch = fs.batch();
-    for (const doc of snap.docs) batch.delete(doc.ref);
-    await batch.commit();
-    totalDeleted += snap.size;
-    logger.info({ label: plan.label, deleted: snap.size, total: totalDeleted }, 'deleted batch');
-    if (snap.size < BATCH_SIZE) more = false;
+  // Dry-run: use a count() aggregation so the operator sees the true total
+  // (the doc-fetch loop below would otherwise stop at the first 500-doc window).
+  if (dryRun) {
+    const agg = await plan.query().count().get();
+    const count = agg.data().count;
+    logger.info({ label: plan.label, count }, '[DRY-RUN] would delete');
+    return count;
   }
-  logger.info({ label: plan.label, dryRun, totalDeleted }, 'done');
-  return totalDeleted;
+
+  let total = 0;
+  for (;;) {
+    const snap = await plan.query().limit(BATCH_SIZE).get();
+    if (snap.size === 0) return total;
+    const batch = fs.batch();
+    for (const d of snap.docs) batch.delete(d.ref);
+    await batch.commit();
+    total += snap.size;
+    logger.info({ label: plan.label, deleted: snap.size, total }, 'deleted batch');
+    if (snap.size < BATCH_SIZE) return total;
+  }
+}
+
+async function deleteTurnMetrics(cutoff7d: Timestamp): Promise<number> {
+  logger.info({}, '[turn_metrics] scanning by parent code_tasks.createdAt');
+  let total = 0;
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+
+  for (;;) {
+    let q = fs
+      .collection('code_tasks')
+      .where('createdAt', '<', cutoff7d)
+      .orderBy('createdAt')
+      .limit(BATCH_SIZE);
+    if (cursor) q = q.startAfter(cursor);
+    const parents = await q.get();
+    if (parents.size === 0) break;
+
+    for (const taskDoc of parents.docs) {
+      // Page subcollection in BATCH_SIZE chunks so we never exceed the
+      // Firestore 500-op batch ceiling for tasks with many turn_metrics rows.
+      let subCursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+      for (;;) {
+        let subQ = taskDoc.ref.collection('turn_metrics').orderBy('__name__').limit(BATCH_SIZE);
+        if (subCursor) subQ = subQ.startAfter(subCursor);
+        const subSnap = await subQ.get();
+        if (subSnap.size === 0) break;
+        if (!dryRun) {
+          const batch = fs.batch();
+          for (const sub of subSnap.docs) batch.delete(sub.ref);
+          await batch.commit();
+        }
+        total += subSnap.size;
+        if (subSnap.size < BATCH_SIZE) break;
+        subCursor = subSnap.docs[subSnap.docs.length - 1];
+      }
+    }
+
+    if (parents.size < BATCH_SIZE) break;
+    cursor = parents.docs[parents.docs.length - 1];
+  }
+
+  logger.info({ dryRun, turnMetricsDeleted: total }, '[turn_metrics] done');
+  return total;
 }
 
 async function main(): Promise<void> {
@@ -94,27 +128,22 @@ async function main(): Promise<void> {
     {
       label: 'github-webhook-audit-events',
       query: () => fs.collection('github-webhook-audit-events').where('receivedAt', '<', cutoff24h),
-      isCollectionGroup: false,
     },
     {
       label: 'github-pr-events',
       query: () => fs.collection('github-pr-events').where('processedAt', '<', cutoff24h),
-      isCollectionGroup: false,
     },
     {
       label: 'github-event-log-entries',
       query: () => fs.collection('github-event-log-entries').where('authPassedAt', '<', cutoff24h),
-      isCollectionGroup: false,
     },
     {
       label: '(group) logs',
       query: () => fs.collectionGroup('logs').where('timestamp', '<', cutoff7d),
-      isCollectionGroup: true,
     },
     {
       label: '(group) log_lines',
       query: () => fs.collectionGroup('log_lines').where('timestamp', '<', cutoff7d),
-      isCollectionGroup: true,
     },
   ];
 
@@ -122,28 +151,7 @@ async function main(): Promise<void> {
   for (const plan of plans) {
     grandTotal += await deleteByQuery(plan);
   }
-
-  // turn_metrics: timestamp is an ISO string, so we can't do a server-side
-  // Timestamp comparison. Instead, find code_tasks.createdAt < now - 7d, then
-  // delete each task's turn_metrics subcollection.
-  logger.info({}, '[turn_metrics] scanning by parent code_tasks.createdAt');
-  let turnMetricsDeleted = 0;
-  const oldTasksSnap = await fs.collection('code_tasks').where('createdAt', '<', cutoff7d).get();
-  logger.info({ eligibleParents: oldTasksSnap.size }, 'turn_metrics parent tasks found');
-  for (const taskDoc of oldTasksSnap.docs) {
-    const subSnap = await taskDoc.ref.collection('turn_metrics').get();
-    if (subSnap.size === 0) continue;
-    if (dryRun) {
-      turnMetricsDeleted += subSnap.size;
-      continue;
-    }
-    const batch = fs.batch();
-    for (const sub of subSnap.docs) batch.delete(sub.ref);
-    await batch.commit();
-    turnMetricsDeleted += subSnap.size;
-  }
-  logger.info({ dryRun, turnMetricsDeleted }, '[turn_metrics] done');
-  grandTotal += turnMetricsDeleted;
+  grandTotal += await deleteTurnMetrics(cutoff7d);
 
   logger.info({ dryRun, grandTotal }, 'bulk-delete complete');
   if (dryRun) logger.info({}, 'Run again with --execute to commit.');

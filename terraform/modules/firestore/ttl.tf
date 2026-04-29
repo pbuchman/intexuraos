@@ -19,7 +19,6 @@ locals {
     "logs",
     "log_lines",
     "turn_metrics",
-    "log_entries",
   ]
 }
 
