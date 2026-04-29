@@ -86,6 +86,9 @@ describe('main.ts', () => {
     adoptTask: vi.fn(),
     recoverPendingResumeTask: vi.fn(),
     emitTerminalMetrics: vi.fn(),
+    // INT-1551 §E.7: AbortController + Promise.race shutdown wiring.
+    setShutdownSignal: vi.fn(),
+    getInFlightPromises: vi.fn(() => []),
   } as unknown as TaskDispatcher;
 
   const mockListWorkerContainers = vi.fn<() => Promise<DiscoveredContainer[]>>();
@@ -1454,8 +1457,12 @@ describe('main.ts', () => {
       expect(mockStopPeriodicCleanup).toHaveBeenCalledTimes(1);
     });
 
-    it('should wait for running tasks to complete before exit', async () => {
-      // exit is mocked at module level via mockExit
+    it('should drain in-flight handlers via Promise.race before exit (INT-1551 §E.7)', async () => {
+      // INT-1551 §E.7: shutdown awaits getInFlightPromises() via
+      // Promise.race([allSettled, timeout]) instead of polling getRunningCount.
+      const inFlight = Promise.resolve();
+      const getInFlightPromises = vi.mocked(mockDispatcher.getInFlightPromises);
+      getInFlightPromises.mockReturnValue([inFlight]);
 
       const { main } = await import('../main.js');
 
@@ -1479,61 +1486,142 @@ describe('main.ts', () => {
       const sigtermHandler = sigtermCall?.[1];
 
       if (typeof sigtermHandler === 'function') {
-        // Mock dispatcher to return 1 running task initially, then 0
-        vi.mocked(mockDispatcher.getRunningCount)
-          .mockReturnValueOnce(1)
-          .mockReturnValueOnce(1)
-          .mockReturnValueOnce(0);
-
-        try {
-          await sigtermHandler();
-        } catch {
-          // exit(0) will throw
-        }
-      }
-
-      // Should have called getRunningCount multiple times while waiting
-      expect(mockDispatcher.getRunningCount).toHaveBeenCalled();
-
-      // mockExit doesn't need restore - it's cleared in beforeEach
-    });
-
-    it('should save state before exit', async () => {
-      // exit is mocked at module level via mockExit
-
-      const { main } = await import('../main.js');
-
-      try {
-        await main(
-          mockConfig,
-          mockStatePersistence,
-          mockDispatcher,
-          mockTokenService,
-          mockWebhookClient,
-          mockHeartbeatManager,
-          mockLogger
-        );
-      } catch {
-        // Expected
-      }
-
-      // Get the SIGTERM handler
-      const onCalls = vi.mocked(process.on).mock.calls;
-      const sigtermCall = onCalls.find((call) => call[0] === 'SIGTERM');
-      const sigtermHandler = sigtermCall?.[1];
-
-      if (typeof sigtermHandler === 'function') {
-        vi.mocked(mockDispatcher.getRunningCount).mockReturnValue(0);
-
         sigtermHandler();
-        // Allow all async operations in shutdown to complete
         await vi.runAllTimersAsync();
       }
 
-      // Should save state before exit
-      expect(mockStatePersistence.save).toHaveBeenCalled();
+      // Should have invoked the dispatcher's in-flight snapshot helper.
+      expect(getInFlightPromises).toHaveBeenCalled();
+      // The drained-arm log should fire because the lone in-flight promise
+      // resolves immediately and beats the 30s timeout.
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ drainedCount: 1 }),
+        'In-flight handlers drained'
+      );
+    });
 
-      // mockExit doesn't need restore - it's cleared in beforeEach
+    it('logs a warning and forces exit when in-flight handlers exceed SHUTDOWN_TIMEOUT_MS', async () => {
+      // INT-1551 §E.7: timeout arm of Promise.race wins for handlers that
+      // do not settle within the budget. We assert the warn log + exit path.
+      // Use a never-resolving promise to force the timeout branch.
+      const stuckPromise = new Promise(() => {
+        /* never resolves */
+      });
+      vi.mocked(mockDispatcher.getInFlightPromises).mockReturnValue([stuckPromise]);
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger
+        );
+      } catch {
+        // Expected
+      }
+
+      const onCalls = vi.mocked(process.on).mock.calls;
+      const sigtermCall = onCalls.find((call) => call[0] === 'SIGTERM');
+      const sigtermHandler = sigtermCall?.[1];
+
+      if (typeof sigtermHandler === 'function') {
+        sigtermHandler();
+        // Advance past SHUTDOWN_TIMEOUT_MS so the timeout arm of the race
+        // wins. runAllTimersAsync would loop forever on the never-resolving
+        // promise, so step the clock explicitly.
+        await vi.advanceTimersByTimeAsync(31_000);
+      }
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ inFlightCount: 1 }),
+        'Shutdown timeout reached; forcing exit with in-flight handlers still pending'
+      );
+      expect(mockExit).toHaveBeenCalledWith(0);
+    });
+
+    it('aborts the controller before draining so dispatcher modules can cancel pending work (INT-1551 §E.7)', async () => {
+      // INT-1551 §E.7: shutdown calls dispatcher.setShutdownSignal(signal)
+      // and aborts that signal BEFORE awaiting the drain race. We assert the
+      // signal threaded into the dispatcher reports `aborted === true` once
+      // shutdown begins.
+      vi.mocked(mockDispatcher.getInFlightPromises).mockReturnValue([]);
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger
+        );
+      } catch {
+        // Expected
+      }
+
+      const setSignalCalls = vi.mocked(mockDispatcher.setShutdownSignal).mock.calls;
+      expect(setSignalCalls.length).toBe(1);
+      const wiredSignal = setSignalCalls[0]?.[0] as AbortSignal;
+      expect(wiredSignal).toBeDefined();
+      expect(wiredSignal.aborted).toBe(false);
+
+      const onCalls = vi.mocked(process.on).mock.calls;
+      const sigtermCall = onCalls.find((call) => call[0] === 'SIGTERM');
+      const sigtermHandler = sigtermCall?.[1];
+
+      if (typeof sigtermHandler === 'function') {
+        sigtermHandler();
+        await vi.runAllTimersAsync();
+      }
+
+      // After shutdown, the wired signal must be aborted so any queued
+      // TaskTimers / TaskRunner work bails out.
+      expect(wiredSignal.aborted).toBe(true);
+    });
+
+    it('does NOT call statePersistence.save() during shutdown (INT-1551 §E.8 removed save(load()) no-op)', async () => {
+      // INT-1551 §E.8: the legacy `await save(await load())` no-op was
+      // removed. The shutdown handler must NOT touch state persistence.
+      vi.mocked(mockDispatcher.getInFlightPromises).mockReturnValue([]);
+
+      const { main } = await import('../main.js');
+
+      try {
+        await main(
+          mockConfig,
+          mockStatePersistence,
+          mockDispatcher,
+          mockTokenService,
+          mockWebhookClient,
+          mockHeartbeatManager,
+          mockLogger
+        );
+      } catch {
+        // Expected
+      }
+
+      // Snapshot save calls made during startup recovery.
+      const savesBeforeShutdown = vi.mocked(mockStatePersistence.save).mock.calls.length;
+
+      const onCalls = vi.mocked(process.on).mock.calls;
+      const sigtermCall = onCalls.find((call) => call[0] === 'SIGTERM');
+      const sigtermHandler = sigtermCall?.[1];
+
+      if (typeof sigtermHandler === 'function') {
+        sigtermHandler();
+        await vi.runAllTimersAsync();
+      }
+
+      // Shutdown handler must not invoke save() at all.
+      expect(vi.mocked(mockStatePersistence.save).mock.calls.length).toBe(savesBeforeShutdown);
     });
 
     it('should close server on shutdown', async () => {
