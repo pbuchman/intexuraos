@@ -739,10 +739,21 @@ export class CompletionPipeline {
         // post-finalize compliance call + log-forwarder flush before exit
         // (review I-2). Without tracking, the 30 s drain window completes
         // immediately and the work is lost.
+        //
+        // INT-1551 follow-up: the previous form used a `.finally(() => void
+        // this.flushAndCloseLogForwarder(...))` callback which detached the
+        // flush from the tracked promise — `trackInFlight` resolved as soon
+        // as compliance settled, leaving the log flush racing the drain
+        // window. Wrap both calls in a single async closure so the tracked
+        // promise only resolves after the log forwarder has flushed.
         void ctx.trackInFlight(
-          this.executeComplianceValidation(task, complianceInput).finally(() => {
-            void this.flushAndCloseLogForwarder(task.taskId);
-          })
+          (async (): Promise<void> => {
+            try {
+              await this.executeComplianceValidation(task, complianceInput);
+            } finally {
+              await this.flushAndCloseLogForwarder(task.taskId);
+            }
+          })()
         );
       }
       /* v8 ignore stop @preserve */

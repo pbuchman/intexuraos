@@ -141,57 +141,63 @@ export class TaskTimers {
   startCompletionMonitoring(taskId: string): void {
     const ctx = this.ctx;
     const checkInterval = setInterval(() => {
-      void (async (): Promise<void> => {
-        try {
-          const task = await ctx.getTask(taskId);
-          if (task?.status !== 'running') {
-            this.clearTaskTimers(taskId);
-            return;
-          }
-
-          // Check if Docker container is still running
-          const isRunning = await ctx.isolation.provider.isWorkerRunning(taskId);
-          const attemptCompleted = ctx.attemptCompletionSignals.has(taskId);
-
-          // Emit activity heartbeat when no Docker output for threshold duration
-          const lastActivity = ctx.lastOutputAt.get(taskId);
-          if (isRunning && lastActivity !== undefined) {
-            const silenceMs = Date.now() - lastActivity;
-            if (silenceMs >= ACTIVITY_HEARTBEAT_THRESHOLD_MS) {
-              const silenceSeconds = Math.round(silenceMs / 1000);
-              ctx.appendTaggedTaskLog(
-                taskId,
-                'system',
-                `Still processing... no output for ${String(silenceSeconds)}s`
-              );
-            }
-          }
-
-          if (!isRunning || attemptCompleted) {
-            if (ctx.completionInProgress.has(taskId)) {
+      // INT-1551 §E.7: register each tick with the in-flight set so SIGTERM
+      // shutdown drain awaits an active `handleTaskCompletion` call instead
+      // of cutting it off mid-finalize. `trackInFlight` auto-removes the
+      // promise on settle.
+      void ctx.trackInFlight(
+        (async (): Promise<void> => {
+          try {
+            const task = await ctx.getTask(taskId);
+            if (task?.status !== 'running') {
+              this.clearTaskTimers(taskId);
               return;
             }
-            // Skip: an inactivity restart is mid-flight (old worker destroyed,
-            // new one not yet up). Running completion now would verify on the
-            // stale transcript of the killed session.
-            if (ctx.inactivityRestartInProgress.has(taskId)) {
-              ctx.logger.debug(
-                { taskId },
-                'Completion monitor tick skipped: inactivity restart in progress'
-              );
-              return;
+
+            // Check if Docker container is still running
+            const isRunning = await ctx.isolation.provider.isWorkerRunning(taskId);
+            const attemptCompleted = ctx.attemptCompletionSignals.has(taskId);
+
+            // Emit activity heartbeat when no Docker output for threshold duration
+            const lastActivity = ctx.lastOutputAt.get(taskId);
+            if (isRunning && lastActivity !== undefined) {
+              const silenceMs = Date.now() - lastActivity;
+              if (silenceMs >= ACTIVITY_HEARTBEAT_THRESHOLD_MS) {
+                const silenceSeconds = Math.round(silenceMs / 1000);
+                ctx.appendTaggedTaskLog(
+                  taskId,
+                  'system',
+                  `Still processing... no output for ${String(silenceSeconds)}s`
+                );
+              }
             }
-            ctx.completionInProgress.add(taskId);
-            try {
-              await ctx.handleTaskCompletion(task);
-            } finally {
-              ctx.completionInProgress.delete(taskId);
+
+            if (!isRunning || attemptCompleted) {
+              if (ctx.completionInProgress.has(taskId)) {
+                return;
+              }
+              // Skip: an inactivity restart is mid-flight (old worker destroyed,
+              // new one not yet up). Running completion now would verify on the
+              // stale transcript of the killed session.
+              if (ctx.inactivityRestartInProgress.has(taskId)) {
+                ctx.logger.debug(
+                  { taskId },
+                  'Completion monitor tick skipped: inactivity restart in progress'
+                );
+                return;
+              }
+              ctx.completionInProgress.add(taskId);
+              try {
+                await ctx.handleTaskCompletion(task);
+              } finally {
+                ctx.completionInProgress.delete(taskId);
+              }
             }
+          } catch (error) {
+            ctx.logger.error({ taskId, error }, 'Error in completion monitoring callback');
           }
-        } catch (error) {
-          ctx.logger.error({ taskId, error }, 'Error in completion monitoring callback');
-        }
-      })();
+        })()
+      );
     }, COMPLETION_CHECK_INTERVAL_MS);
 
     ctx.activeTasks.set(`${taskId}-monitor`, checkInterval);

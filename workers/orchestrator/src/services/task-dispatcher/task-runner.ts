@@ -169,6 +169,13 @@ export class TaskRunner {
     try {
       await ctx.isolation.tokenRefresher.registerTask(task.taskId);
 
+      // INT-1551 §E.7: thread the shutdown signal into the long awaits so a
+      // SIGTERM during pull/create short-circuits the race instead of leaving
+      // `main.ts` to time out the whole drain. The underlying provider call
+      // itself is not abortable, so the zombie-cleanup block at the bottom of
+      // the catch handler still owns the late-resolution path.
+      const shutdownSignal = ctx.shutdownSignal;
+
       // Phase 1/2: Pull worker image (network-bound, variable latency)
       // Only pull for new containers — continued sessions reuse existing containers.
       if (!params.continueSession && ctx.isolation.provider.pullImage !== undefined) {
@@ -178,7 +185,8 @@ export class TaskRunner {
             ctx.appendOrchestratorTaskLog(task.taskId, message);
           }),
           IMAGE_PULL_TIMEOUT_MS,
-          `Image pull timed out after ${String(IMAGE_PULL_TIMEOUT_MS / 1000)}s`
+          `Image pull timed out after ${String(IMAGE_PULL_TIMEOUT_MS / 1000)}s`,
+          shutdownSignal
         );
         workerConfig.resolvedImage = resolvedImage;
       }
@@ -192,7 +200,8 @@ export class TaskRunner {
       const handle = await withTimeout(
         createPromise,
         CONTAINER_CREATE_TIMEOUT_MS,
-        `Container creation timed out after ${String(CONTAINER_CREATE_TIMEOUT_MS / 1000)}s — Docker may be unresponsive`
+        `Container creation timed out after ${String(CONTAINER_CREATE_TIMEOUT_MS / 1000)}s — Docker may be unresponsive`,
+        shutdownSignal
       );
 
       ctx.appendOrchestratorTaskLog(

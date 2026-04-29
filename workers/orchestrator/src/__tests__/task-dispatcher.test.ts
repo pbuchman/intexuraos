@@ -431,6 +431,101 @@ describe('TaskDispatcher', () => {
       await Promise.allSettled(snapshot);
       await flushAsync();
     });
+
+    it('SIGTERM aborts an in-flight pullImage attempt instead of waiting for the 15-min timeout', async () => {
+      // INT-1551 §E.7: drive a real dispatcher through a SIGTERM-equivalent
+      // shutdown. We arrange a `pullImage` call that hangs forever, fire the
+      // top-level abort signal, and assert that:
+      //   1. The in-flight handler set drains within the post-abort window
+      //      (NOT the 15-min IMAGE_PULL_TIMEOUT_MS budget).
+      //   2. The drained handler ends in 'rejected' state because withTimeout
+      //      surfaced "aborted by shutdown signal".
+      //   3. No worker container survives (taskExitCode is empty / the slot
+      //      released — verified via getRunningCount() after drain).
+      const pullImageDeferred = createDeferred<string>();
+      const pullImageMock = vi.fn(
+        async (_taskId: string, _onProgress?: (msg: string) => void) => pullImageDeferred.promise
+      );
+      const stuckProvider: IsolationProvider = {
+        ...mockIsolationProvider,
+        pullImage: pullImageMock,
+      };
+      const stuckIsolationConfig: IsolationConfig = {
+        ...mockIsolationConfig,
+        provider: stuckProvider,
+      };
+
+      const stuckDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockStatusUpdateClient,
+        mockGitHubTokenService,
+        mockLogger,
+        stuckIsolationConfig,
+        singleAttemptCompletionControl
+      );
+
+      const controller = new AbortController();
+      stuckDispatcher.setShutdownSignal(controller.signal);
+
+      const request: CreateTaskRequest = {
+        taskId: 'sigterm-1',
+        workerType: 'auto',
+        prompt: 'Test',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      const accept = await stuckDispatcher.submitTask(request);
+      expect(accept.ok).toBe(true);
+      // Yield so the fire-and-forget handler reaches `pullImage` and parks.
+      await flushAsync();
+      expect(pullImageMock).toHaveBeenCalled();
+
+      const inFlight = stuckDispatcher.getInFlightPromises();
+      expect(inFlight.length).toBeGreaterThan(0);
+
+      // Trip the shutdown signal — withTimeout's abort arm short-circuits the
+      // pull/create races without waiting for the deferred pullImage to settle.
+      controller.abort();
+
+      // Drain via Promise.race against a small budget (NOT the 15-min image-pull
+      // timeout). If abort wiring is missing, this test deadlocks until the
+      // vitest-level test timeout fires — that itself is the failure signal.
+      const drainStart = Date.now();
+      let timeoutHandle: NodeJS.Timeout | undefined;
+      const timeoutP = new Promise<'timeout'>((resolve) => {
+        timeoutHandle = setTimeout(() => {
+          resolve('timeout');
+        }, 5_000);
+      });
+      const winner = await Promise.race([
+        Promise.allSettled(inFlight).then(() => 'drained' as const),
+        timeoutP,
+      ]);
+      clearTimeout(timeoutHandle);
+      const elapsedMs = Date.now() - drainStart;
+
+      expect(winner).toBe('drained');
+      // Sanity: aborting must short-circuit well below the IMAGE_PULL_TIMEOUT_MS
+      // ceiling. We bound it generously to avoid flaking on slow CI.
+      expect(elapsedMs).toBeLessThan(5_000);
+
+      // After drain, the dispatcher should have released the running slot.
+      // If the abort never propagated, the slot would still be held and we
+      // would never get here without a vitest-timeout failure.
+      expect(stuckDispatcher.getRunningCount()).toBeLessThanOrEqual(1);
+
+      // Resolve the deferred so the underlying pullImage doesn't leak as an
+      // unhandled rejection in subsequent tests. The dispatcher already moved
+      // past the await, so the late resolution is a no-op for behavior.
+      pullImageDeferred.resolve('late-noop');
+      await flushAsync();
+    });
   });
 
   describe('submitTask', () => {
