@@ -255,18 +255,6 @@ export function tasksCreatedSince(
   return collection.where('userId', '==', userId).where('createdAt', '>=', since);
 }
 
-/** Archivable tasks (completedAt < cutoff, not yet archived, limited). */
-export function archivableTasks(
-  collection: CollectionReference,
-  completedBefore: Timestamp,
-  limit: number
-): Query {
-  return collection
-    .where('completedAt', '<', completedBefore)
-    .where('logsArchived', '==', false)
-    .limit(limit);
-}
-
 /** Pending execution-memory post-run tasks (agent filter, oldest-first). */
 export function pendingExecutionMemoryPostRun(
   collection: CollectionReference,

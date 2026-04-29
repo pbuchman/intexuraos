@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
-import type { Firestore } from '@google-cloud/firestore';
+import type { Firestore, Timestamp as FirestoreTimestamp } from '@google-cloud/firestore';
+import { Timestamp } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
 import { createFirestoreTurnMetricsRepository } from '../../../infra/repositories/firestoreTurnMetricsRepository.js';
 import type { TurnMetrics } from '../../../domain/models/turnMetrics.js';
@@ -9,7 +10,14 @@ describe('FirestoreTurnMetricsRepository', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
   let logger: Logger;
 
+  // Fixed time so `computeExpireAt` produces a deterministic Timestamp the tests
+  // can assert against. expireAt = NOW + 7 days = 2026-05-06T00:00:00.000Z.
+  const NOW = new Date('2026-04-29T00:00:00.000Z');
+  const EXPECTED_EXPIRE_AT_MS = NOW.getTime() + 7 * 24 * 60 * 60 * 1000;
+
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Firestore);
     logger = {
@@ -21,6 +29,7 @@ describe('FirestoreTurnMetricsRepository', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     resetFirestore();
   });
 
@@ -87,6 +96,27 @@ describe('FirestoreTurnMetricsRepository', () => {
         .doc('0012');
       const doc = await docRef.get();
       expect(doc.exists).toBe(true);
+    });
+
+    it('writes expireAt = now + 7d for Firestore native TTL', async () => {
+      const repo = createFirestoreTurnMetricsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.store('task-ttl', 1, createMetrics());
+
+      const docRef = (fakeFirestore as unknown as Firestore)
+        .collection('code_tasks')
+        .doc('task-ttl')
+        .collection('turn_metrics')
+        .doc('0001');
+      const doc = await docRef.get();
+      const data = doc.data();
+      expect(data?.['expireAt']).toBeDefined();
+      const expireAt = data?.['expireAt'] as FirestoreTimestamp;
+      expect(expireAt).toBeInstanceOf(Timestamp);
+      expect(expireAt.toMillis()).toBe(EXPECTED_EXPIRE_AT_MS);
     });
 
     it('returns error when Firestore fails', async () => {

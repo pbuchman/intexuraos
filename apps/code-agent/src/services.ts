@@ -15,7 +15,6 @@ import { createLinearIssueService } from './domain/services/linearIssueService.j
 import { createStatusMirrorService } from './infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from './domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from './domain/usecases/detectZombieTasks.js';
-import { createCleanupTaskLogsUseCase } from './domain/usecases/cleanupTaskLogs.js';
 import { createArchiveStaleGroupsUseCase } from './domain/usecases/archiveStaleGroups.js';
 import { createAutoArchiveMergedTasksUseCase } from './domain/usecases/autoArchiveMergedTasks.js';
 import { createMetricsClient, createNoOpMetricsClient } from './infra/metrics.js';
@@ -151,7 +150,6 @@ export function initServices(config: ServiceConfig): void {
     taskDispatcher, whatsappNotifier, actionsAgentClient, linearAgentClient, statusMirrorService, linearIssueService,
     processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
     detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
-    cleanupTaskLogs: createCleanupTaskLogsUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
     archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
     autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
     metricsClient, workerSettingsRepo: repos.workerSettingsRepo, workerHealthProbe,

@@ -2,7 +2,7 @@ import type { Logger } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type { LogLineRepository, RepositoryError } from '../../domain/repositories/logLineRepository.js';
 import type { FormattedLogLine } from '../../domain/models/logLine.js';
-import type { Firestore } from '@intexuraos/infra-firestore';
+import { computeExpireAt, RETENTION_7D_MS, type Firestore } from '@intexuraos/infra-firestore';
 
 export interface FirestoreLogLineRepositoryDeps {
   firestore: Firestore;
@@ -26,6 +26,7 @@ export class FirestoreLogLineRepository implements LogLineRepository {
     const MAX_BATCH_SIZE = 500;
 
     try {
+      const expireAt = computeExpireAt(RETENTION_7D_MS);
       for (let i = 0; i < lines.length; i += MAX_BATCH_SIZE) {
         const batch = this.firestore.batch();
         const slice = lines.slice(i, i + MAX_BATCH_SIZE);
@@ -41,6 +42,7 @@ export class FirestoreLogLineRepository implements LogLineRepository {
             sequence: line.sequence,
             text: line.text,
             timestamp: line.timestamp,
+            expireAt,
           });
         }
 

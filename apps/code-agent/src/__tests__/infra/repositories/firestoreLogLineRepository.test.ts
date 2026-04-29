@@ -24,7 +24,14 @@ describe('firestoreLogLineRepository', () => {
     ...overrides,
   });
 
+  // Fixed time so `computeExpireAt` produces a deterministic Timestamp the tests
+  // can assert against. expireAt = NOW + 7 days = 2026-05-06T00:00:00.000Z.
+  const NOW = new Date('2026-04-29T00:00:00.000Z');
+  const EXPECTED_EXPIRE_AT = Timestamp.fromMillis(NOW.getTime() + 7 * 24 * 60 * 60 * 1000);
+
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
     mockBatch = {
       set: vi.fn(),
       delete: vi.fn(),
@@ -60,6 +67,7 @@ describe('firestoreLogLineRepository', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
@@ -105,7 +113,20 @@ describe('firestoreLogLineRepository', () => {
         sequence: 5,
         text: 'log message',
         timestamp,
+        expireAt: EXPECTED_EXPIRE_AT,
       });
+    });
+
+    it('writes expireAt = now + 7d for Firestore native TTL', async () => {
+      const repo = createFirestoreLogLineRepository({ firestore: mockFirestore, logger });
+      await repo.storeBatch('task-ttl', [createLine()]);
+
+      const setCall = mockBatch.set.mock.calls[0];
+      const storedData = setCall?.[1] as Record<string, unknown>;
+      expect(storedData['expireAt']).toBeInstanceOf(Timestamp);
+      expect((storedData['expireAt'] as Timestamp).toMillis()).toBe(
+        EXPECTED_EXPIRE_AT.toMillis()
+      );
     });
 
     it('stores multiple lines in single batch', async () => {

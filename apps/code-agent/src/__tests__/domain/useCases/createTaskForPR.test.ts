@@ -83,12 +83,6 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async countByUserToday(): ReturnType<CodeTaskRepository['countByUserToday']> {
       return ok(0);
     },
-    async findArchivableTasks(): ReturnType<CodeTaskRepository['findArchivableTasks']> {
-      return ok([]);
-    },
-    async archiveTaskLogs(): ReturnType<CodeTaskRepository['archiveTaskLogs']> {
-      return ok({ logCount: 0, archivedAt: new Date() });
-    },
     async findByPR(): ReturnType<CodeTaskRepository['findByPR']> {
       return ok(null);
     },

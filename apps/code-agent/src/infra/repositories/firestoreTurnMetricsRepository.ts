@@ -5,7 +5,7 @@ import type {
   RepositoryError,
 } from '../../domain/repositories/turnMetricsRepository.js';
 import type { TurnMetrics } from '../../domain/models/turnMetrics.js';
-import type { Firestore } from '@intexuraos/infra-firestore';
+import { computeExpireAt, RETENTION_7D_MS, type Firestore } from '@intexuraos/infra-firestore';
 
 export interface FirestoreTurnMetricsRepositoryDeps {
   firestore: Firestore;
@@ -34,7 +34,7 @@ export class FirestoreTurnMetricsRepository implements TurnMetricsRepository {
       .doc(docId);
 
     try {
-      await docRef.set(metrics);
+      await docRef.set({ ...metrics, expireAt: computeExpireAt(RETENTION_7D_MS) });
       this.logger.debug({ taskId, attempt }, 'Stored turn metrics');
       return ok(undefined);
     } catch (error) {

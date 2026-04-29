@@ -218,7 +218,6 @@ describe('Automation log integration flows', () => {
       statusMirrorService: {} as never,
       processHeartbeat: {} as never,
       detectZombieTasks: {} as never,
-      cleanupTaskLogs: {} as never,
       archiveStaleGroups: {} as never,
       autoArchiveMergedTasks: {} as never,
       metricsClient: {} as never,

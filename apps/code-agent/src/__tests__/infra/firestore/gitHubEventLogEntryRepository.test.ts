@@ -1,9 +1,16 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import type { Logger } from 'pino';
+import { Timestamp } from '@google-cloud/firestore';
 
-vi.mock('@intexuraos/infra-firestore', () => ({
-  getFirestore: vi.fn(),
-}));
+vi.mock('@intexuraos/infra-firestore', async () => {
+  const actual = await vi.importActual<typeof import('@intexuraos/infra-firestore')>(
+    '@intexuraos/infra-firestore'
+  );
+  return {
+    ...actual,
+    getFirestore: vi.fn(),
+  };
+});
 
 import { getFirestore } from '@intexuraos/infra-firestore';
 import { createFirestoreGitHubEventLogEntryRepository } from '../../../infra/firestore/gitHubEventLogEntryRepository.js';
@@ -18,6 +25,14 @@ const mockLogger: Logger = {
 } as unknown as Logger;
 
 describe('createFirestoreGitHubEventLogEntryRepository', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-29T00:00:00.000Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('creates a pending event log row', async () => {
     const mockDocRef = {
       set: vi.fn().mockResolvedValue(undefined),
@@ -52,6 +67,13 @@ describe('createFirestoreGitHubEventLogEntryRepository', () => {
       expect(result.value.decisionState).toBe('pending');
       expect(result.value.decisionOutcome).toBeNull();
     }
+
+    // TTL: every write carries `expireAt = now + 24h` for Firestore native TTL
+    const setPayload = mockDocRef.set.mock.calls[0]?.[0] as { expireAt?: Timestamp };
+    expect(setPayload?.expireAt).toBeInstanceOf(Timestamp);
+    expect(setPayload?.expireAt?.toMillis()).toBe(
+      new Date('2026-04-30T00:00:00.000Z').getTime()
+    );
   });
 
   it('returns FIRESTORE_ERROR when complete cannot find the updated entry', async () => {

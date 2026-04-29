@@ -2446,7 +2446,7 @@ resource "google_storage_bucket_object" "function_placeholder" {
 resource "google_service_account" "cloud_functions" {
   account_id   = "intexuraos-functions-${var.environment}"
   display_name = "Cloud Functions Service Account"
-  description  = "Service account for Cloud Functions (vm-lifecycle, log-cleanup)"
+  description  = "Service account for Cloud Functions (vm-lifecycle)"
 
   depends_on = [google_project_service.apis]
 }
@@ -2624,185 +2624,12 @@ resource "google_cloud_scheduler_job" "vm_stop" {
 }
 
 # -----------------------------------------------------------------------------
-# Cloud Functions - Log Cleanup (90-day retention)
-# -----------------------------------------------------------------------------
-
-# Pub/Sub topic for log cleanup trigger.
-# Delivery is via an explicit push subscription (defined below) so we can
-# attach a dead_letter_policy. See audio_stored above for the rationale.
-resource "google_pubsub_topic" "log_cleanup" {
-  name    = "intexuraos-log-cleanup-${var.environment}"
-  project = var.project_id
-  labels  = local.common_labels
-
-  depends_on = [google_project_service.apis]
-}
-
-# Grant Cloud Scheduler permission to publish to the topic
-resource "google_pubsub_topic_iam_member" "scheduler_publishes_log_cleanup" {
-  project = var.project_id
-  topic   = google_pubsub_topic.log_cleanup.name
-  role    = "roles/pubsub.publisher"
-  member  = "serviceAccount:${google_service_account.cloud_scheduler.email}"
-}
-
-# Dead-letter topic for log-cleanup consumer (Subtask G). Subscription-level
-# DLQ acts as defense-in-depth: even though log-cleanup has no application-
-# level DLQ publisher (Subtask B treats failure as Nack-and-redeliver), Pub/Sub
-# will forward to log_cleanup_dlq after max_delivery_attempts so we don't lose
-# visibility into chronically failing scheduled runs.
-resource "google_pubsub_topic" "log_cleanup_dlq" {
-  name    = "intexuraos-log-cleanup-dlq-${var.environment}"
-  project = var.project_id
-  labels  = local.common_labels
-
-  depends_on = [google_project_service.apis]
-}
-
-# Pub/Sub service agent must be able to publish to the DLQ topic for the
-# subscription-level dead_letter_policy to function.
-resource "google_pubsub_topic_iam_member" "pubsub_publishes_log_cleanup_dlq" {
-  project = var.project_id
-  topic   = google_pubsub_topic.log_cleanup_dlq.name
-  role    = "roles/pubsub.publisher"
-  member  = "serviceAccount:service-${local.project_number}@gcp-sa-pubsub.iam.gserviceaccount.com"
-}
-
-# DLQ inspection subscription (mirrors transcription_dlq_inspect).
-resource "google_pubsub_subscription" "log_cleanup_dlq_inspect" {
-  name    = "intexuraos-log-cleanup-dlq-${var.environment}-inspect"
-  topic   = google_pubsub_topic.log_cleanup_dlq.id
-  project = var.project_id
-  labels  = local.common_labels
-
-  ack_deadline_seconds       = 600
-  message_retention_duration = "604800s" # 7 days
-
-  expiration_policy {
-    ttl = ""
-  }
-
-  depends_on = [google_pubsub_topic.log_cleanup_dlq]
-}
-
-module "function_log_cleanup" {
-  source = "../../modules/cloud-function"
-
-  project_id    = var.project_id
-  region        = var.region
-  environment   = var.environment
-  function_name = "intexuraos-log-cleanup-${var.environment}"
-  description   = "Clean up old execution logs (90-day retention)"
-  entry_point   = "cleanupLogs"
-  runtime       = "nodejs22"
-
-  source_bucket   = google_storage_bucket.cloud_functions_source.name
-  source_object   = "log-cleanup/function.zip"
-  service_account = google_service_account.cloud_functions.email
-
-  # See function_transcription above for rationale on HTTP + push subscription.
-  trigger_type    = "http"
-  invoker_members = ["serviceAccount:${google_service_account.cloud_functions.email}"]
-
-  timeout_seconds  = 540
-  available_memory = "512M"
-
-  env_vars = {
-    INTEXURAOS_ENVIRONMENT    = var.environment
-    INTEXURAOS_GCP_PROJECT_ID = var.project_id
-    INTEXURAOS_CODE_AGENT_URL = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
-  }
-
-  secrets = {
-    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-  }
-
-  labels = local.common_labels
-
-  depends_on = [
-    google_project_service.apis,
-    google_storage_bucket_object.function_placeholder,
-    google_service_account.cloud_functions,
-    google_pubsub_topic.log_cleanup,
-    google_secret_manager_secret_iam_member.functions_internal_auth_token,
-  ]
-}
-
-# Push subscription that delivers log-cleanup events to the log-cleanup
-# Cloud Function with a dead_letter_policy.
-resource "google_pubsub_subscription" "log_cleanup_push" {
-  name    = "intexuraos-log-cleanup-${var.environment}-push"
-  topic   = google_pubsub_topic.log_cleanup.id
-  project = var.project_id
-  labels  = local.common_labels
-
-  ack_deadline_seconds       = 600 # 10 minutes — matches function timeout
-  message_retention_duration = "604800s"
-
-  push_config {
-    push_endpoint = module.function_log_cleanup.function_uri
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_functions.email
-      audience              = module.function_log_cleanup.function_uri
-    }
-
-    attributes = {
-      x-goog-version = "v1"
-    }
-  }
-
-  retry_policy {
-    minimum_backoff = "10s"
-    maximum_backoff = "600s"
-  }
-
-  dead_letter_policy {
-    dead_letter_topic     = google_pubsub_topic.log_cleanup_dlq.id
-    max_delivery_attempts = 5
-  }
-
-  expiration_policy {
-    ttl = ""
-  }
-
-  depends_on = [
-    module.function_log_cleanup,
-    google_pubsub_topic.log_cleanup_dlq,
-    google_pubsub_topic_iam_member.pubsub_publishes_log_cleanup_dlq,
-  ]
-}
-
-# Cloud Scheduler - Trigger log cleanup at 3 AM UTC daily
-resource "google_cloud_scheduler_job" "log_cleanup" {
-  name        = "intexuraos-log-cleanup-${var.environment}"
-  description = "Trigger log cleanup at 3 AM UTC daily"
-  schedule    = "0 3 * * *"
-  time_zone   = "UTC"
-  region      = var.region
-
-  pubsub_target {
-    topic_name = google_pubsub_topic.log_cleanup.id
-    data       = base64encode(jsonencode({ trigger = "scheduled" }))
-  }
-
-  retry_config {
-    retry_count          = 1
-    max_retry_duration   = "60s"
-    min_backoff_duration = "5s"
-    max_backoff_duration = "30s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    google_pubsub_topic.log_cleanup,
-    google_pubsub_topic_iam_member.scheduler_publishes_log_cleanup,
-  ]
-}
-
-# -----------------------------------------------------------------------------
 # Cloud Functions - Transcription Worker
 # -----------------------------------------------------------------------------
+# (Log-cleanup function and its Pub/Sub topic, DLQ, push subscription, and
+# Cloud Scheduler job were removed when retention moved to native Firestore TTL.
+# See terraform/modules/firestore/ttl.tf for the replacement.)
+
 
 resource "google_service_account" "transcription_function" {
   account_id   = "ixos-transcription-fn-${var.environment}"
@@ -3176,16 +3003,6 @@ output "function_vm_start_uri" {
 output "function_vm_stop_uri" {
   description = "VM Stop Cloud Function HTTP endpoint"
   value       = module.function_vm_stop.function_uri
-}
-
-output "function_log_cleanup_name" {
-  description = "Log Cleanup Cloud Function name"
-  value       = module.function_log_cleanup.function_name
-}
-
-output "pubsub_log_cleanup_topic" {
-  description = "Pub/Sub topic for log cleanup trigger"
-  value       = google_pubsub_topic.log_cleanup.name
 }
 
 output "function_transcription_name" {

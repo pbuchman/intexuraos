@@ -18,6 +18,9 @@ export {
 // Schema-version write helper
 export { withSchemaVersion, type SchemaVersionedFields } from './schemaVersion.js';
 
+// TTL helper for retention-driven deletion
+export { computeExpireAt, RETENTION_24H_MS, RETENTION_7D_MS } from './expireAt.js';
+
 // Testing utilities
 export {
   createFakeFirestore,
