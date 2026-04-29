@@ -183,6 +183,12 @@ export function makeContextHarness(initialTasks: Task[] = []): ContextHarness {
     incrementRunningCount: () => {
       runningCount.value++;
     },
+    tryAcquireCapacitySlot: async () => {
+      runningCount.value++;
+      return { ok: true, value: undefined };
+    },
+    getDefaultRepository: () => 'pbuchman/intexuraos',
+    buildResumePreamble: () => '',
   };
 
   return {

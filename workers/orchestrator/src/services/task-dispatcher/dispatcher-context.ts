@@ -133,4 +133,16 @@ export interface DispatcherContext {
   getRuntimeDisplayName: (task: Task) => string;
   /** Increment the dispatcher's `runningCount` counter. */
   incrementRunningCount: () => void;
+  /**
+   * Atomic capacity check. Returns `{ ok: true }` if a slot was reserved
+   * (the caller is now responsible for eventually calling `releaseSlot`),
+   * or `{ ok: false }` if the dispatcher is at capacity.
+   */
+  tryAcquireCapacitySlot: () => Promise<
+    { ok: true; value: undefined } | { ok: false; error: { type: 'at_capacity'; message: string } }
+  >;
+  /** Resolves a default repository for a task setup request. */
+  getDefaultRepository: (request: import('../../types/api.js').CreateTaskRequest) => string;
+  /** Builds the resume preamble used when re-prompting a task. */
+  buildResumePreamble: (task?: Task) => string;
 }
