@@ -55,6 +55,29 @@ export interface DispatcherContext {
   readonly inactivityRestartInProgress: Set<string>;
   readonly pendingMessages: Map<string, string[]>;
   readonly lastOutputAt: Map<string, number>;
+  /**
+   * INT-1551 §E.7: Set of in-flight fire-and-forget handler promises. Used by
+   * the shutdown path in `main.ts` to await graceful drain via `Promise.race`
+   * instead of polling `getRunningCount()`. Operations and lifecycle modules
+   * register their fire-and-forget promises here via `trackInFlight()`.
+   */
+  readonly inFlightHandlers: Set<Promise<unknown>>;
+
+  /**
+   * INT-1551 §E.7: top-level AbortController signal threaded down from
+   * `main.ts`. `TaskTimers` and `TaskRunner` consult this to cancel pending
+   * timers and fail fast on shutdown. `undefined` when no controller has been
+   * wired (most unit tests). When the signal is `aborted`, sub-modules MUST
+   * NOT introduce new code paths that drop pending state — `pendingMessages`
+   * etc. remain owned by their existing lifecycles.
+   */
+  shutdownSignal: AbortSignal | undefined; // @allow-undefined-type -- mutable post-construction setter via TaskDispatcher.setShutdownSignal; using `?:` would change the type identity that sub-modules consume via narrowing checks
+
+  /**
+   * INT-1551 §E.7: Register a fire-and-forget Promise so the shutdown handler
+   * can await its settlement. The promise is auto-removed on settle.
+   */
+  trackInFlight: <T>(promise: Promise<T>) => Promise<T>;
 
   /**
    * Idempotent slot release helper: decrements the dispatcher's

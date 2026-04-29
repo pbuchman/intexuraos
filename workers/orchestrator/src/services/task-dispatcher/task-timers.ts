@@ -48,6 +48,8 @@ export class TaskTimers {
     }, TASK_TIMEOUT_WARNING_MS);
 
     ctx.activeTasks.set(`${taskId}-warning`, timeout);
+    // INT-1551 §E.7: cancel pending warning if shutdown signal fires.
+    this.attachShutdownAbort(timeout, false);
   }
 
   scheduleTimeoutKill(taskId: string): void {
@@ -132,6 +134,8 @@ export class TaskTimers {
     }, TASK_TIMEOUT_KILL_MS);
 
     ctx.activeTasks.set(`${taskId}-kill`, timeout);
+    // INT-1551 §E.7: cancel pending kill timer if shutdown signal fires.
+    this.attachShutdownAbort(timeout, false);
   }
 
   startCompletionMonitoring(taskId: string): void {
@@ -191,6 +195,33 @@ export class TaskTimers {
     }, COMPLETION_CHECK_INTERVAL_MS);
 
     ctx.activeTasks.set(`${taskId}-monitor`, checkInterval);
+    // INT-1551 §E.7: cancel completion poll if shutdown signal fires.
+    this.attachShutdownAbort(checkInterval, true);
+  }
+
+  /**
+   * INT-1551 §E.7: register a one-shot abort listener that cancels a pending
+   * timer when the dispatcher's shutdown signal fires. No-op if no signal is
+   * wired (e.g. tests that construct a dispatcher without one) or if the
+   * signal has already aborted (caller has not registered yet — clear immediately).
+   */
+  private attachShutdownAbort(handle: NodeJS.Timeout, isInterval: boolean): void {
+    const signal = this.ctx.shutdownSignal;
+    if (signal === undefined) {
+      return;
+    }
+    const cancel = (): void => {
+      if (isInterval) {
+        clearInterval(handle);
+      } else {
+        clearTimeout(handle);
+      }
+    };
+    if (signal.aborted) {
+      cancel();
+      return;
+    }
+    signal.addEventListener('abort', cancel, { once: true });
   }
 
   clearTaskTimers(taskId: string): void {

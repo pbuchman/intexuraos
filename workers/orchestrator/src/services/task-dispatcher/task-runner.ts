@@ -44,6 +44,11 @@ export class TaskRunner {
     }
   ): Promise<{ ok: true; containerId: string } | { ok: false; error: unknown }> {
     const ctx = this.ctx;
+    // INT-1551 §E.7: bail out fast on shutdown so graceful drain doesn't
+    // race against a brand-new container creation.
+    if (ctx.shutdownSignal?.aborted === true) {
+      return { ok: false, error: new Error('Worker startup aborted by shutdown signal') };
+    }
     ctx.attemptCompletionSignals.delete(task.taskId);
     ctx.appendOrchestratorTaskLog(
       task.taskId,

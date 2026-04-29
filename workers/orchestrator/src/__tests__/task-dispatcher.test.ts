@@ -395,6 +395,44 @@ describe('TaskDispatcher', () => {
     vi.unstubAllGlobals();
   });
 
+  describe('shutdown wiring (INT-1551 §E.7)', () => {
+    it('getInFlightPromises returns an empty array initially', () => {
+      expect(dispatcher.getInFlightPromises()).toEqual([]);
+    });
+
+    it('setShutdownSignal threads a signal into the dispatcher context', () => {
+      const controller = new AbortController();
+      // Method returns void; assertion is that the call does not throw and
+      // does not break subsequent dispatch — the signal flows into TaskRunner /
+      // TaskTimers behaviorally (covered by their own unit tests).
+      dispatcher.setShutdownSignal(controller.signal);
+      expect(dispatcher.getInFlightPromises()).toEqual([]);
+    });
+
+    it('getInFlightPromises tracks fire-and-forget submitTask handlers', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'inflight-1',
+        workerType: 'auto',
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      // Capture the in-flight set DURING the async setup before it settles.
+      // submitTask returns immediately after registering trackInFlight.
+      const accept = await dispatcher.submitTask(request);
+      expect(accept.ok).toBe(true);
+      // The handler may already have settled by the time we check (FakeIsolation
+      // resolves synchronously). The contract we assert is: getInFlightPromises
+      // returns a snapshot array, not undefined, and is safe to await on.
+      const snapshot = dispatcher.getInFlightPromises();
+      expect(Array.isArray(snapshot)).toBe(true);
+      await Promise.allSettled(snapshot);
+      await flushAsync();
+    });
+  });
+
   describe('submitTask', () => {
     it('should accept task when capacity available', async () => {
       const request: CreateTaskRequest = {

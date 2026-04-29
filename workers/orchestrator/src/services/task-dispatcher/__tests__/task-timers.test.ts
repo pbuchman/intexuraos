@@ -140,4 +140,44 @@ describe('TaskTimers', () => {
       expect(harness.activityTimeoutManager.stop).toHaveBeenCalledWith('task-1');
     });
   });
+
+  describe('shutdown signal wiring (INT-1551 §E.7)', () => {
+    it('cancels the warning timer when the shutdown signal aborts', async () => {
+      const controller = new AbortController();
+      harness.ctx.shutdownSignal = controller.signal;
+
+      timers.scheduleTimeoutWarning('task-1');
+      controller.abort();
+
+      // Advance past the warning deadline; the cancelled timer must NOT fire.
+      await vi.advanceTimersByTimeAsync(TASK_TIMEOUT_WARNING_MS + 1);
+      await Promise.resolve();
+      expect(harness.logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('cancels the completion-monitor interval when the shutdown signal aborts', async () => {
+      const controller = new AbortController();
+      harness.ctx.shutdownSignal = controller.signal;
+      harness.isWorkerRunning.mockResolvedValue(false);
+
+      timers.startCompletionMonitoring('task-1');
+      controller.abort();
+
+      await vi.advanceTimersByTimeAsync(COMPLETION_CHECK_INTERVAL_MS + 1);
+      await Promise.resolve();
+      expect(harness.handleTaskCompletion).not.toHaveBeenCalled();
+    });
+
+    it('clears immediately when scheduled with an already-aborted signal', () => {
+      const controller = new AbortController();
+      controller.abort();
+      harness.ctx.shutdownSignal = controller.signal;
+
+      // Spy clearTimeout to verify the early-cancel branch executed.
+      const clearSpy = vi.spyOn(global, 'clearTimeout');
+      timers.scheduleTimeoutKill('task-1');
+      expect(clearSpy).toHaveBeenCalled();
+      clearSpy.mockRestore();
+    });
+  });
 });

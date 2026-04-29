@@ -33,11 +33,14 @@ export async function submitTask(
     return capacityCheck;
   }
 
-  void attemptLifecycle
-    .executeTaskSetup(request, (req) => ctx.getDefaultRepository(req))
-    .catch((error: unknown) => {
-      ctx.logger.error({ taskId: request.taskId, error }, 'Unhandled error in async task setup');
-    });
+  // INT-1551 §E.7: track this fire-and-forget so graceful shutdown can drain it.
+  void ctx.trackInFlight(
+    attemptLifecycle
+      .executeTaskSetup(request, (req) => ctx.getDefaultRepository(req))
+      .catch((error: unknown) => {
+        ctx.logger.error({ taskId: request.taskId, error }, 'Unhandled error in async task setup');
+      })
+  );
 
   return { ok: true, value: undefined };
 }
@@ -316,9 +319,12 @@ export async function sendMessage(
     await ctx.saveTask(task);
 
     ctx.incrementRunningCount();
-    void attemptLifecycle.resumeTaskWithUserMessage(task).catch((error: unknown) => {
-      void attemptLifecycle.failAcceptedResume(task, error);
-    });
+    // INT-1551 §E.7: track resume so shutdown can wait for it to settle.
+    void ctx.trackInFlight(
+      attemptLifecycle.resumeTaskWithUserMessage(task).catch((error: unknown) => {
+        void attemptLifecycle.failAcceptedResume(task, error);
+      })
+    );
     ctx.logger.info({ taskId }, 'Task resume accepted with user message');
     return { ok: true, value: { action: 'resumed' } };
   }

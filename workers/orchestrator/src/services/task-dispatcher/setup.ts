@@ -63,6 +63,8 @@ export interface DispatcherContextState {
   readonly inactivityRestartInProgress: Set<string>;
   readonly pendingMessages: Map<string, string[]>;
   readonly lastOutputAt: Map<string, number>;
+  /** INT-1551 §E.7: tracks fire-and-forget handler promises for graceful shutdown. */
+  readonly inFlightHandlers: Set<Promise<unknown>>;
   readonly capacityMutex: Mutex;
   /** Mutable reference to the dispatcher's running-count counter. */
   readonly runningCount: { value: number };
@@ -121,6 +123,20 @@ export function buildDispatcherContext(
     inactivityRestartInProgress: state.inactivityRestartInProgress,
     pendingMessages: state.pendingMessages,
     lastOutputAt: state.lastOutputAt,
+    inFlightHandlers: state.inFlightHandlers,
+    shutdownSignal: undefined,
+    trackInFlight: <T>(promise: Promise<T>): Promise<T> => {
+      state.inFlightHandlers.add(promise);
+      promise
+        .catch(() => {
+          // Errors are owned by the originating call site — we only track
+          // settlement here so shutdown can await drain.
+        })
+        .finally(() => {
+          state.inFlightHandlers.delete(promise);
+        });
+      return promise;
+    },
     releaseSlot: (): void => {
       if (state.runningCount.value > 0) state.runningCount.value--;
     },

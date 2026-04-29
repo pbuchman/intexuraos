@@ -66,6 +66,24 @@ describe('TaskRunner', () => {
       expect(harness.pullImage).not.toHaveBeenCalled();
       expect(harness.createWorker).not.toHaveBeenCalled();
     });
+
+    it('bails out with ok:false when the shutdown signal is already aborted (INT-1551 §E.7)', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      harness.ctx.shutdownSignal = controller.signal;
+
+      const task = makeTask();
+      const result = await runner.startWorkerAttempt(task, {
+        prompt: 'do thing',
+        continueSession: false,
+      });
+
+      expect(result.ok).toBe(false);
+      // Did NOT touch isolation: shutdown short-circuit fires BEFORE any
+      // network/docker work begins.
+      expect(harness.pullImage).not.toHaveBeenCalled();
+      expect(harness.createWorker).not.toHaveBeenCalled();
+    });
   });
 
   describe('handleRuntimeEvents', () => {

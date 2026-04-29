@@ -161,6 +161,9 @@ export function makeContextHarness(initialTasks: Task[] = []): ContextHarness {
     inactivityRestartInProgress: new Set(),
     pendingMessages: new Map(),
     lastOutputAt: new Map(),
+    inFlightHandlers: new Set(),
+    shutdownSignal: undefined,
+    trackInFlight: <T>(promise: Promise<T>): Promise<T> => promise,
     releaseSlot: () => {
       if (runningCount.value > 0) runningCount.value--;
     },

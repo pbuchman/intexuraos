@@ -373,9 +373,12 @@ export class AttemptLifecycle {
     await ctx.saveTask(task);
 
     ctx.incrementRunningCount();
-    void this.recreateTaskFromDispatchMetadata(task).catch((error: unknown) => {
-      void this.failAcceptedResume(task, error);
-    });
+    // INT-1551 §E.7: track recreate-from-metadata so shutdown can drain it.
+    void ctx.trackInFlight(
+      this.recreateTaskFromDispatchMetadata(task).catch((error: unknown) => {
+        void this.failAcceptedResume(task, error);
+      })
+    );
     ctx.logger.info({ taskId }, 'Task resume accepted after dispatch metadata recovery');
 
     return { ok: true, value: { action: 'resumed' } };

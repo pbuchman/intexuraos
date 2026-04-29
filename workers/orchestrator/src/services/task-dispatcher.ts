@@ -169,6 +169,12 @@ export class TaskDispatcher {
   private readonly inactivityRestartInProgress = new Set<string>();
   private readonly pendingMessages = new Map<string, string[]>();
   private readonly lastOutputAt = new Map<string, number>();
+  /**
+   * INT-1551 §E.7: in-flight fire-and-forget handler promises. The shutdown
+   * handler in `main.ts` calls `getInFlightPromises()` and awaits drain via
+   * `Promise.race` against `SHUTDOWN_TIMEOUT_MS`.
+   */
+  private readonly inFlightHandlers = new Set<Promise<unknown>>();
   private readonly completionMaxAttempts: number;
   /** Injectable resume-summary helper. In tests the override may instead
    * supply `verifier.extractResumeSummary` — we resolve to a uniform callable. */
@@ -238,9 +244,12 @@ export class TaskDispatcher {
       },
       /* v8 ignore stop @preserve */
       (taskId) => {
-        void this.attemptLifecycle.handleInactivityRestart(taskId).catch((error: unknown) => {
-          this.logger.error({ taskId, error }, 'Error in inactivity restart handler');
-        });
+        // INT-1551 §E.7: track inactivity-restart so graceful shutdown drains it.
+        void this.context.trackInFlight(
+          this.attemptLifecycle.handleInactivityRestart(taskId).catch((error: unknown) => {
+            this.logger.error({ taskId, error }, 'Error in inactivity restart handler');
+          })
+        );
       }
     );
 
@@ -276,6 +285,7 @@ export class TaskDispatcher {
         inactivityRestartInProgress: this.inactivityRestartInProgress,
         pendingMessages: this.pendingMessages,
         lastOutputAt: this.lastOutputAt,
+        inFlightHandlers: this.inFlightHandlers,
         capacityMutex: this.capacityMutex,
         runningCount: this.runningCountBox,
       },
@@ -368,6 +378,28 @@ export class TaskDispatcher {
 
   getRunningCount(): number {
     return this.runningCountBox.value;
+  }
+
+  /**
+   * INT-1551 §E.7: snapshot of currently-tracked fire-and-forget handler
+   * promises. The shutdown path in `main.ts` awaits these via
+   * `Promise.race([Promise.allSettled(...), timeout])` so graceful shutdown
+   * actually drains in-flight work instead of polling `getRunningCount()`.
+   */
+  getInFlightPromises(): Promise<unknown>[] {
+    return Array.from(this.inFlightHandlers);
+  }
+
+  /**
+   * INT-1551 §E.7: thread the top-level AbortController signal down to
+   * `TaskRunner` and `TaskTimers`. Wired from `main.ts` after construction so
+   * the dispatcher does not need an extra constructor parameter (preserves the
+   * public construction API). Calling with a fresh signal replaces any prior
+   * one — current tests construct dispatchers without a signal and the
+   * production caller invokes this exactly once.
+   */
+  setShutdownSignal(signal: AbortSignal): void {
+    this.context.shutdownSignal = signal;
   }
 
   getCapacity(): number {
