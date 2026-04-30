@@ -12,6 +12,15 @@
  * Pagination: walks `whatsapp_user_mappings` ordered by __name__ in batches of
  * 200 docs using cursor pagination via `startAfter(lastDoc)` to avoid loading
  * the entire collection into memory.
+ *
+ * Security rules: the new `whatsapp_notification_preferences` collection is
+ * server-only (all access goes through whatsapp-service's
+ * `/internal/whatsapp/notifications/preferences` HTTP path with
+ * `X-Internal-Auth`). It therefore relies on the `{document=**}` catch-all
+ * "block all client reads/writes" rule from migration 001, matching the
+ * pattern used by every other whatsapp_* collection (`whatsapp_user_mappings`,
+ * `whatsapp_messages`, `whatsapp_outbound_messages`, `whatsapp_phone_verifications`,
+ * `whatsapp_webhook_events`). No explicit rules export is needed here.
  */
 
 import { Timestamp } from 'firebase-admin/firestore';
