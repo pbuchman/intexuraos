@@ -110,20 +110,6 @@ export type CloudEventHandler<D> = (
 export interface ObservabilityOptions {
   readonly sentryDsn?: string;
   readonly dlqPublish?: (payload: unknown, reason: string) => Promise<void>;
-  /**
-   * Optional pre-configured base logger. When supplied, `withObservability`
-   * uses it instead of `createWorkerLogger(handlerName)`. Allows callers that
-   * already bootstrap a Sentry-integrated pino logger (via
-   * `@intexuraos/infra-sentry`'s `initWorker`) to keep that single logger
-   * instance flowing through the wrapper — Sentry capture for warn/error
-   * logs is handled by the logger's own stream pipeline, so the wrapper does
-   * not import `@sentry/node` directly.
-   *
-   * NOTE: This field is shim-only — it does not appear in the frozen §3.3
-   * contract. Callers using the eventual `@intexuraos/common-worker` package
-   * should drop this field and rely on `createWorkerLogger` + `sentryDsn`.
-   */
-  readonly baseLogger?: WorkerLogger;
 }
 
 /**
@@ -139,7 +125,12 @@ export interface ObservabilityOptions {
  *                    logger's own stream when a Sentry DSN is configured) and
  *                    re-thrown so Pub/Sub redelivers (Nack semantics).
  *
- * `opts.sentryDsn` is currently a marker to indicate the caller has wired
+ * The wrapper creates its own logger via `createWorkerLogger(handlerName)`
+ * for the structured `worker_request_*` envelope lines; the handler's
+ * domain logs use whatever logger it received via its own dependency
+ * injection (matching the frozen §3.3 contract — see plan §4).
+ *
+ * `opts.sentryDsn` is currently a marker indicating the caller has wired
  * Sentry via `@intexuraos/infra-sentry`'s `initWorker` outside of this
  * wrapper; the shim does not call `Sentry.captureException` directly so it
  * stays free of a hard `@sentry/node` dependency.
@@ -152,7 +143,7 @@ export function withObservability<D>(
   handler: CloudEventHandler<D>,
   opts: ObservabilityOptions = {}
 ): (event: CloudEvent<D>) => Promise<void> {
-  const logger = opts.baseLogger ?? createWorkerLogger(handlerName);
+  const logger = createWorkerLogger(handlerName);
   return async (event: CloudEvent<D>): Promise<void> => {
     logger.info(
       { event: 'worker_request_start', handlerName, eventId: event.id },

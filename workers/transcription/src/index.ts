@@ -98,10 +98,16 @@ async function publishDeadLetter(payload: unknown, reason: string): Promise<void
   }
 }
 
+// `withObservability` constructs its own logger for the `worker_request_*`
+// envelope lines (per §3.3) — that logger is intentionally separate from the
+// Sentry-integrated `initWorker` logger above, which the handler uses for
+// domain logs via `deps.baseLogger`. Sentry is initialized at module scope
+// by `initWorker`, so warn/error lines on either logger flow through the
+// same DSN configured below.
 functions.cloudEvent<PubSubData>(
   'transcribeAudio',
   withObservability<PubSubData>('transcription', handler, {
-    baseLogger: logger as unknown as WorkerLogger,
     dlqPublish: publishDeadLetter,
+    ...(sentryDsn !== undefined ? { sentryDsn } : {}),
   })
 );
