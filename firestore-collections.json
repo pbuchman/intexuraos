@@ -20,7 +20,11 @@
     },
     "whatsapp_user_mappings": {
       "owner": "whatsapp-service",
-      "description": "Phone number to user ID mappings for WhatsApp integration; also stores the per-user notificationLevel ('all' | 'important', default 'all') used by whatsapp-service to filter outbound messages (INT-1418)."
+      "description": "Phone number to user ID mappings for WhatsApp integration. Shape: { userId, phoneNumbers, connected, createdAt, updatedAt }. Notification preferences are stored separately in whatsapp_notification_preferences (INT-1542)."
+    },
+    "whatsapp_notification_preferences": {
+      "owner": "whatsapp-service",
+      "description": "Per-user WhatsApp notification preferences (notificationLevel: 'all' | 'important'). Structurally isolated from user mappings so notificationLevel can never leak into the public WhatsAppUserMappingPublic projection (INT-1542)."
     },
     "whatsapp_webhook_events": {
       "owner": "whatsapp-service",
