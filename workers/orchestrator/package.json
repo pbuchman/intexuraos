@@ -42,6 +42,7 @@
     "minimatch": "^10.1.1",
     "openai": "catalog:",
     "pino": "catalog:",
+    "pino-opentelemetry-transport": "^2.0.0",
     "pino-pretty": "^13.0.0",
     "yaml": "^2.8.3",
     "zod": "catalog:"

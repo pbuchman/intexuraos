@@ -2277,6 +2277,9 @@ importers:
       pino:
         specifier: 'catalog:'
         version: 10.1.1
+      pino-opentelemetry-transport:
+        specifier: ^2.0.0
+        version: 2.0.0(@opentelemetry/api@1.9.0)(pino@10.1.1)
       pino-pretty:
         specifier: ^13.0.0
         version: 13.1.3
