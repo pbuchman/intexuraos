@@ -30,6 +30,7 @@ import {
   startCredentialRefreshLoop,
 } from './bootstrap/service-wiring.js';
 import { ensureDirectoryExists } from './bootstrap/fs-utils.js';
+import { defaultNodeEnv } from './bootstrap/node-env.js';
 
 function buildOrchestratorConfig(
   env: BootstrapEnvConfig,
@@ -80,6 +81,13 @@ function readCodeVersion(): string {
  * `await flush()` before exit.
  */
 export async function start(): Promise<void> {
+  // Mirror `pnpm --filter orchestrator dev` (which inlines
+  // NODE_ENV=development) for hosts that launch us via `node dist/index.js`
+  // — the home-dev systemd unit and the macOS LaunchAgent. Required before
+  // initWorker() so createAppLogger() takes the pino-pretty branch instead
+  // of raw JSON stdout (which is unreadable in journalctl).
+  defaultNodeEnv();
+
   const home = homedir();
   const orchestratorDir = join(home, '.code-orchestrator');
   const worktreeDir = join(home, 'code-workers', 'worktrees');
