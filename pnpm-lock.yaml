@@ -2247,6 +2247,9 @@ importers:
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
+      '@sentry/node':
+        specifier: ^8.42.0
+        version: 8.55.0
       async-mutex:
         specifier: ^0.5.0
         version: 0.5.0

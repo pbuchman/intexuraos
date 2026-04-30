@@ -21,6 +21,7 @@
     "openai",
     "fastify-server",
     "@google/genai",
+    "@sentry/node",
     "react",
     "react-dom",
     "vibe-kanban-web-companion",
