@@ -150,6 +150,78 @@ if (bundledNpmPackages.size > 0) {
   process.exit(1);
 }
 
+// Detect external packages that are referenced by the bundle but not
+// resolvable from `<serviceDir>/dist/` via Node's module resolution.
+//
+// This check applies ONLY to services that run `node dist/index.js`
+// directly from the source tree (e.g. orchestrator on home-dev systemd),
+// where there is no separate `pnpm install` step from the generated
+// `dist/package.json`. Cloud Functions / Cloud Run paths are exempt
+// because their deploy pipelines run a fresh install inside the deployed
+// `dist/`.
+//
+// For source-tree-run services, every referenced external must be hoisted
+// into the service's own `node_modules` tree. Under pnpm strict isolation,
+// only direct deps are hoisted — transitive deps from @intexuraos/infra-*
+// workspace packages (e.g. `@sentry/node`, `pino-opentelemetry-transport`)
+// are NOT symlinked, so Node throws ERR_MODULE_NOT_FOUND at startup.
+//
+// We scan the bundle source for string-literal references rather than the
+// esbuild metafile because the failure mode covers both static imports and
+// dynamic targets passed as strings (e.g.
+// `pino.transport({ target: 'pino-opentelemetry-transport' })`), which
+// never appear in metafile.outputs.imports.
+
+/**
+ * Services that run `node dist/index.js` directly from the source tree
+ * with no separate install step. Add a service here when it adopts a
+ * deploy path that does not run `pnpm install --prod` inside `dist/`.
+ */
+const SOURCE_TREE_RUN_SERVICES = new Set(['orchestrator']);
+function canResolveFrom(pkg, fromDir) {
+  let dir = fromDir;
+  while (true) {
+    if (existsSync(resolve(dir, 'node_modules', pkg, 'package.json'))) return true;
+    const parent = dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
+}
+
+if (SOURCE_TREE_RUN_SERVICES.has(service)) {
+  const distDir = resolve(rootDir, `${serviceDir}/dist`);
+  const distOutputPath = resolve(rootDir, `${serviceDir}/dist/index.js`);
+  const bundleSource = readFileSync(distOutputPath, 'utf8');
+
+  // A package is "referenced" if its exact name appears as a quoted string
+  // in the bundle. Quoted-only matching avoids substring false positives
+  // from unrelated specifiers (e.g. `@sentry/node-foo` matching `@sentry/node`).
+  function isReferenced(pkg, source) {
+    const patterns = [`"${pkg}"`, `'${pkg}'`, `\`${pkg}\``];
+    return patterns.some((p) => source.includes(p));
+  }
+
+  const referencedExternals = externalPackages.filter((pkg) => isReferenced(pkg, bundleSource));
+  const unresolvable = referencedExternals.filter((pkg) => !canResolveFrom(pkg, distDir));
+  if (unresolvable.length > 0) {
+    console.error(
+      '\nERROR: external packages referenced by dist/index.js not resolvable from dist/:'
+    );
+    for (const pkg of unresolvable) {
+      console.error(`  - ${pkg}`);
+    }
+    console.error(
+      `\nThese packages are referenced by the bundle but pnpm has not symlinked` +
+        ` them into ${serviceDir}/node_modules. Under strict isolation, only` +
+        ` direct dependencies of the service are hoisted there — transitive` +
+        ` deps from @intexuraos/infra-* workspace packages are not.` +
+        `\n\nFix: Add the package(s) to ${serviceDir}/package.json dependencies` +
+        ` so pnpm symlinks them where Node ESM can resolve them.\n`
+    );
+    process.exit(1);
+  }
+}
+
 // Generate production package.json with all pnpm dependencies (including transitive)
 const depsWithVersions = collectExternalDepsWithVersions(`@intexuraos/${service}`);
 // Always include infra-otel's deps for the OTel preload module
