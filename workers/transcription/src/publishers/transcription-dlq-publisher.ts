@@ -35,8 +35,9 @@ export interface TranscriptionDlqPublisherConfig {
 /**
  * Envelope written to the DLQ topic. Captures the original payload (whatever
  * the upstream subscription delivered to the worker) plus the worker-level
- * `reason` code, so DLQ inspectors can correlate without re-parsing the
- * inner Pub/Sub envelope.
+ * `reason` code and the source CloudEvent id so DLQ inspectors can link
+ * back to the original delivery without re-parsing the inner Pub/Sub
+ * envelope.
  */
 export interface TranscriptionDlqEvent {
   /** Stable type identifier so multi-source DLQ subscribers can filter. */
@@ -45,6 +46,8 @@ export interface TranscriptionDlqEvent {
   payload: unknown;
   /** Machine-readable failure category (e.g. `parse_error`, `invalid_event_schema`). */
   reason: string;
+  /** Source CloudEvent id, when known. Optional because some test paths omit it. */
+  eventId?: string;
   /** ISO 8601 timestamp the DLQ event was generated. */
   timestamp: string;
 }
@@ -58,8 +61,10 @@ export interface TranscriptionDlqPublisher {
    *
    * @param payload - Original payload that failed parsing / validation.
    * @param reason  - Stable failure code (see translation table in plan §8).
+   * @param eventId - Optional source CloudEvent id for correlation with the
+   *                  worker's `worker_request_*` log lines.
    */
-  publish(payload: unknown, reason: string): Promise<Result<void, PublishError>>;
+  publish(payload: unknown, reason: string, eventId?: string): Promise<Result<void, PublishError>>;
 }
 
 /**
@@ -76,17 +81,22 @@ class TranscriptionDlqPublisherImpl
     this.topicName = config.topicName;
   }
 
-  async publish(payload: unknown, reason: string): Promise<Result<void, PublishError>> {
+  async publish(
+    payload: unknown,
+    reason: string,
+    eventId?: string
+  ): Promise<Result<void, PublishError>> {
     const event: TranscriptionDlqEvent = {
       type: 'srt.transcription.dead_letter',
       payload,
       reason,
       timestamp: new Date().toISOString(),
+      ...(eventId !== undefined ? { eventId } : {}),
     };
     return await this.publishToTopic(
       this.topicName,
       event,
-      { reason },
+      eventId !== undefined ? { reason, eventId } : { reason },
       'transcription dead-letter'
     );
   }

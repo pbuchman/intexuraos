@@ -79,6 +79,21 @@ describe('createTranscriptionDlqPublisher', () => {
     // carry the failure reason even when the payload is non-serializable.
     expect(decoded['reason']).toBe('missing_message_data');
     expect(decoded['type']).toBe('srt.transcription.dead_letter');
+    // eventId is omitted entirely when not supplied (don't leak `undefined`).
+    expect(Object.prototype.hasOwnProperty.call(decoded, 'eventId')).toBe(false);
+  });
+
+  it('attaches eventId to the envelope when supplied for DLQ-dashboard correlation', async () => {
+    const publisher = createTranscriptionDlqPublisher(config);
+    const payload = { foo: 'bar' };
+
+    const result = await publisher.publish(payload, 'parse_error', 'evt-correlation-1');
+
+    expect(result.ok).toBe(true);
+    const call = mockPublishMessage.mock.calls[0] as [{ data: Buffer }];
+    const decoded = JSON.parse(call[0].data.toString()) as Record<string, unknown>;
+
+    expect(decoded['eventId']).toBe('evt-correlation-1');
   });
 
   it('returns TOPIC_NOT_FOUND error when topic does not exist', async () => {

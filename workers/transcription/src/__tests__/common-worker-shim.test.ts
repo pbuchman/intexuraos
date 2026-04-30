@@ -199,129 +199,130 @@ describe('shim: makePubSubCloudEvent', () => {
 });
 
 describe('shim: withObservability', () => {
-  // CloudEvent `id` is required by the type but only used for log correlation;
-  // pass a stable string in tests so log assertions stay deterministic.
+  // The wrapper creates its own logger via `createWorkerLogger(handlerName)`
+  // per the §3.3 contract — there is no log-injection seam, so these tests
+  // assert behavior via observable side effects (return value, throw,
+  // `dlqPublish` invocation) rather than scraping log output. The
+  // `vitest.setup.ts` global setup pins `LOG_LEVEL=silent`, so the wrapper's
+  // pino logger emits nothing during the test run.
   function makeEvent(overrides: { id?: string } = {}): ReturnType<typeof makePubSubCloudEvent> {
     return makePubSubCloudEvent({ payload: 'x' }, { id: overrides.id ?? 'evt-1' });
   }
 
-  it('Ack: resolves and logs worker_request_ack', async () => {
-    const baseLogger = createFakeLogger();
+  it('Ack: resolves without throwing', async () => {
     const handler: CloudEventHandler<unknown> = async (): Promise<AckResult> => ({
       decision: AckDecision.Ack,
     });
-    const wrapped = withObservability('test', handler, { baseLogger });
+    const wrapped = withObservability('test', handler);
 
     await expect(wrapped(makeEvent())).resolves.toBeUndefined();
-
-    const events = baseLogger.entries.map((e) => (e.obj as { event?: string }).event);
-    expect(events).toContain('worker_request_start');
-    expect(events).toContain('worker_request_ack');
   });
 
-  it('Nack: throws and logs worker_request_nack with reason', async () => {
-    const baseLogger = createFakeLogger();
+  it('Nack: throws with reason in the error message', async () => {
     const handler: CloudEventHandler<unknown> = async (): Promise<AckResult> => ({
       decision: AckDecision.Nack,
       reason: 'transient_error',
     });
-    const wrapped = withObservability('test', handler, { baseLogger });
+    const wrapped = withObservability('test', handler);
 
     await expect(wrapped(makeEvent())).rejects.toThrow(/nack: transient_error/);
-
-    const nackEntry = baseLogger.entries.find(
-      (e) => (e.obj as { event?: string }).event === 'worker_request_nack'
-    );
-    expect(nackEntry).toBeDefined();
-    expect((nackEntry?.obj as { reason?: string }).reason).toBe('transient_error');
   });
 
   it('Nack with no reason: throws "nack: unspecified"', async () => {
-    const baseLogger = createFakeLogger();
     const handler: CloudEventHandler<unknown> = async (): Promise<AckResult> => ({
       decision: AckDecision.Nack,
     });
-    const wrapped = withObservability('test', handler, { baseLogger });
+    const wrapped = withObservability('test', handler);
+
     await expect(wrapped(makeEvent())).rejects.toThrow(/nack: unspecified/);
   });
 
   it('DeadLetter with publisher: invokes dlqPublish with payload + reason and resolves', async () => {
-    const baseLogger = createFakeLogger();
     const dlqPublish = vi.fn().mockResolvedValue(undefined);
     const handler: CloudEventHandler<unknown> = async (): Promise<AckResult> => ({
       decision: AckDecision.DeadLetter,
       reason: 'parse_error',
     });
-    const wrapped = withObservability('test', handler, { baseLogger, dlqPublish });
+    const wrapped = withObservability('test', handler, { dlqPublish });
 
     const event = makeEvent();
     await expect(wrapped(event)).resolves.toBeUndefined();
 
     expect(dlqPublish).toHaveBeenCalledTimes(1);
     expect(dlqPublish).toHaveBeenCalledWith(event.data, 'parse_error');
-
-    const dlqEntry = baseLogger.entries.find(
-      (e) => (e.obj as { event?: string }).event === 'worker_request_dlq'
-    );
-    expect(dlqEntry).toBeDefined();
   });
 
-  it('DeadLetter without publisher: degrades to nack and logs missing-publisher warning', async () => {
-    const baseLogger = createFakeLogger();
+  it('DeadLetter without publisher: degrades to nack', async () => {
     const handler: CloudEventHandler<unknown> = async (): Promise<AckResult> => ({
       decision: AckDecision.DeadLetter,
       reason: 'schema_invalid',
     });
-    const wrapped = withObservability('test', handler, { baseLogger });
+    const wrapped = withObservability('test', handler);
 
     await expect(wrapped(makeEvent())).rejects.toThrow(/dlq \(no publisher\): schema_invalid/);
-
-    const warnEntry = baseLogger.entries.find(
-      (e) => (e.obj as { event?: string }).event === 'worker_request_dlq_missing_publisher'
-    );
-    expect(warnEntry).toBeDefined();
   });
 
   it('DeadLetter with no reason: defaults reason to "dlq" when invoking dlqPublish', async () => {
-    const baseLogger = createFakeLogger();
     const dlqPublish = vi.fn().mockResolvedValue(undefined);
     const handler: CloudEventHandler<unknown> = async (): Promise<AckResult> => ({
       decision: AckDecision.DeadLetter,
     });
-    const wrapped = withObservability('test', handler, { baseLogger, dlqPublish });
+    const wrapped = withObservability('test', handler, { dlqPublish });
 
     await wrapped(makeEvent());
 
     expect(dlqPublish).toHaveBeenCalledWith(expect.anything(), 'dlq');
   });
 
-  it('handler throws: logs worker_request_error and re-throws', async () => {
-    const baseLogger = createFakeLogger();
+  it('DeadLetter without publisher and no reason: defaults the thrown error to "dlq"', async () => {
+    const handler: CloudEventHandler<unknown> = async (): Promise<AckResult> => ({
+      decision: AckDecision.DeadLetter,
+    });
+    const wrapped = withObservability('test', handler);
+
+    await expect(wrapped(makeEvent())).rejects.toThrow(/dlq \(no publisher\): dlq/);
+  });
+
+  it('handler throws: re-throws so Pub/Sub redelivers', async () => {
     const handler: CloudEventHandler<unknown> = async (): Promise<AckResult> => {
       throw new Error('boom');
     };
-    const wrapped = withObservability('test', handler, { baseLogger });
+    const wrapped = withObservability('test', handler);
 
     await expect(wrapped(makeEvent())).rejects.toThrow(/boom/);
-
-    const errEntry = baseLogger.entries.find(
-      (e) => (e.obj as { event?: string }).event === 'worker_request_error'
-    );
-    expect(errEntry).toBeDefined();
   });
 
-  it('falls back to createWorkerLogger(handlerName) when no baseLogger is supplied', async () => {
-    // Smoke test: ensures the no-baseLogger code path in withObservability does
-    // not crash. The default pino logger writes to stdout; we assert only that
-    // the handler ran and ack resolved.
-    const handlerCalls: string[] = [];
+  it('SILENT-ACK regression guard: dlqPublish rejection bubbles up as Nack', async () => {
+    // Locks in the silent-ACK fix this subtask exists to provide. A failed
+    // DLQ publish MUST throw — the wrapper degrades to Nack so Pub/Sub
+    // redelivers (and the subscription's dead-letter policy eventually
+    // routes the original message to the platform-managed DLQ topic). A
+    // silent ACK here would re-introduce the original bug.
+    const dlqPublish = vi.fn().mockRejectedValue(new Error('topic missing'));
+    const handler: CloudEventHandler<unknown> = async (): Promise<AckResult> => ({
+      decision: AckDecision.DeadLetter,
+      reason: 'parse_error',
+    });
+    const wrapped = withObservability('test', handler, { dlqPublish });
+
+    await expect(wrapped(makeEvent())).rejects.toThrow(/topic missing/);
+    expect(dlqPublish).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes a non-null `logger` argument to the handler so the §3.3 signature is honored', async () => {
+    // Without a logger, handlers conforming to the §3.3 contract would
+    // crash on the first `.info(...)` call. Asserting the level field is
+    // a string is a structural smoke check.
+    const seen: { hasLevel: boolean }[] = [];
     const handler: CloudEventHandler<unknown> = async (_event, log): Promise<AckResult> => {
-      handlerCalls.push(log.level);
+      seen.push({ hasLevel: typeof log.level === 'string' });
       return { decision: AckDecision.Ack };
     };
-    const wrapped = withObservability('handler-without-base-logger', handler);
+    const wrapped = withObservability('test', handler);
 
-    await expect(wrapped(makeEvent())).resolves.toBeUndefined();
-    expect(handlerCalls).toHaveLength(1);
+    await wrapped(makeEvent());
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.hasLevel).toBe(true);
   });
 });
