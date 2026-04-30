@@ -5,7 +5,7 @@
  */
 import { BatchClient } from '@speechmatics/batch-client';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type { Logger } from '../../logger.js';
+import type { WorkerLogger as Logger } from '../../__shims__/common-worker.js';
 import type {
   SpeechTranscriptionPort,
   TranscriptionJobInput,

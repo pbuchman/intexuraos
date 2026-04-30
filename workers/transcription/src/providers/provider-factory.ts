@@ -6,7 +6,7 @@
  */
 import type { SpeechTranscriptionPort } from './transcription-provider.js';
 import { SpeechmaticsTranscriptionAdapter } from './speechmatics/adapter.js';
-import type { Logger } from '../logger.js';
+import type { WorkerLogger as Logger } from '../__shims__/common-worker.js';
 
 /**
  * Create a transcription provider by name.
