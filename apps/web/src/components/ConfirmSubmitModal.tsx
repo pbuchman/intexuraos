@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 import type { CodeTaskWorkerType } from '@intexuraos/code-task-domain/worker-types';
+import { DEFAULT_TIMEOUT_HOURS } from '@intexuraos/code-task-domain/timeout';
 import type { TaskMode } from '@/types';
 import { formatSchedulePreview } from '@/utils/scheduledDispatch';
 import { Button } from './ui/Button.js';
@@ -22,6 +23,11 @@ interface ConfirmSubmitModalProps {
     timezone: string;
     notBeforeAt: string;
   };
+  /**
+   * Selected per-task timeout in hours. Rendered as an extra info row only
+   * when it differs from `DEFAULT_TIMEOUT_HOURS`. INT-1585.
+   */
+  timeoutHours?: number;
   onConfirm: () => Promise<void>;
   onCancel: () => void;
 }
@@ -32,6 +38,7 @@ export function ConfirmSubmitModal({
   workerType,
   taskMode,
   schedule,
+  timeoutHours,
   onConfirm,
   onCancel,
 }: ConfirmSubmitModalProps): React.JSX.Element | null {
@@ -122,6 +129,14 @@ export function ConfirmSubmitModal({
                   Added to queue immediately
                 </p>
               </div>
+            ) : null}
+            {timeoutHours !== undefined && timeoutHours !== DEFAULT_TIMEOUT_HOURS ? (
+              <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">
+                Custom timeout:{' '}
+                <span className="font-semibold">
+                  {String(timeoutHours)} {timeoutHours === 1 ? 'hour' : 'hours'}
+                </span>
+              </p>
             ) : null}
           </div>
 
