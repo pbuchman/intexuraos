@@ -7,7 +7,7 @@
  * @packageDocumentation
  */
 
-import type { Result } from '@intexuraos/common-core';
+import { IntexuraOSError, type Result } from '@intexuraos/common-core';
 import type { LLMError, LLMErrorCode } from '@intexuraos/llm-contract';
 
 /**
@@ -52,6 +52,12 @@ export async function withRetry<T>(
   fn: () => Promise<Result<T, LLMError>>,
   opts: WithRetryOptions
 ): Promise<Result<T, LLMError>> {
+  if (opts.maxAttempts < 1) {
+    throw new IntexuraOSError(
+      'INVALID_REQUEST',
+      `withRetry: maxAttempts must be >= 1 (got ${String(opts.maxAttempts)})`
+    );
+  }
   const sleeper =
     opts.sleep ?? ((ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms)));
   const maxDelay = opts.maxDelayMs ?? 30_000;

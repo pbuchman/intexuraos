@@ -2,7 +2,7 @@
  * LLM Client Factory
  *
  * Provides a unified interface for creating LLM clients
- * across different providers (Gemini).
+ * across different providers (Google, Anthropic, OpenAI, Perplexity, OpenRouter).
  *
  * @packageDocumentation
  *
