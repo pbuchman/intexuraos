@@ -1028,6 +1028,11 @@ export interface CodeTask {
   error?: CodeTaskError;
   executionMemoryContext?: CodeTaskExecutionMemoryContext;
   executionMemoryPostRun?: CodeTaskExecutionMemoryPostRun;
+  /**
+   * User-customised per-task timeout in hours (1–12). Absent when the user
+   * accepted the orchestrator default (5h). INT-1585.
+   */
+  timeoutHours?: number;
 }
 
 export type TaskMode = 'planning' | 'execution';
@@ -1049,6 +1054,11 @@ export interface SubmitCodeTaskRequest {
     timezone: string;
     notBeforeAt: string; // ISO UTC
   };
+  /**
+   * Optional per-task timeout override in hours (1–12). When omitted, the
+   * orchestrator default (5h) applies. INT-1585.
+   */
+  timeoutHours?: number;
 }
 
 /**

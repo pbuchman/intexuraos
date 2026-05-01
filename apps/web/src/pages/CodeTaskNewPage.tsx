@@ -1,4 +1,6 @@
 import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain/worker-types';
+import { DEFAULT_TIMEOUT_HOURS } from '@intexuraos/code-task-domain/timeout';
+import { TimeoutSlider } from '@/components/code-tasks/TimeoutSlider';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, Play, Link2, Sparkles, Pencil, ClipboardList, Rocket, Clock } from 'lucide-react';
@@ -68,6 +70,9 @@ export function CodeTaskNewPage(): React.JSX.Element {
   const [workerType, setWorkerType] = useState<CodeTaskWorkerType>('auto');
   const [linearMode, setLinearMode] = useState<LinearMode>('create');
   const [taskMode, setTaskMode] = useState<TaskMode>('planning');
+  // INT-1585: per-task timeout override. Default to the shared default; when
+  // left at the default the request omits the field for backward compat.
+  const [timeoutHours, setTimeoutHours] = useState<number>(DEFAULT_TIMEOUT_HOURS);
   const [selectedIssue, setSelectedIssue] = useState<LinearIssueOption | null>(null);
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduleLocalDateTime, setScheduleLocalDateTime] = useState('');
@@ -210,6 +215,12 @@ export function CodeTaskNewPage(): React.JSX.Element {
       // Attach scheduledDispatch only when execution mode + schedule enabled + valid.
       if (validSchedulePayload !== null) {
         requestData.scheduledDispatch = validSchedulePayload;
+      }
+
+      // INT-1585: only send timeoutHours when it differs from the default —
+      // preserves wire-level backward compatibility.
+      if (timeoutHours !== DEFAULT_TIMEOUT_HOURS) {
+        requestData.timeoutHours = timeoutHours;
       }
 
       const token = await getAccessToken();
@@ -394,6 +405,12 @@ export function CodeTaskNewPage(): React.JSX.Element {
               {TASK_MODES.find((m) => m.id === taskMode)?.description}
             </p>
           </div>
+
+          <TimeoutSlider
+            value={timeoutHours}
+            onChange={setTimeoutHours}
+            disabled={submitting}
+          />
 
           {taskMode === 'execution' ? (
             <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
@@ -583,6 +600,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
         taskTitle={getTaskTitle()}
         workerType={workerType}
         taskMode={taskMode}
+        timeoutHours={timeoutHours}
         {...(validSchedulePayload !== null ? { schedule: validSchedulePayload } : {})}
         onConfirm={handleConfirmSubmit}
         onCancel={handleCancelModal}
