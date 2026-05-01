@@ -88,12 +88,7 @@ export const CreateTaskRequestSchema = z.object({
    * Optional per-task timeout in hours (1–12). When omitted, the orchestrator
    * applies its 5h default. INT-1585.
    */
-  timeoutHours: z
-    .number()
-    .int()
-    .min(MIN_TIMEOUT_HOURS)
-    .max(MAX_TIMEOUT_HOURS)
-    .optional(),
+  timeoutHours: z.number().int().min(MIN_TIMEOUT_HOURS).max(MAX_TIMEOUT_HOURS).optional(),
 });
 
 // POST /tasks/:id/message request schema

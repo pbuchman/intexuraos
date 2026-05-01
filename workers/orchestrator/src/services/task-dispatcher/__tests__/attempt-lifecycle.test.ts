@@ -103,8 +103,14 @@ describe('AttemptLifecycle', () => {
       };
       await al.executeTaskSetup(request, () => 'pbuchman/intexuraos');
       const expectedTimeoutMs = 8 * 60 * 60 * 1000;
-      expect(harness.ctx.scheduleTimeoutWarning).toHaveBeenCalledWith('setup-timeout', expectedTimeoutMs);
-      expect(harness.ctx.scheduleTimeoutKill).toHaveBeenCalledWith('setup-timeout', expectedTimeoutMs);
+      expect(harness.ctx.scheduleTimeoutWarning).toHaveBeenCalledWith(
+        'setup-timeout',
+        expectedTimeoutMs
+      );
+      expect(harness.ctx.scheduleTimeoutKill).toHaveBeenCalledWith(
+        'setup-timeout',
+        expectedTimeoutMs
+      );
     });
 
     it('releases slot and sends setup-failure webhook on worktree error', async () => {
