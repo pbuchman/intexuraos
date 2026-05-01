@@ -222,6 +222,7 @@ export const MODEL_KEYWORDS: Record<ResearchModel, string[]> = {
   [LlmModels.Gemini25Flash]: ['gemini flash', 'gemini-flash', 'gemini', 'google'],
   [LlmModels.ClaudeOpus46]: ['claude opus', 'opus'],
   [LlmModels.ClaudeSonnet46]: ['claude sonnet', 'sonnet', 'claude', 'anthropic'],
+  [LlmModels.ClaudeSonnet47]: ['claude sonnet 4.7', 'sonnet 4.7', 'claude-sonnet-4-7'],
   [LlmModels.O4MiniDeepResearch]: ['o4', 'o4-mini', 'deep research'],
   [LlmModels.GPT54]: ['gpt', 'gpt-5', 'openai', 'chatgpt'],
   [LlmModels.Sonar]: ['sonar basic'],
