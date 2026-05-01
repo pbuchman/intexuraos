@@ -1,4 +1,3 @@
-// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 /**
  * Repair prompt for calendar event extraction.
  * Used when the initial extraction returns invalid JSON or fails schema validation.
