@@ -102,8 +102,9 @@ export async function adoptTask(
   task.containerId = startResult.containerId;
   await ctx.saveTask(task);
 
-  ctx.scheduleTimeoutWarning(task.taskId);
-  ctx.scheduleTimeoutKill(task.taskId);
+  // INT-1585: re-arm timers with task's per-task timeoutMs after restart adoption.
+  ctx.scheduleTimeoutWarning(task.taskId, task.timeoutMs);
+  ctx.scheduleTimeoutKill(task.taskId, task.timeoutMs);
   ctx.startCompletionMonitoring(task.taskId);
 
   ctx.appendOrchestratorTaskLog(

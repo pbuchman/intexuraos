@@ -302,11 +302,11 @@ export class TaskDispatcher {
         clearTaskTimers: (taskId): void => {
           this.taskTimers.clearTaskTimers(taskId);
         },
-        scheduleTimeoutWarning: (taskId): void => {
-          this.taskTimers.scheduleTimeoutWarning(taskId);
+        scheduleTimeoutWarning: (taskId, overrideKillMs): void => {
+          this.taskTimers.scheduleTimeoutWarning(taskId, overrideKillMs);
         },
-        scheduleTimeoutKill: (taskId): void => {
-          this.taskTimers.scheduleTimeoutKill(taskId);
+        scheduleTimeoutKill: (taskId, overrideKillMs): void => {
+          this.taskTimers.scheduleTimeoutKill(taskId, overrideKillMs);
         },
         startCompletionMonitoring: (taskId): void => {
           this.taskTimers.startCompletionMonitoring(taskId);
