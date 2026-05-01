@@ -47,7 +47,7 @@ import {
   type GenerateResult,
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
-import { withLlmSpan } from '@intexuraos/llm-utils';
+import { withLlmSpan, withRetry } from '@intexuraos/llm-utils';
 import type { ClaudeConfig, ClaudeError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
@@ -171,57 +171,67 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       prompt: string,
       options: GenerateOptions
     ): Promise<Result<GenerateResult, ClaudeError>> {
-      const start = Date.now();
-      try {
-        const { result, durationMs } = await withLlmSpan(
-          LlmProviders.Anthropic,
-          async () => {
-            const response = await client.messages.create({
-              model,
-              max_tokens: MAX_TOKENS,
-              messages: [{ role: 'user', content: prompt }],
-            });
-
-            const textBlocks = response.content.filter(
-              (block): block is Anthropic.TextBlock => block.type === 'text'
-            );
-            const text = textBlocks.map((b) => b.text).join('\n\n');
-            const usageDetails = extractUsageDetails(response.usage);
-            const usage = normalizeUsage(
-              usageDetails.inputTokens,
-              usageDetails.outputTokens,
-              usageDetails.cacheReadTokens,
-              usageDetails.cacheCreationTokens,
-              0
-            );
-            return { content: text, usage, cacheReadTokens: usageDetails.cacheReadTokens };
-          },
-          ({ usage, cacheReadTokens }) => ({
-            model,
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            ...(cacheReadTokens > 0 && { cachedInputTokens: cacheReadTokens }),
-            costUsd: usage.costUsd,
-          })
-        );
-
-        trackUsage('generate', result.usage, true, durationMs, undefined, options.promptType);
-
-        return ok({ content: result.content, usage: result.usage });
-      } catch (error) {
-        const durationMs = Date.now() - start;
-        const errorMsg = getErrorMessage(error);
-        const emptyUsage: NormalizedUsage = {
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-          costUsd: 0,
-        };
-        trackUsage('generate', emptyUsage, false, durationMs, errorMsg, options.promptType);
-        return err(mapClaudeError(error));
-      }
+      return await withRetry(() => generateOnce(prompt, options), {
+        maxAttempts: 3,
+        baseDelayMs: 500,
+      });
     },
   };
+
+  async function generateOnce(
+    prompt: string,
+    options: GenerateOptions
+  ): Promise<Result<GenerateResult, ClaudeError>> {
+    const start = Date.now();
+    try {
+      const { result, durationMs } = await withLlmSpan(
+        LlmProviders.Anthropic,
+        async () => {
+          const response = await client.messages.create({
+            model,
+            max_tokens: MAX_TOKENS,
+            messages: [{ role: 'user', content: prompt }],
+          });
+
+          const textBlocks = response.content.filter(
+            (block): block is Anthropic.TextBlock => block.type === 'text'
+          );
+          const text = textBlocks.map((b) => b.text).join('\n\n');
+          const usageDetails = extractUsageDetails(response.usage);
+          const usage = normalizeUsage(
+            usageDetails.inputTokens,
+            usageDetails.outputTokens,
+            usageDetails.cacheReadTokens,
+            usageDetails.cacheCreationTokens,
+            0
+          );
+          return { content: text, usage, cacheReadTokens: usageDetails.cacheReadTokens };
+        },
+        ({ usage, cacheReadTokens }) => ({
+          model,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          ...(cacheReadTokens > 0 && { cachedInputTokens: cacheReadTokens }),
+          costUsd: usage.costUsd,
+        })
+      );
+
+      trackUsage('generate', result.usage, true, durationMs, undefined, options.promptType);
+
+      return ok({ content: result.content, usage: result.usage });
+    } catch (error) {
+      const durationMs = Date.now() - start;
+      const errorMsg = getErrorMessage(error);
+      const emptyUsage: NormalizedUsage = {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+      };
+      trackUsage('generate', emptyUsage, false, durationMs, errorMsg, options.promptType);
+      return err(mapClaudeError(error));
+    }
+  }
 }
 
 function mapClaudeError(error: unknown): ClaudeError {

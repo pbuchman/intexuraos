@@ -21,3 +21,6 @@ export {
   type LlmSpanAttributes,
   type WithLlmSpanResult,
 } from './withLlmSpan.js';
+
+// Retry helper for transient LLM errors
+export { withRetry, type WithRetryOptions } from './withRetry.js';

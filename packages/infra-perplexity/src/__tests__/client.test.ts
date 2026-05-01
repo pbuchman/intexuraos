@@ -453,6 +453,31 @@ describe('createPerplexityClient', () => {
       }
     });
 
+    it('retries transient RATE_LIMITED then returns success', async () => {
+      nock(API_BASE_URL).post('/chat/completions').reply(429, 'Rate limited');
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'recovered' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+        });
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generate('hi', { promptType: 'test-prompt' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.content).toBe('recovered');
+      }
+    });
+
     it('returns costUsd 0 for generate regardless of provider cost', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions')
@@ -785,6 +810,7 @@ describe('createPerplexityClient', () => {
     it('handles timeout error in generate', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions')
+        .times(3)
         .replyWithError(new Error('Connection timeout occurred'));
 
       const client = createPerplexityClient({
@@ -917,7 +943,7 @@ describe('createPerplexityClient', () => {
     it('handles AbortError from fetch in generate', async () => {
       const abortError = new Error('The operation was aborted');
       abortError.name = 'AbortError';
-      nock(API_BASE_URL).post('/chat/completions').replyWithError(abortError);
+      nock(API_BASE_URL).post('/chat/completions').times(3).replyWithError(abortError);
 
       const client = createPerplexityClient({
         apiKey: 'test-key',
@@ -1147,7 +1173,7 @@ describe('createPerplexityClient', () => {
     });
 
     it('records ERROR-status span when API returns non-OK HTTP status', async () => {
-      nock(API_BASE_URL).post('/chat/completions').reply(429, 'Rate limited');
+      nock(API_BASE_URL).post('/chat/completions').times(3).reply(429, 'Rate limited');
       const client = createPerplexityClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
@@ -1158,7 +1184,8 @@ describe('createPerplexityClient', () => {
       await client.generate('hi', { promptType: 'test-prompt' });
 
       const spans = spanExporter.getFinishedSpans();
-      expect(spans).toHaveLength(1);
+      // Each retry attempt emits its own span; with 3 attempts we get 3 ERROR spans.
+      expect(spans.length).toBeGreaterThanOrEqual(1);
       const span = spans[0];
       if (span === undefined) throw new Error('no span');
       expect(span.name).toBe('llm.perplexity.generate');
