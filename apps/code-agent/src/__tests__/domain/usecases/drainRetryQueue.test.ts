@@ -688,6 +688,44 @@ describe('drainRetryQueue', () => {
       );
     });
 
+    it('forwards timeoutHours to dispatcher when task has it (INT-1585)', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(
+        ok({
+          ...sampleTask,
+          timeoutHours: 8,
+        })
+      );
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' }),
+      );
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.action).toBe('dispatched');
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ timeoutHours: 8 }),
+      );
+    });
+
+    it('omits timeoutHours from retry dispatch when task has none — backward compat (INT-1585)', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok({ ...sampleTask }));
+      mockTaskDispatcher.dispatch.mockResolvedValue(
+        ok({ dispatched: true, workerLocation: 'home-mac' }),
+      );
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.not.objectContaining({ timeoutHours: expect.anything() }),
+      );
+    });
+
     it('forwards continuation PR metadata and archives the original task after retry dispatch', async () => {
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
       mockCodeTaskRepo.findById.mockResolvedValue(

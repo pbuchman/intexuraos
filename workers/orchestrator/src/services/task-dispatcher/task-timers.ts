@@ -64,7 +64,11 @@ export class TaskTimers {
     const ctx = this.ctx;
     const warningMs = resolveWarningMs(overrideKillMs);
     const killMs = resolveKillMs(overrideKillMs);
-    const hours = Math.round(killMs / (60 * 60 * 1000));
+    // The route-level schema enforces `MIN_TIMEOUT_HOURS >= 1`, so production
+    // values always round to >= 1. The Math.max guard keeps the rendered log
+    // line sensible if a sub-hour value is ever supplied (e.g., unit tests
+    // that exercise the warning-clamp branch).
+    const hours = Math.max(1, Math.round(killMs / (60 * 60 * 1000)));
     const timeout = setTimeout(() => {
       void (async (): Promise<void> => {
         try {
