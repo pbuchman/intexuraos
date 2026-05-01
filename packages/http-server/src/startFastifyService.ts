@@ -17,6 +17,7 @@
 import type { FastifyInstance } from 'fastify';
 import { initSentry } from '@intexuraos/infra-sentry';
 import { getErrorMessage } from '@intexuraos/common-core';
+import { flushAllUsageSinks } from '@intexuraos/llm-pricing';
 import { validateRequiredEnv } from './health.js';
 
 export interface StartFastifyServiceOptions {
@@ -55,11 +56,28 @@ export async function startFastifyService(opts: StartFastifyServiceOptions): Pro
   const port = opts.port ?? Number(process.env['PORT'] ?? 8080);
   const host = opts.host ?? process.env['HOST'] ?? '0.0.0.0';
 
+  // SIGTERM/SIGINT must drain registered usage sinks BEFORE exit. The HTTP
+  // sinks coalesce events on a 500ms unref'd timer; without this drain
+  // step, recent events buffered between the last flush and the signal are
+  // dropped on Cloud Run scale-down. Drain failures are logged but do not
+  // change the exit code — request-lifecycle outcome (`app.close()`) is
+  // what determines 0 vs 1.
   const close = (): void => {
-    void app.close().then(
-      () => process.exit(0),
-      () => process.exit(1)
-    );
+    void (async (): Promise<void> => {
+      let exitCode = 0;
+      try {
+        await app.close();
+      } catch {
+        exitCode = 1;
+      }
+      try {
+        await flushAllUsageSinks({ logger: app.log });
+      } catch {
+        // flushAllUsageSinks already logs per-sink failures; this catch is
+        // belt-and-braces so an unexpected throw never blocks exit.
+      }
+      process.exit(exitCode);
+    })();
   };
   process.on('SIGTERM', close);
   process.on('SIGINT', close);

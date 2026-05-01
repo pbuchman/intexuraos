@@ -1,3 +1,4 @@
+// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 /**
  * Prompt builder for the resume-summary LLM helper — the only remaining
  * LLM-backed path in the completion-verifier module. The legacy

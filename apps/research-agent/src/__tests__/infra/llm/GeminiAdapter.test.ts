@@ -54,15 +54,13 @@ describe('GeminiAdapter', () => {
         LlmModels.Gemini25Pro,
         'test-user-id',
         mockLogger,
-        fakeUsageSink,
-        'research-123'
+        fakeUsageSink
       );
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: LlmModels.Gemini25Pro,
         userId: 'test-user-id',
-        researchId: 'research-123',
         logger: mockLogger,
         usageSink: fakeUsageSink,
       });
@@ -93,7 +91,65 @@ describe('GeminiAdapter', () => {
       if (result.ok) {
         expect(result.value.content).toBe('Research result');
       }
-      expect(mockResearch).toHaveBeenCalledWith(expect.stringContaining('Test prompt'));
+      expect(mockResearch).toHaveBeenCalledWith(expect.stringContaining('Test prompt'), undefined);
+    });
+
+    it('threads researchId through per-call correlation when provided', async () => {
+      mockResearch.mockResolvedValue({
+        ok: true,
+        value: { content: 'Research result', sources: [], usage: mockUsage },
+      });
+
+      await adapter.research('Test prompt', undefined, { researchId: 'r-1' });
+
+      expect(mockResearch).toHaveBeenCalledWith(
+        expect.stringContaining('Test prompt'),
+        { correlation: { researchId: 'r-1' } }
+      );
+    });
+
+    it('falls back to constructor researchId when call-site override is omitted', async () => {
+      mockResearch.mockResolvedValue({
+        ok: true,
+        value: { content: 'Research result', sources: [], usage: mockUsage },
+      });
+
+      const adapterWithBaked = new GeminiAdapter(
+        'test-key',
+        LlmModels.Gemini25Pro,
+        'test-user-id',
+        mockLogger,
+        fakeUsageSink,
+        'baked-research'
+      );
+      await adapterWithBaked.research('Test prompt');
+
+      expect(mockResearch).toHaveBeenCalledWith(
+        expect.stringContaining('Test prompt'),
+        { correlation: { researchId: 'baked-research' } }
+      );
+    });
+
+    it('per-call researchId override wins over constructor researchId', async () => {
+      mockResearch.mockResolvedValue({
+        ok: true,
+        value: { content: 'Research result', sources: [], usage: mockUsage },
+      });
+
+      const adapterWithBaked = new GeminiAdapter(
+        'test-key',
+        LlmModels.Gemini25Pro,
+        'test-user-id',
+        mockLogger,
+        fakeUsageSink,
+        'baked'
+      );
+      await adapterWithBaked.research('Test prompt', undefined, { researchId: 'override' });
+
+      expect(mockResearch).toHaveBeenCalledWith(
+        expect.stringContaining('Test prompt'),
+        { correlation: { researchId: 'override' } }
+      );
     });
 
     it('maps error codes correctly', async () => {
@@ -204,6 +260,83 @@ describe('GeminiAdapter', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('TIMEOUT');
       }
+    });
+
+    it('forwards constructor researchId to client.generate via correlation on synthesize', async () => {
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: { content: 'Synthesized', usage: mockUsage },
+      });
+
+      const adapterWithResearchId = new GeminiAdapter(
+        'test-key',
+        LlmModels.Gemini25Pro,
+        'test-user-id',
+        mockLogger,
+        fakeUsageSink,
+        'r-synth-1'
+      );
+      await adapterWithResearchId.synthesize('Prompt', [{ model: 'gpt', content: 'GPT' }]);
+
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.any(String),
+        {
+          promptType: 'research-synthesis',
+          correlation: { researchId: 'r-synth-1' },
+        }
+      );
+    });
+
+    it('forwards constructor researchId on generateTitle and generateContextLabel', async () => {
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: { content: 'A Title', usage: mockUsage },
+      });
+
+      const adapterWithResearchId = new GeminiAdapter(
+        'test-key',
+        LlmModels.Gemini25Pro,
+        'test-user-id',
+        mockLogger,
+        fakeUsageSink,
+        'r-title-1'
+      );
+      await adapterWithResearchId.generateTitle('Some content for the title');
+      expect(mockGenerate).toHaveBeenLastCalledWith(
+        expect.any(String),
+        {
+          promptType: 'research-title-generation',
+          correlation: { researchId: 'r-title-1' },
+        }
+      );
+
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: { content: 'context-label', usage: mockUsage },
+      });
+      await adapterWithResearchId.generateContextLabel('content body');
+      expect(mockGenerate).toHaveBeenLastCalledWith(
+        expect.any(String),
+        {
+          promptType: 'research-context-label',
+          correlation: { researchId: 'r-title-1' },
+        }
+      );
+    });
+
+    it('omits correlation entirely when no researchId is configured', async () => {
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: { content: 'Synthesized', usage: mockUsage },
+      });
+
+      // The default `adapter` from beforeEach is built without researchId.
+      await adapter.synthesize('Prompt', [{ model: 'gpt', content: 'GPT' }]);
+
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.any(String),
+        { promptType: 'research-synthesis' }
+      );
     });
 
     it('logs synthesis start with undefined additionalSources (nullish coalescing)', async () => {

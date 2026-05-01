@@ -19,9 +19,17 @@ export function createSynthesisProviders(
   synthesisModel: ResearchModel,
   apiKeys: DecryptedApiKeys,
   userId: string,
-  researchId: string | undefined,
   services: ServiceContainer,
-  logger: Logger
+  logger: Logger,
+  /**
+   * The research being synthesised. Forwarded to both the synthesizer and
+   * context-inferrer factories so every internal `client.generate()` call
+   * carries `correlation.researchId` and llm-usage-service can attribute
+   * the synthesis/title/context cost to this research. Optional so
+   * lightweight callers (tests) can omit it; in production
+   * `handleAllCompleted` always provides it.
+   */
+  researchId?: string
 ): SynthesisProviders {
   const { createSynthesizer, createContextInferrer } = services;
 
@@ -39,13 +47,7 @@ export function createSynthesisProviders(
     throw new Error(`No API key configured for provider '${synthesisProvider}'`);
   }
 
-  const synthesizer = createSynthesizer(
-    synthesisModel,
-    synthesisKey,
-    userId,
-    logger,
-    researchId
-  );
+  const synthesizer = createSynthesizer(synthesisModel, synthesisKey, userId, logger, researchId);
 
   const result: SynthesisProviders = { synthesizer };
 

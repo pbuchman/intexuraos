@@ -43,6 +43,7 @@ export type GPTImage1 = 'gpt-image-1';
 
 export type ClaudeOpus46 = 'claude-opus-4-6';
 export type ClaudeSonnet46 = 'claude-sonnet-4-6';
+export type ClaudeSonnet47 = 'claude-sonnet-4-7';
 export type ClaudeHaiku35 = 'claude-3-5-haiku-20241022';
 
 // =============================================================================
@@ -70,6 +71,7 @@ export type ResearchModel =
   | Gemini25Flash
   | ClaudeOpus46
   | ClaudeSonnet46
+  | ClaudeSonnet47
   | O4MiniDeepResearch
   | GPT54
   | Sonar
@@ -113,9 +115,10 @@ export type LLMModel =
   | GPT54
   | GPT4oMini
   | GPTImage1
-  // Anthropic (3 models)
+  // Anthropic (4 models)
   | ClaudeOpus46
   | ClaudeSonnet46
+  | ClaudeSonnet47
   | ClaudeHaiku35
   // Perplexity (3 models)
   | Sonar
@@ -160,6 +163,7 @@ export const LlmModels = {
   // Anthropic
   ClaudeOpus46: 'claude-opus-4-6' as ClaudeOpus46,
   ClaudeSonnet46: 'claude-sonnet-4-6' as ClaudeSonnet46,
+  ClaudeSonnet47: 'claude-sonnet-4-7' as ClaudeSonnet47,
   ClaudeHaiku35: 'claude-3-5-haiku-20241022' as ClaudeHaiku35,
   // Perplexity
   Sonar: 'sonar' as Sonar,
@@ -189,6 +193,7 @@ export const ALL_LLM_MODELS: LLMModel[] = [
   // Anthropic
   LlmModels.ClaudeOpus46,
   LlmModels.ClaudeSonnet46,
+  LlmModels.ClaudeSonnet47,
   LlmModels.ClaudeHaiku35,
   // Perplexity
   LlmModels.Sonar,
@@ -227,6 +232,7 @@ export const MODEL_PROVIDER_MAP: Record<LLMModel, LlmProvider> = {
   // Anthropic
   [LlmModels.ClaudeOpus46]: LlmProviders.Anthropic,
   [LlmModels.ClaudeSonnet46]: LlmProviders.Anthropic,
+  [LlmModels.ClaudeSonnet47]: LlmProviders.Anthropic,
   [LlmModels.ClaudeHaiku35]: LlmProviders.Anthropic,
   // Perplexity
   [LlmModels.Sonar]: LlmProviders.Perplexity,

@@ -11,6 +11,7 @@ import type {
   LlmError,
   LlmResearchProvider,
   LlmResearchResult,
+  ResearchProviderCallOptions,
 } from '../../domain/research/index.js';
 
 export class ClaudeAdapter implements LlmResearchProvider {
@@ -23,14 +24,12 @@ export class ClaudeAdapter implements LlmResearchProvider {
     model: string,
     userId: string,
     logger: Logger,
-    usageSink: UsageSink,
-    researchId?: string
+    usageSink: UsageSink
   ) {
     this.client = createClaudeClient({
       apiKey,
       model,
       userId,
-      ...(researchId !== undefined && { researchId }),
       logger,
       usageSink,
     });
@@ -38,10 +37,18 @@ export class ClaudeAdapter implements LlmResearchProvider {
     this.logger = logger;
   }
 
-  async research(prompt: string, ctx?: ResearchContext): Promise<Result<LlmResearchResult, LlmError>> {
+  async research(
+    prompt: string,
+    ctx?: ResearchContext,
+    options?: ResearchProviderCallOptions
+  ): Promise<Result<LlmResearchResult, LlmError>> {
     const builtPrompt = buildResearchPrompt(prompt, ctx);
     this.logger.info({ model: this.model, promptLength: builtPrompt.length }, 'Claude research started');
-    const result = await this.client.research(builtPrompt);
+    const researchOptions =
+      options?.researchId !== undefined
+        ? { correlation: { researchId: options.researchId } }
+        : undefined;
+    const result = await this.client.research(builtPrompt, researchOptions);
     if (!result.ok) {
       const error = mapToLlmError(result.error);
       this.logger.error(

@@ -6,6 +6,7 @@ import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { UsageLogParams } from '../usageLogger.js';
 import { HttpWebhookUsageSink } from '../httpWebhookUsageSink.js';
 import type { HttpWebhookUsageSinkConfig } from '../httpWebhookUsageSink.js';
+import { clearUsageSinkRegistry } from '../usageSinkRegistry.js';
 
 const WEBHOOK_URL = 'http://localhost:9999/webhook/usage';
 const WEBHOOK_SECRET = 'test-secret-key';
@@ -105,11 +106,13 @@ describe('HttpWebhookUsageSink', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-06-15T12:00:00.000Z'));
+    clearUsageSinkRegistry();
   });
 
   afterEach(() => {
     vi.useRealTimers();
     nock.cleanAll();
+    clearUsageSinkRegistry();
   });
 
   describe('happy path', () => {
@@ -131,6 +134,7 @@ describe('HttpWebhookUsageSink', () => {
         });
 
       await sink.log(baseParams);
+      await sink.flushSync();
 
       expect(scope.isDone()).toBe(true);
 
@@ -229,6 +233,7 @@ describe('HttpWebhookUsageSink', () => {
       };
 
       await sink.log(minimalParams);
+      await sink.flushSync();
 
       expect(scope.isDone()).toBe(true);
 
@@ -263,6 +268,7 @@ describe('HttpWebhookUsageSink', () => {
         success: false,
         errorMessage: 'Rate limit exceeded',
       });
+      await sink.flushSync();
 
       expect(scope.isDone()).toBe(true);
 
@@ -287,6 +293,7 @@ describe('HttpWebhookUsageSink', () => {
         .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
 
       await sink.log(baseParams);
+      await sink.flushSync();
 
       const parsedBody = parseBody(capturedBody);
       expect(parsedBody.events[0]?.error).toBeNull();
@@ -309,6 +316,7 @@ describe('HttpWebhookUsageSink', () => {
         ...baseParams,
         success: false,
       });
+      await sink.flushSync();
 
       const parsedBody = parseBody(capturedBody);
       expect(parsedBody.events[0]?.error).toEqual({ code: null, message: null });
@@ -332,6 +340,7 @@ describe('HttpWebhookUsageSink', () => {
         .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
 
       await sink.log(baseParams);
+      await sink.flushSync();
 
       expect(scope.isDone()).toBe(true);
 
@@ -357,6 +366,7 @@ describe('HttpWebhookUsageSink', () => {
         .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
 
       await sink.log(baseParams);
+      await sink.flushSync();
 
       const parsedBody = parseBody(capturedBody);
       expect(parsedBody.events[0]?.correlation.taskId).toBeNull();
@@ -376,14 +386,51 @@ describe('HttpWebhookUsageSink', () => {
         .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
 
       await sink.log(baseParams);
+      await sink.flushSync();
 
       const parsedBody = parseBody(capturedBody);
       expect(parsedBody.events[0]?.correlation.taskId).toBeNull();
     });
+
+    it('forwards params.correlation overrides (researchId/sessionId/requestId/taskId) into the event', async () => {
+      const config = makeConfig({ getCorrelationTaskId: () => 'sink-task' });
+      const sink = new HttpWebhookUsageSink(config);
+
+      let capturedBody: string | undefined;
+
+      nock('http://localhost:9999')
+        .post('/webhook/usage', (body: unknown) => {
+          capturedBody = JSON.stringify(body);
+          return true;
+        })
+        .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
+
+      await sink.log({
+        ...baseParams,
+        correlation: {
+          taskId: 'override-task',
+          sessionId: 'sess-1',
+          requestId: 'req-1',
+          researchId: 'research-1',
+        },
+      });
+      await sink.flushSync();
+
+      const parsedBody = parseBody(capturedBody);
+      const event = parsedBody.events[0];
+      expect(event?.correlation).toEqual({
+        requestId: 'req-1',
+        traceId: null,
+        taskId: 'override-task',
+        researchId: 'research-1',
+        attempt: null,
+        sessionId: 'sess-1',
+      });
+    });
   });
 
   describe('non-fatal error handling', () => {
-    it('logs warning and does not throw on 5xx response', async () => {
+    it('flushSync() rethrows on 5xx response', async () => {
       const config = makeConfig();
       const sink = new HttpWebhookUsageSink(config);
 
@@ -391,7 +438,8 @@ describe('HttpWebhookUsageSink', () => {
         .post('/webhook/usage')
         .reply(500, { error: 'Internal Server Error' });
 
-      await expect(sink.log(baseParams)).resolves.toBeUndefined();
+      await sink.log(baseParams);
+      await expect(sink.flushSync()).rejects.toThrow();
 
       expect(scope.isDone()).toBe(true);
       expect(fakeLogger.warn).toHaveBeenCalledWith(
@@ -402,8 +450,30 @@ describe('HttpWebhookUsageSink', () => {
       );
     });
 
-    it('logs warning and does not throw on network error', async () => {
-      const config = makeConfig();
+    it('does not throw from log() when timer-driven flush hits a 5xx', async () => {
+      vi.useRealTimers();
+      const config = makeConfig({ flushIntervalMs: 5 });
+      const sink = new HttpWebhookUsageSink(config);
+
+      const scope = nock('http://localhost:9999')
+        .post('/webhook/usage')
+        .reply(500, { error: 'Internal Server Error' });
+
+      await expect(sink.log(baseParams)).resolves.toBeUndefined();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(scope.isDone()).toBe(true);
+      expect(fakeLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: 500,
+        }),
+        expect.stringContaining('Usage webhook')
+      );
+    });
+
+    it('logs warning and does not throw from log() on network error', async () => {
+      vi.useRealTimers();
+      const config = makeConfig({ flushIntervalMs: 5 });
       const sink = new HttpWebhookUsageSink(config);
 
       const scope = nock('http://localhost:9999')
@@ -411,6 +481,7 @@ describe('HttpWebhookUsageSink', () => {
         .replyWithError('ECONNREFUSED');
 
       await expect(sink.log(baseParams)).resolves.toBeUndefined();
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(scope.isDone()).toBe(true);
       expect(fakeLogger.warn).toHaveBeenCalledWith(
@@ -419,6 +490,96 @@ describe('HttpWebhookUsageSink', () => {
         }),
         expect.stringContaining('Usage webhook')
       );
+    });
+
+    it('flushSync() rethrows on network error', async () => {
+      const config = makeConfig();
+      const sink = new HttpWebhookUsageSink(config);
+
+      nock('http://localhost:9999').post('/webhook/usage').replyWithError('ECONNREFUSED');
+
+      await sink.log(baseParams);
+      await expect(sink.flushSync()).rejects.toThrow();
+    });
+  });
+
+  describe('batching', () => {
+    it('coalesces multiple events within the flush window into a single POST', async () => {
+      const config = makeConfig({ flushIntervalMs: 500, maxBatchSize: 100 });
+      const sink = new HttpWebhookUsageSink(config);
+
+      let capturedBody: string | undefined;
+      let postCount = 0;
+
+      const scope = nock('http://localhost:9999')
+        .post('/webhook/usage', (body: unknown) => {
+          capturedBody = JSON.stringify(body);
+          postCount++;
+          return true;
+        })
+        .reply(200, { accepted: 3, duplicates: 0, rejected: [] });
+
+      await sink.log(baseParams);
+      await sink.log(baseParams);
+      await sink.log(baseParams);
+
+      expect(postCount).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(scope.isDone()).toBe(true);
+      expect(postCount).toBe(1);
+
+      const parsed = parseBody(capturedBody);
+      expect(parsed.events).toHaveLength(3);
+    });
+
+    it('flushes immediately when the buffer reaches maxBatchSize', async () => {
+      vi.useRealTimers();
+      const config = makeConfig({ flushIntervalMs: 60_000, maxBatchSize: 2 });
+      const sink = new HttpWebhookUsageSink(config);
+
+      let capturedBody: string | undefined;
+      let postCount = 0;
+
+      const scope = nock('http://localhost:9999')
+        .post('/webhook/usage', (body: unknown) => {
+          capturedBody = JSON.stringify(body);
+          postCount++;
+          return true;
+        })
+        .reply(200, { accepted: 2, duplicates: 0, rejected: [] });
+
+      await sink.log(baseParams);
+      await sink.log(baseParams);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      expect(scope.isDone()).toBe(true);
+      expect(postCount).toBe(1);
+      const parsed = parseBody(capturedBody);
+      expect(parsed.events).toHaveLength(2);
+    });
+
+    it('flushSync() resolves cleanly when buffer is empty', async () => {
+      const config = makeConfig();
+      const sink = new HttpWebhookUsageSink(config);
+      await expect(sink.flushSync()).resolves.toBeUndefined();
+    });
+
+    it('clears the buffer after flushSync()', async () => {
+      const config = makeConfig();
+      const sink = new HttpWebhookUsageSink(config);
+
+      const scope = nock('http://localhost:9999')
+        .post('/webhook/usage')
+        .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
+
+      await sink.log(baseParams);
+      await sink.flushSync();
+      expect(scope.isDone()).toBe(true);
+
+      await expect(sink.flushSync()).resolves.toBeUndefined();
+      expect(nock.pendingMocks()).toHaveLength(0);
     });
   });
 
@@ -440,6 +601,7 @@ describe('HttpWebhookUsageSink', () => {
         .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
 
       await sink.log(baseParams);
+      await sink.flushSync();
 
       const parsedBody = parseBody(capturedBody);
       expect(parsedBody.events[0]?.source.environment).toBe('prod');
@@ -468,6 +630,7 @@ describe('HttpWebhookUsageSink', () => {
         .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
 
       await sink.log(baseParams);
+      await sink.flushSync();
 
       const parsedBody = parseBody(capturedBody);
       expect(parsedBody.events[0]?.source.environment).toBe('dev');
@@ -477,6 +640,74 @@ describe('HttpWebhookUsageSink', () => {
       } else {
         process.env['NODE_ENV'] = originalNodeEnv;
       }
+    });
+  });
+
+  describe('async-timing branches', () => {
+    // Covers httpWebhookUsageSink.ts:118 — `if (this.inFlight !== null)` in
+    // flushSync. The timer fires, flushBuffered starts a POST, and before it
+    // resolves we call flushSync — which must await the in-flight promise.
+    it('flushSync awaits an already-in-flight timer-driven flush', async () => {
+      vi.useRealTimers();
+      const config = makeConfig({ flushIntervalMs: 5, maxBatchSize: 100 });
+      const sink = new HttpWebhookUsageSink(config);
+
+      let postCount = 0;
+      const scope = nock('http://localhost:9999')
+        .post('/webhook/usage')
+        .delay(50)
+        .reply(() => {
+          postCount += 1;
+          return [200, { accepted: 1, duplicates: 0, rejected: [] }];
+        });
+
+      await sink.log(baseParams);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await sink.flushSync();
+
+      expect(scope.isDone()).toBe(true);
+      expect(postCount).toBe(1);
+    });
+
+    // Covers httpWebhookUsageSink.ts:136 — `if (this.buffer.length === 0)`
+    // early-return in flushBuffered.
+    it('flushBuffered early-returns when buffer is empty', async () => {
+      vi.useRealTimers();
+      const config = makeConfig();
+      const sink = new HttpWebhookUsageSink(config);
+      await (sink as unknown as { flushBuffered(): Promise<void> }).flushBuffered();
+      expect(nock.pendingMocks()).toHaveLength(0);
+    });
+
+    // Covers httpWebhookUsageSink.ts:143 — the FALSE arm of the
+    // `if (this.inFlight === wrapped)` guard inside the finally callback.
+    // Concurrent flushes overlap so that A's finally runs after B has
+    // already overwritten inFlight.
+    it('finally guard skips reset when a newer flush replaced inFlight', async () => {
+      vi.useRealTimers();
+      const config = makeConfig({ flushIntervalMs: 60_000, maxBatchSize: 100 });
+      const sink = new HttpWebhookUsageSink(config);
+
+      const scopeA = nock('http://localhost:9999')
+        .post('/webhook/usage')
+        .delay(40)
+        .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
+      const scopeB = nock('http://localhost:9999')
+        .post('/webhook/usage')
+        .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
+
+      const flushA = (sink as unknown as { flushBuffered(): Promise<void> }).flushBuffered.bind(
+        sink
+      );
+      await sink.log(baseParams);
+      const aDone = flushA();
+      await sink.log(baseParams);
+      const bDone = flushA();
+
+      await Promise.all([aDone, bDone]);
+
+      expect(scopeA.isDone()).toBe(true);
+      expect(scopeB.isDone()).toBe(true);
     });
   });
 });

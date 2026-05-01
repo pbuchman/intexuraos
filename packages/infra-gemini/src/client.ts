@@ -40,12 +40,49 @@ import {
   type GenerateResult,
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
-import { withLlmSpan } from '@intexuraos/llm-utils';
+import { withLlmSpan, withRetry } from '@intexuraos/llm-utils';
 import type { GeminiConfig, GeminiError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 import { resolveVertexRedirectUrls } from './vertexUrlResolver.js';
 
-export interface GeminiClient extends Omit<LLMClient, 'generate'> {
+export interface GenerateOptions {
+  promptType: string;
+  /**
+   * Optional per-call correlation overrides. Forwarded to the usage sink
+   * so the emitted event carries researchId / sessionId / taskId /
+   * requestId for the originating request.
+   */
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
+}
+
+/**
+ * Per-call options for {@link GeminiClient.research}. Carries correlation
+ * overrides so the emitted usage event can be attributed to the originating
+ * researchId / sessionId / taskId / requestId.
+ */
+export interface ResearchOptions {
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
+}
+
+export interface GeminiClient extends Omit<LLMClient, 'generate' | 'research'> {
+  /**
+   * Performs research using Gemini's grounding with Google Search.
+   *
+   * @param prompt - The research query
+   * @param options - Optional per-call options (e.g., correlation)
+   */
+  research(prompt: string, options?: ResearchOptions): Promise<Result<ResearchResult, GeminiError>>;
+
   /**
    * Generates text completion without web search.
    *
@@ -55,10 +92,7 @@ export interface GeminiClient extends Omit<LLMClient, 'generate'> {
    * @param options - Generation options including promptType for usage tracking
    * @returns Promise resolving to {@link GenerateResult} or {@link GeminiError}
    */
-  generate(
-    prompt: string,
-    options: { promptType: string }
-  ): Promise<Result<GenerateResult, GeminiError>>;
+  generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, GeminiError>>;
 }
 
 const IMAGE_MODEL = LlmModels.Gemini25FlashImage;
@@ -74,7 +108,8 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
     success: boolean,
     durationMs: number,
     errorMessage?: string,
-    promptType?: string
+    promptType?: string,
+    correlation?: GenerateOptions['correlation']
   ): void {
     void usageLogger.log({
       userId,
@@ -87,11 +122,15 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       ...(errorMessage !== undefined && { errorMessage }),
       ...(ownerType !== undefined && { ownerType }),
       ...(promptType !== undefined && { promptType }),
+      ...(correlation !== undefined && { correlation }),
     });
   }
 
   return {
-    async research(prompt: string): Promise<Result<ResearchResult, GeminiError>> {
+    async research(
+      prompt: string,
+      options?: ResearchOptions
+    ): Promise<Result<ResearchResult, GeminiError>> {
       const start = Date.now();
       try {
         const response = await ai.models.generateContent({
@@ -109,7 +148,15 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
         const usage = normalizeUsage(inputTokens, outputTokens, groundingEnabled, thinkingTokens);
 
-        trackUsage('research', usage, true, Date.now() - start);
+        trackUsage(
+          'research',
+          usage,
+          true,
+          Date.now() - start,
+          undefined,
+          undefined,
+          options?.correlation
+        );
 
         return ok({ content: text, sources, usage });
       } catch (error) {
@@ -121,51 +168,27 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('research', emptyUsage, false, durationMs, errorMsg);
+        trackUsage(
+          'research',
+          emptyUsage,
+          false,
+          durationMs,
+          errorMsg,
+          undefined,
+          options?.correlation
+        );
         return err(mapGeminiError(error));
       }
     },
 
     async generate(
       prompt: string,
-      options: { promptType: string }
+      options: GenerateOptions
     ): Promise<Result<GenerateResult, GeminiError>> {
-      const start = Date.now();
-      try {
-        const { result, durationMs } = await withLlmSpan(
-          LlmProviders.Google,
-          async () => {
-            const response = await ai.models.generateContent({ model, contents: prompt });
-            const text = response.text ?? '';
-            const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
-            const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
-            const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
-            const usage = normalizeUsage(inputTokens, outputTokens, false, thinkingTokens);
-            return { content: text, usage };
-          },
-          ({ usage }) => ({
-            model,
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            costUsd: usage.costUsd,
-          })
-        );
-
-        trackUsage('generate', result.usage, true, durationMs, undefined, options.promptType);
-
-        return ok({ content: result.content, usage: result.usage });
-      } catch (error) {
-        const durationMs = Date.now() - start;
-        const errorMsg = getErrorMessage(error);
-        const emptyUsage: NormalizedUsage = {
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-          costUsd: 0,
-        };
-        trackUsage('generate', emptyUsage, false, durationMs, errorMsg, options.promptType);
-        return err(mapGeminiError(error));
-      }
+      return await withRetry(() => generateOnce(prompt, options), {
+        maxAttempts: 3,
+        baseDelayMs: 500,
+      });
     },
 
     async generateImage(
@@ -213,6 +236,64 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       }
     },
   };
+
+  async function generateOnce(
+    prompt: string,
+    options: GenerateOptions
+  ): Promise<Result<GenerateResult, GeminiError>> {
+    const start = Date.now();
+    try {
+      const { result, durationMs } = await withLlmSpan(
+        LlmProviders.Google,
+        async () => {
+          const response = await ai.models.generateContent({ model, contents: prompt });
+          const text = response.text ?? '';
+          const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
+          const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
+          const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
+          const usage = normalizeUsage(inputTokens, outputTokens, false, thinkingTokens);
+          return { content: text, usage };
+        },
+        ({ usage }) => ({
+          model,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: usage.costUsd,
+        })
+      );
+
+      trackUsage(
+        'generate',
+        result.usage,
+        true,
+        durationMs,
+        undefined,
+        options.promptType,
+        options.correlation
+      );
+
+      return ok({ content: result.content, usage: result.usage });
+    } catch (error) {
+      const durationMs = Date.now() - start;
+      const errorMsg = getErrorMessage(error);
+      const emptyUsage: NormalizedUsage = {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+      };
+      trackUsage(
+        'generate',
+        emptyUsage,
+        false,
+        durationMs,
+        errorMsg,
+        options.promptType,
+        options.correlation
+      );
+      return err(mapGeminiError(error));
+    }
+  }
 }
 
 function mapGeminiError(error: unknown): GeminiError {

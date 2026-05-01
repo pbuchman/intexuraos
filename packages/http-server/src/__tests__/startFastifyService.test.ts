@@ -4,6 +4,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { startFastifyService } from '../startFastifyService.js';
+import {
+  clearUsageSinkRegistry,
+  registerUsageSink,
+  type FlushableUsageSink,
+} from '@intexuraos/llm-pricing';
 
 vi.mock('@intexuraos/infra-sentry', () => ({
   initSentry: vi.fn(),
@@ -238,5 +243,112 @@ describe('startFastifyService', () => {
     expect(process.listenerCount('SIGINT')).toBeGreaterThanOrEqual(before.sigint + 1);
     // Note: handlers call process.exit; we cannot invoke them here. They are
     // covered by integration tests at the per-app level.
+  });
+
+  describe('shutdown handler drains registered usage sinks', () => {
+    let exitSpy: ReturnType<typeof vi.spyOn>;
+    const installedHandlers: { event: 'SIGTERM' | 'SIGINT'; listener: NodeJS.SignalsListener }[] =
+      [];
+
+    beforeEach(() => {
+      clearUsageSinkRegistry();
+      // Stub process.exit so the SIGTERM handler doesn't terminate the test
+      // runner. We assert the exit code by spying on this. We deliberately
+      // make this a no-op (rather than throwing) so the IIFE inside the
+      // close handler completes cleanly and doesn't leak unhandled
+      // rejections — the assertions below check the recorded call args.
+      exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        return undefined as never;
+      }) as never);
+    });
+
+    afterEach(() => {
+      exitSpy.mockRestore();
+      clearUsageSinkRegistry();
+      while (installedHandlers.length > 0) {
+        const entry = installedHandlers.pop();
+        if (entry !== undefined) {
+          process.off(entry.event, entry.listener);
+        }
+      }
+    });
+
+    async function waitForExit(): Promise<void> {
+      for (let i = 0; i < 50 && exitSpy.mock.calls.length === 0; i++) {
+        await new Promise((r) => setImmediate(r));
+      }
+    }
+
+    it('flushes registered sinks before exit on SIGTERM', async () => {
+      process.env['REQ_ENV_VAR'] = 'x';
+
+      const handlersBefore = process.listeners('SIGTERM');
+      const flushSync = vi.fn(() => Promise.resolve());
+      const sink: FlushableUsageSink = { flushSync };
+      registerUsageSink(sink);
+
+      const app = fakeApp();
+      await startFastifyService({
+        serviceName: 'x',
+        requiredEnv: ['REQ_ENV_VAR'],
+        initServices: () => undefined,
+        buildServer: async () => app,
+        port: 0,
+      });
+
+      const sigtermHandler = process
+        .listeners('SIGTERM')
+        .find((listener) => !handlersBefore.includes(listener));
+      expect(sigtermHandler).toBeDefined();
+      installedHandlers.push({
+        event: 'SIGTERM',
+        listener: sigtermHandler as unknown as NodeJS.SignalsListener,
+      });
+
+      (sigtermHandler as () => void)();
+      await waitForExit();
+
+      expect(app.close).toHaveBeenCalledTimes(1);
+      expect(flushSync).toHaveBeenCalledTimes(1);
+      const closeOrder = (app.close as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0] ?? 0;
+      const flushOrder = flushSync.mock.invocationCallOrder[0] ?? 0;
+      expect(closeOrder).toBeLessThan(flushOrder);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    });
+
+    it('still drains sinks even when app.close() rejects, and exits 1', async () => {
+      process.env['REQ_ENV_VAR'] = 'x';
+
+      const handlersBefore = process.listeners('SIGTERM');
+      const flushSync = vi.fn(() => Promise.resolve());
+      registerUsageSink({ flushSync });
+
+      const app = fakeApp();
+      (app.close as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('shutdown blew up')
+      );
+
+      await startFastifyService({
+        serviceName: 'x',
+        requiredEnv: ['REQ_ENV_VAR'],
+        initServices: () => undefined,
+        buildServer: async () => app,
+        port: 0,
+      });
+
+      const sigtermHandler = process
+        .listeners('SIGTERM')
+        .find((listener) => !handlersBefore.includes(listener));
+      installedHandlers.push({
+        event: 'SIGTERM',
+        listener: sigtermHandler as unknown as NodeJS.SignalsListener,
+      });
+      (sigtermHandler as () => void)();
+      await waitForExit();
+
+      // Drain was attempted even though close failed.
+      expect(flushSync).toHaveBeenCalledTimes(1);
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
   });
 });

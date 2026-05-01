@@ -94,29 +94,27 @@ export interface ServiceContainer {
     model: ResearchModel,
     apiKey: string,
     userId: string,
-    logger: Logger,
-    researchId: string | undefined // @allow-undefined-type -- positional arg preserved for call-site compat
+    logger: Logger
   ) => LlmResearchProvider;
   createSynthesizer: (
     model: ResearchModel,
     apiKey: string,
     userId: string,
     logger: Logger,
-    researchId: string | undefined // @allow-undefined-type -- positional arg preserved for call-site compat
+    researchId?: string
   ) => LlmSynthesisProvider;
   createTitleGenerator: (
     model: FastModel,
     apiKey: string,
     userId: string,
-    logger: Logger,
-    researchId: string | undefined // @allow-undefined-type -- positional arg preserved for call-site compat
+    logger: Logger
   ) => TitleGenerator;
   createContextInferrer: (
     model: FastModel,
     apiKey: string,
     userId: string,
     logger: Logger,
-    researchId: string | undefined // @allow-undefined-type -- positional arg preserved for call-site compat
+    researchId?: string
   ) => ContextInferenceProvider;
   createInputValidator: (
     model: FastModel,
@@ -285,23 +283,21 @@ export function initializeServices(): void {
       model: ResearchModel,
       apiKey: string,
       userId: string,
-      logger: Logger,
-      researchId: string | undefined // @allow-undefined-type -- positional arg matches container type
+      logger: Logger
     ): LlmResearchProvider =>
       createResearchProvider(
         model,
         apiKey,
         userId,
         logger,
-        buildUsageSink(`research:${model}`),
-        researchId
+        buildUsageSink(`research:${model}`)
       ),
     createSynthesizer: (
       model: ResearchModel,
       apiKey: string,
       userId: string,
       logger: Logger,
-      researchId: string | undefined // @allow-undefined-type -- positional arg matches container type
+      researchId?: string
     ): LlmSynthesisProvider =>
       createSynthesizer(
         model,
@@ -315,23 +311,15 @@ export function initializeServices(): void {
       model: FastModel,
       apiKey: string,
       userId: string,
-      logger: Logger,
-      researchId: string | undefined // @allow-undefined-type -- positional arg matches container type
+      logger: Logger
     ): TitleGenerator =>
-      createTitleGenerator(
-        model,
-        apiKey,
-        userId,
-        logger,
-        buildUsageSink('title-generator'),
-        researchId
-      ),
+      createTitleGenerator(model, apiKey, userId, logger, buildUsageSink('title-generator')),
     createContextInferrer: (
       model: FastModel,
       apiKey: string,
       userId: string,
       logger: Logger,
-      researchId: string | undefined // @allow-undefined-type -- positional arg matches container type
+      researchId?: string
     ): ContextInferenceProvider =>
       createContextInferrer(
         model,

@@ -225,7 +225,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.inputContexts,
           apiKeys.google,
           user.userId,
-          researchId,
           createTitleGenerator,
           request.log
         );
@@ -307,8 +306,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           LlmModels.Gemini25Flash,
           apiKeys.google,
           user.userId,
-          request.log,
-          draftId
+          request.log
         );
         const titleResult = await titleGenerator.generateTitle(body.prompt);
         title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
@@ -332,7 +330,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.inputContexts,
           apiKeys.google,
           user.userId,
-          draftId,
           createTitleGenerator,
           request.log
         );
@@ -441,8 +438,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             LlmModels.Gemini25Flash,
             apiKeys.google,
             user.userId,
-            request.log,
-            existing.id
+            request.log
           );
           const titleResult = await titleGenerator.generateTitle(body.prompt);
           title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
@@ -466,7 +462,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.inputContexts,
           apiKeys.google,
           user.userId,
-          existing.id,
           createTitleGenerator,
           request.log
         );
@@ -765,7 +760,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('FORBIDDEN', 'Access denied');
       }
 
-      return await reply.ok(result.value);
+      return await reply.ok(result.value); // @allow-result-access -- result.ok narrowed at line 746 (outside 15-line hook window due to inline null-and-ownership guards)
     }
   );
 
@@ -971,11 +966,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
           const { synthesizer, contextInferrer } = createSynthesisProviders(
             synthesisModel,
-            apiKeysResult.value,
+            apiKeysResult.value, // @allow-result-access -- apiKeysResult.ok narrowed earlier in handler
             user.userId,
-            id,
             getServices(),
-            request.log
+            request.log,
+            id
           );
 
           const synthesisResult = await runSynthesis(id, {
@@ -1177,9 +1172,9 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         synthesisModel,
         apiKeysResult.value,
         user.userId,
-        id,
         getServices(),
-        request.log
+        request.log,
+        id
       );
 
       const retryResult = await retryFromFailed(id, {
@@ -1327,7 +1322,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.additionalContexts,
           apiKeys.google,
           user.userId,
-          id,
           createTitleGenerator,
           request.log
         );
@@ -1367,12 +1361,12 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Publish to Pub/Sub for async processing
       await researchEventPublisher.publishProcessResearch({
         type: 'research.process',
-        researchId: result.value.id,
+        researchId: result.value.id, // @allow-result-access -- result.ok narrowed earlier in handler (outside 15-line hook window due to switch arms)
         userId: user.userId,
         triggeredBy: 'create',
       });
 
-      return await reply.code(201).ok(result.value);
+      return await reply.code(201).ok(result.value); // @allow-result-access -- result.ok narrowed earlier in handler (outside 15-line hook window due to switch arms)
     }
   );
 

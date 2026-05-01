@@ -33,14 +33,9 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import {
-  LlmProviders,
-  type LLMClient,
-  type NormalizedUsage,
-  type GenerateResult,
-} from '@intexuraos/llm-contract';
+import { LlmProviders, type NormalizedUsage, type GenerateResult } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
-import { withLlmSpan } from '@intexuraos/llm-utils';
+import { withLlmSpan, withRetry } from '@intexuraos/llm-utils';
 import type {
   GenerateOptions,
   OpenRouterConfig,
@@ -48,11 +43,20 @@ import type {
   OpenRouterKeyInfo,
   OpenRouterResponse,
   OpenRouterUsage,
+  ResearchOptions,
   ResearchResult,
 } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
-export type OpenRouterClient = Pick<LLMClient, 'research'> & {
+export interface OpenRouterClient {
+  /**
+   * Performs research using the model's web-search-augmented mode (`:online` suffix).
+   */
+  research: (
+    prompt: string,
+    options?: ResearchOptions
+  ) => Promise<Result<ResearchResult, OpenRouterError>>;
+
   /**
    * Generates text completion without web search.
    * Accepts generation options (e.g., response format, promptType).
@@ -67,7 +71,7 @@ export type OpenRouterClient = Pick<LLMClient, 'research'> & {
    * This is a free, no-token-cost introspection call.
    */
   validateKey: (apiKey: string) => Promise<Result<OpenRouterKeyInfo, OpenRouterError>>;
-};
+}
 
 /** OpenRouter API base URL */
 const API_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -134,7 +138,8 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     durationMs: number,
     errorMessage?: string,
     providerReportedUsd?: number | null,
-    promptType?: string
+    promptType?: string,
+    correlation?: GenerateOptions['correlation']
   ): void {
     void usageLogger.log({
       userId,
@@ -149,6 +154,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         providerReportedUsd !== null && { providerReportedUsd }),
       ...(ownerType !== undefined && { ownerType }),
       ...(promptType !== undefined && { promptType }),
+      ...(correlation !== undefined && { correlation }),
     });
   }
 
@@ -174,7 +180,10 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
   }
 
   return {
-    async research(prompt: string): Promise<Result<ResearchResult, OpenRouterError>> {
+    async research(
+      prompt: string,
+      options?: ResearchOptions
+    ): Promise<Result<ResearchResult, OpenRouterError>> {
       const start = Date.now();
       try {
         // Build the model ID - research uses :online suffix for web search
@@ -222,7 +231,16 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             totalTokens: 0,
             costUsd: 0,
           };
-          trackUsage('research', emptyUsage, false, durationMs, errorMsg);
+          trackUsage(
+            'research',
+            emptyUsage,
+            false,
+            durationMs,
+            errorMsg,
+            undefined,
+            undefined,
+            options?.correlation
+          );
           return err(mapOpenRouterError(apiError));
         }
 
@@ -256,7 +274,9 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           true,
           Date.now() - start,
           undefined,
-          providerReportedUsd
+          providerReportedUsd,
+          undefined,
+          options?.correlation
         );
 
         return ok({ content, sources, usage: normalized });
@@ -269,7 +289,16 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('research', emptyUsage, false, durationMs, errorMsg);
+        trackUsage(
+          'research',
+          emptyUsage,
+          false,
+          durationMs,
+          errorMsg,
+          undefined,
+          undefined,
+          options?.correlation
+        );
         return err(mapOpenRouterError(error));
       }
     },
@@ -278,106 +307,10 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       prompt: string,
       options: GenerateOptions
     ): Promise<Result<GenerateResult, OpenRouterError>> {
-      const start = Date.now();
-      try {
-        const { result, durationMs } = await withLlmSpan(
-          LlmProviders.OpenRouter,
-          async (): Promise<{
-            content: string;
-            normalized: NormalizedUsage;
-            providerReportedUsd: number | null;
-          }> => {
-            const requestBody = {
-              model, // No :online suffix for synthesis
-              messages: [
-                {
-                  role: 'user',
-                  content: prompt,
-                },
-              ],
-              temperature: 0.2,
-              ...(options.responseFormat !== undefined && {
-                response_format: options.responseFormat,
-              }),
-            };
-
-            const response = await fetchWithTimeout(
-              `${API_BASE_URL}/chat/completions`,
-              {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${apiKey}`,
-                  'Content-Type': 'application/json',
-                  'HTTP-Referer': 'https://intexuraos.cloud',
-                  'X-Title': APP_TITLE,
-                },
-                body: JSON.stringify(requestBody),
-              },
-              timeoutMs
-            );
-
-            // Throw on HTTP error so withLlmSpan records ERROR status. The outer
-            // catch below maps the error and logs usage with measured duration.
-            if (!response.ok) {
-              const errorText = await response.text();
-              throw new OpenRouterApiError(response.status, errorText);
-            }
-
-            const data = (await response.json()) as OpenRouterResponse;
-            const firstChoice = data.choices[0];
-            // Handle case where choices array is empty (upstream API may return this)
-            if (firstChoice === undefined) {
-              /* v8 ignore start -- upstream: cannot verify firstChoice message structure when choices is empty @preserve */
-              return {
-                content: '',
-                normalized: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
-                providerReportedUsd: null,
-              };
-              /* v8 ignore stop @preserve */
-            }
-            const content = firstChoice.message.content;
-            const { normalized, providerReportedUsd } = extractUsage(data.usage);
-            return { content, normalized, providerReportedUsd };
-          },
-          ({ normalized }) => ({
-            model,
-            inputTokens: normalized.inputTokens,
-            outputTokens: normalized.outputTokens,
-            costUsd: normalized.costUsd,
-          })
-        );
-
-        trackUsage(
-          'generate',
-          result.normalized,
-          true,
-          durationMs,
-          undefined,
-          result.providerReportedUsd,
-          options.promptType
-        );
-
-        return ok({ content: result.content, usage: result.normalized });
-      } catch (error) {
-        const durationMs = Date.now() - start;
-        const errorMsg = getErrorMessage(error);
-        const emptyUsage: NormalizedUsage = {
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-          costUsd: 0,
-        };
-        trackUsage(
-          'generate',
-          emptyUsage,
-          false,
-          durationMs,
-          errorMsg,
-          undefined,
-          options.promptType
-        );
-        return err(mapOpenRouterError(error));
-      }
+      return await withRetry(() => generateOnce(prompt, options), {
+        maxAttempts: 3,
+        baseDelayMs: 500,
+      });
     },
 
     async validateKey(key: string): Promise<Result<OpenRouterKeyInfo, OpenRouterError>> {
@@ -408,6 +341,114 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       }
     },
   };
+
+  async function generateOnce(
+    prompt: string,
+    options: GenerateOptions
+  ): Promise<Result<GenerateResult, OpenRouterError>> {
+    const start = Date.now();
+    try {
+      const { result, durationMs } = await withLlmSpan(
+        LlmProviders.OpenRouter,
+        async (): Promise<{
+          content: string;
+          normalized: NormalizedUsage;
+          providerReportedUsd: number | null;
+        }> => {
+          const requestBody = {
+            model, // No :online suffix for synthesis
+            messages: [
+              {
+                role: 'user',
+                content: prompt,
+              },
+            ],
+            temperature: 0.2,
+            ...(options.responseFormat !== undefined && {
+              response_format: options.responseFormat,
+            }),
+          };
+
+          const response = await fetchWithTimeout(
+            `${API_BASE_URL}/chat/completions`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://intexuraos.cloud',
+                'X-Title': APP_TITLE,
+              },
+              body: JSON.stringify(requestBody),
+            },
+            timeoutMs
+          );
+
+          // Throw on HTTP error so withLlmSpan records ERROR status. The outer
+          // catch below maps the error and logs usage with measured duration.
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new OpenRouterApiError(response.status, errorText);
+          }
+
+          const data = (await response.json()) as OpenRouterResponse;
+          const firstChoice = data.choices[0];
+          // Handle case where choices array is empty (upstream API may return this)
+          if (firstChoice === undefined) {
+            /* v8 ignore start -- upstream: cannot verify firstChoice message structure when choices is empty @preserve */
+            return {
+              content: '',
+              normalized: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
+              providerReportedUsd: null,
+            };
+            /* v8 ignore stop @preserve */
+          }
+          const content = firstChoice.message.content;
+          const { normalized, providerReportedUsd } = extractUsage(data.usage);
+          return { content, normalized, providerReportedUsd };
+        },
+        ({ normalized }) => ({
+          model,
+          inputTokens: normalized.inputTokens,
+          outputTokens: normalized.outputTokens,
+          costUsd: normalized.costUsd,
+        })
+      );
+
+      trackUsage(
+        'generate',
+        result.normalized,
+        true,
+        durationMs,
+        undefined,
+        result.providerReportedUsd,
+        options.promptType,
+        options.correlation
+      );
+
+      return ok({ content: result.content, usage: result.normalized });
+    } catch (error) {
+      const durationMs = Date.now() - start;
+      const errorMsg = getErrorMessage(error);
+      const emptyUsage: NormalizedUsage = {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+      };
+      trackUsage(
+        'generate',
+        emptyUsage,
+        false,
+        durationMs,
+        errorMsg,
+        undefined,
+        options.promptType,
+        options.correlation
+      );
+      return err(mapOpenRouterError(error));
+    }
+  }
 }
 
 function mapOpenRouterError(error: unknown): OpenRouterError {

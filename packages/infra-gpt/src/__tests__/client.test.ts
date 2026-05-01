@@ -320,6 +320,30 @@ describe('createGptClient', () => {
         })
       );
     });
+
+    it('forwards per-call correlation to usage logger when provided', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'ok',
+        output: [],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.research('hello', { correlation: { researchId: 'r-1' } });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'research',
+          correlation: { researchId: 'r-1' },
+        })
+      );
+    });
   });
 
   describe('generate', () => {
@@ -757,21 +781,60 @@ describe('createGptClient', () => {
     });
 
     it('handles timeout error in generate via APIError', async () => {
-      mockChatCompletionsCreate.mockRejectedValue(new MockAPIError(408, 'Connection timeout'));
+      vi.useFakeTimers();
+      try {
+        mockChatCompletionsCreate.mockRejectedValue(new MockAPIError(408, 'Connection timeout'));
 
-      const client = createGptClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-      const result = await client.generate('Test prompt', { promptType: 'test-prompt' });
+        const client = createGptClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+        const promise = client.generate('Test prompt', { promptType: 'test-prompt' });
+        await vi.runAllTimersAsync();
+        const result = await promise;
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('TIMEOUT');
-        expect(result.error.message).toContain('timeout');
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('TIMEOUT');
+          expect(result.error.message).toContain('timeout');
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('retries transient RATE_LIMITED then returns success', async () => {
+      vi.useFakeTimers();
+      try {
+        mockChatCompletionsCreate
+          .mockRejectedValueOnce(new MockAPIError(429, 'Rate limited'))
+          .mockResolvedValueOnce({
+            choices: [{ message: { content: 'recovered' } }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          });
+
+        const client = createGptClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+
+        const promise = client.generate('hi', { promptType: 'test-prompt' });
+        await vi.runAllTimersAsync();
+        const result = await promise;
+
+        expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(2);
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.content).toBe('recovered');
+        }
+      } finally {
+        vi.useRealTimers();
       }
     });
 
@@ -877,6 +940,48 @@ describe('createGptClient', () => {
     expect(mockUsageLoggerLog).toHaveBeenCalledWith(
       expect.objectContaining({ promptType: 'test-prompt' })
     );
+  });
+
+  it('forwards per-call correlation to usage logger when provided', async () => {
+    mockChatCompletionsCreate.mockResolvedValue({
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 5, completion_tokens: 5 },
+    });
+
+    const client = createGptClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+    await client.generate('hello', {
+      promptType: 'test-prompt',
+      correlation: { researchId: 'r-1' },
+    });
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ correlation: { researchId: 'r-1' } })
+    );
+  });
+
+  it('omits correlation from usage logger when not provided', async () => {
+    mockChatCompletionsCreate.mockResolvedValue({
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 5, completion_tokens: 5 },
+    });
+
+    const client = createGptClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+    await client.generate('hello', { promptType: 'test-prompt' });
+
+    const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(lastCall).not.toHaveProperty('correlation');
   });
 
   describe('OTel span emission for generate()', () => {

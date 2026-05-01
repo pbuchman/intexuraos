@@ -1,3 +1,4 @@
+// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 /**
  * Repair prompt builders for input validation.
  * When initial LLM response fails validation, these build repair prompts.

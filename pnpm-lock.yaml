@@ -1791,6 +1791,9 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../infra-sentry
+      '@intexuraos/llm-pricing':
+        specifier: workspace:*
+        version: link:../llm-pricing
     devDependencies:
       fastify:
         specifier: 'catalog:'
@@ -2089,12 +2092,21 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
+      '@intexuraos/infra-claude':
+        specifier: workspace:*
+        version: link:../infra-claude
       '@intexuraos/infra-gemini':
         specifier: workspace:*
         version: link:../infra-gemini
+      '@intexuraos/infra-gpt':
+        specifier: workspace:*
+        version: link:../infra-gpt
       '@intexuraos/infra-openrouter':
         specifier: workspace:*
         version: link:../infra-openrouter
+      '@intexuraos/infra-perplexity':
+        specifier: workspace:*
+        version: link:../infra-perplexity
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
@@ -2224,6 +2236,9 @@ importers:
 
   workers/orchestrator:
     dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.52.0
+        version: 0.52.0
       '@fastify/cors':
         specifier: ^10.1.0
         version: 10.1.0

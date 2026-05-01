@@ -1,3 +1,4 @@
+// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 /**
  * Shared research prompt builder for LLM research operations.
  * Used by all LLM providers (OpenAI, Claude, Gemini) for consistent research quality.

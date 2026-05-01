@@ -39,8 +39,21 @@ export interface LlmSynthesisResult {
   usage?: LlmUsage;
 }
 
+/**
+ * Per-call options forwarded by the adapter into the underlying infra
+ * client's correlation bag. Currently only carries the originating
+ * researchId so the emitted usage event can be attributed end-to-end.
+ */
+export interface ResearchProviderCallOptions {
+  researchId?: string;
+}
+
 export interface LlmResearchProvider {
-  research(prompt: string, ctx?: ResearchContext): Promise<Result<LlmResearchResult, LlmError>>;
+  research(
+    prompt: string,
+    ctx?: ResearchContext,
+    options?: ResearchProviderCallOptions
+  ): Promise<Result<LlmResearchResult, LlmError>>;
 }
 
 export interface LlmSynthesisProvider {

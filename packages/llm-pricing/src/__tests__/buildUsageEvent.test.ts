@@ -19,6 +19,14 @@ interface EventForTests {
     durationMs: number;
     promptType?: string;
   };
+  correlation: {
+    requestId: string | null;
+    traceId: string | null;
+    taskId: string | null;
+    researchId: string | null;
+    attempt: number | null;
+    sessionId: string | null;
+  };
   [k: string]: unknown;
 }
 
@@ -134,5 +142,27 @@ describe('buildUsageEvent with promptType', () => {
     }) as EventForTests;
 
     expect(event.request.promptType).toBeUndefined();
+  });
+});
+
+describe('buildUsageEvent correlation overrides', () => {
+  it('propagates researchId when provided via CorrelationOverrides', () => {
+    const event = buildUsageEvent(baseParams, baseSource, {
+      researchId: 'research-abc-123',
+    }) as EventForTests;
+    expect(event.correlation.researchId).toBe('research-abc-123');
+  });
+
+  it('defaults correlation.researchId to null when overrides omit it', () => {
+    const event = buildUsageEvent(baseParams, baseSource) as EventForTests;
+    expect(event.correlation.researchId).toBeNull();
+  });
+
+  it('defaults correlation.researchId to null when overrides provided without researchId', () => {
+    const event = buildUsageEvent(baseParams, baseSource, {
+      taskId: 'task-1',
+    }) as EventForTests;
+    expect(event.correlation.researchId).toBeNull();
+    expect(event.correlation.taskId).toBe('task-1');
   });
 });

@@ -17,6 +17,7 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
     "@fastify/cors": "^10.1.0",
     "@google-cloud/firestore": "catalog:",
     "@google/genai": "^1.0.0",
