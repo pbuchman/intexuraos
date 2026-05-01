@@ -238,6 +238,64 @@ describe('HttpInternalAuthUsageSink', () => {
       expect(event?.usage.imageCount).toBe(0);
     });
 
+    it('forwards params.correlation overrides into the emitted event', async () => {
+      const config = makeConfig({ getCorrelationTaskId: () => 'sink-task' });
+      const sink = new HttpInternalAuthUsageSink(config);
+
+      let capturedBody: string | undefined;
+
+      nock(USAGE_SERVICE_URL)
+        .post('/internal/usage/events', (body: unknown) => {
+          capturedBody = JSON.stringify(body);
+          return true;
+        })
+        .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
+
+      await sink.log({
+        ...baseParams,
+        correlation: {
+          taskId: 'override-task',
+          sessionId: 'sess-1',
+          requestId: 'req-1',
+          researchId: 'research-1',
+        },
+      });
+
+      const parsedBody = parseBody(capturedBody);
+      const event = parsedBody.events[0];
+      expect(event?.correlation).toEqual({
+        requestId: 'req-1',
+        traceId: null,
+        taskId: 'override-task',
+        researchId: 'research-1',
+        attempt: null,
+        sessionId: 'sess-1',
+      });
+    });
+
+    it('falls back to sink-level taskId when params.correlation omits taskId', async () => {
+      const config = makeConfig({ getCorrelationTaskId: () => 'sink-task' });
+      const sink = new HttpInternalAuthUsageSink(config);
+
+      let capturedBody: string | undefined;
+
+      nock(USAGE_SERVICE_URL)
+        .post('/internal/usage/events', (body: unknown) => {
+          capturedBody = JSON.stringify(body);
+          return true;
+        })
+        .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
+
+      await sink.log(baseParams);
+
+      const parsedBody = parseBody(capturedBody);
+      const event = parsedBody.events[0];
+      expect(event?.correlation.taskId).toBe('sink-task');
+      expect(event?.correlation.researchId).toBeNull();
+      expect(event?.correlation.sessionId).toBeNull();
+      expect(event?.correlation.requestId).toBeNull();
+    });
+
     it('maps error fields when success is false', async () => {
       const config = makeConfig();
       const sink = new HttpInternalAuthUsageSink(config);
