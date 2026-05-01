@@ -6,7 +6,7 @@ import {
   reviewPrompt,
   remediationPrompt,
   pullRequestPrompt,
-  buildSystemPrompt,
+  systemPrompt,
 } from '../services/system-prompt.js';
 
 describe('executionPrompt', () => {
@@ -88,12 +88,12 @@ describe('buildSystemPrompt (review agent)', () => {
   };
 
   it('includes needs_remediation field in REVIEW_AGENT_FINAL block', () => {
-    const prompt = buildSystemPrompt(baseParams);
+    const prompt = systemPrompt.build(baseParams);
     expect(prompt).toContain('needs_remediation');
   });
 
   it('REVIEW_AGENT_FINAL block contains needs_remediation between gh_actions_status and Summary', () => {
-    const prompt = buildSystemPrompt(baseParams);
+    const prompt = systemPrompt.build(baseParams);
     const ghActionsIdx = prompt.indexOf('gh_actions_status');
     const needsRemIdx = prompt.indexOf('needs_remediation');
     const summaryIdx = prompt.lastIndexOf('Summary:');
@@ -105,7 +105,7 @@ describe('buildSystemPrompt (review agent)', () => {
   });
 
   it('needs_remediation definition excludes operational/manual verification steps', () => {
-    const prompt = buildSystemPrompt(baseParams);
+    const prompt = systemPrompt.build(baseParams);
     expect(prompt).toContain('post-merge activities');
     expect(prompt).toContain('do NOT count as code remediation');
   });
@@ -348,7 +348,7 @@ describe('pullRequestPrompt', () => {
 
 describe('askAgentPrompt', () => {
   it('instructs ask-agent that resumed sessions carry prior turns without naming a specific CLI flag', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       taskId: 'task_test',
       linearIssueLabels: [],
       workerType: 'opus',

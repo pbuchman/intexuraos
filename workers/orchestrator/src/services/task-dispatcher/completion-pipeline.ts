@@ -3,7 +3,7 @@ import type { CompletionAgentType, CompletionVerifierVerdict } from '../completi
 import { getLast50ClaudeLines, getLast50Lines } from '../completion-verifier.js';
 import { CODE_TASK_METRICS, mapTerminalStatusToMetricStatus } from '../../metrics.js';
 import {
-  buildMissingFieldsPrompt as buildMissingFieldsPromptFn,
+  missingFieldsPrompt as missingFieldsPromptObj,
   getTaskEventUrl as getTaskEventUrlFn,
 } from './prompts.js';
 import {
@@ -878,12 +878,12 @@ export class CompletionPipeline {
       await ctx.flushTaskLogs(task.taskId);
       await ctx.teardownAttempt(task.taskId, true);
 
-      const resumePrompt = buildMissingFieldsPromptFn(
-        completionAgentType,
-        outcome.missingFields,
+      const resumePrompt = missingFieldsPromptObj.build({
+        agentType: completionAgentType,
+        missingFields: outcome.missingFields,
         rawLogs,
-        task.executionMemoryContext
-      );
+        executionMemoryContext: task.executionMemoryContext,
+      });
       const resumePreview =
         resumePrompt.length > 500 ? resumePrompt.slice(0, 500) + '…' : resumePrompt;
       ctx.appendTaggedTaskLog(task.taskId, 'prompt', `Resume prompt:\n${resumePreview}`);
