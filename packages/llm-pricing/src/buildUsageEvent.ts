@@ -9,6 +9,7 @@ export interface CorrelationOverrides {
   taskId?: string | null;
   sessionId?: string | null;
   requestId?: string | null;
+  researchId?: string | null;
 }
 
 /**
@@ -82,7 +83,7 @@ export function buildUsageEvent(
       requestId: correlationOverrides?.requestId ?? null,
       traceId: null,
       taskId: correlationOverrides?.taskId ?? null,
-      researchId: null,
+      researchId: correlationOverrides?.researchId ?? null,
       attempt: null,
       sessionId: correlationOverrides?.sessionId ?? null,
     },

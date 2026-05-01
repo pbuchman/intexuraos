@@ -380,6 +380,41 @@ describe('HttpWebhookUsageSink', () => {
       const parsedBody = parseBody(capturedBody);
       expect(parsedBody.events[0]?.correlation.taskId).toBeNull();
     });
+
+    it('forwards params.correlation overrides (researchId/sessionId/requestId/taskId) into the event', async () => {
+      const config = makeConfig({ getCorrelationTaskId: () => 'sink-task' });
+      const sink = new HttpWebhookUsageSink(config);
+
+      let capturedBody: string | undefined;
+
+      nock('http://localhost:9999')
+        .post('/webhook/usage', (body: unknown) => {
+          capturedBody = JSON.stringify(body);
+          return true;
+        })
+        .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
+
+      await sink.log({
+        ...baseParams,
+        correlation: {
+          taskId: 'override-task',
+          sessionId: 'sess-1',
+          requestId: 'req-1',
+          researchId: 'research-1',
+        },
+      });
+
+      const parsedBody = parseBody(capturedBody);
+      const event = parsedBody.events[0];
+      expect(event?.correlation).toEqual({
+        requestId: 'req-1',
+        traceId: null,
+        taskId: 'override-task',
+        researchId: 'research-1',
+        attempt: null,
+        sessionId: 'sess-1',
+      });
+    });
   });
 
   describe('non-fatal error handling', () => {

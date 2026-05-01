@@ -37,14 +37,25 @@ export class HttpInternalAuthUsageSink extends UsageSink {
   }
 
   override async log(params: UsageLogParams): Promise<void> {
-    const taskId = this.config.getCorrelationTaskId?.() ?? null;
+    const sinkTaskId = this.config.getCorrelationTaskId?.() ?? null;
     const event = buildUsageEvent(
       params,
       {
         service: this.config.service,
         component: this.config.component,
       },
-      { taskId }
+      {
+        taskId: params.correlation?.taskId ?? sinkTaskId,
+        ...(params.correlation?.sessionId !== undefined && {
+          sessionId: params.correlation.sessionId,
+        }),
+        ...(params.correlation?.requestId !== undefined && {
+          requestId: params.correlation.requestId,
+        }),
+        ...(params.correlation?.researchId !== undefined && {
+          researchId: params.correlation.researchId,
+        }),
+      }
     );
 
     const body = JSON.stringify({ schemaVersion: 2, events: [event] });
