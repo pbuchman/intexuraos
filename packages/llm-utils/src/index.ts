@@ -24,3 +24,13 @@ export {
 
 // Retry helper for transient LLM errors
 export { withRetry, type WithRetryOptions } from './withRetry.js';
+
+// Structured-output helper: markdown-strip + JSON.parse + Zod + repair loop
+export {
+  generateStructured,
+  type GenerateStructuredParams,
+  type GenerateStructuredOutput,
+  type StructuredClient,
+  type StructuredError,
+  type StructuredGenerateResult,
+} from './generateStructured.js';
