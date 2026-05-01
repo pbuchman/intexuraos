@@ -100,7 +100,8 @@ export interface ServiceContainer {
     model: ResearchModel,
     apiKey: string,
     userId: string,
-    logger: Logger
+    logger: Logger,
+    researchId?: string
   ) => LlmSynthesisProvider;
   createTitleGenerator: (
     model: FastModel,
@@ -112,7 +113,8 @@ export interface ServiceContainer {
     model: FastModel,
     apiKey: string,
     userId: string,
-    logger: Logger
+    logger: Logger,
+    researchId?: string
   ) => ContextInferenceProvider;
   createInputValidator: (
     model: FastModel,
@@ -294,9 +296,17 @@ export function initializeServices(): void {
       model: ResearchModel,
       apiKey: string,
       userId: string,
-      logger: Logger
+      logger: Logger,
+      researchId?: string
     ): LlmSynthesisProvider =>
-      createSynthesizer(model, apiKey, userId, logger, buildUsageSink(`synthesis:${model}`)),
+      createSynthesizer(
+        model,
+        apiKey,
+        userId,
+        logger,
+        buildUsageSink(`synthesis:${model}`),
+        researchId
+      ),
     createTitleGenerator: (
       model: FastModel,
       apiKey: string,
@@ -308,9 +318,17 @@ export function initializeServices(): void {
       model: FastModel,
       apiKey: string,
       userId: string,
-      logger: Logger
+      logger: Logger,
+      researchId?: string
     ): ContextInferenceProvider =>
-      createContextInferrer(model, apiKey, userId, logger, buildUsageSink('context-inferrer')),
+      createContextInferrer(
+        model,
+        apiKey,
+        userId,
+        logger,
+        buildUsageSink('context-inferrer'),
+        researchId
+      ),
     createInputValidator: (
       model: FastModel,
       apiKey: string,

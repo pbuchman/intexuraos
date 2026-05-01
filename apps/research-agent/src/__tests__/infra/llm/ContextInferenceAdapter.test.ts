@@ -118,6 +118,72 @@ describe('ContextInferenceAdapter', () => {
         usageSink: fakeUsageSink,
       });
     });
+
+    it('threads constructor researchId into client.generate via correlation on inferResearchContext', async () => {
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: { content: JSON.stringify(validResearchContext), usage: mockUsage },
+      });
+
+      const adapterWithResearchId = new ContextInferenceAdapter(
+        'test-key',
+        LlmModels.Gemini20Flash,
+        'test-user',
+        mockLogger,
+        fakeUsageSink,
+        'r-ctx-1'
+      );
+      await adapterWithResearchId.inferResearchContext('User query');
+
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.any(String),
+        {
+          promptType: 'research-context-inference',
+          correlation: { researchId: 'r-ctx-1' },
+        }
+      );
+    });
+
+    it('threads constructor researchId into inferSynthesisContext call', async () => {
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: { content: JSON.stringify(validSynthesisContext), usage: mockUsage },
+      });
+
+      const adapterWithResearchId = new ContextInferenceAdapter(
+        'test-key',
+        LlmModels.Gemini20Flash,
+        'test-user',
+        mockLogger,
+        fakeUsageSink,
+        'r-ctx-2'
+      );
+      await adapterWithResearchId.inferSynthesisContext({
+        originalPrompt: 'p',
+        reports: [{ model: 'gpt', content: 'r' }],
+      });
+
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.any(String),
+        {
+          promptType: 'research-synthesis-context-inference',
+          correlation: { researchId: 'r-ctx-2' },
+        }
+      );
+    });
+
+    it('omits correlation when no researchId is configured', async () => {
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: { content: JSON.stringify(validResearchContext), usage: mockUsage },
+      });
+      // The default `adapter` from beforeEach has no researchId.
+      await adapter.inferResearchContext('User query');
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.any(String),
+        { promptType: 'research-context-inference' }
+      );
+    });
   });
 
   describe('inferResearchContext', () => {

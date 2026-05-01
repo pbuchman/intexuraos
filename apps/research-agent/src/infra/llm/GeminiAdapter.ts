@@ -29,13 +29,23 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
   private readonly client: GeminiClient;
   private readonly model: string;
   private readonly logger: Logger;
+  /**
+   * Optional research correlation token baked at construction time. When the
+   * adapter is built inside the synthesis/title/context path of
+   * `handleAllCompleted`, this is the research being completed — it must
+   * travel with every internal `client.generate()` call so usage events
+   * carry `correlation.researchId`. Without it, llm-usage-service can't
+   * attribute synthesis/title/context cost to the originating research.
+   */
+  private readonly researchId?: string;
 
   constructor(
     apiKey: string,
     model: string,
     userId: string,
     logger: Logger,
-    usageSink: UsageSink
+    usageSink: UsageSink,
+    researchId?: string
   ) {
     this.client = createGeminiClient({
       apiKey,
@@ -46,6 +56,24 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     });
     this.model = model;
     this.logger = logger;
+    if (researchId !== undefined) {
+      this.researchId = researchId;
+    }
+  }
+
+  /**
+   * Builds a `GenerateOptions`-compatible bag with the adapter's
+   * `correlation.researchId` baked in (when available). Centralising the
+   * shape keeps every synthesize/title/context call consistent.
+   */
+  private generateOptions(promptType: string): {
+    promptType: string;
+    correlation?: { researchId: string };
+  } {
+    if (this.researchId !== undefined) {
+      return { promptType, correlation: { researchId: this.researchId } };
+    }
+    return { promptType };
   }
 
   async research(
@@ -55,9 +83,16 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
   ): Promise<Result<LlmResearchResult, LlmError>> {
     const builtPrompt = buildResearchPrompt(prompt, ctx);
     this.logger.info({ model: this.model, promptLength: builtPrompt.length }, 'Gemini research started');
+    // Per-call researchId from `options` takes precedence over the adapter's
+    // baked-in researchId — research() is invoked from the parallel
+    // research-orchestration loop where the call site has the live
+    // researchId in scope. The fallback to `this.researchId` is meaningful
+    // for adapters constructed inside the synthesis path (where the same
+    // adapter would not otherwise see the researchId).
+    const callResearchId = options?.researchId ?? this.researchId;
     const researchOptions =
-      options?.researchId !== undefined
-        ? { correlation: { researchId: options.researchId } }
+      callResearchId !== undefined
+        ? { correlation: { researchId: callResearchId } }
         : undefined;
     const result = await this.client.research(builtPrompt, researchOptions);
     if (!result.ok) {
@@ -89,7 +124,7 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
       synthesisContext !== undefined
         ? buildSynthesisPrompt(originalPrompt, reports, synthesisContext, additionalSources)
         : buildSynthesisPrompt(originalPrompt, reports, additionalSources);
-    const result = await this.client.generate(synthesisPrompt, { promptType: 'research-synthesis' });
+    const result = await this.client.generate(synthesisPrompt, this.generateOptions('research-synthesis'));
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -120,7 +155,7 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
       { content: prompt },
       { wordRange: { min: 5, max: 8 }, includeExamples: true }
     );
-    const result = await this.client.generate(builtPrompt, { promptType: 'research-title-generation' });
+    const result = await this.client.generate(builtPrompt, this.generateOptions('research-title-generation'));
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -148,7 +183,7 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
   async generateContextLabel(content: string): Promise<Result<LabelGenerateResult, LlmError>> {
     this.logger.info({ model: this.model, contentLength: content.length }, 'Gemini label generation started');
     const builtPrompt = labelPrompt.build({ content }, { contentPreviewLimit: 2000 });
-    const result = await this.client.generate(builtPrompt, { promptType: 'research-context-label' });
+    const result = await this.client.generate(builtPrompt, this.generateOptions('research-context-label'));
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);

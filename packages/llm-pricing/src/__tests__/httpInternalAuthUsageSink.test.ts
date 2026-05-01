@@ -5,6 +5,7 @@ import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { UsageLogParams } from '../usageLogger.js';
 import { HttpInternalAuthUsageSink } from '../httpInternalAuthUsageSink.js';
 import type { HttpInternalAuthUsageSinkConfig } from '../httpInternalAuthUsageSink.js';
+import { clearUsageSinkRegistry } from '../usageSinkRegistry.js';
 
 const USAGE_SERVICE_URL = 'http://localhost:8132';
 const INTERNAL_AUTH_TOKEN = 'test-internal-auth';
@@ -104,11 +105,13 @@ describe('HttpInternalAuthUsageSink', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-06-15T12:00:00.000Z'));
+    clearUsageSinkRegistry();
   });
 
   afterEach(() => {
     vi.useRealTimers();
     nock.cleanAll();
+    clearUsageSinkRegistry();
   });
 
   describe('happy path', () => {

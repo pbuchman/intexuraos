@@ -3,6 +3,7 @@ import type { Logger } from '@intexuraos/common-core';
 import type { UsageLogParams } from './usageLogger.js';
 import { UsageSink } from './usageLogger.js';
 import { buildUsageEvent, type UsageEventPayload } from './buildUsageEvent.js';
+import { registerUsageSink } from './usageSinkRegistry.js';
 
 /**
  * Configuration for the HTTP internal-auth usage sink.
@@ -54,6 +55,10 @@ export class HttpInternalAuthUsageSink extends UsageSink {
     this.config = config;
     this.flushIntervalMs = config.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
     this.maxBatchSize = config.maxBatchSize ?? DEFAULT_MAX_BATCH_SIZE;
+    // Register so shutdown handlers can drain any pending events on
+    // SIGTERM/SIGINT. Without this the unref'd flush timer can leave events
+    // unsent when the process exits between buffering and the next tick.
+    registerUsageSink(this);
   }
 
   override log(params: UsageLogParams): Promise<void> {

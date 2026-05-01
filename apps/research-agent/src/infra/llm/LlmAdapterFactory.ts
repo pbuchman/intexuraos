@@ -55,21 +55,22 @@ export function createSynthesizer(
   apiKey: string,
   userId: string,
   logger: Logger,
-  usageSink: UsageSink
+  usageSink: UsageSink,
+  researchId?: string
 ): LlmSynthesisProvider {
   const provider = getProviderForModel(model);
 
   switch (provider) {
     case 'google':
-      return new GeminiAdapter(apiKey, model, userId, logger, usageSink);
+      return new GeminiAdapter(apiKey, model, userId, logger, usageSink, researchId);
     case 'anthropic':
       throw new Error('Anthropic does not support synthesis');
     case 'openai':
-      return new GptAdapter(apiKey, model, userId, logger, usageSink);
+      return new GptAdapter(apiKey, model, userId, logger, usageSink, researchId);
     case 'perplexity':
       throw new Error('Perplexity does not support synthesis');
     case 'openrouter':
-      return new OpenRouterAdapter(apiKey, model, userId, logger, usageSink);
+      return new OpenRouterAdapter(apiKey, model, userId, logger, usageSink, researchId);
   }
 }
 
@@ -88,9 +89,10 @@ export function createContextInferrer(
   apiKey: string,
   userId: string,
   logger: Logger,
-  usageSink: UsageSink
+  usageSink: UsageSink,
+  researchId?: string
 ): ContextInferenceProvider {
-  return new ContextInferenceAdapter(apiKey, model, userId, logger, usageSink);
+  return new ContextInferenceAdapter(apiKey, model, userId, logger, usageSink, researchId);
 }
 
 export function createInputValidator(
