@@ -50,8 +50,7 @@ describe('ClaudeAdapter', () => {
         LlmModels.ClaudeOpus46,
         'test-user-id',
         mockLogger,
-        fakeUsageSink,
-        'research-123'
+        fakeUsageSink
       );
 
       expect(mockCreateClaudeClient).toHaveBeenCalledWith({
@@ -79,7 +78,21 @@ describe('ClaudeAdapter', () => {
       if (result.ok) {
         expect(result.value.content).toBe('Research result');
       }
-      expect(mockResearch).toHaveBeenCalledWith(expect.stringContaining('Test prompt'));
+      expect(mockResearch).toHaveBeenCalledWith(expect.stringContaining('Test prompt'), undefined);
+    });
+
+    it('threads researchId through per-call correlation when provided', async () => {
+      mockResearch.mockResolvedValue({
+        ok: true,
+        value: { content: 'Research result', sources: [], usage: mockUsage },
+      });
+
+      await adapter.research('Test prompt', undefined, { researchId: 'r-1' });
+
+      expect(mockResearch).toHaveBeenCalledWith(
+        expect.stringContaining('Test prompt'),
+        { correlation: { researchId: 'r-1' } }
+      );
     });
 
     it('maps error codes correctly', async () => {

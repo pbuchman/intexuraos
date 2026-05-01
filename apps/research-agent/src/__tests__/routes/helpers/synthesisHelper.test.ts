@@ -40,7 +40,7 @@ describe('createSynthesisProviders', () => {
     vi.clearAllMocks();
   });
 
-  it('forwards researchId to synthesis providers', () => {
+  it('forwards args to synthesis providers without researchId positional arg', () => {
     const apiKeys: DecryptedApiKeys = {
       openrouter: 'test-or-key',
       google: 'test-google-key',
@@ -50,7 +50,6 @@ describe('createSynthesisProviders', () => {
       'or:anthropic/claude-sonnet-4.6' as ResearchModel,
       apiKeys,
       'user-123',
-      'research-123',
       mockServices,
       mockLogger as never
     );
@@ -59,15 +58,13 @@ describe('createSynthesisProviders', () => {
       'or:anthropic/claude-sonnet-4.6',
       'test-or-key',
       'user-123',
-      mockLogger,
-      'research-123'
+      mockLogger
     );
     expect(mockCreateContextInferrer).toHaveBeenCalledWith(
       LlmModels.Gemini25Flash,
       'test-google-key',
       'user-123',
-      mockLogger,
-      'research-123'
+      mockLogger
     );
   });
 
@@ -81,7 +78,6 @@ describe('createSynthesisProviders', () => {
       LlmModels.ClaudeSonnet46,
       apiKeys,
       'user-123',
-      undefined,
       mockServices,
       mockLogger as never
     );
@@ -100,7 +96,6 @@ describe('createSynthesisProviders', () => {
         LlmModels.ClaudeSonnet46,
         apiKeys,
         'user-123',
-        undefined,
         mockServices,
         mockLogger as never
       )
@@ -117,7 +112,6 @@ describe('createSynthesisProviders', () => {
         LlmModels.ClaudeSonnet46,
         apiKeys,
         'user-123',
-        undefined,
         mockServices,
         mockLogger as never
       )
@@ -134,7 +128,6 @@ describe('createSynthesisProviders', () => {
       LlmModels.ClaudeSonnet46,
       apiKeys,
       'user-123',
-      undefined,
       mockServices,
       mockLogger as never
     );
@@ -156,7 +149,6 @@ describe('createSynthesisProviders', () => {
         invalidModel,
         apiKeys,
         'user-123',
-        undefined,
         mockServices,
         mockLogger as never
       )
@@ -175,7 +167,6 @@ describe('createSynthesisProviders', () => {
       validOrModel,
       apiKeys,
       'user-123',
-      undefined,
       mockServices,
       mockLogger as never
     );

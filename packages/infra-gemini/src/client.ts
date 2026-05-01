@@ -60,7 +60,29 @@ export interface GenerateOptions {
   };
 }
 
-export interface GeminiClient extends Omit<LLMClient, 'generate'> {
+/**
+ * Per-call options for {@link GeminiClient.research}. Carries correlation
+ * overrides so the emitted usage event can be attributed to the originating
+ * researchId / sessionId / taskId / requestId.
+ */
+export interface ResearchOptions {
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
+}
+
+export interface GeminiClient extends Omit<LLMClient, 'generate' | 'research'> {
+  /**
+   * Performs research using Gemini's grounding with Google Search.
+   *
+   * @param prompt - The research query
+   * @param options - Optional per-call options (e.g., correlation)
+   */
+  research(prompt: string, options?: ResearchOptions): Promise<Result<ResearchResult, GeminiError>>;
+
   /**
    * Generates text completion without web search.
    *
@@ -105,7 +127,10 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
   }
 
   return {
-    async research(prompt: string): Promise<Result<ResearchResult, GeminiError>> {
+    async research(
+      prompt: string,
+      options?: ResearchOptions
+    ): Promise<Result<ResearchResult, GeminiError>> {
       const start = Date.now();
       try {
         const response = await ai.models.generateContent({
@@ -123,7 +148,15 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
         const usage = normalizeUsage(inputTokens, outputTokens, groundingEnabled, thinkingTokens);
 
-        trackUsage('research', usage, true, Date.now() - start);
+        trackUsage(
+          'research',
+          usage,
+          true,
+          Date.now() - start,
+          undefined,
+          undefined,
+          options?.correlation
+        );
 
         return ok({ content: text, sources, usage });
       } catch (error) {
@@ -135,7 +168,15 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('research', emptyUsage, false, durationMs, errorMsg);
+        trackUsage(
+          'research',
+          emptyUsage,
+          false,
+          durationMs,
+          errorMsg,
+          undefined,
+          options?.correlation
+        );
         return err(mapGeminiError(error));
       }
     },

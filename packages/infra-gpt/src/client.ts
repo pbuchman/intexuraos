@@ -68,7 +68,22 @@ export interface GenerateOptions {
   };
 }
 
-export type GptClient = Omit<LLMClient, 'generate'> & {
+/**
+ * Per-call options for {@link GptClient.research}. Carries correlation
+ * overrides so the emitted usage event can be attributed to the originating
+ * researchId / sessionId / taskId / requestId.
+ */
+export interface ResearchOptions {
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
+}
+
+export type GptClient = Omit<LLMClient, 'generate' | 'research'> & {
+  research(prompt: string, options?: ResearchOptions): Promise<Result<ResearchResult, GptError>>;
   generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, GptError>>;
 };
 
@@ -157,7 +172,10 @@ export function createGptClient(config: GptConfig): GptClient {
   }
 
   return {
-    async research(prompt: string): Promise<Result<ResearchResult, GptError>> {
+    async research(
+      prompt: string,
+      options?: ResearchOptions
+    ): Promise<Result<ResearchResult, GptError>> {
       const start = Date.now();
       try {
         const response = await client.responses.create({
@@ -180,7 +198,15 @@ export function createGptClient(config: GptConfig): GptClient {
           usageDetails.reasoningTokens
         );
 
-        trackUsage('research', usage, true, Date.now() - start);
+        trackUsage(
+          'research',
+          usage,
+          true,
+          Date.now() - start,
+          undefined,
+          undefined,
+          options?.correlation
+        );
 
         return ok({ content, sources, usage });
       } catch (error) {
@@ -192,7 +218,15 @@ export function createGptClient(config: GptConfig): GptClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('research', emptyUsage, false, durationMs, errorMsg);
+        trackUsage(
+          'research',
+          emptyUsage,
+          false,
+          durationMs,
+          errorMsg,
+          undefined,
+          options?.correlation
+        );
         return err(mapGptError(error));
       }
     },

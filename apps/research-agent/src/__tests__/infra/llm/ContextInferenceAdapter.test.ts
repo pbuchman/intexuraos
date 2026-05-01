@@ -107,8 +107,7 @@ describe('ContextInferenceAdapter', () => {
         LlmModels.Gemini20Flash,
         'test-user',
         testLogger,
-        fakeUsageSink,
-        'research-123'
+        fakeUsageSink
       );
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({

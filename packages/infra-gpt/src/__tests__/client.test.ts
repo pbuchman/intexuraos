@@ -320,6 +320,30 @@ describe('createGptClient', () => {
         })
       );
     });
+
+    it('forwards per-call correlation to usage logger when provided', async () => {
+      mockResponsesCreate.mockResolvedValue({
+        output_text: 'ok',
+        output: [],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.research('hello', { correlation: { researchId: 'r-1' } });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'research',
+          correlation: { researchId: 'r-1' },
+        })
+      );
+    });
   });
 
   describe('generate', () => {

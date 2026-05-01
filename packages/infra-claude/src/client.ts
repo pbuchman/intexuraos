@@ -66,7 +66,22 @@ export interface GenerateOptions {
   };
 }
 
-export type ClaudeClient = Omit<LLMClient, 'generate'> & {
+/**
+ * Per-call options for {@link ClaudeClient.research}. Currently only carries
+ * correlation overrides so the emitted usage event can be attributed to the
+ * originating researchId / sessionId / taskId / requestId.
+ */
+export interface ResearchOptions {
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
+}
+
+export type ClaudeClient = Omit<LLMClient, 'generate' | 'research'> & {
+  research(prompt: string, options?: ResearchOptions): Promise<Result<ResearchResult, ClaudeError>>;
   generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, ClaudeError>>;
 };
 
@@ -138,7 +153,10 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   }
 
   return {
-    async research(prompt: string): Promise<Result<ResearchResult, ClaudeError>> {
+    async research(
+      prompt: string,
+      options?: ResearchOptions
+    ): Promise<Result<ResearchResult, ClaudeError>> {
       const start = Date.now();
       try {
         const response = await client.messages.create({
@@ -163,7 +181,15 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           webSearchCalls
         );
 
-        trackUsage('research', usage, true, Date.now() - start);
+        trackUsage(
+          'research',
+          usage,
+          true,
+          Date.now() - start,
+          undefined,
+          undefined,
+          options?.correlation
+        );
 
         return ok({ content, sources, usage });
       } catch (error) {
@@ -175,7 +201,15 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('research', emptyUsage, false, durationMs, errorMsg);
+        trackUsage(
+          'research',
+          emptyUsage,
+          false,
+          durationMs,
+          errorMsg,
+          undefined,
+          options?.correlation
+        );
         return err(mapClaudeError(error));
       }
     },

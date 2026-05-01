@@ -33,12 +33,7 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import {
-  LlmProviders,
-  type LLMClient,
-  type NormalizedUsage,
-  type GenerateResult,
-} from '@intexuraos/llm-contract';
+import { LlmProviders, type NormalizedUsage, type GenerateResult } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import { withLlmSpan, withRetry } from '@intexuraos/llm-utils';
 import type {
@@ -48,11 +43,20 @@ import type {
   OpenRouterKeyInfo,
   OpenRouterResponse,
   OpenRouterUsage,
+  ResearchOptions,
   ResearchResult,
 } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
-export type OpenRouterClient = Pick<LLMClient, 'research'> & {
+export interface OpenRouterClient {
+  /**
+   * Performs research using the model's web-search-augmented mode (`:online` suffix).
+   */
+  research: (
+    prompt: string,
+    options?: ResearchOptions
+  ) => Promise<Result<ResearchResult, OpenRouterError>>;
+
   /**
    * Generates text completion without web search.
    * Accepts generation options (e.g., response format, promptType).
@@ -67,7 +71,7 @@ export type OpenRouterClient = Pick<LLMClient, 'research'> & {
    * This is a free, no-token-cost introspection call.
    */
   validateKey: (apiKey: string) => Promise<Result<OpenRouterKeyInfo, OpenRouterError>>;
-};
+}
 
 /** OpenRouter API base URL */
 const API_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -176,7 +180,10 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
   }
 
   return {
-    async research(prompt: string): Promise<Result<ResearchResult, OpenRouterError>> {
+    async research(
+      prompt: string,
+      options?: ResearchOptions
+    ): Promise<Result<ResearchResult, OpenRouterError>> {
       const start = Date.now();
       try {
         // Build the model ID - research uses :online suffix for web search
@@ -224,7 +231,16 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             totalTokens: 0,
             costUsd: 0,
           };
-          trackUsage('research', emptyUsage, false, durationMs, errorMsg);
+          trackUsage(
+            'research',
+            emptyUsage,
+            false,
+            durationMs,
+            errorMsg,
+            undefined,
+            undefined,
+            options?.correlation
+          );
           return err(mapOpenRouterError(apiError));
         }
 
@@ -258,7 +274,9 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           true,
           Date.now() - start,
           undefined,
-          providerReportedUsd
+          providerReportedUsd,
+          undefined,
+          options?.correlation
         );
 
         return ok({ content, sources, usage: normalized });
@@ -271,7 +289,16 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('research', emptyUsage, false, durationMs, errorMsg);
+        trackUsage(
+          'research',
+          emptyUsage,
+          false,
+          durationMs,
+          errorMsg,
+          undefined,
+          undefined,
+          options?.correlation
+        );
         return err(mapOpenRouterError(error));
       }
     },

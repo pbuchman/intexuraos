@@ -13,6 +13,7 @@ import type {
   LlmResearchResult,
   LlmSynthesisProvider,
   LlmSynthesisResult,
+  ResearchProviderCallOptions,
   TitleGenerateResult,
 } from '../../domain/research/index.js';
 
@@ -26,13 +27,7 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     model: string,
     userId: string,
     logger: Logger,
-    usageSink: UsageSink,
-    // Accepted for positional-arg compatibility with LlmAdapterFactory.
-    // The infra client no longer threads researchId at construction
-    // (INT-1533 Task 5). Will be threaded per-call via
-    // GenerateOptions.correlation once research-agent migrates to the
-    // unified factory (Task 10).
-    _researchId?: string
+    usageSink: UsageSink
   ) {
     this.client = createGptClient({
       apiKey,
@@ -45,10 +40,18 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     this.logger = logger;
   }
 
-  async research(prompt: string, ctx?: ResearchContext): Promise<Result<LlmResearchResult, LlmError>> {
+  async research(
+    prompt: string,
+    ctx?: ResearchContext,
+    options?: ResearchProviderCallOptions
+  ): Promise<Result<LlmResearchResult, LlmError>> {
     const builtPrompt = buildResearchPrompt(prompt, ctx);
     this.logger.info({ model: this.model, promptLength: builtPrompt.length }, 'GPT research started');
-    const result = await this.client.research(builtPrompt);
+    const researchOptions =
+      options?.researchId !== undefined
+        ? { correlation: { researchId: options.researchId } }
+        : undefined;
+    const result = await this.client.research(builtPrompt, researchOptions);
     if (!result.ok) {
       const error = mapToLlmError(result.error);
       this.logger.error(

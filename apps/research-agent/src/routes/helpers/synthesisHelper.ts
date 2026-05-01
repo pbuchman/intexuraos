@@ -19,7 +19,6 @@ export function createSynthesisProviders(
   synthesisModel: ResearchModel,
   apiKeys: DecryptedApiKeys,
   userId: string,
-  researchId: string | undefined,
   services: ServiceContainer,
   logger: Logger
 ): SynthesisProviders {
@@ -39,13 +38,7 @@ export function createSynthesisProviders(
     throw new Error(`No API key configured for provider '${synthesisProvider}'`);
   }
 
-  const synthesizer = createSynthesizer(
-    synthesisModel,
-    synthesisKey,
-    userId,
-    logger,
-    researchId
-  );
+  const synthesizer = createSynthesizer(synthesisModel, synthesisKey, userId, logger);
 
   const result: SynthesisProviders = { synthesizer };
 
@@ -54,8 +47,7 @@ export function createSynthesisProviders(
       LlmModels.Gemini25Flash,
       apiKeys.google,
       userId,
-      logger,
-      researchId
+      logger
     );
   }
 

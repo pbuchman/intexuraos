@@ -359,6 +359,30 @@ describe('createGeminiClient', () => {
         expect(result.value.usage.costUsd).toBe(0);
       }
     });
+
+    it('forwards per-call correlation to usage logger when provided', async () => {
+      mockGenerateContent.mockResolvedValue({
+        text: 'ok',
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
+        candidates: [{ groundingMetadata: {} }],
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.research('hello', { correlation: { researchId: 'r-1' } });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'research',
+          correlation: { researchId: 'r-1' },
+        })
+      );
+    });
   });
 
   describe('generate', () => {

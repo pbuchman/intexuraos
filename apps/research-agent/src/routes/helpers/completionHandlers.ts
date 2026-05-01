@@ -90,7 +90,6 @@ export async function handleAllCompleted(params: AllCompletedHandlerParams): Pro
     synthesisModel,
     apiKeys,
     userId,
-    researchId,
     services,
     logger
   );

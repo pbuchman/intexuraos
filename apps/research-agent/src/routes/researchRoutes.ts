@@ -225,7 +225,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.inputContexts,
           apiKeys.google,
           user.userId,
-          researchId,
           createTitleGenerator,
           request.log
         );
@@ -307,8 +306,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           LlmModels.Gemini25Flash,
           apiKeys.google,
           user.userId,
-          request.log,
-          draftId
+          request.log
         );
         const titleResult = await titleGenerator.generateTitle(body.prompt);
         title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
@@ -332,7 +330,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.inputContexts,
           apiKeys.google,
           user.userId,
-          draftId,
           createTitleGenerator,
           request.log
         );
@@ -441,8 +438,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             LlmModels.Gemini25Flash,
             apiKeys.google,
             user.userId,
-            request.log,
-            existing.id
+            request.log
           );
           const titleResult = await titleGenerator.generateTitle(body.prompt);
           title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
@@ -466,7 +462,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.inputContexts,
           apiKeys.google,
           user.userId,
-          existing.id,
           createTitleGenerator,
           request.log
         );
@@ -973,7 +968,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             synthesisModel,
             apiKeysResult.value,
             user.userId,
-            id,
             getServices(),
             request.log
           );
@@ -1177,7 +1171,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         synthesisModel,
         apiKeysResult.value,
         user.userId,
-        id,
         getServices(),
         request.log
       );
@@ -1327,7 +1320,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           body.additionalContexts,
           apiKeys.google,
           user.userId,
-          id,
           createTitleGenerator,
           request.log
         );

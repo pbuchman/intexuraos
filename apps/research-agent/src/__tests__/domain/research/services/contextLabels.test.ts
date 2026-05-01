@@ -28,7 +28,6 @@ describe('generateContextLabels', () => {
       contexts,
       undefined,
       'user-123',
-      undefined,
       () => {
         throw new Error('Should not be called');
       },
@@ -62,7 +61,6 @@ describe('generateContextLabels', () => {
       contexts,
       'google-api-key',
       'user-123',
-      undefined,
       () => mockGenerator,
       mockLogger
     );
@@ -87,7 +85,6 @@ describe('generateContextLabels', () => {
       contexts,
       'google-api-key',
       'user-123',
-      undefined,
       () => mockGenerator,
       mockLogger
     );
@@ -112,7 +109,6 @@ describe('generateContextLabels', () => {
       contexts,
       'google-api-key',
       'user-123',
-      undefined,
       () => mockGenerator,
       mockLogger
     );
@@ -129,7 +125,6 @@ describe('generateContextLabels', () => {
     let capturedApiKey: unknown;
     let capturedUserId: unknown;
     let capturedLogger: unknown;
-    let capturedResearchId: unknown;
 
     const mockGenerator = {
       generateTitle: async () => ok({ title: 'Title', usage: { inputTokens: 10, outputTokens: 5 } }),
@@ -140,13 +135,11 @@ describe('generateContextLabels', () => {
       contexts,
       'test-api-key',
       'test-user-id',
-      'research-456',
-      (model, apiKey, userId, logger, researchId) => {
+      (model, apiKey, userId, logger) => {
         capturedModel = model;
         capturedApiKey = apiKey;
         capturedUserId = userId;
         capturedLogger = logger;
-        capturedResearchId = researchId;
         return mockGenerator;
       },
       mockLogger
@@ -156,7 +149,6 @@ describe('generateContextLabels', () => {
     expect(capturedApiKey).toBe('test-api-key');
     expect(capturedUserId).toBe('test-user-id');
     expect(capturedLogger).toBe(mockLogger);
-    expect(capturedResearchId).toBe('research-456');
   });
 
   it('processes multiple contexts in parallel', async () => {
@@ -176,7 +168,7 @@ describe('generateContextLabels', () => {
       },
     };
 
-    await generateContextLabels(contexts, 'api-key', 'user', undefined, () => mockGenerator, mockLogger);
+    await generateContextLabels(contexts, 'api-key', 'user', () => mockGenerator, mockLogger);
 
     expect(callOrder).toEqual([1, 2, 3]);
   });
