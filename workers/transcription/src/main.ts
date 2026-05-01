@@ -15,7 +15,7 @@ import type { PublishError } from '@intexuraos/infra-pubsub';
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { AudioStoredEvent, TranscriptionCompletedEvent } from './types.js';
 import type { SpeechTranscriptionPort } from './providers/transcription-provider.js';
-import type { Logger } from './logger.js';
+import type { WorkerLogger as Logger } from './__shims__/common-worker.js';
 import { formatSpeechmaticsError } from './format-error.js';
 import { pollUntilComplete, DEFAULT_POLL_CONFIG, type PollingConfig } from './polling.js';
 
