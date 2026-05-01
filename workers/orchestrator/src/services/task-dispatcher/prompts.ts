@@ -1,3 +1,4 @@
+// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 import type { CompletionAgentType } from '../completion-verifier.js';
 import { getLast50Lines } from '../completion-verifier.js';
 import type { ExecutionMemoryPromptContext } from '../../types/execution-memory.js';

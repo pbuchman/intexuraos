@@ -1,3 +1,4 @@
+// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 /**
  * Prompt for triaging *_ENFORCEMENT_FAILED errors.
  *

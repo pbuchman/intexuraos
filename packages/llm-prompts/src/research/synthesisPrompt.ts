@@ -1,3 +1,4 @@
+// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 /**
  * Shared synthesis prompt builder for combining multiple LLM research reports.
  * Used by adapters in research-agent to synthesize research from multiple providers.
