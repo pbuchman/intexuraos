@@ -16,3 +16,6 @@ export {
   isSupportedProvider,
 } from './llmClientFactory.js';
 export { createOpenRouterGenerateClient } from './openRouterGenerateClient.js';
+export { createClaudeGenerateClient } from './claudeGenerateClient.js';
+export { createGptGenerateClient } from './gptGenerateClient.js';
+export { createPerplexityGenerateClient } from './perplexityGenerateClient.js';
