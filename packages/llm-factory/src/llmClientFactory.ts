@@ -176,17 +176,12 @@ export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
       return createGptGenerateClient(config);
     case LlmProviders.Perplexity:
       return createPerplexityGenerateClient(config);
-    case LlmProviders.OpenRouter:
-      // OpenRouter models are routed above via isOpenRouterModel(); reaching this
-      // branch would mean an or:-prefixed model slipped past the prefix check.
-      return createOpenRouterGenerateClient(config);
-    default: {
-      const _exhaustive: never = providerForModel;
-      throw new IntexuraOSError(
-        'INVALID_REQUEST',
-        `Unsupported LLM provider: ${String(_exhaustive)}`
-      );
-    }
+    default:
+      // OpenRouter (or any future provider not in the switch) lands here. Static
+      // OpenRouter models don't exist in MODEL_PROVIDER_MAP — the `or:` prefix
+      // path above handles every OpenRouter call. Throwing keeps the factory
+      // closed under unknown providers.
+      throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM provider: ${providerForModel}`);
   }
 }
 

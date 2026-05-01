@@ -138,19 +138,20 @@ export class HttpWebhookUsageSink extends UsageSink {
     }
     const events = this.buffer;
     this.buffer = [];
-    const promise = this.postBatch(events, { rethrow: false });
-    this.inFlight = promise.finally(() => {
-      if (this.inFlight === promise) {
+    // Capture the wrapped promise reference so the finally guard can compare
+    // identity correctly. Assigning `this.inFlight = promise.finally(...)` and
+    // then comparing `this.inFlight === promise` inside the callback would
+    // never match — `inFlight` holds the chained promise, not the original.
+    const wrapped: Promise<void> = this.postBatch(events, { rethrow: false }).finally(() => {
+      if (this.inFlight === wrapped) {
         this.inFlight = null;
       }
     });
-    await this.inFlight;
+    this.inFlight = wrapped;
+    await wrapped;
   }
 
-  private async postBatch(
-    events: UsageEventPayload[],
-    opts: { rethrow: boolean }
-  ): Promise<void> {
+  private async postBatch(events: UsageEventPayload[], opts: { rethrow: boolean }): Promise<void> {
     const body = JSON.stringify({ schemaVersion: 2, events });
     const timestamp = Math.floor(Date.now() / 1000);
     const message = `${String(timestamp)}.${body}`;

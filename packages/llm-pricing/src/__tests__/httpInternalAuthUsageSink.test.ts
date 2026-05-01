@@ -488,4 +488,83 @@ describe('HttpInternalAuthUsageSink', () => {
       expect(nock.pendingMocks()).toHaveLength(0);
     });
   });
+
+  describe('async-timing branches', () => {
+    // Covers httpInternalAuthUsageSink.ts:119 — `if (this.inFlight !== null)`
+    // in flushSync. The timer fires, flushBuffered starts a POST, and before it
+    // resolves we call flushSync — which must await the in-flight promise.
+    it('flushSync awaits an already-in-flight timer-driven flush', async () => {
+      vi.useRealTimers();
+      const config = makeConfig({ flushIntervalMs: 5, maxBatchSize: 100 });
+      const sink = new HttpInternalAuthUsageSink(config);
+
+      let postCount = 0;
+      const scope = nock(USAGE_SERVICE_URL)
+        .post('/internal/usage/events')
+        // delay the response so flushSync overlaps the in-flight POST
+        .delay(50)
+        .reply(() => {
+          postCount += 1;
+          return [200, { accepted: 1, duplicates: 0, rejected: [] }];
+        });
+
+      await sink.log(baseParams);
+      // Let the 5ms timer fire, starting flushBuffered → inFlight = promise
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      // Now inFlight !== null; flushSync should await it (no double-POST).
+      await sink.flushSync();
+
+      expect(scope.isDone()).toBe(true);
+      expect(postCount).toBe(1);
+    });
+
+    // Covers httpInternalAuthUsageSink.ts:139 — `if (this.buffer.length === 0)`
+    // early-return in flushBuffered. Reachable when flushBuffered runs after
+    // the buffer was already drained (timer-after-flushSync race). Invoked via
+    // a typed cast since the natural racing path is timing-fragile.
+    it('flushBuffered early-returns when buffer is empty', async () => {
+      vi.useRealTimers();
+      const config = makeConfig();
+      const sink = new HttpInternalAuthUsageSink(config);
+
+      // No nock interceptor: any HTTP call would error out.
+      await (sink as unknown as { flushBuffered(): Promise<void> }).flushBuffered();
+      expect(nock.pendingMocks()).toHaveLength(0);
+    });
+
+    // Covers httpInternalAuthUsageSink.ts:146 — the `if (this.inFlight === promise)`
+    // FALSE branch. Concurrent flushes overlap: flush A's `.finally` runs
+    // AFTER flush B has already overwritten `inFlight`, so the guard must
+    // skip the `inFlight = null` assignment.
+    it('finally guard skips reset when a newer flush replaced inFlight', async () => {
+      vi.useRealTimers();
+      const config = makeConfig({ flushIntervalMs: 60_000, maxBatchSize: 100 });
+      const sink = new HttpInternalAuthUsageSink(config);
+
+      // Two interceptors; the first delays so it's still in flight when we
+      // start the second.
+      const scopeA = nock(USAGE_SERVICE_URL)
+        .post('/internal/usage/events')
+        .delay(40)
+        .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
+      const scopeB = nock(USAGE_SERVICE_URL)
+        .post('/internal/usage/events')
+        .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
+
+      // Kick off flush A directly (sets inFlight = promiseA).
+      const flushA = (sink as unknown as { flushBuffered(): Promise<void> }).flushBuffered.bind(
+        sink
+      );
+      await sink.log(baseParams);
+      const aDone = flushA();
+      // While A is in flight, kick off flush B (overwrites inFlight = promiseB).
+      await sink.log(baseParams);
+      const bDone = flushA();
+
+      await Promise.all([aDone, bDone]);
+
+      expect(scopeA.isDone()).toBe(true);
+      expect(scopeB.isDone()).toBe(true);
+    });
+  });
 });

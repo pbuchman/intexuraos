@@ -23,9 +23,10 @@ interface Call {
   promptType: string;
 }
 
-function makeClient(
-  responses: Result<StructuredGenerateResult, LLMError>[],
-): { client: StructuredClient; calls: Call[] } {
+function makeClient(responses: Result<StructuredGenerateResult, LLMError>[]): {
+  client: StructuredClient;
+  calls: Call[];
+} {
   const calls: Call[] = [];
   let i = 0;
   return {
@@ -33,7 +34,7 @@ function makeClient(
     client: {
       generate: async (
         prompt: string,
-        options: { promptType: string },
+        options: { promptType: string }
       ): Promise<Result<StructuredGenerateResult, LLMError>> => {
         calls.push({ prompt, promptType: options.promptType });
         const response = responses[i] ?? responses[responses.length - 1];
@@ -99,7 +100,7 @@ describe('generateStructured', () => {
       ok({ content: '{"answer":"yes","score":1}', usage: zeroUsage }),
     ]);
     const repair = vi.fn(
-      (raw: string, e: z.ZodError) => `FIX: ${String(e.issues.length)} issues in ${raw}`,
+      (raw: string, e: z.ZodError) => `FIX: ${String(e.issues.length)} issues in ${raw}`
     );
 
     const res = await generateStructured({
@@ -192,9 +193,7 @@ describe('generateStructured', () => {
   });
 
   it('with no repairBuilder, performs a single attempt and returns validation error', async () => {
-    const { client, calls } = makeClient([
-      ok({ content: '{"answer":"yes"}', usage: zeroUsage }),
-    ]);
+    const { client, calls } = makeClient([ok({ content: '{"answer":"yes"}', usage: zeroUsage })]);
 
     const res = await generateStructured({
       client,
@@ -249,6 +248,40 @@ describe('generateStructured', () => {
     }
     // No retry on llm error
     expect(calls).toHaveLength(1);
+  });
+
+  // Covers generateStructured.ts:106 — `match[1] ?? trimmed` fallback. The
+  // FENCED regex's capture group is non-optional, but `noUncheckedIndexedAccess`
+  // widens `match[1]` to `string | undefined`, so the fallback exists for
+  // type-safety. Force it by stubbing exec to return a match with no group.
+  it('falls back to trimmed content when fenced regex match has no capture group', async () => {
+    const fenced = '```json\n{"answer":"yes","score":1}\n```';
+    const execSpy = vi.spyOn(RegExp.prototype, 'exec').mockImplementationOnce(function (
+      this: RegExp,
+      str: string
+    ) {
+      // Return a match-like object with [1] === undefined to force the
+      // `?? trimmed` arm. JSON.parse on `trimmed` (with backticks) will fail
+      // — generateStructured surfaces this as a validation error whose `raw`
+      // includes the original fenced content.
+      const fakeMatch = [str] as unknown as RegExpExecArray;
+      (fakeMatch as unknown as { index: number }).index = 0;
+      (fakeMatch as unknown as { input: string }).input = str;
+      return fakeMatch;
+    });
+
+    const { client } = makeClient([ok({ content: fenced, usage: zeroUsage })]);
+    const res = await generateStructured({ client, prompt: 'q', schema, promptType: 'test' });
+
+    expect(execSpy).toHaveBeenCalled();
+    // JSON.parse(trimmed) fails because trimmed still contains backticks, so
+    // the helper reports a validation error with raw === fenced.
+    expect(res.ok).toBe(false);
+    if (!res.ok && res.error.kind === 'validation') {
+      expect(res.error.raw).toBe(fenced);
+    }
+
+    execSpy.mockRestore();
   });
 
   it('forwards options (excluding promptType) into client.generate', async () => {
