@@ -132,6 +132,12 @@ export interface Task {
    * Tracks lifetime restarts for observability — never reset.
    */
   inactivityRestartCount?: number;
+  /**
+   * Resolved per-task timeout in milliseconds, derived from
+   * `CreateTaskRequest.timeoutHours`. When undefined, the orchestrator
+   * falls back to TASK_TIMEOUT_KILL_MS (5h). INT-1585.
+   */
+  timeoutMs?: number;
 }
 
 export interface TaskResult {
