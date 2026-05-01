@@ -224,6 +224,10 @@ export class AttemptLifecycle {
         /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for reviewTypes in dispatchPlanReview request payload @preserve */
         ...(request.reviewTypes !== undefined && { reviewTypes: request.reviewTypes }),
         /* v8 ignore stop @preserve */
+        // INT-1585: convert per-task hour override into ms once on intake.
+        ...(request.timeoutHours !== undefined && {
+          timeoutMs: request.timeoutHours * 60 * 60 * 1000,
+        }),
         startedAt: new Date().toISOString(),
         attemptCount: 1,
         maxAttempts: ctx.completionMaxAttempts,

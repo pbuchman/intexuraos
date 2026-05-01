@@ -1,4 +1,8 @@
-import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
+import {
+  CODE_TASK_WORKER_TYPES,
+  MIN_TIMEOUT_HOURS,
+  MAX_TIMEOUT_HOURS,
+} from '@intexuraos/code-task-domain';
 import { z } from 'zod';
 
 // Worker type validation
@@ -79,6 +83,16 @@ export const CreateTaskRequestSchema = z.object({
   continuationPrBranch: z.string().min(1).optional(),
   reviewTypes: z
     .array(z.enum(['code_quality', 'security', 'architecture', 'plan_review', 'test_quality']))
+    .optional(),
+  /**
+   * Optional per-task timeout in hours (1–12). When omitted, the orchestrator
+   * applies its 5h default. INT-1585.
+   */
+  timeoutHours: z
+    .number()
+    .int()
+    .min(MIN_TIMEOUT_HOURS)
+    .max(MAX_TIMEOUT_HOURS)
     .optional(),
 });
 

@@ -172,6 +172,8 @@ export function registerRoutes(
       }),
       ...(parsed.reviewTypes !== undefined && { reviewTypes: parsed.reviewTypes }),
       ...(parsed.retriedFrom !== undefined && { retriedFrom: parsed.retriedFrom }),
+      // INT-1585: forward optional per-task timeout override
+      ...(parsed.timeoutHours !== undefined && { timeoutHours: parsed.timeoutHours }),
     };
 
     logger.info(
