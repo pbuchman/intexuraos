@@ -4,7 +4,7 @@ import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import {
   ResumeSummaryExtractor,
   RESUME_SUMMARY_SCHEMA,
-  buildResumeSummaryPrompt,
+  resumeSummaryPrompt,
   getLast50Lines,
   getLast50ClaudeLines,
   getLast20Lines,
@@ -52,9 +52,9 @@ describe('RESUME_SUMMARY_SCHEMA', () => {
   });
 });
 
-describe('buildResumeSummaryPrompt', () => {
+describe('resumeSummaryPrompt', () => {
   it('embeds transcript and instructs JSON-only response', () => {
-    const p = buildResumeSummaryPrompt('X');
+    const p = resumeSummaryPrompt.build({ transcript: 'X' });
     expect(p).toContain('JSON');
     expect(p.endsWith('X')).toBe(true);
   });

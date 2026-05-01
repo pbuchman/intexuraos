@@ -1,9 +1,9 @@
-// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 /**
  * Shared research prompt builder for LLM research operations.
  * Used by all LLM providers (OpenAI, Claude, Gemini) for consistent research quality.
  */
 
+import type { PromptBuilder } from '../shared/types.js';
 import type { ResearchContext } from './contextTypes.js';
 import { filterByExclusions, extractUserExclusions } from './promptUtils.js';
 
@@ -175,18 +175,7 @@ ${safetySection}${redFlagsSection}
 Write the ENTIRE response in ${ctx.language.toUpperCase()}. This is the language of the original query.`;
 }
 
-/**
- * Builds a structured research prompt optimized for web search and deep research.
- * Instructs the LLM to search the web, cross-reference sources, and cite findings.
- *
- * @param userPrompt - The user's research query
- * @param ctx - Optional research context for targeted prompts
- */
-export function buildResearchPrompt(userPrompt: string, ctx?: ResearchContext): string {
-  if (ctx !== undefined) {
-    return buildContextualResearchPrompt(userPrompt, ctx);
-  }
-
+function buildLegacyResearchPrompt(userPrompt: string): string {
   const currentYear = new Date().getFullYear();
   return `Conduct comprehensive research on the following topic.
 
@@ -245,4 +234,26 @@ Adjust your approach based on the topic:
 
 Write the ENTIRE response in the SAME LANGUAGE as the Research Request (Polish → Polish, Spanish → Spanish, etc.)`;
 }
-// Prompt version: 2.1.0
+
+export interface ResearchPromptInput {
+  userPrompt: string;
+  ctx?: ResearchContext | undefined;
+}
+
+/**
+ * Builds a structured research prompt optimized for web search and deep research.
+ * Instructs the LLM to search the web, cross-reference sources, and cite findings.
+ */
+export const researchPrompt: PromptBuilder<ResearchPromptInput> = {
+  name: 'research-query',
+  description: 'Builds a structured research prompt for an LLM with optional structured context',
+  version: '2.1.0',
+
+  build(input: ResearchPromptInput): string {
+    const { userPrompt, ctx } = input;
+    if (ctx !== undefined) {
+      return buildContextualResearchPrompt(userPrompt, ctx);
+    }
+    return buildLegacyResearchPrompt(userPrompt);
+  },
+};

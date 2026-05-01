@@ -27,7 +27,7 @@ import type {
   ComplianceValidationInput,
 } from './agent-compliance-validator.js';
 import {
-  buildMissingFieldsPrompt as buildMissingFieldsPromptFn,
+  missingFieldsPrompt as missingFieldsPromptObj,
   buildResumePreamble as buildResumePreambleFn,
   buildActiveGoalSection as buildActiveGoalSectionFn,
   parseRebaseResultOutput as parseRebaseResultOutputFn,
@@ -69,7 +69,7 @@ import { noopMetricsClient, type MetricsClient } from '../metrics.js';
 // Re-export module-level helpers for backward compatibility with existing imports.
 export const getTaskEventUrl = getTaskEventUrlFn;
 export const hasFatalExitCodeField = hasFatalExitCodeFieldFn;
-export const buildMissingFieldsPrompt = buildMissingFieldsPromptFn;
+export const missingFieldsPrompt = missingFieldsPromptObj;
 
 export interface DispatchError {
   type:

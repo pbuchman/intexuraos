@@ -1,6 +1,6 @@
-// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 import type { CompletionAgentType } from '../completion-verifier.js';
 import { getLast50Lines } from '../completion-verifier.js';
+import type { PromptBuilder } from '../prompt-builder.js';
 import type { ExecutionMemoryPromptContext } from '../../types/execution-memory.js';
 import type { Task, TaskResult } from '../../types/task.js';
 import type { Logger } from '@intexuraos/common-core';
@@ -19,6 +19,13 @@ export function hasFatalExitCodeField(missingFields: string[]): string | undefin
   return missingFields.find((f) => f.startsWith(FATAL_EXIT_CODE_PREFIX));
 }
 
+export interface MissingFieldsPromptInput {
+  agentType: CompletionAgentType;
+  missingFields: string[];
+  rawLogs: string;
+  executionMemoryContext?: ExecutionMemoryPromptContext | undefined;
+}
+
 /**
  * [INT-1470] Deliverable-only resume prompt. Telemetry-only misses
  * (`memory_ids_used` / `memory_ids_rejected` / `memory_acknowledgment`) are
@@ -28,31 +35,33 @@ export function hasFatalExitCodeField(missingFields: string[]): string | undefin
  * auto-continue the session asking the agent to re-emit memory fields it
  * had already either emitted or skipped — a no-op in practice.
  */
-export function buildMissingFieldsPrompt(
-  agentType: CompletionAgentType,
-  missingFields: string[],
-  rawLogs: string,
-  _executionMemoryContext?: ExecutionMemoryPromptContext // @allow-undefined-type -- signature preserved for caller compat; telemetry branch removed so context is unused
-): string {
-  const transcript = getLast50Lines(rawLogs);
+export const missingFieldsPrompt: PromptBuilder<MissingFieldsPromptInput> = {
+  name: 'missing-fields-resume',
+  description: 'Auto-continue prompt asking the agent to re-emit missing deliverable fields',
+  version: '1.0.0',
 
-  return [
-    '[AUTO-CONTINUE ATTEMPT]',
-    'Your last response was missing required fields for the completion verifier.',
-    '',
-    `Missing fields: ${missingFields.join(', ')}`,
-    '',
-    'Please ensure your final message includes all required information.',
-    `Agent type: ${agentType}`,
-    '',
-    'Last 50 lines of transcript for reference:',
-    transcript,
-    '',
-    'Constraints:',
-    '- Do not restart from scratch.',
-    '- Continue from current repository/worktree state.',
-  ].join('\n');
-}
+  build(input: MissingFieldsPromptInput): string {
+    const { agentType, missingFields, rawLogs } = input;
+    const transcript = getLast50Lines(rawLogs);
+
+    return [
+      '[AUTO-CONTINUE ATTEMPT]',
+      'Your last response was missing required fields for the completion verifier.',
+      '',
+      `Missing fields: ${missingFields.join(', ')}`,
+      '',
+      'Please ensure your final message includes all required information.',
+      `Agent type: ${agentType}`,
+      '',
+      'Last 50 lines of transcript for reference:',
+      transcript,
+      '',
+      'Constraints:',
+      '- Do not restart from scratch.',
+      '- Continue from current repository/worktree state.',
+    ].join('\n');
+  },
+};
 
 export function buildResumePreamble(task?: Task): string {
   const prViewCommand =

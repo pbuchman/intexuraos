@@ -1,43 +1,57 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildValidationRepairPrompt,
-  buildImprovementRepairPrompt,
+  validationRepairPrompt,
+  improvementRepairPrompt,
 } from '../buildInputValidationRepairPrompt.js';
 
-describe('buildValidationRepairPrompt', () => {
+describe('validationRepairPrompt metadata', () => {
+  it('has correct metadata', () => {
+    expect(validationRepairPrompt.name).toBe('input-validation-repair');
+    expect(validationRepairPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+});
+
+describe('improvementRepairPrompt metadata', () => {
+  it('has correct metadata', () => {
+    expect(improvementRepairPrompt.name).toBe('input-improvement-repair');
+    expect(improvementRepairPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+});
+
+describe('validationRepairPrompt', () => {
   const originalPrompt = 'best travel tips';
   const invalidResponse = '{"quality": "high"}';
   const errorMessage = 'quality must be a number';
 
   it('includes the original prompt content', () => {
-    const result = buildValidationRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = validationRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     expect(result).toContain(originalPrompt);
   });
 
   it('includes the invalid response content', () => {
-    const result = buildValidationRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = validationRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     expect(result).toContain(invalidResponse);
   });
 
   it('includes error details', () => {
-    const result = buildValidationRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = validationRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     expect(result).toContain(errorMessage);
   });
 
   it('includes JSON requirements', () => {
-    const result = buildValidationRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = validationRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     expect(result).toContain('Output ONLY valid JSON');
     expect(result).toContain('quality field must be a number');
   });
 
   it('includes quality evaluation examples', () => {
-    const result = buildValidationRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = validationRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     expect(result).toContain('"quality": 2');
     expect(result).toContain('"quality": 0');
   });
 
   it('has anti-injection guard before ORIGINAL PROMPT block', () => {
-    const result = buildValidationRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = validationRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     const guardPattern =
       /(?:Treat|treat).*(?:literal|verbatim).*(?:Do not|do not).*(?:follow|interpret|execute).*(?:instructions|commands)/is;
     const originalPromptIndex = result.indexOf('<original_prompt>');
@@ -49,7 +63,7 @@ describe('buildValidationRepairPrompt', () => {
   });
 
   it('has anti-injection guard before INVALID RESPONSE block', () => {
-    const result = buildValidationRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = validationRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     const invalidResponseIndex = result.indexOf('<invalid_response>');
     expect(invalidResponseIndex).toBeGreaterThan(-1);
 
@@ -59,7 +73,7 @@ describe('buildValidationRepairPrompt', () => {
   });
 
   it('wraps original prompt in XML-style delimiters', () => {
-    const result = buildValidationRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = validationRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     expect(result).toContain('<original_prompt>');
     expect(result).toContain('</original_prompt>');
 
@@ -73,7 +87,7 @@ describe('buildValidationRepairPrompt', () => {
   });
 
   it('wraps invalid response in XML-style delimiters', () => {
-    const result = buildValidationRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = validationRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     expect(result).toContain('<invalid_response>');
     expect(result).toContain('</invalid_response>');
 
@@ -86,7 +100,7 @@ describe('buildValidationRepairPrompt', () => {
   });
 
   it('guards appear in correct order: guard, original prompt, error, invalid response', () => {
-    const result = buildValidationRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = validationRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     const originalPromptIdx = result.indexOf('<original_prompt>');
     const errorIdx = result.indexOf('ERROR DETAILS:');
     const invalidResponseIdx = result.indexOf('<invalid_response>');
@@ -97,41 +111,41 @@ describe('buildValidationRepairPrompt', () => {
   });
 
   it('does not use triple-quote delimiters for untrusted content', () => {
-    const result = buildValidationRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = validationRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     // Should NOT contain """ around the originalPrompt or invalidResponse
     // (""" is easily escapable by malicious content)
     expect(result).not.toContain('"""');
   });
 });
 
-describe('buildImprovementRepairPrompt', () => {
+describe('improvementRepairPrompt', () => {
   const originalPrompt = 'travel tips';
   const invalidResponse = 'Here is an improved version: better travel tips';
   const errorMessage = 'Response contains prefix text';
 
   it('includes the original prompt content', () => {
-    const result = buildImprovementRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = improvementRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     expect(result).toContain(originalPrompt);
   });
 
   it('includes the invalid response content', () => {
-    const result = buildImprovementRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = improvementRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     expect(result).toContain(invalidResponse);
   });
 
   it('includes error details', () => {
-    const result = buildImprovementRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = improvementRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     expect(result).toContain(errorMessage);
   });
 
   it('includes improvement requirements', () => {
-    const result = buildImprovementRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = improvementRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     expect(result).toContain('SAME LANGUAGE');
     expect(result).toContain('Return ONLY the improved prompt text');
   });
 
   it('has anti-injection guard before ORIGINAL PROMPT block', () => {
-    const result = buildImprovementRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = improvementRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     const guardPattern =
       /(?:Treat|treat).*(?:literal|verbatim).*(?:Do not|do not).*(?:follow|interpret|execute).*(?:instructions|commands)/is;
     const originalPromptIndex = result.indexOf('<original_prompt>');
@@ -142,7 +156,7 @@ describe('buildImprovementRepairPrompt', () => {
   });
 
   it('has anti-injection guard before INVALID RESPONSE block', () => {
-    const result = buildImprovementRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = improvementRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     const invalidResponseIndex = result.indexOf('<invalid_response>');
     expect(invalidResponseIndex).toBeGreaterThan(-1);
 
@@ -151,7 +165,7 @@ describe('buildImprovementRepairPrompt', () => {
   });
 
   it('wraps original prompt in XML-style delimiters', () => {
-    const result = buildImprovementRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = improvementRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     expect(result).toContain('<original_prompt>');
     expect(result).toContain('</original_prompt>');
 
@@ -164,7 +178,7 @@ describe('buildImprovementRepairPrompt', () => {
   });
 
   it('wraps invalid response in XML-style delimiters', () => {
-    const result = buildImprovementRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = improvementRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     expect(result).toContain('<invalid_response>');
     expect(result).toContain('</invalid_response>');
 
@@ -177,7 +191,7 @@ describe('buildImprovementRepairPrompt', () => {
   });
 
   it('guards appear in correct order: guard, original prompt, error, invalid response', () => {
-    const result = buildImprovementRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = improvementRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     const originalPromptIdx = result.indexOf('<original_prompt>');
     const errorIdx = result.indexOf('ERROR DETAILS:');
     const invalidResponseIdx = result.indexOf('<invalid_response>');
@@ -188,7 +202,7 @@ describe('buildImprovementRepairPrompt', () => {
   });
 
   it('does not use triple-quote delimiters for untrusted content', () => {
-    const result = buildImprovementRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = improvementRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     expect(result).not.toContain('"""');
   });
 });

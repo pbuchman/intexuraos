@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   askAgentPrompt,
-  buildSystemPrompt,
+  systemPrompt,
   executionPrompt,
   getPromptForAgent,
   planningPrompt,
@@ -49,7 +49,7 @@ describe('getPromptForAgent', () => {
 
 describe('buildSystemPrompt dispatch', () => {
   it('appends PR review overlay for execution agent', () => {
-    const prompt = buildSystemPrompt({
+    const prompt = systemPrompt.build({
       ...baseParams,
       agentType: 'execution',
     });
@@ -57,7 +57,7 @@ describe('buildSystemPrompt dispatch', () => {
   });
 
   it('appends PR review overlay for planning agent', () => {
-    const prompt = buildSystemPrompt({
+    const prompt = systemPrompt.build({
       ...baseParams,
       agentType: 'planning',
     });
@@ -65,7 +65,7 @@ describe('buildSystemPrompt dispatch', () => {
   });
 
   it('does NOT append PR review overlay for review agent', () => {
-    const prompt = buildSystemPrompt({
+    const prompt = systemPrompt.build({
       ...baseParams,
       agentType: 'review',
     });
@@ -73,7 +73,7 @@ describe('buildSystemPrompt dispatch', () => {
   });
 
   it('does NOT append PR review overlay for remediation agent', () => {
-    const prompt = buildSystemPrompt({
+    const prompt = systemPrompt.build({
       ...baseParams,
       agentType: 'remediation',
     });
@@ -81,7 +81,7 @@ describe('buildSystemPrompt dispatch', () => {
   });
 
   it('uses pull request prompt when pr-comment label is present', () => {
-    const prompt = buildSystemPrompt({
+    const prompt = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['pr-comment'],
     });
@@ -89,7 +89,7 @@ describe('buildSystemPrompt dispatch', () => {
   });
 
   it('uses pull request prompt when pr-comment label has mixed case / whitespace', () => {
-    const prompt = buildSystemPrompt({
+    const prompt = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['  PR-Comment  '],
     });
@@ -97,7 +97,7 @@ describe('buildSystemPrompt dispatch', () => {
   });
 
   it('uses ask agent prompt when agentType is ask_agent', () => {
-    const prompt = buildSystemPrompt({
+    const prompt = systemPrompt.build({
       ...baseParams,
       agentType: 'ask_agent',
     });

@@ -1,4 +1,3 @@
-// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 /**
  * Prompt for extracting LLM model preferences from user messages.
  *
@@ -8,6 +7,7 @@
 
 import type { Logger } from 'pino';
 import { LlmModels, type ResearchModel } from '@intexuraos/llm-contract';
+import type { PromptBuilder } from '../shared/types.js';
 
 /**
  * Model information for building the extraction prompt.
@@ -47,38 +47,43 @@ export interface ModelExtractionResponse {
 /**
  * Build the prompt for extracting model preferences from a user message.
  */
-export function buildModelExtractionPrompt(deps: ModelExtractionPromptDeps): string {
-  const { userMessage, availableModels, synthesisModels, defaultSynthesisModel } = deps;
+export const modelExtractionPrompt: PromptBuilder<ModelExtractionPromptDeps> = {
+  name: 'research-model-extraction',
+  description: 'Extracts research/synthesis model preferences from a user message',
+  version: '1.1.0',
 
-  // Group models by provider
-  const modelsByProvider = new Map<string, AvailableModelInfo[]>();
-  for (const model of availableModels) {
-    const existing = modelsByProvider.get(model.provider) ?? [];
-    existing.push(model);
-    modelsByProvider.set(model.provider, existing);
-  }
+  build(deps: ModelExtractionPromptDeps): string {
+    const { userMessage, availableModels, synthesisModels, defaultSynthesisModel } = deps;
 
-  // Build available models description
-  const modelsDescription = availableModels
-    .map((m) => {
-      const defaultNote = m.isProviderDefault ? ' (provider default)' : '';
-      return `- ${m.id}: ${m.displayName} (${m.provider})${defaultNote}\n  Keywords: ${m.keywords.join(', ')}`;
-    })
-    .join('\n');
+    // Group models by provider
+    const modelsByProvider = new Map<string, AvailableModelInfo[]>();
+    for (const model of availableModels) {
+      const existing = modelsByProvider.get(model.provider) ?? [];
+      existing.push(model);
+      modelsByProvider.set(model.provider, existing);
+    }
 
-  // Build provider defaults description
-  const providerDefaults = Array.from(modelsByProvider.entries())
-    .map(([provider, models]) => {
-      const defaultModel = models.find((m) => m.isProviderDefault);
-      if (defaultModel !== undefined) {
-        return `- ${provider}: ${defaultModel.id}`;
-      }
-      return null;
-    })
-    .filter((s): s is string => s !== null)
-    .join('\n');
+    // Build available models description
+    const modelsDescription = availableModels
+      .map((m) => {
+        const defaultNote = m.isProviderDefault ? ' (provider default)' : '';
+        return `- ${m.id}: ${m.displayName} (${m.provider})${defaultNote}\n  Keywords: ${m.keywords.join(', ')}`;
+      })
+      .join('\n');
 
-  return `You are a model selection assistant. Your task is to extract LLM model preferences from a user's research request.
+    // Build provider defaults description
+    const providerDefaults = Array.from(modelsByProvider.entries())
+      .map(([provider, models]) => {
+        const defaultModel = models.find((m) => m.isProviderDefault);
+        if (defaultModel !== undefined) {
+          return `- ${provider}: ${defaultModel.id}`;
+        }
+        return null;
+      })
+      .filter((s): s is string => s !== null)
+      .join('\n');
+
+    return `You are a model selection assistant. Your task is to extract LLM model preferences from a user's research request.
 
 The selected models will be used to fan out parallel research requests. Each selected model will independently research the user's topic.
 
@@ -122,8 +127,8 @@ Respond with ONLY valid JSON in this exact format:
 }
 
 Do not include any text before or after the JSON.`;
-}
-// Prompt version: 1.1.0
+  },
+};
 
 /**
  * Parse the LLM response into typed model extraction result.

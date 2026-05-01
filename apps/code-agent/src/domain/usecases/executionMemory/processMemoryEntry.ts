@@ -26,7 +26,7 @@ import {
   parseCsv,
   parseJsonObject,
   isInfraOnlyFailure,
-  buildDistillationPrompt,
+  distillationPrompt,
   buildEvaluationContext,
 } from './shared.js';
 import { persistMemory } from './persistMemory.js';
@@ -330,7 +330,7 @@ export async function distillTask(
     };
   }
 
-  const prompt = buildDistillationPrompt(task, logs, turnMetrics, issueContext);
+  const prompt = distillationPrompt.build({ task, logs, turnMetrics, issueContext });
 
   const result = await deps.distillerClient.generate(prompt, { promptType: 'execution-memory-distillation' });
   if (!result.ok) {

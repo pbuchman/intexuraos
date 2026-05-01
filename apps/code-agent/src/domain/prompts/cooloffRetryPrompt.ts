@@ -1,4 +1,3 @@
-// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 /**
  * Prompt for extracting Claude usage-limit reset times from failed tasks.
  *
@@ -9,6 +8,8 @@
  *
  * INT-1463: Scheduled code-task dispatch (cooloff retry branch).
  */
+
+import type { PromptBuilder } from '@intexuraos/llm-prompts';
 
 export const COOLOFF_RETRY_PROMPT_VERSION = '1.0.0';
 
@@ -32,18 +33,24 @@ export interface CooloffParsedResponse {
   reason: string;
 }
 
-export function buildCooloffRetryPrompt(input: CooloffPromptInput): string {
-  const logLines = input.recentLogLines.slice(-MAX_LOG_LINES);
-  const logSection =
-    logLines.length > 0 ? logLines.join('\n') : '(no log lines available)';
+export const cooloffRetryPrompt: PromptBuilder<CooloffPromptInput> = {
+  name: 'cooloff-retry',
+  description:
+    'Extracts an absolute UTC retry timestamp from Claude usage-limit failure messages',
+  version: '1.0.0',
 
-  const nowIso = input.now.toISOString();
-  const tzLine =
-    input.userTimezone !== undefined && input.userTimezone.length > 0
-      ? `- **User timezone:** ${input.userTimezone} (use this to disambiguate reset strings that lack an explicit timezone).`
-      : `- **User timezone:** (not provided — if the reset string is ambiguous and has no explicit timezone, assume UTC).`;
+  build(input: CooloffPromptInput): string {
+    const logLines = input.recentLogLines.slice(-MAX_LOG_LINES);
+    const logSection =
+      logLines.length > 0 ? logLines.join('\n') : '(no log lines available)';
 
-  return `You are a cooldown parser for Claude usage-limit failures. A task failed because the user hit a Claude API usage limit, and the error message usually contains the next reset time (for example: "You've hit your limit · resets 10pm (UTC)"). Your job is to extract exactly ONE absolute UTC timestamp for when the task can be retried.
+    const nowIso = input.now.toISOString();
+    const tzLine =
+      input.userTimezone !== undefined && input.userTimezone.length > 0
+        ? `- **User timezone:** ${input.userTimezone} (use this to disambiguate reset strings that lack an explicit timezone).`
+        : `- **User timezone:** (not provided — if the reset string is ambiguous and has no explicit timezone, assume UTC).`;
+
+    return `You are a cooldown parser for Claude usage-limit failures. A task failed because the user hit a Claude API usage limit, and the error message usually contains the next reset time (for example: "You've hit your limit · resets 10pm (UTC)"). Your job is to extract exactly ONE absolute UTC timestamp for when the task can be retried.
 
 ## Anchor
 - **Now (UTC):** ${nowIso}
@@ -78,7 +85,8 @@ Rules:
 - \`notBeforeAt\` MUST be an ISO-8601 UTC timestamp ending in \`Z\`.
 - \`reason\` is a short human-readable explanation.
 - \`timezone\` and \`sourceText\` are optional but preferred when you can infer them.`;
-}
+  },
+};
 
 export function parseCooloffResponse(
   raw: string,

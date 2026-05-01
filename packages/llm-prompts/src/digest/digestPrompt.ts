@@ -1,4 +1,4 @@
-// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
+import type { PromptBuilder } from '../shared/types.js';
 import { COLD_START_EXAMPLE, WITH_CONTEXT_EXAMPLE } from './examples.js';
 
 export const DIGEST_PROMPT_VERSION = '2.0.0';
@@ -19,18 +19,23 @@ export interface DigestPromptInput {
   }[];
 }
 
-export function buildDigestPrompt(input: DigestPromptInput): string {
-  const messagesText = input.todaysMessages
-    .map((m) => {
-      const ts = new Date(m.postTimeSec * 1000).toISOString().slice(11, 16);
-      return `[${ts}] ${m.sender}: ${m.text}`;
-    })
-    .join('\n');
+export const digestPrompt: PromptBuilder<DigestPromptInput> = {
+  name: 'whatsapp-digest',
+  description: 'Aggregates a day of WhatsApp fishing-group messages into AggregationOutput JSON',
+  version: '2.0.0',
 
-  const stateJson = JSON.stringify(input.previousState ?? {}, null, 2);
-  const summariesJson = JSON.stringify(input.last3Summaries, null, 2);
+  build(input: DigestPromptInput): string {
+    const messagesText = input.todaysMessages
+      .map((m) => {
+        const ts = new Date(m.postTimeSec * 1000).toISOString().slice(11, 16);
+        return `[${ts}] ${m.sender}: ${m.text}`;
+      })
+      .join('\n');
 
-  return `Jesteś asystentem agregującym dzień rozmów z grupy WhatsApp wędkarskiej w schemat AggregationOutput (JSON).
+    const stateJson = JSON.stringify(input.previousState ?? {}, null, 2);
+    const summariesJson = JSON.stringify(input.last3Summaries, null, 2);
+
+    return `Jesteś asystentem agregującym dzień rozmów z grupy WhatsApp wędkarskiej w schemat AggregationOutput (JSON).
 
 Format treści:
 - headline: JEDNO krótkie zdanie (do 200 znaków) po polsku, oddające najważniejsze tematy dnia. Nie stosuj szablonów typu "Dzień upłynął pod znakiem…".
@@ -71,4 +76,5 @@ todaysMessages (po dedup, posortowane rosnąco po czasie) — JEDYNE ŹRÓDŁO F
 ${messagesText}
 
 Zwróć wyłącznie obiekt JSON AggregationOutput.`;
-}
+  },
+};
