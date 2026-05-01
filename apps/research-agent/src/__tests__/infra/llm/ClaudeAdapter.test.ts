@@ -58,7 +58,6 @@ describe('ClaudeAdapter', () => {
         apiKey: 'test-key',
         model: LlmModels.ClaudeOpus46,
         userId: 'test-user-id',
-        researchId: 'research-123',
         logger: mockLogger,
         usageSink: fakeUsageSink,
       });

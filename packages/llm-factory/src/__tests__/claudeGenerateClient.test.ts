@@ -58,6 +58,23 @@ describe('createClaudeGenerateClient', () => {
     }
   });
 
+  it('forwards per-call correlation to the underlying Claude client', async () => {
+    mockClaudeGenerate.mockResolvedValue(
+      ok({ content: '', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 } })
+    );
+
+    const client = createClaudeGenerateClient(baseConfig);
+    await client.generate('hi', {
+      promptType: 'test-prompt',
+      correlation: { researchId: 'r-1', sessionId: 's-2' },
+    });
+
+    expect(mockClaudeGenerate).toHaveBeenCalledWith('hi', {
+      promptType: 'test-prompt',
+      correlation: { researchId: 'r-1', sessionId: 's-2' },
+    });
+  });
+
   it('passes through errors from Claude generate unchanged', async () => {
     mockClaudeGenerate.mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Bad API key' }));
 

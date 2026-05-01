@@ -58,6 +58,23 @@ describe('createPerplexityGenerateClient', () => {
     }
   });
 
+  it('forwards per-call correlation to the underlying Perplexity client', async () => {
+    mockPerplexityGenerate.mockResolvedValue(
+      ok({ content: '', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 } })
+    );
+
+    const client = createPerplexityGenerateClient(baseConfig);
+    await client.generate('hi', {
+      promptType: 'test-prompt',
+      correlation: { researchId: 'r-1' },
+    });
+
+    expect(mockPerplexityGenerate).toHaveBeenCalledWith('hi', {
+      promptType: 'test-prompt',
+      correlation: { researchId: 'r-1' },
+    });
+  });
+
   it('passes through errors from Perplexity generate unchanged', async () => {
     mockPerplexityGenerate.mockResolvedValue(
       err({ code: 'TIMEOUT', message: 'Request timed out' })

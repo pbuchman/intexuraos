@@ -60,7 +60,6 @@ describe('GptAdapter', () => {
         apiKey: 'test-key',
         model: LlmModels.O4MiniDeepResearch,
         userId: 'test-user-id',
-        researchId: 'research-123',
         logger: mockLogger,
         usageSink: fakeUsageSink,
       });

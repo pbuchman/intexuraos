@@ -45,6 +45,21 @@ import type { GeminiConfig, GeminiError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 import { resolveVertexRedirectUrls } from './vertexUrlResolver.js';
 
+export interface GenerateOptions {
+  promptType: string;
+  /**
+   * Optional per-call correlation overrides. Forwarded to the usage sink
+   * so the emitted event carries researchId / sessionId / taskId /
+   * requestId for the originating request.
+   */
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
+}
+
 export interface GeminiClient extends Omit<LLMClient, 'generate'> {
   /**
    * Generates text completion without web search.
@@ -57,7 +72,7 @@ export interface GeminiClient extends Omit<LLMClient, 'generate'> {
    */
   generate(
     prompt: string,
-    options: { promptType: string }
+    options: GenerateOptions
   ): Promise<Result<GenerateResult, GeminiError>>;
 }
 
@@ -74,7 +89,8 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
     success: boolean,
     durationMs: number,
     errorMessage?: string,
-    promptType?: string
+    promptType?: string,
+    correlation?: GenerateOptions['correlation']
   ): void {
     void usageLogger.log({
       userId,
@@ -87,6 +103,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       ...(errorMessage !== undefined && { errorMessage }),
       ...(ownerType !== undefined && { ownerType }),
       ...(promptType !== undefined && { promptType }),
+      ...(correlation !== undefined && { correlation }),
     });
   }
 
@@ -128,7 +145,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 
     async generate(
       prompt: string,
-      options: { promptType: string }
+      options: GenerateOptions
     ): Promise<Result<GenerateResult, GeminiError>> {
       return await withRetry(() => generateOnce(prompt, options), {
         maxAttempts: 3,
@@ -184,7 +201,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 
   async function generateOnce(
     prompt: string,
-    options: { promptType: string }
+    options: GenerateOptions
   ): Promise<Result<GenerateResult, GeminiError>> {
     const start = Date.now();
     try {
@@ -207,7 +224,15 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         })
       );
 
-      trackUsage('generate', result.usage, true, durationMs, undefined, options.promptType);
+      trackUsage(
+        'generate',
+        result.usage,
+        true,
+        durationMs,
+        undefined,
+        options.promptType,
+        options.correlation
+      );
 
       return ok({ content: result.content, usage: result.usage });
     } catch (error) {
@@ -219,7 +244,15 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
         totalTokens: 0,
         costUsd: 0,
       };
-      trackUsage('generate', emptyUsage, false, durationMs, errorMsg, options.promptType);
+      trackUsage(
+        'generate',
+        emptyUsage,
+        false,
+        durationMs,
+        errorMsg,
+        options.promptType,
+        options.correlation
+      );
       return err(mapGeminiError(error));
     }
   }

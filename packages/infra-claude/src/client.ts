@@ -53,6 +53,17 @@ import { normalizeUsage } from './costCalculator.js';
 
 export interface GenerateOptions {
   promptType: string;
+  /**
+   * Optional per-call correlation overrides. Forwarded to the usage sink
+   * so the emitted event carries researchId / sessionId / taskId /
+   * requestId for the originating request.
+   */
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
 }
 
 export type ClaudeClient = Omit<LLMClient, 'generate'> & {
@@ -92,7 +103,8 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
     success: boolean,
     durationMs: number,
     errorMessage?: string,
-    promptType?: string
+    promptType?: string,
+    correlation?: GenerateOptions['correlation']
   ): void {
     void usageLogger.log({
       userId,
@@ -105,6 +117,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       ...(errorMessage !== undefined && { errorMessage }),
       ...(ownerType !== undefined && { ownerType }),
       ...(promptType !== undefined && { promptType }),
+      ...(correlation !== undefined && { correlation }),
     });
   }
 
@@ -216,7 +229,15 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
         })
       );
 
-      trackUsage('generate', result.usage, true, durationMs, undefined, options.promptType);
+      trackUsage(
+        'generate',
+        result.usage,
+        true,
+        durationMs,
+        undefined,
+        options.promptType,
+        options.correlation
+      );
 
       return ok({ content: result.content, usage: result.usage });
     } catch (error) {
@@ -228,7 +249,15 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
         totalTokens: 0,
         costUsd: 0,
       };
-      trackUsage('generate', emptyUsage, false, durationMs, errorMsg, options.promptType);
+      trackUsage(
+        'generate',
+        emptyUsage,
+        false,
+        durationMs,
+        errorMsg,
+        options.promptType,
+        options.correlation
+      );
       return err(mapClaudeError(error));
     }
   }

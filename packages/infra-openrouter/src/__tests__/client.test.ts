@@ -1194,6 +1194,76 @@ describe('createOpenRouterClient', () => {
       const callArg = mockUsageLoggerLog.mock.calls[0]?.[0] as Record<string, unknown>;
       expect(callArg['promptType']).toBe('test-prompt');
     });
+
+    it('forwards per-call correlation to usage logger when provided', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'ok', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await client.generate('hello', {
+        promptType: 'test-prompt',
+        correlation: { researchId: 'r-1', taskId: 't-2' },
+      });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          correlation: { researchId: 'r-1', taskId: 't-2' },
+        })
+      );
+    });
+
+    it('omits correlation from usage logger when not provided', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'ok', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await client.generate('hello', { promptType: 'test-prompt' });
+
+      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      expect(lastCall).not.toHaveProperty('correlation');
+    });
   });
 
   describe('OTel span emission for generate()', () => {

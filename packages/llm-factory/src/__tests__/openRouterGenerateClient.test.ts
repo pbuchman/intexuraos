@@ -57,6 +57,23 @@ describe('createOpenRouterGenerateClient', () => {
     }
   });
 
+  it('forwards per-call correlation to the underlying OpenRouter client', async () => {
+    mockOrGenerate.mockResolvedValue(
+      ok({ content: '', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 } })
+    );
+
+    const client = createOpenRouterGenerateClient(baseConfig);
+    await client.generate('hi', {
+      promptType: 'test-prompt',
+      correlation: { researchId: 'r-1' },
+    });
+
+    expect(mockOrGenerate).toHaveBeenCalledWith('hi', {
+      promptType: 'test-prompt',
+      correlation: { researchId: 'r-1' },
+    });
+  });
+
   it('strips the or: prefix before passing model to createOpenRouterClient', async () => {
     const { createOpenRouterClient } = await import('@intexuraos/infra-openrouter');
     mockOrGenerate.mockResolvedValue(

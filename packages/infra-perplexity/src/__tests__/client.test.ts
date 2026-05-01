@@ -531,6 +531,52 @@ describe('createPerplexityClient', () => {
       );
     });
 
+    it('forwards per-call correlation to usage logger when provided', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'Generated text.' } }],
+          usage: { prompt_tokens: 50, completion_tokens: 100 },
+        });
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('Write something', {
+        promptType: 'test-prompt',
+        correlation: { researchId: 'r-1' },
+      });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({ correlation: { researchId: 'r-1' } })
+      );
+    });
+
+    it('omits correlation from usage logger when not provided', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'Generated text.' } }],
+          usage: { prompt_tokens: 50, completion_tokens: 100 },
+        });
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('Write something', { promptType: 'test-prompt' });
+
+      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      expect(lastCall).not.toHaveProperty('correlation');
+    });
+
     it('handles empty response content', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions')

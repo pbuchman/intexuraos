@@ -32,7 +32,12 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
     userId: string,
     logger: Logger,
     usageSink: UsageSink,
-    researchId?: string
+    // Accepted for positional-arg compatibility with LlmAdapterFactory.
+    // The infra client no longer threads researchId at construction
+    // (INT-1533 Task 5). Will be threaded per-call via
+    // GenerateOptions.correlation once research-agent migrates to the
+    // unified factory (Task 10).
+    _researchId?: string
   ) {
     // Strip 'or:' prefix before passing to OpenRouter API client
     const rawModel = isOpenRouterModel(model) ? getOpenRouterRawId(model) : model;
@@ -40,7 +45,6 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
       apiKey,
       model: rawModel,
       userId,
-      ...(researchId !== undefined && { researchId }),
       logger,
       usageSink,
     });

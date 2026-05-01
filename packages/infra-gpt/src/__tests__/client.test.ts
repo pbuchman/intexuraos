@@ -918,6 +918,48 @@ describe('createGptClient', () => {
     );
   });
 
+  it('forwards per-call correlation to usage logger when provided', async () => {
+    mockChatCompletionsCreate.mockResolvedValue({
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 5, completion_tokens: 5 },
+    });
+
+    const client = createGptClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+    await client.generate('hello', {
+      promptType: 'test-prompt',
+      correlation: { researchId: 'r-1' },
+    });
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ correlation: { researchId: 'r-1' } })
+    );
+  });
+
+  it('omits correlation from usage logger when not provided', async () => {
+    mockChatCompletionsCreate.mockResolvedValue({
+      choices: [{ message: { content: 'ok' } }],
+      usage: { prompt_tokens: 5, completion_tokens: 5 },
+    });
+
+    const client = createGptClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+    await client.generate('hello', { promptType: 'test-prompt' });
+
+    const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(lastCall).not.toHaveProperty('correlation');
+  });
+
   describe('OTel span emission for generate()', () => {
     it('emits llm.openai.generate span with all canonical attributes on success', async () => {
       mockChatCompletionsCreate.mockResolvedValue({
