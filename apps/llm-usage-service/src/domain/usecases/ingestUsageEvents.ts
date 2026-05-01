@@ -1,5 +1,5 @@
 import type { Logger } from '@intexuraos/common-core';
-import { isErr } from '@intexuraos/common-core';
+import { getErrorMessage, isErr } from '@intexuraos/common-core';
 import type { UsageEventInput, UsageEvent, UsageIngestResponse, RejectedEvent } from '../models/usageEvent.js';
 import type { UsageEventRepository } from '../repositories/usageEventRepository.js';
 import type { UsageAggregateRepository } from '../repositories/usageAggregateRepository.js';
@@ -23,6 +23,7 @@ export async function ingestUsageEvents(
   let accepted = 0;
   let duplicates = 0;
   const rejected: RejectedEvent[] = [];
+  const pricingMissingEvents: { provider: string; model: string }[] = [];
 
   const receivedAt = new Date().toISOString();
 
@@ -32,7 +33,33 @@ export async function ingestUsageEvents(
       continue;
     }
 
-    const fullEvent = enrichEvent(input, receivedAt, ingress, await resolveCost(input, pricingCache, logger));
+    let resolvedCost: ResolvedCost;
+    try {
+      resolvedCost = await resolveCost(input, pricingCache, logger);
+    } catch (e) {
+      const message = getErrorMessage(e);
+      logger.error(
+        {
+          eventId: input.eventId,
+          provider: input.request.provider,
+          model: input.request.model,
+          err: message,
+        },
+        'resolveCost threw; rejecting event with PRICING_MISSING',
+      );
+      rejected.push({
+        index: i,
+        code: 'PRICING_MISSING',
+        message,
+      });
+      pricingMissingEvents.push({
+        provider: input.request.provider,
+        model: input.request.model,
+      });
+      continue;
+    }
+
+    const fullEvent = enrichEvent(input, receivedAt, ingress, resolvedCost);
 
     const createResult = await usageEventRepository.createEvent(fullEvent);
     if (!createResult.ok) {
@@ -69,6 +96,18 @@ export async function ingestUsageEvents(
     { accepted, duplicates, rejected: rejected.length, total: events.length },
     'Usage event ingestion complete',
   );
+
+  // In non-production, fail-fast at end-of-loop so good events in the batch are
+  // still processed before the throw. This preserves the dev signal while not
+  // dropping work mid-batch.
+  if (process.env['NODE_ENV'] !== 'production' && pricingMissingEvents.length > 0) {
+    const summary = pricingMissingEvents
+      .map((e) => `${e.provider}/${e.model}`)
+      .join(', ');
+    throw new Error(
+      `Pricing missing for unknown model(s): ${summary}. Add an entry to llm-pricing or mark as unsupported.`,
+    );
+  }
 
   return { accepted, duplicates, rejected };
 }

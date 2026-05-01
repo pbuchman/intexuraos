@@ -206,6 +206,88 @@ describe('ingestUsageEvents', () => {
       }
     });
 
+    it('in dev, a batch of [bad, good] still throws but processes the good one before throwing', async () => {
+      pricingCache.setPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', anthropicPricing);
+
+      const originalNodeEnv = process.env['NODE_ENV'];
+      process.env['NODE_ENV'] = 'development';
+      try {
+        const badEvent = createTestEventInput({
+          eventId: 'evt_bad_dev',
+          request: {
+            provider: LlmProviders.Anthropic,
+            model: 'claude-unknown-v99',
+            operation: 'generate',
+            success: true,
+            durationMs: 1500,
+          },
+          cost: { providerReportedUsd: null, pricingSource: 'pending' },
+        });
+        const goodEvent = createTestEventInput({
+          eventId: 'evt_good_dev',
+          cost: { providerReportedUsd: null, pricingSource: 'pending' },
+        });
+
+        await expect(
+          ingestUsageEvents(makeDeps(), [badEvent, goodEvent], 'internal'),
+        ).rejects.toThrow(/Pricing missing for unknown model/i);
+
+        // The throw happens at end-of-loop so the good event is still stored.
+        const stored = eventRepo.getStoredEvents();
+        expect(stored).toHaveLength(1);
+        expect(stored[0]?.eventId).toBe('evt_good_dev');
+      } finally {
+        if (originalNodeEnv === undefined) {
+          delete process.env['NODE_ENV'];
+        } else {
+          process.env['NODE_ENV'] = originalNodeEnv;
+        }
+      }
+    });
+
+    it('in prod, a batch of [bad, good] returns rejected for bad and stored for good', async () => {
+      pricingCache.setPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', anthropicPricing);
+
+      const originalNodeEnv = process.env['NODE_ENV'];
+      process.env['NODE_ENV'] = 'production';
+      try {
+        const badEvent = createTestEventInput({
+          eventId: 'evt_bad_prod',
+          request: {
+            provider: LlmProviders.Anthropic,
+            model: 'claude-unknown-v99',
+            operation: 'generate',
+            success: true,
+            durationMs: 1500,
+          },
+          cost: { providerReportedUsd: null, pricingSource: 'pending' },
+        });
+        const goodEvent = createTestEventInput({
+          eventId: 'evt_good_prod',
+          cost: { providerReportedUsd: null, pricingSource: 'pending' },
+        });
+
+        const result = await ingestUsageEvents(makeDeps(), [badEvent, goodEvent], 'internal');
+
+        // In prod, unknown model is stored with pricingSource:missing, not rejected.
+        expect(result.accepted).toBe(2);
+        expect(result.rejected).toHaveLength(0);
+
+        const stored = eventRepo.getStoredEvents();
+        expect(stored).toHaveLength(2);
+        const bad = stored.find((e) => e.eventId === 'evt_bad_prod');
+        const good = stored.find((e) => e.eventId === 'evt_good_prod');
+        expect(bad?.cost.pricingSource).toBe('missing');
+        expect(good?.cost.pricingSource).toBe('calculated');
+      } finally {
+        if (originalNodeEnv === undefined) {
+          delete process.env['NODE_ENV'];
+        } else {
+          process.env['NODE_ENV'] = originalNodeEnv;
+        }
+      }
+    });
+
     it('uses provider_reported cost when pricingSource is provider_reported and providerReportedUsd is non-null', async () => {
       const events = [createTestEventInput({
         eventId: 'evt_v2_reported',
