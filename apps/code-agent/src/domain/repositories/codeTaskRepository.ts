@@ -90,6 +90,9 @@ export interface CreateTaskInput {
 
   // Deferred dispatch metadata (INT-1468)
   dispatchSchedule?: DispatchScheduleCreateInput | undefined;
+
+  /** Custom per-task timeout in hours (1–12). INT-1585. */
+  timeoutHours?: number;
 }
 
 export interface UpdateTaskInput {
