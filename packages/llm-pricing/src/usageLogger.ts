@@ -73,6 +73,20 @@ export interface UsageLogParams {
    * per-call latency without relying on OTel ingest.
    */
   durationMs: number;
+  /**
+   * Optional per-call correlation overrides. Sinks forward these into
+   * the emitted usage event's `correlation` block (alongside any
+   * sink-level overrides such as `taskId` resolved from
+   * `getCorrelationTaskId`). Primary use case: callers that have
+   * per-call context (e.g. orchestrator forwarding `researchId` from the
+   * triggering research record) can opt in without changing the sink wiring.
+   */
+  correlation?: {
+    taskId?: string | null;
+    sessionId?: string | null;
+    requestId?: string | null;
+    researchId?: string | null;
+  };
 }
 
 /**

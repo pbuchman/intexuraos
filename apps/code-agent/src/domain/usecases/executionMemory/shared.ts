@@ -1,3 +1,4 @@
+// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Timestamp } from '@google-cloud/firestore';

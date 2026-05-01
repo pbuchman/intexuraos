@@ -12,6 +12,7 @@ import { registerRoutes } from './routes.js';
 import fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import type { Logger } from '@intexuraos/common-core';
+import { flushAllUsageSinks } from '@intexuraos/llm-pricing';
 
 const TOKEN_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const WEBHOOK_RETRY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -414,6 +415,19 @@ function setupShutdownHandlers(handlers: ShutdownHandlers): void {
     }
 
     handlers.logger.info({ message: 'Orchestrator shutdown complete' });
+
+    // Drain registered LLM usage sinks (HttpWebhookUsageSink) so any events
+    // buffered inside the 500ms batching window during the final
+    // validation-model calls make it to code-agent before exit. The helper
+    // is non-fatal — per-sink failures are logged via `handlers.logger`.
+    try {
+      await flushAllUsageSinks({ logger: handlers.logger });
+    } catch (drainError) {
+      handlers.logger.warn(
+        { err: drainError },
+        'flushAllUsageSinks raised during shutdown; continuing exit'
+      );
+    }
 
     // INT-1565 §S5: drain Pino + Sentry buffers before exit so the final
     // shutdown log lines + any inflight error reports make it to the unified

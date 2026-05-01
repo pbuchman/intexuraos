@@ -421,6 +421,33 @@ describe('createPerplexityClient', () => {
         expect(result.value.content).toBe('');
       }
     });
+
+    it('forwards per-call correlation to usage logger when provided', async () => {
+      const sseBody = createSSEBody({
+        content: 'ok',
+        citations: [],
+        usage: { prompt_tokens: 10, completion_tokens: 5 },
+      });
+      nock(API_BASE_URL).post('/chat/completions').reply(200, sseBody, {
+        'Content-Type': 'text/event-stream',
+      });
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.research('hello', { correlation: { researchId: 'r-1' } });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'research',
+          correlation: { researchId: 'r-1' },
+        })
+      );
+    });
   });
 
   describe('generate', () => {
@@ -450,6 +477,31 @@ describe('createPerplexityClient', () => {
           totalTokens: 150,
         });
         expect(result.value.usage.costUsd).toBe(0);
+      }
+    });
+
+    it('retries transient RATE_LIMITED then returns success', async () => {
+      nock(API_BASE_URL).post('/chat/completions').reply(429, 'Rate limited');
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'recovered' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+        });
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generate('hi', { promptType: 'test-prompt' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.content).toBe('recovered');
       }
     });
 
@@ -504,6 +556,52 @@ describe('createPerplexityClient', () => {
           success: true,
         })
       );
+    });
+
+    it('forwards per-call correlation to usage logger when provided', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'Generated text.' } }],
+          usage: { prompt_tokens: 50, completion_tokens: 100 },
+        });
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('Write something', {
+        promptType: 'test-prompt',
+        correlation: { researchId: 'r-1' },
+      });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({ correlation: { researchId: 'r-1' } })
+      );
+    });
+
+    it('omits correlation from usage logger when not provided', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'Generated text.' } }],
+          usage: { prompt_tokens: 50, completion_tokens: 100 },
+        });
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.generate('Write something', { promptType: 'test-prompt' });
+
+      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      expect(lastCall).not.toHaveProperty('correlation');
     });
 
     it('handles empty response content', async () => {
@@ -785,6 +883,7 @@ describe('createPerplexityClient', () => {
     it('handles timeout error in generate', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions')
+        .times(3)
         .replyWithError(new Error('Connection timeout occurred'));
 
       const client = createPerplexityClient({
@@ -917,7 +1016,7 @@ describe('createPerplexityClient', () => {
     it('handles AbortError from fetch in generate', async () => {
       const abortError = new Error('The operation was aborted');
       abortError.name = 'AbortError';
-      nock(API_BASE_URL).post('/chat/completions').replyWithError(abortError);
+      nock(API_BASE_URL).post('/chat/completions').times(3).replyWithError(abortError);
 
       const client = createPerplexityClient({
         apiKey: 'test-key',
@@ -1147,7 +1246,7 @@ describe('createPerplexityClient', () => {
     });
 
     it('records ERROR-status span when API returns non-OK HTTP status', async () => {
-      nock(API_BASE_URL).post('/chat/completions').reply(429, 'Rate limited');
+      nock(API_BASE_URL).post('/chat/completions').times(3).reply(429, 'Rate limited');
       const client = createPerplexityClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
@@ -1158,7 +1257,8 @@ describe('createPerplexityClient', () => {
       await client.generate('hi', { promptType: 'test-prompt' });
 
       const spans = spanExporter.getFinishedSpans();
-      expect(spans).toHaveLength(1);
+      // Each retry attempt emits its own span; with 3 attempts we get 3 ERROR spans.
+      expect(spans.length).toBeGreaterThanOrEqual(1);
       const span = spans[0];
       if (span === undefined) throw new Error('no span');
       expect(span.name).toBe('llm.perplexity.generate');

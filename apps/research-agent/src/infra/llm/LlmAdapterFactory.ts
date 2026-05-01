@@ -32,22 +32,21 @@ export function createResearchProvider(
   apiKey: string,
   userId: string,
   logger: Logger,
-  usageSink: UsageSink,
-  researchId: string | undefined // @allow-undefined-type -- positional arg kept for call-site compat
+  usageSink: UsageSink
 ): LlmResearchProvider {
   const provider = getProviderForModel(model);
 
   switch (provider) {
     case 'google':
-      return new GeminiAdapter(apiKey, model, userId, logger, usageSink, researchId);
+      return new GeminiAdapter(apiKey, model, userId, logger, usageSink);
     case 'anthropic':
-      return new ClaudeAdapter(apiKey, model, userId, logger, usageSink, researchId);
+      return new ClaudeAdapter(apiKey, model, userId, logger, usageSink);
     case 'openai':
-      return new GptAdapter(apiKey, model, userId, logger, usageSink, researchId);
+      return new GptAdapter(apiKey, model, userId, logger, usageSink);
     case 'perplexity':
-      return new PerplexityAdapter(apiKey, model, userId, logger, usageSink, researchId);
+      return new PerplexityAdapter(apiKey, model, userId, logger, usageSink);
     case 'openrouter':
-      return new OpenRouterAdapter(apiKey, model, userId, logger, usageSink, researchId);
+      return new OpenRouterAdapter(apiKey, model, userId, logger, usageSink);
   }
 }
 
@@ -57,7 +56,7 @@ export function createSynthesizer(
   userId: string,
   logger: Logger,
   usageSink: UsageSink,
-  researchId: string | undefined // @allow-undefined-type -- positional arg kept for call-site compat
+  researchId?: string
 ): LlmSynthesisProvider {
   const provider = getProviderForModel(model);
 
@@ -80,10 +79,9 @@ export function createTitleGenerator(
   apiKey: string,
   userId: string,
   logger: Logger,
-  usageSink: UsageSink,
-  researchId: string | undefined // @allow-undefined-type -- positional arg kept for call-site compat
+  usageSink: UsageSink
 ): TitleGenerator {
-  return new GeminiAdapter(apiKey, model, userId, logger, usageSink, researchId);
+  return new GeminiAdapter(apiKey, model, userId, logger, usageSink);
 }
 
 export function createContextInferrer(
@@ -92,7 +90,7 @@ export function createContextInferrer(
   userId: string,
   logger: Logger,
   usageSink: UsageSink,
-  researchId: string | undefined // @allow-undefined-type -- positional arg kept for call-site compat
+  researchId?: string
 ): ContextInferenceProvider {
   return new ContextInferenceAdapter(apiKey, model, userId, logger, usageSink, researchId);
 }

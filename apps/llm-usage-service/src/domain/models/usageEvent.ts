@@ -61,7 +61,7 @@ export interface UsageEvent {
     billedUsd: number;
     providerReportedUsd: number | null;
     calculatedUsd: number | null;
-    pricingSource: 'provider_reported' | 'calculated' | 'mixed' | 'external';
+    pricingSource: 'provider_reported' | 'calculated' | 'missing' | 'mixed' | 'external';
   };
 
   correlation: {

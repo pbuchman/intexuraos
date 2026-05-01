@@ -47,15 +47,41 @@ import {
   type GenerateResult,
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
-import { withLlmSpan } from '@intexuraos/llm-utils';
+import { withLlmSpan, withRetry } from '@intexuraos/llm-utils';
 import type { ClaudeConfig, ClaudeError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
 export interface GenerateOptions {
   promptType: string;
+  /**
+   * Optional per-call correlation overrides. Forwarded to the usage sink
+   * so the emitted event carries researchId / sessionId / taskId /
+   * requestId for the originating request.
+   */
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
 }
 
-export type ClaudeClient = Omit<LLMClient, 'generate'> & {
+/**
+ * Per-call options for {@link ClaudeClient.research}. Currently only carries
+ * correlation overrides so the emitted usage event can be attributed to the
+ * originating researchId / sessionId / taskId / requestId.
+ */
+export interface ResearchOptions {
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
+}
+
+export type ClaudeClient = Omit<LLMClient, 'generate' | 'research'> & {
+  research(prompt: string, options?: ResearchOptions): Promise<Result<ResearchResult, ClaudeError>>;
   generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, ClaudeError>>;
 };
 
@@ -92,7 +118,8 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
     success: boolean,
     durationMs: number,
     errorMessage?: string,
-    promptType?: string
+    promptType?: string,
+    correlation?: GenerateOptions['correlation']
   ): void {
     void usageLogger.log({
       userId,
@@ -105,6 +132,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       ...(errorMessage !== undefined && { errorMessage }),
       ...(ownerType !== undefined && { ownerType }),
       ...(promptType !== undefined && { promptType }),
+      ...(correlation !== undefined && { correlation }),
     });
   }
 
@@ -125,7 +153,10 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   }
 
   return {
-    async research(prompt: string): Promise<Result<ResearchResult, ClaudeError>> {
+    async research(
+      prompt: string,
+      options?: ResearchOptions
+    ): Promise<Result<ResearchResult, ClaudeError>> {
       const start = Date.now();
       try {
         const response = await client.messages.create({
@@ -150,7 +181,15 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           webSearchCalls
         );
 
-        trackUsage('research', usage, true, Date.now() - start);
+        trackUsage(
+          'research',
+          usage,
+          true,
+          Date.now() - start,
+          undefined,
+          undefined,
+          options?.correlation
+        );
 
         return ok({ content, sources, usage });
       } catch (error) {
@@ -162,7 +201,15 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('research', emptyUsage, false, durationMs, errorMsg);
+        trackUsage(
+          'research',
+          emptyUsage,
+          false,
+          durationMs,
+          errorMsg,
+          undefined,
+          options?.correlation
+        );
         return err(mapClaudeError(error));
       }
     },
@@ -171,57 +218,83 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       prompt: string,
       options: GenerateOptions
     ): Promise<Result<GenerateResult, ClaudeError>> {
-      const start = Date.now();
-      try {
-        const { result, durationMs } = await withLlmSpan(
-          LlmProviders.Anthropic,
-          async () => {
-            const response = await client.messages.create({
-              model,
-              max_tokens: MAX_TOKENS,
-              messages: [{ role: 'user', content: prompt }],
-            });
-
-            const textBlocks = response.content.filter(
-              (block): block is Anthropic.TextBlock => block.type === 'text'
-            );
-            const text = textBlocks.map((b) => b.text).join('\n\n');
-            const usageDetails = extractUsageDetails(response.usage);
-            const usage = normalizeUsage(
-              usageDetails.inputTokens,
-              usageDetails.outputTokens,
-              usageDetails.cacheReadTokens,
-              usageDetails.cacheCreationTokens,
-              0
-            );
-            return { content: text, usage, cacheReadTokens: usageDetails.cacheReadTokens };
-          },
-          ({ usage, cacheReadTokens }) => ({
-            model,
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            ...(cacheReadTokens > 0 && { cachedInputTokens: cacheReadTokens }),
-            costUsd: usage.costUsd,
-          })
-        );
-
-        trackUsage('generate', result.usage, true, durationMs, undefined, options.promptType);
-
-        return ok({ content: result.content, usage: result.usage });
-      } catch (error) {
-        const durationMs = Date.now() - start;
-        const errorMsg = getErrorMessage(error);
-        const emptyUsage: NormalizedUsage = {
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-          costUsd: 0,
-        };
-        trackUsage('generate', emptyUsage, false, durationMs, errorMsg, options.promptType);
-        return err(mapClaudeError(error));
-      }
+      return await withRetry(() => generateOnce(prompt, options), {
+        maxAttempts: 3,
+        baseDelayMs: 500,
+      });
     },
   };
+
+  async function generateOnce(
+    prompt: string,
+    options: GenerateOptions
+  ): Promise<Result<GenerateResult, ClaudeError>> {
+    const start = Date.now();
+    try {
+      const { result, durationMs } = await withLlmSpan(
+        LlmProviders.Anthropic,
+        async () => {
+          const response = await client.messages.create({
+            model,
+            max_tokens: MAX_TOKENS,
+            messages: [{ role: 'user', content: prompt }],
+          });
+
+          const textBlocks = response.content.filter(
+            (block): block is Anthropic.TextBlock => block.type === 'text'
+          );
+          const text = textBlocks.map((b) => b.text).join('\n\n');
+          const usageDetails = extractUsageDetails(response.usage);
+          const usage = normalizeUsage(
+            usageDetails.inputTokens,
+            usageDetails.outputTokens,
+            usageDetails.cacheReadTokens,
+            usageDetails.cacheCreationTokens,
+            0
+          );
+          return { content: text, usage, cacheReadTokens: usageDetails.cacheReadTokens };
+        },
+        ({ usage, cacheReadTokens }) => ({
+          model,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          ...(cacheReadTokens > 0 && { cachedInputTokens: cacheReadTokens }),
+          costUsd: usage.costUsd,
+        })
+      );
+
+      trackUsage(
+        'generate',
+        result.usage,
+        true,
+        durationMs,
+        undefined,
+        options.promptType,
+        options.correlation
+      );
+
+      return ok({ content: result.content, usage: result.usage });
+    } catch (error) {
+      const durationMs = Date.now() - start;
+      const errorMsg = getErrorMessage(error);
+      const emptyUsage: NormalizedUsage = {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+      };
+      trackUsage(
+        'generate',
+        emptyUsage,
+        false,
+        durationMs,
+        errorMsg,
+        options.promptType,
+        options.correlation
+      );
+      return err(mapClaudeError(error));
+    }
+  }
 }
 
 function mapClaudeError(error: unknown): ClaudeError {

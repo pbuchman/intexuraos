@@ -2,9 +2,11 @@
 /**
  * Prompt Version Verification Script.
  *
- * Two checks:
+ * Three checks:
  * A) All PromptBuilder objects have a valid semver `version` field.
  * B) When prompt file content changes vs base branch, version must be bumped.
+ * C) Plain `export function buildXxxPrompt(` functions must either be migrated
+ *    to the `PromptBuilder` pattern or carry a `// prompt-version-exempt: <reason>` marker.
  *
  * Usage:
  *   node scripts/verify-prompt-versions.mjs
@@ -20,8 +22,10 @@ const SEMVER_REGEX = /^\d+\.\d+\.\d+$/;
 const VERSION_LINE_REGEX = /^\s*version:\s*['"](\d+\.\d+\.\d+)['"]/;
 // Matches concrete PromptBuilder variable declarations, not interface definitions or JSDoc
 const PROMPT_BUILDER_REGEX = /(?:export\s+)?(?:const|let)\s+\w+\s*:\s*PromptBuilder</;
-
-const errors = [];
+// Matches plain prompt builder function exports (anchored at start of a line)
+const PLAIN_BUILDER_REGEX = /^\s*export\s+function\s+(build\w+Prompt)\s*\(/m;
+// Matches any `// prompt-version-exempt:<reason>` marker anywhere in file
+const EXEMPTION_REGEX = /\/\/\s*prompt-version-exempt:/;
 
 /**
  * Recursively find TypeScript source files (not tests, not dist).
@@ -106,45 +110,63 @@ function countPromptBuilderExports(content) {
 }
 
 /**
- * Check A: All PromptBuilder objects have valid semver version fields.
+ * Find the name of the first plain builder function in content (or null).
  */
-function checkVersionFieldsExist(promptFiles) {
-  console.log('Check A: Version fields exist and are valid semver\n');
+function findPlainBuilderName(content) {
+  const match = PLAIN_BUILDER_REGEX.exec(content);
+  return match?.[1] ?? null;
+}
 
-  let checked = 0;
+/**
+ * Per-file analysis.
+ *
+ * Branches:
+ * - File contains a PromptBuilder typed export → run version-field checks.
+ * - File contains a plain `export function buildXxxPrompt(` and NO exemption
+ *   marker → emit `unversioned-plain-builder`.
+ * - Otherwise → no errors.
+ *
+ * Returns: { errors: Array<{ kind, path, message, line? }> }
+ */
+export function analyzeFile(path, content) {
+  const errors = [];
 
-  for (const filePath of promptFiles) {
-    const content = readFileSync(filePath, 'utf8');
-    const relPath = relative(repoRoot, filePath);
+  if (hasPromptBuilderExport(content)) {
     const expectedCount = countPromptBuilderExports(content);
     const versions = extractVersions(content);
 
-    checked++;
-
     if (versions.length < expectedCount) {
       errors.push({
-        file: relPath,
+        kind: 'missing-version',
+        path,
         message: `Expected ${String(expectedCount)} version field(s) but found ${String(versions.length)}`,
-        check: 'A',
       });
-      continue;
     }
 
     for (const { version, line } of versions) {
       if (!SEMVER_REGEX.test(version)) {
         errors.push({
-          file: relPath,
+          kind: 'invalid-version',
+          path,
           line,
           message: `Invalid version "${version}" — must be MAJOR.MINOR.PATCH`,
-          check: 'A',
         });
       }
     }
 
-    console.log(`  ✓ ${relPath} (${versions.map((v) => v.version).join(', ')})`);
+    return { errors };
   }
 
-  console.log(`\n  Checked ${String(checked)} prompt file(s)\n`);
+  const plainBuilderName = findPlainBuilderName(content);
+  if (plainBuilderName !== null && !EXEMPTION_REGEX.test(content)) {
+    errors.push({
+      kind: 'unversioned-plain-builder',
+      path,
+      message: `Plain builder function "${plainBuilderName}" must be migrated to the PromptBuilder<> pattern (with a versioned object), or marked with a "// prompt-version-exempt: <reason>" comment if it is genuinely out of scope (e.g. fixture or trivial template). See docs/patterns/prompt-versioning.md`,
+    });
+  }
+
+  return { errors };
 }
 
 /**
@@ -226,7 +248,7 @@ function stripVersionLines(content) {
 /**
  * Check B: Version bumped when prompt content changes.
  */
-function checkVersionBumped(promptFiles) {
+function checkVersionBumped(promptFiles, errors) {
   const baseBranch = getBaseBranch();
 
   if (baseBranch === null) {
@@ -273,12 +295,12 @@ function checkVersionBumped(promptFiles) {
 
     if (currentVersionStr === baseVersionStr) {
       errors.push({
-        file: relPath,
+        kind: 'version-not-bumped',
+        path: relPath,
         message: `Content changed but version was not bumped (still ${currentVersionStr}).
     Prompt versioning follows semver:
       MAJOR for behavior changes, MINOR for refinements, PATCH for typos.
     See docs/patterns/prompt-versioning.md`,
-        check: 'B',
       });
     } else {
       console.log(`  ✓ ${relPath} (${baseVersionStr} → ${currentVersionStr})`);
@@ -293,12 +315,13 @@ function checkVersionBumped(promptFiles) {
 }
 
 /**
- * Find all files containing PromptBuilder exports.
- * Guards: each search directory must contain at least one prompt.
- * If a directory exists but yields zero prompts, the script fails —
- * this catches silent breakage in the verification itself.
+ * Walk all source files in the standard search dirs and run analyzeFile()
+ * on each. Returns { errors, promptFiles, allFiles }.
+ *
+ * - promptFiles: files with a PromptBuilder typed export (used by Check B)
+ * - errors: union of per-file analysis errors
  */
-function findPromptFiles() {
+function analyzeAllFiles() {
   const searchDirs = [
     join(repoRoot, 'packages/llm-prompts/src'),
     join(repoRoot, 'apps'),
@@ -306,30 +329,55 @@ function findPromptFiles() {
   ];
 
   const promptFiles = [];
+  const errors = [];
+  let totalAnalyzed = 0;
 
   for (const dir of searchDirs) {
     const tsFiles = findTsFiles(dir);
     const dirLabel = relative(repoRoot, dir);
-    let dirCount = 0;
+    let dirPromptCount = 0;
 
     for (const filePath of tsFiles) {
       const content = readFileSync(filePath, 'utf8');
+      const relPath = relative(repoRoot, filePath);
+      const { errors: fileErrors } = analyzeFile(relPath, content);
+      errors.push(...fileErrors);
+      totalAnalyzed++;
+
       if (hasPromptBuilderExport(content)) {
         promptFiles.push(filePath);
-        dirCount++;
+        dirPromptCount++;
       }
     }
 
-    if (existsSync(dir) && dirCount === 0) {
+    if (existsSync(dir) && dirPromptCount === 0) {
       errors.push({
-        file: dirLabel,
+        kind: 'missing-version',
+        path: dirLabel,
         message: `Directory "${dirLabel}" exists but contains no PromptBuilder exports. This likely indicates a broken verification — check regex patterns and directory structure.`,
-        check: 'A',
       });
     }
   }
 
-  return promptFiles;
+  return { errors, promptFiles, totalAnalyzed };
+}
+
+/**
+ * Map error kind → which check it belongs to (for grouped reporting).
+ */
+function checkLabel(kind) {
+  switch (kind) {
+    case 'missing-version':
+    case 'invalid-version':
+      return 'A';
+    case 'version-not-bumped':
+      return 'B';
+    case 'unversioned-plain-builder':
+      return 'C';
+    /* v8 ignore next 2 -- unreachable: all known kinds covered above @preserve */
+    default:
+      return '?';
+  }
 }
 
 /**
@@ -338,38 +386,61 @@ function findPromptFiles() {
 function main() {
   console.log('Verifying prompt versions...\n');
 
-  const promptFiles = findPromptFiles();
+  const { errors, promptFiles, totalAnalyzed } = analyzeAllFiles();
 
   if (promptFiles.length === 0) {
     console.log('No PromptBuilder files found');
     process.exit(1);
   }
 
-  console.log(`Found ${String(promptFiles.length)} prompt file(s)\n`);
+  console.log(`Analyzed ${String(totalAnalyzed)} source file(s)`);
+  console.log(`Found ${String(promptFiles.length)} PromptBuilder file(s)\n`);
 
-  checkVersionFieldsExist(promptFiles);
-  checkVersionBumped(promptFiles);
+  console.log('Check A: Version fields exist and are valid semver');
+  console.log('Check C: Plain builder functions migrated or exempted\n');
+
+  for (const filePath of promptFiles) {
+    const content = readFileSync(filePath, 'utf8');
+    const versions = extractVersions(content);
+    console.log(
+      `  ✓ ${relative(repoRoot, filePath)} (${versions.map((v) => v.version).join(', ')})`
+    );
+  }
+  console.log('');
+
+  checkVersionBumped(promptFiles, errors);
 
   if (errors.length > 0) {
-    const checkAErrors = errors.filter((e) => e.check === 'A');
-    const checkBErrors = errors.filter((e) => e.check === 'B');
+    const grouped = {
+      A: errors.filter((e) => checkLabel(e.kind) === 'A'),
+      B: errors.filter((e) => checkLabel(e.kind) === 'B'),
+      C: errors.filter((e) => checkLabel(e.kind) === 'C'),
+    };
 
     console.log('Violations found:\n');
 
-    if (checkAErrors.length > 0) {
-      console.log(`── Missing/invalid version fields (${String(checkAErrors.length)}) ──\n`);
-      for (const error of checkAErrors) {
+    if (grouped.A.length > 0) {
+      console.log(`── Missing/invalid version fields (${String(grouped.A.length)}) ──\n`);
+      for (const error of grouped.A) {
         console.log(
-          `  FAIL: ${error.file}${error.line !== undefined ? `:${String(error.line)}` : ''}`
+          `  FAIL: ${error.path}${error.line !== undefined ? `:${String(error.line)}` : ''}`
         );
         console.log(`    ${error.message}\n`);
       }
     }
 
-    if (checkBErrors.length > 0) {
-      console.log(`── Version not bumped (${String(checkBErrors.length)}) ──\n`);
-      for (const error of checkBErrors) {
-        console.log(`  FAIL: ${error.file}`);
+    if (grouped.B.length > 0) {
+      console.log(`── Version not bumped (${String(grouped.B.length)}) ──\n`);
+      for (const error of grouped.B) {
+        console.log(`  FAIL: ${error.path}`);
+        console.log(`    ${error.message}\n`);
+      }
+    }
+
+    if (grouped.C.length > 0) {
+      console.log(`── Unversioned plain builder functions (${String(grouped.C.length)}) ──\n`);
+      for (const error of grouped.C) {
+        console.log(`  FAIL: ${error.path}`);
         console.log(`    ${error.message}\n`);
       }
     }
@@ -383,4 +454,10 @@ function main() {
   console.log('✓ All prompt versions are valid and up to date');
 }
 
-main();
+// Run main() only when invoked as a script (not when imported by tests).
+const invokedAsScript =
+  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (invokedAsScript) {
+  main();
+}

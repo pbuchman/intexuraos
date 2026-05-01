@@ -1,3 +1,4 @@
+// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 import { COLD_START_EXAMPLE, WITH_CONTEXT_EXAMPLE } from './examples.js';
 
 export const DIGEST_PROMPT_VERSION = '2.0.0';

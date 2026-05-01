@@ -7,6 +7,7 @@ export type {
   LlmSynthesisProvider,
   LlmSynthesisResult,
   LlmUsage,
+  ResearchProviderCallOptions,
   TitleGenerator,
   TitleGenerateResult,
   LabelGenerateResult,

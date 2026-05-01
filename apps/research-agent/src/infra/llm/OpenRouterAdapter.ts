@@ -18,6 +18,7 @@ import type {
   LlmResearchResult,
   LlmSynthesisProvider,
   LlmSynthesisResult,
+  ResearchProviderCallOptions,
   TitleGenerateResult,
 } from '../../domain/research/index.js';
 
@@ -25,6 +26,13 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
   private readonly client: OpenRouterClient;
   private readonly model: string;
   private readonly logger: Logger;
+  /**
+   * Optional research correlation token baked at construction time. See
+   * GeminiAdapter for the rationale: synthesis/title-generation must carry
+   * `correlation.researchId` so usage events are attributable to the
+   * originating research.
+   */
+  private readonly researchId?: string;
 
   constructor(
     apiKey: string,
@@ -40,18 +48,41 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
       apiKey,
       model: rawModel,
       userId,
-      ...(researchId !== undefined && { researchId }),
       logger,
       usageSink,
     });
     this.model = model;
     this.logger = logger;
+    if (researchId !== undefined) {
+      this.researchId = researchId;
+    }
   }
 
-  async research(prompt: string, ctx?: ResearchContext): Promise<Result<LlmResearchResult, LlmError>> {
+  private generateOptions(promptType: string): {
+    promptType: string;
+    correlation?: { researchId: string };
+  } {
+    if (this.researchId !== undefined) {
+      return { promptType, correlation: { researchId: this.researchId } };
+    }
+    return { promptType };
+  }
+
+  async research(
+    prompt: string,
+    ctx?: ResearchContext,
+    options?: ResearchProviderCallOptions
+  ): Promise<Result<LlmResearchResult, LlmError>> {
     const builtPrompt = buildResearchPrompt(prompt, ctx);
     this.logger.info({ model: this.model, promptLength: builtPrompt.length }, 'OpenRouter research started');
-    const result = await this.client.research(builtPrompt);
+    // Per-call researchId wins over the constructor-baked one (see
+    // GeminiAdapter for rationale).
+    const callResearchId = options?.researchId ?? this.researchId;
+    const researchOptions =
+      callResearchId !== undefined
+        ? { correlation: { researchId: callResearchId } }
+        : undefined;
+    const result = await this.client.research(builtPrompt, researchOptions);
     if (!result.ok) {
       const error = mapToLlmError(result.error);
       this.logger.error(
@@ -81,7 +112,7 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
       synthesisContext !== undefined
         ? buildSynthesisPrompt(originalPrompt, reports, synthesisContext, additionalSources)
         : buildSynthesisPrompt(originalPrompt, reports, additionalSources);
-    const result = await this.client.generate(synthesisPrompt, { promptType: 'research-synthesis' });
+    const result = await this.client.generate(synthesisPrompt, this.generateOptions('research-synthesis'));
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -112,7 +143,7 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
       { content: prompt },
       { wordRange: { min: 5, max: 8 } }
     );
-    const result = await this.client.generate(builtPrompt, { promptType: 'research-title-generation' });
+    const result = await this.client.generate(builtPrompt, this.generateOptions('research-title-generation'));
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);

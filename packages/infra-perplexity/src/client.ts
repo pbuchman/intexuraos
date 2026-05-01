@@ -40,12 +40,11 @@ import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import {
   LlmModels,
   LlmProviders,
-  type LLMClient,
   type NormalizedUsage,
   type GenerateResult,
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
-import { withLlmSpan } from '@intexuraos/llm-utils';
+import { withLlmSpan, withRetry } from '@intexuraos/llm-utils';
 import type {
   PerplexityConfig,
   PerplexityError,
@@ -59,14 +58,43 @@ import { normalizeUsage } from './costCalculator.js';
 
 export interface GenerateOptions {
   promptType: string;
+  /**
+   * Optional per-call correlation overrides. Forwarded to the usage sink
+   * so the emitted event carries researchId / sessionId / taskId /
+   * requestId for the originating request.
+   */
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
 }
 
-export type PerplexityClient = Pick<LLMClient, 'research'> & {
+/**
+ * Per-call options for {@link PerplexityClient.research}. Carries correlation
+ * overrides so the emitted usage event can be attributed to the originating
+ * researchId / sessionId / taskId / requestId.
+ */
+export interface ResearchOptions {
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
+}
+
+export interface PerplexityClient {
+  research(
+    prompt: string,
+    options?: ResearchOptions
+  ): Promise<Result<ResearchResult, PerplexityError>>;
   generate(
     prompt: string,
     options: GenerateOptions
   ): Promise<Result<GenerateResult, PerplexityError>>;
-};
+}
 
 const API_BASE_URL = 'https://api.perplexity.ai';
 
@@ -212,7 +240,8 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
     success: boolean,
     durationMs: number,
     errorMessage?: string,
-    promptType?: string
+    promptType?: string,
+    correlation?: GenerateOptions['correlation']
   ): void {
     void usageLogger.log({
       userId,
@@ -225,6 +254,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
       ...(errorMessage !== undefined && { errorMessage }),
       ...(ownerType !== undefined && { ownerType }),
       ...(promptType !== undefined && { promptType }),
+      ...(correlation !== undefined && { correlation }),
     });
   }
 
@@ -236,7 +266,10 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
   }
 
   return {
-    async research(prompt: string): Promise<Result<ResearchResult, PerplexityError>> {
+    async research(
+      prompt: string,
+      options?: ResearchOptions
+    ): Promise<Result<ResearchResult, PerplexityError>> {
       const start = Date.now();
       try {
         const searchContext = SEARCH_CONTEXT_MAP[model] ?? 'medium';
@@ -282,7 +315,15 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
             totalTokens: 0,
             costUsd: 0,
           };
-          trackUsage('research', emptyUsage, false, durationMs, errorMsg);
+          trackUsage(
+            'research',
+            emptyUsage,
+            false,
+            durationMs,
+            errorMsg,
+            undefined,
+            options?.correlation
+          );
           return err(mapPerplexityError(apiError));
         }
 
@@ -294,7 +335,15 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
 
         const usage = extractUsage(rawUsage);
 
-        trackUsage('research', usage, true, Date.now() - start);
+        trackUsage(
+          'research',
+          usage,
+          true,
+          Date.now() - start,
+          undefined,
+          undefined,
+          options?.correlation
+        );
 
         return ok({ content, sources: citations, usage });
       } catch (error) {
@@ -306,7 +355,15 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('research', emptyUsage, false, durationMs, errorMsg);
+        trackUsage(
+          'research',
+          emptyUsage,
+          false,
+          durationMs,
+          errorMsg,
+          undefined,
+          options?.correlation
+        );
         return err(mapPerplexityError(error));
       }
     },
@@ -315,76 +372,102 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
       prompt: string,
       options: GenerateOptions
     ): Promise<Result<GenerateResult, PerplexityError>> {
-      const start = Date.now();
-      try {
-        const { result, durationMs } = await withLlmSpan(
-          LlmProviders.Perplexity,
-          async (): Promise<{
-            content: string;
-            usage: NormalizedUsage;
-          }> => {
-            const requestBody: PerplexityRequestBody = {
-              model,
-              messages: [
-                {
-                  role: 'user',
-                  content: prompt,
-                },
-              ],
-              temperature: 0.2,
-              max_tokens: MAX_TOKENS,
-            };
-
-            const response = await fetchWithTimeout(
-              `${API_BASE_URL}/chat/completions`,
-              {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${apiKey}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody),
-              },
-              timeoutMs
-            );
-
-            // Throw on HTTP error so withLlmSpan records ERROR status. The outer
-            // catch below maps the error and logs usage with measured duration.
-            if (!response.ok) {
-              const errorText = await response.text();
-              throw new PerplexityApiError(response.status, errorText);
-            }
-
-            const data = (await response.json()) as PerplexityResponse;
-            const content = data.choices[0]?.message.content ?? '';
-            const usage = extractUsage(data.usage);
-            return { content, usage };
-          },
-          ({ usage }) => ({
-            model,
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            costUsd: usage.costUsd,
-          })
-        );
-
-        trackUsage('generate', result.usage, true, durationMs, undefined, options.promptType);
-
-        return ok({ content: result.content, usage: result.usage });
-      } catch (error) {
-        const durationMs = Date.now() - start;
-        const errorMsg = getErrorMessage(error);
-        const emptyUsage: NormalizedUsage = {
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-          costUsd: 0,
-        };
-        trackUsage('generate', emptyUsage, false, durationMs, errorMsg, options.promptType);
-        return err(mapPerplexityError(error));
-      }
+      return await withRetry(() => generateOnce(prompt, options), {
+        maxAttempts: 3,
+        baseDelayMs: 500,
+      });
     },
   };
+
+  async function generateOnce(
+    prompt: string,
+    options: GenerateOptions
+  ): Promise<Result<GenerateResult, PerplexityError>> {
+    const start = Date.now();
+    try {
+      const { result, durationMs } = await withLlmSpan(
+        LlmProviders.Perplexity,
+        async (): Promise<{
+          content: string;
+          usage: NormalizedUsage;
+        }> => {
+          const requestBody: PerplexityRequestBody = {
+            model,
+            messages: [
+              {
+                role: 'user',
+                content: prompt,
+              },
+            ],
+            temperature: 0.2,
+            max_tokens: MAX_TOKENS,
+          };
+
+          const response = await fetchWithTimeout(
+            `${API_BASE_URL}/chat/completions`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(requestBody),
+            },
+            timeoutMs
+          );
+
+          // Throw on HTTP error so withLlmSpan records ERROR status. The outer
+          // catch below maps the error and logs usage with measured duration.
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new PerplexityApiError(response.status, errorText);
+          }
+
+          const data = (await response.json()) as PerplexityResponse;
+          const content = data.choices[0]?.message.content ?? '';
+          const usage = extractUsage(data.usage);
+          return { content, usage };
+        },
+        ({ usage }) => ({
+          model,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: usage.costUsd,
+        })
+      );
+
+      trackUsage(
+        'generate',
+        result.usage,
+        true,
+        durationMs,
+        undefined,
+        options.promptType,
+        options.correlation
+      );
+
+      return ok({ content: result.content, usage: result.usage });
+    } catch (error) {
+      const durationMs = Date.now() - start;
+      const errorMsg = getErrorMessage(error);
+      const emptyUsage: NormalizedUsage = {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+      };
+      trackUsage(
+        'generate',
+        emptyUsage,
+        false,
+        durationMs,
+        errorMsg,
+        options.promptType,
+        options.correlation
+      );
+      return err(mapPerplexityError(error));
+    }
+  }
 }
 
 function mapPerplexityError(error: unknown): PerplexityError {

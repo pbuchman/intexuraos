@@ -17,13 +17,11 @@ export async function generateContextLabels(
   contexts: ContextWithLabel[],
   googleApiKey: string | undefined,
   userId: string,
-  researchId: string | undefined,
   createTitleGenerator: (
     model: Gemini25Flash,
     apiKey: string,
     userId: string,
-    logger: Logger,
-    researchId: string | undefined
+    logger: Logger
   ) => TitleGenerator,
   logger: Logger
 ): Promise<ContextWithLabel[]> {
@@ -31,13 +29,7 @@ export async function generateContextLabels(
     return contexts;
   }
 
-  const generator = createTitleGenerator(
-    LlmModels.Gemini25Flash,
-    googleApiKey,
-    userId,
-    logger,
-    researchId
-  );
+  const generator = createTitleGenerator(LlmModels.Gemini25Flash, googleApiKey, userId, logger);
 
   return await Promise.all(
     contexts.map(async (ctx) => {

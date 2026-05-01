@@ -2,6 +2,7 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "include": ["dependencies", "unlisted"],
   "ignoreDependencies": [
+    "@anthropic-ai/sdk",
     "@google-cloud/firestore",
     "@google-cloud/pubsub",
     "@google-cloud/monitoring",

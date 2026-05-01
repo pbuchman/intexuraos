@@ -86,13 +86,18 @@ export async function handleAllCompleted(params: AllCompletedHandlerParams): Pro
     return;
   }
 
+  // Thread `researchId` so the synthesis/title/context adapters bake the
+  // correlation token into every `client.generate()` call. Without this,
+  // synthesis/title/context usage events lose `correlation.researchId` and
+  // llm-usage-service cannot attribute their cost back to this research
+  // (regression caught by Codex review on PR #2030).
   const { synthesizer, contextInferrer } = createSynthesisProviders(
     synthesisModel,
     apiKeys,
     userId,
-    researchId,
     services,
-    logger
+    logger,
+    researchId
   );
 
   const synthesisResult = await runSynthesis(researchId, {

@@ -46,15 +46,13 @@ describe('PerplexityAdapter', () => {
         LlmModels.SonarPro,
         'test-user-id',
         mockLogger,
-        fakeUsageSink,
-        'research-123'
+        fakeUsageSink
       );
 
       expect(mockCreatePerplexityClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: LlmModels.SonarPro,
         userId: 'test-user-id',
-        researchId: 'research-123',
         logger: mockLogger,
         usageSink: fakeUsageSink,
       });
@@ -75,7 +73,21 @@ describe('PerplexityAdapter', () => {
         expect(result.value.content).toBe('Research result');
         expect(result.value.sources).toContain('https://source.com');
       }
-      expect(mockResearch).toHaveBeenCalledWith(expect.stringContaining('Test prompt'));
+      expect(mockResearch).toHaveBeenCalledWith(expect.stringContaining('Test prompt'), undefined);
+    });
+
+    it('threads researchId through per-call correlation when provided', async () => {
+      mockResearch.mockResolvedValue({
+        ok: true,
+        value: { content: 'Research result', sources: [] },
+      });
+
+      await adapter.research('Test prompt', undefined, { researchId: 'r-1' });
+
+      expect(mockResearch).toHaveBeenCalledWith(
+        expect.stringContaining('Test prompt'),
+        { correlation: { researchId: 'r-1' } }
+      );
     });
 
     it('maps RATE_LIMITED error code correctly', async () => {

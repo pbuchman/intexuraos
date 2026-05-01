@@ -1,3 +1,4 @@
+// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 export const DIGEST_REPAIR_PROMPT_VERSION = '1.0.0';
 
 export function buildDigestRepairPrompt(
