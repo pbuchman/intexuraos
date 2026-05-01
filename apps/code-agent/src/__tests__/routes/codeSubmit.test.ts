@@ -949,4 +949,113 @@ describe('POST /code/submit', () => {
       expect(taskResult.value.dispatchSchedule).toBeUndefined();
     });
   });
+
+  describe('custom timeout (INT-1585)', () => {
+    const stubLinearIssue = (issueId: string, title: string): void => {
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: issueId,
+        linearIssueTitle: title,
+        linearIssueLabels: [],
+        hasChildren: false,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+    };
+
+    it('persists timeoutHours when sent in /code/submit body', async () => {
+      stubLinearIssue('INT-800', 'Timeout custom task');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Long-running task',
+          timeoutHours: 8,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      const taskId = body.data.codeTaskId as string;
+      const stored = await codeTaskRepo.findById(taskId);
+      expect(stored.ok).toBe(true);
+      if (!stored.ok) return;
+      expect(stored.value.timeoutHours).toBe(8);
+    });
+
+    it('rejects timeoutHours below MIN_TIMEOUT_HOURS', async () => {
+      stubLinearIssue('INT-801', 'Bad timeout low');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Bad lower bound',
+          timeoutHours: 0,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('rejects timeoutHours above MAX_TIMEOUT_HOURS', async () => {
+      stubLinearIssue('INT-802', 'Bad timeout high');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Bad upper bound',
+          timeoutHours: 13,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('rejects non-integer timeoutHours (covers runtime guard for valid-range floats)', async () => {
+      // The JSON-schema declares `integer`; this also exercises the runtime
+      // isValidTimeoutHours() guard in case the schema is bypassed.
+      stubLinearIssue('INT-803', 'Float timeout');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'Float bound',
+          timeoutHours: 5.5,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('omitting timeoutHours produces a task without it (backward compat)', async () => {
+      stubLinearIssue('INT-804', 'No timeout task');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          prompt: 'No override',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      const taskId = body.data.codeTaskId as string;
+      const stored = await codeTaskRepo.findById(taskId);
+      expect(stored.ok).toBe(true);
+      if (!stored.ok) return;
+      expect(stored.value.timeoutHours).toBeUndefined();
+    });
+  });
 });
