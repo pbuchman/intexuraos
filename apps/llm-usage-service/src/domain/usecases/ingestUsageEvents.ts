@@ -77,7 +77,7 @@ interface ResolvedCost {
   billedUsd: number;
   providerReportedUsd: number | null;
   calculatedUsd: number | null;
-  pricingSource: 'provider_reported' | 'calculated';
+  pricingSource: 'provider_reported' | 'calculated' | 'missing';
 }
 
 async function resolveCost(
@@ -109,13 +109,18 @@ async function resolveCost(
 
   logger.warn(
     { provider: input.request.provider, model: input.request.model },
-    'No pricing found for model; defaulting cost to 0',
+    'No pricing found for model — emitting pricingSource:missing',
   );
+  if (process.env['NODE_ENV'] !== 'production') {
+    throw new Error(
+      `Pricing missing for unknown model ${input.request.provider}/${input.request.model}. Add an entry to llm-pricing or mark as unsupported.`,
+    );
+  }
   return {
     billedUsd: 0,
     providerReportedUsd: null,
     calculatedUsd: 0,
-    pricingSource: 'calculated',
+    pricingSource: 'missing',
   };
 }
 

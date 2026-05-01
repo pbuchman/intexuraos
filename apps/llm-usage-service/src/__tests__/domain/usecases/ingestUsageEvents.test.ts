@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { LlmProviders } from '@intexuraos/llm-contract';
 import type { ModelPricing } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 import { ingestUsageEvents } from '../../../domain/usecases/ingestUsageEvents.js';
 import { FakeUsageEventRepository } from '../../fakeUsageEventRepository.js';
 import { FakeUsageAggregateRepository } from '../../fakeUsageAggregateRepository.js';
@@ -136,25 +137,73 @@ describe('ingestUsageEvents', () => {
       expect(event?.cost.billedUsd).toBe(event?.cost.calculatedUsd);
     });
 
-    it('defaults cost to 0 when pricing is not found for model', async () => {
-      // No pricing seeded for model — cache returns null
+    it('emits pricingSource:missing and billedUsd:0 for unknown models in production', async () => {
+      // FakePricingCache seeds the default fixture model; clear it so the
+      // unknown-model path is exercised regardless of which model the
+      // fixture defaults to.
+      pricingCache.invalidate();
+      const originalNodeEnv = process.env['NODE_ENV'];
+      process.env['NODE_ENV'] = 'production';
+      try {
+        const events = [createTestEventInput({
+          eventId: 'evt_v2_unknown',
+          request: {
+            provider: LlmProviders.Anthropic,
+            model: 'claude-unknown-v99',
+            operation: 'generate',
+            success: true,
+            durationMs: 1500,
+          },
+          cost: { providerReportedUsd: null, pricingSource: 'pending' },
+        })];
 
-      const events = [createTestEventInput({
-        eventId: 'evt_v2_unknown',
-        cost: { providerReportedUsd: null, pricingSource: 'pending' },
-      })];
+        const result = await ingestUsageEvents(makeDeps(), events, 'internal');
 
-      const result = await ingestUsageEvents(makeDeps(), events, 'internal');
+        expect(result.accepted).toBe(1);
 
-      expect(result.accepted).toBe(1);
+        const stored = eventRepo.getStoredEvents();
+        expect(stored).toHaveLength(1);
+        const event = stored[0];
+        expect(event?.cost.billedUsd).toBe(0);
+        expect(event?.cost.calculatedUsd).toBe(0);
+        expect(event?.cost.pricingSource).toBe('missing');
+        expect(event?.cost.providerReportedUsd).toBeNull();
+      } finally {
+        if (originalNodeEnv === undefined) {
+          delete process.env['NODE_ENV'];
+        } else {
+          process.env['NODE_ENV'] = originalNodeEnv;
+        }
+      }
+    });
 
-      const stored = eventRepo.getStoredEvents();
-      expect(stored).toHaveLength(1);
-      const event = stored[0];
-      expect(event?.cost.billedUsd).toBe(0);
-      expect(event?.cost.calculatedUsd).toBe(0);
-      expect(event?.cost.pricingSource).toBe('calculated');
-      expect(event?.cost.providerReportedUsd).toBeNull();
+    it('fails fast in dev when an unknown model is ingested', async () => {
+      pricingCache.invalidate();
+      const originalNodeEnv = process.env['NODE_ENV'];
+      process.env['NODE_ENV'] = 'development';
+      try {
+        const events = [createTestEventInput({
+          eventId: 'evt_v2_unknown_dev',
+          request: {
+            provider: LlmProviders.Anthropic,
+            model: 'claude-unknown-v99',
+            operation: 'generate',
+            success: true,
+            durationMs: 1500,
+          },
+          cost: { providerReportedUsd: null, pricingSource: 'pending' },
+        })];
+
+        await expect(ingestUsageEvents(makeDeps(), events, 'internal')).rejects.toThrow(
+          /Pricing missing for unknown model/i,
+        );
+      } finally {
+        if (originalNodeEnv === undefined) {
+          delete process.env['NODE_ENV'];
+        } else {
+          process.env['NODE_ENV'] = originalNodeEnv;
+        }
+      }
     });
 
     it('uses provider_reported cost when pricingSource is provider_reported and providerReportedUsd is non-null', async () => {
@@ -211,6 +260,37 @@ describe('ingestUsageEvents', () => {
       expect(event?.cost.calculatedUsd).toBeGreaterThan(0);
       expect(event?.cost.billedUsd).toBe(event?.cost.calculatedUsd);
       expect(event?.cost.providerReportedUsd).toBeNull();
+    });
+
+    it('calculates a non-zero cost for the new claude-sonnet-4-7 SKU', async () => {
+      // Mirrors the migration 099 entry for claude-sonnet-4-7.
+      pricingCache.setPricing(LlmProviders.Anthropic, LlmModels.ClaudeSonnet47, {
+        inputPricePerMillion: 3.0,
+        outputPricePerMillion: 15.0,
+        cacheReadMultiplier: 0.1,
+        cacheWriteMultiplier: 1.25,
+      });
+
+      const events = [createTestEventInput({
+        eventId: 'evt_claude_4_7',
+        request: {
+          provider: LlmProviders.Anthropic,
+          model: LlmModels.ClaudeSonnet47,
+          operation: 'generate',
+          success: true,
+          durationMs: 1500,
+        },
+        cost: { providerReportedUsd: null, pricingSource: 'pending' },
+      })];
+
+      const result = await ingestUsageEvents(makeDeps(), events, 'internal');
+
+      expect(result.accepted).toBe(1);
+      const stored = eventRepo.getStoredEvents();
+      const event = stored[0];
+      expect(event?.cost.pricingSource).toBe('calculated');
+      expect(event?.cost.calculatedUsd).toBeGreaterThan(0);
+      expect(event?.cost.billedUsd).toBe(event?.cost.calculatedUsd);
     });
 
     it('stores v2 events as schemaVersion 1', async () => {
