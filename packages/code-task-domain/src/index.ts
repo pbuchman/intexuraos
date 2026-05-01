@@ -7,3 +7,10 @@ export {
   resolvePlanDocumentPathFromLinearContext,
   type PlanResolutionContext,
 } from './planPathResolver.js';
+export {
+  MIN_TIMEOUT_HOURS,
+  MAX_TIMEOUT_HOURS,
+  DEFAULT_TIMEOUT_HOURS,
+  isValidTimeoutHours,
+  timeoutHoursToMs,
+} from './codeTaskTimeout.js';
