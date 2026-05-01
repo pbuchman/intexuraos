@@ -595,7 +595,7 @@ describe('CodeTaskNewPage - per-task timeout (INT-1585)', () => {
     fireEvent.change(editor, { target: { value: 'long task' } });
 
     // Set the slider to 8 hours.
-    const slider = screen.getByRole('slider', { name: /task timeout in hours/i });
+    const slider = screen.getByRole('slider', { name: /task timeout/i });
     fireEvent.change(slider, { target: { value: '8' } });
 
     const submitButtons = screen.getAllByRole('button', { name: /submit task/i });

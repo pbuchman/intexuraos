@@ -1017,9 +1017,10 @@ describe('POST /code/submit', () => {
       expect(response.statusCode).toBe(400);
     });
 
-    it('rejects non-integer timeoutHours (covers runtime guard for valid-range floats)', async () => {
-      // The JSON-schema declares `integer`; this also exercises the runtime
-      // isValidTimeoutHours() guard in case the schema is bypassed.
+    it('rejects non-integer timeoutHours via Fastify Ajv integer validation', async () => {
+      // The route declares `type: integer` in the JSON-schema body; Ajv
+      // therefore rejects floats before the handler runs. There is no
+      // additional runtime guard — Ajv coverage is sufficient (INT-1585).
       stubLinearIssue('INT-803', 'Float timeout');
 
       const response = await app.inject({

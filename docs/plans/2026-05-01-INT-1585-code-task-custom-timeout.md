@@ -346,13 +346,7 @@ In `task-routes.ts` `/code/submit` registration:
               },
 ```
 
-(c) After existing `scheduledDispatch` validation, insert defence-in-depth runtime validation (the JSON-schema bounds reject invalid values, but runtime guard documents intent):
-
-```ts
-        if (body.timeoutHours !== undefined && !isValidTimeoutHours(body.timeoutHours)) {
-          return await reply.fail('INVALID_REQUEST', `timeoutHours must be an integer in [${String(MIN_TIMEOUT_HOURS)}, ${String(MAX_TIMEOUT_HOURS)}]`);
-        }
-```
+(c) The Fastify Ajv body schema (`type: 'integer', minimum, maximum`) fully validates the field before the handler runs, so no additional runtime guard is required. The original plan called for a defence-in-depth `isValidTimeoutHours` check, but it would be unreachable through the public route — Ajv rejects the request before the handler executes — and 100% branch coverage would force a `/* v8 ignore */` exemption. Ajv coverage is sufficient.
 
 (d) Add to `createInput` construction (next to where `dispatchSchedule` is set, around line 1588):
 

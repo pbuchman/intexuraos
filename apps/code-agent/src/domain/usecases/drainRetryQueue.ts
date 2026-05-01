@@ -344,6 +344,9 @@ async function handleNewTaskRetry(
       executionMemoryContext: dispatchExecutionMemoryContext,
     }),
     ...(task.prNumber !== undefined && { prNumber: task.prNumber }),
+    // INT-1585: forward optional per-task timeout override on retry, too,
+    // so a transient first-dispatch failure does not silently revert to 5h.
+    ...(task.timeoutHours !== undefined && { timeoutHours: task.timeoutHours }),
   });
 
   if (!dispatchResult.ok) {

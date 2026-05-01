@@ -21,7 +21,7 @@ describe('TimeoutSlider (INT-1585)', () => {
     render(<TimeoutSlider value={DEFAULT_TIMEOUT_HOURS} onChange={onChange} />);
 
     expect(screen.getByText('5 hours')).toBeDefined();
-    const slider = screen.getByRole('slider');
+    const slider = screen.getByRole('slider', { name: /task timeout/i });
     expect(slider.getAttribute('min')).toBe(String(MIN_TIMEOUT_HOURS));
     expect(slider.getAttribute('max')).toBe(String(MAX_TIMEOUT_HOURS));
     expect((slider as HTMLInputElement).value).toBe(String(DEFAULT_TIMEOUT_HOURS));
@@ -29,6 +29,17 @@ describe('TimeoutSlider (INT-1585)', () => {
     expect(
       screen.getByText(/Default — orchestrator will apply 5 hours\./i),
     ).toBeDefined();
+  });
+
+  it('associates the visible label with the slider input via htmlFor/id', () => {
+    const onChange = vi.fn();
+    render(<TimeoutSlider value={DEFAULT_TIMEOUT_HOURS} onChange={onChange} />);
+    const slider = screen.getByRole('slider', { name: /task timeout/i });
+    const id = slider.getAttribute('id');
+    expect(id).not.toBeNull();
+    expect(id).not.toBe('');
+    // The visible "Task Timeout" label must be the accessible name source.
+    expect(slider.getAttribute('aria-label')).toBeNull();
   });
 
   it('calls onChange with the new integer value when the slider moves', () => {
