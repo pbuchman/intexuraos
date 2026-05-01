@@ -224,6 +224,10 @@ export class AttemptLifecycle {
         /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for reviewTypes in dispatchPlanReview request payload @preserve */
         ...(request.reviewTypes !== undefined && { reviewTypes: request.reviewTypes }),
         /* v8 ignore stop @preserve */
+        // INT-1585: convert per-task hour override into ms once on intake.
+        ...(request.timeoutHours !== undefined && {
+          timeoutMs: request.timeoutHours * 60 * 60 * 1000,
+        }),
         startedAt: new Date().toISOString(),
         attemptCount: 1,
         maxAttempts: ctx.completionMaxAttempts,
@@ -267,8 +271,10 @@ export class AttemptLifecycle {
 
       await ctx.saveTask(task);
 
-      ctx.scheduleTimeoutWarning(taskId);
-      ctx.scheduleTimeoutKill(taskId);
+      // INT-1585: pass per-task timeoutMs override to honour user-customised
+      // 1–12h horizon; falls back to the legacy 5h constants when undefined.
+      ctx.scheduleTimeoutWarning(taskId, task.timeoutMs);
+      ctx.scheduleTimeoutKill(taskId, task.timeoutMs);
 
       ctx.startCompletionMonitoring(taskId);
       ctx.appendOrchestratorTaskLog(
@@ -430,8 +436,9 @@ export class AttemptLifecycle {
       delete task.pendingResumeStart;
       await ctx.saveTask(task);
 
-      ctx.scheduleTimeoutWarning(task.taskId);
-      ctx.scheduleTimeoutKill(task.taskId);
+      // INT-1585: re-arm timers with the per-task override on resume, too.
+      ctx.scheduleTimeoutWarning(task.taskId, task.timeoutMs);
+      ctx.scheduleTimeoutKill(task.taskId, task.timeoutMs);
       ctx.startCompletionMonitoring(task.taskId);
 
       ctx.logger.info({ taskId: task.taskId }, 'Task resumed with user message');

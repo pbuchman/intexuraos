@@ -2,6 +2,13 @@ import type { ActivityTimeoutManager } from '../activity-timeout-manager.js';
 
 export const TASK_TIMEOUT_WARNING_MS = 295 * 60 * 1000; // 4h 55m
 export const TASK_TIMEOUT_KILL_MS = 300 * 60 * 1000; // 5h
+/**
+ * Warning offset before kill: when a task carries a per-task `timeoutMs`
+ * override (INT-1585), the warning fires at `timeoutMs - WARNING_OFFSET_MS`.
+ * For the legacy default path the precomputed TASK_TIMEOUT_WARNING_MS is used
+ * unchanged so that existing tests and behaviour are preserved.
+ */
+export const TASK_TIMEOUT_WARNING_OFFSET_MS = 5 * 60 * 1000; // 5 min
 export const COMPLETION_CHECK_INTERVAL_MS = 30 * 1000; // 30s
 export const ACTIVITY_HEARTBEAT_THRESHOLD_MS = 30 * 1000; // 30s
 export const IMAGE_PULL_TIMEOUT_MS = 900_000; // 15 minutes — image pulls are network-bound

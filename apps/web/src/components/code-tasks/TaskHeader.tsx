@@ -131,6 +131,12 @@ export function TaskHeader({ task, workerStatusTag }: TaskHeaderProps): React.JS
         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${workerStatusTag !== null ? WORKER_STATUS_STYLES[workerStatusTag] : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'}`}>
           {task.workerLocation}
         </span>
+        {task.timeoutHours !== undefined ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+            <Clock className="h-3 w-3" aria-hidden="true" />
+            Custom timeout: {String(task.timeoutHours)}h
+          </span>
+        ) : null}
         {task.linearIssue?.state !== undefined ? (
           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
             LINEAR_STATE_STYLES[task.linearIssue.state.type] ?? DEFAULT_STATE_STYLE

@@ -3,11 +3,36 @@ import {
   clearTaskTimers as clearTaskTimersFn,
   TASK_TIMEOUT_WARNING_MS,
   TASK_TIMEOUT_KILL_MS,
+  TASK_TIMEOUT_WARNING_OFFSET_MS,
   COMPLETION_CHECK_INTERVAL_MS,
   ACTIVITY_HEARTBEAT_THRESHOLD_MS,
   WORKER_DESTROY_TIMEOUT_MS,
 } from './retry-logic.js';
 import type { DispatcherContext } from './dispatcher-context.js';
+
+/**
+ * Resolve the effective kill duration in ms.
+ * - When the per-task `overrideKillMs` is provided (INT-1585), it is used as the kill horizon.
+ * - Otherwise, the legacy `TASK_TIMEOUT_KILL_MS` (5h) constant is used.
+ */
+function resolveKillMs(overrideKillMs: number | undefined): number {
+  return overrideKillMs ?? TASK_TIMEOUT_KILL_MS;
+}
+
+/**
+ * Resolve the effective warning duration in ms.
+ * - When the per-task `overrideKillMs` is provided, the warning fires at
+ *   `max(0, overrideKillMs - TASK_TIMEOUT_WARNING_OFFSET_MS)` so that 1h
+ *   tasks (where offset > kill) clamp to 0 instead of going negative.
+ * - Otherwise, the legacy precomputed `TASK_TIMEOUT_WARNING_MS` (4h55m)
+ *   constant is used unchanged.
+ */
+function resolveWarningMs(overrideKillMs: number | undefined): number {
+  if (overrideKillMs === undefined) {
+    return TASK_TIMEOUT_WARNING_MS;
+  }
+  return Math.max(0, overrideKillMs - TASK_TIMEOUT_WARNING_OFFSET_MS);
+}
 
 /**
  * INT-1551 §E.3: timer/monitor lifecycle helpers.
@@ -30,30 +55,47 @@ import type { DispatcherContext } from './dispatcher-context.js';
 export class TaskTimers {
   constructor(private readonly ctx: DispatcherContext) {}
 
-  scheduleTimeoutWarning(taskId: string): void {
+  /**
+   * Schedule the timeout warning. INT-1585: when `overrideKillMs` is set, the
+   * warning fires at `overrideKillMs - 5min` (clamped to 0). Otherwise the
+   * legacy 4h55m precomputed warning is used unchanged.
+   */
+  scheduleTimeoutWarning(taskId: string, overrideKillMs?: number): void {
     const ctx = this.ctx;
+    const warningMs = resolveWarningMs(overrideKillMs);
+    const killMs = resolveKillMs(overrideKillMs);
+    // The route-level schema enforces `MIN_TIMEOUT_HOURS >= 1`, so production
+    // values always round to >= 1. The Math.max guard keeps the rendered log
+    // line sensible if a sub-hour value is ever supplied (e.g., unit tests
+    // that exercise the warning-clamp branch).
+    const hours = Math.max(1, Math.round(killMs / (60 * 60 * 1000)));
     const timeout = setTimeout(() => {
       void (async (): Promise<void> => {
         try {
           const task = await ctx.getTask(taskId);
           /* v8 ignore start -- source-map: claude-runtime detached settimeout closure — branch misattributed by v8 (claude success notify path) @preserve */
           if (task !== null && task.status === 'running') {
-            ctx.logger.warn({ taskId }, 'Task approaching 5-hour timeout');
+            ctx.logger.warn({ taskId }, `Task approaching ${String(hours)}-hour timeout`);
           }
           /* v8 ignore stop @preserve */
         } catch (error) {
           ctx.logger.error({ taskId, error }, 'Error in timeout warning callback');
         }
       })();
-    }, TASK_TIMEOUT_WARNING_MS);
+    }, warningMs);
 
     ctx.activeTasks.set(`${taskId}-warning`, timeout);
     // INT-1551 §E.7: cancel pending warning if shutdown signal fires.
     this.attachShutdownAbort(timeout, false);
   }
 
-  scheduleTimeoutKill(taskId: string): void {
+  /**
+   * Schedule the hard-kill timer. INT-1585: when `overrideKillMs` is set, the
+   * kill fires after that duration; otherwise the legacy 5h constant is used.
+   */
+  scheduleTimeoutKill(taskId: string, overrideKillMs?: number): void {
     const ctx = this.ctx;
+    const killMs = resolveKillMs(overrideKillMs);
     const timeout = setTimeout(() => {
       void (async (): Promise<void> => {
         try {
@@ -131,7 +173,7 @@ export class TaskTimers {
           ctx.logger.error({ taskId, error }, 'Error in timeout kill callback');
         }
       })();
-    }, TASK_TIMEOUT_KILL_MS);
+    }, killMs);
 
     ctx.activeTasks.set(`${taskId}-kill`, timeout);
     // INT-1551 §E.7: cancel pending kill timer if shutdown signal fires.

@@ -45,8 +45,8 @@ export interface DispatcherContextBridges {
   ) => Promise<void>;
   teardownAttempt: (taskId: string, keepSession: boolean) => Promise<void>;
   clearTaskTimers: (taskId: string) => void;
-  scheduleTimeoutWarning: (taskId: string) => void;
-  scheduleTimeoutKill: (taskId: string) => void;
+  scheduleTimeoutWarning: (taskId: string, overrideKillMs?: number) => void;
+  scheduleTimeoutKill: (taskId: string, overrideKillMs?: number) => void;
   startCompletionMonitoring: (taskId: string) => void;
   failAcceptedResume: (task: Task, error: unknown) => Promise<void>;
   getRuntimeDisplayName: (task: Task) => string;

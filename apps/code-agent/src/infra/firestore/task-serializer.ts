@@ -236,6 +236,9 @@ export function toFirestoreDoc(
   if (input.dispatchSchedule !== undefined) {
     taskData.dispatchSchedule = serializeDispatchSchedule(input.dispatchSchedule);
   }
+  if (input.timeoutHours !== undefined) {
+    taskData.timeoutHours = input.timeoutHours;
+  }
 
   return taskData;
 }

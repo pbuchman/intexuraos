@@ -37,6 +37,11 @@ export interface CreateTaskRequest {
   continuationPrBranch?: string;
   /** Review types requested for review agent tasks. */
   reviewTypes?: string[];
+  /**
+   * Optional per-task timeout in hours (1–12). When omitted, the orchestrator
+   * default (5h) applies. INT-1585.
+   */
+  timeoutHours?: number;
 }
 
 // GET /health response

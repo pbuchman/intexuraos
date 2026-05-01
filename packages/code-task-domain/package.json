@@ -8,7 +8,8 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./worker-types": "./src/codeTaskWorkerTypes.ts"
+    "./worker-types": "./src/codeTaskWorkerTypes.ts",
+    "./timeout": "./src/codeTaskTimeout.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
