@@ -119,12 +119,10 @@ describe('common-worker contract — testing exports (§3.3)', () => {
   });
 
   it('makePubSubCloudEvent supports stripping `data` for the missing-data DLQ path', () => {
-    // Use undefined override to overwrite the default data (the JSDoc-promised
-    // "missing message data" path that subtask C exercises).
-    const evt = testing.makePubSubCloudEvent(
-      { ignored: true },
-      { data: undefined as unknown as testing.PubSubData }
-    );
+    // The override accepts `data: undefined` directly via
+    // `PubSubCloudEventOverrides`, no double-cast required. This exercises
+    // the "missing message data" path that subtask C will dead-letter.
+    const evt = testing.makePubSubCloudEvent({ ignored: true }, { data: undefined });
     expect(evt.data).toBeUndefined();
   });
 });

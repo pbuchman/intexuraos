@@ -9,6 +9,7 @@ export {
   type PubSubData,
   type PubSubMessage,
   type PubSubCloudEvent,
+  type PubSubCloudEventOverrides,
 } from './cloudEvent.js';
 export {
   makeHttpRequest,
