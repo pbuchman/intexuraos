@@ -74,13 +74,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     model: string,
     userId: string,
     logger: Logger,
-    usageSink: UsageSink,
-    // Accepted for positional-arg compatibility with LlmAdapterFactory.
-    // The infra client no longer threads researchId at construction
-    // (INT-1533 Task 5). Will be threaded per-call via
-    // GenerateOptions.correlation once research-agent migrates to the
-    // unified factory (Task 10).
-    _researchId?: string
+    usageSink: UsageSink
   ) {
     this.client = createGeminiClient({
       apiKey,

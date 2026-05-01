@@ -421,6 +421,33 @@ describe('createPerplexityClient', () => {
         expect(result.value.content).toBe('');
       }
     });
+
+    it('forwards per-call correlation to usage logger when provided', async () => {
+      const sseBody = createSSEBody({
+        content: 'ok',
+        citations: [],
+        usage: { prompt_tokens: 10, completion_tokens: 5 },
+      });
+      nock(API_BASE_URL).post('/chat/completions').reply(200, sseBody, {
+        'Content-Type': 'text/event-stream',
+      });
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.research('hello', { correlation: { researchId: 'r-1' } });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'research',
+          correlation: { researchId: 'r-1' },
+        })
+      );
+    });
   });
 
   describe('generate', () => {

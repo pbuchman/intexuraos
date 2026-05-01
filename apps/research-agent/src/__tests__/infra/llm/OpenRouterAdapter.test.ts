@@ -67,26 +67,6 @@ describe('OpenRouterAdapter', () => {
       });
     });
 
-    it('does NOT thread researchId at construction (INT-1533 Task 5: now per-call via correlation)', () => {
-      mockCreateOpenRouterClient.mockClear();
-      new OpenRouterAdapter(
-        'test-key',
-        TEST_MODEL,
-        'test-user-id',
-        mockLogger,
-        fakeUsageSink,
-        'research-123'
-      );
-
-      expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
-        apiKey: 'test-key',
-        model: EXPECTED_RAW_MODEL,
-        userId: 'test-user-id',
-        logger: mockLogger,
-        usageSink: fakeUsageSink,
-      });
-    });
-
     it('passes non-OpenRouter model directly without stripping prefix', () => {
       mockCreateOpenRouterClient.mockClear();
       const nonOpenRouterModel = 'google/gemini-2.0-flash';
@@ -145,7 +125,25 @@ describe('OpenRouterAdapter', () => {
         expect(result.value.content).toBe('Research result');
         expect(result.value.sources).toContain('https://source.com');
       }
-      expect(mockResearch).toHaveBeenCalledWith(expect.stringContaining('Test prompt'));
+      expect(mockResearch).toHaveBeenCalledWith(expect.stringContaining('Test prompt'), undefined);
+    });
+
+    it('threads researchId through per-call correlation when provided', async () => {
+      mockResearch.mockResolvedValue({
+        ok: true,
+        value: {
+          content: 'Research result',
+          sources: [],
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.00105 },
+        },
+      });
+
+      await adapter.research('Test prompt', undefined, { researchId: 'r-1' });
+
+      expect(mockResearch).toHaveBeenCalledWith(
+        expect.stringContaining('Test prompt'),
+        { correlation: { researchId: 'r-1' } }
+      );
     });
 
     it('maps RATE_LIMITED error code correctly', async () => {

@@ -439,6 +439,42 @@ describe('createOpenRouterClient', () => {
         expect(result.error.code).toBe('TIMEOUT');
       }
     });
+
+    it('forwards per-call correlation to usage logger when provided', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: `${TEST_MODEL}:online`,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'ok', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await client.research('hello', { correlation: { researchId: 'r-1' } });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'research',
+          correlation: { researchId: 'r-1' },
+        })
+      );
+    });
   });
 
   describe('generate', () => {

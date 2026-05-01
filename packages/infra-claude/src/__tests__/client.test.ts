@@ -344,6 +344,29 @@ describe('createClaudeClient', () => {
         expect(result.error.message).toBe('Network failure');
       }
     });
+
+    it('forwards per-call correlation to usage logger when provided', async () => {
+      mockMessagesCreate.mockResolvedValue({
+        content: [{ type: 'text', text: 'ok' }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      });
+
+      const client = createClaudeClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      await client.research('hello', { correlation: { researchId: 'r-1' } });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'research',
+          correlation: { researchId: 'r-1' },
+        })
+      );
+    });
   });
 
   describe('generate', () => {

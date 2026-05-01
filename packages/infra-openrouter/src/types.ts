@@ -36,6 +36,20 @@ export interface GenerateOptions {
 }
 
 /**
+ * Per-call options for the research method. Currently only carries
+ * correlation overrides so the emitted usage event can be attributed to the
+ * originating researchId / sessionId / taskId / requestId.
+ */
+export interface ResearchOptions {
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
+}
+
+/**
  * Configuration for creating an OpenRouter client.
  *
  * OpenRouter provides access to multiple frontier models from various providers

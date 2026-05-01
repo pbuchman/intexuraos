@@ -40,7 +40,6 @@ import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import {
   LlmModels,
   LlmProviders,
-  type LLMClient,
   type NormalizedUsage,
   type GenerateResult,
 } from '@intexuraos/llm-contract';
@@ -72,12 +71,30 @@ export interface GenerateOptions {
   };
 }
 
-export type PerplexityClient = Pick<LLMClient, 'research'> & {
+/**
+ * Per-call options for {@link PerplexityClient.research}. Carries correlation
+ * overrides so the emitted usage event can be attributed to the originating
+ * researchId / sessionId / taskId / requestId.
+ */
+export interface ResearchOptions {
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
+}
+
+export interface PerplexityClient {
+  research(
+    prompt: string,
+    options?: ResearchOptions
+  ): Promise<Result<ResearchResult, PerplexityError>>;
   generate(
     prompt: string,
     options: GenerateOptions
   ): Promise<Result<GenerateResult, PerplexityError>>;
-};
+}
 
 const API_BASE_URL = 'https://api.perplexity.ai';
 
@@ -249,7 +266,10 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
   }
 
   return {
-    async research(prompt: string): Promise<Result<ResearchResult, PerplexityError>> {
+    async research(
+      prompt: string,
+      options?: ResearchOptions
+    ): Promise<Result<ResearchResult, PerplexityError>> {
       const start = Date.now();
       try {
         const searchContext = SEARCH_CONTEXT_MAP[model] ?? 'medium';
@@ -295,7 +315,15 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
             totalTokens: 0,
             costUsd: 0,
           };
-          trackUsage('research', emptyUsage, false, durationMs, errorMsg);
+          trackUsage(
+            'research',
+            emptyUsage,
+            false,
+            durationMs,
+            errorMsg,
+            undefined,
+            options?.correlation
+          );
           return err(mapPerplexityError(apiError));
         }
 
@@ -307,7 +335,15 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
 
         const usage = extractUsage(rawUsage);
 
-        trackUsage('research', usage, true, Date.now() - start);
+        trackUsage(
+          'research',
+          usage,
+          true,
+          Date.now() - start,
+          undefined,
+          undefined,
+          options?.correlation
+        );
 
         return ok({ content, sources: citations, usage });
       } catch (error) {
@@ -319,7 +355,15 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
           totalTokens: 0,
           costUsd: 0,
         };
-        trackUsage('research', emptyUsage, false, durationMs, errorMsg);
+        trackUsage(
+          'research',
+          emptyUsage,
+          false,
+          durationMs,
+          errorMsg,
+          undefined,
+          options?.correlation
+        );
         return err(mapPerplexityError(error));
       }
     },
