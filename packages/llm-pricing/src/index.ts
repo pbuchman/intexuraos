@@ -1,4 +1,4 @@
-export type { LlmPricing, LlmProvider } from './types.js';
+export type { LlmPricing, LlmProvider, PricingSource } from './types.js';
 
 export {
   isUsageLoggingEnabled,

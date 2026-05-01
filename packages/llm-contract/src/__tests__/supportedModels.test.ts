@@ -80,8 +80,8 @@ describe('getProviderForModel', () => {
 
 describe('supportedModels', () => {
   describe('ALL_LLM_MODELS', () => {
-    it('contains all 14 expected models', () => {
-      expect(ALL_LLM_MODELS).toHaveLength(14);
+    it('contains all 15 expected models', () => {
+      expect(ALL_LLM_MODELS).toHaveLength(15);
     });
 
     it('contains all Google models', () => {
@@ -101,6 +101,7 @@ describe('supportedModels', () => {
     it('contains all Anthropic models', () => {
       expect(ALL_LLM_MODELS).toContain('claude-opus-4-6');
       expect(ALL_LLM_MODELS).toContain('claude-sonnet-4-6');
+      expect(ALL_LLM_MODELS).toContain('claude-sonnet-4-7');
       expect(ALL_LLM_MODELS).toContain('claude-3-5-haiku-20241022');
     });
 
@@ -137,6 +138,7 @@ describe('supportedModels', () => {
     it('maps Anthropic models correctly', () => {
       expect(MODEL_PROVIDER_MAP['claude-opus-4-6']).toBe('anthropic');
       expect(MODEL_PROVIDER_MAP['claude-sonnet-4-6']).toBe('anthropic');
+      expect(MODEL_PROVIDER_MAP['claude-sonnet-4-7']).toBe('anthropic');
       expect(MODEL_PROVIDER_MAP['claude-3-5-haiku-20241022']).toBe('anthropic');
     });
 
