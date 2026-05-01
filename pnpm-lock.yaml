@@ -1749,12 +1749,6 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
-      '@intexuraos/infra-pubsub':
-        specifier: workspace:*
-        version: link:../infra-pubsub
-      '@intexuraos/infra-sentry':
-        specifier: workspace:*
-        version: link:../infra-sentry
       '@sentry/node':
         specifier: ^8.42.0
         version: 8.55.0

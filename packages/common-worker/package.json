@@ -18,8 +18,6 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
-    "@intexuraos/infra-pubsub": "workspace:*",
-    "@intexuraos/infra-sentry": "workspace:*",
     "@google-cloud/functions-framework": "^3.0.0",
     "@sentry/node": "^8.42.0",
     "pino": "catalog:"
