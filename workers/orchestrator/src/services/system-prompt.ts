@@ -1,3 +1,4 @@
+// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 import { hasCodeTaskLabel } from '@intexuraos/linear-domain';
 import type { PromptBuilder } from './prompt-builder.js';
 import { askAgentPrompt } from './prompts/ask-agent-prompt.js';

@@ -1,3 +1,4 @@
+// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 /**
  * Repair prompt builder for synthesis context inference.
  * When initial LLM response fails schema validation, this builds a repair prompt.

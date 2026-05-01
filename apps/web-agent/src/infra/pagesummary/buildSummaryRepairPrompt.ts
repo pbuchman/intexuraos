@@ -1,3 +1,4 @@
+// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 /**
  * Builds prompts for LLM-based page summarization.
  * Uses PromptBuilder pattern for consistency with llm-common.

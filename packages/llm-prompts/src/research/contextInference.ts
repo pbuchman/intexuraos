@@ -1,3 +1,4 @@
+// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 /**
  * Prompt builder for inferring research context from a user query.
  */
