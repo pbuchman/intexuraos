@@ -432,7 +432,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           apiKeys,
           research.userId,
           services,
-          request.log
+          request.log,
+          event.researchId
         );
 
         const deps: Parameters<typeof processResearch>[1] = {

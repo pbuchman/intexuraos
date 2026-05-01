@@ -760,7 +760,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('FORBIDDEN', 'Access denied');
       }
 
-      return await reply.ok(result.value);
+      return await reply.ok(result.value); // @allow-result-access -- result.ok narrowed at line 746 (outside 15-line hook window due to inline null-and-ownership guards)
     }
   );
 
@@ -966,10 +966,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
           const { synthesizer, contextInferrer } = createSynthesisProviders(
             synthesisModel,
-            apiKeysResult.value,
+            apiKeysResult.value, // @allow-result-access -- apiKeysResult.ok narrowed earlier in handler
             user.userId,
             getServices(),
-            request.log
+            request.log,
+            id
           );
 
           const synthesisResult = await runSynthesis(id, {
@@ -1172,7 +1173,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         apiKeysResult.value,
         user.userId,
         getServices(),
-        request.log
+        request.log,
+        id
       );
 
       const retryResult = await retryFromFailed(id, {
@@ -1359,12 +1361,12 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Publish to Pub/Sub for async processing
       await researchEventPublisher.publishProcessResearch({
         type: 'research.process',
-        researchId: result.value.id,
+        researchId: result.value.id, // @allow-result-access -- result.ok narrowed earlier in handler (outside 15-line hook window due to switch arms)
         userId: user.userId,
         triggeredBy: 'create',
       });
 
-      return await reply.code(201).ok(result.value);
+      return await reply.code(201).ok(result.value); // @allow-result-access -- result.ok narrowed earlier in handler (outside 15-line hook window due to switch arms)
     }
   );
 

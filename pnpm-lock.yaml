@@ -1769,6 +1769,9 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../infra-sentry
+      '@intexuraos/llm-pricing':
+        specifier: workspace:*
+        version: link:../llm-pricing
     devDependencies:
       fastify:
         specifier: 'catalog:'

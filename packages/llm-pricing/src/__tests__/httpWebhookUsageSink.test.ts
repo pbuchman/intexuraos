@@ -6,6 +6,7 @@ import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { UsageLogParams } from '../usageLogger.js';
 import { HttpWebhookUsageSink } from '../httpWebhookUsageSink.js';
 import type { HttpWebhookUsageSinkConfig } from '../httpWebhookUsageSink.js';
+import { clearUsageSinkRegistry } from '../usageSinkRegistry.js';
 
 const WEBHOOK_URL = 'http://localhost:9999/webhook/usage';
 const WEBHOOK_SECRET = 'test-secret-key';
@@ -105,11 +106,13 @@ describe('HttpWebhookUsageSink', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-06-15T12:00:00.000Z'));
+    clearUsageSinkRegistry();
   });
 
   afterEach(() => {
     vi.useRealTimers();
     nock.cleanAll();
+    clearUsageSinkRegistry();
   });
 
   describe('happy path', () => {
