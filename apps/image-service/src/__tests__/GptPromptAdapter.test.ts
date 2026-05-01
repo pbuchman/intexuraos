@@ -138,9 +138,10 @@ describe('GptPromptAdapter', () => {
     });
 
     it('returns RATE_LIMITED error for rate limit', async () => {
+      // 3 withRetry attempts × up to 3 OpenAI SDK internal retries = 9 max requests.
       nock('https://api.openai.com')
         .post('/v1/chat/completions')
-        .times(3)
+        .times(9)
         .reply(429, {
           error: {
             message: 'Rate limit reached for requests',

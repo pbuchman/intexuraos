@@ -757,21 +757,60 @@ describe('createGptClient', () => {
     });
 
     it('handles timeout error in generate via APIError', async () => {
-      mockChatCompletionsCreate.mockRejectedValue(new MockAPIError(408, 'Connection timeout'));
+      vi.useFakeTimers();
+      try {
+        mockChatCompletionsCreate.mockRejectedValue(new MockAPIError(408, 'Connection timeout'));
 
-      const client = createGptClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-      const result = await client.generate('Test prompt', { promptType: 'test-prompt' });
+        const client = createGptClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+        const promise = client.generate('Test prompt', { promptType: 'test-prompt' });
+        await vi.runAllTimersAsync();
+        const result = await promise;
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('TIMEOUT');
-        expect(result.error.message).toContain('timeout');
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('TIMEOUT');
+          expect(result.error.message).toContain('timeout');
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('retries transient RATE_LIMITED then returns success', async () => {
+      vi.useFakeTimers();
+      try {
+        mockChatCompletionsCreate
+          .mockRejectedValueOnce(new MockAPIError(429, 'Rate limited'))
+          .mockResolvedValueOnce({
+            choices: [{ message: { content: 'recovered' } }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          });
+
+        const client = createGptClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+
+        const promise = client.generate('hi', { promptType: 'test-prompt' });
+        await vi.runAllTimersAsync();
+        const result = await promise;
+
+        expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(2);
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.content).toBe('recovered');
+        }
+      } finally {
+        vi.useRealTimers();
       }
     });
 

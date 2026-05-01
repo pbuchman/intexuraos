@@ -40,7 +40,7 @@ import {
   type GenerateResult,
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
-import { withLlmSpan } from '@intexuraos/llm-utils';
+import { withLlmSpan, withRetry } from '@intexuraos/llm-utils';
 import type { GeminiConfig, GeminiError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 import { resolveVertexRedirectUrls } from './vertexUrlResolver.js';
@@ -130,42 +130,10 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       prompt: string,
       options: { promptType: string }
     ): Promise<Result<GenerateResult, GeminiError>> {
-      const start = Date.now();
-      try {
-        const { result, durationMs } = await withLlmSpan(
-          LlmProviders.Google,
-          async () => {
-            const response = await ai.models.generateContent({ model, contents: prompt });
-            const text = response.text ?? '';
-            const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
-            const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
-            const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
-            const usage = normalizeUsage(inputTokens, outputTokens, false, thinkingTokens);
-            return { content: text, usage };
-          },
-          ({ usage }) => ({
-            model,
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            costUsd: usage.costUsd,
-          })
-        );
-
-        trackUsage('generate', result.usage, true, durationMs, undefined, options.promptType);
-
-        return ok({ content: result.content, usage: result.usage });
-      } catch (error) {
-        const durationMs = Date.now() - start;
-        const errorMsg = getErrorMessage(error);
-        const emptyUsage: NormalizedUsage = {
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-          costUsd: 0,
-        };
-        trackUsage('generate', emptyUsage, false, durationMs, errorMsg, options.promptType);
-        return err(mapGeminiError(error));
-      }
+      return await withRetry(() => generateOnce(prompt, options), {
+        maxAttempts: 3,
+        baseDelayMs: 500,
+      });
     },
 
     async generateImage(
@@ -213,6 +181,48 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       }
     },
   };
+
+  async function generateOnce(
+    prompt: string,
+    options: { promptType: string }
+  ): Promise<Result<GenerateResult, GeminiError>> {
+    const start = Date.now();
+    try {
+      const { result, durationMs } = await withLlmSpan(
+        LlmProviders.Google,
+        async () => {
+          const response = await ai.models.generateContent({ model, contents: prompt });
+          const text = response.text ?? '';
+          const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
+          const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
+          const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
+          const usage = normalizeUsage(inputTokens, outputTokens, false, thinkingTokens);
+          return { content: text, usage };
+        },
+        ({ usage }) => ({
+          model,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: usage.costUsd,
+        })
+      );
+
+      trackUsage('generate', result.usage, true, durationMs, undefined, options.promptType);
+
+      return ok({ content: result.content, usage: result.usage });
+    } catch (error) {
+      const durationMs = Date.now() - start;
+      const errorMsg = getErrorMessage(error);
+      const emptyUsage: NormalizedUsage = {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+      };
+      trackUsage('generate', emptyUsage, false, durationMs, errorMsg, options.promptType);
+      return err(mapGeminiError(error));
+    }
+  }
 }
 
 function mapGeminiError(error: unknown): GeminiError {

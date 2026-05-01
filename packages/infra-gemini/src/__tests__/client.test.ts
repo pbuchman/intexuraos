@@ -868,38 +868,84 @@ describe('createGeminiClient', () => {
     });
 
     it('maps timeout error to TIMEOUT in generate', async () => {
-      mockGenerateContent.mockRejectedValue(new Error('Connection timeout'));
+      vi.useFakeTimers();
+      try {
+        mockGenerateContent.mockRejectedValue(new Error('Connection timeout'));
 
-      const client = createGeminiClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-      const result = await client.generate('Test', { promptType: 'test-prompt' });
+        const client = createGeminiClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+        const promise = client.generate('Test', { promptType: 'test-prompt' });
+        await vi.runAllTimersAsync();
+        const result = await promise;
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('TIMEOUT');
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('TIMEOUT');
+        }
+      } finally {
+        vi.useRealTimers();
       }
     });
 
     it('maps rate limit error to RATE_LIMITED in generate', async () => {
-      mockGenerateContent.mockRejectedValue(new Error('429 rate limit'));
+      vi.useFakeTimers();
+      try {
+        mockGenerateContent.mockRejectedValue(new Error('429 rate limit'));
 
-      const client = createGeminiClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-      const result = await client.generate('Test', { promptType: 'test-prompt' });
+        const client = createGeminiClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+        const promise = client.generate('Test', { promptType: 'test-prompt' });
+        await vi.runAllTimersAsync();
+        const result = await promise;
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('RATE_LIMITED');
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.code).toBe('RATE_LIMITED');
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('retries transient RATE_LIMITED then returns success', async () => {
+      vi.useFakeTimers();
+      try {
+        mockGenerateContent
+          .mockRejectedValueOnce(new Error('429 rate limit'))
+          .mockResolvedValueOnce({
+            text: 'recovered',
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
+          });
+
+        const client = createGeminiClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+
+        const promise = client.generate('hi', { promptType: 'test-prompt' });
+        await vi.runAllTimersAsync();
+        const result = await promise;
+
+        expect(mockGenerateContent).toHaveBeenCalledTimes(2);
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.content).toBe('recovered');
+        }
+      } finally {
+        vi.useRealTimers();
       }
     });
 

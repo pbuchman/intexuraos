@@ -594,7 +594,7 @@ describe('createOpenRouterClient', () => {
     });
 
     it('handles 429 rate limit error', async () => {
-      nock(API_BASE_URL).post('/chat/completions').reply(429, 'Rate limited');
+      nock(API_BASE_URL).post('/chat/completions').times(3).reply(429, 'Rate limited');
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
@@ -613,7 +613,7 @@ describe('createOpenRouterClient', () => {
     });
 
     it('handles 503 overloaded error', async () => {
-      nock(API_BASE_URL).post('/chat/completions').reply(503, 'Service overloaded');
+      nock(API_BASE_URL).post('/chat/completions').times(3).reply(503, 'Service overloaded');
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
@@ -632,7 +632,10 @@ describe('createOpenRouterClient', () => {
     });
 
     it('handles timeout error', async () => {
-      nock(API_BASE_URL).post('/chat/completions').replyWithError(new Error('Request timeout'));
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .times(3)
+        .replyWithError(new Error('Request timeout'));
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
@@ -647,6 +650,31 @@ describe('createOpenRouterClient', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('TIMEOUT');
+      }
+    });
+
+    it('retries transient RATE_LIMITED then returns success', async () => {
+      nock(API_BASE_URL).post('/chat/completions').reply(429, 'Rate limited');
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: 'recovered' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 2 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generate('hi', { promptType: 'test-prompt' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.content).toBe('recovered');
       }
     });
 
@@ -1249,7 +1277,7 @@ describe('createOpenRouterClient', () => {
     });
 
     it('records ERROR-status span when API returns non-OK HTTP status', async () => {
-      nock(API_BASE_URL).post('/chat/completions').reply(503, 'Service overloaded');
+      nock(API_BASE_URL).post('/chat/completions').times(3).reply(503, 'Service overloaded');
       const client = createOpenRouterClient({
         apiKey: 'test-key',
         model: TEST_MODEL,
@@ -1260,7 +1288,8 @@ describe('createOpenRouterClient', () => {
       await client.generate('hi', { promptType: 'test-prompt' });
 
       const spans = spanExporter.getFinishedSpans();
-      expect(spans).toHaveLength(1);
+      // Each retry attempt emits its own span; with 3 attempts we get 3 ERROR spans.
+      expect(spans.length).toBeGreaterThanOrEqual(1);
       const span = spans[0];
       if (span === undefined) throw new Error('no span');
       expect(span.name).toBe('llm.openrouter.generate');

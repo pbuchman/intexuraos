@@ -412,6 +412,38 @@ describe('createClaudeClient', () => {
         expect(result.error.code).toBe('INVALID_KEY');
       }
     });
+
+    it('retries transient RATE_LIMITED then returns success', async () => {
+      vi.useFakeTimers();
+      try {
+        mockMessagesCreate
+          .mockRejectedValueOnce(new MockAPIError(429, 'Rate limited'))
+          .mockResolvedValueOnce({
+            content: [{ type: 'text', text: 'recovered' }],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          });
+
+        const client = createClaudeClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+
+        const promise = client.generate('hi', { promptType: 'test-prompt' });
+        await vi.runAllTimersAsync();
+        const result = await promise;
+
+        expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.content).toBe('recovered');
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('passes ownerType to usage logger when provided', async () => {
