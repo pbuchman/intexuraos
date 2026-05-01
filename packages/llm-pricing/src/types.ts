@@ -15,11 +15,7 @@ export type { LlmProvider };
  * - `missing`           — the model has no pricing entry; cost defaulted to 0
  *                         and the event needs operator follow-up
  */
-export type PricingSource =
-  | 'provider_reported'
-  | 'calculated'
-  | 'pending'
-  | 'missing';
+export type PricingSource = 'provider_reported' | 'calculated' | 'pending' | 'missing';
 
 export interface LlmPricing {
   provider: LlmProvider;

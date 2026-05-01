@@ -44,7 +44,7 @@ export interface StructuredGenerateResult {
 export interface StructuredClient {
   generate: (
     prompt: string,
-    options: { promptType: string } & Record<string, unknown>,
+    options: { promptType: string } & Record<string, unknown>
   ) => Promise<Result<StructuredGenerateResult, LLMError>>;
 }
 
@@ -125,7 +125,7 @@ function makeParseError(raw: string): z.ZodError {
  *          `kind: 'llm' | 'validation'`.
  */
 export async function generateStructured<T>(
-  params: GenerateStructuredParams<T>,
+  params: GenerateStructuredParams<T>
 ): Promise<Result<GenerateStructuredOutput<T>, StructuredError>> {
   const maxRepair = params.maxRepairAttempts ?? (params.repairBuilder !== undefined ? 1 : 0);
   let currentPrompt = params.prompt;

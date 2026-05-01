@@ -52,7 +52,8 @@ export async function withRetry<T>(
   fn: () => Promise<Result<T, LLMError>>,
   opts: WithRetryOptions
 ): Promise<Result<T, LLMError>> {
-  const sleeper = opts.sleep ?? ((ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms)));
+  const sleeper =
+    opts.sleep ?? ((ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms)));
   const maxDelay = opts.maxDelayMs ?? 30_000;
 
   let last: Result<T, LLMError> | null = null;

@@ -70,10 +70,7 @@ export interface GeminiClient extends Omit<LLMClient, 'generate'> {
    * @param options - Generation options including promptType for usage tracking
    * @returns Promise resolving to {@link GenerateResult} or {@link GeminiError}
    */
-  generate(
-    prompt: string,
-    options: GenerateOptions
-  ): Promise<Result<GenerateResult, GeminiError>>;
+  generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, GeminiError>>;
 }
 
 const IMAGE_MODEL = LlmModels.Gemini25FlashImage;
