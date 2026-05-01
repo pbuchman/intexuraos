@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { metadata, up } from '../099_claude-sonnet-4-7-pricing.mjs'; // @allow-missing-js -- .mjs import
+import { metadata, up } from '../100_claude-sonnet-4-7-pricing.mjs'; // @allow-missing-js -- .mjs import
 
 interface FakeDoc {
   data: Record<string, unknown> | undefined;
@@ -30,7 +30,7 @@ function makeFakeFirestore(initial: Record<string, FakeDoc>): {
   return { firestore, store };
 }
 
-describe('migration 099 – claude-sonnet-4-7 pricing', () => {
+describe('migration 100 – claude-sonnet-4-7 pricing', () => {
   beforeEach(() => {
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
   });
@@ -41,7 +41,7 @@ describe('migration 099 – claude-sonnet-4-7 pricing', () => {
 
   it('has correct metadata', () => {
     expect(metadata).toMatchObject({
-      id: '099',
+      id: '100',
       name: 'claude-sonnet-4-7-pricing',
     });
     expect(metadata.description).toBeDefined();
