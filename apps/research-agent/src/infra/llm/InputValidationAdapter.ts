@@ -6,8 +6,8 @@
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
-  buildImprovementRepairPrompt,
-  buildValidationRepairPrompt,
+  improvementRepairPrompt,
+  validationRepairPrompt,
   inputImprovementPrompt,
   inputQualityPrompt,
   InputQualitySchema,
@@ -149,7 +149,7 @@ export class InputValidationAdapter implements InputValidationProvider {
       })
     );
 
-    const repairPrompt = buildValidationRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const repairPrompt = validationRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     const result = await this.client.generate(repairPrompt, { promptType: 'research-input-validation-repair' });
 
     if (!result.ok) {
@@ -217,7 +217,7 @@ export class InputValidationAdapter implements InputValidationProvider {
       })
     );
 
-    const repairPrompt = buildImprovementRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const repairPrompt = improvementRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
     const result = await this.client.generate(repairPrompt, { promptType: 'research-input-improvement-repair' });
 
     if (!result.ok) {

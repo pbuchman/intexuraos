@@ -6,10 +6,10 @@
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
-  buildInferResearchContextPrompt,
-  buildInferSynthesisContextPrompt,
-  buildResearchContextRepairPrompt,
-  buildSynthesisContextRepairPrompt,
+  inferResearchContextPrompt,
+  inferSynthesisContextPrompt,
+  researchContextRepairPrompt,
+  synthesisContextRepairPrompt,
   ResearchContextSchema,
   SynthesisContextSchema,
   type InferResearchContextOptions,
@@ -111,7 +111,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     userQuery: string,
     opts?: InferResearchContextOptions
   ): Promise<Result<ResearchContextResult, LlmError>> {
-    const prompt = buildInferResearchContextPrompt(userQuery, opts);
+    const prompt = inferResearchContextPrompt.build({ userQuery, opts });
     const result = await this.client.generate(prompt, this.generateOptions('research-context-inference'));
 
     if (!result.ok) {
@@ -172,7 +172,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
   async inferSynthesisContext(
     params: InferSynthesisContextParams
   ): Promise<Result<SynthesisContextResult, LlmError>> {
-    const prompt = buildInferSynthesisContextPrompt(params);
+    const prompt = inferSynthesisContextPrompt.build(params);
     const result = await this.client.generate(prompt, this.generateOptions('research-synthesis-context-inference'));
 
     if (!result.ok) {
@@ -235,11 +235,11 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     invalidResponse: string,
     errorMessage: string
   ): Promise<Result<ResearchContextResult, string>> {
-    const repairPrompt = buildResearchContextRepairPrompt(
-      userQuery,
+    const repairPrompt = researchContextRepairPrompt.build({
+      originalQuery: userQuery,
       invalidResponse,
-      errorMessage
-    );
+      errorMessage,
+    });
     const result = await this.client.generate(repairPrompt, this.generateOptions('research-context-inference-repair'));
 
     if (!result.ok) {
@@ -283,11 +283,11 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     invalidResponse: string,
     errorMessage: string
   ): Promise<Result<SynthesisContextResult, string>> {
-    const repairPrompt = buildSynthesisContextRepairPrompt(
-      params.originalPrompt,
+    const repairPrompt = synthesisContextRepairPrompt.build({
+      originalPrompt: params.originalPrompt,
       invalidResponse,
-      errorMessage
-    );
+      errorMessage,
+    });
     const result = await this.client.generate(repairPrompt, this.generateOptions('research-synthesis-context-inference-repair'));
 
     if (!result.ok) {
