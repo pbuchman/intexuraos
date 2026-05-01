@@ -1,15 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { buildResumeSummaryPrompt } from '../../../services/completion-verifier/prompt-builder.js';
+import { resumeSummaryPrompt } from '../../../services/completion-verifier/prompt-builder.js';
 
-describe('buildResumeSummaryPrompt', () => {
+describe('resumeSummaryPrompt', () => {
+  it('has correct metadata', () => {
+    expect(resumeSummaryPrompt.name).toBe('resume-summary');
+    expect(resumeSummaryPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
   it('includes the transcript at the end of the prompt', () => {
-    const out = buildResumeSummaryPrompt('UNIQUE_TRANSCRIPT_MARKER');
+    const out = resumeSummaryPrompt.build({ transcript: 'UNIQUE_TRANSCRIPT_MARKER' });
     expect(out.endsWith('UNIQUE_TRANSCRIPT_MARKER')).toBe(true);
   });
 
   it('pins length and boundary anchors', () => {
     const T = 'TRANSCRIPT_MARKER';
-    const p = buildResumeSummaryPrompt(T);
+    const p = resumeSummaryPrompt.build({ transcript: T });
     expect(p.length).toBe(754);
     expect(p.startsWith('You are summarizing the output of a resumed code-worker session.')).toBe(
       true
@@ -19,7 +24,7 @@ describe('buildResumeSummaryPrompt', () => {
   });
 
   it('returns ONLY-JSON instruction', () => {
-    const p = buildResumeSummaryPrompt('');
+    const p = resumeSummaryPrompt.build({ transcript: '' });
     expect(p).toContain('Return ONLY a JSON object');
   });
 });

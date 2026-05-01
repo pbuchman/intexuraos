@@ -12,7 +12,8 @@ vi.mock('node:child_process', () => ({
 }));
 
 const {
-  buildCompliancePrompt,
+  compliancePrompt,
+  prepareCompliancePrompt,
   renderComplianceMarkdown,
   AGENT_COMPLIANCE_PROMPT_VERSION,
   OrchestratorAgentComplianceValidator,
@@ -123,9 +124,17 @@ beforeEach(() => {
   );
 });
 
-describe('buildCompliancePrompt', () => {
+describe('compliancePrompt metadata', () => {
+  it('has correct metadata', () => {
+    expect(compliancePrompt.name).toBe('agent-compliance-validation');
+    expect(compliancePrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(compliancePrompt.version).toBe(AGENT_COMPLIANCE_PROMPT_VERSION);
+  });
+});
+
+describe('prepareCompliancePrompt', () => {
   it('includes claims JSON, transcript, schema shape, and key sections', () => {
-    const result = buildCompliancePrompt({
+    const result = prepareCompliancePrompt({
       formattedTranscript: '[MSG-001] test transcript',
       agentClaims: defaultClaims,
       workerType: 'auto',
@@ -148,7 +157,7 @@ describe('buildCompliancePrompt', () => {
 
   it('returns TRANSCRIPT_TOO_LONG for oversized transcripts', () => {
     const oversized = 'A'.repeat(720_001);
-    const result = buildCompliancePrompt({
+    const result = prepareCompliancePrompt({
       formattedTranscript: oversized,
       agentClaims: defaultClaims,
       workerType: 'auto',
@@ -161,7 +170,7 @@ describe('buildCompliancePrompt', () => {
 
   it('does not return TRANSCRIPT_TOO_LONG for exactly max-length transcript', () => {
     const exactlyMax = 'A'.repeat(720_000);
-    const result = buildCompliancePrompt({
+    const result = prepareCompliancePrompt({
       formattedTranscript: exactlyMax,
       agentClaims: defaultClaims,
       workerType: 'auto',

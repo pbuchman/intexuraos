@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CODE_TASK_WORKER_TYPES } from '@intexuraos/code-task-domain';
 import {
-  buildSystemPrompt,
+  systemPrompt,
   planningPrompt,
   executionPrompt,
   remediationPrompt,
@@ -52,7 +52,7 @@ describe('system-prompt', () => {
   };
 
   it('builds planning agent prompt with required markers and rules', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('[WORKER-MODE]');
     expect(result).toContain('[AGENT:PLANNING]');
@@ -68,7 +68,7 @@ describe('system-prompt', () => {
   });
 
   it('requires archiving issue content before editing in planning prompt', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('archive its current content by adding a Linear comment');
     // Archive instruction appears in both Planning Contract and Simple vs Complex sections
@@ -78,7 +78,7 @@ describe('system-prompt', () => {
   });
 
   it('enforces strict parallel work breakdown rules for complex tasks', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('STRICT REQUIREMENT');
     expect(result).toContain('strict requirement for the agent executing the plan');
@@ -88,27 +88,27 @@ describe('system-prompt', () => {
   });
 
   it('enforces Plan PR rules in PLANNING_AGENT_FINAL', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('MANDATORY for ALL planned outcomes, including SIMPLE tasks');
   });
 
   it('enforces Clarification message rules in PLANNING_AGENT_FINAL', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('REQUIRED for unclear outcomes');
     expect(result).toContain('MUST be empty for successfully planned outcomes');
   });
 
   it('requires proof of parallel breakdown showing boundaries for complex outcomes', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('show service boundaries and contracts between subissues');
     expect(result).toContain('agents can work on each subissue independently');
   });
 
   it('requires complexity judgment before any changes in planning prompt', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain(
       '### Complexity Judgment (MANDATORY — NON-NEGOTIABLE, after Reading section above)'
@@ -126,13 +126,13 @@ describe('system-prompt', () => {
   });
 
   it('includes the PLAN-DOC tier section in the planning prompt', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('PLAN-DOC task (no subtasks, but needs a plan document)');
   });
 
   it('includes the Self-Verification section in the planning prompt', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('### Self-Verification (MANDATORY before completion)');
   });
@@ -150,13 +150,13 @@ describe('system-prompt', () => {
   });
 
   it('includes the strengthened SIMPLE guardrail text in the planning prompt', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('3+ implementation steps');
   });
 
   it('places PLAN-DOC section between SIMPLE and COMPLEX sections', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     const simpleIdx = result.indexOf('**SIMPLE task:**');
     const planDocIdx = result.indexOf('**PLAN-DOC task');
@@ -166,13 +166,13 @@ describe('system-prompt', () => {
   });
 
   it('includes the updated COMPLEX header with descriptive text', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('subtasks + plan doc + PR, all together');
   });
 
   it('includes PR Description Format in planning prompt with Linear link, task URL, worker type, and model', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['bug'],
       linearIssueTitle: 'Fix login bug',
@@ -192,7 +192,7 @@ describe('system-prompt', () => {
   });
 
   it('renders PR Description Format with fallback values when optional fields are missing', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('- Linear: [INT-123](https://linear.app/pbuchman/issue/INT-123)');
     expect(result).not.toContain('IntexuraOS Code Task');
@@ -270,7 +270,7 @@ describe('system-prompt', () => {
   });
 
   it('remediation prompt includes remediation-specific completion and pre-push contract', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       agentType: 'remediation',
       continuationPrNumber: 901,
@@ -318,7 +318,7 @@ describe('system-prompt', () => {
   });
 
   it('remediation prompt renders linearIssueTitle in PR Description when provided', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       agentType: 'remediation',
       linearIssueTitle: 'Fix review follow-up',
@@ -338,7 +338,7 @@ describe('system-prompt', () => {
     void _issueId;
     void _workerType;
 
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...paramsWithoutIssueAndWorker,
       agentType: 'remediation',
       continuationPrNumber: 901,
@@ -443,16 +443,16 @@ describe('system-prompt', () => {
   });
 
   it('includes mandatory Worker Type and Model emphasis in all prompt types', () => {
-    const planningResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
-    const executionResult = buildSystemPrompt({
+    const planningResult = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
+    const executionResult = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task'],
     });
-    const prResult = buildSystemPrompt({
+    const prResult = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task', 'pr-comment'],
     });
-    const reviewResult = buildSystemPrompt({
+    const reviewResult = systemPrompt.build({
       ...baseParams,
       agentType: 'review',
     });
@@ -465,14 +465,14 @@ describe('system-prompt', () => {
   });
 
   it('includes PR Title Format section in planning prompt with [plan] tag', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('### PR Title Format');
     expect(result).toContain('`[INT-XXX] [plan] title`');
   });
 
   it('includes PR Title Format section in execution prompt without [plan] tag', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['code-task'] });
 
     expect(result).toContain('### PR Title Format');
     expect(result).toContain('`[INT-XXX] title`');
@@ -480,7 +480,7 @@ describe('system-prompt', () => {
   });
 
   it('builds execution agent prompt with execution marker and final block', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['code-task'] });
 
     expect(result).toContain('[WORKER-MODE]');
     expect(result).toContain('[AGENT:EXECUTION]');
@@ -502,7 +502,7 @@ describe('system-prompt', () => {
   });
 
   it('execution prompt requires evidence PR for already_completed', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['code-task'] });
 
     expect(result).toContain('Evidence PR (MANDATORY for already_completed)');
     expect(result).toContain('docs/evidence/');
@@ -510,7 +510,7 @@ describe('system-prompt', () => {
   });
 
   it('pins execution final block memory self-report fields', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['code-task'] });
     const finalBlockStart = result.indexOf('EXECUTION_AGENT_FINAL:');
     const finalBlockEnd = result.indexOf('```', finalBlockStart);
     const finalBlock = result.slice(finalBlockStart, finalBlockEnd);
@@ -521,7 +521,7 @@ describe('system-prompt', () => {
   });
 
   it('builds execution continuation instructions when an open PR is inherited', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task'],
       continuationPrNumber: 1139,
@@ -537,7 +537,7 @@ describe('system-prompt', () => {
   });
 
   it('builds pull request agent prompt when pr-comment label is present', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task', 'pr-comment'],
     });
@@ -550,7 +550,7 @@ describe('system-prompt', () => {
   });
 
   it('builds pull request agent prompt when agentType is pull_request without pr-comment label', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['bug'],
       agentType: 'pull_request',
@@ -563,7 +563,7 @@ describe('system-prompt', () => {
   });
 
   it('requires gathering feedback from both PR and issue comments', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task', 'pr-comment'],
     });
@@ -575,7 +575,7 @@ describe('system-prompt', () => {
   });
 
   it('includes Tracking Comment section with taskUrl in PR prompt', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task', 'pr-comment'],
       taskUrl: 'https://intexuraos.cloud/tasks/task-123',
@@ -589,7 +589,7 @@ describe('system-prompt', () => {
   });
 
   it('includes Tracking comment line in PULL_REQUEST_AGENT_FINAL contract', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task', 'pr-comment'],
     });
@@ -598,7 +598,7 @@ describe('system-prompt', () => {
   });
 
   it('contains protocol violation language for skipping tracking comment', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task', 'pr-comment'],
     });
@@ -609,7 +609,7 @@ describe('system-prompt', () => {
   });
 
   it('contains fixed Total PR comments posted value of 1', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task', 'pr-comment'],
     });
@@ -619,7 +619,7 @@ describe('system-prompt', () => {
   });
 
   it('reuses an existing tracking comment when trackingCommentId is provided', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task', 'pr-comment'],
       trackingCommentId: '12345',
@@ -631,7 +631,7 @@ describe('system-prompt', () => {
   });
 
   it('uses agentType=execution over missing code-task label', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['bug'],
       agentType: 'execution',
@@ -641,7 +641,7 @@ describe('system-prompt', () => {
   });
 
   it('uses agentType=planning over present code-task label', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task'],
       agentType: 'planning',
@@ -651,16 +651,16 @@ describe('system-prompt', () => {
   });
 
   it('falls back to label detection when agentType is absent', () => {
-    expect(buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] })).toContain(
+    expect(systemPrompt.build({ ...baseParams, linearIssueLabels: ['code-task'] })).toContain(
       '[AGENT:EXECUTION]'
     );
-    expect(buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] })).toContain(
+    expect(systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] })).toContain(
       '[AGENT:PLANNING]'
     );
   });
 
   it('pr-comment takes priority over explicit agentType', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['pr-comment'],
       agentType: 'planning',
@@ -670,7 +670,7 @@ describe('system-prompt', () => {
   });
 
   it('enforces zero-tolerance review loop in execution prompt', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['code-task'] });
 
     expect(result).toContain('zero-tolerance loop');
     expect(result).toContain('ZERO issues');
@@ -680,7 +680,7 @@ describe('system-prompt', () => {
   });
 
   it('includes PR review overlay in execution prompt', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task'],
       taskUrl: 'https://intexuraos.cloud/tasks/task-123',
@@ -698,7 +698,7 @@ describe('system-prompt', () => {
   });
 
   it('includes PR review overlay in planning prompt', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['bug'],
       taskUrl: 'https://intexuraos.cloud/tasks/task-123',
@@ -715,7 +715,7 @@ describe('system-prompt', () => {
   });
 
   it('does not include PR review overlay in pull request prompt (already native)', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task', 'pr-comment'],
     });
@@ -725,7 +725,7 @@ describe('system-prompt', () => {
   });
 
   it('renders PR review overlay without task URL when taskUrl is undefined', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task'],
     });
@@ -736,7 +736,7 @@ describe('system-prompt', () => {
   });
 
   it('includes Reading the Linear Issue section in planning prompt', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('### Reading the Linear Issue (MANDATORY PREREQUISITE');
     expect(result).toContain('mcp__linear__list_comments');
@@ -746,7 +746,7 @@ describe('system-prompt', () => {
   });
 
   it('includes Reading the Linear Issue section in execution prompt', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['code-task'] });
 
     expect(result).toContain('### Reading the Linear Issue (MANDATORY FIRST ACTION');
     expect(result).toContain('mcp__linear__list_comments');
@@ -756,7 +756,7 @@ describe('system-prompt', () => {
   });
 
   it('includes Reading the Linear Issue section in pull request prompt', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task', 'pr-comment'],
     });
@@ -769,21 +769,21 @@ describe('system-prompt', () => {
   });
 
   it('clarifies id vs identifier distinction in Reading the Linear Issue section for planning', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('UUID');
     expect(result).toContain('identifier');
   });
 
   it('clarifies id vs identifier distinction in Reading the Linear Issue section for execution', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['code-task'] });
 
     expect(result).toContain('UUID');
     expect(result).toContain('identifier');
   });
 
   it('clarifies id vs identifier distinction in Reading the Linear Issue section for pull request', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task', 'pr-comment'],
     });
@@ -793,21 +793,21 @@ describe('system-prompt', () => {
   });
 
   it('explains comments may contain user clarifications from previous runs for planning', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('flagged as unclear');
     expect(result).toContain('clarifying answers');
   });
 
   it('explains comments may contain user clarifications from previous runs for execution', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['code-task'] });
 
     expect(result).toContain('flagged as unclear');
     expect(result).toContain('clarifying answers');
   });
 
   it('explains comments may contain user clarifications from previous runs for pull request', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task', 'pr-comment'],
     });
@@ -817,7 +817,7 @@ describe('system-prompt', () => {
   });
 
   it('planning prompt Reading section is a prerequisite to Complexity Judgment, not competing first step', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     // Reading section must appear before Complexity Judgment
     const readingIdx = result.indexOf('### Reading the Linear Issue');
@@ -835,7 +835,7 @@ describe('system-prompt', () => {
   });
 
   it('builds review agent prompt with review markers and REVIEW_AGENT_FINAL', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       agentType: 'review',
     });
@@ -848,7 +848,7 @@ describe('system-prompt', () => {
   });
 
   it('review agent prompt does NOT include prReviewOverlayPrompt', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       agentType: 'review',
     });
@@ -857,7 +857,7 @@ describe('system-prompt', () => {
   });
 
   it('review agent prompt includes plan_review scope definition', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       agentType: 'review',
     });
@@ -869,7 +869,7 @@ describe('system-prompt', () => {
   });
 
   it('review agent prompt includes PR analysis instructions', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       agentType: 'review',
     });
@@ -880,7 +880,7 @@ describe('system-prompt', () => {
   });
 
   it('review agent prompt includes review types and PR context fields', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       agentType: 'review',
     });
@@ -890,7 +890,7 @@ describe('system-prompt', () => {
   });
 
   it('review agent prompt requires View in IntexuraOS link in review body when taskUrl is present', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       agentType: 'review',
       taskUrl: 'https://intexuraos.cloud/#/code-tasks/task-123',
@@ -905,7 +905,7 @@ describe('system-prompt', () => {
 
   it('review agent prompt omits Linear section when linearIssueId is undefined', () => {
     const { linearIssueId: _, ...paramsWithoutLinear } = baseParams;
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...paramsWithoutLinear,
       agentType: 'review',
     });
@@ -920,16 +920,16 @@ describe('system-prompt', () => {
     function buildForLabel(label: string): string {
       switch (label) {
         case 'planning':
-          return buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+          return systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
         case 'execution':
-          return buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+          return systemPrompt.build({ ...baseParams, linearIssueLabels: ['code-task'] });
         case 'pull_request':
-          return buildSystemPrompt({
+          return systemPrompt.build({
             ...baseParams,
             linearIssueLabels: ['code-task', 'pr-comment'],
           });
         case 'review':
-          return buildSystemPrompt({
+          return systemPrompt.build({
             ...baseParams,
             linearIssueLabels: [],
             agentType: 'review',
@@ -971,7 +971,7 @@ describe('system-prompt', () => {
     );
 
     it('does not duplicate worker instruction sections in overlay (planning+overlay)', () => {
-      const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+      const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
       const ghCliCount = result.split('### Git CLI (MANDATORY').length - 1;
       const gcpCount = result.split('### GCP Service Account Credentials').length - 1;
@@ -983,7 +983,7 @@ describe('system-prompt', () => {
     });
 
     it('does not duplicate worker instruction sections in overlay (execution+overlay)', () => {
-      const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+      const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['code-task'] });
 
       const ghCliCount = result.split('### Git CLI (MANDATORY').length - 1;
       const gcpCount = result.split('### GCP Service Account Credentials').length - 1;
@@ -996,7 +996,7 @@ describe('system-prompt', () => {
   });
 
   it('review agent prompt omits View in IntexuraOS review-body instruction when taskUrl is undefined', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       agentType: 'review',
     });
@@ -1006,7 +1006,7 @@ describe('system-prompt', () => {
   });
 
   it('review agent prompt requires posting review started comment as absolute first action', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       agentType: 'review',
     });
@@ -1018,7 +1018,7 @@ describe('system-prompt', () => {
   });
 
   it('review agent prompt requires review started comment before all other sections', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       agentType: 'review',
     });
@@ -1035,7 +1035,7 @@ describe('system-prompt', () => {
   });
 
   it('review agent prompt includes requirements validation instructions', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       agentType: 'review',
     });
@@ -1046,7 +1046,7 @@ describe('system-prompt', () => {
   });
 
   it('review agent prompt includes plan compliance hard gate instructions', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       agentType: 'review',
     });
@@ -1057,7 +1057,7 @@ describe('system-prompt', () => {
   });
 
   it('review agent prompt has requirements validation before gathering PR context', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       agentType: 'review',
     });
@@ -1193,7 +1193,7 @@ describe('system-prompt', () => {
   });
 
   it('planning prompt includes Comment-Driven Decision Log section after Reading section', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
     expect(result).toContain('### Comment-Driven Decision Log (MANDATORY when comments exist)');
     expect(result).toContain('Track decisions');
@@ -1210,7 +1210,7 @@ describe('system-prompt', () => {
   });
 
   it('execution prompt includes Comment-Driven Decision Log section after Reading section', () => {
-    const result = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+    const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['code-task'] });
 
     expect(result).toContain('### Comment-Driven Decision Log (MANDATORY when comments exist)');
     expect(result).toContain('Track decisions');
@@ -1227,8 +1227,8 @@ describe('system-prompt', () => {
   });
 
   it('Comment-Driven Decision Log includes skip-when-empty instruction', () => {
-    const planningResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
-    const executionResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+    const planningResult = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
+    const executionResult = systemPrompt.build({ ...baseParams, linearIssueLabels: ['code-task'] });
 
     for (const result of [planningResult, executionResult]) {
       expect(result).toContain(
@@ -1238,8 +1238,8 @@ describe('system-prompt', () => {
   });
 
   it('Comment-Driven Decision Log specifies timing for Linear acknowledgment comment', () => {
-    const planningResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['bug'] });
-    const executionResult = buildSystemPrompt({ ...baseParams, linearIssueLabels: ['code-task'] });
+    const planningResult = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
+    const executionResult = systemPrompt.build({ ...baseParams, linearIssueLabels: ['code-task'] });
 
     // Verifies the ack comment has explicit ordering relative to PR creation
     for (const result of [planningResult, executionResult]) {
@@ -1248,11 +1248,11 @@ describe('system-prompt', () => {
   });
 
   it('Comment-Driven Decision Log is absent from non-planning/non-execution prompts', () => {
-    const prResult = buildSystemPrompt({
+    const prResult = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task', 'pr-comment'],
     });
-    const reviewResult = buildSystemPrompt({
+    const reviewResult = systemPrompt.build({
       ...baseParams,
       agentType: 'review',
     });
@@ -1276,7 +1276,7 @@ describe('system-prompt', () => {
   });
 
   it('injects execution memory section only for execution tasks', () => {
-    const executionResult = buildSystemPrompt({
+    const executionResult = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['code-task'],
       executionMemoryContext: {
@@ -1298,7 +1298,7 @@ describe('system-prompt', () => {
       },
     });
 
-    const planningResult = buildSystemPrompt({
+    const planningResult = systemPrompt.build({
       ...baseParams,
       linearIssueLabels: ['bug'],
       executionMemoryContext: {
@@ -1418,7 +1418,7 @@ describe('system-prompt', () => {
   });
 
   it('review agent prompt includes Linear section when linearIssueId is provided', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       ...baseParams,
       agentType: 'review',
     });
@@ -1457,7 +1457,7 @@ describe('system-prompt', () => {
   });
 
   it('routes ask_agent to askAgentPrompt', () => {
-    const result = buildSystemPrompt({ ...baseParams, agentType: 'ask_agent' });
+    const result = systemPrompt.build({ ...baseParams, agentType: 'ask_agent' });
     expect(result).toContain('[AGENT:ASK_AGENT]');
     expect(result).toContain('[ASK AGENT MODE]');
     expect(result).not.toContain('[AGENT:PLANNING]');
@@ -1507,7 +1507,7 @@ describe('system-prompt', () => {
   });
 
   it('includes non-interactive environment instructions for ask_agent', () => {
-    const result = buildSystemPrompt({
+    const result = systemPrompt.build({
       taskId: 'task_test',
       linearIssueLabels: [],
       workerType: 'opus',

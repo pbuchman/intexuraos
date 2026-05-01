@@ -1,7 +1,7 @@
 import type { Task } from '../../types/task.js';
 import type { WorkerConfig, WorkerHandle } from '../isolation/types.js';
 import { WORKER_TYPES } from '../isolation/types.js';
-import { buildSystemPrompt } from '../system-prompt.js';
+import { systemPrompt } from '../system-prompt.js';
 import { stripDockerHeaders } from '../log-formatter.js';
 import { getRuntime, type RuntimeEvent, type WorkerRuntime } from '../runtime/index.js';
 import { withTimeout } from '../../with-timeout.js';
@@ -91,7 +91,7 @@ export class TaskRunner {
       prompt: params.prompt,
       /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for systemPrompt linear-issue + worker-model fields in workerConfig @preserve */
       systemPrompt:
-        buildSystemPrompt({
+        systemPrompt.build({
           taskId: task.taskId,
           ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
           ...(task.linearIssueTitle !== undefined && { linearIssueTitle: task.linearIssueTitle }),

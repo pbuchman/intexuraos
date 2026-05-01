@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createHmac } from 'node:crypto';
 import { registerRoutes, cleanUpExpiredNonces } from '../routes.js';
-import { buildSystemPrompt } from '../services/system-prompt.js';
+import { systemPrompt } from '../services/system-prompt.js';
 import type { TaskDispatcher } from '../services/task-dispatcher.js';
 import type { GitHubTokenService } from '../github/token-service.js';
 import type { IsolationProvider } from '../services/isolation/types.js';
@@ -637,7 +637,7 @@ describe('Routes', () => {
       const submitted = (firstCall as unknown as [Record<string, unknown>])[0];
       expect(submitted['executionMemoryContext']).toEqual(memoryContext);
 
-      const rendered = buildSystemPrompt({
+      const rendered = systemPrompt.build({
         taskId: submitted['taskId'] as string,
         linearIssueLabels: submitted['linearIssueLabels'] as string[],
         agentType: 'review',
