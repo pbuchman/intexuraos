@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok, type Result } from '@intexuraos/common-core';
+import { err, IntexuraOSError, ok, type Result } from '@intexuraos/common-core';
 import type { LLMError } from '@intexuraos/llm-contract';
 
 import { withRetry } from '../withRetry.js';
@@ -7,6 +7,18 @@ import { withRetry } from '../withRetry.js';
 const success: Result<string, LLMError> = ok('done');
 
 describe('withRetry', () => {
+  it('throws IntexuraOSError(INVALID_REQUEST) when maxAttempts < 1', async () => {
+    const fn = vi.fn().mockResolvedValue(success);
+
+    await expect(withRetry(fn, { maxAttempts: 0, baseDelayMs: 100 })).rejects.toBeInstanceOf(
+      IntexuraOSError
+    );
+    await expect(withRetry(fn, { maxAttempts: 0, baseDelayMs: 100 })).rejects.toMatchObject({
+      code: 'INVALID_REQUEST',
+    });
+    expect(fn).not.toHaveBeenCalled();
+  });
+
   it('returns success immediately without sleeping', async () => {
     const sleep = vi.fn().mockResolvedValue(undefined);
     const fn = vi.fn().mockResolvedValue(success);
