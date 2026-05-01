@@ -46,6 +46,9 @@ import {
   type OwnerType,
 } from '@intexuraos/llm-contract';
 import { createOpenRouterGenerateClient } from './openRouterGenerateClient.js';
+import { createClaudeGenerateClient } from './claudeGenerateClient.js';
+import { createGptGenerateClient } from './gptGenerateClient.js';
+import { createPerplexityGenerateClient } from './perplexityGenerateClient.js';
 import { IntexuraOSError, type Logger, type Result } from '@intexuraos/common-core';
 
 /**
@@ -109,9 +112,14 @@ export interface LlmGenerateClient {
 
 /**
  * Supported providers for the factory.
- * App-side: Google (Gemini) and OpenRouter are supported.
+ * App-side: Google, Anthropic, OpenAI, Perplexity, and OpenRouter are supported.
  */
-type SupportedProvider = typeof LlmProviders.Google | typeof LlmProviders.OpenRouter;
+type SupportedProvider =
+  | typeof LlmProviders.Google
+  | typeof LlmProviders.Anthropic
+  | typeof LlmProviders.OpenAI
+  | typeof LlmProviders.Perplexity
+  | typeof LlmProviders.OpenRouter;
 
 /**
  * Maps model to provider and creates the appropriate client.
@@ -145,23 +153,42 @@ export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
     throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM model: ${model}`);
   }
 
-  // Static models: check provider
+  // Static models: dispatch on provider
   const providerForModel = getProviderForModel(config.model);
-  if (providerForModel !== LlmProviders.Google) {
-    throw new IntexuraOSError(
-      'INVALID_REQUEST',
-      `Unsupported LLM provider: ${providerForModel}. Only ${LlmProviders.Google} is supported.`
-    );
+  switch (providerForModel) {
+    case LlmProviders.Google:
+      return createGeminiClient(config);
+    case LlmProviders.Anthropic:
+      return createClaudeGenerateClient(config);
+    case LlmProviders.OpenAI:
+      return createGptGenerateClient(config);
+    case LlmProviders.Perplexity:
+      return createPerplexityGenerateClient(config);
+    case LlmProviders.OpenRouter:
+      // OpenRouter models are routed above via isOpenRouterModel(); reaching this
+      // branch would mean an or:-prefixed model slipped past the prefix check.
+      return createOpenRouterGenerateClient(config);
+    default: {
+      const _exhaustive: never = providerForModel;
+      throw new IntexuraOSError(
+        'INVALID_REQUEST',
+        `Unsupported LLM provider: ${String(_exhaustive)}`
+      );
+    }
   }
-
-  return createGeminiClient(config);
 }
 
 /**
  * Type guard to check if a provider is supported by the factory.
  */
 export function isSupportedProvider(provider: string): provider is SupportedProvider {
-  return provider === LlmProviders.Google || provider === LlmProviders.OpenRouter;
+  return (
+    provider === LlmProviders.Google ||
+    provider === LlmProviders.Anthropic ||
+    provider === LlmProviders.OpenAI ||
+    provider === LlmProviders.Perplexity ||
+    provider === LlmProviders.OpenRouter
+  );
 }
 
 /**
