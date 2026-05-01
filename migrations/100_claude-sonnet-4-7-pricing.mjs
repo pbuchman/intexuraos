@@ -1,5 +1,5 @@
 /**
- * Migration 099: Add Claude Sonnet 4.7 pricing
+ * Migration 100: Add Claude Sonnet 4.7 pricing
  *
  * Adds the `claude-sonnet-4-7` SKU to the Anthropic pricing document so that
  * usage events from the next-generation Sonnet model can be priced server-side
@@ -18,7 +18,7 @@
  */
 
 export const metadata = {
-  id: '099',
+  id: '100',
   name: 'claude-sonnet-4-7-pricing',
   description: 'Add claude-sonnet-4-7 pricing entry to llm_pricing/anthropic',
   createdAt: '2026-05-01',
@@ -30,7 +30,7 @@ export async function up(context) {
   const ref = context.firestore.doc('llm_pricing/anthropic');
   const snap = await ref.get();
   if (!snap.exists) {
-    throw new Error('Migration 099: llm_pricing/anthropic document missing');
+    throw new Error('Migration 100: llm_pricing/anthropic document missing');
   }
 
   const data = snap.data();
