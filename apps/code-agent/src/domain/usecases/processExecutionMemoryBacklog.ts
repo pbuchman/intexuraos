@@ -18,7 +18,7 @@ import {
 } from './executionMemory/testablesCompat.js';
 import {
   EVALUATION_SCHEMA_BLOCK,
-  buildDistillationPrompt,
+  distillationPrompt,
   buildEvaluationContext,
   buildFingerprint,
   computeQualityScore,
@@ -178,7 +178,7 @@ export const __testables = {
   buildFingerprint,
   isInfraOnlyFailure,
   shouldSkipDistillation,
-  buildDistillationPrompt,
+  distillationPrompt,
   buildEvaluationContext,
   EVALUATION_SCHEMA_BLOCK,
 };

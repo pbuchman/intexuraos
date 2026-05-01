@@ -1,8 +1,8 @@
-// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Timestamp } from '@google-cloud/firestore';
 import { IntexuraOSError } from '@intexuraos/common-core';
+import type { PromptBuilder } from '@intexuraos/llm-prompts';
 import type { CodeTask } from '../../models/codeTask.js';
 
 export const DISTILLATION_VERSION = 'execution-memory-distiller@2.1.0';
@@ -228,7 +228,7 @@ export function buildEvaluationContext(task: CodeTask): {
   }
 }
 
-function buildExecutionDistillationPrompt(
+function renderExecutionDistillationPrompt(
   task: CodeTask,
   logs: { text: string }[],
   turnMetrics: unknown[],
@@ -247,7 +247,7 @@ function buildExecutionDistillationPrompt(
   ].join('\n\n');
 }
 
-function buildPlanningDistillationPrompt(
+function renderPlanningDistillationPrompt(
   task: CodeTask,
   logs: { text: string }[],
   turnMetrics: unknown[],
@@ -291,7 +291,7 @@ function buildPlanningDistillationPrompt(
   ].join('\n\n');
 }
 
-function buildReviewDistillationPrompt(
+function renderReviewDistillationPrompt(
   task: CodeTask,
   logs: { text: string }[],
   issueContext: { description: string | null; comments: { body: string; createdAt: string }[] }
@@ -330,18 +330,28 @@ function buildReviewDistillationPrompt(
   ].join('\n\n');
 }
 
-export function buildDistillationPrompt(
-  task: CodeTask,
-  logs: { text: string }[],
-  turnMetrics: unknown[],
-  issueContext: { description: string | null; comments: { body: string; createdAt: string }[] }
-): string {
-  switch (task.agentType) {
-    case 'planning':
-      return buildPlanningDistillationPrompt(task, logs, turnMetrics, issueContext);
-    case 'review':
-      return buildReviewDistillationPrompt(task, logs, issueContext);
-    default:
-      return buildExecutionDistillationPrompt(task, logs, turnMetrics, issueContext);
-  }
+export interface DistillationPromptInput {
+  task: CodeTask;
+  logs: { text: string }[];
+  turnMetrics: unknown[];
+  issueContext: { description: string | null; comments: { body: string; createdAt: string }[] };
 }
+
+export const distillationPrompt: PromptBuilder<DistillationPromptInput> = {
+  name: 'execution-memory-distillation',
+  description:
+    'Routes a completed code task to the appropriate distillation prompt (execution, planning, or review)',
+  version: '1.0.0',
+
+  build(input: DistillationPromptInput): string {
+    const { task, logs, turnMetrics, issueContext } = input;
+    switch (task.agentType) {
+      case 'planning':
+        return renderPlanningDistillationPrompt(task, logs, turnMetrics, issueContext);
+      case 'review':
+        return renderReviewDistillationPrompt(task, logs, issueContext);
+      default:
+        return renderExecutionDistillationPrompt(task, logs, turnMetrics, issueContext);
+    }
+  },
+};

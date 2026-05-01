@@ -16,9 +16,9 @@ import type { WhatsAppNotifier } from '../services/whatsappNotifier.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
 import { classifyFailure } from '../utils/classifyFailure.js';
 import { autoRetryTask, type AutoRetryTaskRequest } from './autoRetryTask.js';
-import { buildFailureTriagePrompt, parseTriageResponse } from '../prompts/failureTriagePrompt.js';
+import { failureTriagePrompt, parseTriageResponse } from '../prompts/failureTriagePrompt.js';
 import {
-  buildCooloffRetryPrompt,
+  cooloffRetryPrompt,
   parseCooloffResponse,
 } from '../prompts/cooloffRetryPrompt.js';
 
@@ -134,7 +134,7 @@ async function askUserLlmForTriage(
     logger.warn({ taskId: task.id, error: logResult.error }, 'Failed to fetch log lines for triage');
   }
 
-  const prompt = buildFailureTriagePrompt({
+  const prompt = failureTriagePrompt.build({
     errorCode: taskError.code,
     errorMessage: taskError.message,
     recentLogLines: logLines,
@@ -217,7 +217,7 @@ async function resolveCooloffSchedule(
     return fallback;
   }
 
-  const prompt = buildCooloffRetryPrompt({
+  const prompt = cooloffRetryPrompt.build({
     errorCode: taskError.code,
     errorMessage: taskError.message,
     recentLogLines,

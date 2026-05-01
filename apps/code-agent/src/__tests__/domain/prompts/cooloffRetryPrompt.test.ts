@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   COOLOFF_RETRY_PROMPT_VERSION,
-  buildCooloffRetryPrompt,
+  cooloffRetryPrompt,
   parseCooloffResponse,
 } from '../../../domain/prompts/cooloffRetryPrompt.js';
 
@@ -22,10 +22,19 @@ describe('cooloffRetryPrompt', () => {
     });
   });
 
-  describe('buildCooloffRetryPrompt', () => {
+  describe('cooloffRetryPrompt metadata', () => {
+    it('has correct name, description, and semver version', () => {
+      expect(cooloffRetryPrompt.name).toBe('cooloff-retry');
+      expect(cooloffRetryPrompt.description).toContain('UTC');
+      expect(cooloffRetryPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(cooloffRetryPrompt.version).toBe(COOLOFF_RETRY_PROMPT_VERSION);
+    });
+  });
+
+  describe('cooloffRetryPrompt.build', () => {
     it('includes the production reset string, recent log lines, and user timezone', () => {
       const now = new Date('2026-04-23T12:00:00Z');
-      const prompt = buildCooloffRetryPrompt({
+      const prompt = cooloffRetryPrompt.build({
         errorCode: 'TASK_RUNTIME_HARD_ERROR',
         errorMessage: `Non-zero exit code: 1; Claude error: ${PRODUCTION_RESET_TEXT}`,
         recentLogLines: ['log-line-A', 'log-line-B', 'log-line-C'],
@@ -45,7 +54,7 @@ describe('cooloffRetryPrompt', () => {
     });
 
     it('falls back to a UTC note when userTimezone is missing', () => {
-      const prompt = buildCooloffRetryPrompt({
+      const prompt = cooloffRetryPrompt.build({
         errorCode: 'TASK_RUNTIME_HARD_ERROR',
         errorMessage: `Claude error: ${PRODUCTION_RESET_TEXT}`,
         recentLogLines: [],
@@ -57,7 +66,7 @@ describe('cooloffRetryPrompt', () => {
 
     it('caps log lines at 20', () => {
       const manyLines = Array.from({ length: 50 }, (_, i) => `log-line-${String(i)}`);
-      const prompt = buildCooloffRetryPrompt({
+      const prompt = cooloffRetryPrompt.build({
         errorCode: 'TASK_RUNTIME_HARD_ERROR',
         errorMessage: 'rate limit',
         recentLogLines: manyLines,

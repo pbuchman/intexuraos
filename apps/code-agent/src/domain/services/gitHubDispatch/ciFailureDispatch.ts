@@ -1,10 +1,19 @@
-// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 import { getErrorMessage } from '@intexuraos/common-core';
+import type { PromptBuilder } from '@intexuraos/llm-prompts';
 import type {
   CIFailureDispatchContext,
   CIFailureDispatchResult,
   WebhookDispatchServiceDeps,
 } from './types.js';
+
+export interface CIFixPromptInput {
+  repository: string;
+  prNumber: number;
+  prUrl: string;
+  checkName: string;
+  branch: string;
+  headSha: string;
+}
 
 /**
  * Execute the CI failure dispatch workflow: when a check run on a PR that was
@@ -84,7 +93,7 @@ export async function executeCIFailureDispatch(
     });
 
     // Build follow-up task prompt
-    const fixPrompt = buildCIFixPrompt({
+    const fixPrompt = ciFixPrompt.build({
       repository: event.repository,
       prNumber: event.pullRequestNumber,
       prUrl,
@@ -201,15 +210,13 @@ export async function executeCIFailureDispatch(
 /**
  * Build the prompt for a CI fix follow-up task.
  */
-export function buildCIFixPrompt(input: {
-  repository: string;
-  prNumber: number;
-  prUrl: string;
-  checkName: string;
-  branch: string;
-  headSha: string;
-}): string {
-  return `## CI Failure Fix Task
+export const ciFixPrompt: PromptBuilder<CIFixPromptInput> = {
+  name: 'ci-fix',
+  description: 'Builds the follow-up task prompt for an automated CI failure fix',
+  version: '1.0.0',
+
+  build(input: CIFixPromptInput): string {
+    return `## CI Failure Fix Task
 
 ### Context
 A CI check failed on your agent's Pull Request.
@@ -246,4 +253,5 @@ ${input.checkName}
 - Add proper v8 ignore exemptions with specific categories and explanations
 - Ensure all existing tests still pass
 `;
-}
+  },
+};

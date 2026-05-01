@@ -2195,16 +2195,28 @@ describe('processExecutionMemoryBacklog', () => {
     });
   });
 
-  describe('buildDistillationPrompt router', () => {
+  describe('distillationPrompt router', () => {
+    it('has correct metadata', () => {
+      expect(processExecutionMemoryBacklogTestables.distillationPrompt.name).toBe(
+        'execution-memory-distillation'
+      );
+      expect(processExecutionMemoryBacklogTestables.distillationPrompt.version).toMatch(
+        /^\d+\.\d+\.\d+$/
+      );
+    });
+
     it('routes planning agent type to planning-memory-distiller@1.1.0', () => {
       const task = createTask({
         agentType: 'planning',
         status: 'planned',
         result: { summary: 'planned', planning_outcome_label: 'planned', planning_is_complex: '1', planning_subtask_urls: 'url1,url2' },
       });
-      const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
-        task, [{ text: 'log' }], [], { description: 'issue', comments: [] }
-      );
+      const prompt = processExecutionMemoryBacklogTestables.distillationPrompt.build({
+        task,
+        logs: [{ text: 'log' }],
+        turnMetrics: [],
+        issueContext: { description: 'issue', comments: [] },
+      });
       expect(prompt).toContain('planning-memory-distiller@1.1.0');
     });
 
@@ -2214,37 +2226,46 @@ describe('processExecutionMemoryBacklog', () => {
         status: 'reviewed',
         result: { summary: 'reviewed', review_types: 'code_quality', review_comments_posted: '3', needs_remediation: '0' },
       });
-      const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
-        task, [{ text: 'log' }], [], { description: 'issue', comments: [] }
-      );
+      const prompt = processExecutionMemoryBacklogTestables.distillationPrompt.build({
+        task,
+        logs: [{ text: 'log' }],
+        turnMetrics: [],
+        issueContext: { description: 'issue', comments: [] },
+      });
       expect(prompt).toContain('review-memory-distiller@1.1.0');
     });
 
     it('routes execution and undefined agent type to execution-memory-distiller@2.1.0', () => {
       const executionTask = createTask({ agentType: 'execution' });
-      const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
-        executionTask, [{ text: 'log' }], [], { description: null, comments: [] }
-      );
+      const prompt = processExecutionMemoryBacklogTestables.distillationPrompt.build({
+        task: executionTask,
+        logs: [{ text: 'log' }],
+        turnMetrics: [],
+        issueContext: { description: null, comments: [] },
+      });
       expect(prompt).toContain('execution-memory-distiller@2.1.0');
 
       const undefinedTask = createTask({ agentType: undefined } as never);
-      const prompt2 = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
-        undefinedTask, [{ text: 'log' }], [], { description: null, comments: [] }
-      );
+      const prompt2 = processExecutionMemoryBacklogTestables.distillationPrompt.build({
+        task: undefinedTask,
+        logs: [{ text: 'log' }],
+        turnMetrics: [],
+        issueContext: { description: null, comments: [] },
+      });
       expect(prompt2).toContain('execution-memory-distiller@2.1.0');
     });
   });
 
   describe('componentHints guidance in distillation prompts', () => {
     it('includes componentHints guidance in distillation prompts', () => {
-      // The buildDistillationPrompt function (for execution tasks) includes DISTILLATION_SCHEMA_BLOCK
+      // The distillationPrompt (for execution tasks) includes DISTILLATION_SCHEMA_BLOCK
       // which should contain componentHints guidance
-      const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
-        createTask({ status: 'implemented', agentType: 'execution' }),
-        [{ text: 'log line' }],
-        [],
-        { description: null, comments: [] }
-      );
+      const prompt = processExecutionMemoryBacklogTestables.distillationPrompt.build({
+        task: createTask({ status: 'implemented', agentType: 'execution' }),
+        logs: [{ text: 'log line' }],
+        turnMetrics: [],
+        issueContext: { description: null, comments: [] },
+      });
 
       expect(prompt).toContain('componentHints guidance:');
       expect(prompt).toContain('Use canonical service and module names');
@@ -2268,9 +2289,12 @@ describe('processExecutionMemoryBacklog', () => {
           planning_pr_url: 'https://github.com/pr/1',
         },
       });
-      const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
-        task, [{ text: 'log line' }], [{ metric: 1 }], { description: 'Linear issue', comments: [{ body: 'comment', createdAt: '2026-01-01' }] }
-      );
+      const prompt = processExecutionMemoryBacklogTestables.distillationPrompt.build({
+        task,
+        logs: [{ text: 'log line' }],
+        turnMetrics: [{ metric: 1 }],
+        issueContext: { description: 'Linear issue', comments: [{ body: 'comment', createdAt: '2026-01-01' }] },
+      });
       expect(prompt).toContain('Planning outcome:');
       expect(prompt).toContain('Complexity classification:');
       expect(prompt).toContain('COMPLEX');
@@ -2289,9 +2313,12 @@ describe('processExecutionMemoryBacklog', () => {
         status: 'planned',
         result: { summary: 'done' },
       });
-      const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
-        task, [{ text: 'log line' }], [], { description: null, comments: [] }
-      );
+      const prompt = processExecutionMemoryBacklogTestables.distillationPrompt.build({
+        task,
+        logs: [{ text: 'log line' }],
+        turnMetrics: [],
+        issueContext: { description: null, comments: [] },
+      });
       expect(prompt).toContain('Planning outcome: ');
       expect(prompt).toContain('SIMPLE_OR_PLAN_DOC');
       expect(prompt).toContain('Subtask count: 0');
@@ -2314,9 +2341,12 @@ describe('processExecutionMemoryBacklog', () => {
           review_inline_comments: 'Line 42: Missing null check',
         },
       });
-      const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
-        task, [{ text: 'log line' }], [], { description: 'Linear issue', comments: [] }
-      );
+      const prompt = processExecutionMemoryBacklogTestables.distillationPrompt.build({
+        task,
+        logs: [{ text: 'log line' }],
+        turnMetrics: [],
+        issueContext: { description: 'Linear issue', comments: [] },
+      });
       expect(prompt).toContain('Review body:');
       expect(prompt).toContain('Found issues with error handling.');
       expect(prompt).toContain('Inline comments:');
@@ -2332,9 +2362,12 @@ describe('processExecutionMemoryBacklog', () => {
         status: 'reviewed',
         result: { summary: 'reviewed' },
       });
-      const prompt = processExecutionMemoryBacklogTestables.buildDistillationPrompt(
-        task, [{ text: 'log line' }], [], { description: null, comments: [] }
-      );
+      const prompt = processExecutionMemoryBacklogTestables.distillationPrompt.build({
+        task,
+        logs: [{ text: 'log line' }],
+        turnMetrics: [],
+        issueContext: { description: null, comments: [] },
+      });
       expect(prompt).toContain('Review types: ');
       expect(prompt).toContain('Comments posted: ');
       expect(prompt).toContain('Needs remediation: ');
