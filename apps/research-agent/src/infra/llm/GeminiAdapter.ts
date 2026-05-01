@@ -7,8 +7,8 @@ import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini'
 import type { Logger, Result } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
-  buildResearchPrompt,
-  buildSynthesisPrompt,
+  researchPrompt,
+  synthesisPrompt,
   titlePrompt,
   labelPrompt,
   type ResearchContext,
@@ -81,7 +81,7 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     ctx?: ResearchContext,
     options?: ResearchProviderCallOptions
   ): Promise<Result<LlmResearchResult, LlmError>> {
-    const builtPrompt = buildResearchPrompt(prompt, ctx);
+    const builtPrompt = researchPrompt.build({ userPrompt: prompt, ctx });
     this.logger.info({ model: this.model, promptLength: builtPrompt.length }, 'Gemini research started');
     // Per-call researchId from `options` takes precedence over the adapter's
     // baked-in researchId — research() is invoked from the parallel
@@ -120,11 +120,13 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
       { model: this.model, reportCount: reports.length, sourceCount: additionalSources?.length ?? 0 },
       'Gemini synthesis started'
     );
-    const synthesisPrompt =
-      synthesisContext !== undefined
-        ? buildSynthesisPrompt(originalPrompt, reports, synthesisContext, additionalSources)
-        : buildSynthesisPrompt(originalPrompt, reports, additionalSources);
-    const result = await this.client.generate(synthesisPrompt, this.generateOptions('research-synthesis'));
+    const synthesisPromptText = synthesisPrompt.build({
+      originalPrompt,
+      reports,
+      ctx: synthesisContext,
+      additionalSources,
+    });
+    const result = await this.client.generate(synthesisPromptText, this.generateOptions('research-synthesis'));
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);

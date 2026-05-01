@@ -1,15 +1,24 @@
-// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 /**
  * Repair prompt builder for research context inference.
  * When initial LLM response fails schema validation, this builds a repair prompt.
  */
 
-export function buildResearchContextRepairPrompt(
-  originalQuery: string,
-  invalidResponse: string,
-  errorMessage: string
-): string {
-  return `You are a JSON repair assistant. Your task is to fix a malformed JSON response to match the required schema exactly.
+import type { PromptBuilder } from '../shared/types.js';
+
+export interface ResearchContextRepairPromptInput {
+  originalQuery: string;
+  invalidResponse: string;
+  errorMessage: string;
+}
+
+export const researchContextRepairPrompt: PromptBuilder<ResearchContextRepairPromptInput> = {
+  name: 'research-context-repair',
+  description: 'Asks the LLM to fix a malformed research-context JSON response',
+  version: '1.3.0',
+
+  build(input: ResearchContextRepairPromptInput): string {
+    const { originalQuery, invalidResponse, errorMessage } = input;
+    return `You are a JSON repair assistant. Your task is to fix a malformed JSON response to match the required schema exactly.
 
 The previous response was invalid. Please fix it.
 
@@ -84,5 +93,5 @@ EXPECTED SCHEMA:
 }
 
 Output the corrected JSON:`;
-}
-// Prompt version: 1.3.0
+  },
+};

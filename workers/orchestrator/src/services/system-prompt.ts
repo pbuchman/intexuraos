@@ -1,4 +1,3 @@
-// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 import { hasCodeTaskLabel } from '@intexuraos/linear-domain';
 import type { PromptBuilder } from './prompt-builder.js';
 import { askAgentPrompt } from './prompts/ask-agent-prompt.js';
@@ -34,34 +33,41 @@ export function getPromptForAgent(agentType: AgentType): PromptBuilder<SystemPro
   return PROMPT_REGISTRY[agentType];
 }
 
-export function buildSystemPrompt(params: SystemPromptParams): string {
-  const isPullRequestTask =
-    params.agentType === 'pull_request' ||
-    params.linearIssueLabels.some((label) => label.trim().toLowerCase() === 'pr-comment');
-  if (isPullRequestTask) {
-    return pullRequestPrompt.build(params);
-  }
+export const systemPrompt: PromptBuilder<SystemPromptParams> = {
+  name: 'orchestrator-system-prompt',
+  description:
+    'Routes a code-task system-prompt build to the right agent-specific PromptBuilder based on agentType and labels',
+  version: '1.0.0',
 
-  if (params.agentType === 'ask_agent') {
-    return askAgentPrompt.build(params);
-  }
+  build(params: SystemPromptParams): string {
+    const isPullRequestTask =
+      params.agentType === 'pull_request' ||
+      params.linearIssueLabels.some((label) => label.trim().toLowerCase() === 'pr-comment');
+    if (isPullRequestTask) {
+      return pullRequestPrompt.build(params);
+    }
 
-  const resolvedAgentType =
-    params.agentType ?? (hasCodeTaskLabel(params.linearIssueLabels) ? 'execution' : 'planning');
+    if (params.agentType === 'ask_agent') {
+      return askAgentPrompt.build(params);
+    }
 
-  if (resolvedAgentType === 'review') {
-    return reviewPrompt.build(params);
-  }
+    const resolvedAgentType =
+      params.agentType ?? (hasCodeTaskLabel(params.linearIssueLabels) ? 'execution' : 'planning');
 
-  if (resolvedAgentType === 'remediation') {
-    return remediationPrompt.build(params);
-  }
+    if (resolvedAgentType === 'review') {
+      return reviewPrompt.build(params);
+    }
 
-  const overlay = prReviewOverlayPrompt.build(params);
+    if (resolvedAgentType === 'remediation') {
+      return remediationPrompt.build(params);
+    }
 
-  if (resolvedAgentType === 'planning') {
-    return planningPrompt.build(params) + overlay;
-  }
+    const overlay = prReviewOverlayPrompt.build(params);
 
-  return executionPrompt.build(params) + overlay;
-}
+    if (resolvedAgentType === 'planning') {
+      return planningPrompt.build(params) + overlay;
+    }
+
+    return executionPrompt.build(params) + overlay;
+  },
+};

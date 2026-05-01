@@ -8,7 +8,7 @@
 import type { Logger } from '@intexuraos/common-core';
 import { getProviderForModel, type LlmProvider, type ResearchModel, LlmModels } from '@intexuraos/llm-contract';
 import {
-  buildModelExtractionPrompt,
+  modelExtractionPrompt,
   parseModelExtractionResponse,
   MODEL_KEYWORDS,
   PROVIDER_DEFAULT_MODELS,
@@ -217,7 +217,7 @@ export async function extractModelPreferences(
   }
 
   // Build the extraction prompt
-  const prompt = buildModelExtractionPrompt({
+  const prompt = modelExtractionPrompt.build({
     userMessage: originalMessage,
     availableModels,
     synthesisModels: SYNTHESIS_MODELS,

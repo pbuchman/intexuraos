@@ -4,7 +4,7 @@ import {
   INACTIVITY_RESTART_PROMPT,
   getTaskEventUrl,
   hasFatalExitCodeField,
-  buildMissingFieldsPrompt,
+  missingFieldsPrompt,
   buildResumePreamble,
   buildActiveGoalSection,
   parseRebaseResultOutput,
@@ -57,11 +57,20 @@ describe('getTaskEventUrl', () => {
   });
 });
 
-describe('buildMissingFieldsPrompt', () => {
+describe('missingFieldsPrompt', () => {
   const rawLogs = 'first-line\nsecond-line\nthird-line';
 
+  it('has correct metadata', () => {
+    expect(missingFieldsPrompt.name).toBe('missing-fields-resume');
+    expect(missingFieldsPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
   it('includes the missing fields, agent type, transcript, and constraints', () => {
-    const result = buildMissingFieldsPrompt('planning', ['summary'], rawLogs);
+    const result = missingFieldsPrompt.build({
+      agentType: 'planning',
+      missingFields: ['summary'],
+      rawLogs,
+    });
     expect(result).toContain('[AUTO-CONTINUE ATTEMPT]');
     expect(result).toContain('Missing fields: summary');
     expect(result).toContain('Agent type: planning');
@@ -74,21 +83,26 @@ describe('buildMissingFieldsPrompt', () => {
     // Telemetry-only retries are gone — the only resume prompt is for
     // deliverable misses (outcome / pr / summary). Telemetry misses are
     // warn-only and never trigger a retry.
-    const result = buildMissingFieldsPrompt(
-      'execution',
-      ['memory_ids_used', 'memory_ids_rejected'],
-      rawLogs
-    );
+    const result = missingFieldsPrompt.build({
+      agentType: 'execution',
+      missingFields: ['memory_ids_used', 'memory_ids_rejected'],
+      rawLogs,
+    });
     expect(result).not.toContain('EXECUTION MEMORY REPORTING FAILURE');
   });
 
   it('[INT-1470] resume prompt does NOT emit memory-acknowledgment guidance', () => {
-    const result = buildMissingFieldsPrompt('execution', ['memory_acknowledgment'], rawLogs, {
-      matchedMemories: [
-        { memoryId: 'mem_123', title: 'Sample', type: 't', score: 1, content: 'x' },
-      ],
-      totalMatched: 1,
-    } as never);
+    const result = missingFieldsPrompt.build({
+      agentType: 'execution',
+      missingFields: ['memory_acknowledgment'],
+      rawLogs,
+      executionMemoryContext: {
+        matchedMemories: [
+          { memoryId: 'mem_123', title: 'Sample', type: 't', score: 1, content: 'x' },
+        ],
+        totalMatched: 1,
+      } as never,
+    });
     expect(result).not.toContain('Execution Memories Received');
     expect(result).not.toContain('Injected memory IDs you MUST acknowledge');
     // It still lists the missing field name by virtue of the standard resume header.

@@ -1,4 +1,3 @@
-// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -8,6 +7,7 @@ import { promisify } from 'node:util';
 import { getErrorMessage, type Logger } from '@intexuraos/common-core';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { createLlmParseError, formatZodErrors, logLlmParseError } from '@intexuraos/llm-utils';
+import type { PromptBuilder } from './prompt-builder.js';
 import {
   AgentComplianceReportSchema,
   type AgentComplianceReport,
@@ -97,14 +97,15 @@ export type CompliancePromptResult =
 // Note: LlmGenerateClient.generate() accepts only a string prompt — no responseFormat option.
 // JSON mode is enforced entirely via prompt instructions ("Return ONLY valid JSON…") and the
 // stripCodeFences + Zod-parse repair loop in OrchestratorAgentComplianceValidator.
-export function buildCompliancePrompt(input: CompliancePromptInput): CompliancePromptResult {
-  if (input.formattedTranscript.length > MAX_TRANSCRIPT_TOKENS_CHARS) {
-    return { ok: false, reason: 'TRANSCRIPT_TOO_LONG' };
-  }
-  const claimsJson = JSON.stringify(input.agentClaims, null, 2);
-  return {
-    ok: true as const,
-    prompt: [
+export const compliancePrompt: PromptBuilder<CompliancePromptInput> = {
+  name: 'agent-compliance-validation',
+  description:
+    'Post-execution compliance validator that analyzes a session transcript and emits a structured report',
+  version: '1.0.0',
+
+  build(input: CompliancePromptInput): string {
+    const claimsJson = JSON.stringify(input.agentClaims, null, 2);
+    return [
       '[agent-compliance-prompt v' + AGENT_COMPLIANCE_PROMPT_VERSION + ']',
       'You are a post-execution compliance validator for the IntexuraOS Agent-Based Code Task Execution Flow.',
       'Analyze the full session transcript below and produce a structured Agent Compliance Report.',
@@ -158,8 +159,20 @@ export function buildCompliancePrompt(input: CompliancePromptInput): ComplianceP
       '',
       '=== Full Session Transcript ===',
       input.formattedTranscript,
-    ].join('\n'),
-  };
+    ].join('\n');
+  },
+};
+
+/**
+ * Wrapper that performs the transcript-length guard before delegating to
+ * `compliancePrompt.build`. Returns a discriminated union so callers can
+ * branch on whether the transcript was short enough to render.
+ */
+export function prepareCompliancePrompt(input: CompliancePromptInput): CompliancePromptResult {
+  if (input.formattedTranscript.length > MAX_TRANSCRIPT_TOKENS_CHARS) {
+    return { ok: false, reason: 'TRANSCRIPT_TOO_LONG' };
+  }
+  return { ok: true, prompt: compliancePrompt.build(input) };
 }
 
 export function renderComplianceMarkdown(
@@ -338,7 +351,7 @@ export class OrchestratorAgentComplianceValidator implements AgentComplianceVali
     input: ComplianceValidationInput,
     onProgress?: (message: string) => void
   ): Promise<ComplianceValidationResult | null> {
-    const promptResult = buildCompliancePrompt({
+    const promptResult = prepareCompliancePrompt({
       formattedTranscript: input.formattedTranscript,
       agentClaims: input.agentClaims,
       workerType: input.workerType,

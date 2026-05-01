@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { buildSynthesisContextRepairPrompt } from '../repairPrompt.js';
+import { synthesisContextRepairPrompt } from '../repairPrompt.js';
 
-describe('buildSynthesisContextRepairPrompt', () => {
+describe('synthesisContextRepairPrompt', () => {
+  it('has correct metadata', () => {
+    expect(synthesisContextRepairPrompt.name).toBe('synthesis-context-repair');
+    expect(synthesisContextRepairPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
   it('includes original prompt in XML tags', () => {
-    const result = buildSynthesisContextRepairPrompt('test query', '{}', 'some error');
+    const result = synthesisContextRepairPrompt.build({
+      originalPrompt: 'test query',
+      invalidResponse: '{}',
+      errorMessage: 'some error',
+    });
 
     expect(result).toContain('<user_query>');
     expect(result).toContain('test query');
@@ -11,7 +20,11 @@ describe('buildSynthesisContextRepairPrompt', () => {
   });
 
   it('includes invalid response in XML tags', () => {
-    const result = buildSynthesisContextRepairPrompt('query', '{bad json}', 'parse error');
+    const result = synthesisContextRepairPrompt.build({
+      originalPrompt: 'query',
+      invalidResponse: '{bad json}',
+      errorMessage: 'parse error',
+    });
 
     expect(result).toContain('<invalid_response>');
     expect(result).toContain('{bad json}');
@@ -19,14 +32,22 @@ describe('buildSynthesisContextRepairPrompt', () => {
   });
 
   it('includes error message', () => {
-    const result = buildSynthesisContextRepairPrompt('query', '{}', 'missing field: domain');
+    const result = synthesisContextRepairPrompt.build({
+      originalPrompt: 'query',
+      invalidResponse: '{}',
+      errorMessage: 'missing field: domain',
+    });
 
     expect(result).toContain('ERROR DETAILS:');
     expect(result).toContain('missing field: domain');
   });
 
   it('includes JSON schema requirements', () => {
-    const result = buildSynthesisContextRepairPrompt('query', '{}', 'error');
+    const result = synthesisContextRepairPrompt.build({
+      originalPrompt: 'query',
+      invalidResponse: '{}',
+      errorMessage: 'error',
+    });
 
     expect(result).toContain('EXPECTED SCHEMA:');
     expect(result).toContain('"domain"');
@@ -35,30 +56,42 @@ describe('buildSynthesisContextRepairPrompt', () => {
   });
 
   it('includes JSON formatting rules', () => {
-    const result = buildSynthesisContextRepairPrompt('query', '{}', 'error');
+    const result = synthesisContextRepairPrompt.build({
+      originalPrompt: 'query',
+      invalidResponse: '{}',
+      errorMessage: 'error',
+    });
 
     expect(result).toContain('Output ONLY valid JSON');
     expect(result).toContain('No trailing commas');
   });
 
   it('should include outdoor_recreation and fishing in domain list', () => {
-    const result = buildSynthesisContextRepairPrompt('query', '{}', 'error');
+    const result = synthesisContextRepairPrompt.build({
+      originalPrompt: 'query',
+      invalidResponse: '{}',
+      errorMessage: 'error',
+    });
     expect(result).toContain('outdoor_recreation');
     expect(result).toContain('fishing');
     expect(result).toContain('construction_building');
   });
 
   it('should include user_exclusions in safety schema', () => {
-    const result = buildSynthesisContextRepairPrompt('query', '{}', 'error');
+    const result = synthesisContextRepairPrompt.build({
+      originalPrompt: 'query',
+      invalidResponse: '{}',
+      errorMessage: 'error',
+    });
     expect(result).toContain('user_exclusions');
   });
 
   it('preserves parameter ordering', () => {
-    const result = buildSynthesisContextRepairPrompt(
-      'original prompt text',
-      'invalid response text',
-      'error message text'
-    );
+    const result = synthesisContextRepairPrompt.build({
+      originalPrompt: 'original prompt text',
+      invalidResponse: 'invalid response text',
+      errorMessage: 'error message text',
+    });
 
     const originalIdx = result.indexOf('original prompt text');
     const invalidIdx = result.indexOf('invalid response text');

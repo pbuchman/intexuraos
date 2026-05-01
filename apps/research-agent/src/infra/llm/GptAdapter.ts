@@ -6,7 +6,7 @@
 import { createGptClient, type GptClient } from '@intexuraos/infra-gpt';
 import type { Logger, Result } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
-import { buildResearchPrompt, buildSynthesisPrompt, titlePrompt, type ResearchContext, type SynthesisContext } from '@intexuraos/llm-prompts';
+import { researchPrompt, synthesisPrompt, titlePrompt, type ResearchContext, type SynthesisContext } from '@intexuraos/llm-prompts';
 import type {
   LlmError,
   LlmResearchProvider,
@@ -66,7 +66,7 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     ctx?: ResearchContext,
     options?: ResearchProviderCallOptions
   ): Promise<Result<LlmResearchResult, LlmError>> {
-    const builtPrompt = buildResearchPrompt(prompt, ctx);
+    const builtPrompt = researchPrompt.build({ userPrompt: prompt, ctx });
     this.logger.info({ model: this.model, promptLength: builtPrompt.length }, 'GPT research started');
     // Per-call researchId wins over the constructor-baked one (see
     // GeminiAdapter for rationale).
@@ -101,11 +101,13 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
       { model: this.model, reportCount: reports.length, sourceCount: additionalSources?.length ?? 0 },
       'GPT synthesis started'
     );
-    const synthesisPrompt =
-      synthesisContext !== undefined
-        ? buildSynthesisPrompt(originalPrompt, reports, synthesisContext, additionalSources)
-        : buildSynthesisPrompt(originalPrompt, reports, additionalSources);
-    const result = await this.client.generate(synthesisPrompt, this.generateOptions('research-synthesis'));
+    const synthesisPromptText = synthesisPrompt.build({
+      originalPrompt,
+      reports,
+      ctx: synthesisContext,
+      additionalSources,
+    });
+    const result = await this.client.generate(synthesisPromptText, this.generateOptions('research-synthesis'));
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);

@@ -1,19 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import type { Task } from '../../types/task.js';
 
-const { buildMissingFieldsPrompt, runVerification } = await import('../task-dispatcher.js');
+const { missingFieldsPrompt, runVerification } = await import('../task-dispatcher.js');
 
 // ---------------------------------------------------------------------------
-// buildMissingFieldsPrompt (post-INT-1470: deliverable-only; telemetry misses
+// missingFieldsPrompt (post-INT-1470: deliverable-only; telemetry misses
 // never trigger a retry so the memory guidance branches have been removed)
 // ---------------------------------------------------------------------------
 
-describe('buildMissingFieldsPrompt', () => {
+describe('missingFieldsPrompt', () => {
   const rawLogs = 'line1\nline2\nline3';
 
   it('always includes transcript, agent type, and constraints', () => {
     const logsWithContent = 'alpha\nbeta\ngamma';
-    const result = buildMissingFieldsPrompt('planning', ['summary'], logsWithContent);
+    const result = missingFieldsPrompt.build({
+      agentType: 'planning',
+      missingFields: ['summary'],
+      rawLogs: logsWithContent,
+    });
 
     expect(result).toContain('[AUTO-CONTINUE ATTEMPT]');
     expect(result).toContain('Missing fields: summary');
@@ -25,16 +29,20 @@ describe('buildMissingFieldsPrompt', () => {
   });
 
   it('does NOT emit the legacy EXECUTION MEMORY REPORTING FAILURE branch', () => {
-    const result = buildMissingFieldsPrompt(
-      'execution',
-      ['memory_acknowledgment', 'memory_ids_unaccounted'],
-      rawLogs
-    );
+    const result = missingFieldsPrompt.build({
+      agentType: 'execution',
+      missingFields: ['memory_acknowledgment', 'memory_ids_unaccounted'],
+      rawLogs,
+    });
     expect(result).not.toContain('EXECUTION MEMORY REPORTING FAILURE');
   });
 
   it('does NOT emit the legacy MEMORY ACKNOWLEDGMENT BLOCK guidance', () => {
-    const result = buildMissingFieldsPrompt('review', ['memory_acknowledgment'], rawLogs);
+    const result = missingFieldsPrompt.build({
+      agentType: 'review',
+      missingFields: ['memory_acknowledgment'],
+      rawLogs,
+    });
     expect(result).not.toContain('MEMORY ACKNOWLEDGMENT BLOCK MISSING');
     expect(result).not.toContain('Execution Memories Received');
   });

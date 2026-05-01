@@ -4,9 +4,10 @@
  * Contains prompts and utilities for research and synthesis operations.
  */
 
-export { buildResearchPrompt } from './researchPrompt.js';
+export { researchPrompt, type ResearchPromptInput } from './researchPrompt.js';
 export {
-  buildSynthesisPrompt,
+  synthesisPrompt,
+  type SynthesisPromptInput,
   type SynthesisReport,
   type AdditionalSource,
   /** @deprecated Use AdditionalSource instead */
@@ -61,10 +62,16 @@ export {
   OutputFormatSchema,
   ResearchContextSchema,
 } from './contextSchemas.js';
-export { buildInferResearchContextPrompt } from './contextInference.js';
-export { buildResearchContextRepairPrompt } from './repairPrompt.js';
 export {
-  buildModelExtractionPrompt,
+  inferResearchContextPrompt,
+  type InferResearchContextPromptInput,
+} from './contextInference.js';
+export {
+  researchContextRepairPrompt,
+  type ResearchContextRepairPromptInput,
+} from './repairPrompt.js';
+export {
+  modelExtractionPrompt,
   parseModelExtractionResponse,
   MODEL_KEYWORDS,
   PROVIDER_DEFAULT_MODELS,

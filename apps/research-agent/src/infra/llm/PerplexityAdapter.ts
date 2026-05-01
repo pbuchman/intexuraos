@@ -7,7 +7,7 @@
 import { createPerplexityClient, type PerplexityClient } from '@intexuraos/infra-perplexity';
 import type { Logger, Result } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
-import { buildResearchPrompt, type ResearchContext } from '@intexuraos/llm-prompts';
+import { researchPrompt, type ResearchContext } from '@intexuraos/llm-prompts';
 import type {
   LlmError,
   LlmResearchProvider,
@@ -43,7 +43,7 @@ export class PerplexityAdapter implements LlmResearchProvider {
     ctx?: ResearchContext,
     options?: ResearchProviderCallOptions
   ): Promise<Result<LlmResearchResult, LlmError>> {
-    const builtPrompt = buildResearchPrompt(prompt, ctx);
+    const builtPrompt = researchPrompt.build({ userPrompt: prompt, ctx });
     this.logger.info({ model: this.model, promptLength: builtPrompt.length }, 'Perplexity research started');
     const researchOptions =
       options?.researchId !== undefined

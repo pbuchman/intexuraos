@@ -9,7 +9,7 @@ import {
 import { AGENT_CONTRACTS } from './completion-verifier/contracts.js';
 import { detectEmptyMemoryFields } from './completion-verifier/memory-validation.js';
 import { RESUME_SUMMARY_SCHEMA } from './completion-verifier/schemas.js';
-import { buildResumeSummaryPrompt } from './completion-verifier/prompt-builder.js';
+import { resumeSummaryPrompt } from './completion-verifier/prompt-builder.js';
 import {
   generateResumeSummaryWithFallback,
   extractAndParseJson,
@@ -35,7 +35,7 @@ export {
   partitionMissingFields,
   TELEMETRY_FIELD_NAMES,
 } from './completion-verifier/memory-validation.js';
-export { buildResumeSummaryPrompt } from './completion-verifier/prompt-builder.js';
+export { resumeSummaryPrompt } from './completion-verifier/prompt-builder.js';
 export {
   generateResumeSummaryWithFallback,
   extractAndParseJson,
@@ -163,7 +163,7 @@ export class ResumeSummaryExtractor {
       primaryClient: this.primaryClient,
       primaryModelName: this.primaryModelName,
       fallbacks: this.fallbacks,
-      prompt: buildResumeSummaryPrompt(getLast20Lines(rawLogs)),
+      prompt: resumeSummaryPrompt.build({ transcript: getLast20Lines(rawLogs) }),
       taskId,
       logger,
     });

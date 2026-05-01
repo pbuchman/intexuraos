@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { buildDigestPrompt, DIGEST_PROMPT_VERSION } from '../digestPrompt.js';
+import { digestPrompt, DIGEST_PROMPT_VERSION } from '../digestPrompt.js';
 
-describe('buildDigestPrompt', () => {
+describe('digestPrompt metadata', () => {
+  it('has correct metadata', () => {
+    expect(digestPrompt.name).toBe('whatsapp-digest');
+    expect(digestPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(digestPrompt.version).toBe(DIGEST_PROMPT_VERSION);
+  });
+});
+
+describe('digestPrompt.build', () => {
   const baseInput = {
     userId: 'google-oauth2|test-user',
     groupKey: 'grupa-wedkarska-skool',
@@ -12,32 +20,32 @@ describe('buildDigestPrompt', () => {
   };
 
   it('returns a non-empty prompt with the date and group key', () => {
-    const prompt = buildDigestPrompt(baseInput);
+    const prompt = digestPrompt.build(baseInput);
     expect(prompt.length).toBeGreaterThan(500);
     expect(prompt).toContain('2026-04-15');
     expect(prompt).toContain('grupa-wedkarska-skool');
   });
 
   it('embeds both few-shot examples', () => {
-    const prompt = buildDigestPrompt(baseInput);
+    const prompt = digestPrompt.build(baseInput);
     expect(prompt).toContain('2026-04-08');
     expect(prompt).toContain('2026-04-11');
   });
 
   it('instructs the model to write Polish narratives', () => {
-    const prompt = buildDigestPrompt(baseInput);
+    const prompt = digestPrompt.build(baseInput);
     expect(prompt.toLowerCase()).toContain('po polsku');
   });
 
   it('instructs the model to output headline + bullets (hybrid format)', () => {
-    const prompt = buildDigestPrompt(baseInput);
+    const prompt = digestPrompt.build(baseInput);
     expect(prompt).toMatch(/headline/i);
     expect(prompt).toMatch(/bullets/i);
     expect(prompt).toMatch(/3.{0,10}7/);
   });
 
   it('forbids copying from last3Summaries', () => {
-    const prompt = buildDigestPrompt(baseInput);
+    const prompt = digestPrompt.build(baseInput);
     expect(prompt.toLowerCase()).toContain('nie kopiuj');
   });
 
