@@ -271,8 +271,10 @@ export class AttemptLifecycle {
 
       await ctx.saveTask(task);
 
-      ctx.scheduleTimeoutWarning(taskId);
-      ctx.scheduleTimeoutKill(taskId);
+      // INT-1585: pass per-task timeoutMs override to honour user-customised
+      // 1–12h horizon; falls back to the legacy 5h constants when undefined.
+      ctx.scheduleTimeoutWarning(taskId, task.timeoutMs);
+      ctx.scheduleTimeoutKill(taskId, task.timeoutMs);
 
       ctx.startCompletionMonitoring(taskId);
       ctx.appendOrchestratorTaskLog(
@@ -434,8 +436,9 @@ export class AttemptLifecycle {
       delete task.pendingResumeStart;
       await ctx.saveTask(task);
 
-      ctx.scheduleTimeoutWarning(task.taskId);
-      ctx.scheduleTimeoutKill(task.taskId);
+      // INT-1585: re-arm timers with the per-task override on resume, too.
+      ctx.scheduleTimeoutWarning(task.taskId, task.timeoutMs);
+      ctx.scheduleTimeoutKill(task.taskId, task.timeoutMs);
       ctx.startCompletionMonitoring(task.taskId);
 
       ctx.logger.info({ taskId: task.taskId }, 'Task resumed with user message');

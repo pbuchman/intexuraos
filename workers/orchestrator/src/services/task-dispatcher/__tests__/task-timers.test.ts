@@ -3,6 +3,7 @@ import { TaskTimers } from '../task-timers.js';
 import {
   TASK_TIMEOUT_WARNING_MS,
   TASK_TIMEOUT_KILL_MS,
+  TASK_TIMEOUT_WARNING_OFFSET_MS,
   COMPLETION_CHECK_INTERVAL_MS,
 } from '../retry-logic.js';
 import { makeContextHarness, makeTask, type ContextHarness } from './fixtures.js';
@@ -33,15 +34,85 @@ describe('TaskTimers', () => {
       expect(harness.ctx.activeTasks.has('task-1-warning')).toBe(false);
     });
 
-    it('logs a warning when the timer fires for a still-running task', async () => {
+    it('logs a 5-hour warning at TASK_TIMEOUT_WARNING_MS when no override is set', async () => {
       timers.scheduleTimeoutWarning('task-1');
       await vi.advanceTimersByTimeAsync(TASK_TIMEOUT_WARNING_MS);
       // Drain any microtasks scheduled by the inner async callback.
       await Promise.resolve();
       expect(harness.logger.warn).toHaveBeenCalledWith(
         { taskId: 'task-1' },
-        expect.stringContaining('5-hour timeout')
+        'Task approaching 5-hour timeout'
       );
+    });
+  });
+
+  describe('per-task timeout override (INT-1585)', () => {
+    it('schedules warning at overrideKillMs - 5min when override is provided', async () => {
+      const overrideKillMs = 2 * 60 * 60 * 1000; // 2h
+      timers.scheduleTimeoutWarning('task-1', overrideKillMs);
+
+      // Just before the warning deadline → no log yet.
+      await vi.advanceTimersByTimeAsync(overrideKillMs - TASK_TIMEOUT_WARNING_OFFSET_MS - 1);
+      await Promise.resolve();
+      expect(harness.logger.warn).not.toHaveBeenCalled();
+
+      // Cross the deadline → warning logged with templated hour count.
+      await vi.advanceTimersByTimeAsync(2);
+      await Promise.resolve();
+      expect(harness.logger.warn).toHaveBeenCalledWith(
+        { taskId: 'task-1' },
+        'Task approaching 2-hour timeout'
+      );
+    });
+
+    it('clamps warning to 0 when overrideKillMs is below the warning offset (Math.max guard)', async () => {
+      // When overrideKillMs is smaller than the 5-min warning offset, the
+      // warning would otherwise be scheduled at a negative delay. The Math.max
+      // guard clamps to 0 so the warning fires on the next tick instead.
+      const tinyOverride = TASK_TIMEOUT_WARNING_OFFSET_MS - 1; // < offset
+      timers.scheduleTimeoutWarning('task-1', tinyOverride);
+
+      // Advance 1ms — the clamped 0ms timer must fire.
+      await vi.advanceTimersByTimeAsync(1);
+      await Promise.resolve();
+      expect(harness.logger.warn).toHaveBeenCalled();
+    });
+
+    it('kills the task at overrideKillMs when override is provided', async () => {
+      const overrideKillMs = 3 * 60 * 60 * 1000; // 3h
+      harness.runningCount.value = 1;
+      timers.scheduleTimeoutKill('task-1', overrideKillMs);
+
+      // Before override deadline → not killed yet.
+      await vi.advanceTimersByTimeAsync(overrideKillMs - 1);
+      await Promise.resolve();
+      const taskMid = harness.tasks.get('task-1');
+      expect(taskMid?.status).not.toBe('interrupted');
+
+      // Cross the override deadline → task killed.
+      await vi.advanceTimersByTimeAsync(2);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      const taskAfter = harness.tasks.get('task-1');
+      expect(taskAfter?.status).toBe('interrupted');
+    });
+
+    it('falls back to TASK_TIMEOUT_KILL_MS (5h) when overrideKillMs is undefined', async () => {
+      harness.runningCount.value = 1;
+      timers.scheduleTimeoutKill('task-1');
+
+      // Just before the legacy 5h deadline → not killed yet.
+      await vi.advanceTimersByTimeAsync(TASK_TIMEOUT_KILL_MS - 1);
+      await Promise.resolve();
+      expect(harness.tasks.get('task-1')?.status).not.toBe('interrupted');
+
+      // Cross the deadline → task killed via legacy 5h constant.
+      await vi.advanceTimersByTimeAsync(2);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(harness.tasks.get('task-1')?.status).toBe('interrupted');
     });
   });
 

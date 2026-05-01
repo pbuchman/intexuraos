@@ -141,10 +141,15 @@ export interface DispatcherContext {
    * Backed by `TaskTimers.clearTaskTimers`.
    */
   clearTaskTimers: (taskId: string) => void;
-  /** Best-effort 5h warning timer. */
-  scheduleTimeoutWarning: (taskId: string) => void;
-  /** Hard 5h kill timer. */
-  scheduleTimeoutKill: (taskId: string) => void;
+  /**
+   * Best-effort warning timer. Fires at `overrideKillMs - 5min` when set
+   * (INT-1585), else 4h55m.
+   */
+  scheduleTimeoutWarning: (taskId: string, overrideKillMs?: number) => void;
+  /**
+   * Hard kill timer. Fires after `overrideKillMs` when set (INT-1585), else 5h.
+   */
+  scheduleTimeoutKill: (taskId: string, overrideKillMs?: number) => void;
   /** 30s poll on `isWorkerRunning` + `attemptCompletionSignals`. */
   startCompletionMonitoring: (taskId: string) => void;
   /** Convert a resume-startup error → terminal failure. */
