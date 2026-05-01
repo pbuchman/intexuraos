@@ -130,6 +130,7 @@ describe('HttpInternalAuthUsageSink', () => {
         });
 
       await sink.log(baseParams);
+      await sink.flushSync();
 
       expect(scope.isDone()).toBe(true);
 
@@ -222,6 +223,7 @@ describe('HttpInternalAuthUsageSink', () => {
       };
 
       await sink.log(minimalParams);
+      await sink.flushSync();
 
       expect(scope.isDone()).toBe(true);
 
@@ -260,6 +262,7 @@ describe('HttpInternalAuthUsageSink', () => {
           researchId: 'research-1',
         },
       });
+      await sink.flushSync();
 
       const parsedBody = parseBody(capturedBody);
       const event = parsedBody.events[0];
@@ -287,6 +290,7 @@ describe('HttpInternalAuthUsageSink', () => {
         .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
 
       await sink.log(baseParams);
+      await sink.flushSync();
 
       const parsedBody = parseBody(capturedBody);
       const event = parsedBody.events[0];
@@ -314,6 +318,7 @@ describe('HttpInternalAuthUsageSink', () => {
         success: false,
         errorMessage: 'Rate limit exceeded',
       });
+      await sink.flushSync();
 
       const parsedBody = parseBody(capturedBody);
       const event = parsedBody.events[0];
@@ -332,7 +337,9 @@ describe('HttpInternalAuthUsageSink', () => {
         .post('/internal/usage/events')
         .reply(500, { error: 'Internal Server Error' });
 
-      await expect(sink.log(baseParams)).resolves.toBeUndefined();
+      await sink.log(baseParams);
+      // flushSync rethrows on non-2xx — that's the contract for shutdown callers.
+      await expect(sink.flushSync()).rejects.toThrow();
 
       expect(scope.isDone()).toBe(true);
       expect(fakeLogger.warn).toHaveBeenCalledWith(
@@ -343,8 +350,31 @@ describe('HttpInternalAuthUsageSink', () => {
       );
     });
 
-    it('logs warning and does not throw on network error', async () => {
-      const config = makeConfig();
+    it('does not throw from log() when timer-driven flush hits a 5xx', async () => {
+      vi.useRealTimers();
+      const config = makeConfig({ flushIntervalMs: 5 });
+      const sink = new HttpInternalAuthUsageSink(config);
+
+      const scope = nock(USAGE_SERVICE_URL)
+        .post('/internal/usage/events')
+        .reply(500, { error: 'Internal Server Error' });
+
+      await expect(sink.log(baseParams)).resolves.toBeUndefined();
+      // Wait for the timer + fetch round-trip on real timers.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(scope.isDone()).toBe(true);
+      expect(fakeLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: 500,
+        }),
+        expect.stringContaining('Usage ingest')
+      );
+    });
+
+    it('logs warning and does not throw from log() on network error', async () => {
+      vi.useRealTimers();
+      const config = makeConfig({ flushIntervalMs: 5 });
       const sink = new HttpInternalAuthUsageSink(config);
 
       const scope = nock(USAGE_SERVICE_URL)
@@ -352,6 +382,7 @@ describe('HttpInternalAuthUsageSink', () => {
         .replyWithError('ECONNREFUSED');
 
       await expect(sink.log(baseParams)).resolves.toBeUndefined();
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(scope.isDone()).toBe(true);
       expect(fakeLogger.warn).toHaveBeenCalledWith(
@@ -360,6 +391,101 @@ describe('HttpInternalAuthUsageSink', () => {
         }),
         expect.stringContaining('Usage ingest')
       );
+    });
+
+    it('flushSync() rethrows on network error', async () => {
+      const config = makeConfig();
+      const sink = new HttpInternalAuthUsageSink(config);
+
+      nock(USAGE_SERVICE_URL).post('/internal/usage/events').replyWithError('ECONNREFUSED');
+
+      await sink.log(baseParams);
+      await expect(sink.flushSync()).rejects.toThrow();
+    });
+  });
+
+  describe('batching', () => {
+    it('coalesces multiple events within the flush window into a single POST', async () => {
+      const config = makeConfig({ flushIntervalMs: 500, maxBatchSize: 100 });
+      const sink = new HttpInternalAuthUsageSink(config);
+
+      let capturedBody: string | undefined;
+      let postCount = 0;
+
+      const scope = nock(USAGE_SERVICE_URL)
+        .post('/internal/usage/events', (body: unknown) => {
+          capturedBody = JSON.stringify(body);
+          postCount++;
+          return true;
+        })
+        .reply(200, { accepted: 3, duplicates: 0, rejected: [] });
+
+      await sink.log(baseParams);
+      await sink.log(baseParams);
+      await sink.log(baseParams);
+
+      // Before the timer fires, no POST should have happened.
+      expect(postCount).toBe(0);
+
+      // Fire the flush window.
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(scope.isDone()).toBe(true);
+      expect(postCount).toBe(1);
+
+      const parsed = parseBody(capturedBody);
+      expect(parsed.events).toHaveLength(3);
+    });
+
+    it('flushes immediately when the buffer reaches maxBatchSize', async () => {
+      vi.useRealTimers();
+      const config = makeConfig({ flushIntervalMs: 60_000, maxBatchSize: 2 });
+      const sink = new HttpInternalAuthUsageSink(config);
+
+      let capturedBody: string | undefined;
+      let postCount = 0;
+
+      const scope = nock(USAGE_SERVICE_URL)
+        .post('/internal/usage/events', (body: unknown) => {
+          capturedBody = JSON.stringify(body);
+          postCount++;
+          return true;
+        })
+        .reply(200, { accepted: 2, duplicates: 0, rejected: [] });
+
+      await sink.log(baseParams);
+      await sink.log(baseParams);
+      // Wait for the in-flight POST to land. The buffer-full path fires the
+      // flush asynchronously and we deliberately don't await it from log().
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      expect(scope.isDone()).toBe(true);
+      expect(postCount).toBe(1);
+      const parsed = parseBody(capturedBody);
+      expect(parsed.events).toHaveLength(2);
+    });
+
+    it('flushSync() resolves cleanly when buffer is empty', async () => {
+      const config = makeConfig();
+      const sink = new HttpInternalAuthUsageSink(config);
+      await expect(sink.flushSync()).resolves.toBeUndefined();
+    });
+
+    it('clears the buffer after flushSync()', async () => {
+      const config = makeConfig();
+      const sink = new HttpInternalAuthUsageSink(config);
+
+      const scope = nock(USAGE_SERVICE_URL)
+        .post('/internal/usage/events')
+        .reply(200, { accepted: 1, duplicates: 0, rejected: [] });
+
+      await sink.log(baseParams);
+      await sink.flushSync();
+      expect(scope.isDone()).toBe(true);
+
+      // Second flush with no new events: no further POST.
+      await expect(sink.flushSync()).resolves.toBeUndefined();
+      expect(nock.pendingMocks()).toHaveLength(0);
     });
   });
 });
