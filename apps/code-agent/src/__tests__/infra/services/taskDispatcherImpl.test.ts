@@ -278,6 +278,109 @@ describe('taskDispatcherImpl', () => {
     });
   });
 
+  describe('dispatch forwards timeoutHours (INT-1585)', () => {
+    it('includes timeoutHours in worker dispatch payload when set', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+        },
+      });
+
+      const service = createTaskDispatcherService(deps);
+
+      let capturedBody: Record<string, unknown> | undefined;
+      nock(WORKER_URL)
+        .post('/tasks', (body: Record<string, unknown>) => {
+          capturedBody = body;
+          return true;
+        })
+        .reply(200, { status: 'accepted' });
+
+      const result = await service.dispatch({
+        taskId: 'task-timeout-set',
+        prompt: 'Long task',
+        systemPromptHash: 'hash-123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+        timeoutHours: 8,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(capturedBody).toBeDefined();
+      expect(capturedBody?.['timeoutHours']).toBe(8);
+    });
+
+    it('omits timeoutHours from dispatch payload when absent (backward compat)', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+        },
+      });
+
+      const service = createTaskDispatcherService(deps);
+
+      let capturedBody: Record<string, unknown> | undefined;
+      nock(WORKER_URL)
+        .post('/tasks', (body: Record<string, unknown>) => {
+          capturedBody = body;
+          return true;
+        })
+        .reply(200, { status: 'accepted' });
+
+      const result = await service.dispatch({
+        taskId: 'task-timeout-absent',
+        prompt: 'Default-timeout task',
+        systemPromptHash: 'hash-123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        linearIssueLabels: [],
+        hasChildren: false,
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      expect(capturedBody).toBeDefined();
+      expect('timeoutHours' in (capturedBody ?? {})).toBe(false);
+    });
+  });
+
   describe('dispatch includes reviewTypes when provided', () => {
     it('sends reviewTypes in the dispatch request body', async () => {
       const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;

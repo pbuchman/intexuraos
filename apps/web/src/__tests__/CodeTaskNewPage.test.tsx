@@ -558,3 +558,58 @@ describe('CodeTaskNewPage - scheduled dispatch UX', () => {
     }
   });
 });
+
+describe('CodeTaskNewPage - per-task timeout (INT-1585)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('omits timeoutHours from the request when slider stays at the default (5h)', async () => {
+    render(<CodeTaskNewPage />);
+
+    const editor = screen.getAllByTestId('md-editor')[0] as HTMLTextAreaElement;
+    fireEvent.change(editor, { target: { value: 'default-timeout task' } });
+
+    // Do NOT touch the slider — it stays at DEFAULT_TIMEOUT_HOURS (5).
+
+    const submitButtons = screen.getAllByRole('button', { name: /submit task/i });
+    fireEvent.click(submitButtons[0] as HTMLElement);
+    fireEvent.click(screen.getByTestId('confirm-submit-btn'));
+
+    await waitFor(() => {
+      expect(submitCodeTask).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = vi.mocked(submitCodeTask).mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(payload['timeoutHours']).toBeUndefined();
+  });
+
+  it('sends timeoutHours when the slider is changed to a non-default value', async () => {
+    render(<CodeTaskNewPage />);
+
+    const editor = screen.getAllByTestId('md-editor')[0] as HTMLTextAreaElement;
+    fireEvent.change(editor, { target: { value: 'long task' } });
+
+    // Set the slider to 8 hours.
+    const slider = screen.getByRole('slider', { name: /task timeout/i });
+    fireEvent.change(slider, { target: { value: '8' } });
+
+    const submitButtons = screen.getAllByRole('button', { name: /submit task/i });
+    fireEvent.click(submitButtons[0] as HTMLElement);
+    fireEvent.click(screen.getByTestId('confirm-submit-btn'));
+
+    await waitFor(() => {
+      expect(submitCodeTask).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = vi.mocked(submitCodeTask).mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(payload['timeoutHours']).toBe(8);
+  });
+});

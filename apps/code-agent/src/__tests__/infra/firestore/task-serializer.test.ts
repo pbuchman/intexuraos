@@ -282,6 +282,16 @@ describe('toFirestoreDoc', () => {
     expect(doc.dispatchSchedule?.source).toBe('user_scheduled');
   });
 
+  it('persists timeoutHours when provided (INT-1585)', () => {
+    const doc = toFirestoreDoc({ ...baseCreate(), timeoutHours: 8 }, opts);
+    expect(doc.timeoutHours).toBe(8);
+  });
+
+  it('omits timeoutHours when not provided — backward compat (INT-1585)', () => {
+    const doc = toFirestoreDoc(baseCreate(), opts);
+    expect(doc.timeoutHours).toBeUndefined();
+  });
+
   it('omits optional fields when not provided', () => {
     const doc = toFirestoreDoc(baseCreate(), opts);
     expect(doc.actionId).toBeUndefined();
@@ -303,6 +313,7 @@ describe('toFirestoreDoc', () => {
     expect(doc.failedWorkerLocation).toBeUndefined();
     expect(doc.autoRetryAttempt).toBeUndefined();
     expect(doc.dispatchSchedule).toBeUndefined();
+    expect(doc.timeoutHours).toBeUndefined();
   });
 });
 

@@ -66,6 +66,8 @@ interface WorkerTaskRequest {
   continuationPrNumber?: number;
   continuationPrBranch?: string;
   reviewTypes?: string[];
+  /** Custom per-task timeout in hours (1–12). INT-1585. */
+  timeoutHours?: number;
 }
 
 /**
@@ -148,6 +150,9 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     }
     if (request.reviewTypes !== undefined) {
       taskRequest.reviewTypes = request.reviewTypes;
+    }
+    if (request.timeoutHours !== undefined) {
+      taskRequest.timeoutHours = request.timeoutHours;
     }
 
     const body = JSON.stringify(taskRequest);

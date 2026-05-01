@@ -284,4 +284,11 @@ export interface CodeTask {
 
   // Deferred dispatch metadata (INT-1468)
   dispatchSchedule?: DispatchSchedule;
+
+  /**
+   * Optional per-task timeout override in hours (1–12).
+   * When undefined, the orchestrator applies its default (5h).
+   * Source of truth: user input on the New Code Task UI (INT-1585).
+   */
+  timeoutHours?: number;
 }

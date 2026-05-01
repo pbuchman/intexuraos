@@ -75,11 +75,42 @@ describe('AttemptLifecycle', () => {
       await al.executeTaskSetup(request, () => 'pbuchman/intexuraos');
       expect(worktreeManager.createWorktree).toHaveBeenCalled();
       expect(harness.ctx.startWorkerAttempt).toHaveBeenCalled();
-      expect(harness.ctx.scheduleTimeoutWarning).toHaveBeenCalledWith('setup-1');
-      expect(harness.ctx.scheduleTimeoutKill).toHaveBeenCalledWith('setup-1');
+      // INT-1585: timers are now invoked with the per-task `task.timeoutMs`
+      // override (undefined here because no timeoutHours was supplied).
+      expect(harness.ctx.scheduleTimeoutWarning).toHaveBeenCalledWith('setup-1', undefined);
+      expect(harness.ctx.scheduleTimeoutKill).toHaveBeenCalledWith('setup-1', undefined);
       expect(harness.ctx.startCompletionMonitoring).toHaveBeenCalledWith('setup-1');
       // task should be saved.
       expect(harness.saveTask).toHaveBeenCalled();
+    });
+
+    it('forwards per-task timeoutMs to schedule calls when timeoutHours is set (INT-1585)', async () => {
+      const worktreeManager = {
+        createWorktree: vi.fn().mockResolvedValue('/tmp/wt'),
+        removeWorktree: vi.fn().mockResolvedValue(undefined),
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test stub
+      (harness.ctx as any).worktreeManager = worktreeManager;
+      const request = {
+        taskId: 'setup-timeout',
+        workerType: 'sonnet' as const,
+        prompt: 'long task',
+        webhookUrl: 'http://wh',
+        webhookSecret: 'sec',
+        linearIssueLabels: [],
+        hasChildren: false,
+        timeoutHours: 8,
+      };
+      await al.executeTaskSetup(request, () => 'pbuchman/intexuraos');
+      const expectedTimeoutMs = 8 * 60 * 60 * 1000;
+      expect(harness.ctx.scheduleTimeoutWarning).toHaveBeenCalledWith(
+        'setup-timeout',
+        expectedTimeoutMs
+      );
+      expect(harness.ctx.scheduleTimeoutKill).toHaveBeenCalledWith(
+        'setup-timeout',
+        expectedTimeoutMs
+      );
     });
 
     it('releases slot and sends setup-failure webhook on worktree error', async () => {

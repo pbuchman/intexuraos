@@ -12,7 +12,11 @@ import { randomUUID } from 'node:crypto';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { authenticateInternalScheduler } from '../helpers/internalAuth.js';
 import { extractOrGenerateTraceId, type ErrorCode } from '@intexuraos/common-core';
-import { isCodeTaskWorkerType } from '@intexuraos/code-task-domain';
+import {
+  isCodeTaskWorkerType,
+  MIN_TIMEOUT_HOURS,
+  MAX_TIMEOUT_HOURS,
+} from '@intexuraos/code-task-domain';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { getServices } from '../../services.js';
 import { processCodeAction } from '../../domain/usecases/processCodeAction.js';
@@ -1329,6 +1333,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           timezone: string;
           notBeforeAt: string;
         };
+        timeoutHours?: number;
       };
     }>(
       '/code/submit',
@@ -1353,6 +1358,13 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                   notBeforeAt: { type: 'string' },
                 },
                 required: ['localDateTime', 'timezone', 'notBeforeAt'],
+              },
+              timeoutHours: {
+                type: 'integer',
+                minimum: MIN_TIMEOUT_HOURS,
+                maximum: MAX_TIMEOUT_HOURS,
+                description:
+                  'Optional per-task timeout override in hours (1–12). When omitted, orchestrator default (5h) applies (INT-1585).',
               },
             },
             required: ['prompt'],
@@ -1477,7 +1489,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           },
         },
       },
-      async (request: FastifyRequest<{ Body: { prompt: string; workerType?: WorkerType; workerLocation?: string; linearIssueId?: string; taskMode?: 'planning' | 'execution'; scheduledDispatch?: { localDateTime: string; timezone: string; notBeforeAt: string } } }>, reply: FastifyReply) => {
+      async (request: FastifyRequest<{ Body: { prompt: string; workerType?: WorkerType; workerLocation?: string; linearIssueId?: string; taskMode?: 'planning' | 'execution'; scheduledDispatch?: { localDateTime: string; timezone: string; notBeforeAt: string }; timeoutHours?: number } }>, reply: FastifyReply) => {
         logIncomingRequest(request, {
           message: 'Received request to POST /code/submit',
           includeParams: true,
@@ -1494,6 +1506,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             timezone: string;
             notBeforeAt: string;
           };
+          timeoutHours?: number;
         };
 
         /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId in submit-code-task route — ?? fallback unreachable @preserve */
@@ -1556,6 +1569,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           linearIssueId?: string;
           agentType: 'planning' | 'execution';
           dispatchSchedule?: DispatchScheduleCreateInput;
+          timeoutHours?: number;
         } = {
           id: taskId,
           userId,
@@ -1586,6 +1600,11 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             derivedBy: 'user_input',
           };
           createInput.dispatchSchedule = dispatchSchedule;
+        }
+
+        // Persist user-provided timeout override on the new task (INT-1585)
+        if (body.timeoutHours !== undefined) {
+          createInput.timeoutHours = body.timeoutHours;
         }
 
         const createResult = await codeTaskRepo.create(createInput);

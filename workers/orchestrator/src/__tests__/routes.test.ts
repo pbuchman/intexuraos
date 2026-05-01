@@ -560,6 +560,43 @@ describe('Routes', () => {
       );
     });
 
+    it('forwards timeoutHours to dispatcher.submitTask when set (INT-1585)', async () => {
+      const payload = {
+        taskId: 'task_00000000-0000-0000-0000-00000000aaaa',
+        workerType: 'auto',
+        prompt: 'p',
+        webhookUrl: 'https://example.com/hook',
+        webhookSecret: 'sec',
+        linearIssueLabels: [],
+        hasChildren: false,
+        timeoutHours: 8,
+      };
+      const { headers, body } = createSignedRequest(payload);
+      const response = await app.inject({ method: 'POST', url: '/tasks', headers, body });
+      expect(response.statusCode).toBe(202);
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({ timeoutHours: 8 })
+      );
+    });
+
+    it('omits timeoutHours when not present in body — backward compat (INT-1585)', async () => {
+      const payload = {
+        taskId: 'task_00000000-0000-0000-0000-00000000bbbb',
+        workerType: 'auto',
+        prompt: 'p',
+        webhookUrl: 'https://example.com/hook',
+        webhookSecret: 'sec',
+        linearIssueLabels: [],
+        hasChildren: false,
+      };
+      const { headers, body } = createSignedRequest(payload);
+      const response = await app.inject({ method: 'POST', url: '/tasks', headers, body });
+      expect(response.statusCode).toBe(202);
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.not.objectContaining({ timeoutHours: expect.anything() })
+      );
+    });
+
     it('executionMemoryContext flows from POST body into the rendered system prompt', async () => {
       const memoryContext = {
         applicationId: 'app_e2e',
