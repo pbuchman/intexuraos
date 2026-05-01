@@ -1,0 +1,29 @@
+{
+  "name": "@intexuraos/common-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "workspace:*",
+    "@google-cloud/functions-framework": "^3.0.0",
+    "@sentry/node": "^8.42.0",
+    "pino": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^4.0.16"
+  }
+}
