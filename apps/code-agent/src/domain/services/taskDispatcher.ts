@@ -80,6 +80,11 @@ export interface DispatchRequest {
   reviewTypes?: string[];
   /** Worker location to exclude from dispatch (auto-retry avoidance). INT-1375 */
   failedWorkerLocation?: string;
+  /**
+   * Custom per-task timeout in hours (1–12). When set, orchestrator applies this
+   * instead of its 5h default for both warning and hard-kill timers. INT-1585.
+   */
+  timeoutHours?: number;
 }
 
 /**

@@ -538,6 +538,8 @@ export async function drainTaskQueue(
         executionMemoryContext: dispatchExecutionMemoryContext,
       }),
       ...(task.prNumber !== undefined && { prNumber: task.prNumber }),
+      // INT-1585: forward optional per-task timeout override to orchestrator
+      ...(task.timeoutHours !== undefined && { timeoutHours: task.timeoutHours }),
     });
 
     if (!dispatchResult.ok) {
