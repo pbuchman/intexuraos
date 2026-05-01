@@ -9,9 +9,11 @@ export default mergeConfig(
       coverage: {
         include: ['src/**/*.ts'],
         exclude: [
-          '**/__tests__/**',
-          '**/testing/**',
-          '**/index.ts',
+          'src/__tests__/**',
+          'src/testing/**',
+          // Only the runtime barrel is excluded — sub-barrels under nested
+          // dirs (if any are added later) will require their own entry.
+          'src/index.ts',
           '**/dist/**',
           '**/node_modules/**',
         ],

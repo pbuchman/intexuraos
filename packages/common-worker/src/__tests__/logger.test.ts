@@ -50,6 +50,27 @@ describe('createWorkerLogger', () => {
     expect(child.level).toBe(log.level);
   });
 
+  it('child() carries forward base bindings AND merges new bindings', () => {
+    const lines: string[] = [];
+    const parent = createWorkerLogger('test-worker', {
+      destination: {
+        write(chunk: string): void {
+          lines.push(chunk);
+        },
+      },
+    });
+    const child = parent.child({ traceId: 'abc' });
+    child.info({ foo: 'bar' }, 'hi');
+    expect(lines.length).toBe(1);
+    const record = JSON.parse(lines[0] ?? '{}') as Record<string, unknown>;
+    // Base binding survives the child() call …
+    expect(record['worker']).toBe('test-worker');
+    // … and the child binding is attached …
+    expect(record['traceId']).toBe('abc');
+    // … and per-call fields still apply.
+    expect(record['foo']).toBe('bar');
+  });
+
   it('writes structured records that include the worker binding', () => {
     process.env['LOG_LEVEL'] = 'info';
     const lines: string[] = [];

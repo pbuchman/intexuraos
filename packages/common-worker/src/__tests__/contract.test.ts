@@ -35,6 +35,9 @@ describe('common-worker contract — runtime exports (§3.3)', () => {
     expect(runtime.AckDecision.Nack).toBe('nack');
     expect(runtime.AckDecision.DeadLetter).toBe('dlq');
     const variants = Object.values(runtime.AckDecision);
+    // Lock both the values AND the cardinality — adding a fourth variant
+    // should fail this test until subtasks B–D update their handlers.
+    expect(variants.length).toBe(3);
     expect(new Set(variants)).toEqual(new Set(['ack', 'nack', 'dlq']));
   });
 
@@ -113,5 +116,15 @@ describe('common-worker contract — testing exports (§3.3)', () => {
     res.status(200).json({ ok: true });
     expect(res._status).toBe(200);
     expect(res._body).toEqual({ ok: true });
+  });
+
+  it('makePubSubCloudEvent supports stripping `data` for the missing-data DLQ path', () => {
+    // Use undefined override to overwrite the default data (the JSDoc-promised
+    // "missing message data" path that subtask C exercises).
+    const evt = testing.makePubSubCloudEvent(
+      { ignored: true },
+      { data: undefined as unknown as testing.PubSubData }
+    );
+    expect(evt.data).toBeUndefined();
   });
 });
