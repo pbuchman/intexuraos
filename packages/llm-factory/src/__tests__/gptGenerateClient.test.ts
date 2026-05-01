@@ -58,6 +58,23 @@ describe('createGptGenerateClient', () => {
     }
   });
 
+  it('forwards per-call correlation to the underlying GPT client', async () => {
+    mockGptGenerate.mockResolvedValue(
+      ok({ content: '', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 } })
+    );
+
+    const client = createGptGenerateClient(baseConfig);
+    await client.generate('hi', {
+      promptType: 'test-prompt',
+      correlation: { researchId: 'r-1' },
+    });
+
+    expect(mockGptGenerate).toHaveBeenCalledWith('hi', {
+      promptType: 'test-prompt',
+      correlation: { researchId: 'r-1' },
+    });
+  });
+
   it('passes through errors from GPT generate unchanged', async () => {
     mockGptGenerate.mockResolvedValue(err({ code: 'RATE_LIMITED', message: 'Too many requests' }));
 

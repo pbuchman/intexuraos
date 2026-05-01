@@ -62,7 +62,6 @@ describe('GeminiAdapter', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini25Pro,
         userId: 'test-user-id',
-        researchId: 'research-123',
         logger: mockLogger,
         usageSink: fakeUsageSink,
       });

@@ -67,7 +67,7 @@ describe('OpenRouterAdapter', () => {
       });
     });
 
-    it('passes researchId to client when provided', () => {
+    it('does NOT thread researchId at construction (INT-1533 Task 5: now per-call via correlation)', () => {
       mockCreateOpenRouterClient.mockClear();
       new OpenRouterAdapter(
         'test-key',
@@ -82,7 +82,6 @@ describe('OpenRouterAdapter', () => {
         apiKey: 'test-key',
         model: EXPECTED_RAW_MODEL,
         userId: 'test-user-id',
-        researchId: 'research-123',
         logger: mockLogger,
         usageSink: fakeUsageSink,
       });

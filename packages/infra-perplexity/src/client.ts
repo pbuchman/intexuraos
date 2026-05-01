@@ -59,6 +59,17 @@ import { normalizeUsage } from './costCalculator.js';
 
 export interface GenerateOptions {
   promptType: string;
+  /**
+   * Optional per-call correlation overrides. Forwarded to the usage sink
+   * so the emitted event carries researchId / sessionId / taskId /
+   * requestId for the originating request.
+   */
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
 }
 
 export type PerplexityClient = Pick<LLMClient, 'research'> & {
@@ -212,7 +223,8 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
     success: boolean,
     durationMs: number,
     errorMessage?: string,
-    promptType?: string
+    promptType?: string,
+    correlation?: GenerateOptions['correlation']
   ): void {
     void usageLogger.log({
       userId,
@@ -225,6 +237,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
       ...(errorMessage !== undefined && { errorMessage }),
       ...(ownerType !== undefined && { ownerType }),
       ...(promptType !== undefined && { promptType }),
+      ...(correlation !== undefined && { correlation }),
     });
   }
 
@@ -379,7 +392,15 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
         })
       );
 
-      trackUsage('generate', result.usage, true, durationMs, undefined, options.promptType);
+      trackUsage(
+        'generate',
+        result.usage,
+        true,
+        durationMs,
+        undefined,
+        options.promptType,
+        options.correlation
+      );
 
       return ok({ content: result.content, usage: result.usage });
     } catch (error) {
@@ -391,7 +412,15 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
         totalTokens: 0,
         costUsd: 0,
       };
-      trackUsage('generate', emptyUsage, false, durationMs, errorMsg, options.promptType);
+      trackUsage(
+        'generate',
+        emptyUsage,
+        false,
+        durationMs,
+        errorMsg,
+        options.promptType,
+        options.correlation
+      );
       return err(mapPerplexityError(error));
     }
   }

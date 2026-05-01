@@ -485,6 +485,50 @@ describe('createClaudeClient', () => {
     );
   });
 
+  it('forwards per-call correlation to usage logger when provided', async () => {
+    mockMessagesCreate.mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    });
+
+    const client = createClaudeClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+    await client.generate('hello', {
+      promptType: 'test-prompt',
+      correlation: { researchId: 'r-1', sessionId: 's-2', taskId: 't-3', requestId: 'req-4' },
+    });
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        correlation: { researchId: 'r-1', sessionId: 's-2', taskId: 't-3', requestId: 'req-4' },
+      })
+    );
+  });
+
+  it('omits correlation from usage logger when not provided', async () => {
+    mockMessagesCreate.mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    });
+
+    const client = createClaudeClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+    await client.generate('hello', { promptType: 'test-prompt' });
+
+    const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(lastCall).not.toHaveProperty('correlation');
+  });
+
   describe('OTel span emission for generate()', () => {
     it('emits llm.anthropic.generate span with all canonical attributes on success', async () => {
       mockMessagesCreate.mockResolvedValue({

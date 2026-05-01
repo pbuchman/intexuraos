@@ -39,7 +39,7 @@ describe('PerplexityAdapter', () => {
   });
 
   describe('constructor', () => {
-    it('passes apiKey and model to client', () => {
+    it('passes apiKey and model to client (researchId no longer threaded at construction; INT-1533 Task 5)', () => {
       mockCreatePerplexityClient.mockClear();
       new PerplexityAdapter(
         'test-key',
@@ -54,7 +54,6 @@ describe('PerplexityAdapter', () => {
         apiKey: 'test-key',
         model: LlmModels.SonarPro,
         userId: 'test-user-id',
-        researchId: 'research-123',
         logger: mockLogger,
         usageSink: fakeUsageSink,
       });

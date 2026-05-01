@@ -22,6 +22,17 @@ export interface GenerateOptions {
   responseFormat?: { type: 'json_object' | 'text' };
   /** Semantic identifier for what the prompt was used for (e.g., 'linear-issue-title', 'code-worker-validation') */
   promptType: string;
+  /**
+   * Optional per-call correlation overrides. Forwarded to the usage sink
+   * so the emitted event carries researchId / sessionId / taskId /
+   * requestId for the originating request.
+   */
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
 }
 
 /**
@@ -50,8 +61,6 @@ export interface OpenRouterConfig {
   model: string;
   /** User ID for usage tracking and analytics */
   userId: string;
-  /** Optional research ID for correlating audit logs to a research run */
-  researchId?: string;
   /** Request timeout in milliseconds. Default: 840000 (14 minutes) */
   timeoutMs?: number;
   /** Pino logger for structured LLM usage logging */

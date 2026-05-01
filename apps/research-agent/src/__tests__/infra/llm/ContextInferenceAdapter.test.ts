@@ -115,7 +115,6 @@ describe('ContextInferenceAdapter', () => {
         apiKey: 'test-key',
         model: LlmModels.Gemini20Flash,
         userId: 'test-user',
-        researchId: 'research-123',
         logger: testLogger,
         usageSink: fakeUsageSink,
       });

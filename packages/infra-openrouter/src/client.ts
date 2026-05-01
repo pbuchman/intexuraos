@@ -134,7 +134,8 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     durationMs: number,
     errorMessage?: string,
     providerReportedUsd?: number | null,
-    promptType?: string
+    promptType?: string,
+    correlation?: GenerateOptions['correlation']
   ): void {
     void usageLogger.log({
       userId,
@@ -149,6 +150,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         providerReportedUsd !== null && { providerReportedUsd }),
       ...(ownerType !== undefined && { ownerType }),
       ...(promptType !== undefined && { promptType }),
+      ...(correlation !== undefined && { correlation }),
     });
   }
 
@@ -393,7 +395,8 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         durationMs,
         undefined,
         result.providerReportedUsd,
-        options.promptType
+        options.promptType,
+        options.correlation
       );
 
       return ok({ content: result.content, usage: result.normalized });
@@ -413,7 +416,8 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         durationMs,
         errorMsg,
         undefined,
-        options.promptType
+        options.promptType,
+        options.correlation
       );
       return err(mapOpenRouterError(error));
     }
