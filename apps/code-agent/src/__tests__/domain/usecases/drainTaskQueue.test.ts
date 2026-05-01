@@ -1406,6 +1406,40 @@ describe('drainTaskQueue', () => {
     );
   });
 
+  it('forwards timeoutHours to dispatcher when task has it (INT-1585)', async () => {
+    const task = createMockTask({ timeoutHours: 8 });
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ timeoutHours: 8 }),
+    );
+  });
+
+  it('omits timeoutHours from dispatch when task has none — backward compat (INT-1585)', async () => {
+    const task = createMockTask();
+    mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+    setupWorkerSettings();
+
+    mockTaskDispatcher.dispatch.mockResolvedValue(
+      ok({ dispatched: true, workerLocation: 'home-mac' })
+    );
+    mockCodeTaskRepo.update.mockResolvedValue(ok(createMockTask({ status: 'dispatched' })));
+
+    await drainTaskQueue(createDeps());
+
+    expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+      expect.not.objectContaining({ timeoutHours: expect.anything() }),
+    );
+  });
+
   describe('PR task lock cleanup', () => {
     it('returns locksToCleanup on TTL expiry (PR task)', async () => {
       const beyondTtl = new Date(Date.now() - 1441 * 60 * 1000);
