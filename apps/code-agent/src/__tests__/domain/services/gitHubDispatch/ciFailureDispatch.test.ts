@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { ok, err, type Logger } from '@intexuraos/common-core';
 import {
-  buildCIFixPrompt,
+  ciFixPrompt,
   executeCIFailureDispatch,
 } from '../../../../domain/services/gitHubDispatch/ciFailureDispatch.js';
 import type { WebhookDispatchServiceDeps } from '../../../../domain/services/gitHubDispatch/types.js';
@@ -75,9 +75,15 @@ function makeDeps(overrides: Partial<WebhookDispatchServiceDeps> = {}): WebhookD
   };
 }
 
-describe('buildCIFixPrompt', () => {
+describe('ciFixPrompt', () => {
+  it('has correct metadata', () => {
+    expect(ciFixPrompt.name).toBe('ci-fix');
+    expect(ciFixPrompt.description).toContain('CI');
+    expect(ciFixPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
   it('includes repository, PR number, URL, branch, SHA, and check name', () => {
-    const prompt = buildCIFixPrompt({
+    const prompt = ciFixPrompt.build({
       repository: 'alice/intexuraos',
       prNumber: 42,
       prUrl: 'https://github.com/alice/intexuraos/pull/42',

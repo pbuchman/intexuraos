@@ -1,4 +1,3 @@
-// prompt-version-exempt: pending migration to PromptBuilder (INT-1533 Task 2)
 /**
  * Prompt for triaging *_ENFORCEMENT_FAILED errors.
  *
@@ -7,6 +6,8 @@
  *
  * INT-1375: Self-healing failure triage.
  */
+
+import type { PromptBuilder } from '@intexuraos/llm-prompts';
 
 export const FAILURE_TRIAGE_PROMPT_VERSION = '1.0.0';
 
@@ -23,12 +24,17 @@ export interface TriageResponse {
   reason: string;
 }
 
-export function buildFailureTriagePrompt(input: TriagePromptInput): string {
-  const logLines = input.recentLogLines.slice(-MAX_LOG_LINES);
-  const logSection =
-    logLines.length > 0 ? logLines.join('\n') : '(no log lines available)';
+export const failureTriagePrompt: PromptBuilder<TriagePromptInput> = {
+  name: 'failure-triage',
+  description: 'Decides whether a failed enforcement task should be auto-retried',
+  version: '1.0.0',
 
-  return `You are a failure triage system for automated code tasks. A task failed with an enforcement error, meaning the AI agent did not produce the required output format.
+  build(input: TriagePromptInput): string {
+    const logLines = input.recentLogLines.slice(-MAX_LOG_LINES);
+    const logSection =
+      logLines.length > 0 ? logLines.join('\n') : '(no log lines available)';
+
+    return `You are a failure triage system for automated code tasks. A task failed with an enforcement error, meaning the AI agent did not produce the required output format.
 
 ## Error Details
 - **Error Code:** ${input.errorCode}
@@ -49,7 +55,8 @@ Respond with ONLY a JSON object:
 \`\`\`json
 {"shouldRetry": true/false, "reason": "brief explanation"}
 \`\`\``;
-}
+  },
+};
 
 export function parseTriageResponse(rawResponse: string): TriageResponse {
   try {
