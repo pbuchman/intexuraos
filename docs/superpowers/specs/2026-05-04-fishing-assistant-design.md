@@ -63,6 +63,12 @@ The new service does not own mobile notification storage or digest generation. I
 - Chat-like two-pane UI: `apps/web/src/pages/HellscriptConversationPage.tsx`
 - Composer behavior: `HellscriptComposer` and `code-tasks/MessageInput`
 
+## Implementation Plan
+
+The worker-ready implementation plan is in `docs/superpowers/plans/2026-05-04-fishing-assistant-rag.md`.
+
+Use the design spec for product and architecture decisions. Use the implementation plan for exact files, task order, route contracts, migration shape, env/deployment wiring, tests, and verification commands.
+
 ## Service Boundary
 
 `fishing-assistant-service` is a user-facing domain service.
