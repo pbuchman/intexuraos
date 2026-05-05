@@ -55,7 +55,7 @@ Unchanged:
 - Modify `workers/orchestrator/src/__tests__/services/task-dispatcher/metrics-emission.test.ts`: update metrics fixture secrets with `KIMI_API_KEY`.
 - Modify `terraform/environments/dev/main.tf`: add the Kimi Secret Manager secret definition.
 - Modify `ecosystem.config.cjs`: expose `INTEXURAOS_KIMI_APP_API_KEY` to dev process env in the same group as other LLM provider keys.
-- Modify `.envrc`: add `export INTEXURAOS_KIMI_APP_API_KEY=ABCDEFG`.
+- Populate `.envrc` via Secret Manager sync with temporary test value `ABCDEFG`; `.envrc` is intentionally ignored and must not be committed.
 - Modify `workers/orchestrator/README.md`: document the required Kimi API key env var for orchestrator setup.
 
 ### Task 1: Lock The Native Kimi Worker Type Contract
@@ -466,19 +466,21 @@ In `ecosystem.config.cjs`, add the env var near the other LLM provider keys:
 
 - [ ] **Step 3: Add the temporary test key value**
 
-In `.envrc`, add:
-
-```bash
-export INTEXURAOS_KIMI_APP_API_KEY=ABCDEFG
-```
-
-Set the same value in GCP Secret Manager for the shared project when applying the change:
+Set the temporary test value in GCP Secret Manager for the shared project when applying the change:
 
 ```bash
 printf '%s' 'ABCDEFG' | gcloud secrets versions add INTEXURAOS_KIMI_APP_API_KEY --data-file=- --project=intexuraos-dev-pbuchman
 ```
 
 Run the `gcloud secrets versions add` command only after Terraform has created `INTEXURAOS_KIMI_APP_API_KEY` or after confirming the secret already exists.
+
+Then regenerate the ignored `.envrc` from Secret Manager:
+
+```bash
+PROJECT_ID=intexuraos-dev-pbuchman ./scripts/sync-secrets.sh
+```
+
+Do not commit `.envrc`; it contains synced secret values and is excluded by `.gitignore`.
 
 - [ ] **Step 4: Document the required orchestrator env var**
 
@@ -515,14 +517,14 @@ Run the final audit task.
 - Verify: `workers/orchestrator/src/start.ts`
 - Verify: `terraform/environments/dev/main.tf`
 - Verify: `ecosystem.config.cjs`
-- Verify: `.envrc`
+- Verify: `PROJECT_ID=intexuraos-dev-pbuchman ./scripts/sync-secrets.sh --output /tmp/int-1589.envrc`
 
 - [ ] **Step 1: Audit for stale Kimi DashScope references**
 
 Run:
 
 ```bash
-rg -n "kimi-k2\\.5|WORKER_TYPES\\.kimi|kimi.*DASHSCOPE|DASHSCOPE.*kimi|coding-intl\\.dashscope.*kimi|INTEXURAOS_KIMI_APP_API_KEY|KIMI_API_KEY" workers/orchestrator terraform/environments/dev/main.tf ecosystem.config.cjs .envrc workers/orchestrator/README.md
+rg -n "kimi-k2\\.5|WORKER_TYPES\\.kimi|kimi.*DASHSCOPE|DASHSCOPE.*kimi|coding-intl\\.dashscope.*kimi|INTEXURAOS_KIMI_APP_API_KEY|KIMI_API_KEY" workers/orchestrator terraform/environments/dev/main.tf ecosystem.config.cjs workers/orchestrator/README.md docs/plans/INT-1589-kimi-native-api.md
 ```
 
 Expected:
@@ -573,7 +575,7 @@ git add workers/orchestrator/src/services/isolation/types.ts workers/orchestrato
 git add workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts workers/orchestrator/src/services/isolation/__tests__/e2e-container.test.ts workers/orchestrator/src/bootstrap/service-wiring.ts
 git add workers/orchestrator/src/bootstrap/env-config.ts workers/orchestrator/src/__tests__/bootstrap/env-config.test.ts workers/orchestrator/src/bootstrap/api-key-validator.ts workers/orchestrator/src/__tests__/bootstrap/api-key-validator.test.ts workers/orchestrator/src/start.ts workers/orchestrator/src/__tests__/start.test.ts
 git add workers/orchestrator/src/services/task-dispatcher.ts workers/orchestrator/src/__tests__/task-dispatcher.test.ts workers/orchestrator/src/services/task-dispatcher/__tests__/fixtures.ts workers/orchestrator/src/__tests__/services/task-dispatcher/metrics-emission.test.ts
-git add terraform/environments/dev/main.tf ecosystem.config.cjs .envrc workers/orchestrator/README.md
+git add terraform/environments/dev/main.tf ecosystem.config.cjs workers/orchestrator/README.md docs/plans/INT-1589-kimi-native-api.md
 git commit -m "fix(orchestrator): route kimi worker to native api"
 git push -u origin HEAD
 gh pr create --base development --title "[INT-1589] Update Kimi worker native API config" --body "Fixes INT-1589
