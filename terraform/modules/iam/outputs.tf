@@ -6,6 +6,7 @@ output "service_accounts" {
     whatsapp_service             = google_service_account.whatsapp_service.email
     api_docs_hub                 = google_service_account.api_docs_hub.email
     mobile_notifications_service = google_service_account.mobile_notifications_service.email
+    fishing_assistant_service    = google_service_account.fishing_assistant_service.email
     research_agent               = google_service_account.research_agent.email
     commands_agent               = google_service_account.commands_agent.email
     actions_agent                = google_service_account.actions_agent.email
@@ -48,6 +49,11 @@ output "api_docs_hub_sa" {
 output "mobile_notifications_service_sa" {
   description = "Mobile Notifications service service account email"
   value       = google_service_account.mobile_notifications_service.email
+}
+
+output "fishing_assistant_service_sa" {
+  description = "Fishing Assistant service service account email"
+  value       = google_service_account.fishing_assistant_service.email
 }
 
 output "research_agent_sa" {

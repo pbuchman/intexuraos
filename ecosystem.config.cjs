@@ -41,6 +41,7 @@ const COMMON_SERVICE_URLS = {
   INTEXURAOS_NOTION_SERVICE_URL: 'http://localhost:8112',
   INTEXURAOS_WHATSAPP_SERVICE_URL: 'http://localhost:8113',
   INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL: 'http://localhost:8114',
+  INTEXURAOS_FISHING_ASSISTANT_SERVICE_URL: 'http://localhost:8119',
   INTEXURAOS_RESEARCH_AGENT_URL: 'http://localhost:8116',
   INTEXURAOS_COMMANDS_AGENT_URL: 'http://localhost:8117',
   INTEXURAOS_ACTIONS_AGENT_URL: 'http://localhost:8118',
@@ -67,6 +68,7 @@ const API_DOCS_HUB_OPENAPI_URLS = {
   INTEXURAOS_NOTION_SERVICE_OPENAPI_URL: 'http://localhost:8112/openapi.json',
   INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL: 'http://localhost:8113/openapi.json',
   INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL: 'http://localhost:8114/openapi.json',
+  INTEXURAOS_FISHING_ASSISTANT_SERVICE_OPENAPI_URL: 'http://localhost:8119/openapi.json',
   INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL: 'http://localhost:8116/openapi.json',
   INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL: 'http://localhost:8117/openapi.json',
   INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL: 'http://localhost:8118/openapi.json',
@@ -196,6 +198,9 @@ const SERVICE_ENV_MAPPINGS = {
     // HS256 secret used to sign guest session JWTs (>=32 bytes; from .envrc)
     INTEXURAOS_GUEST_SESSION_SECRET: process.env.INTEXURAOS_GUEST_SESSION_SECRET,
   },
+  'fishing-assistant-service': {
+    INTEXURAOS_OPENAI_APP_API_KEY: process.env.INTEXURAOS_OPENAI_APP_API_KEY,
+  },
   'llm-usage-service': {
     INTEXURAOS_ORCHESTRATOR_SECRET: process.env.INTEXURAOS_ORCHESTRATOR_SECRET,
   },
@@ -277,6 +282,7 @@ module.exports = {
     createServiceConfig('notion-service', 8112),
     createServiceConfig('whatsapp-service', 8113),
     createServiceConfig('mobile-notifications-service', 8114),
+    createServiceConfig('fishing-assistant-service', 8119),
     createServiceConfig('notes-agent', 8121),
     createServiceConfig('bookmarks-agent', 8124),
     createServiceConfig('code-agent', 8128),

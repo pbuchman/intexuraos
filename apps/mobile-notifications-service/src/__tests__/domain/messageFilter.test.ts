@@ -18,6 +18,18 @@ function makeRaw(overrides: Partial<RawNotification> = {}): RawNotification {
   };
 }
 
+function makeSenderlessRaw(
+  overrides: Partial<Omit<RawNotification, 'sender'>> = {},
+): RawNotification {
+  return {
+    text: 'Hello',
+    postTime: '1000',
+    title: 'Chat',
+    app: 'com.example.chat',
+    ...overrides,
+  };
+}
+
 describe('filterAndDedupeNotifications', () => {
   describe('empty input', () => {
     it('returns empty array for empty input', () => {
@@ -177,6 +189,103 @@ describe('filterAndDedupeNotifications', () => {
       expect(result[0]?.postTimeSec).toBe(1000);
       expect(result[1]?.postTimeSec).toBe(1160);
     });
+
+    it('deduplicates senderless duplicate WhatsApp rows by title and text', () => {
+      const raw = [
+        makeSenderlessRaw({
+          title: 'Fishing Club',
+          app: 'com.whatsapp',
+          text: 'Bite window starts at 18:30',
+          postTime: '1000',
+        }),
+        makeSenderlessRaw({
+          title: 'Fishing Club',
+          app: 'com.whatsapp',
+          text: 'Bite window starts at 18:30',
+          postTime: '1040',
+        }),
+      ];
+
+      const result = filterAndDedupeNotifications(raw);
+
+      expect(result).toStrictEqual([
+        {
+          text: 'Bite window starts at 18:30',
+          postTimeSec: 1000,
+        },
+      ]);
+    });
+
+    it('keeps senderless same-text rows from different titles', () => {
+      const raw = [
+        makeSenderlessRaw({
+          title: 'Fishing Club',
+          app: 'com.whatsapp',
+          text: 'Bite window starts at 18:30',
+          postTime: '1000',
+        }),
+        makeSenderlessRaw({
+          title: 'River Watch',
+          app: 'com.whatsapp',
+          text: 'Bite window starts at 18:30',
+          postTime: '1040',
+        }),
+      ];
+
+      const result = filterAndDedupeNotifications(raw);
+
+      expect(result).toStrictEqual([
+        {
+          text: 'Bite window starts at 18:30',
+          postTimeSec: 1000,
+        },
+        {
+          text: 'Bite window starts at 18:30',
+          postTimeSec: 1040,
+        },
+      ]);
+    });
+
+    it('deduplicates null-sender rows by title but keeps null senderLabel', () => {
+      const raw = [
+        makeRaw({
+          sender: null,
+          title: 'Fishing Club',
+          app: 'com.whatsapp',
+          text: 'Bite window starts at 18:30',
+          postTime: '1000',
+        }),
+        makeRaw({
+          sender: null,
+          title: 'Fishing Club',
+          app: 'com.whatsapp',
+          text: 'Bite window starts at 18:30',
+          postTime: '1040',
+        }),
+        makeRaw({
+          sender: null,
+          title: 'River Watch',
+          app: 'com.whatsapp',
+          text: 'Bite window starts at 18:30',
+          postTime: '1050',
+        }),
+      ];
+
+      const result = filterAndDedupeNotifications(raw);
+
+      expect(result).toStrictEqual([
+        {
+          senderLabel: null,
+          text: 'Bite window starts at 18:30',
+          postTimeSec: 1000,
+        },
+        {
+          senderLabel: null,
+          text: 'Bite window starts at 18:30',
+          postTimeSec: 1050,
+        },
+      ]);
+    });
   });
 
   describe('output ordering', () => {
@@ -192,10 +301,36 @@ describe('filterAndDedupeNotifications', () => {
   });
 
   describe('output shape', () => {
-    it('maps to CleanMessage fields (sender, text, postTimeSec)', () => {
+    it('maps to CleanMessage fields (senderLabel, text, postTimeSec)', () => {
       const raw = [makeRaw({ sender: 'Alice', text: 'Hello', postTime: '5000' })];
       const result = filterAndDedupeNotifications(raw);
-      expect(result[0]).toEqual({ sender: 'Alice', text: 'Hello', postTimeSec: 5000 });
+      expect(result[0]).toStrictEqual({
+        senderLabel: 'Alice',
+        text: 'Hello',
+        postTimeSec: 5000,
+      });
+    });
+
+    it('accepts raw notifications without a sender and does not use title as senderLabel', () => {
+      const raw = [
+        makeSenderlessRaw({
+          title: 'Fishing Club',
+          app: 'com.whatsapp',
+          text: 'Morning conditions are improving',
+          postTime: '5000',
+        }),
+      ];
+
+      const result = filterAndDedupeNotifications(raw);
+
+      expect(result).toStrictEqual([
+        {
+          text: 'Morning conditions are improving',
+          postTimeSec: 5000,
+        },
+      ]);
+      expect(result[0]).not.toHaveProperty('sender');
+      expect(result[0]).not.toHaveProperty('senderLabel', 'Fishing Club');
     });
   });
 });
