@@ -35,6 +35,9 @@ No child issue depends on another child issue being completed first. Web can upd
   - Probe only enabled workers.
 - `PATCH /code/worker-settings/workers/:name`
   - Existing endpoint already accepts `enabled`; add/confirm tests that toggling does not require credential fields and preserves existing secrets.
+- `POST /code/worker-settings/workers/:name/test`
+  - Return a disabled result for disabled workers without fetching the worker `/health` endpoint.
+  - Keep enabled-worker connectivity testing unchanged.
 
 **Created**
 
@@ -50,7 +53,6 @@ No child issue depends on another child issue being completed first. Web can upd
 - `POST /code/worker-settings/workers`
 - `DELETE /code/worker-settings/workers/:name`
 - `PUT /code/worker-settings/priority`
-- `POST /code/worker-settings/workers/:name/test`
 
 ## State Matrix
 
@@ -74,6 +76,7 @@ This matrix incorporates the execution-memory warning for non-standard states: d
 - Modify: `apps/code-agent/src/domain/usecases/sendTaskMessage.ts`
 - Test: `apps/code-agent/src/__tests__/infra/firestore/workerSettingsRepository.test.ts`
 - Test: `apps/code-agent/src/__tests__/routes/codeRoutes.test.ts`
+- Test: `apps/code-agent/src/__tests__/domain/useCases/workerSettings/testWorkerConnectivity.test.ts`
 - Test: `apps/code-agent/src/__tests__/domain/usecases/drainTaskQueue.test.ts`
 - Test: `apps/code-agent/src/__tests__/domain/usecases/drainRetryQueue.test.ts`
 - Create: `migrations/101_backfill-code-worker-settings-enabled.mjs`
@@ -214,7 +217,42 @@ Run: `pnpm --filter code-agent test -- src/__tests__/routes/codeRoutes.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Audit task-specific worker calls**
+- [ ] **Step 5: Add disabled connectivity-test behavior**
+
+Add a route or use-case test proving the connectivity-test endpoint does not call disabled workers:
+
+```ts
+it('does not probe disabled workers during connectivity tests', async () => {
+  mockGetSettings.mockResolvedValue(ok({
+    userId: 'test-user-id',
+    workers: [{ ...enabledWorker({ name: 'mac-dev' }), enabled: false }],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }));
+
+  const response = await server.inject({
+    method: 'POST',
+    url: '/code/worker-settings/workers/mac-dev/test',
+    headers: { authorization: 'Bearer test-token' },
+  });
+
+  expect(response.statusCode).toBe(200);
+  expect(mockFetch).not.toHaveBeenCalled();
+  expect(JSON.parse(response.body).data).toMatchObject({
+    success: false,
+    status: 'disabled',
+    message: 'Worker is disabled',
+  });
+});
+```
+
+Implement the endpoint guard before constructing or sending any `/health` request. The response must update stored test metadata consistently with a skipped disabled test, and UI callers can render the returned disabled result without trying to infer it from network failures.
+
+Run: `pnpm --filter code-agent test -- src/__tests__/routes/codeRoutes.test.ts src/__tests__/domain/useCases/workerSettings/testWorkerConnectivity.test.ts -t "connectivity tests"`
+
+Expected: PASS after disabled connectivity tests return without contacting the worker URL.
+
+- [ ] **Step 6: Audit task-specific worker calls**
 
 Keep new-task dispatch filtering as-is where enabled workers are already used, but fix task-specific calls so they never fall back to a different enabled worker when the task's recorded worker is disabled.
 
@@ -238,11 +276,11 @@ if (worker === undefined) {
 
 Confirm cancellation paths already skip disabled workers by passing `undefined` credentials to `cancelOnWorker`.
 
-Run: `pnpm --filter code-agent test -- src/__tests__/domain/usecases/sendTaskMessage.test.ts src/__tests__/domain/usecases/cancelTask.test.ts`
+Run: `pnpm --filter code-agent test -- src/__tests__/domain/usecases/sendTaskMessage.test.ts src/__tests__/domain/useCases/cancelTask.test.ts src/__tests__/domain/useCases/cancelTaskWithNonce.test.ts`
 
 Expected: PASS after adding or updating tests for disabled task-location handling.
 
-- [ ] **Step 6: Add queue and retry dispatch assertions**
+- [ ] **Step 7: Add queue and retry dispatch assertions**
 
 Add tests proving disabled workers are excluded from dispatch credentials in:
 
@@ -269,7 +307,7 @@ Run: `pnpm --filter code-agent test -- src/__tests__/domain/usecases/drainTaskQu
 
 Expected: PASS.
 
-- [ ] **Step 7: Add the immutable backfill migration**
+- [ ] **Step 8: Add the immutable backfill migration**
 
 Create `migrations/101_backfill-code-worker-settings-enabled.mjs`:
 
@@ -318,7 +356,7 @@ Run: `pnpm --filter migrations test -- 101-backfill-code-worker-settings-enabled
 
 Expected: PASS.
 
-- [ ] **Step 8: Verify code-agent boundary**
+- [ ] **Step 9: Verify code-agent boundary**
 
 Run:
 
