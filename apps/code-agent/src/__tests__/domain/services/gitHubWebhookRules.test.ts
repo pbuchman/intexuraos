@@ -574,6 +574,14 @@ describe('GitHubWebhookRules', () => {
       expect(result).toEqual({ action: 'dispatch', reason: 'CODE_WORKER_PR_EVENT' });
     });
 
+    it('should dispatch pull_request.ready_for_review by code worker', () => {
+      const event = { ...mockEvent, eventType: 'pull_request' as const, action: 'ready_for_review' as const, senderLogin: 'intexuraos-code-worker[bot]' };
+      const rule = new CodeWorkerOutputRule(codeWorkerBots);
+      const result = rule.evaluate(event);
+
+      expect(result).toEqual({ action: 'dispatch', reason: 'CODE_WORKER_PR_EVENT' });
+    });
+
     it('should skip issue_comment.created by code worker', () => {
       const event = { ...mockEvent, eventType: 'issue_comment' as const, action: 'created' as const, senderLogin: 'intexuraos-code-worker[bot]' };
       const rule = new CodeWorkerOutputRule(codeWorkerBots);
@@ -1095,6 +1103,25 @@ describe('GitHubWebhookRules', () => {
         new ActionableEventRule(new Set(['bot'])),
       ]);
       const event = { ...mockEvent, isDraft: false, eventType: 'pull_request' as const, action: 'opened' as const };
+      const result = rules.evaluate(event);
+      expect(result.action).toBe('needs_triage');
+      expect(result.reason).toBe('TRIAGE_REQUIRED');
+    });
+
+    it('should allow code worker ready_for_review events through after draft transition', () => {
+      const rules = new GitHubWebhookRules([
+        new CodeWorkerOutputRule(new Set(['bot'])),
+        new DraftPRRule(),
+        new CIFailureRule(),
+        new ActionableEventRule(new Set(['bot'])),
+      ]);
+      const event = {
+        ...mockEvent,
+        isDraft: false,
+        eventType: 'pull_request' as const,
+        action: 'ready_for_review' as const,
+        senderLogin: 'bot',
+      };
       const result = rules.evaluate(event);
       expect(result.action).toBe('needs_triage');
       expect(result.reason).toBe('TRIAGE_REQUIRED');
