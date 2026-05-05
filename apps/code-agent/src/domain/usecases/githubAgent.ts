@@ -24,6 +24,10 @@ import {
 
 export type { GitHubAgentDeps, GitHubAgentError, GitHubAgentEvalResult, GitHubAgentTriageResult, GitHubAgentUsage };
 
+function isSupportedPullRequestAction(action: GitHubPREvent['action']): boolean {
+  return action === 'opened' || action === 'synchronize' || action === 'ready_for_review';
+}
+
 /**
  * Evaluate a webhook event using the GitHub Agent LLM.
  * Supports both pull_request and issue_comment events.
@@ -40,8 +44,8 @@ export async function evaluateEvent(
     return { ok: false, error: { code: 'INVALID_EVENT', message: `Unsupported event type: ${event.eventType}` } };
   }
 
-  if (event.eventType === 'pull_request' && event.action !== 'opened' && event.action !== 'synchronize') {
-    return { ok: false, error: { code: 'INVALID_EVENT', message: `Expected opened/synchronize action, got ${event.action ?? 'null'}` } };
+  if (event.eventType === 'pull_request' && !isSupportedPullRequestAction(event.action)) {
+    return { ok: false, error: { code: 'INVALID_EVENT', message: `Expected opened/synchronize/ready_for_review action, got ${event.action ?? 'null'}` } };
   }
 
   if (event.eventType === 'issue_comment' && event.action !== 'created' && event.action !== 'edited') {
@@ -99,6 +103,6 @@ export async function evaluatePREvent(
 export function isGitHubAgentEvent(event: GitHubPREvent): boolean {
   return (
     event.eventType === 'pull_request' &&
-    (event.action === 'opened' || event.action === 'synchronize')
+    isSupportedPullRequestAction(event.action)
   );
 }

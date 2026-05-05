@@ -229,7 +229,7 @@ describe('renderEvent', () => {
   });
 
   describe('triage_failed', () => {
-    it('renders fallback action and error in details', () => {
+    it('renders fallback action and neutral details label', () => {
       useFakeTime();
       const event: AutomationEvent = {
         type: 'triage_failed',
@@ -240,6 +240,8 @@ describe('renderEvent', () => {
       const result = renderEvent(event);
       expect(result).toContain('**14:35 UTC** -- **Triage failed** | dispatch');
       expect(result).toContain('<details>');
+      expect(result).toContain('<summary>Details</summary>');
+      expect(result).not.toContain('<summary>Error</summary>');
       expect(result).toContain('LLM timeout after 30s');
     });
   });
