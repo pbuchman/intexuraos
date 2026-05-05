@@ -42,6 +42,7 @@ vi.mock('../bootstrap/env-config.js', () => ({
       minimaxApiKey: 'm',
       mimoApiKey: 'm',
       dashscopeApiKey: 'd',
+      kimiApiKey: 'ABCDEFG',
       openRouterApiKey: '',
       geminiApiKey: 'g',
       logLevel: 'info',
@@ -193,6 +194,11 @@ describe('start() — full bootstrap happy path', () => {
     expect(ensureRepository).toHaveBeenCalledOnce();
     expect(buildOrchestratorServices).toHaveBeenCalledOnce();
     expect(validateWorkerApiKeys).toHaveBeenCalledOnce();
+    expect(validateWorkerApiKeys).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ kimiKey: 'ABCDEFG' }),
+      expect.anything()
+    );
     expect(startCredentialRefreshLoop).toHaveBeenCalledOnce();
     expect(initWorker).toHaveBeenCalledOnce();
     expect(main).toHaveBeenCalledOnce();
@@ -244,6 +250,7 @@ describe('start() — full bootstrap happy path', () => {
       minimaxApiKey: 'm',
       mimoApiKey: 'm',
       dashscopeApiKey: 'd',
+      kimiApiKey: 'ABCDEFG',
       openRouterApiKey: '',
       geminiApiKey: 'g',
       logLevel: 'info',
@@ -332,6 +339,7 @@ describe('start() — full bootstrap happy path', () => {
       minimaxApiKey: 'm',
       mimoApiKey: 'm',
       dashscopeApiKey: 'd',
+      kimiApiKey: 'ABCDEFG',
       openRouterApiKey: '',
       geminiApiKey: 'g',
       gitUserNameOverride: 'Test User',
