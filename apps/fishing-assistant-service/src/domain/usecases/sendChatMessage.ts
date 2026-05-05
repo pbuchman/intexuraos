@@ -23,6 +23,8 @@ import { retrieveEvidence } from '../retrieval/retrieveEvidence.js';
 import type { EvidenceItem } from '../retrieval/types.js';
 import type { MobileNotificationsServiceClient } from '@intexuraos/internal-clients';
 
+const DEFAULT_CHAT_TITLE = 'New Chat';
+
 export type SendChatMessageError =
   | ChatRepositoryError
   | { code: 'NO_API_KEY'; message: string }
@@ -51,7 +53,7 @@ export interface SendChatMessageInput {
 
 function deriveChatTitle(input: string): string {
   const trimmed = input.trim().replace(/\s+/g, ' ');
-  return trimmed === '' ? 'New Chat' : trimmed.slice(0, 120);
+  return trimmed === '' ? DEFAULT_CHAT_TITLE : trimmed.slice(0, 120);
 }
 
 function buildCitations(
@@ -176,7 +178,7 @@ export async function sendChatMessage(
   });
   if (!userMessage.ok) return userMessage;
 
-  if (chatResult.value.title === 'New Chat') {
+  if (chatResult.value.title === DEFAULT_CHAT_TITLE) {
     const titleUpdate = await deps.chatRepository.updateChat({
       userId: input.userId,
       chatId: input.chatId,

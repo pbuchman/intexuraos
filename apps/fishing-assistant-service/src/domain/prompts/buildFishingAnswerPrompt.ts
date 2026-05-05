@@ -14,14 +14,28 @@ export interface BuildFishingAnswerPromptInput {
   evidence: EvidenceItem[];
 }
 
+function sanitizeHistoryContent(content: string): string {
+  const withoutControlCharacters = Array.from(content)
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      return code < 32 || code === 127 ? ' ' : char;
+    })
+    .join('');
+  return withoutControlCharacters
+    .replace(/\b(system|developer|assistant|user|tool)\s*:/gi, '[stored message label]:')
+    .replace(/\b(ignore|disregard)\s+(all\s+)?previous\s+instructions\b/gi, '[instruction text removed]')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export const fishingAnswerPrompt: PromptBuilder<BuildFishingAnswerPromptInput> = {
   name: 'fishing-assistant-answer',
   description: 'Builds a grounded JSON-answer prompt for Fishing Assistant chat responses',
-  version: '1.0.0',
+  version: '2.0.0',
 
   build(input: BuildFishingAnswerPromptInput): string {
     const history = input.recentMessages
-      .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
+      .map((message) => `[stored ${message.role} message] ${sanitizeHistoryContent(message.content)}`)
       .join('\n');
     const evidenceBlocks = input.evidence
       .map(

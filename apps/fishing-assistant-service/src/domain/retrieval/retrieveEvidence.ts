@@ -24,6 +24,9 @@ export interface RetrieveEvidenceInput {
   question: string;
 }
 
+const MOBILE_NOTIFICATIONS_TIMEOUT_MS = 5_000;
+const MAX_DIGEST_GROUPS = 8;
+
 function extractDateRange(question: string, now: Date): { dateFrom: string; dateTo: string } {
   const matches = [...question.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g)].map((match) => match[0]);
   if (matches.length >= 2 && matches[0] !== undefined && matches[1] !== undefined) {
@@ -75,21 +78,27 @@ export async function retrieveEvidence(
     }
   }
 
-  const groupsResult = await deps.mobileNotificationsClient.listDigestSubscriptions({
-    userId: input.userId,
-  });
+  const groupsResult = await deps.mobileNotificationsClient.listDigestSubscriptions(
+    {
+      userId: input.userId,
+    },
+    { timeoutMs: MOBILE_NOTIFICATIONS_TIMEOUT_MS }
+  );
   const digestEvidence: EvidenceItem[] = [];
   if (groupsResult.ok) {
     const range = extractDateRange(input.question, deps.now);
-    for (const group of groupsResult.value.items) {
-      const digestResult = await deps.mobileNotificationsClient.queryDigests({
-        userId: input.userId,
-        groupKey: group.groupKey,
-        dateFrom: range.dateFrom,
-        dateTo: range.dateTo,
-        terms,
-        limit: 8,
-      });
+    for (const group of groupsResult.value.items.slice(0, MAX_DIGEST_GROUPS)) {
+      const digestResult = await deps.mobileNotificationsClient.queryDigests(
+        {
+          userId: input.userId,
+          groupKey: group.groupKey,
+          dateFrom: range.dateFrom,
+          dateTo: range.dateTo,
+          terms,
+          limit: 8,
+        },
+        { timeoutMs: MOBILE_NOTIFICATIONS_TIMEOUT_MS }
+      );
       if (!digestResult.ok) continue;
 
       digestEvidence.push(
@@ -114,13 +123,16 @@ export async function retrieveEvidence(
     .filter((item) => item.groupKey !== '' && item.date !== '');
 
   for (const item of topDigestDates) {
-    const rawResult = await deps.mobileNotificationsClient.queryGroupMessages({
-      userId: input.userId,
-      groupKey: item.groupKey,
-      date: item.date,
-      terms,
-      limit: 12,
-    });
+    const rawResult = await deps.mobileNotificationsClient.queryGroupMessages(
+      {
+        userId: input.userId,
+        groupKey: item.groupKey,
+        date: item.date,
+        terms,
+        limit: 12,
+      },
+      { timeoutMs: MOBILE_NOTIFICATIONS_TIMEOUT_MS }
+    );
     if (!rawResult.ok) continue;
     evidence.push(
       ...rawResult.value.messages.map((message) => rankRawMessageEvidence(message, terms)).slice(0, 12)

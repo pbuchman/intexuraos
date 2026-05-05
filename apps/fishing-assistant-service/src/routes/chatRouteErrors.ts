@@ -2,8 +2,10 @@ import type { FastifyReply } from 'fastify';
 import type { SendChatMessageError } from '../domain/usecases/sendChatMessage.js';
 import type { ChatRepositoryError } from '../domain/ports/chatRepository.js';
 
+type ChatErrorReply = Pick<FastifyReply, 'fail' | 'status'>;
+
 export function sendChatError(
-  reply: FastifyReply,
+  reply: ChatErrorReply,
   error: ChatRepositoryError | SendChatMessageError
 ): FastifyReply | Promise<FastifyReply> {
   switch (error.code) {
