@@ -47,9 +47,10 @@
 # │   2. chat-agent                                                         │
 # │   3. cron-agent                                                         │
 # ├─────────────────────────────────────────────────────────────────────────┤
-# │ BATCH 8 - Agents D (add new services HERE)                              │
+# │ BATCH 8 - Agents D (FULL)                                               │
 # │   1. hellscript-agent                                                   │
 # │   2. llm-usage-service                                                  │
+# │   3. fishing-assistant-service                                          │
 # ├─────────────────────────────────────────────────────────────────────────┤
 # │ BATCH 9 - Cloud Functions Workers (parallel with Batch 1-8)             │
 # │   1. vm-lifecycle                                                       │
@@ -635,7 +636,7 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   # ===========================================================================
-  # BATCH 8 - Agents D (hellscript-agent, llm-usage-service)
+  # BATCH 8 - Agents D (hellscript-agent, llm-usage-service, fishing assistant)
   # ===========================================================================
 
   # --- Batch 8 Builds (wait for Batch 7 deploys) ---
@@ -671,6 +672,22 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'COMMIT_SHA=$COMMIT_SHA'
 
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-fishing-assistant-service'
+    waitFor: ['deploy-code-agent', 'deploy-chat-agent', 'deploy-cron-agent']
+    timeout: 900s
+    entrypoint: 'bash'
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'fishing-assistant-service',
+        'apps/fishing-assistant-service/Dockerfile',
+      ]
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
   # --- Batch 8 Deploys ---
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-hellscript-agent'
@@ -688,6 +705,17 @@ steps:
     waitFor: ['build-push-llm-usage-service']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-llm-usage-service.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-fishing-assistant-service'
+    waitFor: ['build-push-fishing-assistant-service']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-fishing-assistant-service.sh']
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
@@ -724,7 +752,13 @@ steps:
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-config'
-    waitFor: ['deploy-hellscript-agent', 'deploy-llm-usage-service', 'deploy-all-workers']
+    waitFor:
+      [
+        'deploy-hellscript-agent',
+        'deploy-llm-usage-service',
+        'deploy-fishing-assistant-service',
+        'deploy-all-workers',
+      ]
     entrypoint: 'bash'
     args:
       - '-c'
@@ -738,6 +772,7 @@ steps:
           "whatsapp-service:WHATSAPP_SERVICE"
           "notion-service:NOTION_SERVICE"
           "mobile-notifications-service:MOBILE_NOTIFICATIONS_SERVICE"
+          "fishing-assistant-service:FISHING_ASSISTANT_SERVICE"
           "research-agent:RESEARCH_AGENT"
           "commands-agent:COMMANDS_AGENT"
           "actions-agent:ACTIONS_AGENT"

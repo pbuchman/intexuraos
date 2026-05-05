@@ -80,6 +80,7 @@ export default defineConfig(({ mode }) => {
     '/api/notion': { target: 'http://localhost:8112', rewrite: (p: string) => p.replace(/^\/api\/notion/, '') },
     '/api/whatsapp': { target: 'http://localhost:8113', rewrite: (p: string) => p.replace(/^\/api\/whatsapp/, '') },
     '/api/notifications': { target: 'http://localhost:8114', rewrite: (p: string) => p.replace(/^\/api\/notifications/, '') },
+    '/api/fishing-assistant': { target: 'http://localhost:8119', rewrite: (p: string) => p.replace(/^\/api\/fishing-assistant/, '') },
     '/api/research': { target: 'http://localhost:8116', rewrite: (p: string) => p.replace(/^\/api\/research/, '') },
     '/api/commands': { target: 'http://localhost:8117', rewrite: (p: string) => p.replace(/^\/api\/commands/, '') },
     '/api/actions': { target: 'http://localhost:8118', rewrite: (p: string) => p.replace(/^\/api\/actions/, '') },

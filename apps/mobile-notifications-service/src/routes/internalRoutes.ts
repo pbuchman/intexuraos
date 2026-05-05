@@ -85,7 +85,8 @@ interface DateRange {
   dateTo: string;
 }
 
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+type DateRangeResolution = { ok: true; value: DateRange } | { ok: false; message: string };
+
 const DEFAULT_DIGEST_LIMIT = 30;
 const MAX_DIGEST_LIMIT = 100;
 const DEFAULT_GROUP_MESSAGE_LIMIT = 100;
@@ -109,14 +110,10 @@ async function rejectInvalidInternalAuth(
 }
 
 function isValidIsoDate(value: string): boolean {
-  if (!ISO_DATE_RE.test(value)) return false;
   const [yearRaw, monthRaw, dayRaw] = value.split('-');
   const year = Number(yearRaw);
   const month = Number(monthRaw);
   const day = Number(dayRaw);
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
-    return false;
-  }
   const date = new Date(Date.UTC(year, month - 1, day));
   return (
     date.getUTCFullYear() === year &&
@@ -148,18 +145,7 @@ function validateDateRange(
   return null;
 }
 
-function normalizeLimit(
-  value: number | undefined,
-  defaultValue: number,
-  maxValue: number
-): number | null {
-  const limit = value ?? defaultValue;
-  if (!Number.isInteger(limit) || limit < 1 || limit > maxValue) return null;
-  return limit;
-}
-
-function normalizeTerms(terms: readonly string[] | undefined): string[] {
-  if (terms === undefined) return [];
+function normalizeTerms(terms: readonly string[]): string[] {
   return terms.map((term) => term.trim().toLowerCase()).filter((term) => term.length > 0);
 }
 
@@ -216,19 +202,19 @@ function toDigestEvidenceItem(doc: PersistedDailySummary): DigestEvidenceItem {
   };
 }
 
-function resolveGroupMessageRange(body: GroupMessagesQueryBody): DateRange | { error: string } {
+function resolveGroupMessageRange(body: GroupMessagesQueryBody): DateRangeResolution {
   const hasDate = body.date !== undefined && body.date.length > 0;
   const hasRange = body.dateFrom !== undefined || body.dateTo !== undefined;
   if (hasDate && hasRange) {
-    return { error: 'provide either date or dateFrom/dateTo, not both' };
+    return { ok: false, message: 'provide either date or dateFrom/dateTo, not both' };
   }
   if (hasDate) {
-    return { dateFrom: body.date as string, dateTo: body.date as string };
+    return { ok: true, value: { dateFrom: body.date as string, dateTo: body.date as string } };
   }
   if (body.dateFrom === undefined || body.dateTo === undefined) {
-    return { error: 'date or dateFrom/dateTo is required' };
+    return { ok: false, message: 'date or dateFrom/dateTo is required' };
   }
-  return { dateFrom: body.dateFrom, dateTo: body.dateTo };
+  return { ok: true, value: { dateFrom: body.dateFrom, dateTo: body.dateTo } };
 }
 
 function formatWarsawDateFromSec(postTimeSec: number): string {
@@ -238,10 +224,10 @@ function formatWarsawDateFromSec(postTimeSec: number): string {
     month: '2-digit',
     day: '2-digit',
   }).formatToParts(new Date(postTimeSec * 1000));
-  const year = parts.find((part) => part.type === 'year')?.value;
-  const month = parts.find((part) => part.type === 'month')?.value;
-  const day = parts.find((part) => part.type === 'day')?.value;
-  return `${year ?? '0000'}-${month ?? '00'}-${day ?? '00'}`;
+  const year = parts.find((part) => part.type === 'year')?.value as string;
+  const month = parts.find((part) => part.type === 'month')?.value as string;
+  const day = parts.find((part) => part.type === 'day')?.value as string;
+  return `${year}-${month}-${day}`;
 }
 
 function makeQuote(text: string): string {
@@ -259,16 +245,15 @@ function makeMessageRef(groupKey: string, date: string, message: CleanMessage): 
 
 function toGroupMessageEvidence(groupKey: string, message: CleanMessage): GroupMessageEvidence {
   const date = formatWarsawDateFromSec(message.postTimeSec);
-  const base = {
+  return {
     messageRef: makeMessageRef(groupKey, date, message),
     groupKey,
     date,
     postTimeSec: message.postTimeSec,
+    senderLabel: message.senderLabel ?? null,
     text: message.text,
     quote: makeQuote(message.text),
   };
-  if (message.senderLabel === undefined) return base;
-  return { ...base, senderLabel: message.senderLabel };
 }
 
 function toRawNotification(notification: Notification): RawNotification {
@@ -496,8 +481,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { userId, groupKey, dateFrom, dateTo } = request.body;
       const rangeError = validateDateRange(dateFrom, dateTo);
       if (rangeError !== null) return await reply.fail('INVALID_REQUEST', rangeError);
-      const limit = normalizeLimit(request.body.limit, DEFAULT_DIGEST_LIMIT, MAX_DIGEST_LIMIT);
-      if (limit === null) return await reply.fail('INVALID_REQUEST', 'limit is out of range');
+      const limit = request.body.limit as number;
       if (findSubscription(getServices().digestSubscriptions, userId, groupKey) === undefined) {
         return await reply.fail('INVALID_REQUEST', `no digest subscription for userId=${userId} groupKey=${groupKey}`);
       }
@@ -511,7 +495,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       });
       if (!result.ok) return await reply.fail('INTERNAL_ERROR', result.error.message);
 
-      const terms = normalizeTerms(request.body.terms);
+      const terms = normalizeTerms(request.body.terms as string[]);
       const matchedItems = result.value.items
         .map(toDigestEvidenceItem)
         .filter((item) => textMatchesTerms(`${item.title}\n${item.summaryMarkdown}`, terms));
@@ -639,25 +623,21 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { userId, groupKey } = request.body;
       const resolvedRange = resolveGroupMessageRange(request.body);
-      if ('error' in resolvedRange) return await reply.fail('INVALID_REQUEST', resolvedRange.error);
-      const rangeError = validateDateRange(resolvedRange.dateFrom, resolvedRange.dateTo, {
+      if (!resolvedRange.ok) return await reply.fail('INVALID_REQUEST', resolvedRange.message);
+      const { dateFrom, dateTo } = resolvedRange.value;
+      const rangeError = validateDateRange(dateFrom, dateTo, {
         maxDays: MAX_GROUP_MESSAGE_RANGE_DAYS,
       });
       if (rangeError !== null) return await reply.fail('INVALID_REQUEST', rangeError);
-      const limit = normalizeLimit(
-        request.body.limit,
-        DEFAULT_GROUP_MESSAGE_LIMIT,
-        MAX_GROUP_MESSAGE_LIMIT
-      );
-      if (limit === null) return await reply.fail('INVALID_REQUEST', 'limit is out of range');
+      const limit = request.body.limit as number;
 
       const subscription = findSubscription(getServices().digestSubscriptions, userId, groupKey);
       if (subscription === undefined) {
         return await reply.fail('INVALID_REQUEST', `no digest subscription for userId=${userId} groupKey=${groupKey}`);
       }
 
-      const fromBounds = cetDayBounds(resolvedRange.dateFrom);
-      const toBounds = cetDayBounds(resolvedRange.dateTo);
+      const fromBounds = cetDayBounds(dateFrom);
+      const toBounds = cetDayBounds(dateTo);
       const rawNotifications: Notification[] = [];
       let cursor: string | undefined;
       let rawScanTruncated = false;
@@ -693,7 +673,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       } while (cursor !== undefined);
 
       const cleaned = filterAndDedupeNotifications(rawNotifications.map(toRawNotification));
-      const terms = normalizeTerms(request.body.terms);
+      const terms = normalizeTerms(request.body.terms as string[]);
       const matched = cleaned.filter((message) => textMatchesTerms(message.text, terms));
       const messages = matched.slice(0, limit).map((message) => toGroupMessageEvidence(groupKey, message));
 

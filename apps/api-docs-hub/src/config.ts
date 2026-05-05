@@ -23,6 +23,7 @@ export const OPEN_API_SOURCE_CATALOG = [
   { name: 'Notion Service API', openApiUrlEnvVar: 'INTEXURAOS_NOTION_SERVICE_OPENAPI_URL' },
   { name: 'WhatsApp Service API', openApiUrlEnvVar: 'INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL' },
   { name: 'Mobile Notifications Service API', openApiUrlEnvVar: 'INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL' },
+  { name: 'Fishing Assistant Service API', openApiUrlEnvVar: 'INTEXURAOS_FISHING_ASSISTANT_SERVICE_OPENAPI_URL' },
   { name: 'Research Agent API', openApiUrlEnvVar: 'INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL' },
   { name: 'Commands Agent API', openApiUrlEnvVar: 'INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL' },
   { name: 'Actions Agent API', openApiUrlEnvVar: 'INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL' },
