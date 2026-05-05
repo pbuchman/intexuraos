@@ -113,10 +113,10 @@ export function CodeTaskNewPage(): React.JSX.Element {
 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
-  // Compute all workers (sorted by priority, priority > 0 means enabled)
+  // Compute all enabled workers sorted by priority.
   const allWorkers = useMemo(() => {
     if (workersStatus === null) return [];
-    return workersStatus.workers.filter((w) => w.priority > 0).sort((a, b) => a.priority - b.priority);
+    return workersStatus.workers.filter((w) => w.enabled).sort((a, b) => a.priority - b.priority);
   }, [workersStatus]);
 
   // Worker section states

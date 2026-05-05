@@ -411,9 +411,10 @@ describe('codeAgentApi', () => {
       const { apiRequest } = await import('../apiClient.js');
       const mockResponse: WorkersStatusResponse = {
         workers: [
-          { name: 'mac-worker', url: 'https://mac.example.com', priority: 1, healthy: true, checkedAt: '2024-01-01T00:00:00Z' },
-          { name: 'vm-worker', url: 'https://vm.example.com', priority: 2, healthy: false, checkedAt: '2024-01-01T00:00:00Z' },
+          { name: 'mac-worker', url: 'https://mac.example.com', priority: 1, enabled: true, healthy: true, status: 'healthy', details: null, checkedAt: '2024-01-01T00:00:00Z', stale: false },
+          { name: 'vm-worker', url: 'https://vm.example.com', priority: 2, enabled: false, healthy: false, status: 'disabled', details: { reason: 'disabled' }, checkedAt: '2024-01-01T00:00:00Z', stale: false },
         ],
+        stale: false,
       };
       vi.mocked(apiRequest).mockResolvedValue(mockResponse);
 
