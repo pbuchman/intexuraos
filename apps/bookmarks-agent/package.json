@@ -34,8 +34,7 @@
     "@intexuraos/llm-pricing": "workspace:*",
     "@intexuraos/whatsapp-pubsub-client": "workspace:*",
     "fastify": "catalog:",
-    "pino": "catalog:",
-    "zod": "catalog:"
+    "pino": "catalog:"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.0.16",

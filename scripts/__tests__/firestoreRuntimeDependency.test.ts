@@ -39,4 +39,12 @@ describe('Cloud Run runtime dependency declarations', () => {
     expect(pkg.devDependencies?.openai).toBeUndefined();
     expect(pkg.peerDependencies?.openai).toBeUndefined();
   });
+
+  it('keeps common-http production-installable in Cloud Run images', () => {
+    const pkg = readPackageJson('packages/common-http/package.json');
+
+    expect(pkg.dependencies?.zod).toBe('catalog:');
+    expect(pkg.devDependencies?.zod).toBeUndefined();
+    expect(pkg.peerDependencies?.zod).toBeUndefined();
+  });
 });

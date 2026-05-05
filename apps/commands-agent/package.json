@@ -36,7 +36,6 @@
     "@intexuraos/llm-utils": "workspace:*",
     "fastify": "catalog:",
     "jose": "^5.9.6",
-    "pino": "catalog:",
-    "zod": "catalog:"
+    "pino": "catalog:"
   }
 }

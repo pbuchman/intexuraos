@@ -33,7 +33,6 @@
     "@intexuraos/llm-utils": "workspace:*",
     "fastify": "catalog:",
     "googleapis": "^144.0.0",
-    "pino": "catalog:",
-    "zod": "catalog:"
+    "pino": "catalog:"
   }
 }
