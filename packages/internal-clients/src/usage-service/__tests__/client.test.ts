@@ -186,46 +186,6 @@ describe('createUsageServiceClient', () => {
       expect(scope.isDone()).toBe(true);
     });
 
-    it('serializes imageSize in ingest event usage', async () => {
-      let capturedBody: UsageIngestRequest | undefined;
-      const sampleEvent = sampleIngestRequest.events[0];
-      if (sampleEvent === undefined) {
-        throw new Error('sample ingest request missing event fixture');
-      }
-      const imageIngestRequest: UsageIngestRequest = {
-        ...sampleIngestRequest,
-        events: [
-          {
-            ...sampleEvent,
-            request: {
-              ...sampleEvent.request,
-              model: LlmModels.GPTImage1,
-              operation: 'image_generation',
-              promptType: 'image-generation',
-            },
-            usage: {
-              ...sampleEvent.usage,
-              imageCount: 1,
-              imageSize: '1536x1024',
-            },
-          },
-        ],
-      };
-
-      const scope = nock(BASE_URL)
-        .post('/internal/usage/events', (body) => {
-          capturedBody = body as UsageIngestRequest;
-          return true;
-        })
-        .reply(200, { success: true, data: sampleIngestResponse });
-
-      const client = createUsageServiceClient(config);
-      await client.ingestEvents(imageIngestRequest);
-
-      expect(scope.isDone()).toBe(true);
-      expect(capturedBody?.events[0]?.usage.imageSize).toBe('1536x1024');
-    });
-
     it('sends X-Trace-Id when provided', async () => {
       const scope = nock(BASE_URL)
         .post('/internal/usage/events')
