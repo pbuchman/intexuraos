@@ -77,6 +77,8 @@ export interface GenerateOptions {
  * researchId / sessionId / taskId / requestId.
  */
 export interface ResearchOptions {
+  /** Semantic identifier for what the research prompt was used for. */
+  promptType?: string;
   correlation?: {
     researchId?: string | null;
     sessionId?: string | null;
@@ -103,6 +105,7 @@ const DEFAULT_TIMEOUT_MS = 840_000;
 
 /** Maximum output tokens for Perplexity responses */
 const MAX_TOKENS = 8192;
+const RESEARCH_PROMPT_TYPE = 'research-web-search';
 
 const SEARCH_CONTEXT_MAP: Record<string, SearchContextSize> = {
   [LlmModels.Sonar]: 'low',
@@ -321,7 +324,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
             false,
             durationMs,
             errorMsg,
-            undefined,
+            options?.promptType ?? RESEARCH_PROMPT_TYPE,
             options?.correlation
           );
           return err(mapPerplexityError(apiError));
@@ -341,7 +344,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
           true,
           Date.now() - start,
           undefined,
-          undefined,
+          options?.promptType ?? RESEARCH_PROMPT_TYPE,
           options?.correlation
         );
 
@@ -361,7 +364,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
           false,
           durationMs,
           errorMsg,
-          undefined,
+          options?.promptType ?? RESEARCH_PROMPT_TYPE,
           options?.correlation
         );
         return err(mapPerplexityError(error));

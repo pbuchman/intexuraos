@@ -81,6 +81,7 @@ const DEFAULT_TIMEOUT_MS = 840_000;
 
 /** Application name sent to OpenRouter */
 const APP_TITLE = 'IntexuraOS';
+const RESEARCH_PROMPT_TYPE = 'research-web-search';
 
 async function fetchWithTimeout(
   url: string,
@@ -238,7 +239,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             durationMs,
             errorMsg,
             undefined,
-            undefined,
+            options?.promptType ?? RESEARCH_PROMPT_TYPE,
             options?.correlation
           );
           return err(mapOpenRouterError(apiError));
@@ -275,7 +276,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           Date.now() - start,
           undefined,
           providerReportedUsd,
-          undefined,
+          options?.promptType ?? RESEARCH_PROMPT_TYPE,
           options?.correlation
         );
 
@@ -296,7 +297,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           durationMs,
           errorMsg,
           undefined,
-          undefined,
+          options?.promptType ?? RESEARCH_PROMPT_TYPE,
           options?.correlation
         );
         return err(mapOpenRouterError(error));

@@ -72,6 +72,8 @@ export interface GenerateOptions {
  * originating researchId / sessionId / taskId / requestId.
  */
 export interface ResearchOptions {
+  /** Semantic identifier for what the research prompt was used for. */
+  promptType?: string;
   correlation?: {
     researchId?: string | null;
     sessionId?: string | null;
@@ -86,6 +88,7 @@ export type ClaudeClient = Omit<LLMClient, 'generate' | 'research'> & {
 };
 
 const MAX_TOKENS = 8192;
+const RESEARCH_PROMPT_TYPE = 'research-web-search';
 
 /**
  * Creates a configured Anthropic Claude client.
@@ -187,7 +190,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           true,
           Date.now() - start,
           undefined,
-          undefined,
+          options?.promptType ?? RESEARCH_PROMPT_TYPE,
           options?.correlation
         );
 
@@ -207,7 +210,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
           false,
           durationMs,
           errorMsg,
-          undefined,
+          options?.promptType ?? RESEARCH_PROMPT_TYPE,
           options?.correlation
         );
         return err(mapClaudeError(error));

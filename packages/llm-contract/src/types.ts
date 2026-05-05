@@ -7,6 +7,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
+import type { ImageSize } from './pricing.js';
 import type { LLMModel } from './supportedModels.js';
 
 /**
@@ -87,6 +88,10 @@ export interface NormalizedUsage {
   groundingEnabled?: boolean;
   /** Tokens used for internal reasoning (Gemini 2.5 thinking models, billed at output rate) */
   thinkingTokens?: number;
+  /** Number of generated images for image generation operations */
+  imageCount?: number;
+  /** Generated image dimensions when the provider/request exposes them */
+  imageSize?: ImageSize;
 }
 
 /**
@@ -139,9 +144,29 @@ export interface ImageGenerationResult {
  */
 export interface ImageGenerateOptions {
   /** Output dimensions (default: '1024x1024') */
-  size?: '1024x1024' | '1536x1024' | '1024x1536';
+  size?: ImageSize;
   /** Optional slug for tracking/reference */
   slug?: string;
+}
+
+/**
+ * Optional correlation fields forwarded into emitted LLM usage events.
+ */
+export interface LLMCorrelationOptions {
+  researchId?: string | null;
+  sessionId?: string | null;
+  taskId?: string | null;
+  requestId?: string | null;
+}
+
+/**
+ * Options for web-search research calls.
+ */
+export interface ResearchOptions {
+  /** Semantic identifier for what the research prompt was used for */
+  promptType?: string;
+  /** Optional per-call correlation fields for usage attribution */
+  correlation?: LLMCorrelationOptions;
 }
 
 /**
@@ -267,7 +292,7 @@ export interface LLMClient {
    * @param prompt - The research query
    * @returns Promise resolving to {@link ResearchResult} or {@link LLMError}
    */
-  research(prompt: string): Promise<Result<ResearchResult, LLMError>>;
+  research(prompt: string, options?: ResearchOptions): Promise<Result<ResearchResult, LLMError>>;
 
   /**
    * Generates text completion without web search.
