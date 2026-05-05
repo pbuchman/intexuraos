@@ -226,7 +226,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           apiKeys.google,
           user.userId,
           createTitleGenerator,
-          request.log
+          request.log,
+          researchId
         );
         submitParams.inputContexts = contextsWithLabels;
       }
@@ -306,7 +307,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           LlmModels.Gemini25Flash,
           apiKeys.google,
           user.userId,
-          request.log
+          request.log,
+          draftId
         );
         const titleResult = await titleGenerator.generateTitle(body.prompt);
         title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
@@ -331,7 +333,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           apiKeys.google,
           user.userId,
           createTitleGenerator,
-          request.log
+          request.log,
+          draftId
         );
         const now = new Date().toISOString();
         draftParams.inputContexts = contextsWithLabels.map((ctx) => {
@@ -438,7 +441,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             LlmModels.Gemini25Flash,
             apiKeys.google,
             user.userId,
-            request.log
+            request.log,
+            id
           );
           const titleResult = await titleGenerator.generateTitle(body.prompt);
           title = titleResult.ok ? titleResult.value.title : body.prompt.slice(0, 60);
@@ -463,7 +467,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           apiKeys.google,
           user.userId,
           createTitleGenerator,
-          request.log
+          request.log,
+          id
         );
         const now = new Date().toISOString();
         updates.inputContexts = contextsWithLabels.map((ctx) => {
@@ -964,11 +969,12 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
           });
 
+          const services = getServices();
           const { synthesizer, contextInferrer } = createSynthesisProviders(
             synthesisModel,
             apiKeysResult.value, // @allow-result-access -- apiKeysResult.ok narrowed earlier in handler
             user.userId,
-            getServices(),
+            services,
             request.log,
             id
           );
@@ -1016,6 +1022,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
             notionServiceClient,
             researchExportSettings,
+            researchCostSummaryClient: services.researchCostSummaryClient ?? null,
           });
 
           if (synthesisResult.ok) {
@@ -1115,6 +1122,9 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         shareStorage,
         shareConfig,
         webAppUrl,
+        notionServiceClient,
+        researchExportSettings,
+        researchCostSummaryClient,
       } = getServices();
 
       const existing = await getResearch(id, { researchRepo });
@@ -1193,6 +1203,9 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             void userServiceClient.reportLlmSuccess(user.userId, synthesisProvider);
           },
           imageApiKeys: apiKeysResult.value,
+          notionServiceClient,
+          researchExportSettings,
+          researchCostSummaryClient: researchCostSummaryClient ?? null,
           logger: request.log,
         },
       });
@@ -1314,6 +1327,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         sourceResearchId: id,
         userId: user.userId,
       };
+      const enhancedResearchId = generateId();
       if (body.additionalModels !== undefined) {
         enhanceInput.additionalModels = body.additionalModels;
       }
@@ -1323,7 +1337,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           apiKeys.google,
           user.userId,
           createTitleGenerator,
-          request.log
+          request.log,
+          enhancedResearchId
         );
         enhanceInput.additionalContexts = contextsWithLabels;
       }
@@ -1336,7 +1351,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const result = await enhanceResearch(enhanceInput, {
         researchRepo,
-        generateId,
+        generateId: () => enhancedResearchId,
         logger: request.log as unknown as Logger,
       });
 

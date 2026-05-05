@@ -58,10 +58,11 @@ export class OpenAIImageGenerator implements ImageGenerator {
       return err({ code: 'API_ERROR', message: 'Image generation not supported' });
     }
 
-    const generateResult = await client.generateImage(
-      prompt,
-      options?.slug !== undefined ? { slug: options.slug } : undefined
-    );
+    const generateResult = await client.generateImage(prompt, {
+      ...(options?.slug !== undefined && { slug: options.slug }),
+      ...(options?.promptType !== undefined && { promptType: options.promptType }),
+      ...(options?.correlation !== undefined && { correlation: options.correlation }),
+    });
 
     if (!generateResult.ok) {
       return err(mapLlmError(generateResult.error.code, generateResult.error.message));

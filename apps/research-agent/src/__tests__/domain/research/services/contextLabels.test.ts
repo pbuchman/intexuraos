@@ -125,6 +125,7 @@ describe('generateContextLabels', () => {
     let capturedApiKey: unknown;
     let capturedUserId: unknown;
     let capturedLogger: unknown;
+    let capturedResearchId: unknown;
 
     const mockGenerator = {
       generateTitle: async () => ok({ title: 'Title', usage: { inputTokens: 10, outputTokens: 5 } }),
@@ -135,20 +136,23 @@ describe('generateContextLabels', () => {
       contexts,
       'test-api-key',
       'test-user-id',
-      (model, apiKey, userId, logger) => {
+      (model, apiKey, userId, logger, researchId) => {
         capturedModel = model;
         capturedApiKey = apiKey;
         capturedUserId = userId;
         capturedLogger = logger;
+        capturedResearchId = researchId;
         return mockGenerator;
       },
-      mockLogger
+      mockLogger,
+      'research-1'
     );
 
     expect(capturedModel).toBe(LlmModels.Gemini25Flash);
     expect(capturedApiKey).toBe('test-api-key');
     expect(capturedUserId).toBe('test-user-id');
     expect(capturedLogger).toBe(mockLogger);
+    expect(capturedResearchId).toBe('research-1');
   });
 
   it('processes multiple contexts in parallel', async () => {

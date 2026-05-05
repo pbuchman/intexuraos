@@ -3,7 +3,11 @@ import { createGptClient } from '@intexuraos/infra-gpt';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import { generateThumbnailPrompt } from '@intexuraos/llm-prompts';
 import type { ThumbnailPrompt } from '../../domain/index.js';
-import type { PromptGenerationError, PromptGenerator } from '../../domain/ports/promptGenerator.js';
+import type {
+  PromptGenerationError,
+  PromptGenerationOptions,
+  PromptGenerator,
+} from '../../domain/ports/promptGenerator.js';
 
 export interface GptPromptAdapterConfig {
   apiKey: string;
@@ -31,7 +35,8 @@ export class GptPromptAdapter implements PromptGenerator {
   }
 
   async generateThumbnailPrompt(
-    text: string
+    text: string,
+    options?: PromptGenerationOptions
   ): Promise<Result<ThumbnailPrompt, PromptGenerationError>> {
     const client = createGptClient({
       apiKey: this.apiKey,
@@ -41,7 +46,7 @@ export class GptPromptAdapter implements PromptGenerator {
       usageSink: this.usageSink,
     });
 
-    const result = await generateThumbnailPrompt(client, text);
+    const result = await generateThumbnailPrompt(client, text, options);
 
     if (!result.ok) {
       return err(mapError(result.error.code, result.error.message));

@@ -451,7 +451,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             LlmModels.Gemini25Flash,
             apiKeys.google,
             research.userId,
-            request.log
+            request.log,
+            event.researchId
           );
         }
 
@@ -502,6 +503,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             imageApiKeys: apiKeys,
             notionServiceClient: services.notionServiceClient,
             researchExportSettings: services.researchExportSettings,
+            researchCostSummaryClient: services.researchCostSummaryClient ?? null,
           });
         }
 

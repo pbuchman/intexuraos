@@ -1,4 +1,5 @@
 import { ok, err, type Result, type Logger } from '@intexuraos/common-core';
+import type { LLMCorrelationOptions } from '@intexuraos/llm-contract';
 import type {
   ImageGenerationModel,
   ImageGenerationModelConfig,
@@ -14,6 +15,8 @@ export interface GenerateImageInput {
   model: ImageGenerationModel;
   userId: string;
   title?: string | undefined;
+  promptType?: string | undefined;
+  correlation?: LLMCorrelationOptions | undefined;
 }
 
 export interface GenerateImageOutput {
@@ -87,7 +90,11 @@ export function createGenerateImageUseCase(
     // 3. Generate image
     deps.logger.info({ model: input.model, provider: modelConfig.provider }, 'Starting image generation');
     const imageGenerator = deps.createImageGenerator(input.model, apiKey, input.userId, deps.logger);
-    const result = await imageGenerator.generate(input.prompt, { slug });
+    const result = await imageGenerator.generate(input.prompt, {
+      ...(slug !== undefined && { slug }),
+      ...(input.promptType !== undefined && { promptType: input.promptType }),
+      ...(input.correlation !== undefined && { correlation: input.correlation }),
+    });
 
     if (!result.ok) {
       deps.logger.error(

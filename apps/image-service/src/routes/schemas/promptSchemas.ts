@@ -20,6 +20,21 @@ export const generatePromptBodySchema = {
       type: 'string',
       description: 'User ID for API key lookup',
     },
+    promptType: {
+      type: 'string',
+      description: 'Optional usage tracking prompt type',
+    },
+    correlation: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        researchId: { type: 'string' },
+        sessionId: { type: 'string' },
+        taskId: { type: 'string' },
+        requestId: { type: 'string' },
+      },
+      description: 'Optional usage attribution correlation fields',
+    },
   },
   additionalProperties: false,
 } as const;
@@ -73,4 +88,11 @@ export interface GeneratePromptBody {
   text: string;
   model: 'gpt-4.1' | Gemini25Pro;
   userId: string;
+  promptType?: string | undefined;
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  } | undefined;
 }

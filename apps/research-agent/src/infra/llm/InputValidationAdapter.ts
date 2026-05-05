@@ -45,23 +45,39 @@ export class InputValidationAdapter implements InputValidationProvider {
   private readonly client: GeminiClient;
   private readonly model: string;
   private readonly logger: Logger;
+  private readonly researchId: string | undefined;
 
   constructor(
     apiKey: string,
     model: string,
     userId: string,
     logger: Logger,
-    usageSink: UsageSink
+    usageSink: UsageSink,
+    researchId?: string
   ) {
     this.client = createGeminiClient({ apiKey, model, userId, logger, usageSink });
     this.model = model;
     this.logger = logger;
+    this.researchId = researchId;
+  }
+
+  private generateOptions(promptType: string): {
+    promptType: string;
+    correlation?: { researchId: string };
+  } {
+    if (this.researchId !== undefined) {
+      return { promptType, correlation: { researchId: this.researchId } };
+    }
+    return { promptType };
   }
 
   async validateInput(prompt: string): Promise<Result<ValidationResult, LlmError>> {
     this.logger.info({ model: this.model, promptLength: prompt.length }, 'Input validation started');
     const builtPrompt = inputQualityPrompt.build({ prompt });
-    const result = await this.client.generate(builtPrompt, { promptType: 'research-input-validation' });
+    const result = await this.client.generate(
+      builtPrompt,
+      this.generateOptions('research-input-validation')
+    );
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -99,7 +115,10 @@ export class InputValidationAdapter implements InputValidationProvider {
   async improveInput(prompt: string): Promise<Result<ImprovementResult, LlmError>> {
     this.logger.info({ model: this.model, promptLength: prompt.length }, 'Input improvement started');
     const builtPrompt = inputImprovementPrompt.build({ prompt });
-    const result = await this.client.generate(builtPrompt, { promptType: 'research-input-improvement' });
+    const result = await this.client.generate(
+      builtPrompt,
+      this.generateOptions('research-input-improvement')
+    );
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -150,7 +169,10 @@ export class InputValidationAdapter implements InputValidationProvider {
     );
 
     const repairPrompt = validationRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
-    const result = await this.client.generate(repairPrompt, { promptType: 'research-input-validation-repair' });
+    const result = await this.client.generate(
+      repairPrompt,
+      this.generateOptions('research-input-validation-repair')
+    );
 
     if (!result.ok) {
       return {
@@ -218,7 +240,10 @@ export class InputValidationAdapter implements InputValidationProvider {
     );
 
     const repairPrompt = improvementRepairPrompt.build({ originalPrompt, invalidResponse, errorMessage });
-    const result = await this.client.generate(repairPrompt, { promptType: 'research-input-improvement-repair' });
+    const result = await this.client.generate(
+      repairPrompt,
+      this.generateOptions('research-input-improvement-repair')
+    );
 
     if (!result.ok) {
       return {
