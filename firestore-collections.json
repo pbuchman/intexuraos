@@ -258,6 +258,18 @@
     "notification_digest_backfill_runs": {
       "owner": "mobile-notifications-service",
       "description": "Progress tracking for digest backfill runs. One doc per run; mutated as the HTTP-chain processes each day."
+    },
+    "fishing_knowledge_folders": {
+      "owner": "fishing-assistant-service",
+      "description": "Per-user Fishing Assistant knowledge folders used to group manually pasted source pages."
+    },
+    "fishing_knowledge_pages": {
+      "owner": "fishing-assistant-service",
+      "description": "Per-user Fishing Assistant raw and normalized knowledge pages used as RAG sources."
+    },
+    "fishing_knowledge_chunks": {
+      "owner": "fishing-assistant-service",
+      "description": "Per-user Fishing Assistant searchable page chunks with vector embeddings for RAG retrieval."
     }
   }
 }

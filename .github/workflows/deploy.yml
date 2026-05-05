@@ -147,6 +147,7 @@ jobs:
           bash cloudbuild/scripts/build-push-monitored.sh whatsapp-service apps/whatsapp-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh app-settings-service apps/app-settings-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh mobile-notifications-service apps/mobile-notifications-service/Dockerfile &
+          bash cloudbuild/scripts/build-push-monitored.sh fishing-assistant-service apps/fishing-assistant-service/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh research-agent apps/research-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh commands-agent apps/commands-agent/Dockerfile &
           bash cloudbuild/scripts/build-push-monitored.sh actions-agent apps/actions-agent/Dockerfile &
@@ -171,7 +172,7 @@ jobs:
           SERVICES=(
             image-service api-docs-hub notion-service user-service whatsapp-service
             app-settings-service mobile-notifications-service research-agent
-            commands-agent actions-agent notes-agent
+            fishing-assistant-service commands-agent actions-agent notes-agent
             todos-agent bookmarks-agent calendar-agent linear-agent
             web-agent code-agent chat-agent cron-agent hellscript-agent
             llm-usage-service
@@ -190,6 +191,7 @@ jobs:
             "whatsapp-service:WHATSAPP_SERVICE"
             "notion-service:NOTION_SERVICE"
             "mobile-notifications-service:MOBILE_NOTIFICATIONS_SERVICE"
+            "fishing-assistant-service:FISHING_ASSISTANT_SERVICE"
             "research-agent:RESEARCH_AGENT"
             "commands-agent:COMMANDS_AGENT"
             "actions-agent:ACTIONS_AGENT"
@@ -376,6 +378,7 @@ jobs:
                 "whatsapp-service:WHATSAPP_SERVICE"
                 "notion-service:NOTION_SERVICE"
                 "mobile-notifications-service:MOBILE_NOTIFICATIONS_SERVICE"
+                "fishing-assistant-service:FISHING_ASSISTANT_SERVICE"
                 "research-agent:RESEARCH_AGENT"
                 "commands-agent:COMMANDS_AGENT"
                 "actions-agent:ACTIONS_AGENT"

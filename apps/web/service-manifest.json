@@ -5,6 +5,7 @@
     { "name": "whatsapp-service",             "envSuffix": "WHATSAPP_SERVICE" },
     { "name": "notion-service",               "envSuffix": "NOTION_SERVICE" },
     { "name": "mobile-notifications-service", "envSuffix": "MOBILE_NOTIFICATIONS_SERVICE" },
+    { "name": "fishing-assistant-service",    "envSuffix": "FISHING_ASSISTANT_SERVICE" },
     { "name": "research-agent",               "envSuffix": "RESEARCH_AGENT" },
     { "name": "commands-agent",               "envSuffix": "COMMANDS_AGENT" },
     { "name": "actions-agent",                "envSuffix": "ACTIONS_AGENT" },

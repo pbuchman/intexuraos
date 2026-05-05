@@ -24,6 +24,7 @@ export function getConfig(): AppConfig {
     whatsappServiceUrl: getServiceUrl('INTEXURAOS_WHATSAPP_SERVICE_URL', '/api/whatsapp'),
     notionServiceUrl: getServiceUrl('INTEXURAOS_NOTION_SERVICE_URL', '/api/notion'),
     mobileNotificationsServiceUrl: getServiceUrl('INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL', '/api/notifications'),
+    fishingAssistantServiceUrl: getServiceUrl('INTEXURAOS_FISHING_ASSISTANT_SERVICE_URL', '/api/fishing-assistant'),
     ResearchAgentUrl: getServiceUrl('INTEXURAOS_RESEARCH_AGENT_URL', '/api/research'),
     commandsAgentServiceUrl: getServiceUrl('INTEXURAOS_COMMANDS_AGENT_URL', '/api/commands'),
     actionsAgentUrl: getServiceUrl('INTEXURAOS_ACTIONS_AGENT_URL', '/api/actions'),

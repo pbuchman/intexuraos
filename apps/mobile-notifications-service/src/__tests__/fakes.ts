@@ -241,6 +241,14 @@ export class FakeNotificationRepository implements NotificationRepository {
       const titleFilter = options.filter.title.toLowerCase();
       notifications = notifications.filter((n) => n.title.toLowerCase().includes(titleFilter));
     }
+    if (options.filter?.postTimeSecFrom !== undefined) {
+      const from = options.filter.postTimeSecFrom;
+      notifications = notifications.filter((n) => n.timestamp >= from);
+    }
+    if (options.filter?.postTimeSecTo !== undefined) {
+      const to = options.filter.postTimeSecTo;
+      notifications = notifications.filter((n) => n.timestamp < to);
+    }
 
     // Handle cursor
     if (options.cursor !== undefined) {

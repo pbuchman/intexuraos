@@ -36,6 +36,7 @@ export interface RunDigestForGroupResult {
 }
 
 const PREVIOUS_SUMMARIES_WINDOW = 3;
+const DIGEST_SENDER_FALLBACK = 'Unknown sender';
 
 export async function runDigestForGroup(
   deps: RunDigestForGroupDeps,
@@ -87,7 +88,11 @@ export async function runDigestForGroup(
         date: input.date,
         previousState: previousState.value,
         last3Summaries: lastSummaries.value.map((p) => p.summary),
-        todaysMessages: filtered.map((m) => ({ sender: m.sender, text: m.text, postTimeSec: m.postTimeSec })),
+        todaysMessages: filtered.map((m) => ({
+          sender: m.senderLabel ?? DIGEST_SENDER_FALLBACK,
+          text: m.text,
+          postTimeSec: m.postTimeSec,
+        })),
       },
     );
     if (!aggregation.ok) return aggregation;
