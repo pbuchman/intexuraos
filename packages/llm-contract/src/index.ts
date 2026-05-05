@@ -12,6 +12,8 @@ export type {
   GenerateResult,
   ImageGenerationResult,
   ImageGenerateOptions,
+  LLMCorrelationOptions,
+  ResearchOptions,
   SynthesisInput,
   LLMErrorCode,
   LLMError,

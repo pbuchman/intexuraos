@@ -74,6 +74,8 @@ export interface GenerateOptions {
  * researchId / sessionId / taskId / requestId.
  */
 export interface ResearchOptions {
+  /** Semantic identifier for what the research prompt was used for. */
+  promptType?: string;
   correlation?: {
     researchId?: string | null;
     sessionId?: string | null;
@@ -90,6 +92,8 @@ export type GptClient = Omit<LLMClient, 'generate' | 'research'> & {
 const MAX_TOKENS = 8192;
 const IMAGE_MODEL = LlmModels.GPTImage1;
 const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
+const RESEARCH_PROMPT_TYPE = 'research-web-search';
+const IMAGE_PROMPT_TYPE = 'image-generation';
 
 /**
  * Creates a configured OpenAI GPT client.
@@ -124,12 +128,13 @@ export function createGptClient(config: GptConfig): GptClient {
     durationMs: number,
     errorMessage?: string,
     promptType?: string,
-    correlation?: GenerateOptions['correlation']
+    correlation?: GenerateOptions['correlation'],
+    modelOverride?: string
   ): void {
     void usageLogger.log({
       userId,
       provider: LlmProviders.OpenAI,
-      model,
+      model: modelOverride ?? model,
       callType,
       usage,
       success,
@@ -204,7 +209,7 @@ export function createGptClient(config: GptConfig): GptClient {
           true,
           Date.now() - start,
           undefined,
-          undefined,
+          options?.promptType ?? RESEARCH_PROMPT_TYPE,
           options?.correlation
         );
 
@@ -224,7 +229,7 @@ export function createGptClient(config: GptConfig): GptClient {
           false,
           durationMs,
           errorMsg,
-          undefined,
+          options?.promptType ?? RESEARCH_PROMPT_TYPE,
           options?.correlation
         );
         return err(mapGptError(error));
@@ -246,8 +251,8 @@ export function createGptClient(config: GptConfig): GptClient {
       options?: ImageGenerateOptions
     ): Promise<Result<ImageGenerationResult, GptError>> {
       const start = Date.now();
+      const size: ImageSize = options?.size ?? DEFAULT_IMAGE_SIZE;
       try {
-        const size: ImageSize = options?.size ?? DEFAULT_IMAGE_SIZE;
         // gpt-image-1 returns base64 data in response.data[0].b64_json by default
         const response = await client.images.generate({
           model: IMAGE_MODEL,
@@ -262,6 +267,24 @@ export function createGptClient(config: GptConfig): GptClient {
 
         if (b64Data === undefined) {
           const errorMsg = 'No image data in response';
+          const usage: NormalizedUsage = {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+            costUsd: 0,
+            imageCount: 0,
+            imageSize: size,
+          };
+          trackUsage(
+            'image_generation',
+            usage,
+            false,
+            Date.now() - start,
+            errorMsg,
+            IMAGE_PROMPT_TYPE,
+            undefined,
+            IMAGE_MODEL
+          );
           return err({ code: 'API_ERROR', message: errorMsg });
         }
 
@@ -282,9 +305,20 @@ export function createGptClient(config: GptConfig): GptClient {
           outputTokens: 0,
           totalTokens: 0,
           costUsd: 0,
+          imageCount: 1,
+          imageSize: size,
         };
 
-        trackUsage('image_generation', usage, true, Date.now() - start);
+        trackUsage(
+          'image_generation',
+          usage,
+          true,
+          Date.now() - start,
+          undefined,
+          IMAGE_PROMPT_TYPE,
+          undefined,
+          IMAGE_MODEL
+        );
 
         return ok({ imageData: imageBuffer, model: IMAGE_MODEL, usage });
       } catch (error) {
@@ -295,8 +329,19 @@ export function createGptClient(config: GptConfig): GptClient {
           outputTokens: 0,
           totalTokens: 0,
           costUsd: 0,
+          imageCount: 0,
+          imageSize: size,
         };
-        trackUsage('image_generation', emptyUsage, false, durationMs, errorMsg);
+        trackUsage(
+          'image_generation',
+          emptyUsage,
+          false,
+          durationMs,
+          errorMsg,
+          IMAGE_PROMPT_TYPE,
+          undefined,
+          IMAGE_MODEL
+        );
         return err(mapGptError(error));
       }
     },
