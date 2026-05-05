@@ -1119,7 +1119,7 @@ export interface ListCodeTasksResponse {
 /**
  * Worker health status tag
  */
-export type WorkerStatusTag = 'healthy' | 'orchestrator-unreachable' | 'tunnel-down' | 'unknown';
+export type WorkerStatusTag = 'healthy' | 'orchestrator-unreachable' | 'tunnel-down' | 'unknown' | 'disabled';
 
 /**
  * Worker status details
@@ -1140,6 +1140,7 @@ export interface WorkerStatus {
   name: string;
   url: string;
   priority: number;
+  enabled: boolean;
   healthy: boolean;
   status: WorkerStatusTag;
   details: WorkerStatusDetails | null;

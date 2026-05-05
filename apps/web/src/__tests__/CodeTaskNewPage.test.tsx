@@ -65,11 +65,11 @@ vi.mock('@/hooks', () => ({
     error: null,
   }),
   useWorkersStatus: (): {
-    status: { workers: { name: string; priority: number; healthy: boolean }[] };
+    status: { workers: { name: string; priority: number; enabled: boolean; healthy: boolean }[] };
     loading: boolean;
   } => ({
     status: {
-      workers: [{ name: 'worker-1', priority: 1, healthy: true }],
+      workers: [{ name: 'worker-1', priority: 1, enabled: true, healthy: true }],
     },
     loading: false,
   }),

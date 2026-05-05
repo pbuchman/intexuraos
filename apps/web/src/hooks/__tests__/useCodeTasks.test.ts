@@ -25,9 +25,16 @@ vi.mock('../../context/index.js', () => ({
 }));
 
 const mockGetWorkersStatus = vi.fn();
+const mockRefreshWorkersStatus = vi.fn();
+const mockUpdateWorker = vi.fn();
 
 vi.mock('../../services/codeAgentApi.js', () => ({
   getWorkersStatus: (...args: unknown[]): unknown => mockGetWorkersStatus(...args),
+  refreshWorkersStatus: (...args: unknown[]): unknown => mockRefreshWorkersStatus(...args),
+}));
+
+vi.mock('../../services/workerSettingsApi.js', () => ({
+  updateWorker: (...args: unknown[]): unknown => mockUpdateWorker(...args),
 }));
 
 function createTask(overrides: Partial<CodeTask> = {}): CodeTask {
@@ -117,9 +124,10 @@ describe('useWorkersStatus', () => {
 
   const mockStatus: WorkersStatusResponse = {
     workers: [
-      { name: 'mac-worker', url: 'https://mac.example.com', priority: 1, healthy: true, checkedAt: '2024-01-01T00:00:00Z' },
-      { name: 'vm-worker', url: 'https://vm.example.com', priority: 2, healthy: false, checkedAt: '2024-01-01T00:00:00Z' },
+      { name: 'mac-worker', url: 'https://mac.example.com', priority: 1, enabled: true, healthy: true, checkedAt: '2024-01-01T00:00:00Z', status: 'healthy', details: null, stale: false },
+      { name: 'vm-worker', url: 'https://vm.example.com', priority: 2, enabled: false, healthy: false, checkedAt: '2024-01-01T00:00:00Z', status: 'disabled', details: { reason: 'disabled' }, stale: false },
     ],
+    stale: false,
   };
 
   it('fetches worker status on mount', async () => {
@@ -163,8 +171,9 @@ describe('useWorkersStatus', () => {
     mockGetWorkersStatus.mockClear();
     const updatedStatus: WorkersStatusResponse = {
       workers: [
-        { name: 'mac-worker', url: 'https://mac.example.com', priority: 1, healthy: true, checkedAt: '2024-01-01T00:00:00Z' },
+        { name: 'mac-worker', url: 'https://mac.example.com', priority: 1, enabled: true, healthy: true, checkedAt: '2024-01-01T00:00:00Z', status: 'healthy', details: null, stale: false },
       ],
+      stale: false,
     };
     mockGetWorkersStatus.mockResolvedValue(updatedStatus);
 
@@ -174,5 +183,31 @@ describe('useWorkersStatus', () => {
 
     expect(mockGetWorkersStatus).toHaveBeenCalledTimes(1);
     expect(result.current.status?.workers).toHaveLength(1);
+  });
+
+  it('updates worker enabled state and refreshes status after the API succeeds', async () => {
+    mockGetWorkersStatus.mockResolvedValue(mockStatus);
+    const refreshedStatus: WorkersStatusResponse = {
+      workers: [
+        { name: 'mac-worker', url: 'https://mac.example.com', priority: 1, enabled: false, healthy: false, checkedAt: '2024-01-01T00:00:00Z', status: 'disabled', details: { reason: 'disabled' }, stale: false },
+      ],
+      stale: false,
+    };
+    mockUpdateWorker.mockResolvedValue({ updated: true });
+    mockRefreshWorkersStatus.mockResolvedValue(refreshedStatus);
+
+    const { result } = renderHook(() => useWorkersStatus());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.setWorkerEnabled('mac-worker', false);
+    });
+
+    expect(mockUpdateWorker).toHaveBeenCalledWith('test-token', 'mac-worker', { enabled: false });
+    expect(mockRefreshWorkersStatus).toHaveBeenCalledWith('test-token');
+    expect(result.current.status).toEqual(refreshedStatus);
   });
 });
