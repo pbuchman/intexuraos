@@ -18,7 +18,7 @@ const PRODUCTION_RESET_TEXT = "You've hit your limit · resets 10pm (UTC)";
 describe('cooloffRetryPrompt', () => {
   describe('COOLOFF_RETRY_PROMPT_VERSION', () => {
     it('is a semver string', () => {
-      expect(COOLOFF_RETRY_PROMPT_VERSION).toBe('1.0.0');
+      expect(COOLOFF_RETRY_PROMPT_VERSION).toBe('1.1.0');
     });
   });
 
@@ -51,6 +51,22 @@ describe('cooloffRetryPrompt', () => {
       expect(prompt).toContain(now.toISOString());
       // Must tell the LLM to emit an ISO-8601 UTC timestamp.
       expect(prompt).toMatch(/ISO-8601 UTC/i);
+    });
+
+    it('includes Codex usage-limit wording and runtime-neutral instructions', () => {
+      const prompt = cooloffRetryPrompt.build({
+        errorCode: 'TASK_RUNTIME_HARD_ERROR',
+        errorMessage:
+          "Codex error: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:14 PM.",
+        recentLogLines: [],
+        userTimezone: 'Europe/Warsaw',
+        now: new Date('2026-05-05T17:44:20Z'),
+      });
+
+      expect(prompt).toContain('try again at 6:14 PM');
+      expect(prompt).toContain('Codex');
+      expect(prompt).toMatch(/usage-limit failures/i);
+      expect(prompt).not.toMatch(/Claude usage-limit failures/i);
     });
 
     it('falls back to a UTC note when userTimezone is missing', () => {

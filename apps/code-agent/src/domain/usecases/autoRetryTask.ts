@@ -28,13 +28,13 @@ export interface AutoRetryTaskRequest {
    * Optional cooloff dispatch schedule (INT-1463). Only set when the failure
    * verdict is `retry_after_cooloff`; the retry task will be queued but
    * ineligible for dispatch until `notBeforeAt`. Fallback-derived schedules
-   * use a fixed 60-minute wait; LLM-derived ones use the parsed reset time.
+   * use a fixed 60-minute wait; parser/LLM-derived ones use the parsed reset time.
    */
   cooloffSchedule?: {
     notBeforeAt: Date;
     timezone?: string;
     sourceText?: string;
-    derivedBy: 'llm' | 'fallback';
+    derivedBy: 'parser' | 'llm' | 'fallback';
   };
 }
 

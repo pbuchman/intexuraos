@@ -149,7 +149,7 @@ export interface DispatchSchedule {
   /** Raw text we parsed the schedule from (e.g. Claude usage-limit message). */
   sourceText?: string;
   /** How notBeforeAt was derived. */
-  derivedBy: 'user_input' | 'llm' | 'fallback';
+  derivedBy: 'user_input' | 'parser' | 'llm' | 'fallback';
   /** Task that produced this schedule (set for retry_cooloff chains). */
   derivedFromTaskId?: string;
 }
