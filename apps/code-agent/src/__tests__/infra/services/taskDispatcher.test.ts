@@ -145,6 +145,76 @@ describe('taskDispatcherImpl', () => {
       );
     });
 
+    it('skips disabled credentials before health probing and dispatch attempts', async () => {
+      const probeAllWorkers = vi.fn().mockImplementation(
+        async (workers: WorkerSettingsConfig[]): Promise<Record<string, WorkerHealthState>> => {
+          const worker = workers[0];
+          if (worker === undefined) {
+            return {};
+          }
+          return {
+            [worker.name]: {
+              _tag: 'healthy',
+              healthy: true,
+              capacity: 5,
+              running: 0,
+              available: 5,
+              responseTimeMs: 50,
+            },
+          };
+        }
+      );
+      const service = createTaskDispatcherService({
+        ...baseDeps,
+        workerHealthProbe: createMockHealthProbe({ probeAllWorkers }),
+      });
+
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      const [homeMac, cloudVm] = testWorkerCredentials.workers;
+      if (homeMac === undefined || cloudVm === undefined) {
+        throw new Error('test setup failed');
+      }
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Fix the bug',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test123',
+        workerCredentials: {
+          workers: [
+            {
+              ...homeMac,
+              enabled: false,
+            },
+            {
+              ...cloudVm,
+              enabled: true,
+            },
+          ],
+        },
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(probeAllWorkers).toHaveBeenCalledWith([
+        expect.objectContaining({ name: 'cloud-vm' }),
+      ]);
+      expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(global.fetch)).toHaveBeenCalledWith(
+        'https://cc-vm.intexuraos.cloud/tasks',
+        expect.any(Object)
+      );
+    });
+
     it('computes HMAC signature correctly', async () => {
       const service = createTaskDispatcherService(baseDeps);
       vi.mocked(global.fetch).mockResolvedValueOnce({

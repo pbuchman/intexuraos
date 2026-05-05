@@ -2,6 +2,7 @@ packages:
   - 'apps/*'
   - 'packages/*'
   - 'workers/*'
+  - 'migrations'
   - 'tools/log-server'
   - 'tools/sample-data'
   - 'e2e'
