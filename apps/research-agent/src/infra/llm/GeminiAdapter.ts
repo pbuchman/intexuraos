@@ -114,7 +114,8 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     originalPrompt: string,
     reports: { model: string; content: string }[],
     additionalSources?: { content: string; label?: string }[],
-    synthesisContext?: SynthesisContext
+    synthesisContext?: SynthesisContext,
+    options?: { promptType?: string }
   ): Promise<Result<LlmSynthesisResult, LlmError>> {
     this.logger.info(
       { model: this.model, reportCount: reports.length, sourceCount: additionalSources?.length ?? 0 },
@@ -126,7 +127,10 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
       ctx: synthesisContext,
       additionalSources,
     });
-    const result = await this.client.generate(synthesisPromptText, this.generateOptions('research-synthesis'));
+    const result = await this.client.generate(
+      synthesisPromptText,
+      this.generateOptions(options?.promptType ?? 'research-synthesis')
+    );
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);

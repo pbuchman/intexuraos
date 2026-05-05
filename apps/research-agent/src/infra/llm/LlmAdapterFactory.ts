@@ -79,9 +79,10 @@ export function createTitleGenerator(
   apiKey: string,
   userId: string,
   logger: Logger,
-  usageSink: UsageSink
+  usageSink: UsageSink,
+  researchId?: string
 ): TitleGenerator {
-  return new GeminiAdapter(apiKey, model, userId, logger, usageSink);
+  return new GeminiAdapter(apiKey, model, userId, logger, usageSink, researchId);
 }
 
 export function createContextInferrer(
@@ -100,9 +101,10 @@ export function createInputValidator(
   apiKey: string,
   userId: string,
   logger: Logger,
-  usageSink: UsageSink
+  usageSink: UsageSink,
+  researchId?: string
 ): InputValidationProvider {
-  return new InputValidationAdapter(apiKey, model, userId, logger, usageSink);
+  return new InputValidationAdapter(apiKey, model, userId, logger, usageSink, researchId);
 }
 
 export type { InputValidationProvider };

@@ -40,13 +40,21 @@ export type ImageModel = GPTImage1 | Gemini25FlashImage;
 
 export interface GenerateImageOptions {
   title?: string;
+  promptType?: string;
+  correlation?: { researchId: string };
+}
+
+export interface GeneratePromptOptions {
+  promptType?: string;
+  correlation?: { researchId: string };
 }
 
 export interface ImageServiceClient {
   generatePrompt(
     text: string,
     model: PromptModel,
-    userId: string
+    userId: string,
+    options?: GeneratePromptOptions
   ): Promise<Result<ThumbnailPrompt, ImageServiceError>>;
 
   generateImage(
@@ -64,7 +72,8 @@ export function createImageServiceClient(config: ImageServiceConfig): ImageServi
     async generatePrompt(
       text: string,
       model: PromptModel,
-      userId: string
+      userId: string,
+      options?: GeneratePromptOptions
     ): Promise<Result<ThumbnailPrompt, ImageServiceError>> {
       try {
         const response = await fetch(`${config.baseUrl}/internal/images/prompts/generate`, {
@@ -73,7 +82,13 @@ export function createImageServiceClient(config: ImageServiceConfig): ImageServi
             'Content-Type': 'application/json',
             'X-Internal-Auth': config.internalAuthToken,
           },
-          body: JSON.stringify({ text, model, userId }),
+          body: JSON.stringify({
+            text,
+            model,
+            userId,
+            ...(options?.promptType !== undefined && { promptType: options.promptType }),
+            ...(options?.correlation !== undefined && { correlation: options.correlation }),
+          }),
         });
 
         if (!response.ok) {
@@ -107,7 +122,14 @@ export function createImageServiceClient(config: ImageServiceConfig): ImageServi
             'Content-Type': 'application/json',
             'X-Internal-Auth': config.internalAuthToken,
           },
-          body: JSON.stringify({ prompt, model, userId, title: options?.title }),
+          body: JSON.stringify({
+            prompt,
+            model,
+            userId,
+            title: options?.title,
+            ...(options?.promptType !== undefined && { promptType: options.promptType }),
+            ...(options?.correlation !== undefined && { correlation: options.correlation }),
+          }),
         });
 
         if (!response.ok) {
