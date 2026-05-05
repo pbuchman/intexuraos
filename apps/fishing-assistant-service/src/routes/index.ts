@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { logIncomingRequest } from '@intexuraos/common-http';
 import { registerFoldersRoutes } from './foldersRoutes.js';
 import { registerPagesRoutes } from './pagesRoutes.js';
 
@@ -14,7 +15,11 @@ export function fishingAssistantRoutes(app: FastifyInstance): void {
         tags: ['fishing-assistant'],
       },
     },
-    async (_request, reply) => {
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received Fishing Assistant status request',
+      });
+
       return await reply.ok({
         service: 'fishing-assistant-service',
         status: 'ready',
