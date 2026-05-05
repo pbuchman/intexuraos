@@ -1,11 +1,13 @@
 import { err, getErrorMessage, ok, type Logger, type Result } from '@intexuraos/common-core';
-import { Timestamp, type Firestore } from '@intexuraos/infra-firestore';
+import { FieldValue, Timestamp, type Firestore } from '@intexuraos/infra-firestore';
 import type { FishingContentType } from '../../domain/chunking/types.js';
 import type { KnowledgeIndexingStatus, KnowledgePage } from '../../domain/models/knowledge.js';
 import type {
   DeletePageForUserInput,
   FindPageByIdForUserInput,
   KnowledgePageCreateInput,
+  KnowledgePageUpdateInput,
+  ListPagesByUserInput,
   KnowledgePageRepository,
   KnowledgeRepositoryError,
 } from '../../domain/ports/knowledgeRepositories.js';
@@ -136,6 +138,56 @@ export class FirestorePageRepository implements KnowledgePageRepository {
       return ok(toKnowledgePage(doc.id, data as Record<string, unknown>));
     } catch (error) {
       this.logger.error({ error: getErrorMessage(error), input }, 'Failed to load fishing knowledge page');
+      return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error) });
+    }
+  }
+
+  async listByUserId(input: ListPagesByUserInput): Promise<Result<KnowledgePage[], KnowledgeRepositoryError>> {
+    try {
+      let query = this.firestore
+        .collection(FISHING_KNOWLEDGE_PAGES_COLLECTION)
+        .where('userId', '==', input.userId);
+
+      if (input.folderId !== undefined) {
+        query = query.where('folderId', '==', input.folderId);
+      }
+
+      const snapshot = await query.orderBy('updatedAt', 'desc').get();
+      return ok(snapshot.docs.map((doc) => toKnowledgePage(doc.id, doc.data() as Record<string, unknown>)));
+    } catch (error) {
+      this.logger.error({ error: getErrorMessage(error), input }, 'Failed to list fishing knowledge pages');
+      return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error) });
+    }
+  }
+
+  async updateForUser(input: KnowledgePageUpdateInput): Promise<Result<KnowledgePage, KnowledgeRepositoryError>> {
+    try {
+      const pageRef = this.firestore.collection(FISHING_KNOWLEDGE_PAGES_COLLECTION).doc(input.pageId);
+      const existing = await pageRef.get();
+      const existingData = existing.data() as Record<string, unknown> | undefined;
+      if (!existing.exists || existingData?.['userId'] !== input.userId) {
+        return err({ code: 'NOT_FOUND', message: `Fishing knowledge page ${input.pageId} not found` });
+      }
+
+      const updateData: Record<string, unknown> = {
+        updatedAt: Timestamp.now(),
+      };
+
+      if (input.title !== undefined) updateData['title'] = input.title;
+      if (input.rawText !== undefined) updateData['rawText'] = input.rawText;
+      if (input.normalizedText !== undefined) updateData['normalizedText'] = input.normalizedText;
+      if (input.contentType !== undefined) updateData['contentType'] = input.contentType;
+      if (input.indexingStatus !== undefined) updateData['indexingStatus'] = input.indexingStatus;
+      if (input.chunkCount !== undefined) updateData['chunkCount'] = input.chunkCount;
+      if (input.indexingError !== undefined) {
+        updateData['indexingError'] = input.indexingError ?? FieldValue.delete();
+      }
+
+      await pageRef.update(updateData);
+      const updated = await pageRef.get();
+      return ok(toKnowledgePage(updated.id, updated.data() as Record<string, unknown>));
+    } catch (error) {
+      this.logger.error({ error: getErrorMessage(error), input }, 'Failed to update fishing knowledge page');
       return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error) });
     }
   }

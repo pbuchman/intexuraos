@@ -7,7 +7,10 @@ import type {
   KnowledgeFolderRepository,
   KnowledgeRepositoryError,
 } from '../../domain/ports/knowledgeRepositories.js';
-import { FISHING_KNOWLEDGE_FOLDERS_COLLECTION } from './collections.js';
+import {
+  FISHING_KNOWLEDGE_FOLDERS_COLLECTION,
+  FISHING_KNOWLEDGE_PAGES_COLLECTION,
+} from './collections.js';
 
 export interface FirestoreFolderRepositoryDeps {
   firestore: Firestore;
@@ -88,6 +91,58 @@ export class FirestoreFolderRepository implements KnowledgeFolderRepository {
       return ok(snapshot.docs.map((doc) => toKnowledgeFolder(doc.id, doc.data() as Record<string, unknown>)));
     } catch (error) {
       this.logger.error({ error: getErrorMessage(error), userId }, 'Failed to list fishing knowledge folders');
+      return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error) });
+    }
+  }
+
+  async updateForUser(
+    input: KnowledgeFolderCreateInput
+  ): Promise<Result<KnowledgeFolder, KnowledgeRepositoryError>> {
+    try {
+      const docRef = this.firestore.collection(FISHING_KNOWLEDGE_FOLDERS_COLLECTION).doc(input.id);
+      const existing = await docRef.get();
+      const data = existing.data() as Record<string, unknown> | undefined;
+      if (!existing.exists || data?.['userId'] !== input.userId) {
+        return err({ code: 'NOT_FOUND', message: `Fishing knowledge folder ${input.id} not found` });
+      }
+
+      await docRef.update({
+        name: input.name,
+        parentId: input.parentId,
+        sortOrder: input.sortOrder,
+        updatedAt: Timestamp.now(),
+      });
+      const updated = await docRef.get();
+      return ok(toKnowledgeFolder(updated.id, updated.data() as Record<string, unknown>));
+    } catch (error) {
+      this.logger.error({ error: getErrorMessage(error), input }, 'Failed to update fishing knowledge folder');
+      return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error) });
+    }
+  }
+
+  async deleteForUser(input: FindByIdForUserInput): Promise<Result<void, KnowledgeRepositoryError>> {
+    try {
+      const docRef = this.firestore.collection(FISHING_KNOWLEDGE_FOLDERS_COLLECTION).doc(input.folderId);
+      const existing = await docRef.get();
+      const data = existing.data() as Record<string, unknown> | undefined;
+      if (!existing.exists || data?.['userId'] !== input.userId) {
+        return err({ code: 'NOT_FOUND', message: `Fishing knowledge folder ${input.folderId} not found` });
+      }
+
+      const pages = await this.firestore
+        .collection(FISHING_KNOWLEDGE_PAGES_COLLECTION)
+        .where('userId', '==', input.userId)
+        .where('folderId', '==', input.folderId)
+        .limit(1)
+        .get();
+      if (!pages.empty) {
+        return err({ code: 'FOLDER_NOT_EMPTY', message: 'Folder contains pages.' });
+      }
+
+      await docRef.delete();
+      return ok(undefined);
+    } catch (error) {
+      this.logger.error({ error: getErrorMessage(error), input }, 'Failed to delete fishing knowledge folder');
       return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error) });
     }
   }

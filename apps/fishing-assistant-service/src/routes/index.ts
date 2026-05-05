@@ -1,6 +1,11 @@
 import type { FastifyInstance } from 'fastify';
+import { registerFoldersRoutes } from './foldersRoutes.js';
+import { registerPagesRoutes } from './pagesRoutes.js';
 
 export function fishingAssistantRoutes(app: FastifyInstance): void {
+  registerFoldersRoutes(app);
+  registerPagesRoutes(app);
+
   app.get(
     '/fishing-assistant/status',
     {

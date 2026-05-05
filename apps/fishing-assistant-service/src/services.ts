@@ -1,4 +1,4 @@
-import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok, type Logger, type Result } from '@intexuraos/common-core';
 import { getFirestore, type Firestore } from '@intexuraos/infra-firestore';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import {
@@ -12,6 +12,15 @@ import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory
 import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import OpenAI from 'openai';
 import type { Config } from './config.js';
+import type { KnowledgeEmbeddingClient } from './domain/ports/embeddingClient.js';
+import type {
+  KnowledgeChunkRepository,
+  KnowledgeFolderRepository,
+  KnowledgePageRepository,
+} from './domain/ports/knowledgeRepositories.js';
+import { createFirestoreChunkRepository } from './infra/firestore/chunkRepository.js';
+import { createFirestoreFolderRepository } from './infra/firestore/folderRepository.js';
+import { createFirestorePageRepository } from './infra/firestore/pageRepository.js';
 
 export const FISHING_ASSISTANT_CHAT_MODEL_ID = 'or:google/gemini-3-flash-preview';
 const FISHING_ASSISTANT_CHAT_MODEL = createOpenRouterModelId(
@@ -20,6 +29,9 @@ const FISHING_ASSISTANT_CHAT_MODEL = createOpenRouterModelId(
 
 export interface FirestoreRepositories {
   firestore: Firestore;
+  folderRepository: KnowledgeFolderRepository;
+  pageRepository: KnowledgePageRepository;
+  chunkRepository: KnowledgeChunkRepository;
 }
 
 export interface FishingChatClientError {
@@ -38,11 +50,33 @@ export interface ServiceContainer {
   generateId: () => string;
   logger: Logger;
   repositories: FirestoreRepositories;
+  embeddingClient: KnowledgeEmbeddingClient;
   openAiClient: OpenAI;
   userServiceClient: UserServiceClient;
   mobileNotificationsClient: MobileNotificationsServiceClient;
   usageSink: HttpInternalAuthUsageSink;
   chatAdapter: FixedModelChatAdapter;
+}
+
+function createOpenAiKnowledgeEmbeddingClient(deps: {
+  openAiClient: OpenAI;
+  logger: Logger;
+}): KnowledgeEmbeddingClient {
+  return {
+    async embedTexts(input): ReturnType<KnowledgeEmbeddingClient['embedTexts']> {
+      try {
+        const response = await deps.openAiClient.embeddings.create({
+          model: 'text-embedding-3-small',
+          input: input.texts,
+        });
+
+        return ok(response.data.map((item) => item.embedding));
+      } catch (error) {
+        deps.logger.error({ error: getErrorMessage(error), userId: input.userId }, 'Failed to embed fishing knowledge chunks');
+        return err({ code: 'EMBEDDING_FAILED', message: getErrorMessage(error) });
+      }
+    },
+  };
 }
 
 let container: ServiceContainer | null = null;
@@ -116,13 +150,20 @@ export function initServices(config: Config): void {
     usageSink: userServiceUsageSink,
   });
 
+  const firestore = getFirestore();
+  const openAiClient = new OpenAI({ apiKey: config.openAiAppApiKey });
+
   container = {
     generateId: (): string => crypto.randomUUID(),
     logger,
     repositories: {
-      firestore: getFirestore(),
+      firestore,
+      folderRepository: createFirestoreFolderRepository({ firestore, logger }),
+      pageRepository: createFirestorePageRepository({ firestore, logger }),
+      chunkRepository: createFirestoreChunkRepository({ firestore, logger }),
     },
-    openAiClient: new OpenAI({ apiKey: config.openAiAppApiKey }),
+    embeddingClient: createOpenAiKnowledgeEmbeddingClient({ openAiClient, logger }),
+    openAiClient,
     userServiceClient,
     mobileNotificationsClient: createMobileNotificationsServiceClient({
       baseUrl: config.mobileNotificationsServiceUrl,
