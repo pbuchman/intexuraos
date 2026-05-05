@@ -406,9 +406,15 @@ Expected: PASS.
 
 **Files:**
 - Modify: `apps/research-agent/src/services.ts`
+- Modify: `apps/research-agent/src/domain/research/ports/llmProvider.ts`
 - Modify: `apps/research-agent/src/domain/research/usecases/processResearch.ts`
 - Modify: `apps/research-agent/src/domain/research/usecases/runSynthesis.ts`
 - Modify: `apps/research-agent/src/routes/internalRoutes.ts`
+- Modify: `apps/research-agent/src/infra/llm/GeminiAdapter.ts`
+- Modify: `apps/research-agent/src/infra/llm/GptAdapter.ts`
+- Modify: `apps/research-agent/src/infra/llm/OpenRouterAdapter.ts`
+- Modify: `apps/research-agent/src/infra/llm/PerplexityAdapter.ts`
+- Modify: `apps/research-agent/src/infra/llm/ClaudeAdapter.ts`
 - Modify: `apps/research-agent/src/infra/image/imageServiceClient.ts`
 - Create or modify an internal usage-service client under `packages/internal-clients/src/usage-service/`
 - Modify research-agent tests under `apps/research-agent/src/__tests__/`
@@ -460,6 +466,15 @@ If `summaryResult` fails and `existingComputedCostUsd === 0`, log an error with 
 
 - [ ] **Step 4: Pass prompt type and correlation on every research call**
 
+Extend `ResearchProviderCallOptions` first:
+
+```ts
+export interface ResearchProviderCallOptions {
+  researchId?: string;
+  promptType?: string;
+}
+```
+
 Use this shape for web research calls:
 
 ```ts
@@ -469,17 +484,27 @@ await llmProvider.research(event.prompt, research.researchContext, {
 });
 ```
 
-Do the same for validation/title/context/synthesis/repair paths through their existing generate options.
+Update every `apps/research-agent/src/infra/llm/*Adapter.ts` implementation of `research()` to forward both values into the provider client:
+
+```ts
+const callResearchId = options?.researchId ?? this.researchId;
+const researchOptions = {
+  promptType: options?.promptType ?? 'research-web-search',
+  ...(callResearchId !== undefined ? { correlation: { researchId: callResearchId } } : {}),
+};
+```
+
+Adapter tests must assert `research()` forwards `promptType` and `correlation.researchId` to the provider client for Gemini, GPT, OpenRouter, Perplexity, and Claude adapters. Do the same for validation/title/context/synthesis/repair paths through their existing generate options.
 
 - [ ] **Step 5: Correlate cover image requests**
 
-Extend the image-service client request body:
+Extend the image-service client so prompt generation and image generation each carry their own metadata:
 
 ```ts
 correlation: { researchId },
-promptType: 'image-thumbnail-prompt',
-imagePromptType: 'image-generation',
 ```
+
+`generatePrompt()` must send `promptType: 'image-thumbnail-prompt'`; `generateImage()` must send `promptType: 'image-generation'`. Do not add `imagePromptType` to the cross-service contract.
 
 Keep old callers compatible by making the new fields optional.
 
@@ -503,6 +528,7 @@ Expected: PASS.
 
 **Files:**
 - Modify: `apps/image-service/src/routes/schemas/imageSchemas.ts`
+- Modify: `apps/image-service/src/routes/schemas/promptSchemas.ts`
 - Modify: `apps/image-service/src/routes/internalRoutes.ts`
 - Modify: `apps/image-service/src/application/generateImage.ts`
 - Modify: `apps/image-service/src/application/generatePrompt.ts`
@@ -517,6 +543,16 @@ Add tests for request bodies:
 
 ```json
 {
+  "text": "research summary",
+  "model": "gemini-2.5-pro",
+  "userId": "user-1",
+  "correlation": { "researchId": "research-123" },
+  "promptType": "image-thumbnail-prompt"
+}
+```
+
+```json
+{
   "prompt": "cover image prompt",
   "model": "gemini-2.5-flash-image",
   "userId": "user-1",
@@ -526,7 +562,7 @@ Add tests for request bodies:
 }
 ```
 
-Expected: route accepts the body and forwards `correlation` and `promptType`.
+Expected: both routes accept the body and forward `correlation` and their own `promptType`. With `additionalProperties: false`, neither schema should accept an `imagePromptType` field.
 
 - [ ] **Step 2: Extend use case inputs**
 
