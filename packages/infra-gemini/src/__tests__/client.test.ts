@@ -379,6 +379,7 @@ describe('createGeminiClient', () => {
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           callType: 'research',
+          promptType: 'research-web-search',
           correlation: { researchId: 'r-1' },
         })
       );
@@ -692,7 +693,7 @@ describe('createGeminiClient', () => {
       }
     });
 
-    it('uses specified image size', async () => {
+    it('does not log imageSize when size option is supplied', async () => {
       const imageB64 = Buffer.from('fake-image-data').toString('base64');
       mockGenerateContent.mockResolvedValue({
         candidates: [
@@ -718,6 +719,10 @@ describe('createGeminiClient', () => {
       if (result.ok) {
         expect(result.value.usage.costUsd).toBe(0);
       }
+      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as
+        | { usage?: Record<string, unknown> }
+        | undefined;
+      expect(lastCall?.usage).not.toHaveProperty('imageSize');
     });
 
     it('returns image with zero cost when no imagePricing', async () => {
@@ -801,7 +806,39 @@ describe('createGeminiClient', () => {
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           callType: 'image_generation',
+          model: LlmModels.Gemini25FlashImage,
+          promptType: 'image-generation',
           success: true,
+          usage: expect.objectContaining({ imageCount: 1 }),
+        })
+      );
+      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as
+        | { usage?: Record<string, unknown> }
+        | undefined;
+      expect(lastCall?.usage).not.toHaveProperty('imageSize');
+    });
+
+    it('logs failed image generation with imageCount zero when response has no image data', async () => {
+      mockGenerateContent.mockResolvedValue({
+        candidates: [{ content: { parts: [{ text: 'No image' }] } }],
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      await client.generateImage('A cat');
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'image_generation',
+          promptType: 'image-generation',
+          success: false,
+          usage: expect.objectContaining({ imageCount: 0 }),
         })
       );
     });

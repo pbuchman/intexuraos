@@ -174,6 +174,16 @@ describe('calculateCost', () => {
       expect(calculateCost(LlmProviders.Google, usage, pricing)).toBe(0.08);
     });
 
+    it('uses imageSize for image cost when provided', () => {
+      const usage = makeUsage({ imageCount: 2, imageSize: '1536x1024' });
+      const pricing = makePricing({
+        inputPricePerMillion: 0,
+        outputPricePerMillion: 0,
+        imagePricing: { '1024x1024': 0.04, '1536x1024': 0.08, '1024x1536': 0.08 },
+      });
+      expect(calculateCost(LlmProviders.Google, usage, pricing)).toBe(0.16);
+    });
+
     it('returns 0 image cost when imagePricing is undefined', () => {
       const usage = makeUsage({ imageCount: 3 });
       const pricing = makePricing({ inputPricePerMillion: 0, outputPricePerMillion: 0 });
@@ -287,6 +297,16 @@ describe('calculateCost', () => {
       });
       // imageCost = 3 * 0.04 = 0.12
       expect(calculateCost(LlmProviders.OpenAI, usage, pricing)).toBe(0.12);
+    });
+
+    it('uses imageSize for image cost when provided', () => {
+      const usage = makeUsage({ imageCount: 3, imageSize: '1024x1536' });
+      const pricing = makePricing({
+        inputPricePerMillion: 0,
+        outputPricePerMillion: 0,
+        imagePricing: { '1024x1024': 0.04, '1536x1024': 0.08, '1024x1536': 0.08 },
+      });
+      expect(calculateCost(LlmProviders.OpenAI, usage, pricing)).toBe(0.24);
     });
 
     it('adds image cost to token cost', () => {
