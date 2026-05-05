@@ -135,12 +135,10 @@ describe('triageFailedTask', () => {
   });
 
   describe('retry_after_cooloff verdict', () => {
-    // Production evidence: task_ac5fb880-... and task_8f4bc53b-... (INT-1463).
-    // The verbatim production message — classifyFailure's regex recognizes
-    // Claude's "hit your limit · resets …" wording directly, so no synthetic
-    // "rate limited" phrasing is needed.
-    const PRODUCTION_MESSAGE =
-      "Non-zero exit code: 1; Claude error: You've hit your limit · resets 10pm (UTC)";
+    const CODEX_PRODUCTION_MESSAGE =
+      "Non-zero exit code: 1; Codex error: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:14 PM.; No EXECUTION_AGENT_FINAL: block in transcript";
+    const UNPARSEABLE_RATE_LIMIT_MESSAGE =
+      'Non-zero exit code: 1; Runtime error: API returned 429 Too Many Requests';
 
     it('auto-retries rate-limit failures (429 → action: retried_after_cooloff)', async () => {
       const task = buildTask({ id: 'task_ratelimit' });
@@ -165,11 +163,52 @@ describe('triageFailedTask', () => {
       expect(mockCodeTaskRepo.create).toHaveBeenCalledOnce();
     });
 
+    it('parses Codex try-again reset times deterministically without calling the user LLM', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-05T17:44:20.623Z'));
+      mockUserServiceClient.getUserTimezone.mockResolvedValue('Europe/Warsaw');
+      mockUserServiceClient.getLlmClient.mockResolvedValue(
+        err({ code: 'NO_API_KEY', message: 'should not be used' })
+      );
+
+      try {
+        const task = buildTask({ id: 'task_codex_cooloff', workerType: 'codex' });
+        const taskError: TaskError = {
+          code: 'TASK_RUNTIME_HARD_ERROR',
+          message: CODEX_PRODUCTION_MESSAGE,
+        };
+
+        const result = await triageFailedTask(buildDeps(), {
+          task,
+          completedAt: new Date(),
+          taskError,
+        });
+
+        expect(result.action).toBe('retried_after_cooloff');
+        expect(mockUserServiceClient.getUserTimezone).toHaveBeenCalledWith('user_123');
+        expect(mockUserServiceClient.getLlmClient).not.toHaveBeenCalled();
+
+        const createInput = mockCodeTaskRepo.create.mock.calls[0]?.[0] as
+          | { dispatchSchedule?: Record<string, unknown> }
+          | undefined;
+        expect(createInput?.dispatchSchedule).toBeDefined();
+        expect(createInput?.dispatchSchedule?.['derivedBy']).toBe('parser');
+        expect(createInput?.dispatchSchedule?.['source']).toBe('retry_cooloff');
+        expect(createInput?.dispatchSchedule?.['timezone']).toBe('UTC');
+        expect(createInput?.dispatchSchedule?.['sourceText']).toBe('try again at 6:14 PM');
+        const persisted = createInput?.dispatchSchedule?.['notBeforeAt'];
+        expect(persisted).toBeInstanceOf(Date);
+        expect((persisted as Date).toISOString()).toBe('2026-05-05T18:14:00.000Z');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('passes cooloffSchedule with derivedBy "llm" when the LLM returns a valid future timestamp', async () => {
       const task = buildTask({ id: 'task_cooloff_prod' });
       const taskError: TaskError = {
         code: 'TASK_RUNTIME_HARD_ERROR',
-        message: PRODUCTION_MESSAGE,
+        message: UNPARSEABLE_RATE_LIMIT_MESSAGE,
       };
 
       // Future reset ~10 hours away.
@@ -213,7 +252,7 @@ describe('triageFailedTask', () => {
       const task = buildTask({ id: 'task_cooloff_badjson' });
       const taskError: TaskError = {
         code: 'TASK_RUNTIME_HARD_ERROR',
-        message: PRODUCTION_MESSAGE,
+        message: UNPARSEABLE_RATE_LIMIT_MESSAGE,
       };
 
       const mockGenerate = vi.fn().mockResolvedValue(
@@ -247,7 +286,7 @@ describe('triageFailedTask', () => {
       const task = buildTask({ id: 'task_cooloff_nokey' });
       const taskError: TaskError = {
         code: 'TASK_RUNTIME_HARD_ERROR',
-        message: PRODUCTION_MESSAGE,
+        message: UNPARSEABLE_RATE_LIMIT_MESSAGE,
       };
 
       // Timezone is known, but LLM client is unavailable — fallback path
@@ -275,7 +314,7 @@ describe('triageFailedTask', () => {
       const task = buildTask({ id: 'task_cooloff_logfail' });
       const taskError: TaskError = {
         code: 'TASK_RUNTIME_HARD_ERROR',
-        message: PRODUCTION_MESSAGE,
+        message: UNPARSEABLE_RATE_LIMIT_MESSAGE,
       };
 
       mockLogLineRepo.listRecent.mockResolvedValue(
@@ -302,7 +341,7 @@ describe('triageFailedTask', () => {
       const task = buildTask({ id: 'task_cooloff_tz_throw' });
       const taskError: TaskError = {
         code: 'TASK_RUNTIME_HARD_ERROR',
-        message: PRODUCTION_MESSAGE,
+        message: UNPARSEABLE_RATE_LIMIT_MESSAGE,
       };
 
       mockUserServiceClient.getUserTimezone.mockRejectedValue(new Error('tz boom'));
@@ -338,7 +377,7 @@ describe('triageFailedTask', () => {
       const task = buildTask({ id: 'task_cooloff_gen_err' });
       const taskError: TaskError = {
         code: 'TASK_RUNTIME_HARD_ERROR',
-        message: PRODUCTION_MESSAGE,
+        message: UNPARSEABLE_RATE_LIMIT_MESSAGE,
       };
 
       const mockGenerate = vi.fn().mockResolvedValue(

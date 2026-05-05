@@ -1202,6 +1202,12 @@ export class CompletionPipeline {
       task.taskId,
       `Finalizing task: status=${finalStatus} hasResult=${String(payload.result !== undefined)} hasError=${String(payload.error !== undefined)}`
     );
+    if (finalStatus === 'failed' && payload.error !== undefined) {
+      ctx.appendOrchestratorTaskLog(
+        task.taskId,
+        `Task failed: ${payload.error.code} — ${payload.error.message}`
+      );
+    }
 
     try {
       await ctx.logForwarder.flush(task.taskId);
