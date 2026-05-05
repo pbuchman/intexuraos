@@ -21,6 +21,7 @@ import {
   cooloffRetryPrompt,
   parseCooloffResponse,
 } from '../prompts/cooloffRetryPrompt.js';
+import { parseCooloffResetTime } from '../utils/cooloffResetParser.js';
 
 export type TriageAction = 'retried' | 'retried_after_cooloff' | 'permanent_failure';
 
@@ -206,6 +207,25 @@ async function resolveCooloffSchedule(
     sourceText: taskError.message.slice(0, 200),
     ...(userTimezone !== undefined && { timezone: userTimezone }),
   };
+
+  const deterministic = parseCooloffResetTime({ text: taskError.message, now });
+  if (deterministic !== null) {
+    logger.info(
+      {
+        taskId: task.id,
+        notBeforeAt: deterministic.notBeforeAt.toISOString(),
+        timezone: deterministic.timezone,
+        sourceText: deterministic.sourceText,
+      },
+      'Cooloff reset time extracted deterministically'
+    );
+    return {
+      notBeforeAt: deterministic.notBeforeAt,
+      derivedBy: 'parser' as const,
+      timezone: deterministic.timezone,
+      sourceText: deterministic.sourceText,
+    };
+  }
 
   // Resolve LLM client.
   const llmClientResult = await userServiceClient.getLlmClient(task.userId);

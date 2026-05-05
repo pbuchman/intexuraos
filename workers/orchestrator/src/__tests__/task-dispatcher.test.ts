@@ -2542,6 +2542,13 @@ describe('TaskDispatcher', () => {
       expect(failedPayload?.error?.message).toMatch(
         /429|rate limit|hit your limit|usage limit|limit · resets/i
       );
+      const appendedLogs = vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.map((call) => String(call[1]))
+        .join('\n');
+      expect(appendedLogs).toContain('Task failed: TASK_RUNTIME_HARD_ERROR');
+      expect(appendedLogs).toContain('hit your limit');
+      expect(appendedLogs).toContain('No EXECUTION_AGENT_FINAL');
     });
 
     it('INT-1457: normal-path generic runtime error + exit 1 → TASK_RUNTIME_HARD_ERROR', async () => {

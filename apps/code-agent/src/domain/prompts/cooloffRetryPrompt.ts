@@ -1,5 +1,5 @@
 /**
- * Prompt for extracting Claude usage-limit reset times from failed tasks.
+ * Prompt for extracting usage-limit reset times from failed tasks.
  *
  * A single user-scoped LLM call (not an agent with tools) that reads the
  * error message and recent log lines to extract exactly one absolute UTC
@@ -11,7 +11,7 @@
 
 import type { PromptBuilder } from '@intexuraos/llm-prompts';
 
-export const COOLOFF_RETRY_PROMPT_VERSION = '1.0.0';
+export const COOLOFF_RETRY_PROMPT_VERSION = '1.1.0';
 
 const MAX_LOG_LINES = 20;
 
@@ -36,8 +36,8 @@ export interface CooloffParsedResponse {
 export const cooloffRetryPrompt: PromptBuilder<CooloffPromptInput> = {
   name: 'cooloff-retry',
   description:
-    'Extracts an absolute UTC retry timestamp from Claude usage-limit failure messages',
-  version: '1.0.0',
+    'Extracts an absolute UTC retry timestamp from usage-limit failure messages',
+  version: '1.1.0',
 
   build(input: CooloffPromptInput): string {
     const logLines = input.recentLogLines.slice(-MAX_LOG_LINES);
@@ -50,7 +50,7 @@ export const cooloffRetryPrompt: PromptBuilder<CooloffPromptInput> = {
         ? `- **User timezone:** ${input.userTimezone} (use this to disambiguate reset strings that lack an explicit timezone).`
         : `- **User timezone:** (not provided — if the reset string is ambiguous and has no explicit timezone, assume UTC).`;
 
-    return `You are a cooldown parser for Claude usage-limit failures. A task failed because the user hit a Claude API usage limit, and the error message usually contains the next reset time (for example: "You've hit your limit · resets 10pm (UTC)"). Your job is to extract exactly ONE absolute UTC timestamp for when the task can be retried.
+    return `You are a cooldown parser for usage-limit failures. A task failed because the user hit a runtime usage limit, and the error message may contain the next reset time (for example: Claude: "You've hit your limit · resets 10pm (UTC)" or Codex: "try again at 6:14 PM"). Your job is to extract exactly ONE absolute UTC timestamp for when the task can be retried.
 
 ## Anchor
 - **Now (UTC):** ${nowIso}
@@ -66,7 +66,7 @@ ${logSection}
 \`\`\`
 
 ## Your Task
-1. Find the reset time mentioned in the error or logs (e.g. "resets 10pm (UTC)", "retry after 3:00 PM PST").
+1. Find the reset time mentioned in the error or logs (e.g. "resets 10pm (UTC)", "try again at 6:14 PM", "retry after 3:00 PM PST").
 2. Convert it to an absolute UTC ISO-8601 timestamp that is in the FUTURE relative to the Now anchor above, and no more than 24 hours from now.
 3. If the reset string has no explicit timezone, use the user timezone above; if none provided, assume UTC.
 4. Pick the single next occurrence — do not return past times or times more than a day away.
@@ -77,7 +77,7 @@ Respond with ONLY a JSON object and nothing else:
   "notBeforeAt": "2026-04-23T22:00:00Z",
   "timezone": "UTC",
   "sourceText": "resets 10pm (UTC)",
-  "reason": "Claude usage limit resets at 10:00 PM UTC"
+  "reason": "Usage limit resets at 10:00 PM UTC"
 }
 \`\`\`
 
