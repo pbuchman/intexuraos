@@ -41,6 +41,7 @@ Unchanged:
 - Modify `workers/orchestrator/src/services/isolation/types.ts`: add the `KIMI_API_KEY` worker secret key and update only the `kimi` worker config.
 - Modify `workers/orchestrator/src/services/isolation/__tests__/types.test.ts`: assert the Kimi native provider config and secret-key contract.
 - Modify `workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts`: assert Kimi containers receive the dedicated key, Kimi base URL, stable model, and thinking effort env vars.
+- Modify `workers/orchestrator/src/services/isolation/__tests__/e2e-container.test.ts`: update the `WorkerSecrets` fixture with `KIMI_API_KEY`.
 - Modify `workers/orchestrator/src/bootstrap/env-config.ts`: read `INTEXURAOS_KIMI_APP_API_KEY` into `BootstrapEnvConfig`.
 - Modify `workers/orchestrator/src/__tests__/bootstrap/env-config.test.ts`: require and surface the Kimi host env var.
 - Modify `workers/orchestrator/src/bootstrap/service-wiring.ts`: copy `env.kimiApiKey` into `WorkerSecrets.KIMI_API_KEY`.
@@ -48,6 +49,10 @@ Unchanged:
 - Modify `workers/orchestrator/src/__tests__/bootstrap/api-key-validator.test.ts`: update validation input shapes for `kimiKey`.
 - Modify `workers/orchestrator/src/start.ts`: pass `kimiKey` into startup validation.
 - Modify `workers/orchestrator/src/__tests__/start.test.ts`: update mocked env configs and startup validation assertions.
+- Modify `workers/orchestrator/src/services/task-dispatcher.ts`: ensure `IsolationConfig.getSecrets()` returns the full `WorkerSecrets` contract including `KIMI_API_KEY`.
+- Modify `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`: update task dispatcher secret fixtures with `KIMI_API_KEY`.
+- Modify `workers/orchestrator/src/services/task-dispatcher/__tests__/fixtures.ts`: update shared dispatcher fixtures with `KIMI_API_KEY`.
+- Modify `workers/orchestrator/src/__tests__/services/task-dispatcher/metrics-emission.test.ts`: update metrics fixture secrets with `KIMI_API_KEY`.
 - Modify `terraform/environments/dev/main.tf`: add the Kimi Secret Manager secret definition.
 - Modify `ecosystem.config.cjs`: expose `INTEXURAOS_KIMI_APP_API_KEY` to dev process env in the same group as other LLM provider keys.
 - Modify `.envrc`: add `export INTEXURAOS_KIMI_APP_API_KEY=ABCDEFG`.
@@ -160,7 +165,12 @@ Run the next task.
 
 **Files:**
 - Modify: `workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts`
+- Modify: `workers/orchestrator/src/services/isolation/__tests__/e2e-container.test.ts`
 - Modify: `workers/orchestrator/src/bootstrap/service-wiring.ts`
+- Modify: `workers/orchestrator/src/services/task-dispatcher.ts`
+- Modify: `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`
+- Modify: `workers/orchestrator/src/services/task-dispatcher/__tests__/fixtures.ts`
+- Modify: `workers/orchestrator/src/__tests__/services/task-dispatcher/metrics-emission.test.ts`
 
 - [ ] **Step 1: Add the Kimi key to the Docker provider test fixture**
 
@@ -185,7 +195,21 @@ The full `secrets` object should include:
   },
 ```
 
-- [ ] **Step 2: Add the failing Kimi env test**
+- [ ] **Step 2: Add the Kimi key to every non-Docker `WorkerSecrets` fixture**
+
+Update every test fixture that constructs the full worker secret shape:
+
+```typescript
+    KIMI_API_KEY: 'test-kimi-key',
+```
+
+Required fixture files:
+- `workers/orchestrator/src/services/isolation/__tests__/e2e-container.test.ts`
+- `workers/orchestrator/src/__tests__/task-dispatcher.test.ts`
+- `workers/orchestrator/src/services/task-dispatcher/__tests__/fixtures.ts`
+- `workers/orchestrator/src/__tests__/services/task-dispatcher/metrics-emission.test.ts`
+
+- [ ] **Step 3: Add the failing Kimi env test**
 
 Add this test near the existing third-party provider env tests in `workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts`:
 
@@ -212,7 +236,7 @@ Add this test near the existing third-party provider env tests in `workers/orche
     });
 ```
 
-- [ ] **Step 3: Run the focused Docker provider test and confirm it fails**
+- [ ] **Step 4: Run the focused Docker provider test and confirm it fails**
 
 Run:
 
@@ -222,7 +246,7 @@ pnpm --filter orchestrator test -- src/services/isolation/__tests__/docker-provi
 
 Expected: FAIL until Task 1 implementation is present and the service wiring compiles with `KIMI_API_KEY`.
 
-- [ ] **Step 4: Wire `env.kimiApiKey` into worker secrets**
+- [ ] **Step 5: Wire `env.kimiApiKey` into worker secrets**
 
 In `workers/orchestrator/src/bootstrap/service-wiring.ts`, update `apiKeySecrets`:
 
@@ -239,7 +263,11 @@ In `workers/orchestrator/src/bootstrap/service-wiring.ts`, update `apiKeySecrets
   };
 ```
 
-- [ ] **Step 5: Run the focused Docker provider test and confirm it passes**
+- [ ] **Step 6: Keep dispatcher secret handoffs typed against the full worker contract**
+
+In `workers/orchestrator/src/services/task-dispatcher.ts`, ensure `IsolationConfig.getSecrets()` returns the complete `WorkerSecrets` shape after adding `KIMI_API_KEY`, because its value is passed directly into `WorkerConfig.secrets`.
+
+- [ ] **Step 7: Run the focused Docker provider test and confirm it passes**
 
 Run:
 
@@ -249,7 +277,7 @@ pnpm --filter orchestrator test -- src/services/isolation/__tests__/docker-provi
 
 Expected: PASS.
 
-- [ ] **Step 6: Leave the container env changes uncommitted for the final commit**
+- [ ] **Step 8: Leave the container env changes uncommitted for the final commit**
 
 Do not commit yet. This repo requires `pnpm run ci:tracked` before every commit, so commit only once in Task 5 after full tracked CI passes.
 
@@ -482,6 +510,7 @@ Run the final audit task.
 - Verify: `workers/orchestrator/src/services/isolation/types.ts`
 - Verify: `workers/orchestrator/src/bootstrap/env-config.ts`
 - Verify: `workers/orchestrator/src/bootstrap/service-wiring.ts`
+- Verify: `workers/orchestrator/src/services/task-dispatcher.ts`
 - Verify: `workers/orchestrator/src/bootstrap/api-key-validator.ts`
 - Verify: `workers/orchestrator/src/start.ts`
 - Verify: `terraform/environments/dev/main.tf`
@@ -500,9 +529,22 @@ Expected:
 - No active code maps `kimi` to DashScope or `kimi-k2.5`.
 - `glm` and `qwen` still map to DashScope.
 - `INTEXURAOS_KIMI_APP_API_KEY` appears in env config, tests, deployment config, and docs.
-- `KIMI_API_KEY` appears in worker secret typing and container test fixtures.
+- `KIMI_API_KEY` appears in worker secret typing, service wiring, dispatcher handoffs, and every test fixture that constructs `WorkerSecrets`.
 
-- [ ] **Step 2: Run targeted orchestrator verification**
+- [ ] **Step 2: Audit every `WorkerSecrets` consumer and producer**
+
+Run:
+
+```bash
+rg -n "WorkerSecrets|secrets: \{|getSecrets\(|KIMI_API_KEY" workers/orchestrator/src
+```
+
+Expected:
+- Every object typed as `WorkerSecrets` includes `KIMI_API_KEY`.
+- Every `IsolationConfig.getSecrets()` implementation returns `KIMI_API_KEY`.
+- Every `WorkerConfig.secrets` fixture and handoff includes the new key.
+
+- [ ] **Step 3: Run targeted orchestrator verification**
 
 Run:
 
@@ -512,7 +554,7 @@ pnpm run verify:workspace:tracked -- orchestrator
 
 Expected: PASS.
 
-- [ ] **Step 3: Run full tracked CI**
+- [ ] **Step 4: Run full tracked CI**
 
 Run:
 
@@ -522,14 +564,15 @@ pnpm run ci:tracked
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit, push, and open the implementation PR**
+- [ ] **Step 5: Commit, push, and open the implementation PR**
 
 Run:
 
 ```bash
 git add workers/orchestrator/src/services/isolation/types.ts workers/orchestrator/src/services/isolation/__tests__/types.test.ts
-git add workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts workers/orchestrator/src/bootstrap/service-wiring.ts
+git add workers/orchestrator/src/services/isolation/__tests__/docker-provider.test.ts workers/orchestrator/src/services/isolation/__tests__/e2e-container.test.ts workers/orchestrator/src/bootstrap/service-wiring.ts
 git add workers/orchestrator/src/bootstrap/env-config.ts workers/orchestrator/src/__tests__/bootstrap/env-config.test.ts workers/orchestrator/src/bootstrap/api-key-validator.ts workers/orchestrator/src/__tests__/bootstrap/api-key-validator.test.ts workers/orchestrator/src/start.ts workers/orchestrator/src/__tests__/start.test.ts
+git add workers/orchestrator/src/services/task-dispatcher.ts workers/orchestrator/src/__tests__/task-dispatcher.test.ts workers/orchestrator/src/services/task-dispatcher/__tests__/fixtures.ts workers/orchestrator/src/__tests__/services/task-dispatcher/metrics-emission.test.ts
 git add terraform/environments/dev/main.tf ecosystem.config.cjs .envrc workers/orchestrator/README.md
 git commit -m "fix(orchestrator): route kimi worker to native api"
 git push -u origin HEAD
