@@ -418,19 +418,21 @@ class TaskDispatcherImpl implements TaskDispatcherService {
    * Workers are already sorted by user's priority (array order).
    */
   private getWorkerConfigsFromCredentials(credentials: DispatchWorkerCredentials): WorkerConfigWithCredentials[] {
-    return credentials.workers.map((worker, index) => ({
-      name: worker.name,
-      location: worker.name,
-      url: worker.url,
-      priority: index + 1,
-      credentials: {
+    return credentials.workers
+      .filter((worker) => worker.enabled !== false)
+      .map((worker, index) => ({
         name: worker.name,
+        location: worker.name,
         url: worker.url,
-        cfAccessClientId: worker.cfAccessClientId,
-        cfAccessClientSecret: worker.cfAccessClientSecret,
-        dispatchSigningSecret: worker.dispatchSigningSecret,
-      },
-    }));
+        priority: index + 1,
+        credentials: {
+          name: worker.name,
+          url: worker.url,
+          cfAccessClientId: worker.cfAccessClientId,
+          cfAccessClientSecret: worker.cfAccessClientSecret,
+          dispatchSigningSecret: worker.dispatchSigningSecret,
+        },
+      }));
   }
 
   async sendMessageToWorker(
