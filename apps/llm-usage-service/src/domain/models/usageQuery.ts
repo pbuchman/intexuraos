@@ -32,6 +32,7 @@ export const ALLOWED_GROUP_BY = [
   'request.provider',
   'request.model',
   'request.operation',
+  'request.promptType',
   'request.success',
 ] as const;
 
