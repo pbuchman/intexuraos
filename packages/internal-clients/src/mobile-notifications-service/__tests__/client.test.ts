@@ -173,6 +173,28 @@ describe('createMobileNotificationsServiceClient', () => {
     expect(scope.isDone()).toBe(true);
   });
 
+  it('propagates per-request options and default timeout configuration', async () => {
+    const scope = nock(BASE_URL)
+      .post('/internal/notifications/digest-subscriptions/list', { userId: 'u' })
+      .matchHeader('x-internal-auth', 'secret')
+      .matchHeader('x-request-id', 'request-123')
+      .reply(200, { success: true, data: { items: [] } });
+
+    const client = createMobileNotificationsServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+      defaultTimeoutMs: 5000,
+    });
+    const result = await client.listDigestSubscriptions(
+      { userId: 'u' },
+      { requestId: 'request-123', timeoutMs: 1000 }
+    );
+
+    expect(result).toEqual({ ok: true, value: { items: [] } });
+    expect(scope.isDone()).toBe(true);
+  });
+
   it('returns envelope errors without throwing', async () => {
     nock(BASE_URL)
       .post('/internal/notifications/digests/query')

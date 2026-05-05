@@ -43,9 +43,7 @@ export function createMobileNotificationsServiceClient(
     baseUrl: config.baseUrl,
     token: config.internalAuthToken,
     logger: config.logger,
-    ...(config.defaultTimeoutMs !== undefined
-      ? { defaultTimeoutMs: config.defaultTimeoutMs }
-      : {}),
+    ...(config.defaultTimeoutMs !== undefined ? { defaultTimeoutMs: config.defaultTimeoutMs } : {}),
   });
 
   return {

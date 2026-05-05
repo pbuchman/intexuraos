@@ -36,6 +36,13 @@ resource "google_service_account" "mobile_notifications_service" {
   description  = "Service account for mobile-notifications-service Cloud Run deployment"
 }
 
+# Service account for fishing-assistant-service
+resource "google_service_account" "fishing_assistant_service" {
+  account_id   = "intexuraos-fishing-${var.environment}"
+  display_name = "IntexuraOS Fishing Assistant Service (${var.environment})"
+  description  = "Service account for fishing-assistant-service Cloud Run deployment"
+}
+
 # Service account for research-agent
 resource "google_service_account" "research_agent" {
   account_id   = "intexuraos-research-agent-${var.environment}"
@@ -169,6 +176,15 @@ resource "google_secret_manager_secret_iam_member" "mobile_notifications_service
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.mobile_notifications_service.email}"
+}
+
+# Fishing Assistant Service: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "fishing_assistant_service_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.fishing_assistant_service.email}"
 }
 
 # Research Agent: Secret Manager access
@@ -328,6 +344,13 @@ resource "google_project_iam_member" "mobile_notifications_service_firestore" {
   member  = "serviceAccount:${google_service_account.mobile_notifications_service.email}"
 }
 
+# Fishing Assistant Service: Firestore access
+resource "google_project_iam_member" "fishing_assistant_service_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.fishing_assistant_service.email}"
+}
+
 # User service: Firestore access (for future session/token storage)
 resource "google_project_iam_member" "user_service_firestore" {
   project = var.project_id
@@ -481,6 +504,13 @@ resource "google_project_iam_member" "mobile_notifications_service_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.mobile_notifications_service.email}"
+}
+
+# Fishing Assistant Service: Cloud Logging
+resource "google_project_iam_member" "fishing_assistant_service_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.fishing_assistant_service.email}"
 }
 
 # Research Agent: Cloud Logging

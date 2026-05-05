@@ -157,6 +157,7 @@ locals {
     "whatsapp-service",
     "api-docs-hub",
     "mobile-notifications-service",
+    "fishing-assistant-service",
     "research-agent",
     "commands-agent",
     "actions-agent",

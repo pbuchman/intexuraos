@@ -156,6 +156,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    fishing_assistant_service = {
+      name      = "intexuraos-fishing-assistant-service"
+      app_path  = "apps/fishing-assistant-service"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
     api_docs_hub = {
       name      = "intexuraos-api-docs-hub"
       app_path  = "apps/api-docs-hub"
@@ -296,6 +303,7 @@ locals {
     INTEXURAOS_NOTION_SERVICE_URL               = "https://${local.services.notion_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_WHATSAPP_SERVICE_URL             = "https://${local.services.whatsapp_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL = "https://${local.services.mobile_notifications_service.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_FISHING_ASSISTANT_SERVICE_URL    = "https://${local.services.fishing_assistant_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_RESEARCH_AGENT_URL               = "https://${local.services.research_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_COMMANDS_AGENT_URL               = "https://${local.services.commands_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_ACTIONS_AGENT_URL                = "https://${local.services.actions_agent.name}-${local.cloud_run_url_suffix}"
@@ -1076,6 +1084,34 @@ module "mobile_notifications_service" {
   ]
 }
 
+# Fishing Assistant Service - User-scoped fishing RAG knowledge base and chat
+module "fishing_assistant_service" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.fishing_assistant_service.name
+  service_account = module.iam.service_accounts["fishing_assistant_service"]
+  port            = local.services.fishing_assistant_service.port
+  min_scale       = local.services.fishing_assistant_service.min_scale
+  max_scale       = local.services.fishing_assistant_service.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/fishing-assistant-service:latest"
+
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_OPENAI_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_APP_API_KEY"]
+  })
+  env_vars = local.common_service_env_vars
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
 # -----------------------------------------------------------------------------
 # Cloud Scheduler - WhatsApp Digest Yesterday (Daily at 01:00 UTC)
 # -----------------------------------------------------------------------------
@@ -1144,6 +1180,7 @@ module "api_docs_hub" {
     INTEXURAOS_NOTION_SERVICE_OPENAPI_URL               = "${module.notion_service.service_url}/openapi.json"
     INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL             = "${module.whatsapp_service.service_url}/openapi.json"
     INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL = "${module.mobile_notifications_service.service_url}/openapi.json"
+    INTEXURAOS_FISHING_ASSISTANT_SERVICE_OPENAPI_URL    = "${module.fishing_assistant_service.service_url}/openapi.json"
     INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL               = "${module.research_agent.service_url}/openapi.json"
     INTEXURAOS_COMMANDS_AGENT_OPENAPI_URL               = "${module.commands_agent.service_url}/openapi.json"
     INTEXURAOS_ACTIONS_AGENT_OPENAPI_URL                = "${module.actions_agent.service_url}/openapi.json"
@@ -1169,6 +1206,7 @@ module "api_docs_hub" {
     module.notion_service,
     module.whatsapp_service,
     module.mobile_notifications_service,
+    module.fishing_assistant_service,
     module.research_agent,
     module.commands_agent,
     module.actions_agent,
