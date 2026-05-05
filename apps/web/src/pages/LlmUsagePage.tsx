@@ -61,9 +61,10 @@ function isSortState(v: unknown): v is SortState {
 }
 
 function isGroupByMode(v: unknown): v is GroupByMode {
-  // Stale 'promptType' values from localStorage fall through to DEFAULT_GROUP_BY
-  // after that option was removed from the UI.
-  return typeof v === 'string' && ['none', 'day', 'component', 'service', 'model', 'openrouter-model'].includes(v);
+  return (
+    typeof v === 'string' &&
+    ['none', 'day', 'component', 'service', 'promptType', 'model', 'openrouter-model'].includes(v)
+  );
 }
 
 // --- Defaults ---
@@ -225,6 +226,7 @@ function getGroupLabel(row: UsageQueryRow, groupBy: GroupByMode): string {
   const key = GROUP_BY_MAP[groupBy][0];
   if (key === undefined) return 'Unknown';
   const value = row.group[key];
+  if (groupBy === 'promptType' && value === '__missing__') return 'Missing';
   if (typeof value === 'string') return value;
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   return 'Unknown';
