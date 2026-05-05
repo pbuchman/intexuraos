@@ -9,6 +9,7 @@ import { FakePricingCache } from '../fakePricingCache.js';
 import { createTestEvent } from '../helpers.js';
 import { MAX_LIST_LIMIT, DEFAULT_LIST_LIMIT } from '../../domain/models/usageEvent.js';
 import type { DailyUsageAggregate } from '../../domain/models/dailyAggregate.js';
+import { MISSING_PROMPT_TYPE_SENTINEL } from '../../domain/models/dailyAggregate.js';
 
 // Mock common-http to control authentication
 vi.mock('@intexuraos/common-http', async () => {
@@ -39,6 +40,7 @@ function createTestAggregate(overrides?: Partial<DailyUsageAggregate>): DailyUsa
     provider: LlmProviders.Anthropic,
     model: 'claude-sonnet-4-20250514',
     operation: 'generate',
+    promptType: MISSING_PROMPT_TYPE_SENTINEL,
     success: true,
     calls: 10,
     costUsd: 0.05,
