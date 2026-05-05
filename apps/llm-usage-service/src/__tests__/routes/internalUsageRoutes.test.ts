@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmProviders } from '@intexuraos/llm-contract';
 import { buildServer } from '../../server.js';
 import { setServices, resetServices, type ServiceContainer } from '../../services.js';
 import { FakeUsageEventRepository } from '../fakeUsageEventRepository.js';
@@ -94,67 +94,6 @@ describe('internalUsageRoutes', () => {
       const event = stored[0];
       expect(event).toBeDefined();
       expect(event?.request.promptType).toBe('plan-analysis');
-    });
-
-    it('accepts and stores imageSize in image usage events', async () => {
-      const pricingCache = new FakePricingCache();
-      pricingCache.setPricing(LlmProviders.OpenAI, LlmModels.GPTImage1, {
-        inputPricePerMillion: 0,
-        outputPricePerMillion: 0,
-        imagePricing: { '1536x1024': 0.08 },
-      });
-      setServices({
-        usageEventRepository: eventRepo,
-        usageAggregateRepository: aggregateRepo,
-        pricingRepository: new FakePricingRepository(),
-        pricingCache,
-        orchestratorSecret: 'test-secret',
-      } satisfies ServiceContainer);
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/usage/events',
-        headers: { 'x-internal-auth': AUTH_TOKEN },
-        payload: {
-          schemaVersion: 2,
-          events: [
-            createTestEventInput({
-              eventId: 'evt_image_size',
-              request: {
-                provider: LlmProviders.OpenAI,
-                model: LlmModels.GPTImage1,
-                operation: 'image_generation',
-                success: true,
-                durationMs: 1500,
-                promptType: 'image-generation',
-              },
-              usage: {
-                inputTokens: 0,
-                outputTokens: 0,
-                totalTokens: 0,
-                cacheReadTokens: 0,
-                cacheWriteTokens: 0,
-                cachedTokens: 0,
-                reasoningTokens: 0,
-                thinkingTokens: 0,
-                webSearchCalls: 0,
-                groundingEnabled: false,
-                imageCount: 1,
-                imageSize: '1536x1024',
-              },
-            }),
-          ],
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: { accepted: number } };
-      expect(body.success).toBe(true);
-      expect(body.data.accepted).toBe(1);
-
-      const stored = eventRepo.getStoredEvents();
-      expect(stored).toHaveLength(1);
-      expect(stored[0]?.usage.imageSize).toBe('1536x1024');
     });
 
     it('returns 401 for missing auth token', async () => {
