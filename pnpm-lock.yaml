@@ -480,6 +480,9 @@ importers:
       '@fastify/swagger-ui':
         specifier: ^5.2.1
         version: 5.2.4
+      '@google-cloud/firestore':
+        specifier: 'catalog:'
+        version: 7.11.6(encoding@0.1.13)
       '@google-cloud/monitoring':
         specifier: ^5.3.1
         version: 5.3.1
@@ -562,9 +565,6 @@ importers:
         specifier: 'catalog:'
         version: 3.25.76
     devDependencies:
-      '@google-cloud/firestore':
-        specifier: 'catalog:'
-        version: 7.11.6(encoding@0.1.13)
       '@types/node':
         specifier: ^22.10.5
         version: 22.19.5
@@ -1893,13 +1893,12 @@ importers:
 
   packages/infra-firestore:
     dependencies:
-      '@intexuraos/common-core':
-        specifier: workspace:*
-        version: link:../common-core
-    devDependencies:
       '@google-cloud/firestore':
         specifier: 'catalog:'
         version: 7.11.6(encoding@0.1.13)
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../common-core
 
   packages/infra-gemini:
     dependencies:
