@@ -36,7 +36,7 @@ No child issue depends on another child issue being completed first. Web can upd
 - `PATCH /code/worker-settings/workers/:name`
   - Existing endpoint already accepts `enabled`; add/confirm tests that toggling does not require credential fields and preserves existing secrets.
 - `POST /code/worker-settings/workers/:name/test`
-  - Return a disabled result for disabled workers without fetching the worker `/health` endpoint.
+  - Return `testStatus: 'failure'`, `testMessage: 'Worker is disabled'`, and `lastTestedAt` for disabled workers without fetching the worker `/health` endpoint.
   - Keep enabled-worker connectivity testing unchanged.
 
 **Created**
@@ -239,14 +239,14 @@ it('does not probe disabled workers during connectivity tests', async () => {
   expect(response.statusCode).toBe(200);
   expect(mockFetch).not.toHaveBeenCalled();
   expect(JSON.parse(response.body).data).toMatchObject({
-    success: false,
-    status: 'disabled',
-    message: 'Worker is disabled',
+    testStatus: 'failure',
+    testMessage: 'Worker is disabled',
   });
+  expect(JSON.parse(response.body).data.lastTestedAt).toEqual(expect.any(String));
 });
 ```
 
-Implement the endpoint guard before constructing or sending any `/health` request. The response must update stored test metadata consistently with a skipped disabled test, and UI callers can render the returned disabled result without trying to infer it from network failures.
+Implement the endpoint guard before constructing or sending any `/health` request. The response must keep the existing route/web API contract by returning `data.testStatus`, `data.testMessage`, and `data.lastTestedAt`; do not introduce a separate `success`/`status`/`message` shape for disabled workers. The response must update stored test metadata consistently with a skipped disabled test, and UI callers can render the returned disabled result without trying to infer it from network failures.
 
 Run: `pnpm --filter code-agent test -- src/__tests__/routes/codeRoutes.test.ts src/__tests__/domain/useCases/workerSettings/testWorkerConnectivity.test.ts -t "connectivity tests"`
 
