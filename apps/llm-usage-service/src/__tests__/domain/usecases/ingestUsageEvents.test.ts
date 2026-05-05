@@ -375,6 +375,62 @@ describe('ingestUsageEvents', () => {
       expect(event?.cost.billedUsd).toBe(event?.cost.calculatedUsd);
     });
 
+    it('calculates image generation cost from imagePricing when imageCount is one', async () => {
+      pricingCache.setPricing(LlmProviders.Google, LlmModels.Gemini25FlashImage, {
+        inputPricePerMillion: 0,
+        outputPricePerMillion: 0,
+        imagePricing: { '1024x1024': 0.03 },
+      });
+
+      const events = [createTestEventInput({
+        eventId: 'evt_google_image_generation',
+        request: {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25FlashImage,
+          operation: 'image_generation',
+          success: true,
+          durationMs: 1500,
+          promptType: 'image-thumbnail-prompt',
+        },
+        usage: {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cachedTokens: 0,
+          reasoningTokens: 0,
+          thinkingTokens: 0,
+          webSearchCalls: 0,
+          groundingEnabled: false,
+          imageCount: 1,
+        },
+        cost: { providerReportedUsd: null, pricingSource: 'pending' },
+        correlation: {
+          requestId: 'req_image_1',
+          traceId: null,
+          taskId: null,
+          researchId: 'research-image-1',
+          attempt: null,
+          sessionId: null,
+        },
+      })];
+
+      const result = await ingestUsageEvents(makeDeps(), events, 'internal');
+
+      expect(result.accepted).toBe(1);
+
+      const stored = eventRepo.getStoredEvents();
+      expect(stored).toHaveLength(1);
+      const event = stored[0];
+      expect(event?.usage.imageCount).toBe(1);
+      expect(event?.request.promptType).toBe('image-thumbnail-prompt');
+      expect(event?.correlation.researchId).toBe('research-image-1');
+      expect(event?.cost.pricingSource).toBe('calculated');
+      expect(event?.cost.calculatedUsd).toBe(0.03);
+      expect(event?.cost.billedUsd).toBe(0.03);
+    });
+
     it('stores v2 events as schemaVersion 1', async () => {
       pricingCache.setPricing(LlmProviders.Anthropic, 'claude-sonnet-4-20250514', anthropicPricing);
 
