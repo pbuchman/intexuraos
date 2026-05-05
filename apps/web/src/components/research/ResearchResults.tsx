@@ -137,7 +137,8 @@ export function ResearchResults({ research, copiedSection, onCopy }: ResearchRes
     <>
       {/* Research Summary - show when we have usage data */}
       {research.totalInputTokens !== undefined ||
-      research.llmResults.some((r) => r.inputTokens !== undefined) ? (
+      research.totalCostUsd !== undefined ||
+      research.llmResults.some((r) => r.inputTokens !== undefined || r.costUsd !== undefined) ? (
         <Card title="Research Summary" className="mb-6">
           <div className="flex flex-wrap gap-6">
             {research.totalDurationMs !== undefined ? (
