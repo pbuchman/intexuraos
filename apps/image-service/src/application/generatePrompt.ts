@@ -1,5 +1,5 @@
 import { ok, err, type Result, type Logger } from '@intexuraos/common-core';
-import type { Google, OpenAI } from '@intexuraos/llm-contract';
+import type { Google, LLMCorrelationOptions, OpenAI } from '@intexuraos/llm-contract';
 import type { ThumbnailPrompt, PromptGenerator, ImagePromptModelConfig } from '../domain/index.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 
@@ -7,6 +7,8 @@ export interface GeneratePromptInput {
   text: string;
   model: string;
   userId: string;
+  promptType?: string | undefined;
+  correlation?: LLMCorrelationOptions | undefined;
 }
 
 export type GeneratePromptError =
@@ -64,7 +66,10 @@ export function createGeneratePromptUseCase(
 
     deps.logger.info({ model: input.model, provider: modelConfig.provider }, 'Starting prompt generation');
     const generator = deps.createPromptGenerator(modelConfig.provider, modelConfig.modelId, apiKey, input.userId, deps.logger);
-    const result = await generator.generateThumbnailPrompt(input.text);
+    const result = await generator.generateThumbnailPrompt(input.text, {
+      ...(input.promptType !== undefined && { promptType: input.promptType }),
+      ...(input.correlation !== undefined && { correlation: input.correlation }),
+    });
 
     if (!result.ok) {
       deps.logger.error(

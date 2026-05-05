@@ -130,7 +130,8 @@ describe('repairAttribution', () => {
       expect.stringContaining('ALLOWED SOURCE IDs: S1, S2, U1'),
       [],
       undefined,
-      undefined
+      undefined,
+      { promptType: 'research-attribution-repair' }
     );
   });
 
@@ -147,7 +148,8 @@ describe('repairAttribution', () => {
       expect.stringContaining(rawContent),
       [],
       undefined,
-      undefined
+      undefined,
+      { promptType: 'research-attribution-repair' }
     );
   });
 
@@ -163,7 +165,8 @@ describe('repairAttribution', () => {
       expect.stringContaining('Attribution: Primary=S1,S2; Secondary=U1; Constraints=; UNK=false'),
       [],
       undefined,
-      undefined
+      undefined,
+      { promptType: 'research-attribution-repair' }
     );
   });
 
