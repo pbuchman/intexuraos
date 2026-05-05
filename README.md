@@ -369,7 +369,8 @@ You submit tasks while walking, while commuting, while thinking of something els
 | Improvement                      | Impact                                                                                                                       |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **GitHub Agent**                 | A new agent evaluates pull requests using tool calling, with a unified webhook evaluator routing GitHub events automatically |
-| **Alibaba Cloud Model Studio**   | Unified integration for Chinese LLMs — Qwen, Kimi, and GLM-5 — via Alibaba Cloud Model Studio, replacing the ZAI provider    |
+| **Alibaba Cloud Model Studio**   | Unified integration for Qwen and GLM-5 via Alibaba Cloud Model Studio, replacing the ZAI provider                            |
+| **Native Kimi Code API**         | Kimi code workers route through the native Kimi Code API using the stable `kimi-for-coding` model ID                         |
 | **Code Task Detail V2**          | Completely redesigned code task experience with a modern detail page and issue-centric grouped list view                     |
 | **Unified PR Automation Log**    | Every action taken on a pull request is now visible in a single, auditable automation log                                    |
 | **Structured Output Validation** | GitHub Agent triage produces reliable results with automatic repair prompts when structured output is malformed              |
