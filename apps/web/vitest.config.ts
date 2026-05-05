@@ -14,6 +14,7 @@ process.env.INTEXURAOS_USER_SERVICE_URL = 'http://localhost:8110';
 process.env.INTEXURAOS_WHATSAPP_SERVICE_URL = 'http://localhost:8113';
 process.env.INTEXURAOS_NOTION_SERVICE_URL = 'http://localhost:8112';
 process.env.INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL = 'http://localhost:8114';
+process.env.INTEXURAOS_FISHING_ASSISTANT_SERVICE_URL = 'http://localhost:8115';
 process.env.INTEXURAOS_RESEARCH_AGENT_URL = 'http://localhost:8116';
 process.env.INTEXURAOS_COMMANDS_AGENT_URL = 'http://localhost:8117';
 process.env.INTEXURAOS_ACTIONS_AGENT_URL = 'http://localhost:8118';

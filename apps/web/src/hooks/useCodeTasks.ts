@@ -5,6 +5,7 @@ import {
   getWorkersStatus as getWorkersStatusApi,
   refreshWorkersStatus as refreshWorkersStatusApi,
 } from '@/services/codeAgentApi';
+import { updateWorker as updateWorkerSettingsApi } from '@/services/workerSettingsApi';
 import type { CodeTask, WorkersStatusResponse } from '@/types';
 
 /**
@@ -38,6 +39,7 @@ export function useWorkersStatus(): {
   error: string | null;
   refresh: () => Promise<void>;
   refreshStatus: () => Promise<void>;
+  setWorkerEnabled: (workerName: string, enabled: boolean) => Promise<void>;
 } {
   const { getAccessToken, isAuthenticated } = useAuth();
   const [status, setStatus] = useState<WorkersStatusResponse | null>(null);
@@ -96,6 +98,35 @@ export function useWorkersStatus(): {
     }
   }, [getAccessToken, isAuthenticated]);
 
+  const setWorkerEnabled = useCallback(async (workerName: string, enabled: boolean): Promise<void> => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    if (isMountedRef.current) {
+      setRefreshing(true);
+    }
+
+    try {
+      const token = await getAccessToken();
+      await updateWorkerSettingsApi(token, workerName, { enabled });
+      const data = await refreshWorkersStatusApi(token);
+      if (isMountedRef.current) {
+        setStatus(data);
+        setError(null);
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        setError(getErrorMessage(err, 'Failed to update worker'));
+      }
+      throw err;
+    } finally {
+      if (isMountedRef.current) {
+        setRefreshing(false);
+      }
+    }
+  }, [getAccessToken, isAuthenticated]);
+
   useEffect(() => {
     isMountedRef.current = true;
     void refresh();
@@ -126,5 +157,5 @@ export function useWorkersStatus(): {
     };
   }, [refresh, isAuthenticated]);
 
-  return { status, loading, refreshing, error, refresh, refreshStatus };
+  return { status, loading, refreshing, error, refresh, refreshStatus, setWorkerEnabled };
 }

@@ -34,6 +34,8 @@ export function WorkerRow({
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isTogglingEnabled, setIsTogglingEnabled] = useState(false);
+  const [toggleError, setToggleError] = useState<string | null>(null);
 
   const [url, setUrl] = useState(worker.url);
   const [cfAccessClientId, setCfAccessClientId] = useState('');
@@ -99,6 +101,19 @@ export function WorkerRow({
     }
   };
 
+  const handleToggleEnabled = async (): Promise<void> => {
+    setIsTogglingEnabled(true);
+    setToggleError(null);
+    setSaveSuccess(false);
+    try {
+      await onUpdate({ enabled: !worker.enabled });
+    } catch (err) {
+      setToggleError(err instanceof Error ? err.message : 'Failed to update worker status');
+    } finally {
+      setIsTogglingEnabled(false);
+    }
+  };
+
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -150,12 +165,35 @@ export function WorkerRow({
             <code className="block truncate rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">
               {worker.url}
             </code>
-            <div className="flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
               <span>CF Access ID: {worker.cfAccessClientId}</span>
-              <span>Enabled: {worker.enabled ? 'Yes' : 'No'}</span>
+              <span>{worker.enabled ? 'Enabled' : 'Disabled'}</span>
             </div>
           </div>
         </div>
+
+        {!isEditing && !showDeleteConfirm ? (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={worker.enabled}
+            aria-label={`${worker.enabled ? 'Disable' : 'Enable'} ${worker.name}`}
+            title={`${worker.enabled ? 'Disable' : 'Enable'} ${worker.name}`}
+            disabled={isTogglingEnabled}
+            onClick={(): void => {
+              void handleToggleEnabled();
+            }}
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+              worker.enabled ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                worker.enabled ? 'translate-x-4' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        ) : null}
 
         {!isEditing && !showDeleteConfirm ? (
           <div className="relative flex-shrink-0" ref={menuRef}>
@@ -214,6 +252,10 @@ export function WorkerRow({
       {saveSuccess ? (
         <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/30">
           <p className="text-sm font-medium text-green-800 dark:text-green-300">✓ Worker configuration saved successfully</p>
+        </div>
+      ) : toggleError !== null ? (
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/30">
+          <p className="text-sm font-medium text-red-800 dark:text-red-300">{toggleError}</p>
         </div>
       ) : worker.testStatus !== undefined ? (
         <div

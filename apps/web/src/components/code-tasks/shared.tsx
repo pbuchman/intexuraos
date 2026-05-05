@@ -53,6 +53,7 @@ export const WORKER_STATUS_STYLES: Record<WorkerStatusTag, string> = {
   'orchestrator-unreachable': 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
   'tunnel-down':              'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
   unknown:                    'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300',
+  disabled:                   'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300',
 };
 
 export const LINEAR_STATE_STYLES: Record<string, string> = {

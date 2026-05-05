@@ -1,9 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockUseWorkerSettings, mockDefaultWorkerTypeCard } = vi.hoisted(() => ({
+const { mockUseWorkerSettings, mockDefaultWorkerTypeCard, mockWorkerRow } = vi.hoisted(() => ({
   mockUseWorkerSettings: vi.fn(),
   mockDefaultWorkerTypeCard: vi.fn(),
+  mockWorkerRow: vi.fn(),
 }));
 
 vi.mock('@/hooks', () => ({
@@ -30,7 +31,10 @@ vi.mock('@/components', () => ({
 }));
 
 vi.mock('@/components/workers/WorkerRow.js', () => ({
-  WorkerRow: (): null => null,
+  WorkerRow: (props: unknown): null => {
+    mockWorkerRow(props);
+    return null;
+  },
 }));
 
 vi.mock('@/components/workers/AddWorkerForm.js', () => ({
@@ -74,5 +78,41 @@ describe('WorkerSettingsPage', () => {
         currentType: 'auto',
       })
     );
+  });
+
+  it('passes worker enabled updates through Code Settings row handlers', async () => {
+    const updateWorker = vi.fn().mockResolvedValue(undefined);
+    mockUseWorkerSettings.mockReturnValue({
+      settings: {
+        workers: [{
+          name: 'mac',
+          url: 'https://mac.example.com',
+          cfAccessClientId: 'masked-id',
+          cfAccessClientSecret: 'masked-secret',
+          dispatchSigningSecret: 'masked-signing',
+          enabled: true,
+        }],
+      },
+      loading: false,
+      error: null,
+      addWorker: vi.fn(),
+      updateWorker,
+      deleteWorker: vi.fn(),
+      testConnectivity: vi.fn(),
+      reorderWorkers: vi.fn(),
+      updateDefaultWorkerType: vi.fn(),
+    });
+
+    renderToStaticMarkup(<WorkerSettingsPage />);
+
+    const rowProps = mockWorkerRow.mock.calls[0]?.[0] as {
+      worker: { enabled: boolean };
+      onUpdate: (config: { enabled: boolean }) => Promise<void>;
+    };
+    expect(rowProps.worker.enabled).toBe(true);
+
+    await rowProps.onUpdate({ enabled: false });
+
+    expect(updateWorker).toHaveBeenCalledWith('mac', { enabled: false });
   });
 });
