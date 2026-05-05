@@ -195,6 +195,62 @@ describe('Fishing Assistant Firestore knowledge repositories', () => {
     expect(malformedFolder.value?.pageCount).toBe(3);
   });
 
+  it('updates and deletes folders while preventing non-empty folder deletion', async () => {
+    const firestore = createFakeFirestore() as unknown as Firestore;
+    const folders = createFirestoreFolderRepository({ firestore, logger });
+    const pages = createFirestorePageRepository({ firestore, logger });
+    await folders.create({ id: 'folder-1', userId: 'user-1', name: 'Kurs', parentId: null, sortOrder: 0 });
+    await folders.create({ id: 'folder-empty', userId: 'user-1', name: 'Empty', parentId: null, sortOrder: 1 });
+    await pages.create({
+      id: 'page-1',
+      userId: 'user-1',
+      folderId: 'folder-1',
+      title: 'Page',
+      rawText: 'Raw',
+      normalizedText: 'Raw',
+      contentType: 'other',
+      indexingStatus: 'ready',
+      chunkCount: 0,
+    });
+
+    const updated = await folders.updateForUser({
+      id: 'folder-1',
+      userId: 'user-1',
+      name: 'Updated',
+      parentId: 'parent-folder',
+      sortOrder: 5,
+    });
+    const notFoundUpdate = await folders.updateForUser({
+      id: 'missing-folder',
+      userId: 'user-1',
+      name: 'Missing',
+      parentId: null,
+      sortOrder: 0,
+    });
+    const nonEmptyDelete = await folders.deleteForUser({ userId: 'user-1', folderId: 'folder-1' });
+    const missingDelete = await folders.deleteForUser({ userId: 'user-1', folderId: 'missing-folder' });
+    const deleted = await folders.deleteForUser({ userId: 'user-1', folderId: 'folder-empty' });
+    const deletedFolder = await folders.getByIdForUser({ userId: 'user-1', folderId: 'folder-empty' });
+
+    expect(updated.ok).toBe(true);
+    expect(notFoundUpdate.ok).toBe(false);
+    expect(nonEmptyDelete.ok).toBe(false);
+    expect(missingDelete.ok).toBe(false);
+    expect(deleted.ok).toBe(true);
+    expect(deletedFolder.ok).toBe(true);
+    if (!updated.ok || notFoundUpdate.ok || nonEmptyDelete.ok || missingDelete.ok || !deletedFolder.ok) return;
+    expect(updated.value).toMatchObject({
+      id: 'folder-1',
+      name: 'Updated',
+      parentId: 'parent-folder',
+      sortOrder: 5,
+    });
+    expect(notFoundUpdate.error.code).toBe('NOT_FOUND');
+    expect(nonEmptyDelete.error.code).toBe('FOLDER_NOT_EMPTY');
+    expect(missingDelete.error.code).toBe('NOT_FOUND');
+    expect(deletedFolder.value).toBeNull();
+  });
+
   it('rejects page count updates for folders owned by another user', async () => {
     const fake = createFakeFirestore();
     fake.seedCollection(FISHING_KNOWLEDGE_FOLDERS_COLLECTION, [
@@ -330,6 +386,91 @@ describe('Fishing Assistant Firestore knowledge repositories', () => {
     expect(sparse.value?.updatedAt.toMillis()).toBe(0);
     expect(foreign.value).toBeNull();
     expect(missing.value).toBeNull();
+  });
+
+  it('lists pages by user and updates page indexing fields', async () => {
+    const firestore = createFakeFirestore() as unknown as Firestore;
+    const folders = createFirestoreFolderRepository({ firestore, logger });
+    const pages = createFirestorePageRepository({ firestore, logger });
+    await folders.create({ id: 'folder-1', userId: 'user-1', name: 'Kurs', parentId: null, sortOrder: 0 });
+    await folders.create({ id: 'folder-2', userId: 'user-1', name: 'Other', parentId: null, sortOrder: 1 });
+    await pages.create({
+      id: 'page-1',
+      userId: 'user-1',
+      folderId: 'folder-1',
+      title: 'Page 1',
+      rawText: 'Raw',
+      normalizedText: 'Raw',
+      contentType: 'other',
+      indexingStatus: 'failed',
+      indexingError: 'old error',
+      chunkCount: 0,
+    });
+    await pages.create({
+      id: 'page-2',
+      userId: 'user-1',
+      folderId: 'folder-2',
+      title: 'Page 2',
+      rawText: 'Raw',
+      normalizedText: 'Raw',
+      contentType: 'other',
+      indexingStatus: 'ready',
+      chunkCount: 0,
+    });
+
+    const allPages = await pages.listByUserId({ userId: 'user-1' });
+    const folderPages = await pages.listByUserId({ userId: 'user-1', folderId: 'folder-1' });
+    const updated = await pages.updateForUser({
+      userId: 'user-1',
+      pageId: 'page-1',
+      title: 'Updated',
+      rawText: 'Updated raw',
+      normalizedText: 'Updated normalized',
+      contentType: 'recipe',
+      indexingStatus: 'ready',
+      indexingError: null,
+      chunkCount: 2,
+    });
+    const notFound = await pages.updateForUser({
+      userId: 'user-1',
+      pageId: 'missing-page',
+      title: 'Missing',
+    });
+    const titleOnly = await pages.updateForUser({
+      userId: 'user-1',
+      pageId: 'page-2',
+      title: 'Title only',
+    });
+    const statusOnly = await pages.updateForUser({
+      userId: 'user-1',
+      pageId: 'page-2',
+      indexingStatus: 'failed',
+    });
+
+    expect(allPages.ok).toBe(true);
+    expect(folderPages.ok).toBe(true);
+    expect(updated.ok).toBe(true);
+    expect(notFound.ok).toBe(false);
+    expect(titleOnly.ok).toBe(true);
+    expect(statusOnly.ok).toBe(true);
+    if (!allPages.ok || !folderPages.ok || !updated.ok || notFound.ok || !titleOnly.ok || !statusOnly.ok) return;
+    expect(allPages.value.map((page) => page.id).sort()).toEqual(['page-1', 'page-2']);
+    expect(folderPages.value.map((page) => page.id)).toEqual(['page-1']);
+    expect(updated.value).toMatchObject({
+      id: 'page-1',
+      title: 'Updated',
+      rawText: 'Updated raw',
+      normalizedText: 'Updated normalized',
+      contentType: 'recipe',
+      indexingStatus: 'ready',
+      chunkCount: 2,
+    });
+    expect(updated.value.indexingError).toBeUndefined();
+    expect(notFound.error.code).toBe('NOT_FOUND');
+    expect(titleOnly.value.title).toBe('Title only');
+    expect(titleOnly.value.rawText).toBe('Raw');
+    expect(statusOnly.value.title).toBe('Title only');
+    expect(statusOnly.value.indexingStatus).toBe('failed');
   });
 
   it('replaces chunks only for the requested user and page', async () => {
@@ -709,6 +850,8 @@ describe('Fishing Assistant Firestore knowledge repositories', () => {
       await folders.getByIdForUser({ userId: 'user-1', folderId: 'folder-1' }),
       await folders.listByUserId('user-1'),
       await folders.adjustPageCount({ userId: 'user-1', folderId: 'folder-1', delta: 1 }),
+      await folders.updateForUser({ id: 'folder-1', userId: 'user-1', name: 'Kurs', parentId: null, sortOrder: 0 }),
+      await folders.deleteForUser({ userId: 'user-1', folderId: 'folder-1' }),
       await pages.create({
         id: 'page-1',
         userId: 'user-1',
@@ -721,6 +864,8 @@ describe('Fishing Assistant Firestore knowledge repositories', () => {
         chunkCount: 0,
       }),
       await pages.getByIdForUser({ userId: 'user-1', pageId: 'page-1' }),
+      await pages.listByUserId({ userId: 'user-1' }),
+      await pages.updateForUser({ userId: 'user-1', pageId: 'page-1', title: 'Updated' }),
       await pages.deleteForUser({ userId: 'user-1', pageId: 'page-1' }),
       await chunks.replaceForPage({ userId: 'user-1', pageId: 'page-1', chunks: [makeChunk()] }),
       await chunks.findByPageId({ userId: 'user-1', pageId: 'page-1' }),
