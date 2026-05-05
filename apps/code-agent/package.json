@@ -9,6 +9,7 @@
   "scripts": {
     "build": "node ../../scripts/build-service.mjs code-agent",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "lint:local": "eslint src --max-warnings 0",
     "start": "node dist/index.js",
     "start:local": "tsx src/index.ts",

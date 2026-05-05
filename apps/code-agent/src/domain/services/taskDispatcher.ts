@@ -22,6 +22,7 @@ export interface DispatchWorkerCredentials {
     cfAccessClientId: string;
     cfAccessClientSecret: string;
     dispatchSigningSecret: string;
+    enabled?: boolean;
   }[];
 }
 

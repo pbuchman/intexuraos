@@ -31,6 +31,7 @@ import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
 import { generateWebhookSecret } from '../../domain/utils/secrets.js';
 import { loadConfig } from '../../config.js';
 import type { TaskStatus, WorkerType } from '../../domain/models/codeTask.js';
+import type { WorkerConfig, WorkerHealthState, WorkerHealthStatus } from '../../domain/models/workerSettings.js';
 import type { DispatchScheduleCreateInput } from '../../domain/repositories/codeTaskRepository.js';
 import { taskToApiResponse, inFlightRequests } from './responseFormatters.js';
 import {
@@ -54,6 +55,83 @@ const CANCEL_TASK_ERROR_CODE_MAP: Record<CancelTaskErrorCode, ErrorCode> = {
 };
 
 const logger = createAppLogger({ name: 'code-routes' });
+
+interface WorkerStatusResponse {
+  name: string;
+  url: string;
+  priority: number;
+  enabled: boolean;
+  healthy: boolean;
+  status: WorkerHealthState['_tag'] | 'disabled';
+  details: {
+    capacity?: number;
+    available?: number;
+    running?: number;
+    responseTimeMs?: number;
+    reason?: string;
+    code?: string;
+  } | null;
+  checkedAt: string | null;
+  stale: boolean;
+}
+
+function isWorkerEnabled(worker: { enabled?: boolean }): boolean {
+  return worker.enabled ?? true;
+}
+
+function formatWorkerStatus(
+  worker: WorkerConfig,
+  priority: number,
+  healthStatus: WorkerHealthStatus | undefined
+): WorkerStatusResponse {
+  if (!isWorkerEnabled(worker)) {
+    return {
+      name: worker.name,
+      url: worker.url,
+      priority,
+      enabled: false,
+      healthy: false,
+      status: 'disabled',
+      details: { reason: 'disabled' },
+      checkedAt: null,
+      stale: false,
+    };
+  }
+
+  const state = healthStatus?.state;
+  const isHealthy = state?.healthy ?? false;
+  const statusTag = state?._tag ?? 'unknown';
+
+  let details: WorkerStatusResponse['details'] = null;
+
+  if (state?._tag === 'healthy') {
+    details = {
+      capacity: state.capacity,
+      available: state.available,
+      running: state.running,
+      responseTimeMs: state.responseTimeMs,
+    };
+  } else if (state?._tag === 'orchestrator-unreachable' || state?._tag === 'tunnel-down') {
+    details = {
+      reason: state.reason,
+    };
+    if (state.code !== undefined) {
+      details.code = state.code;
+    }
+  }
+
+  return {
+    name: worker.name,
+    url: worker.url,
+    priority,
+    enabled: true,
+    healthy: isHealthy,
+    status: statusTag,
+    details,
+    checkedAt: healthStatus?.checkedAt ?? null,
+    stale: healthStatus?.stale ?? true,
+  };
+}
 
 export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opts, done) => {
   const { jwtValidator } = opts;
@@ -2388,10 +2466,11 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                           name: { type: 'string' },
                           url: { type: 'string' },
                           priority: { type: 'number' },
+                          enabled: { type: 'boolean' },
                           healthy: { type: 'boolean' },
                           status: {
                             type: 'string',
-                            enum: ['healthy', 'orchestrator-unreachable', 'tunnel-down', 'unknown'],
+                            enum: ['healthy', 'orchestrator-unreachable', 'tunnel-down', 'unknown', 'disabled'],
                           },
                           details: {
                             type: 'object',
@@ -2408,7 +2487,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                           checkedAt: { type: 'string', format: 'date-time', nullable: true },
                           stale: { type: 'boolean' },
                         },
-                        required: ['name', 'url', 'priority', 'healthy', 'status', 'details', 'checkedAt', 'stale'],
+                        required: ['name', 'url', 'priority', 'enabled', 'healthy', 'status', 'details', 'checkedAt', 'stale'],
                       },
                     },
                     stale: { type: 'boolean' },
@@ -2461,9 +2540,14 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
         const healthStatusesResult = await workerSettingsRepo.getHealthStatuses(userId);
         const healthStatuses = healthStatusesResult.ok ? healthStatusesResult.value ?? {} : {};
+        const enabledWorkers = settings.workers.filter(isWorkerEnabled);
 
         let stale = false;
-        for (const [_name, status] of Object.entries(healthStatuses)) {
+        for (const worker of enabledWorkers) {
+          const status = healthStatuses[worker.name];
+          if (status === undefined) {
+            continue;
+          }
           const checkedAt = new Date(status.checkedAt).getTime();
           if (now - checkedAt > TTL_MS) {
             stale = true;
@@ -2471,14 +2555,16 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           }
         }
 
-        if (stale || Object.keys(healthStatuses).length < settings.workers.length) {
+        const hasMissingEnabledHealthStatus = enabledWorkers.some((w) => healthStatuses[w.name] === undefined);
+
+        if (enabledWorkers.length > 0 && (stale || hasMissingEnabledHealthStatus)) {
           // Deduplicate in-flight health probes per user
           const probeKey = `health-probe:${userId}`;
           let probePromise = inFlightRequests.get(probeKey);
 
           if (!probePromise) {
             probePromise = workerHealthProbe
-              .probeAllWorkers(settings.workers)
+              .probeAllWorkers(enabledWorkers)
               .then((results) => {
                 // Update all health statuses in Firestore
                 const updatePromises = Object.entries(results).map(([name, state]) =>
@@ -2506,49 +2592,9 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           });
         }
 
-        const workers = settings.workers.map((w, index) => {
-          const healthStatus = healthStatuses[w.name];
-          const state = healthStatus?.state;
-
-          const isHealthy = state?.healthy ?? false;
-          const statusTag = state?._tag ?? 'unknown';
-
-          let details: {
-            capacity?: number;
-            available?: number;
-            running?: number;
-            responseTimeMs?: number;
-            reason?: string;
-            code?: string;
-          } | null = null;
-
-          if (state?._tag === 'healthy') {
-            details = {
-              capacity: state.capacity,
-              available: state.available,
-              running: state.running,
-              responseTimeMs: state.responseTimeMs,
-            };
-          } else if (state?._tag === 'orchestrator-unreachable' || state?._tag === 'tunnel-down') {
-            details = {
-              reason: state.reason,
-            };
-            if (state.code !== undefined) {
-              details.code = state.code;
-            }
-          }
-
-          return {
-            name: w.name,
-            url: w.url,
-            priority: index + 1,
-            healthy: isHealthy,
-            status: statusTag,
-            details,
-            checkedAt: healthStatus?.checkedAt ?? null,
-            stale: healthStatus?.stale ?? true,
-          };
-        });
+        const workers = settings.workers.map((w, index) =>
+          formatWorkerStatus(w, index + 1, healthStatuses[w.name])
+        );
 
         return await reply.ok({ workers, stale });
       }
@@ -2581,10 +2627,11 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                           name: { type: 'string' },
                           url: { type: 'string' },
                           priority: { type: 'number' },
+                          enabled: { type: 'boolean' },
                           healthy: { type: 'boolean' },
                           status: {
                             type: 'string',
-                            enum: ['healthy', 'orchestrator-unreachable', 'tunnel-down', 'unknown'],
+                            enum: ['healthy', 'orchestrator-unreachable', 'tunnel-down', 'unknown', 'disabled'],
                           },
                           details: {
                             type: 'object',
@@ -2598,10 +2645,10 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                               code: { type: 'string' },
                             },
                           },
-                          checkedAt: { type: 'string', format: 'date-time' },
+                          checkedAt: { type: 'string', format: 'date-time', nullable: true },
                           stale: { type: 'boolean' },
                         },
-                        required: ['name', 'url', 'priority', 'healthy', 'status', 'details', 'checkedAt', 'stale'],
+                        required: ['name', 'url', 'priority', 'enabled', 'healthy', 'status', 'details', 'checkedAt', 'stale'],
                       },
                     },
                     stale: { type: 'boolean' },
@@ -2650,57 +2697,35 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
         const settings = settingsResult.value;
 
-        const results = await workerHealthProbe.probeAllWorkers(settings.workers);
+        const enabledWorkers = settings.workers.filter(isWorkerEnabled);
+        const results = enabledWorkers.length > 0
+          ? await workerHealthProbe.probeAllWorkers(enabledWorkers)
+          : {};
+        const checkedAt = new Date().toISOString();
 
         for (const [name, state] of Object.entries(results)) {
           await workerSettingsRepo.updateHealthStatus(userId, name, {
             state,
-            checkedAt: new Date().toISOString(),
+            checkedAt,
             stale: false,
           });
         }
 
         const workers = settings.workers.map((w, index) => {
           const state = results[w.name];
-
-          const isHealthy = state?.healthy ?? false;
-          const statusTag = state?._tag ?? 'unknown';
-
-          let details: {
-            capacity?: number;
-            available?: number;
-            running?: number;
-            responseTimeMs?: number;
-            reason?: string;
-            code?: string;
-          } | null = null;
-
-          if (state?._tag === 'healthy') {
-            details = {
-              capacity: state.capacity,
-              available: state.available,
-              running: state.running,
-              responseTimeMs: state.responseTimeMs,
+          const status = formatWorkerStatus(
+            w,
+            index + 1,
+            state === undefined ? undefined : { state, checkedAt, stale: false }
+          );
+          if (isWorkerEnabled(w) && state === undefined) {
+            return {
+              ...status,
+              checkedAt,
+              stale: false,
             };
-          } else if (state?._tag === 'orchestrator-unreachable' || state?._tag === 'tunnel-down') {
-            details = {
-              reason: state.reason,
-            };
-            if (state.code !== undefined) {
-              details.code = state.code;
-            }
           }
-
-          return {
-            name: w.name,
-            url: w.url,
-            priority: index + 1,
-            healthy: isHealthy,
-            status: statusTag,
-            details,
-            checkedAt: new Date().toISOString(),
-            stale: false,
-          };
+          return status;
         });
 
         return await reply.ok({ workers, stale: false });

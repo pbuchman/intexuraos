@@ -1747,6 +1747,8 @@ importers:
         specifier: ^4.7.0
         version: 4.21.0
 
+  migrations: {}
+
   packages/calendar-pubsub-client:
     dependencies:
       '@intexuraos/common-core':
