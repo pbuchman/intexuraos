@@ -208,13 +208,32 @@ expect(event['usage']).toMatchObject({ imageCount: 1 });
 expect(event['correlation']).toMatchObject({ researchId: 'research-123' });
 ```
 
+Add Gemini and GPT image-client tests that call:
+
+```ts
+await client.generateImage('cover image', {
+  promptType: 'image-generation',
+  correlation: { researchId: 'research-123' },
+});
+```
+
+Expected usage sink payload:
+
+```ts
+expect(event['request']).toMatchObject({ promptType: 'image-generation' });
+expect(event['correlation']).toMatchObject({ researchId: 'research-123' });
+expect(event['usage']).toMatchObject({ imageCount: 1 });
+```
+
 Run:
 
 ```bash
 pnpm --filter @intexuraos/llm-pricing test -- buildUsageEvent
+pnpm --filter @intexuraos/infra-gemini test -- client
+pnpm --filter @intexuraos/infra-gpt test -- client
 ```
 
-Expected: FAIL because `imageCount` is hardcoded to `0` before implementation.
+Expected: FAIL because `imageCount` is hardcoded to `0` before implementation and image-generation options do not reach `trackUsage`.
 
 - [ ] **Step 2: Extend usage facts without reintroducing client billing**
 
@@ -278,17 +297,51 @@ Apply the same fallback on failure events.
 
 - [ ] **Step 5: Emit image generation prompt type and image count**
 
-For Gemini and GPT `generateImage`, call:
+Extend `packages/llm-contract/src/types.ts` so the shared image-generation contract accepts billing metadata:
 
 ```ts
-trackUsage('image_generation', { ...usage, imageCount: 1 }, true, Date.now() - start, undefined, 'image-generation');
+export interface ImageGenerateOptions {
+  size?: '1024x1024' | '1536x1024' | '1024x1536';
+  slug?: string;
+  promptType?: string;
+  correlation?: {
+    researchId?: string | null;
+    sessionId?: string | null;
+    taskId?: string | null;
+    requestId?: string | null;
+  };
+}
 ```
 
-For failure paths, call:
+For Gemini and GPT `generateImage`, forward those options into usage logging:
 
 ```ts
-trackUsage('image_generation', { ...emptyUsage, imageCount: 0 }, false, durationMs, errorMsg, 'image-generation');
+trackUsage(
+  'image_generation',
+  { ...usage, imageCount: 1 },
+  true,
+  Date.now() - start,
+  undefined,
+  options?.promptType ?? 'image-generation',
+  options?.correlation,
+);
 ```
+
+For failure paths, preserve the same metadata:
+
+```ts
+trackUsage(
+  'image_generation',
+  { ...emptyUsage, imageCount: 0 },
+  false,
+  durationMs,
+  errorMsg,
+  options?.promptType ?? 'image-generation',
+  options?.correlation,
+);
+```
+
+Do not leave image-generation correlation as an image-service-only option; the provider clients are the code that emits the authoritative `image_generation` usage event.
 
 - [ ] **Step 6: Verify shared package boundary**
 
@@ -582,7 +635,7 @@ Default prompt types:
 
 - [ ] **Step 3: Forward metadata into prompt and image generators**
 
-Extend `ImageGenerator.generate` options:
+Extend `ImageGenerator.generate` options and map them directly to the shared `ImageGenerateOptions` fields:
 
 ```ts
 export interface GenerateOptions {
@@ -592,7 +645,7 @@ export interface GenerateOptions {
 }
 ```
 
-Pass those options to Gemini/OpenAI `generateImage`.
+Pass those options to Gemini/OpenAI `generateImage`. The provider-level tests from INT-1591 must prove `generateImage()` forwards `promptType` and `correlation.researchId` into `trackUsage`; image-service tests must prove the route/use case hands those same fields to the generator.
 
 Also extend the prompt-generation port path:
 
