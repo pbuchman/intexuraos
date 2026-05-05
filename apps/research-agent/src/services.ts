@@ -25,6 +25,7 @@ import {
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { HttpInternalAuthUsageSink, type UsageSink } from '@intexuraos/llm-pricing';
 import { createImageServiceClient, type ImageServiceClient } from './infra/image/index.js';
+import { createResearchCostSummaryClient } from './infra/usage/index.js';
 import { createNotionServiceClient, type NotionServiceClient } from './infra/notion/index.js';
 import { exportResearchToNotion } from './infra/notion/notionResearchExporter.js';
 import {
@@ -49,6 +50,7 @@ import {
   type TitleGenerator,
 } from './domain/research/index.js';
 import type { ContextInferenceProvider } from './domain/research/ports/contextInference.js';
+import type { ResearchCostSummaryClient } from './domain/research/ports/researchCostSummary.js';
 import type { InputValidationProvider } from './infra/llm/index.js';
 
 /**
@@ -85,6 +87,7 @@ export interface ServiceContainer {
   llmCallPublisher: LlmCallPublisher;
   userServiceClient: UserServiceClient;
   imageServiceClient: ImageServiceClient | null;
+  researchCostSummaryClient?: ResearchCostSummaryClient | null;
   notionServiceClient: NotionServiceClient;
   notificationSender: NotificationSender;
   shareStorage: ShareStoragePort | null;
@@ -107,7 +110,8 @@ export interface ServiceContainer {
     model: FastModel,
     apiKey: string,
     userId: string,
-    logger: Logger
+    logger: Logger,
+    researchId?: string
   ) => TitleGenerator;
   createContextInferrer: (
     model: FastModel,
@@ -120,7 +124,8 @@ export interface ServiceContainer {
     model: FastModel,
     apiKey: string,
     userId: string,
-    logger: Logger
+    logger: Logger,
+    researchId?: string
   ) => InputValidationProvider;
   notionExporter: typeof exportResearchToNotion;
 }
@@ -256,6 +261,15 @@ export function initializeServices(): void {
         })
       : null;
 
+  const researchCostSummaryClient =
+    llmUsageServiceUrl !== ''
+      ? createResearchCostSummaryClient({
+          baseUrl: llmUsageServiceUrl,
+          internalAuthToken,
+          logger: createAppLogger({ name: 'research-cost-summary-client' }),
+        })
+      : null;
+
   const notionServiceClient = createNotionServiceClient({
     baseUrl: process.env['INTEXURAOS_NOTION_SERVICE_URL'] ?? 'http://localhost:8012',
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
@@ -274,6 +288,7 @@ export function initializeServices(): void {
     llmCallPublisher,
     userServiceClient,
     imageServiceClient,
+    researchCostSummaryClient,
     notionServiceClient,
     notificationSender,
     shareStorage,
@@ -308,12 +323,13 @@ export function initializeServices(): void {
         researchId
       ),
     createTitleGenerator: (
-      model: FastModel,
-      apiKey: string,
-      userId: string,
-      logger: Logger
-    ): TitleGenerator =>
-      createTitleGenerator(model, apiKey, userId, logger, buildUsageSink('title-generator')),
+    model: FastModel,
+    apiKey: string,
+    userId: string,
+    logger: Logger,
+    researchId?: string
+  ): TitleGenerator =>
+      createTitleGenerator(model, apiKey, userId, logger, buildUsageSink('title-generator'), researchId),
     createContextInferrer: (
       model: FastModel,
       apiKey: string,
@@ -330,18 +346,20 @@ export function initializeServices(): void {
         researchId
       ),
     createInputValidator: (
-      model: FastModel,
-      apiKey: string,
-      userId: string,
-      logger: Logger
-    ): InputValidationProvider =>
-      createInputValidator(
-        model,
-        apiKey,
-        userId,
-        logger,
-        buildUsageSink('input-validator')
-      ),
+    model: FastModel,
+    apiKey: string,
+    userId: string,
+    logger: Logger,
+    researchId?: string
+  ): InputValidationProvider =>
+    createInputValidator(
+      model,
+      apiKey,
+      userId,
+      logger,
+        buildUsageSink('input-validator'),
+        researchId
+    ),
     notionExporter: exportResearchToNotion,
   };
 }

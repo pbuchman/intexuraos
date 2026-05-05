@@ -17,6 +17,7 @@ import * as repairAttributionModule from '../../../../domain/research/usecases/r
 import type { Research } from '../../../../domain/research/models/index.js';
 import type { ShareStoragePort } from '../../../../domain/research/ports/index.js';
 import type { ImageServiceClient } from '../../../../services.js';
+import type { ResearchCostSummary } from '../../../../domain/research/ports/researchCostSummary.js';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -39,6 +40,9 @@ function createMockDeps(): RunSynthesisDeps & {
     sendLlmFailure: ReturnType<typeof vi.fn>;
   };
   mockReportSuccess: ReturnType<typeof vi.fn>;
+  mockResearchCostSummaryClient: {
+    getResearchCostSummary: ReturnType<typeof vi.fn>;
+  };
 } {
   const mockRepo = {
     findById: vi.fn(),
@@ -66,6 +70,9 @@ function createMockDeps(): RunSynthesisDeps & {
   };
 
   const mockReportSuccess = vi.fn();
+  const mockResearchCostSummaryClient = {
+    getResearchCostSummary: vi.fn().mockResolvedValue(ok(createUsageSummary())),
+  };
 
   return {
     researchRepo: mockRepo,
@@ -80,10 +87,67 @@ function createMockDeps(): RunSynthesisDeps & {
     logger: mockLogger,
     notionServiceClient: null,
     researchExportSettings: null,
+    researchCostSummaryClient: mockResearchCostSummaryClient,
+    usageSummarySettleDelayMs: 0,
     mockRepo,
     mockSynthesizer,
     mockNotificationSender,
     mockReportSuccess,
+    mockResearchCostSummaryClient,
+  };
+}
+
+function createUsageSummary(overrides: {
+  costUsd?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  missingAttributionCostUsd?: number;
+} = {}): ResearchCostSummary {
+  return {
+    researchId: 'research-1',
+    totals: {
+      calls: 4,
+      costUsd: overrides.costUsd ?? 0,
+      inputTokens: overrides.inputTokens ?? 0,
+      outputTokens: overrides.outputTokens ?? 0,
+      totalTokens: (overrides.inputTokens ?? 0) + (overrides.outputTokens ?? 0),
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      cachedTokens: 0,
+      reasoningTokens: 0,
+      thinkingTokens: 0,
+      webSearchCalls: 0,
+      imageCount: 0,
+    },
+    diagnostics: {
+      missingAttribution: {
+        count: overrides.missingAttributionCostUsd !== undefined ? 1 : 0,
+        costUsd: overrides.missingAttributionCostUsd ?? 0,
+        eventIds: overrides.missingAttributionCostUsd !== undefined ? ['evt-missing'] : [],
+      },
+    },
+  };
+}
+
+function expectedImagePromptOptions(): {
+  promptType: 'research-cover-image-prompt';
+  correlation: { researchId: string };
+} {
+  return {
+    promptType: 'research-cover-image-prompt',
+    correlation: { researchId: 'research-1' },
+  };
+}
+
+function expectedImageGenerationOptions(title: string): {
+  title: string;
+  promptType: 'research-cover-image-generation';
+  correlation: { researchId: string };
+} {
+  return {
+    title,
+    promptType: 'research-cover-image-generation',
+    correlation: { researchId: 'research-1' },
   };
 }
 
@@ -120,6 +184,7 @@ describe('runSynthesis', () => {
   let repairAttributionSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     deps = createMockDeps();
     // Mock repairAttribution to fail (so no extra cost from repair attempt)
     const repairError = new Error('Repair disabled in tests') as Error & { code: string };
@@ -452,6 +517,285 @@ describe('runSynthesis', () => {
     });
   });
 
+  it('uses usage-service research summary as authoritative final totals when provider costs are zero', async () => {
+    const research = createTestResearch({
+      llmResults: [
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
+          status: 'completed',
+          result: 'Google Result',
+          inputTokens: 1000,
+          outputTokens: 400,
+          costUsd: 0,
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'completed',
+          result: 'OpenAI Result',
+          inputTokens: 2000,
+          outputTokens: 600,
+          costUsd: 0,
+        },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+    deps.mockSynthesizer.synthesize.mockResolvedValue(
+      ok({ content: 'Synthesized result', usage: { inputTokens: 500, outputTokens: 200, costUsd: 0 } })
+    );
+    deps.mockResearchCostSummaryClient.getResearchCostSummary.mockResolvedValue(
+      ok(createUsageSummary({ costUsd: 0.123456, inputTokens: 74183, outputTokens: 16992 }))
+    );
+
+    const result = await runSynthesis('research-1', deps);
+
+    expect(result).toEqual({ ok: true });
+    expect(deps.mockResearchCostSummaryClient.getResearchCostSummary).toHaveBeenCalledWith(
+      'research-1',
+      { type: 'system', id: 'user-1' },
+      { from: '2024-01-01T10:00:00.000Z', to: '2024-01-01T12:00:00.000Z' }
+    );
+    const finalUpdate = deps.mockRepo.update.mock.calls.find(
+      (call) => call[0] === 'research-1' && typeof call[1]?.totalCostUsd === 'number'
+    );
+    expect(finalUpdate?.[1]).toEqual(
+      expect.objectContaining({
+        totalInputTokens: 74183,
+        totalOutputTokens: 16992,
+        totalCostUsd: 0.123456,
+      })
+    );
+  });
+
+  it('waits for buffered usage events before reading usage-service summary', async () => {
+    const research = createTestResearch({
+      llmResults: [
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
+          status: 'completed',
+          result: 'Google Result',
+          inputTokens: 1000,
+          outputTokens: 400,
+          costUsd: 0,
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'completed',
+          result: 'OpenAI Result',
+          inputTokens: 2000,
+          outputTokens: 600,
+          costUsd: 0,
+        },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+    deps.mockSynthesizer.synthesize.mockResolvedValue(
+      ok({ content: 'Synthesized result', usage: { inputTokens: 500, outputTokens: 200, costUsd: 0 } })
+    );
+
+    const runPromise = runSynthesis('research-1', {
+      ...deps,
+      usageSummarySettleDelayMs: 50,
+    });
+
+    await vi.advanceTimersByTimeAsync(49);
+    expect(deps.mockResearchCostSummaryClient.getResearchCostSummary).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(runPromise).resolves.toEqual({ ok: true });
+    expect(deps.mockResearchCostSummaryClient.getResearchCostSummary).toHaveBeenCalled();
+  });
+
+  it('uses the production usage-summary settle delay when no override is provided', async () => {
+    const research = createTestResearch({
+      llmResults: [
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
+          status: 'completed',
+          result: 'Google Result',
+          inputTokens: 1000,
+          outputTokens: 400,
+          costUsd: 0,
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'completed',
+          result: 'OpenAI Result',
+          inputTokens: 2000,
+          outputTokens: 600,
+          costUsd: 0,
+        },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+    const delayedDeps: RunSynthesisDeps = { ...deps };
+    delete delayedDeps.usageSummarySettleDelayMs;
+
+    const runPromise = runSynthesis('research-1', delayedDeps);
+
+    await vi.advanceTimersByTimeAsync(749);
+    expect(deps.mockResearchCostSummaryClient.getResearchCostSummary).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(runPromise).resolves.toEqual({ ok: true });
+    expect(deps.mockResearchCostSummaryClient.getResearchCostSummary).toHaveBeenCalled();
+  });
+
+  it('does not overwrite an existing nonzero total when usage summary is late and fallback computes zero', async () => {
+    const research = createTestResearch({
+      totalCostUsd: 0.044,
+      llmResults: [
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
+          status: 'completed',
+          result: 'Google Result',
+          costUsd: 0,
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'completed',
+          result: 'OpenAI Result',
+          costUsd: 0,
+        },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+    deps.mockSynthesizer.synthesize.mockResolvedValue(
+      ok({ content: 'Synthesized result', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } })
+    );
+    deps.mockResearchCostSummaryClient.getResearchCostSummary.mockResolvedValue(
+      ok(createUsageSummary({ costUsd: 0, inputTokens: 0, outputTokens: 0 }))
+    );
+
+    const result = await runSynthesis('research-1', deps);
+
+    expect(result).toEqual({ ok: true });
+    const finalUpdate = deps.mockRepo.update.mock.calls.find(
+      (call) => call[0] === 'research-1' && typeof call[1]?.totalCostUsd === 'number'
+    );
+    expect(finalUpdate?.[1]?.totalCostUsd).toBe(0.044);
+  });
+
+  it('does not overwrite existing nonzero token totals when usage summary is late and fallback computes zero', async () => {
+    const research = createTestResearch({
+      totalInputTokens: 1200,
+      totalOutputTokens: 340,
+      totalCostUsd: 0.044,
+      llmResults: [
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
+          status: 'completed',
+          result: 'Google Result',
+          costUsd: 0,
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'completed',
+          result: 'OpenAI Result',
+          costUsd: 0,
+        },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+    deps.mockSynthesizer.synthesize.mockResolvedValue(
+      ok({ content: 'Synthesized result', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } })
+    );
+    deps.mockResearchCostSummaryClient.getResearchCostSummary.mockResolvedValue(
+      ok(createUsageSummary({ costUsd: 0, inputTokens: 0, outputTokens: 0 }))
+    );
+
+    const result = await runSynthesis('research-1', deps);
+
+    expect(result).toEqual({ ok: true });
+    const finalUpdate = deps.mockRepo.update.mock.calls.find(
+      (call) => call[0] === 'research-1' && typeof call[1]?.totalCostUsd === 'number'
+    );
+    expect(finalUpdate?.[1]).toEqual(
+      expect.objectContaining({
+        totalInputTokens: 1200,
+        totalOutputTokens: 340,
+        totalCostUsd: 0.044,
+      })
+    );
+  });
+
+  it('preserves fallback totals when usage-service summary fetch fails', async () => {
+    const research = createTestResearch();
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+    deps.mockResearchCostSummaryClient.getResearchCostSummary.mockResolvedValue(
+      err({ code: 'API_ERROR', message: 'summary unavailable' })
+    );
+
+    const result = await runSynthesis('research-1', deps);
+
+    expect(result).toEqual({ ok: true });
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      {
+        researchId: 'research-1',
+        error: { code: 'API_ERROR', message: 'summary unavailable' },
+      },
+      '[4.6] Failed to fetch usage-service research cost summary'
+    );
+    const finalUpdate = deps.mockRepo.update.mock.calls.find(
+      (call) => call[1]?.status === 'completed'
+    );
+    expect(finalUpdate?.[1]).toEqual(
+      expect.objectContaining({
+        totalInputTokens: 500,
+        totalOutputTokens: 200,
+        totalCostUsd: 0.01,
+      })
+    );
+  });
+
+  it('logs diagnostics when billed events exist but cannot be correlated to the research', async () => {
+    const research = createTestResearch({
+      llmResults: [
+        {
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini20Flash,
+          status: 'completed',
+          result: 'Google Result',
+          costUsd: 0,
+        },
+        {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
+          status: 'completed',
+          result: 'OpenAI Result',
+          costUsd: 0,
+        },
+      ],
+    });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+    deps.mockSynthesizer.synthesize.mockResolvedValue(
+      ok({ content: 'Synthesized result', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } })
+    );
+    deps.mockResearchCostSummaryClient.getResearchCostSummary.mockResolvedValue(
+      ok(createUsageSummary({ costUsd: 0, missingAttributionCostUsd: 0.09 }))
+    );
+
+    const result = await runSynthesis('research-1', deps);
+
+    expect(result).toEqual({ ok: true });
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        researchId: 'research-1',
+        missingAttribution: expect.objectContaining({ costUsd: 0.09 }),
+      }),
+      '[4.6] Usage summary has billed events missing research correlation'
+    );
+  });
+
   it('sends notification on completion', async () => {
     const research = createTestResearch();
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -546,7 +890,15 @@ describe('runSynthesis', () => {
         status: 'completed',
         completedAt: '2024-01-01T12:00:00.000Z',
         totalDurationMs: 7200000,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCostUsd: 0,
       });
+      expect(deps.mockResearchCostSummaryClient.getResearchCostSummary).toHaveBeenCalledWith(
+        'research-1',
+        { type: 'system', id: 'user-1' },
+        { from: '2024-01-01T10:00:00.000Z', to: '2024-01-01T12:00:00.000Z' }
+      );
     });
 
     it('skips synthesis when multiple LLMs selected but only 1 succeeds', async () => {
@@ -1085,13 +1437,14 @@ describe('runSynthesis', () => {
       expect(mockImageServiceClient.generatePrompt).toHaveBeenCalledWith(
         expect.stringContaining('Synthesized result'),
         LlmModels.Gemini25Pro,
-        'user-1'
+        'user-1',
+        expectedImagePromptOptions()
       );
       expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(
         'generated prompt',
         LlmModels.Gemini25FlashImage,
         'user-1',
-        { title: 'Test Cover Title' }
+        expectedImageGenerationOptions('Test Cover Title')
       );
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
@@ -1145,7 +1498,7 @@ describe('runSynthesis', () => {
         'generated prompt',
         LlmModels.GPTImage1,
         'user-1',
-        { title: 'OpenAI Cover Title' }
+        expectedImageGenerationOptions('OpenAI Cover Title')
       );
     });
 
@@ -1337,7 +1690,7 @@ describe('runSynthesis', () => {
         'generated prompt',
         LlmModels.GPTImage1, // Should prefer OpenAI when synthesis model is OpenAI-based
         'user-1',
-        { title: 'Test Cover Title' }
+        expectedImageGenerationOptions('Test Cover Title')
       );
     });
 
@@ -1380,7 +1733,7 @@ describe('runSynthesis', () => {
         'generated prompt',
         LlmModels.Gemini25FlashImage, // Should fall back to Google when OpenAI key not available
         'user-1',
-        { title: 'Test Cover Title' }
+        expectedImageGenerationOptions('Test Cover Title')
       );
     });
   });
@@ -1544,6 +1897,55 @@ describe('runSynthesis', () => {
       expect(updateCall?.[1].totalInputTokens).toBe(1000);
       // totalOutputTokens = new LLM (250) + synthesis (200) = 450
       expect(updateCall?.[1].totalOutputTokens).toBe(450);
+    });
+
+    it('adds copied source cost to authoritative usage-service totals for enhanced research', async () => {
+      const research = createTestResearch({
+        sourceResearchId: 'source-research-1',
+        sourceLlmCostUsd: 0.06,
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'completed',
+            result: 'Source Result',
+            costUsd: 0.03,
+            copiedFromSource: true,
+          },
+          {
+            provider: LlmProviders.Anthropic,
+            model: LlmModels.ClaudeOpus46,
+            status: 'completed',
+            result: 'New Result',
+            costUsd: 0,
+          },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+      deps.mockSynthesizer.synthesize.mockResolvedValue(
+        ok({ content: 'Synthesized result', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } })
+      );
+      deps.mockResearchCostSummaryClient.getResearchCostSummary.mockResolvedValue(
+        ok(createUsageSummary({ costUsd: 0.045, inputTokens: 900, outputTokens: 300 }))
+      );
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(result).toEqual({ ok: true });
+      const updateCall = deps.mockRepo.update.mock.calls.find(
+        (call) => call[0] === 'research-1' && typeof call[1]?.totalCostUsd === 'number'
+      );
+      expect(updateCall?.[1]).toEqual(
+        expect.objectContaining({
+          totalInputTokens: 900,
+          totalOutputTokens: 300,
+          totalCostUsd: 0.105,
+        })
+      );
     });
 
     it('includes all cost components: synthesis + auxiliary + additionalCostUsd', async () => {
@@ -1838,13 +2240,14 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       expect(fakeImageClient.generatePrompt).toHaveBeenCalledWith(
         expect.any(String),
         LlmModels.Gemini25Pro,
-        'user-1'
+        'user-1',
+        expectedImagePromptOptions()
       );
       expect(fakeImageClient.generateImage).toHaveBeenCalledWith(
         'test prompt',
         LlmModels.Gemini25FlashImage,
         'user-1',
-        { title: 'Test Image' }
+        expectedImageGenerationOptions('Test Image')
       );
     });
 
@@ -1874,7 +2277,7 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
         'openai prompt',
         LlmModels.GPTImage1,
         'user-1',
-        { title: 'OpenAI Image' }
+        expectedImageGenerationOptions('OpenAI Image')
       );
     });
 
@@ -1907,7 +2310,11 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
         expect.any(String),
         LlmModels.GPTImage1,
         'user-1',
-        expect.objectContaining({ title: expect.any(String) })
+        expect.objectContaining({
+          title: expect.any(String),
+          promptType: 'research-cover-image-generation',
+          correlation: { researchId: 'research-1' },
+        })
       );
     });
 
@@ -1974,13 +2381,14 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       expect(fakeImageClient.generatePrompt).toHaveBeenCalledWith(
         expect.any(String),
         'gpt-4.1',
-        'user-1'
+        'user-1',
+        expectedImagePromptOptions()
       );
       expect(fakeImageClient.generateImage).toHaveBeenCalledWith(
         'test prompt',
         LlmModels.GPTImage1,
         'user-1',
-        { title: 'Test Image' }
+        expectedImageGenerationOptions('Test Image')
       );
     });
 
@@ -2000,13 +2408,14 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       expect(fakeImageClient.generatePrompt).toHaveBeenCalledWith(
         expect.any(String),
         LlmModels.Gemini25Pro,
-        'user-1'
+        'user-1',
+        expectedImagePromptOptions()
       );
       expect(fakeImageClient.generateImage).toHaveBeenCalledWith(
         'test prompt',
         LlmModels.Gemini25FlashImage,
         'user-1',
-        { title: 'Test Image' }
+        expectedImageGenerationOptions('Test Image')
       );
     });
 
@@ -2027,13 +2436,14 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       expect(fakeImageClient.generatePrompt).toHaveBeenCalledWith(
         expect.any(String),
         'gpt-4.1',
-        'user-1'
+        'user-1',
+        expectedImagePromptOptions()
       );
       expect(fakeImageClient.generateImage).toHaveBeenCalledWith(
         'test prompt',
         LlmModels.GPTImage1,
         'user-1',
-        { title: 'Test Image' }
+        expectedImageGenerationOptions('Test Image')
       );
     });
 
@@ -2063,7 +2473,7 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
         'fallback prompt',
         LlmModels.GPTImage1,
         'user-1',
-        { title: 'Fallback Image' }
+        expectedImageGenerationOptions('Fallback Image')
       );
     });
   });

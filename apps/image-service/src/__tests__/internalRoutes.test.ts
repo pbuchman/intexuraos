@@ -217,6 +217,29 @@ describe('Internal Routes', () => {
       expect(body.data.title).toBe('Test Title');
     });
 
+    it('forwards prompt usage metadata to the prompt generator', async () => {
+      fakeUserClient.setApiKeys({ openai: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/images/prompts/generate',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          text: 'This is a test article about machine learning.',
+          model: 'gpt-4.1',
+          userId: TEST_USER_ID,
+          promptType: 'research-cover-image-prompt',
+          correlation: { researchId: 'research-1' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakePromptGenerator.lastOptions).toEqual({
+        promptType: 'research-cover-image-prompt',
+        correlation: { researchId: 'research-1' },
+      });
+    });
+
     it('generates prompt with gemini model', async () => {
       fakeUserClient.setApiKeys({ google: 'test-key' });
 
@@ -472,6 +495,31 @@ describe('Internal Routes', () => {
       const savedImage = fakeRepo.getImage('test-generated-id');
       expect(savedImage).toBeDefined();
       expect(savedImage?.slug).toBe('my-cool-image-title');
+    });
+
+    it('forwards image usage metadata to the image generator', async () => {
+      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/images/generate',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          prompt: 'A beautiful sunset over mountains',
+          model: LlmModels.GPTImage1,
+          userId: TEST_USER_ID,
+          title: 'My Cool Image Title!!!',
+          promptType: 'research-cover-image-generation',
+          correlation: { researchId: 'research-1' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakeGenerator.lastOptions).toEqual({
+        slug: 'my-cool-image-title',
+        promptType: 'research-cover-image-generation',
+        correlation: { researchId: 'research-1' },
+      });
     });
   });
 

@@ -281,8 +281,8 @@ export function createGptClient(config: GptConfig): GptClient {
             false,
             Date.now() - start,
             errorMsg,
-            IMAGE_PROMPT_TYPE,
-            undefined,
+            options?.promptType ?? IMAGE_PROMPT_TYPE,
+            options?.correlation,
             IMAGE_MODEL
           );
           return err({ code: 'API_ERROR', message: errorMsg });
@@ -315,8 +315,8 @@ export function createGptClient(config: GptConfig): GptClient {
           true,
           Date.now() - start,
           undefined,
-          IMAGE_PROMPT_TYPE,
-          undefined,
+          options?.promptType ?? IMAGE_PROMPT_TYPE,
+          options?.correlation,
           IMAGE_MODEL
         );
 
@@ -338,8 +338,8 @@ export function createGptClient(config: GptConfig): GptClient {
           false,
           durationMs,
           errorMsg,
-          IMAGE_PROMPT_TYPE,
-          undefined,
+          options?.promptType ?? IMAGE_PROMPT_TYPE,
+          options?.correlation,
           IMAGE_MODEL
         );
         return err(mapGptError(error));

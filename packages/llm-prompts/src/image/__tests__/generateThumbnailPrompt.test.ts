@@ -19,7 +19,7 @@ const mockUsage: NormalizedUsage = {
 interface MockGeneratingClient {
   generate(
     prompt: string,
-    options: { promptType: string }
+    options: { promptType: string; correlation?: { researchId?: string | null } }
   ): Promise<Result<GenerateResult, LLMError>>;
 }
 
@@ -90,6 +90,21 @@ describe('generateThumbnailPrompt', () => {
         expect(result.value.thumbnailPrompt.parameters.realism).toBe('photorealistic');
         expect(result.value.usage).toEqual(mockUsage);
       }
+    });
+
+    it('forwards prompt type and correlation options to the LLM client', async () => {
+      const client = createMockClient(validResponse);
+
+      const result = await generateThumbnailPrompt(client, 'Test text content', {
+        promptType: 'research-cover-image-prompt',
+        correlation: { researchId: 'research-1' },
+      });
+
+      expect(result.ok).toBe(true);
+      expect(client.generate).toHaveBeenCalledWith(expect.any(String), {
+        promptType: 'research-cover-image-prompt',
+        correlation: { researchId: 'research-1' },
+      });
     });
 
     it('parses response wrapped in markdown code block', async () => {

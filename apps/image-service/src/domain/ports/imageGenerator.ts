@@ -1,4 +1,5 @@
 import type { Result } from '@intexuraos/common-core';
+import type { LLMCorrelationOptions } from '@intexuraos/llm-contract';
 import type { GeneratedImage } from '../models/index.js';
 
 export interface ImageGenerationError {
@@ -12,6 +13,8 @@ export type GeneratedImageData = Omit<GeneratedImage, 'userId' | 'slug'> & {
 
 export interface GenerateOptions {
   slug?: string | undefined;
+  promptType?: string | undefined;
+  correlation?: LLMCorrelationOptions | undefined;
 }
 
 export interface ImageGenerator {

@@ -1,4 +1,5 @@
 import type { Result } from '@intexuraos/common-core';
+import type { LLMCorrelationOptions } from '@intexuraos/llm-contract';
 import type { ThumbnailPrompt } from '../models/index.js';
 
 export interface PromptGenerationError {
@@ -6,6 +7,14 @@ export interface PromptGenerationError {
   message: string;
 }
 
+export interface PromptGenerationOptions {
+  promptType?: string;
+  correlation?: LLMCorrelationOptions;
+}
+
 export interface PromptGenerator {
-  generateThumbnailPrompt(text: string): Promise<Result<ThumbnailPrompt, PromptGenerationError>>;
+  generateThumbnailPrompt(
+    text: string,
+    options?: PromptGenerationOptions
+  ): Promise<Result<ThumbnailPrompt, PromptGenerationError>>;
 }

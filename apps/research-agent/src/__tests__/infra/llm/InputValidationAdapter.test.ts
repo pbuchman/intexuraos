@@ -33,6 +33,16 @@ describe('InputValidationAdapter', () => {
       new FakeUsageSink()
     );
 
+  const createAdapterForResearch = (researchId: string): InputValidationAdapter =>
+    new InputValidationAdapter(
+      'test-api-key',
+      LlmModels.Gemini25Flash,
+      'user-123',
+      mockLogger,
+      new FakeUsageSink(),
+      researchId
+    );
+
   describe('validateInput', () => {
     it('returns validation result for valid JSON response', async () => {
       mockGenerate.mockResolvedValueOnce({
@@ -54,6 +64,28 @@ describe('InputValidationAdapter', () => {
         expect(result.value.usage.outputTokens).toBe(5);
         expect(result.value.usage.costUsd).toBe(0.001);
       }
+    });
+
+    it('passes research correlation when research id is available', async () => {
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({ quality: 2, reason: 'Clear and specific' }),
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+        },
+      });
+
+      const adapter = createAdapterForResearch('research-1');
+      const result = await adapter.validateInput('Test prompt');
+
+      expect(result.ok).toBe(true);
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.any(String),
+        {
+          promptType: 'research-input-validation',
+          correlation: { researchId: 'research-1' },
+        }
+      );
     });
 
     it('handles markdown code blocks in response', async () => {

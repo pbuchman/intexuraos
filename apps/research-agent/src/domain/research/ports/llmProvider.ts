@@ -48,6 +48,10 @@ export interface ResearchProviderCallOptions {
   researchId?: string;
 }
 
+export interface SynthesisCallOptions {
+  promptType?: string;
+}
+
 export interface LlmResearchProvider {
   research(
     prompt: string,
@@ -61,7 +65,8 @@ export interface LlmSynthesisProvider {
     originalPrompt: string,
     reports: { model: string; content: string }[],
     additionalSources?: { content: string; label?: string }[],
-    synthesisContext?: SynthesisContext
+    synthesisContext?: SynthesisContext,
+    options?: SynthesisCallOptions
   ): Promise<Result<LlmSynthesisResult, LlmError>>;
 
   generateTitle(prompt: string): Promise<Result<TitleGenerateResult, LlmError>>;

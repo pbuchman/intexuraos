@@ -147,6 +147,10 @@ export interface ImageGenerateOptions {
   size?: ImageSize;
   /** Optional slug for tracking/reference */
   slug?: string;
+  /** Semantic identifier for usage tracking */
+  promptType?: string;
+  /** Optional per-call correlation overrides for usage attribution */
+  correlation?: LLMCorrelationOptions;
 }
 
 /**
