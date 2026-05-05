@@ -533,8 +533,11 @@ Expected: PASS.
 - Modify: `apps/image-service/src/application/generateImage.ts`
 - Modify: `apps/image-service/src/application/generatePrompt.ts`
 - Modify: `apps/image-service/src/domain/ports/imageGenerator.ts`
+- Modify: `apps/image-service/src/domain/ports/promptGenerator.ts`
 - Modify: `apps/image-service/src/infra/image/GoogleImageGenerator.ts`
 - Modify: `apps/image-service/src/infra/image/OpenAIImageGenerator.ts`
+- Modify: `apps/image-service/src/infra/llm/GeminiPromptAdapter.ts`
+- Modify: `apps/image-service/src/infra/llm/GptPromptAdapter.ts`
 - Modify image-service tests under `apps/image-service/src/__tests__/`
 
 - [ ] **Step 1: Write failing route metadata tests**
@@ -577,7 +580,7 @@ Default prompt types:
 - prompt generation route: `image-thumbnail-prompt`.
 - image generation route: `image-generation`.
 
-- [ ] **Step 3: Forward metadata into image generators**
+- [ ] **Step 3: Forward metadata into prompt and image generators**
 
 Extend `ImageGenerator.generate` options:
 
@@ -591,11 +594,30 @@ export interface GenerateOptions {
 
 Pass those options to Gemini/OpenAI `generateImage`.
 
-- [ ] **Step 4: Verify image usage facts**
-
-Tests must assert successful image generation logs:
+Also extend the prompt-generation port path:
 
 ```ts
+export interface GenerateThumbnailPromptOptions {
+  promptType?: string;
+  correlation?: { researchId?: string | null };
+}
+
+generateThumbnailPrompt(text: string, options?: GenerateThumbnailPromptOptions): Promise<Result<string, ImageServiceError>>;
+```
+
+`generatePrompt` must pass `{ promptType, correlation }` into `PromptGenerator.generateThumbnailPrompt(input.text, options)`, and `GeminiPromptAdapter` plus `GptPromptAdapter` must forward those options into the underlying LLM client `generate()` call. Adapter tests must fail until the emitted prompt-generation usage event carries `promptType: 'image-thumbnail-prompt'` and `correlation.researchId`.
+
+- [ ] **Step 4: Verify image usage facts**
+
+Tests must assert successful prompt and image generation logs:
+
+```ts
+expect(promptUsageLog).toMatchObject({
+  callType: 'completion',
+  promptType: 'image-thumbnail-prompt',
+  correlation: { researchId: 'research-123' },
+});
+
 expect(usageLog).toMatchObject({
   callType: 'image_generation',
   promptType: 'image-generation',
