@@ -16,7 +16,7 @@ function readPackageJson(relativePath: string): {
   };
 }
 
-describe('Firestore runtime dependency declarations', () => {
+describe('Cloud Run runtime dependency declarations', () => {
   it('keeps infra-firestore production-installable in Cloud Run images', () => {
     const pkg = readPackageJson('packages/infra-firestore/package.json');
 
@@ -30,5 +30,13 @@ describe('Firestore runtime dependency declarations', () => {
 
     expect(pkg.dependencies?.['@google-cloud/firestore']).toBe('catalog:');
     expect(pkg.devDependencies?.['@google-cloud/firestore']).toBeUndefined();
+  });
+
+  it('keeps infra-gpt production-installable in Cloud Run images', () => {
+    const pkg = readPackageJson('packages/infra-gpt/package.json');
+
+    expect(pkg.dependencies?.openai).toBe('catalog:');
+    expect(pkg.devDependencies?.openai).toBeUndefined();
+    expect(pkg.peerDependencies?.openai).toBeUndefined();
   });
 });
