@@ -19,6 +19,10 @@ interface EventForTests {
     durationMs: number;
     promptType?: string;
   };
+  usage: {
+    imageCount: number;
+    imageSize?: string;
+  };
   correlation: {
     requestId: string | null;
     traceId: string | null;
@@ -164,5 +168,34 @@ describe('buildUsageEvent correlation overrides', () => {
     }) as EventForTests;
     expect(event.correlation.researchId).toBeNull();
     expect(event.correlation.taskId).toBe('task-1');
+  });
+});
+
+describe('buildUsageEvent image usage', () => {
+  it('preserves nonzero imageCount and imageSize when provided while retaining correlation', () => {
+    const event = buildUsageEvent(
+      {
+        ...baseParams,
+        callType: 'image_generation',
+        usage: {
+          ...baseParams.usage,
+          imageCount: 1,
+          imageSize: '1024x1024',
+        },
+      },
+      baseSource,
+      { researchId: 'research-image-1' }
+    ) as EventForTests;
+
+    expect(event.usage.imageCount).toBe(1);
+    expect(event.usage.imageSize).toBe('1024x1024');
+    expect(event.correlation.researchId).toBe('research-image-1');
+  });
+
+  it('defaults imageCount to zero and omits imageSize when not provided', () => {
+    const event = buildUsageEvent(baseParams, baseSource) as EventForTests;
+
+    expect(event.usage.imageCount).toBe(0);
+    expect(event.usage.imageSize).toBeUndefined();
   });
 });

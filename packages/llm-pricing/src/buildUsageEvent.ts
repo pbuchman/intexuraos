@@ -73,7 +73,8 @@ export function buildUsageEvent(
       thinkingTokens: params.usage.thinkingTokens ?? 0,
       webSearchCalls: params.usage.webSearchCalls ?? 0,
       groundingEnabled: params.usage.groundingEnabled ?? false,
-      imageCount: 0,
+      imageCount: params.usage.imageCount ?? 0,
+      ...(params.usage.imageSize !== undefined && { imageSize: params.usage.imageSize }),
     },
     cost: {
       providerReportedUsd,

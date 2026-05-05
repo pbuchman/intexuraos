@@ -471,6 +471,7 @@ describe('createOpenRouterClient', () => {
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           callType: 'research',
+          promptType: 'research-web-search',
           correlation: { researchId: 'r-1' },
         })
       );

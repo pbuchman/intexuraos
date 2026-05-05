@@ -66,6 +66,8 @@ export interface GenerateOptions {
  * researchId / sessionId / taskId / requestId.
  */
 export interface ResearchOptions {
+  /** Semantic identifier for what the research prompt was used for. */
+  promptType?: string;
   correlation?: {
     researchId?: string | null;
     sessionId?: string | null;
@@ -96,6 +98,8 @@ export interface GeminiClient extends Omit<LLMClient, 'generate' | 'research'> {
 }
 
 const IMAGE_MODEL = LlmModels.Gemini25FlashImage;
+const RESEARCH_PROMPT_TYPE = 'research-web-search';
+const IMAGE_PROMPT_TYPE = 'image-generation';
 
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
@@ -109,12 +113,13 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
     durationMs: number,
     errorMessage?: string,
     promptType?: string,
-    correlation?: GenerateOptions['correlation']
+    correlation?: GenerateOptions['correlation'],
+    modelOverride?: string
   ): void {
     void usageLogger.log({
       userId,
       provider: LlmProviders.Google,
-      model,
+      model: modelOverride ?? model,
       callType,
       usage,
       success,
@@ -154,7 +159,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
           true,
           Date.now() - start,
           undefined,
-          undefined,
+          options?.promptType ?? RESEARCH_PROMPT_TYPE,
           options?.correlation
         );
 
@@ -174,7 +179,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
           false,
           durationMs,
           errorMsg,
-          undefined,
+          options?.promptType ?? RESEARCH_PROMPT_TYPE,
           options?.correlation
         );
         return err(mapGeminiError(error));
@@ -193,9 +198,10 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 
     async generateImage(
       prompt: string,
-      _options?: ImageGenerateOptions
+      options?: ImageGenerateOptions
     ): Promise<Result<ImageGenerationResult, GeminiError>> {
       const start = Date.now();
+      void options;
       try {
         const response = await ai.models.generateContent({
           model: IMAGE_MODEL,
@@ -207,6 +213,23 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
 
         if (imagePart?.inlineData?.data === undefined) {
           const errorMsg = 'No image data in response';
+          const usage: NormalizedUsage = {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+            costUsd: 0,
+            imageCount: 0,
+          };
+          trackUsage(
+            'image_generation',
+            usage,
+            false,
+            Date.now() - start,
+            errorMsg,
+            IMAGE_PROMPT_TYPE,
+            undefined,
+            IMAGE_MODEL
+          );
           return err({ code: 'API_ERROR', message: errorMsg });
         }
 
@@ -217,9 +240,19 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
           outputTokens: 0,
           totalTokens: 0,
           costUsd: 0,
+          imageCount: 1,
         };
 
-        trackUsage('image_generation', usage, true, Date.now() - start);
+        trackUsage(
+          'image_generation',
+          usage,
+          true,
+          Date.now() - start,
+          undefined,
+          IMAGE_PROMPT_TYPE,
+          undefined,
+          IMAGE_MODEL
+        );
 
         return ok({ imageData: imageBuffer, model: IMAGE_MODEL, usage });
       } catch (error) {
@@ -230,8 +263,18 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
           outputTokens: 0,
           totalTokens: 0,
           costUsd: 0,
+          imageCount: 0,
         };
-        trackUsage('image_generation', emptyUsage, false, durationMs, errorMsg);
+        trackUsage(
+          'image_generation',
+          emptyUsage,
+          false,
+          durationMs,
+          errorMsg,
+          IMAGE_PROMPT_TYPE,
+          undefined,
+          IMAGE_MODEL
+        );
         return err(mapGeminiError(error));
       }
     },

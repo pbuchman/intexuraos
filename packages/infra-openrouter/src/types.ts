@@ -41,6 +41,8 @@ export interface GenerateOptions {
  * originating researchId / sessionId / taskId / requestId.
  */
 export interface ResearchOptions {
+  /** Semantic identifier for what the research prompt was used for. */
+  promptType?: string;
   correlation?: {
     researchId?: string | null;
     sessionId?: string | null;

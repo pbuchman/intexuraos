@@ -340,6 +340,7 @@ describe('createGptClient', () => {
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           callType: 'research',
+          promptType: 'research-web-search',
           correlation: { researchId: 'r-1' },
         })
       );
@@ -547,7 +548,34 @@ describe('createGptClient', () => {
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           callType: 'image_generation',
+          model: LlmModels.GPTImage1,
+          promptType: 'image-generation',
           success: true,
+          usage: expect.objectContaining({ imageCount: 1, imageSize: '1024x1024' }),
+        })
+      );
+    });
+
+    it('logs failed image generation with imageCount zero when response has no image data', async () => {
+      mockImagesGenerate.mockResolvedValue({ data: [{}] });
+
+      const client = createGptClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      await client.generateImage('A cat');
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'image_generation',
+          model: LlmModels.GPTImage1,
+          promptType: 'image-generation',
+          success: false,
+          usage: expect.objectContaining({ imageCount: 0, imageSize: '1024x1024' }),
         })
       );
     });
