@@ -34,8 +34,7 @@
     "@intexuraos/llm-prompts": "workspace:*",
     "fastify": "catalog:",
     "pino": "catalog:",
-    "sharp": "^0.33.5",
-    "zod": "catalog:"
+    "sharp": "^0.33.5"
   },
   "devDependencies": {
     "@intexuraos/llm-factory": "workspace:*",

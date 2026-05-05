@@ -29,8 +29,7 @@
     "@intexuraos/infra-sentry": "workspace:*",
     "fastify": "catalog:",
     "firebase-admin": "^13.0.2",
-    "pino": "catalog:",
-    "zod": "catalog:"
+    "pino": "catalog:"
   },
   "devDependencies": {
     "nock": "^14.0.0"

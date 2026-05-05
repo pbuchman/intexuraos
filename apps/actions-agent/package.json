@@ -34,7 +34,6 @@
     "@intexuraos/llm-prompts": "workspace:*",
     "@intexuraos/whatsapp-pubsub-client": "workspace:*",
     "fastify": "catalog:",
-    "pino": "catalog:",
-    "zod": "catalog:"
+    "pino": "catalog:"
   }
 }
