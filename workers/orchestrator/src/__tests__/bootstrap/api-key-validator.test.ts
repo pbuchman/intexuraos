@@ -290,6 +290,7 @@ describe('validateWorkerApiKeys — auth-state logging branches', () => {
     minimaxKey: '',
     mimoKey: '',
     dashscopeKey: '',
+    kimiKey: '',
     openRouterKey: '',
   };
 

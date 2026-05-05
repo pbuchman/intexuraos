@@ -139,6 +139,7 @@ const isolationConfig: IsolationConfig = {
     MINIMAX_API_KEY: '',
     MIMO_API_KEY: '',
     DASHSCOPE_API_KEY: '',
+    KIMI_API_KEY: '',
     OPENROUTER_API_KEY: '',
   }),
   gcpSaKeyPath: '/tmp/gcp-sa.json',

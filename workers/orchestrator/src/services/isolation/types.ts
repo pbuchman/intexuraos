@@ -32,6 +32,7 @@ export interface WorkerTypeConfig {
     | 'MINIMAX_API_KEY'
     | 'MIMO_API_KEY'
     | 'DASHSCOPE_API_KEY'
+    | 'KIMI_API_KEY'
     | 'OPENROUTER_API_KEY';
   model?: string;
   effort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh';
@@ -97,9 +98,10 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
   },
   kimi: {
     runtime: 'claude',
-    apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
-    apiKeyEnvVar: 'DASHSCOPE_API_KEY',
-    model: 'kimi-k2.5',
+    apiBaseUrl: 'https://api.kimi.com/coding',
+    apiKeyEnvVar: 'KIMI_API_KEY',
+    model: 'kimi-for-coding',
+    effort: 'high',
     telemetryExpectation: 'optional',
   },
   codex: {
@@ -131,6 +133,7 @@ export interface WorkerSecrets {
   MINIMAX_API_KEY: string;
   MIMO_API_KEY: string;
   DASHSCOPE_API_KEY: string;
+  KIMI_API_KEY: string;
   OPENROUTER_API_KEY: string;
 }
 

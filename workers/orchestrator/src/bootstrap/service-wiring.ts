@@ -242,6 +242,7 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
     MINIMAX_API_KEY: env.minimaxApiKey,
     MIMO_API_KEY: env.mimoApiKey,
     DASHSCOPE_API_KEY: env.dashscopeApiKey,
+    KIMI_API_KEY: env.kimiApiKey,
     OPENROUTER_API_KEY: env.openRouterApiKey,
   };
 

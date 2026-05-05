@@ -31,6 +31,7 @@ function makeValidEnv(overrides: Partial<Record<string, string>> = {}): EnvReade
     INTEXURAOS_MINIMAX_APP_API_KEY: 'minimax-key',
     INTEXURAOS_MIMO_APP_API_KEY: 'mimo-key',
     INTEXURAOS_DASHSCOPE_APP_API_KEY: 'dashscope-key',
+    INTEXURAOS_KIMI_APP_API_KEY: 'ABCDEFG',
     INTEXURAOS_GEMINI_APP_API_KEY: 'gemini-key',
     ...overrides,
   };
@@ -92,6 +93,7 @@ describe('loadEnvConfig', () => {
     expect(config.gcpSaKeyPath).toBe('/path/to/sa.json');
     expect(config.projectId).toBe('proj-id');
     expect(config.linearApiKey).toBe('lin-key');
+    expect(config.kimiApiKey).toBe('ABCDEFG');
     expect(config.port).toBe(DEFAULT_PORT);
     expect(config.capacity).toBe(DEFAULT_CAPACITY);
     expect(config.completionMaxAttempts).toBe(DEFAULT_COMPLETION_MAX_ATTEMPTS);

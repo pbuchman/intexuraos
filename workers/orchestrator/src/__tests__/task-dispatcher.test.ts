@@ -279,6 +279,7 @@ describe('TaskDispatcher', () => {
       MINIMAX_API_KEY: 'test-minimax-key',
       MIMO_API_KEY: 'test-mimo-key',
       DASHSCOPE_API_KEY: 'test-dashscope-key',
+      KIMI_API_KEY: 'test-kimi-key',
       OPENROUTER_API_KEY: 'test-openrouter-key',
     }),
     gcpSaKeyPath: '/tmp/gcp-sa.json',

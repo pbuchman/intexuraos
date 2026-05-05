@@ -101,6 +101,7 @@ export interface IsolationConfig {
     MINIMAX_API_KEY: string;
     MIMO_API_KEY: string;
     DASHSCOPE_API_KEY: string;
+    KIMI_API_KEY: string;
     OPENROUTER_API_KEY: string;
   };
   gcpSaKeyPath: string;
