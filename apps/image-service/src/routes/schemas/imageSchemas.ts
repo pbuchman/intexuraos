@@ -24,6 +24,22 @@ export const generateImageBodySchema = {
       maxLength: 100,
       description: 'Optional title for slug-based filename (from prompt generation)',
     },
+    promptType: {
+      type: 'string',
+      minLength: 1,
+      description: 'Optional semantic prompt purpose for usage reporting',
+    },
+    correlation: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        researchId: {
+          type: ['string', 'null'],
+          description: 'Optional originating research ID for usage attribution',
+        },
+      },
+      description: 'Optional usage correlation metadata',
+    },
   },
   additionalProperties: false,
 } as const;
@@ -66,6 +82,10 @@ export interface GenerateImageBody {
   model: GPTImage1 | Gemini25FlashImage;
   userId: string;
   title?: string;
+  promptType?: string;
+  correlation?: {
+    researchId?: string | null;
+  };
 }
 
 export const deleteImageParamsSchema = {

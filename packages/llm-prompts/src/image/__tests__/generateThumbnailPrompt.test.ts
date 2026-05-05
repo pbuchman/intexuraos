@@ -3,7 +3,12 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err, type Result } from '@intexuraos/common-core';
-import type { NormalizedUsage, LLMError, GenerateResult } from '@intexuraos/llm-contract';
+import type {
+  LLMCorrelationOptions,
+  NormalizedUsage,
+  LLMError,
+  GenerateResult,
+} from '@intexuraos/llm-contract';
 import { generateThumbnailPrompt } from '../generateThumbnailPrompt.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -19,7 +24,7 @@ const mockUsage: NormalizedUsage = {
 interface MockGeneratingClient {
   generate(
     prompt: string,
-    options: { promptType: string }
+    options: { promptType: string; correlation?: LLMCorrelationOptions }
   ): Promise<Result<GenerateResult, LLMError>>;
 }
 
@@ -90,6 +95,23 @@ describe('generateThumbnailPrompt', () => {
         expect(result.value.thumbnailPrompt.parameters.realism).toBe('photorealistic');
         expect(result.value.usage).toEqual(mockUsage);
       }
+    });
+
+    it('forwards prompt type and correlation metadata to the LLM client', async () => {
+      const client = createMockClient(validResponse);
+      const result = await generateThumbnailPrompt(client, 'Test text content', {
+        promptType: 'image-thumbnail-prompt',
+        correlation: { researchId: 'research-123' },
+      });
+
+      expect(result.ok).toBe(true);
+      expect(client.generate).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          promptType: 'image-thumbnail-prompt',
+          correlation: { researchId: 'research-123' },
+        })
+      );
     });
 
     it('parses response wrapped in markdown code block', async () => {

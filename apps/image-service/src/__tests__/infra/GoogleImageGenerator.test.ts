@@ -186,6 +186,42 @@ describe('GoogleImageGenerator', () => {
       });
     });
 
+    it('passes usage metadata to the LLM image client', async () => {
+      const fakeImageData = Buffer.from('fake image data');
+
+      mockGenerateImage.mockResolvedValue(
+        ok({
+          imageData: fakeImageData,
+          model: LlmModels.Gemini25FlashImage,
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.03 },
+        })
+      );
+
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
+
+      const generator = new GoogleImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+        userId: 'test-user-id',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await generator.generate(testPrompt, {
+        slug: 'my-cool-image',
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-123' },
+      });
+
+      expect(mockGenerateImage).toHaveBeenCalledWith(testPrompt, {
+        slug: 'my-cool-image',
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-123' },
+      });
+    });
+
     it('returns API_ERROR when generateImage returns error', async () => {
       mockGenerateImage.mockResolvedValue(
         err({ code: 'API_ERROR', message: 'No image data in response' })

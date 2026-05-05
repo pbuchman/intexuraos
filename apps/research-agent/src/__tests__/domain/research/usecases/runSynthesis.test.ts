@@ -1085,13 +1085,21 @@ describe('runSynthesis', () => {
       expect(mockImageServiceClient.generatePrompt).toHaveBeenCalledWith(
         expect.stringContaining('Synthesized result'),
         LlmModels.Gemini25Pro,
-        'user-1'
+        'user-1',
+        {
+          promptType: 'image-thumbnail-prompt',
+          correlation: { researchId: 'research-1' },
+        }
       );
       expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(
         'generated prompt',
         LlmModels.Gemini25FlashImage,
         'user-1',
-        { title: 'Test Cover Title' }
+        expect.objectContaining({
+          title: 'Test Cover Title',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-1' },
+        })
       );
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
@@ -1145,7 +1153,11 @@ describe('runSynthesis', () => {
         'generated prompt',
         LlmModels.GPTImage1,
         'user-1',
-        { title: 'OpenAI Cover Title' }
+        expect.objectContaining({
+          title: 'OpenAI Cover Title',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-1' },
+        })
       );
     });
 
@@ -1337,7 +1349,11 @@ describe('runSynthesis', () => {
         'generated prompt',
         LlmModels.GPTImage1, // Should prefer OpenAI when synthesis model is OpenAI-based
         'user-1',
-        { title: 'Test Cover Title' }
+        expect.objectContaining({
+          title: 'Test Cover Title',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-1' },
+        })
       );
     });
 
@@ -1380,7 +1396,11 @@ describe('runSynthesis', () => {
         'generated prompt',
         LlmModels.Gemini25FlashImage, // Should fall back to Google when OpenAI key not available
         'user-1',
-        { title: 'Test Cover Title' }
+        expect.objectContaining({
+          title: 'Test Cover Title',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-1' },
+        })
       );
     });
   });
@@ -1838,13 +1858,21 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       expect(fakeImageClient.generatePrompt).toHaveBeenCalledWith(
         expect.any(String),
         LlmModels.Gemini25Pro,
-        'user-1'
+        'user-1',
+        {
+          promptType: 'image-thumbnail-prompt',
+          correlation: { researchId: 'research-1' },
+        }
       );
       expect(fakeImageClient.generateImage).toHaveBeenCalledWith(
         'test prompt',
         LlmModels.Gemini25FlashImage,
         'user-1',
-        { title: 'Test Image' }
+        expect.objectContaining({
+          title: 'Test Image',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-1' },
+        })
       );
     });
 
@@ -1874,7 +1902,11 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
         'openai prompt',
         LlmModels.GPTImage1,
         'user-1',
-        { title: 'OpenAI Image' }
+        expect.objectContaining({
+          title: 'OpenAI Image',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-1' },
+        })
       );
     });
 
@@ -1907,7 +1939,11 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
         expect.any(String),
         LlmModels.GPTImage1,
         'user-1',
-        expect.objectContaining({ title: expect.any(String) })
+        expect.objectContaining({
+          title: expect.any(String),
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-1' },
+        })
       );
     });
 
@@ -1974,13 +2010,21 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       expect(fakeImageClient.generatePrompt).toHaveBeenCalledWith(
         expect.any(String),
         'gpt-4.1',
-        'user-1'
+        'user-1',
+        {
+          promptType: 'image-thumbnail-prompt',
+          correlation: { researchId: 'research-1' },
+        }
       );
       expect(fakeImageClient.generateImage).toHaveBeenCalledWith(
         'test prompt',
         LlmModels.GPTImage1,
         'user-1',
-        { title: 'Test Image' }
+        expect.objectContaining({
+          title: 'Test Image',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-1' },
+        })
       );
     });
 
@@ -2000,13 +2044,21 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       expect(fakeImageClient.generatePrompt).toHaveBeenCalledWith(
         expect.any(String),
         LlmModels.Gemini25Pro,
-        'user-1'
+        'user-1',
+        {
+          promptType: 'image-thumbnail-prompt',
+          correlation: { researchId: 'research-1' },
+        }
       );
       expect(fakeImageClient.generateImage).toHaveBeenCalledWith(
         'test prompt',
         LlmModels.Gemini25FlashImage,
         'user-1',
-        { title: 'Test Image' }
+        expect.objectContaining({
+          title: 'Test Image',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-1' },
+        })
       );
     });
 
@@ -2027,13 +2079,21 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       expect(fakeImageClient.generatePrompt).toHaveBeenCalledWith(
         expect.any(String),
         'gpt-4.1',
-        'user-1'
+        'user-1',
+        {
+          promptType: 'image-thumbnail-prompt',
+          correlation: { researchId: 'research-1' },
+        }
       );
       expect(fakeImageClient.generateImage).toHaveBeenCalledWith(
         'test prompt',
         LlmModels.GPTImage1,
         'user-1',
-        { title: 'Test Image' }
+        expect.objectContaining({
+          title: 'Test Image',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-1' },
+        })
       );
     });
 
@@ -2063,7 +2123,11 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
         'fallback prompt',
         LlmModels.GPTImage1,
         'user-1',
-        { title: 'Fallback Image' }
+        expect.objectContaining({
+          title: 'Fallback Image',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-1' },
+        })
       );
     });
   });

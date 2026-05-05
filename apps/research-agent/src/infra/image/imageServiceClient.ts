@@ -3,7 +3,12 @@
  * Provides access to thumbnail prompt generation, image generation, and deletion.
  */
 
-import type { Gemini25Pro, GPTImage1, Gemini25FlashImage } from '@intexuraos/llm-contract';
+import type {
+  Gemini25Pro,
+  GPTImage1,
+  Gemini25FlashImage,
+  LLMCorrelationOptions,
+} from '@intexuraos/llm-contract';
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 
@@ -38,15 +43,25 @@ export interface GeneratedImageData {
 export type PromptModel = 'gpt-4.1' | Gemini25Pro;
 export type ImageModel = GPTImage1 | Gemini25FlashImage;
 
+export interface ImageUsageMetadataOptions {
+  promptType?: string;
+  correlation?: LLMCorrelationOptions;
+}
+
+export type GeneratePromptOptions = ImageUsageMetadataOptions;
+
 export interface GenerateImageOptions {
   title?: string;
+  promptType?: string;
+  correlation?: LLMCorrelationOptions;
 }
 
 export interface ImageServiceClient {
   generatePrompt(
     text: string,
     model: PromptModel,
-    userId: string
+    userId: string,
+    options?: GeneratePromptOptions
   ): Promise<Result<ThumbnailPrompt, ImageServiceError>>;
 
   generateImage(
@@ -64,7 +79,8 @@ export function createImageServiceClient(config: ImageServiceConfig): ImageServi
     async generatePrompt(
       text: string,
       model: PromptModel,
-      userId: string
+      userId: string,
+      options?: GeneratePromptOptions
     ): Promise<Result<ThumbnailPrompt, ImageServiceError>> {
       try {
         const response = await fetch(`${config.baseUrl}/internal/images/prompts/generate`, {
@@ -73,7 +89,13 @@ export function createImageServiceClient(config: ImageServiceConfig): ImageServi
             'Content-Type': 'application/json',
             'X-Internal-Auth': config.internalAuthToken,
           },
-          body: JSON.stringify({ text, model, userId }),
+          body: JSON.stringify({
+            text,
+            model,
+            userId,
+            ...(options?.promptType !== undefined && { promptType: options.promptType }),
+            ...(options?.correlation !== undefined && { correlation: options.correlation }),
+          }),
         });
 
         if (!response.ok) {
@@ -107,7 +129,14 @@ export function createImageServiceClient(config: ImageServiceConfig): ImageServi
             'Content-Type': 'application/json',
             'X-Internal-Auth': config.internalAuthToken,
           },
-          body: JSON.stringify({ prompt, model, userId, title: options?.title }),
+          body: JSON.stringify({
+            prompt,
+            model,
+            userId,
+            ...(options?.title !== undefined && { title: options.title }),
+            ...(options?.promptType !== undefined && { promptType: options.promptType }),
+            ...(options?.correlation !== undefined && { correlation: options.correlation }),
+          }),
         });
 
         if (!response.ok) {
