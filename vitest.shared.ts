@@ -4,6 +4,9 @@ import { defineConfig } from 'vitest/config';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = __dirname;
+const isCoverageRun =
+  process.argv.includes('--coverage') || process.env.npm_lifecycle_event === 'test:coverage';
+const needsConservativeWorkers = process.env.CI === 'true' || isCoverageRun;
 
 /**
  * Shared vitest base for every workspace. Individual workspace configs extend
@@ -38,10 +41,10 @@ export const sharedConfig = defineConfig({
     sequence: {
       shuffle: false,
     },
-    // Use forks pool in CI for better memory isolation during coverage collection
-    pool: process.env.CI === 'true' ? 'forks' : 'threads',
-    // Limit workers in CI to prevent memory exhaustion during coverage
-    maxWorkers: process.env.CI === 'true' ? 2 : undefined,
+    // Coverage collection across the monorepo is memory-intensive enough to
+    // warrant the same worker limits locally as in CI.
+    pool: needsConservativeWorkers ? 'forks' : 'threads',
+    maxWorkers: needsConservativeWorkers ? 2 : undefined,
     // Standard timeout for async operations
     testTimeout: 10000,
     hookTimeout: 30000,

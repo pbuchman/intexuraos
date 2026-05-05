@@ -55,3 +55,5 @@ export {
 } from './useDigestList.js';
 export { useDigestView, type UseDigestViewResult } from './useDigestView.js';
 export { useBackfillRun, type UseBackfillRunResult } from './useBackfillRun.js';
+export { useFishingKnowledge, type UseFishingKnowledgeResult } from './useFishingKnowledge.js';
+export { useFishingChat, type UseFishingChatResult } from './useFishingChat.js';
