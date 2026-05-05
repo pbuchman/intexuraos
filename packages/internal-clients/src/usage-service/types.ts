@@ -1,5 +1,5 @@
 import type { Logger, Result } from '@intexuraos/common-core';
-import type { ImageSize, LlmProvider } from '@intexuraos/llm-contract';
+import type { LlmProvider } from '@intexuraos/llm-contract';
 
 export interface UsageServiceConfig {
   baseUrl: string;
@@ -49,7 +49,6 @@ export interface UsageEventUsage {
   webSearchCalls: number;
   groundingEnabled: boolean;
   imageCount: number;
-  imageSize?: ImageSize;
 }
 
 export interface UsageEventCost {
