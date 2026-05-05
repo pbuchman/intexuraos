@@ -147,6 +147,10 @@ export interface ImageGenerateOptions {
   size?: ImageSize;
   /** Optional slug for tracking/reference */
   slug?: string;
+  /** Semantic identifier for what the image prompt was used for */
+  promptType?: string;
+  /** Optional per-call correlation fields for usage attribution */
+  correlation?: LLMCorrelationOptions;
 }
 
 /**
@@ -305,7 +309,7 @@ export interface LLMClient {
    */
   generate(
     prompt: string,
-    options: { promptType: string }
+    options: { promptType: string; correlation?: LLMCorrelationOptions }
   ): Promise<Result<GenerateResult, LLMError>>;
 
   /**

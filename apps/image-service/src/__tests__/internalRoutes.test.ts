@@ -233,6 +233,45 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
     });
+
+    it('accepts optional prompt usage metadata and forwards it', async () => {
+      fakeUserClient.setApiKeys({ openai: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/images/prompts/generate',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          text: 'This is a test article about machine learning.',
+          model: 'gpt-4.1',
+          userId: TEST_USER_ID,
+          promptType: 'image-thumbnail-prompt',
+          correlation: { researchId: 'research-123' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakePromptGenerator.lastOptions).toStrictEqual({
+        promptType: 'image-thumbnail-prompt',
+        correlation: { researchId: 'research-123' },
+      });
+    });
+
+    it('returns 400 when prompt correlation has invalid shape', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/images/prompts/generate',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          text: 'This is a test article about machine learning.',
+          model: 'gpt-4.1',
+          userId: TEST_USER_ID,
+          correlation: { researchId: 123 },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
   });
 
   describe('POST /internal/images/generate', () => {
@@ -472,6 +511,47 @@ describe('Internal Routes', () => {
       const savedImage = fakeRepo.getImage('test-generated-id');
       expect(savedImage).toBeDefined();
       expect(savedImage?.slug).toBe('my-cool-image-title');
+    });
+
+    it('accepts optional image usage metadata and forwards it', async () => {
+      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/images/generate',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          prompt: 'A beautiful sunset over mountains',
+          model: LlmModels.GPTImage1,
+          userId: TEST_USER_ID,
+          title: 'Research Cover',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-123' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakeGenerator.lastOptions).toStrictEqual({
+        slug: 'research-cover',
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-123' },
+      });
+    });
+
+    it('returns 400 when image correlation has invalid shape', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/images/generate',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          prompt: 'A beautiful sunset over mountains',
+          model: LlmModels.GPTImage1,
+          userId: TEST_USER_ID,
+          correlation: { researchId: 123 },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
     });
   });
 

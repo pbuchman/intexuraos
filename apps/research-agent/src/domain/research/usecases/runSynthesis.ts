@@ -305,6 +305,7 @@ export async function runSynthesis(
     logger.info({}, '[4.4.1] Starting cover image generation');
     const imageResult = await generateCoverImage(
       imageServiceClient,
+      researchId,
       processedContent,
       userId,
       imageApiKeys,
@@ -478,6 +479,7 @@ function getAvailableProviderPipelines(
 
 async function generateCoverImage(
   client: ImageServiceClient,
+  researchId: string,
   synthesizedResult: string,
   userId: string,
   imageApiKeys: ImageApiKeys | undefined,
@@ -509,7 +511,11 @@ async function generateCoverImage(
       const promptResult = await client.generatePrompt(
         synthesizedResult,
         pipeline.promptModel,
-        userId
+        userId,
+        {
+          promptType: 'image-thumbnail-prompt',
+          correlation: { researchId },
+        }
       );
 
       if (!promptResult.ok) {
@@ -536,7 +542,11 @@ async function generateCoverImage(
         promptResult.value.prompt,
         pipeline.imageModel,
         userId,
-        { title: promptResult.value.title }
+        {
+          title: promptResult.value.title,
+          promptType: 'image-generation',
+          correlation: { researchId },
+        }
       );
 
       if (!imageResult.ok) {

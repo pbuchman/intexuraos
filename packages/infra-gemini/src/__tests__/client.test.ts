@@ -818,6 +818,42 @@ describe('createGeminiClient', () => {
       expect(lastCall?.usage).not.toHaveProperty('imageSize');
     });
 
+    it('forwards image generation correlation to usage logger on success', async () => {
+      const imageB64 = Buffer.from('fake-image-data').toString('base64');
+      mockGenerateContent.mockResolvedValue({
+        candidates: [
+          {
+            content: {
+              parts: [{ inlineData: { data: imageB64 } }],
+            },
+          },
+        ],
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      await client.generateImage('A cat', {
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-123' },
+      });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'image_generation',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-123' },
+          success: true,
+          usage: expect.objectContaining({ imageCount: 1 }),
+        })
+      );
+    });
+
     it('logs failed image generation with imageCount zero when response has no image data', async () => {
       mockGenerateContent.mockResolvedValue({
         candidates: [{ content: { parts: [{ text: 'No image' }] } }],
@@ -837,6 +873,35 @@ describe('createGeminiClient', () => {
         expect.objectContaining({
           callType: 'image_generation',
           promptType: 'image-generation',
+          success: false,
+          usage: expect.objectContaining({ imageCount: 0 }),
+        })
+      );
+    });
+
+    it('forwards image generation correlation to usage logger on failure', async () => {
+      mockGenerateContent.mockResolvedValue({
+        candidates: [{ content: { parts: [{ text: 'No image' }] } }],
+      });
+
+      const client = createGeminiClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      if (client.generateImage === undefined) throw new Error('generateImage not defined');
+      await client.generateImage('A cat', {
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-123' },
+      });
+
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callType: 'image_generation',
+          promptType: 'image-generation',
+          correlation: { researchId: 'research-123' },
           success: false,
           usage: expect.objectContaining({ imageCount: 0 }),
         })

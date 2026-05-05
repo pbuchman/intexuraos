@@ -208,10 +208,13 @@ export class FakeUserServiceClient implements UserServiceClient {
 export class FakePromptGenerator implements PromptGenerator {
   private shouldFail = false;
   private failErrorCode: PromptGenerationError['code'] = 'API_ERROR';
+  lastOptions: Parameters<PromptGenerator['generateThumbnailPrompt']>[1] | undefined;
 
   async generateThumbnailPrompt(
-    _text: string
+    _text: string,
+    options?: Parameters<PromptGenerator['generateThumbnailPrompt']>[1]
   ): Promise<Result<ThumbnailPrompt, PromptGenerationError>> {
+    this.lastOptions = options;
     if (this.shouldFail) {
       this.shouldFail = false;
       return err({ code: this.failErrorCode, message: `Simulated failure: ${this.failErrorCode}` });
@@ -242,8 +245,13 @@ export class FakeImageGenerator implements ImageGenerator {
   private shouldFail = false;
   private failError: ImageGenerationError = { code: 'API_ERROR', message: 'Simulated failure' };
   private generatedId = 'test-generated-id';
+  lastOptions: Parameters<ImageGenerator['generate']>[1] | undefined;
 
-  async generate(prompt: string): Promise<Result<GeneratedImageData, ImageGenerationError>> {
+  async generate(
+    prompt: string,
+    options?: Parameters<ImageGenerator['generate']>[1]
+  ): Promise<Result<GeneratedImageData, ImageGenerationError>> {
+    this.lastOptions = options;
     if (this.shouldFail) {
       this.shouldFail = false;
       return err(this.failError);

@@ -91,6 +91,27 @@ describe('createGenerateImageUseCase', () => {
     expect(savedImage?.slug).toBe('my-cool-title');
   });
 
+  it('forwards image usage metadata to image generator', async () => {
+    fakeUserClient.setApiKeys({ openai: 'test-key' });
+    const useCase = createUseCase();
+
+    const result = await useCase({
+      prompt: 'A cat in a hat',
+      model: LlmModels.GPTImage1,
+      userId: 'user-1',
+      title: 'My Cool Title',
+      promptType: 'image-generation',
+      correlation: { researchId: 'research-123' },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(fakeGenerator.lastOptions).toStrictEqual({
+      slug: 'my-cool-title',
+      promptType: 'image-generation',
+      correlation: { researchId: 'research-123' },
+    });
+  });
+
   it('returns API_KEYS_UNAVAILABLE when user-service fails', async () => {
     fakeUserClient.setFailNext(true);
     const useCase = createUseCase();
