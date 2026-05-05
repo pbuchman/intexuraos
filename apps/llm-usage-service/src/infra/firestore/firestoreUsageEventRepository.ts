@@ -2,10 +2,12 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore, type Firestore } from '@intexuraos/infra-firestore';
 import { decodeCursor, encodeCursor } from '../../domain/models/cursor.js';
 import type { UsageEvent } from '../../domain/models/usageEvent.js';
+import type { ResearchCostSummaryRequest } from '../../domain/models/researchCostSummary.js';
 import type {
   CreateEventResult,
   ListUsageEventsParams,
   ListUsageEventsResult,
+  ResearchCostSummaryEventsResult,
   SortField,
   UsageEventFilters,
   UsageEventRepository,
@@ -166,6 +168,66 @@ export class FirestoreUsageEventRepository implements UsageEventRepository {
       });
     }
   }
+
+  async findResearchCostSummaryEvents(
+    params: ResearchCostSummaryRequest,
+  ): Promise<Result<ResearchCostSummaryEventsResult, { code: string; message: string }>> {
+    const db = getFirestore();
+
+    try {
+      let correlatedQuery: FirestoreQuery = db
+        .collection(COLLECTION)
+        .where('correlation.researchId', '==', params.researchId);
+
+      correlatedQuery = applyResearchSummaryGuards(correlatedQuery, params)
+        .orderBy('occurredAt', 'asc')
+        .orderBy('__name__', 'asc');
+
+      const correlatedSnapshot = await correlatedQuery.get();
+      const correlatedEvents = correlatedSnapshot.docs.map((doc) => doc.data() as UsageEvent);
+
+      let missingAttributionEvents: UsageEvent[] = [];
+      if (params.owner !== undefined && params.timeRange !== undefined) {
+        let missingQuery: FirestoreQuery = db
+          .collection(COLLECTION)
+          .where('correlation.researchId', '==', null);
+
+        missingQuery = applyResearchSummaryGuards(missingQuery, params)
+          .orderBy('occurredAt', 'asc')
+          .orderBy('__name__', 'asc');
+
+        const missingSnapshot = await missingQuery.get();
+        missingAttributionEvents = missingSnapshot.docs.map((doc) => doc.data() as UsageEvent);
+      }
+
+      return ok({ correlatedEvents, missingAttributionEvents });
+    } catch (error: unknown) {
+      const firestoreError = error as { code?: number; message?: string };
+      return err({
+        code: String(firestoreError.code ?? 'UNKNOWN'),
+        message: firestoreError.message ?? 'Unknown Firestore error',
+      });
+    }
+  }
+}
+
+function applyResearchSummaryGuards(
+  query: FirestoreQuery,
+  params: ResearchCostSummaryRequest,
+): FirestoreQuery {
+  let q = query;
+
+  if (params.owner !== undefined) {
+    q = q.where('owner.type', '==', params.owner.type);
+    q = q.where('owner.id', '==', params.owner.id);
+  }
+
+  if (params.timeRange !== undefined) {
+    q = q.where('occurredAt', '>=', params.timeRange.from);
+    q = q.where('occurredAt', '<=', params.timeRange.to);
+  }
+
+  return q;
 }
 
 function getFirestoreSortValue(event: UsageEvent, field: SortField): string | number {

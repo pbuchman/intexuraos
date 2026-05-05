@@ -62,6 +62,7 @@ const GROUP_KEY_EXTRACTORS: Record<string, (agg: DailyUsageAggregate) => string 
   'request.provider': (agg) => agg.provider,
   'request.model': (agg) => agg.model,
   'request.operation': (agg) => agg.operation,
+  'request.promptType': (agg) => agg.promptType,
   'request.success': (agg) => agg.success,
 };
 

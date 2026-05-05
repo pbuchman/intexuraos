@@ -1,5 +1,6 @@
 import { LlmProviders } from '@intexuraos/llm-contract';
 import type { UsageEvent, UsageEventInput } from '../domain/models/usageEvent.js';
+import { MISSING_PROMPT_TYPE_SENTINEL } from '../domain/models/dailyAggregate.js';
 
 /**
  * Creates a valid UsageEventInput (v2 canonical form) for testing.
@@ -21,6 +22,7 @@ export function createTestEventInput(overrides?: Partial<UsageEventInput>): Usag
       provider: LlmProviders.Anthropic,
       model: 'claude-sonnet-4-20250514',
       operation: 'generate',
+      promptType: MISSING_PROMPT_TYPE_SENTINEL,
       success: true,
       durationMs: 1500,
     },

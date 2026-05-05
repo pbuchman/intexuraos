@@ -7,7 +7,7 @@ import { FakeUsageEventRepository } from '../fakeUsageEventRepository.js';
 import { FakeUsageAggregateRepository } from '../fakeUsageAggregateRepository.js';
 import { FakePricingRepository } from '../fakePricingRepository.js';
 import { FakePricingCache } from '../fakePricingCache.js';
-import { createTestEventInput } from '../helpers.js';
+import { createTestEvent, createTestEventInput } from '../helpers.js';
 
 describe('internalUsageRoutes', () => {
   let app: FastifyInstance;
@@ -324,6 +324,164 @@ describe('internalUsageRoutes', () => {
       expect(response.statusCode).toBe(400);
       // Full-batch rejection: zero events persisted even though events[0] and events[2] were valid
       expect(eventRepo.getStoredEvents()).toHaveLength(0);
+    });
+  });
+
+  describe('POST /internal/usage/research-cost-summary', () => {
+    it('returns research cost summary with missing-attribution diagnostics', async () => {
+      await eventRepo.createEvent(createTestEvent({
+        eventId: 'evt_route_research',
+        owner: { type: 'user', id: 'user_123' },
+        occurredAt: '2026-05-05T07:53:00.000Z',
+        cost: {
+          billedUsd: 0.03,
+          providerReportedUsd: null,
+          calculatedUsd: 0.03,
+          pricingSource: 'calculated',
+        },
+        correlation: {
+          requestId: 'req_route_1',
+          traceId: null,
+          taskId: null,
+          researchId: 'research-route-1',
+          attempt: null,
+          sessionId: null,
+        },
+      }));
+      await eventRepo.createEvent(createTestEvent({
+        eventId: 'evt_route_missing',
+        owner: { type: 'user', id: 'user_123' },
+        occurredAt: '2026-05-05T07:54:00.000Z',
+        cost: {
+          billedUsd: 0.02,
+          providerReportedUsd: null,
+          calculatedUsd: 0.02,
+          pricingSource: 'calculated',
+        },
+        correlation: {
+          requestId: 'req_route_missing',
+          traceId: null,
+          taskId: null,
+          researchId: null,
+          attempt: null,
+          sessionId: null,
+        },
+      }));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/research-cost-summary',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: {
+          researchId: 'research-route-1',
+          owner: { type: 'user', id: 'user_123' },
+          timeRange: {
+            from: '2026-05-05T07:52:00.000Z',
+            to: '2026-05-05T07:57:00.000Z',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          totals: { calls: number; costUsd: number };
+          rows: { eventId: string }[];
+          diagnostics: { missingAttribution: { count: number; costUsd: number; eventIds: string[] } };
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.totals).toEqual(expect.objectContaining({ calls: 1, costUsd: 0.03 }));
+      expect(body.data.rows.map((row) => row.eventId)).toEqual(['evt_route_research']);
+      expect(body.data.diagnostics.missingAttribution).toEqual({
+        count: 1,
+        costUsd: 0.02,
+        eventIds: ['evt_route_missing'],
+      });
+    });
+
+    it('returns 401 for research summary without internal auth', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/research-cost-summary',
+        payload: { researchId: 'research-route-1' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 400 for research summary without researchId', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/research-cost-summary',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 400 for research summary with blank researchId', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/research-cost-summary',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: { researchId: '   ' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toBe('researchId is required');
+    });
+
+    it('returns 400 for research summary with inverted timeRange', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/research-cost-summary',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: {
+          researchId: 'research-route-1',
+          timeRange: {
+            from: '2026-05-05T07:57:00.000Z',
+            to: '2026-05-05T07:52:00.000Z',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toBe('timeRange.from must be less than or equal to timeRange.to');
+    });
+
+    it('returns 500 when research summary repository returns an error', async () => {
+      eventRepo.setFailure({ code: 'DB_ERROR', message: 'summary failed' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/research-cost-summary',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: { researchId: 'research-route-1' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('summary failed');
     });
   });
 

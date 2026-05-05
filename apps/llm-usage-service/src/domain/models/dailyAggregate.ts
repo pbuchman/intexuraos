@@ -1,3 +1,5 @@
+export const MISSING_PROMPT_TYPE_SENTINEL = '__missing__';
+
 export interface DailyUsageAggregate {
   aggregateId: string;
   date: string;
@@ -13,6 +15,7 @@ export interface DailyUsageAggregate {
   provider: string;
   model: string;
   operation: string;
+  promptType: string;
   success: boolean;
 
   calls: number;
