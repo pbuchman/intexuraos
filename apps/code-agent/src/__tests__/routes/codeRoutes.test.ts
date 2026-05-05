@@ -48,6 +48,7 @@ import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
+import type { WorkerConfig } from '../../domain/models/workerSettings.js';
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
 import { Timestamp } from '@google-cloud/firestore';
@@ -1834,6 +1835,7 @@ describe('codeRoutes', () => {
       expect(body.success).toBe(true);
       expect(body.data.workers).toHaveLength(1);
       expect(body.data.workers[0].name).toBe('test-worker');
+      expect(body.data.workers[0].enabled).toBe(true);
       expect(body.data.workers[0].healthy).toBe(true);
       expect(body.data.workers[0].status).toBe('healthy');
       expect(body.data.workers[0].details).toEqual({
@@ -1842,6 +1844,137 @@ describe('codeRoutes', () => {
         available: 3,
         responseTimeMs: 150,
       });
+
+      mockGetSettings.mockRestore();
+      mockGetHealthStatuses.mockRestore();
+    });
+
+    it('returns disabled worker status without probing disabled workers', async () => {
+      const services = getServices();
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [
+            {
+              name: 'disabled-worker',
+              url: 'http://disabled-worker:3000',
+              enabled: false,
+              cfAccessClientId: 'client-id',
+              cfAccessClientSecret: 'client-secret',
+              dispatchSigningSecret: 'secret',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
+        ok({})
+      );
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({});
+
+      setServices({
+        ...services,
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.stale).toBe(false);
+      expect(body.data.workers).toEqual([
+        {
+          name: 'disabled-worker',
+          url: 'http://disabled-worker:3000',
+          priority: 1,
+          enabled: false,
+          healthy: false,
+          status: 'disabled',
+          details: { reason: 'disabled' },
+          checkedAt: null,
+          stale: false,
+        },
+      ]);
+      expect(mockProbeAllWorkers).not.toHaveBeenCalled();
+
+      mockGetSettings.mockRestore();
+      mockGetHealthStatuses.mockRestore();
+    });
+
+    it('treats legacy workers with missing enabled as enabled in status responses', async () => {
+      const services = getServices();
+      const legacyWorker = {
+        name: 'legacy-worker',
+        url: 'http://legacy-worker:3000',
+        cfAccessClientId: 'client-id',
+        cfAccessClientSecret: 'client-secret',
+        dispatchSigningSecret: 'secret',
+      } satisfies Omit<WorkerConfig, 'enabled'>;
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok({
+          userId: 'test-user-id',
+          workers: [legacyWorker as WorkerConfig],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+
+      const mockGetHealthStatuses = vi.spyOn(services.workerSettingsRepo, 'getHealthStatuses').mockResolvedValue(
+        ok({
+          'legacy-worker': {
+            state: {
+              _tag: 'healthy',
+              healthy: true,
+              capacity: 1,
+              running: 0,
+              available: 1,
+              responseTimeMs: 50,
+            },
+            checkedAt: new Date().toISOString(),
+            stale: false,
+          },
+        })
+      );
+
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({});
+
+      setServices({
+        ...services,
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.workers[0]).toMatchObject({
+        name: 'legacy-worker',
+        enabled: true,
+        healthy: true,
+        status: 'healthy',
+      });
+      expect(mockProbeAllWorkers).not.toHaveBeenCalled();
 
       mockGetSettings.mockRestore();
       mockGetHealthStatuses.mockRestore();
@@ -2835,6 +2968,7 @@ describe('codeRoutes', () => {
         name: 'home-mac',
         url: 'https://cc-mac.intexuraos.cloud',
         priority: 1,
+        enabled: true,
         healthy: true,
         status: 'healthy',
         details: {
@@ -2851,6 +2985,58 @@ describe('codeRoutes', () => {
           name: 'home-mac',
         }),
       ]);
+    });
+
+    it('should return disabled worker status without probing disabled workers', async () => {
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({});
+
+      setServices({
+        ...getServices(),
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      const services = getServices();
+      await services.workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      });
+      await services.workerSettingsRepo.updateWorker('test-user-id', 'home-mac', { enabled: false });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/workers/refresh-status',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual({
+        workers: [
+          {
+            name: 'home-mac',
+            url: 'https://cc-mac.intexuraos.cloud',
+            priority: 1,
+            enabled: false,
+            healthy: false,
+            status: 'disabled',
+            details: { reason: 'disabled' },
+            checkedAt: null,
+            stale: false,
+          },
+        ],
+        stale: false,
+      });
+      expect(mockProbeAllWorkers).not.toHaveBeenCalled();
     });
 
     it('should return orchestrator-unreachable when probe times out', async () => {
