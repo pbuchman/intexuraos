@@ -36,6 +36,18 @@ function assistantTone(confidence?: FishingChatMessage['confidence']): string {
   }
 }
 
+function isSafeCitationUrl(url: string): boolean {
+  if (url.startsWith('/') && !url.startsWith('//')) {
+    return true;
+  }
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
 export function FishingChatPanel({
   chats,
   selectedChatId,
@@ -192,7 +204,11 @@ export function FishingChatPanel({
                     <div className="mt-3 flex flex-wrap gap-2 text-xs">
                       {message.citations.map((citation, index) => {
                         const label = `[${String(index + 1)}]`;
-                        if (citation.url === undefined || citation.url === '') {
+                        if (
+                          citation.url === undefined ||
+                          citation.url === '' ||
+                          !isSafeCitationUrl(citation.url)
+                        ) {
                           return (
                             <span
                               key={`${message.id}-${citation.sourceId}-${String(index)}`}

@@ -110,14 +110,17 @@ describe('retrieveEvidence', () => {
       }
     );
 
-    expect(mobileNotificationsClient.queryDigests).toHaveBeenCalledWith({
-      userId: 'user-1',
-      groupKey: 'feeder',
-      dateFrom: '2026-05-01',
-      dateTo: '2026-05-03',
-      terms: ['compare', 'notes', 'spring', 'feeder', 'bait'],
-      limit: 8,
-    });
+    expect(mobileNotificationsClient.queryDigests).toHaveBeenCalledWith(
+      {
+        userId: 'user-1',
+        groupKey: 'feeder',
+        dateFrom: '2026-05-01',
+        dateTo: '2026-05-03',
+        terms: ['compare', 'notes', 'spring', 'feeder', 'bait'],
+        limit: 8,
+      },
+      { timeoutMs: 5000 }
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.some((item) => item.sourceType === 'knowledge_page')).toBe(true);
@@ -183,13 +186,16 @@ describe('retrieveEvidence', () => {
       }
     );
 
-    expect(mobileNotificationsClient.queryGroupMessages).toHaveBeenCalledWith({
-      userId: 'user-1',
-      groupKey: 'feeder',
-      date: '2026-05-02',
-      terms: ['what', 'they', 'say', 'about', 'pinka'],
-      limit: 12,
-    });
+    expect(mobileNotificationsClient.queryGroupMessages).toHaveBeenCalledWith(
+      {
+        userId: 'user-1',
+        groupKey: 'feeder',
+        date: '2026-05-02',
+        terms: ['what', 'they', 'say', 'about', 'pinka'],
+        limit: 12,
+      },
+      { timeoutMs: 5000 }
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.map((item) => item.sourceType)).toContain('raw_message');
@@ -239,21 +245,27 @@ describe('retrieveEvidence', () => {
       }
     );
 
-    expect(mobileNotificationsClient.queryDigests).toHaveBeenCalledWith({
-      userId: 'user-1',
-      groupKey: 'feeder',
-      dateFrom: '2026-05-02',
-      dateTo: '2026-05-02',
-      terms: ['what', 'happened'],
-      limit: 8,
-    });
-    expect(mobileNotificationsClient.queryGroupMessages).toHaveBeenCalledWith({
-      userId: 'user-1',
-      groupKey: 'feeder',
-      date: '2026-05-02',
-      terms: ['what', 'happened'],
-      limit: 12,
-    });
+    expect(mobileNotificationsClient.queryDigests).toHaveBeenCalledWith(
+      {
+        userId: 'user-1',
+        groupKey: 'feeder',
+        dateFrom: '2026-05-02',
+        dateTo: '2026-05-02',
+        terms: ['what', 'happened'],
+        limit: 8,
+      },
+      { timeoutMs: 5000 }
+    );
+    expect(mobileNotificationsClient.queryGroupMessages).toHaveBeenCalledWith(
+      {
+        userId: 'user-1',
+        groupKey: 'feeder',
+        date: '2026-05-02',
+        terms: ['what', 'happened'],
+        limit: 12,
+      },
+      { timeoutMs: 5000 }
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.some((item) => item.sourceType === 'digest')).toBe(true);
@@ -289,14 +301,70 @@ describe('retrieveEvidence', () => {
       }
     );
 
-    expect(mobileNotificationsClient.queryDigests).toHaveBeenCalledWith({
-      userId: 'user-1',
-      groupKey: 'feeder',
-      dateFrom: '2026-02-04',
-      dateTo: '2026-05-05',
-      terms: ['where', 'should', 'fish', 'now'],
-      limit: 8,
-    });
+    expect(mobileNotificationsClient.queryDigests).toHaveBeenCalledWith(
+      {
+        userId: 'user-1',
+        groupKey: 'feeder',
+        dateFrom: '2026-02-04',
+        dateTo: '2026-05-05',
+        terms: ['where', 'should', 'fish', 'now'],
+        limit: 8,
+      },
+      { timeoutMs: 5000 }
+    );
+    expect(mobileNotificationsClient.listDigestSubscriptions).toHaveBeenCalledWith(
+      { userId: 'user-1' },
+      { timeoutMs: 5000 }
+    );
+  });
+
+  it('caps digest group fan-out while preserving bounded downstream timeouts', async () => {
+    const embeddingClient = {
+      embedTexts: vi.fn().mockResolvedValue({ ok: false, error: { code: 'DOWNSTREAM_ERROR', message: 'embed failed' } }),
+    };
+    const chunkRepository = makeChunkRepository({ ok: true, value: [] });
+    const groups = Array.from({ length: 10 }, (_, index) => ({
+      groupKey: `group-${String(index + 1)}`,
+      displayName: `Group ${String(index + 1)}`,
+    }));
+    const mobileNotificationsClient = {
+      listDigestSubscriptions: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { items: groups },
+      }),
+      queryDigests: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { items: [], truncated: false },
+      }),
+      queryGroupMessages: vi.fn(),
+    };
+
+    const result = await retrieveEvidence(
+      {
+        embeddingClient,
+        chunkRepository,
+        mobileNotificationsClient,
+        now: new Date('2026-05-05T12:00:00Z'),
+      },
+      {
+        userId: 'user-1',
+        question: 'recent feeder reports',
+      }
+    );
+
+    expect(mobileNotificationsClient.queryDigests).toHaveBeenCalledTimes(8);
+    expect(mobileNotificationsClient.queryDigests).toHaveBeenLastCalledWith(
+      {
+        userId: 'user-1',
+        groupKey: 'group-8',
+        dateFrom: '2026-02-04',
+        dateTo: '2026-05-05',
+        terms: ['recent', 'feeder', 'reports'],
+        limit: 8,
+      },
+      { timeoutMs: 5000 }
+    );
+    expect(result.ok).toBe(false);
   });
 
   it('falls back to an empty embedding vector and digest-only evidence when chunk search fails', async () => {

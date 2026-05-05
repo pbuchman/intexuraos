@@ -10,7 +10,11 @@ interface ChatMessageBody {
 }
 
 function parseChatMessageBody(body: unknown): ChatMessageBody {
-  return body !== null && typeof body === 'object' ? (body as ChatMessageBody) : {};
+  if (body === null || typeof body !== 'object') {
+    return {};
+  }
+  const candidate = body as { message?: unknown };
+  return typeof candidate.message === 'string' ? { message: candidate.message } : {};
 }
 
 export function registerChatsRoutes(app: FastifyInstance): void {

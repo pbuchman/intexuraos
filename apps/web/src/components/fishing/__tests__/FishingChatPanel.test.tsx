@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { FishingChatPanel } from '../FishingChatPanel.js';
 import type { FishingChat, FishingChatMessage } from '@/types/fishingAssistant';
@@ -156,5 +156,41 @@ describe('FishingChatPanel', () => {
       'href',
       '/settings/api-keys'
     );
+  });
+
+  it('renders unsafe citation URLs as text labels instead of links', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <FishingChatPanel
+          chats={chats}
+          selectedChatId="chat-1"
+          messages={[
+            {
+              ...messages[1],
+              citations: [
+                {
+                  sourceId: 'unsafe-citation',
+                  sourceType: 'knowledge_page',
+                  title: 'Unsafe',
+                  quote: 'Unsafe URL',
+                  usedFor: 'URL validation',
+                  url: 'javascript:alert(1)',
+                },
+              ],
+            },
+          ]}
+          loading={false}
+          sending={false}
+          error={null}
+          errorCode={null}
+          onSelectChat={vi.fn()}
+          onCreateChat={vi.fn()}
+          onSendMessage={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    expect(within(container).queryByRole('link', { name: '[1]' })).not.toBeInTheDocument();
+    expect(within(container).getByText('[1]')).toBeInTheDocument();
   });
 });

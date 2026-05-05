@@ -249,10 +249,16 @@ describe('Fishing Assistant chat routes', () => {
       url: '/fishing/chats/missing/messages',
       payload: { message: '   ' },
     });
+    const invalidMessageType = await ctx.app.inject({
+      method: 'POST',
+      url: '/fishing/chats/missing/messages',
+      payload: { message: 42 },
+    });
 
     expect(missingChat.statusCode).toBe(404);
     expect(missingMessages.statusCode).toBe(404);
     expect(invalidBody.statusCode).toBe(400);
+    expect(invalidMessageType.statusCode).toBe(400);
   });
 
   it('maps repository errors for list/create/get routes and rejects non-object message bodies', async () => {
