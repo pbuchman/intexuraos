@@ -116,7 +116,6 @@ export const usageEventInputSchema = {
         webSearchCalls: { type: 'number', minimum: 0 },
         groundingEnabled: { type: 'boolean' },
         imageCount: { type: 'number', minimum: 0 },
-        imageSize: { type: 'string', enum: ['1024x1024', '1536x1024', '1024x1536'] },
       },
     },
     cost: {
