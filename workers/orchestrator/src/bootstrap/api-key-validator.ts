@@ -218,12 +218,13 @@ export interface WorkerApiKeysForValidation {
   minimaxKey: string;
   mimoKey: string;
   dashscopeKey: string;
+  kimiKey: string;
   openRouterKey: string;
 }
 
 /**
  * Runs all startup validation in parallel: logs claude/codex worker auth
- * state, then issues live validation requests for the four third-party
+ * state, then issues live validation requests for the third-party
  * providers that have direct API keys. Empty keys are skipped.
  *
  * Never throws — a failed upstream request warns and returns.
@@ -261,7 +262,7 @@ export async function validateWorkerApiKeys(
   }
 
   // Validate all third-party API keys in parallel.
-  // GLM, Qwen, and Kimi all use the same DashScope API key — validate once via qwen.
+  // GLM and Qwen use the DashScope API key; Kimi uses its own native Kimi Code key.
   /* v8 ignore start -- module-init: validateThirdPartyApiKey fan-out issues live HTTPS probes that cannot be exercised without real sockets; the inner function carries its own ignore and the per-key empty-guard branches short-circuit during unit tests before any network call @preserve */
   await Promise.all([
     keys.minimaxKey !== ''
@@ -272,6 +273,9 @@ export async function validateWorkerApiKeys(
       : Promise.resolve(),
     keys.dashscopeKey !== ''
       ? validateThirdPartyApiKey('qwen', keys.dashscopeKey, logger)
+      : Promise.resolve(),
+    keys.kimiKey !== ''
+      ? validateThirdPartyApiKey('kimi', keys.kimiKey, logger)
       : Promise.resolve(),
     keys.openRouterKey !== ''
       ? validateThirdPartyApiKey('openrouter-free', keys.openRouterKey, logger)

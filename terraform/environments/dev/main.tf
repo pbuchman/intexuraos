@@ -537,6 +537,7 @@ module "secret_manager" {
     "INTEXURAOS_MIMO_APP_API_KEY"       = "MiMo Pro API key for orchestrator worker containers"
     "INTEXURAOS_GEMINI_APP_API_KEY"     = "Gemini API key for orchestrator completion verifier"
     "INTEXURAOS_DASHSCOPE_APP_API_KEY"  = "Dashscope API key for orchestrator glm and qwen worker containers"
+    "INTEXURAOS_KIMI_APP_API_KEY"       = "Kimi Code API key for orchestrator kimi worker containers"
     "INTEXURAOS_OPENROUTER_APP_API_KEY" = "OpenRouter API key for agent compliance validator"
     # External service API keys for worker containers
     "INTEXURAOS_LINEAR_API_KEY"    = "Linear API key passed to code worker containers"
@@ -570,7 +571,10 @@ module "iam" {
   environment = var.environment
   services    = local.services
 
-  secret_ids = module.secret_manager.secret_ids
+  secret_ids = {
+    for name, secret_id in module.secret_manager.secret_ids : name => secret_id
+    if name != "INTEXURAOS_KIMI_APP_API_KEY"
+  }
 
   depends_on = [
     google_project_service.apis,

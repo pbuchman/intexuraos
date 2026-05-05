@@ -169,7 +169,7 @@ echo "X-Dispatch-Signature: ${SIGNATURE}"
 
 ### Step 2: Submit a task
 
-The `workerType` field controls which runtime/model preset handles the task. Valid types are `opus`, `auto`, `sonnet` (Anthropic), `minimax` (MiniMax), `mimo-pro` (Xiaomi MiMo), `glm`, `qwen`, `kimi` (Alibaba Cloud DashScope), `codex`, `codex-xhigh` (OpenAI Codex), and `openrouter-free` (zero-cost via OpenRouter).
+The `workerType` field controls which runtime/model preset handles the task. Valid types are `opus`, `auto`, `sonnet` (Anthropic), `minimax` (MiniMax), `mimo-pro` (Xiaomi MiMo), `glm`, `qwen` (Alibaba Cloud DashScope), `kimi` (Kimi Code), `codex`, `codex-xhigh` (OpenAI Codex), and `openrouter-free` (zero-cost via OpenRouter).
 
 ```bash
 BODY='{
@@ -484,6 +484,7 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 | `Cannot find module '@intexuraos'`                | Packages not built                    | Run `pnpm build` at repository root                                                                                                               |
 | Turn metrics always zero                          | macOS host (no cgroup v2 exposure)    | Expected on macOS; metrics are non-fatal and show zeros                                                                                           |
 | `INTEXURAOS_GEMINI_APP_API_KEY not set`           | Missing required env var              | Add to `.envrc.local` and run `direnv allow`                                                                                                      |
+| `INTEXURAOS_KIMI_APP_API_KEY not set`             | Missing required Kimi Code key        | Populate the Secret Manager version, run `./scripts/sync-secrets.sh --add-new`, then `direnv allow`                                               |
 | `TASK_COMPLETION_VERIFIER_FAILED`                 | All validation models unreachable     | Check network connectivity and API keys for configured validation models                                                                          |
 | `503 docker_unavailable`                          | Docker daemon not responding          | Check Docker Desktop is running                                                                                                                   |
 | `503 auth_unavailable`                            | Worker auth not ready                 | Check `workerAuths` in health endpoint; run `claude login` or `codex-login.sh`                                                                    |

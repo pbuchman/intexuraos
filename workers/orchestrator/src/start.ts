@@ -157,6 +157,7 @@ export async function start(): Promise<void> {
       minimaxKey: env.minimaxApiKey,
       mimoKey: env.mimoApiKey,
       dashscopeKey: env.dashscopeApiKey,
+      kimiKey: env.kimiApiKey,
       openRouterKey: env.openRouterApiKey,
     },
     logger

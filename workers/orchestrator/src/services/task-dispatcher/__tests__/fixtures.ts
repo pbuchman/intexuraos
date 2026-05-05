@@ -122,6 +122,7 @@ export function makeContextHarness(initialTasks: Task[] = []): ContextHarness {
         MINIMAX_API_KEY: 'm',
         MIMO_API_KEY: 'mi',
         DASHSCOPE_API_KEY: 'd',
+        KIMI_API_KEY: 'k',
         OPENROUTER_API_KEY: 'o',
       }),
       gcpSaKeyPath: '/tmp/gcp.key',

@@ -634,6 +634,7 @@ Collects per-task resource and token metrics after completion:
 | `INTEXURAOS_MINIMAX_APP_API_KEY`            | Yes      | -                                  |
 | `INTEXURAOS_MIMO_APP_API_KEY`               | Yes      | -                                  |
 | `INTEXURAOS_DASHSCOPE_APP_API_KEY`          | Yes      | -                                  |
+| `INTEXURAOS_KIMI_APP_API_KEY`               | Yes      | -                                  |
 | `INTEXURAOS_ZAI_APP_API_KEY`                | Yes      | -                                  |
 | `INTEXURAOS_USAGE_WEBHOOK_URL`              | Yes      | -                                  |
 | `GOOGLE_APPLICATION_CREDENTIALS`            | Yes      | -                                  |

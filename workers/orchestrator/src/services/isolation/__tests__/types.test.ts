@@ -23,8 +23,12 @@ describe('WORKER_TYPES configuration', () => {
     expect(WORKER_TYPES.qwen.model).toBe('qwen3.5-plus');
   });
 
-  it('uses kimi as the worker key and preserves kimi-k2.5 as the provider model id', () => {
-    expect(WORKER_TYPES.kimi.model).toBe('kimi-k2.5');
+  it('routes kimi to native Kimi Code API using stable coding model with thinking enabled', () => {
+    expect(WORKER_TYPES.kimi.runtime).toBe('claude');
+    expect(WORKER_TYPES.kimi.apiBaseUrl).toBe('https://api.kimi.com/coding');
+    expect(WORKER_TYPES.kimi.apiKeyEnvVar).toBe('KIMI_API_KEY');
+    expect(WORKER_TYPES.kimi.model).toBe('kimi-for-coding');
+    expect(WORKER_TYPES.kimi.effort).toBe('high');
   });
 
   it('does not set a model for auto worker type', () => {
@@ -87,6 +91,7 @@ describe('WORKER_TYPES configuration', () => {
       'MINIMAX_API_KEY',
       'MIMO_API_KEY',
       'DASHSCOPE_API_KEY',
+      'KIMI_API_KEY',
       'OPENROUTER_API_KEY',
     ]);
 

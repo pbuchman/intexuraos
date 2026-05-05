@@ -51,6 +51,7 @@ export interface BootstrapEnvConfig {
   minimaxApiKey: string;
   mimoApiKey: string;
   dashscopeApiKey: string;
+  kimiApiKey: string;
   openRouterApiKey: string;
   geminiApiKey: string;
   gitUserNameOverride?: string;
@@ -172,6 +173,7 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
   const minimaxApiKey = getRequiredEnv('INTEXURAOS_MINIMAX_APP_API_KEY', env);
   const mimoApiKey = getRequiredEnv('INTEXURAOS_MIMO_APP_API_KEY', env);
   const dashscopeApiKey = getRequiredEnv('INTEXURAOS_DASHSCOPE_APP_API_KEY', env);
+  const kimiApiKey = getRequiredEnv('INTEXURAOS_KIMI_APP_API_KEY', env);
   const geminiApiKey = getRequiredEnv('INTEXURAOS_GEMINI_APP_API_KEY', env);
   const openRouterApiKey = env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
 
@@ -223,6 +225,7 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
     minimaxApiKey,
     mimoApiKey,
     dashscopeApiKey,
+    kimiApiKey,
     openRouterApiKey,
     geminiApiKey,
     ...(gitUserNameOverride !== undefined ? { gitUserNameOverride } : {}),
