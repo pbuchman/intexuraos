@@ -18,14 +18,11 @@
     "@intexuraos/llm-prompts": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
-    "@intexuraos/llm-utils": "workspace:*"
-  },
-  "peerDependencies": {
-    "openai": "^6.15.0"
+    "@intexuraos/llm-utils": "workspace:*",
+    "openai": "catalog:"
   },
   "devDependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/sdk-trace-base": "^1.30.0",
-    "openai": "catalog:"
+    "@opentelemetry/sdk-trace-base": "^1.30.0"
   }
 }
