@@ -195,9 +195,6 @@ importers:
       pino:
         specifier: 'catalog:'
         version: 10.1.1
-      zod:
-        specifier: 'catalog:'
-        version: 3.25.76
 
   apps/api-docs-hub:
     dependencies:
@@ -270,9 +267,6 @@ importers:
       pino:
         specifier: 'catalog:'
         version: 10.1.1
-      zod:
-        specifier: 'catalog:'
-        version: 3.25.76
     devDependencies:
       nock:
         specifier: ^14.0.0
@@ -331,9 +325,6 @@ importers:
       pino:
         specifier: 'catalog:'
         version: 10.1.1
-      zod:
-        specifier: 'catalog:'
-        version: 3.25.76
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^4.0.16
@@ -401,9 +392,6 @@ importers:
       pino:
         specifier: 'catalog:'
         version: 10.1.1
-      zod:
-        specifier: 'catalog:'
-        version: 3.25.76
 
   apps/chat-agent:
     dependencies:
@@ -646,9 +634,6 @@ importers:
       pino:
         specifier: 'catalog:'
         version: 10.1.1
-      zod:
-        specifier: 'catalog:'
-        version: 3.25.76
 
   apps/cron-agent:
     dependencies:
@@ -703,9 +688,6 @@ importers:
       pino:
         specifier: 'catalog:'
         version: 10.1.1
-      zod:
-        specifier: 'catalog:'
-        version: 3.25.76
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^4.0.16
@@ -837,9 +819,6 @@ importers:
       pino:
         specifier: 'catalog:'
         version: 10.1.1
-      zod:
-        specifier: 'catalog:'
-        version: 3.25.76
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^4.0.16
@@ -913,9 +892,6 @@ importers:
       sharp:
         specifier: ^0.33.5
         version: 0.33.5
-      zod:
-        specifier: 'catalog:'
-        version: 3.25.76
     devDependencies:
       '@intexuraos/llm-factory':
         specifier: workspace:*
@@ -1043,9 +1019,6 @@ importers:
       pino:
         specifier: 'catalog:'
         version: 10.1.1
-      zod:
-        specifier: 'catalog:'
-        version: 3.25.76
     devDependencies:
       nock:
         specifier: ^14.0.0
@@ -1150,9 +1123,6 @@ importers:
       pino:
         specifier: 'catalog:'
         version: 10.1.1
-      zod:
-        specifier: 'catalog:'
-        version: 3.25.76
     devDependencies:
       '@vitest/coverage-v8':
         specifier: ^4.0.16
@@ -1368,9 +1338,6 @@ importers:
       pino:
         specifier: 'catalog:'
         version: 10.1.1
-      zod:
-        specifier: 'catalog:'
-        version: 3.25.76
     devDependencies:
       '@types/node':
         specifier: ^22.10.2
@@ -1781,13 +1748,13 @@ importers:
       jose:
         specifier: ^5.9.6
         version: 5.10.0
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.76
     devDependencies:
       fastify:
         specifier: 'catalog:'
         version: 5.6.2
-      zod:
-        specifier: 'catalog:'
-        version: 3.25.76
 
   packages/common-metrics:
     dependencies:

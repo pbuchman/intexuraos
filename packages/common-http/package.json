@@ -16,14 +16,13 @@
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
     "fastify-plugin": "^5.0.1",
-    "jose": "^5.9.6"
+    "jose": "^5.9.6",
+    "zod": "catalog:"
   },
   "peerDependencies": {
-    "fastify": "^5.1.0",
-    "zod": "^3.24.1"
+    "fastify": "^5.1.0"
   },
   "devDependencies": {
-    "fastify": "catalog:",
-    "zod": "catalog:"
+    "fastify": "catalog:"
   }
 }

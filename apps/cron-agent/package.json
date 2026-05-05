@@ -34,8 +34,7 @@
     "@intexuraos/llm-prompts": "workspace:*",
     "cron-parser": "^4.9.0",
     "fastify": "catalog:",
-    "pino": "catalog:",
-    "zod": "catalog:"
+    "pino": "catalog:"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.0.16",
