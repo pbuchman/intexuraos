@@ -4,6 +4,7 @@ import {
   PROVIDER_ACTIVE_CLASSES,
   PROVIDER_DOT_CLASSES,
   INACTIVE_SEGMENT_CLASS,
+  GROUP_BY_MAP,
   GROUP_BY_OPTIONS,
   SORT_OPTIONS,
   PRESET_OPTIONS,
@@ -24,6 +25,11 @@ describe('filterConstants', () => {
   it('group-by options are unique by key', () => {
     const keys = GROUP_BY_OPTIONS.map((o) => o.key);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('maps prompt type grouping to the backend request key', () => {
+    expect(GROUP_BY_OPTIONS).toContainEqual({ key: 'promptType', label: 'Prompt Type' });
+    expect(GROUP_BY_MAP.promptType).toEqual(['request.promptType']);
   });
 
   it('sort options and preset options expose labels', () => {
