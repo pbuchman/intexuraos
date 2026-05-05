@@ -2,8 +2,107 @@
  * Tests for internal routes (service-to-service communication).
  */
 import { describe, expect, it, setupTestContext } from './testUtils.js';
+import { ok } from '@intexuraos/common-core';
+import { setMockServices } from './helpers/mockServices.js';
+import { cetDayBounds } from '../domain/usecases/cetDayBounds.js';
+import type {
+  DigestRepository,
+  GroupStateRepository,
+} from '../domain/repositories/digestRepositories.js';
+import type {
+  DailySummary,
+  GroupState,
+} from '../domain/schemas/digestSchemas.js';
+import type { NotificationRepository } from '../domain/notifications/index.js';
 
 const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token';
+
+interface SuccessResponse<T> {
+  success: true;
+  data: T;
+}
+
+interface ErrorResponse {
+  success: false;
+  error: {
+    code: string;
+    message: string;
+  };
+}
+
+function setInternalAuth(): void {
+  process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
+}
+
+function makeSummary(overrides: Partial<DailySummary> = {}): DailySummary {
+  return {
+    date: '2026-04-15',
+    groupKey: 'g',
+    messageCount: 3,
+    headline: 'Spring ground bait discussion',
+    bullets: ['Ground bait worked in spring', 'Fish responded near reeds', 'Bread added cloud'],
+    threads: [
+      {
+        topic: 'Ground bait',
+        participants: ['Jan'],
+        resolved: true,
+        keyFacts: ['Use light ground bait in spring'],
+      },
+    ],
+    moderatorPosts: [],
+    openQuestions: [],
+    activityOutliers: [],
+    ...overrides,
+  };
+}
+
+function makeDigestRepository(overrides: Partial<DigestRepository>): DigestRepository {
+  return {
+    save: (): ReturnType<DigestRepository['save']> => {
+      throw new Error('digestRepository.save not configured');
+    },
+    findByDate: (): ReturnType<DigestRepository['findByDate']> => {
+      throw new Error('digestRepository.findByDate not configured');
+    },
+    findRecentByGroup: (): ReturnType<DigestRepository['findRecentByGroup']> => {
+      throw new Error('digestRepository.findRecentByGroup not configured');
+    },
+    findInRange: (): ReturnType<DigestRepository['findInRange']> => {
+      throw new Error('digestRepository.findInRange not configured');
+    },
+    ...overrides,
+  };
+}
+
+function makeGroupState(overrides: Partial<GroupState> = {}): GroupState {
+  return {
+    userId: 'u',
+    groupKey: 'g',
+    updatedAt: '2026-04-15T20:00:00.000Z',
+    identityLedger: [],
+    moderatorEvents: [],
+    openThreads: [],
+    recentSummaryDates: ['2026-04-15'],
+    ...overrides,
+  };
+}
+
+function makeGroupStateRepository(
+  overrides: Partial<GroupStateRepository>
+): GroupStateRepository {
+  return {
+    getByDate: (): ReturnType<GroupStateRepository['getByDate']> => {
+      throw new Error('groupStateRepository.getByDate not configured');
+    },
+    getLatest: (): ReturnType<GroupStateRepository['getLatest']> => {
+      throw new Error('groupStateRepository.getLatest not configured');
+    },
+    save: (): ReturnType<GroupStateRepository['save']> => {
+      throw new Error('groupStateRepository.save not configured');
+    },
+    ...overrides,
+  };
+}
 
 describe('Internal Routes', () => {
   const ctx = setupTestContext();
@@ -391,6 +490,317 @@ describe('Internal Routes', () => {
         data: { notifications: unknown[] };
       };
       expect(body.data.notifications).toHaveLength(1);
+    });
+  });
+
+  describe('Fishing Assistant evidence routes', () => {
+    it('returns 401 when x-internal-auth header is missing', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/digest-subscriptions/list',
+        payload: { userId: 'u' },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as ErrorResponse;
+      expect(body.error.message).toContain('auth');
+    });
+
+    it('returns 401 when x-internal-auth token is invalid', async () => {
+      setInternalAuth();
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/digest-subscriptions/list',
+        headers: { 'x-internal-auth': 'wrong-token' },
+        payload: { userId: 'u' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('lists only digest subscriptions owned by the requested user', async () => {
+      setInternalAuth();
+      setMockServices({
+        notificationRepository: ctx.notificationRepo,
+        digestSubscriptions: [
+          { userId: 'u', groupKey: 'g', groupTitlePrefix: 'Group One' },
+          { userId: 'other', groupKey: 'hidden', groupTitlePrefix: 'Hidden Group' },
+        ],
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/digest-subscriptions/list',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { userId: 'u' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as SuccessResponse<{
+        items: { groupKey: string; displayName: string }[];
+      }>;
+      expect(body.data.items).toEqual([{ groupKey: 'g', displayName: 'g' }]);
+    });
+
+    it('validates digest query date order', async () => {
+      setInternalAuth();
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/digests/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { userId: 'u', groupKey: 'g', dateFrom: '2026-04-16', dateTo: '2026-04-15' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as ErrorResponse;
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('queries digests in range and formats markdown evidence', async () => {
+      setInternalAuth();
+      let capturedInput: Parameters<DigestRepository['findInRange']>[0] | null = null;
+      const summary = makeSummary();
+      const digestRepository = makeDigestRepository({
+        findInRange: async (input) => {
+          capturedInput = input;
+          return ok({
+            items: [{ summary, generation: 1, generatedAt: '2026-04-15T20:00:00.000Z', modelId: 'm' }],
+          });
+        },
+      });
+      setMockServices({ notificationRepository: ctx.notificationRepo, digestRepository });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/digests/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          userId: 'u',
+          groupKey: 'g',
+          dateFrom: '2026-04-15',
+          dateTo: '2026-04-15',
+          terms: ['spring'],
+          limit: 10,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedInput).toEqual({
+        userId: 'u',
+        groupKey: 'g',
+        fromDate: '2026-04-15',
+        toDate: '2026-04-15',
+        limit: 10,
+      });
+      const body = JSON.parse(response.body) as SuccessResponse<{
+        items: { title: string; summaryMarkdown: string; messageCount: number }[];
+        truncated: boolean;
+      }>;
+      expect(body.data.items).toHaveLength(1);
+      expect(body.data.items[0]?.title).toBe('Spring ground bait discussion');
+      expect(body.data.items[0]?.summaryMarkdown).toContain('Ground bait worked in spring');
+      expect(body.data.items[0]?.messageCount).toBe(3);
+      expect(body.data.truncated).toBe(false);
+    });
+
+    it('returns 404 when a digest is missing', async () => {
+      setInternalAuth();
+      const digestRepository = makeDigestRepository({
+        findByDate: async () => ok(null),
+      });
+      setMockServices({ notificationRepository: ctx.notificationRepo, digestRepository });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/digests/get',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { userId: 'u', groupKey: 'g', date: '2026-04-15' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as ErrorResponse;
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 404 when latest group state is missing', async () => {
+      setInternalAuth();
+      const groupStateRepository = makeGroupStateRepository({
+        getLatest: async () => ok(null),
+      });
+      setMockServices({ notificationRepository: ctx.notificationRepo, groupStateRepository });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/digest-state/get',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { userId: 'u', groupKey: 'g' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as ErrorResponse;
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns latest group state', async () => {
+      setInternalAuth();
+      const state = makeGroupState();
+      const groupStateRepository = makeGroupStateRepository({
+        getLatest: async (input) => {
+          expect(input).toEqual({ userId: 'u', groupKey: 'g' });
+          return ok(state);
+        },
+      });
+      setMockServices({ notificationRepository: ctx.notificationRepo, groupStateRepository });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/digest-state/get',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { userId: 'u', groupKey: 'g' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as SuccessResponse<GroupState>;
+      expect(body.data.recentSummaryDates).toEqual(['2026-04-15']);
+    });
+
+    it('requires a date or date range for group-message queries', async () => {
+      setInternalAuth();
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/group-messages/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { userId: 'u', groupKey: 'g' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as ErrorResponse;
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('rejects group-message ranges that are too large', async () => {
+      setInternalAuth();
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/group-messages/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          userId: 'u',
+          groupKey: 'g',
+          dateFrom: '2026-04-01',
+          dateTo: '2026-05-15',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as ErrorResponse;
+      expect(body.error.message).toContain('range');
+    });
+
+    it('validates group-message subscription ownership', async () => {
+      setInternalAuth();
+      setMockServices({
+        notificationRepository: ctx.notificationRepo,
+        digestSubscriptions: [{ userId: 'other', groupKey: 'g', groupTitlePrefix: 'G' }],
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/group-messages/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { userId: 'u', groupKey: 'g', date: '2026-04-15' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as ErrorResponse;
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('filters, cleans, deduplicates, and term-filters group messages', async () => {
+      setInternalAuth();
+      const bounds = cetDayBounds('2026-04-15');
+      const firstMessageSec = bounds.fromSec + 3600;
+      const secondMessageSec = bounds.fromSec + 5400;
+
+      const addNotification = (
+        id: string,
+        overrides: Partial<Parameters<NotificationRepository['save']>[0]> & { receivedAt?: string }
+      ): void => {
+        ctx.notificationRepo.addNotification({
+          id,
+          userId: 'u',
+          source: 'tasker',
+          device: 'phone',
+          app: 'com.whatsapp',
+          title: 'G fishing chat',
+          text: 'Spring ground bait with bread cloud',
+          timestamp: firstMessageSec,
+          postTime: String(firstMessageSec),
+          receivedAt: new Date(firstMessageSec * 1000).toISOString(),
+          notificationId: id,
+          ...overrides,
+        });
+      };
+
+      addNotification('meta', { text: '(3 new messages)', timestamp: firstMessageSec, postTime: String(firstMessageSec) });
+      addNotification('kept', { text: 'Spring ground bait with bread cloud', timestamp: firstMessageSec, postTime: String(firstMessageSec) });
+      addNotification('duplicate', { text: 'Spring ground bait with bread cloud', timestamp: firstMessageSec + 30, postTime: String(firstMessageSec + 30) });
+      addNotification('term-drop', { text: 'Winter boilies only', timestamp: secondMessageSec, postTime: String(secondMessageSec) });
+      addNotification('wrong-title', { title: 'Other group', text: 'Spring ground bait hidden', timestamp: firstMessageSec, postTime: String(firstMessageSec) });
+      addNotification('wrong-app', { app: 'com.gmail', text: 'Spring ground bait hidden', timestamp: firstMessageSec, postTime: String(firstMessageSec) });
+      addNotification('wrong-day', { text: 'Spring ground bait outside range', timestamp: bounds.fromSec - 60, postTime: String(bounds.fromSec - 60) });
+      setMockServices({
+        notificationRepository: ctx.notificationRepo,
+        digestSubscriptions: [{ userId: 'u', groupKey: 'g', groupTitlePrefix: 'G fishing chat' }],
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/group-messages/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          userId: 'u',
+          groupKey: 'g',
+          date: '2026-04-15',
+          terms: ['spring'],
+          limit: 10,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as SuccessResponse<{
+        messages: {
+          messageRef: string;
+          groupKey: string;
+          date: string;
+          postTimeSec: number;
+          text: string;
+          quote: string;
+          senderLabel?: string | null;
+        }[];
+        totalRaw: number;
+        totalCleaned: number;
+        returned: number;
+        truncated: boolean;
+      }>;
+      expect(body.data.totalRaw).toBe(4);
+      expect(body.data.totalCleaned).toBe(2);
+      expect(body.data.returned).toBe(1);
+      expect(body.data.truncated).toBe(false);
+      expect(body.data.messages).toEqual([
+        {
+          messageRef: expect.stringContaining('g:2026-04-15:') as string,
+          groupKey: 'g',
+          date: '2026-04-15',
+          postTimeSec: firstMessageSec,
+          text: 'Spring ground bait with bread cloud',
+          quote: 'Spring ground bait with bread cloud',
+        },
+      ]);
     });
   });
 });
