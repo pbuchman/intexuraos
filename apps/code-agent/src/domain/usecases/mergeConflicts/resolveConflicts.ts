@@ -1,7 +1,6 @@
 import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
-import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH, type CodeTask } from '../../models/codeTask.js';
+import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH, type CodeTask, type WorkerType } from '../../models/codeTask.js';
 import type { GitHubPRSummary } from '../../models/gitHubPRSummary.js';
-import type { WorkerConfig } from '../../models/workerSettings.js';
 import type { GitHubPRClient, GitHubPullRequestDetails } from '../../ports/gitHubPRClient.js';
 import type { WorkerSettingsRepository } from '../../ports/workerSettingsRepository.js';
 import type { CodeTaskRepository, CreateTaskInput } from '../../repositories/codeTaskRepository.js';
@@ -70,6 +69,7 @@ interface CreateTaskParams {
   commentId: number;
   existingTask: CodeTask | null;
   ownerUserId: string;
+  workerType: WorkerType;
 }
 
 export function isMergeConflictTask(task: Pick<CodeTask, 'followUpReason' | 'systemPromptHash'>): boolean {
@@ -214,23 +214,23 @@ export async function resolveExistingConflictTask(
   });
 }
 
-async function resolveEnabledWorker(
+async function resolveMergeConflictWorkerType(
   workerSettingsRepo: WorkerSettingsRepository,
   userId: string,
   logger: Logger
-): Promise<Result<WorkerConfig, { code: 'NO_ENABLED_WORKER' | 'INTERNAL_ERROR'; message: string }>> {
+): Promise<Result<WorkerType, { code: 'NO_ENABLED_WORKER' | 'INTERNAL_ERROR'; message: string }>> {
   const settingsResult = await workerSettingsRepo.getSettings(userId);
   if (!settingsResult.ok) {
     logger.warn({ error: settingsResult.error, userId }, 'Failed to load worker settings for conflict detection');
     return err({ code: 'INTERNAL_ERROR', message: settingsResult.error.message });
   }
 
-  const worker = settingsResult.value?.workers.find((candidate) => candidate.enabled);
-  if (worker === undefined) {
+  const hasEnabledWorker = settingsResult.value?.workers.some((candidate) => candidate.enabled) === true;
+  if (!hasEnabledWorker) {
     return err({ code: 'NO_ENABLED_WORKER', message: `No enabled worker for user ${userId}` });
   }
 
-  return ok(worker);
+  return ok(settingsResult.value.defaultPullRequestWorkerType ?? 'auto');
 }
 
 function buildEnsureIssuePrompt(details: GitHubPullRequestDetails, repository: string): string {
@@ -274,6 +274,7 @@ function buildCreateTaskInput(params: {
   eventId: string;
   userId: string;
   webhookSecret: string;
+  workerType: WorkerType;
   linearIssueId?: string | undefined;
   parentTaskId?: string | undefined;
 }): CreateTaskInput {
@@ -283,7 +284,7 @@ function buildCreateTaskInput(params: {
     prompt: params.prompt,
     sanitizedPrompt: params.prompt,
     systemPromptHash: SYSTEM_PROMPT_HASH,
-    workerType: 'auto',
+    workerType: params.workerType,
     workerLocation: 'queued',
     repository: params.repository,
     baseBranch: params.baseBranch,
@@ -338,6 +339,7 @@ export async function createMergeConflictTask(
     eventId: params.eventId,
     userId: params.ownerUserId,
     webhookSecret,
+    workerType: params.workerType,
     ...(linkedLinearIssueId !== undefined && { linearIssueId: linkedLinearIssueId }),
     ...(conflictParentTaskId !== undefined && { parentTaskId: conflictParentTaskId }),
   }));
@@ -368,14 +370,14 @@ export async function createMergeConflictTask(
 async function createConflictTaskWorkflow(
   params: ConflictWorkflowParams & { commentId: number }
 ): Promise<ConflictWorkflowResult> {
-  const workerResult = await resolveEnabledWorker(
+  const workerTypeResult = await resolveMergeConflictWorkerType(
     params.deps.workerSettingsRepo,
     params.accessContext.userId,
     params.logger
   );
 
-  if (!workerResult.ok) {
-    const phase = workerResult.error.code === 'NO_ENABLED_WORKER' ? 'no-worker' : 'failed';
+  if (!workerTypeResult.ok) {
+    const phase = workerTypeResult.error.code === 'NO_ENABLED_WORKER' ? 'no-worker' : 'failed';
     await updateManagedComment(
       params.deps.gitHubPRClient,
       params.accessContext.token,
@@ -413,6 +415,7 @@ async function createConflictTaskWorkflow(
       commentId: params.commentId,
       existingTask: params.taskResolution.latestTask,
       ownerUserId: params.accessContext.userId,
+      workerType: workerTypeResult.value,
     }
   );
 
