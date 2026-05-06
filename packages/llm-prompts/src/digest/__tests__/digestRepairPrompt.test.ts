@@ -29,7 +29,7 @@ describe('digestRepairPrompt', () => {
       invalidResponse: 'B',
       errorMessage: 'C',
     });
-    expect(repair.toLowerCase()).toContain('tylko');
+    expect(repair.toLowerCase()).toContain('only');
     expect(repair.toLowerCase()).toContain('json');
   });
 });

@@ -22,19 +22,19 @@ const DEFAULT_GROUP_KEY = 'grupa-wedkarska-skool';
 const FILTER_OPTIONS: { key: DigestStatusFilter; label: string; dotClass: string; activeClass: string }[] = [
   {
     key: 'all',
-    label: 'Wszystkie',
+    label: 'All',
     dotClass: 'bg-slate-400',
     activeClass: 'border-slate-400 bg-slate-50 text-slate-700 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-300',
   },
   {
     key: 'single-generation',
-    label: 'Pierwsza wersja',
+    label: 'First version',
     dotClass: 'bg-blue-500',
     activeClass: 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/30 dark:text-blue-400',
   },
   {
     key: 'regenerated',
-    label: 'Wygenerowane ponownie',
+    label: 'Regenerated',
     dotClass: 'bg-amber-500',
     activeClass: 'border-amber-500 bg-amber-50 text-amber-700 dark:border-amber-400 dark:bg-amber-900/30 dark:text-amber-400',
   },
@@ -44,9 +44,9 @@ const INACTIVE_CHIP_CLASS =
   'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500';
 
 const SORT_OPTIONS: { key: DigestSortOption; label: string }[] = [
-  { key: 'date-desc', label: 'Najnowsze' },
-  { key: 'date-asc', label: 'Najstarsze' },
-  { key: 'message-count-desc', label: 'Najwięcej wiadomości' },
+  { key: 'date-desc', label: 'Newest' },
+  { key: 'date-asc', label: 'Oldest' },
+  { key: 'message-count-desc', label: 'Most messages' },
 ];
 
 export function NotificationDigestsPage(): React.JSX.Element {
@@ -74,7 +74,7 @@ export function NotificationDigestsPage(): React.JSX.Element {
       setBackfillOpen(false);
       void navigate(`/notifications/digests/backfill/${encodeURIComponent(resp.runId)}`);
     } catch (err: unknown) {
-      setBackfillError(getErrorMessage(err, 'Nie udało się uruchomić backfillu'));
+      setBackfillError(getErrorMessage(err, 'Failed to start backfill'));
     } finally {
       setBackfillBusy(false);
     }
@@ -90,7 +90,7 @@ export function NotificationDigestsPage(): React.JSX.Element {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-            Podsumowania dzienne
+            Daily digests
           </h2>
         </div>
         <Button
@@ -98,7 +98,7 @@ export function NotificationDigestsPage(): React.JSX.Element {
           onClick={(): void => { setBackfillOpen(true); }}
         >
           <CalendarRange className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Uzupełnij zakres</span>
+          <span className="hidden sm:inline">Backfill range</span>
         </Button>
       </div>
 
@@ -141,7 +141,7 @@ export function NotificationDigestsPage(): React.JSX.Element {
       <div className="mb-4 flex items-center justify-between">
         <MonthPicker month={month} onChange={setMonth} />
         <span className="text-xs text-slate-500 dark:text-slate-400">
-          {String(items.length)} {items.length === 1 ? 'dzień' : 'dni'} · {String(regeneratedCount)} wygenerowanych ponownie
+          {String(items.length)} {items.length === 1 ? 'day' : 'days'} · {String(regeneratedCount)} regenerated
         </span>
       </div>
 
@@ -158,7 +158,7 @@ export function NotificationDigestsPage(): React.JSX.Element {
       ) : items.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <p className="text-slate-600 dark:text-slate-300">
-            Brak podsumowań w wybranym zakresie. Uruchom backfill, aby je wygenerować.
+            No digests in the selected range. Run a backfill to generate them.
           </p>
         </div>
       ) : (

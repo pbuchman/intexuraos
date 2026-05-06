@@ -42,7 +42,7 @@ export function useBackfillRun(runId: string | undefined): UseBackfillRunResult 
       setRun((prev) => (prev !== null && JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
     } catch (err: unknown) {
       if (isMountedRef.current) {
-        setError(getErrorMessage(err, 'Nie udało się pobrać stanu backfillu'));
+        setError(getErrorMessage(err, 'Failed to load backfill state'));
       }
     } finally {
       if (isMountedRef.current) setLoading(false);

@@ -12,24 +12,24 @@ import { useBackfillRun } from '@/hooks/useBackfillRun';
 function statusBadge(status: string): { label: string; className: string } {
   if (status === 'completed') {
     return {
-      label: 'Ukończone',
+      label: 'Completed',
       className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
     };
   }
   if (status === 'failed') {
     return {
-      label: 'Błąd',
+      label: 'Failed',
       className: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
     };
   }
   if (status === 'running') {
     return {
-      label: 'W trakcie',
+      label: 'Running',
       className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
     };
   }
   return {
-    label: 'W kolejce',
+    label: 'Queued',
     className: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
   };
 }
@@ -63,7 +63,7 @@ export function NotificationDigestBackfillPage(): React.JSX.Element {
       <Layout>
         <Card className="mt-4">
           <p className="text-slate-600 dark:text-slate-300">
-            Nie znaleziono backfillu {runId ?? ''}.
+            Backfill {runId ?? ''} was not found.
           </p>
         </Card>
       </Layout>
@@ -80,19 +80,19 @@ export function NotificationDigestBackfillPage(): React.JSX.Element {
           className="inline-flex items-center gap-1 text-sm text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Wróć do listy
+          Back to list
         </Link>
       </div>
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          Uzupełnianie podsumowań
+          Backfilling digests
         </h2>
         <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${badge.className}`}>
           {badge.label}
         </span>
         <span className="text-xs text-slate-500 dark:text-slate-400">
-          {run.fromDate} → {run.toDate} · {String(run.totalDates)} dni
+          {run.fromDate} → {run.toDate} · {String(run.totalDates)} days
         </span>
       </div>
 
@@ -105,17 +105,17 @@ export function NotificationDigestBackfillPage(): React.JSX.Element {
       <BackfillProgressGrid run={run} />
 
       <div className="mt-4 text-xs text-slate-500 dark:text-slate-400">
-        Uruchomiono: {new Date(run.startedAt).toLocaleString('pl-PL')} ·{' '}
-        Ostatnia aktualizacja: {new Date(run.updatedAt).toLocaleString('pl-PL')}
+        Started: {new Date(run.startedAt).toLocaleString('en-US')} ·{' '}
+        Last updated: {new Date(run.updatedAt).toLocaleString('en-US')}
         {run.completedAt !== undefined ? (
-          <> · Zakończono: {new Date(run.completedAt).toLocaleString('pl-PL')}</>
+          <> · Completed: {new Date(run.completedAt).toLocaleString('en-US')}</>
         ) : null}
       </div>
 
       {run.failedDates.length > 0 ? (
         <Card variant="error" className="mt-6">
           <h3 className="mb-2 font-semibold text-red-800 dark:text-red-300">
-            Dni z błędami ({String(run.failedDates.length)})
+            Days with errors ({String(run.failedDates.length)})
           </h3>
           <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">
             {run.failedDates.map((f) => (

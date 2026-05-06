@@ -90,7 +90,7 @@ export function useDigestList(options: UseDigestListOptions): UseDigestListResul
       });
       setRaw(resp.items);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Nie udało się pobrać podsumowań'));
+      setError(getErrorMessage(err, 'Failed to load digests'));
     } finally {
       setLoading(false);
     }

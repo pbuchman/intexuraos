@@ -18,7 +18,7 @@ function formatDateLabel(isoDate: string): string {
   // `YYYY-MM-DD` is already human-friendly; we show it plus weekday.
   const d = new Date(`${isoDate}T12:00:00Z`);
   if (Number.isNaN(d.getTime())) return isoDate;
-  const weekday = new Intl.DateTimeFormat('pl-PL', { weekday: 'long' }).format(d);
+  const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(d);
   return `${isoDate} · ${weekday}`;
 }
 
@@ -40,7 +40,7 @@ export function DigestRow({ digest }: DigestRowProps): React.JSX.Element {
             {formatDateLabel(summary.date)}
           </p>
           <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-            {summary.headline !== '' ? summary.headline : 'Brak wiadomości tego dnia'}
+            {summary.headline !== '' ? summary.headline : 'No messages that day'}
           </p>
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
@@ -51,7 +51,7 @@ export function DigestRow({ digest }: DigestRowProps): React.JSX.Element {
           {isRegenerated ? (
             <span
               className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-              title={`Wygenerowano ponownie (generacja ${String(generation)})`}
+              title={`Regenerated (generation ${String(generation)})`}
             >
               <RotateCcw className="h-3 w-3" />
               v{String(generation)}
