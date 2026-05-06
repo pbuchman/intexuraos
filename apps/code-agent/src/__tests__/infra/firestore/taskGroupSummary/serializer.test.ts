@@ -19,6 +19,7 @@ import {
   defaultCounts,
   docToCounts,
   docToSummary,
+  getLinearIssueSortFields,
   getGroupKey,
   hasCompletedExecutionAgentOnly,
   hasCompletedExecutionTask,
@@ -51,6 +52,31 @@ function makeTask(overrides: Partial<CodeTask> = {}): CodeTask {
 }
 
 describe('serializer: predicates', () => {
+  it('getLinearIssueSortFields extracts numeric issue fields', () => {
+    expect(getLinearIssueSortFields('INT-1606')).toEqual({
+      linearIssueNumber: 1606,
+      linearIssueSortKey: 1606,
+    });
+  });
+
+  it('getLinearIssueSortFields uses standalone-first sort key for null or unparsable issue IDs', () => {
+    expect(getLinearIssueSortFields(null)).toEqual({
+      linearIssueNumber: null,
+      linearIssueSortKey: Number.MAX_SAFE_INTEGER,
+    });
+    expect(getLinearIssueSortFields('not-linear')).toEqual({
+      linearIssueNumber: null,
+      linearIssueSortKey: Number.MAX_SAFE_INTEGER,
+    });
+  });
+
+  it('getLinearIssueSortFields uses standalone-first sort key for non-finite issue numbers', () => {
+    expect(getLinearIssueSortFields(`INT-${'9'.repeat(400)}`)).toEqual({
+      linearIssueNumber: null,
+      linearIssueSortKey: Number.MAX_SAFE_INTEGER,
+    });
+  });
+
   it('getGroupKey returns linearIssueId when present', () => {
     expect(getGroupKey(makeTask({ linearIssueId: 'INT-1' }))).toBe('INT-1');
   });
@@ -147,6 +173,8 @@ describe('serializer: docToSummary', () => {
     const original: TaskGroupSummary = {
       userId: 'u1',
       linearIssueId: 'INT-1',
+      linearIssueNumber: 1,
+      linearIssueSortKey: 1,
       groupKey: 'INT-1',
       taskCount: 2,
       activeTaskCount: 1,
@@ -169,9 +197,22 @@ describe('serializer: docToSummary', () => {
     expect(back).toMatchObject(original);
   });
 
+  it('derives linear sort fields for legacy docs', () => {
+    const back = docToSummary({
+      userId: 'u1', linearIssueId: 'INT-42', groupKey: 'INT-42', taskCount: 1, activeTaskCount: 0,
+      latestTaskStatus: 'planned', latestTaskUpdatedAt: now, agentTypesPresent: ['planning'],
+      hasCompletedPlanning: true, hasCompletedExecution: false, hasImplementationTaskId: false,
+      hasPrUrl: false, prNumber: null, latestReviewNeedsRemediation: null,
+      oldestTaskCreatedAt: now, mostRecentDispatchedAt: null, aggregateStatus: 'done', updatedAt: now,
+    });
+    expect(back.linearIssueNumber).toBe(42);
+    expect(back.linearIssueSortKey).toBe(42);
+  });
+
   it('preserves optional label fields when present', () => {
     const s: TaskGroupSummary = {
       userId: 'u', linearIssueId: null, groupKey: 'standalone_x', taskCount: 1, activeTaskCount: 0,
+      linearIssueNumber: null, linearIssueSortKey: Number.MAX_SAFE_INTEGER,
       latestTaskStatus: 'planned', latestTaskUpdatedAt: now, agentTypesPresent: [],
       hasCompletedPlanning: false, hasCompletedExecution: false, hasCompletedExecutionAgent: false,
       hasImplementationTaskId: false, hasPrUrl: false, prNumber: null,
@@ -255,6 +296,8 @@ describe('serializer: buildInitialSummary', () => {
     const summary = buildInitialSummary(task, now);
     expect(summary.userId).toBe('u');
     expect(summary.linearIssueId).toBe('INT-1');
+    expect(summary.linearIssueNumber).toBe(1);
+    expect(summary.linearIssueSortKey).toBe(1);
     expect(summary.groupKey).toBe('INT-1');
     expect(summary.taskCount).toBe(1);
     expect(summary.activeTaskCount).toBe(0);
@@ -296,6 +339,12 @@ describe('serializer: buildInitialSummary', () => {
   it('activeTaskCount=1 for running status', () => {
     expect(buildInitialSummary(makeTask({ status: 'running' }), now).activeTaskCount).toBe(1);
   });
+
+  it('sets standalone-first sort key when no linear issue is present', () => {
+    const summary = buildInitialSummary(makeTask(), now);
+    expect(summary.linearIssueNumber).toBeNull();
+    expect(summary.linearIssueSortKey).toBe(Number.MAX_SAFE_INTEGER);
+  });
 });
 
 describe('serializer: applyIncrementalCreateUpdate', () => {
@@ -303,6 +352,7 @@ describe('serializer: applyIncrementalCreateUpdate', () => {
   const t2 = Timestamp.fromDate(new Date('2026-01-02T00:00:00Z'));
   const base: TaskGroupSummary = {
     userId: 'u', linearIssueId: 'INT-1', groupKey: 'INT-1', taskCount: 1, activeTaskCount: 0,
+    linearIssueNumber: 1, linearIssueSortKey: 1,
     latestTaskStatus: 'planned', latestTaskUpdatedAt: t1, agentTypesPresent: ['planning'],
     hasCompletedPlanning: true, hasCompletedExecution: false, hasCompletedExecutionAgent: false,
     hasImplementationTaskId: false, hasPrUrl: false, prNumber: null,
@@ -389,6 +439,7 @@ describe('serializer: applyStatusChangeUpdate', () => {
   const t2 = Timestamp.fromDate(new Date('2026-01-02T00:00:00Z'));
   const base: TaskGroupSummary = {
     userId: 'u', linearIssueId: 'INT-1', groupKey: 'INT-1', taskCount: 1, activeTaskCount: 1,
+    linearIssueNumber: 1, linearIssueSortKey: 1,
     latestTaskStatus: 'running', latestTaskUpdatedAt: t1, agentTypesPresent: ['execution'],
     hasCompletedPlanning: false, hasCompletedExecution: false, hasCompletedExecutionAgent: false,
     hasImplementationTaskId: false, hasPrUrl: false, prNumber: null,
@@ -482,6 +533,7 @@ describe('serializer: applyDeleteUpdate', () => {
   const now = Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'));
   const base: TaskGroupSummary = {
     userId: 'u', linearIssueId: 'INT-1', groupKey: 'INT-1', taskCount: 2, activeTaskCount: 1,
+    linearIssueNumber: 1, linearIssueSortKey: 1,
     latestTaskStatus: 'running', latestTaskUpdatedAt: now, agentTypesPresent: ['execution'],
     hasCompletedPlanning: false, hasCompletedExecution: false, hasCompletedExecutionAgent: false,
     hasImplementationTaskId: false, hasPrUrl: false, prNumber: null,
@@ -537,12 +589,16 @@ describe('serializer: computeSummaryFromTasks', () => {
     expect(s.latestTaskStatus).toBe('implemented');
     expect(s.agentTypesPresent).toEqual(expect.arrayContaining(['planning', 'execution']));
     expect(s.linearIssueId).toBe('INT-9');
+    expect(s.linearIssueNumber).toBe(9);
+    expect(s.linearIssueSortKey).toBe(9);
   });
 
   it('linearIssueId is null when tasks have no linear id', () => {
     const task = makeTask({ status: 'planned', createdAt: t1, updatedAt: t1 });
     const s = computeSummaryFromTasks('u', 'g', [task], t1);
     expect(s?.linearIssueId).toBeNull();
+    expect(s?.linearIssueNumber).toBeNull();
+    expect(s?.linearIssueSortKey).toBe(Number.MAX_SAFE_INTEGER);
   });
 
   it('tracks review remediation', () => {

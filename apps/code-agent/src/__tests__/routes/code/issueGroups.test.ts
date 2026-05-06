@@ -122,6 +122,8 @@ function makeSummary(overrides: Partial<TaskGroupSummary> & { linearIssueId: str
   return {
     userId: 'test-user-id',
     groupKey: overrides.linearIssueId,
+    linearIssueNumber: null,
+    linearIssueSortKey: 0,
     taskCount: 1,
     activeTaskCount: overrides.aggregateStatus === 'active' ? 1 : 0,
     latestTaskStatus: 'queued',
@@ -147,6 +149,8 @@ function makeStandaloneSummary(taskId: string): TaskGroupSummary {
   return {
     userId: 'test-user-id',
     linearIssueId: null,
+    linearIssueNumber: null,
+    linearIssueSortKey: Number.MAX_SAFE_INTEGER,
     groupKey: `standalone_${taskId}`,
     taskCount: 1,
     activeTaskCount: 1,
@@ -218,7 +222,7 @@ describe('GET /code/issue-groups', () => {
       taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
       mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
       mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repoToUse, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repoToUse, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: repoToUse, logger }),
       groupSummaryRepo: overrides.groupSummaryRepo ?? makeGroupSummaryRepo(),
       prTriagePublisher: { publishPRTriage: async () => ok(undefined) } as never,
@@ -322,7 +326,7 @@ describe('GET /code/issue-groups', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -595,8 +599,8 @@ describe('GET /code/issue-groups', () => {
     expect(body.data.counts['failed']).toBe(1);
   });
 
-  it('sorts by linear-id by default', async () => {
-    const r1 = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-200', traceId: 'trace-s1' }));
+  it('sorts by linear-id by default using numeric issue order', async () => {
+    const r1 = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-99', traceId: 'trace-s1' }));
     expect(r1.ok).toBe(true);
     if (!r1.ok) return;
     await codeTaskRepo.update(r1.value.id, { status: 'cancelled' });
@@ -606,15 +610,15 @@ describe('GET /code/issue-groups', () => {
     if (!r2.ok) return;
     await codeTaskRepo.update(r2.value.id, { status: 'cancelled' });
 
-    const r3 = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-300', traceId: 'trace-s3' }));
+    const r3 = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-2', traceId: 'trace-s3' }));
     expect(r3.ok).toBe(true);
     if (!r3.ok) return;
     await codeTaskRepo.update(r3.value.id, { status: 'cancelled' });
 
     mockSummaries = [
-      makeSummary({ linearIssueId: 'INT-200', aggregateStatus: 'done' }),
-      makeSummary({ linearIssueId: 'INT-100', aggregateStatus: 'done' }),
-      makeSummary({ linearIssueId: 'INT-300', aggregateStatus: 'done' }),
+      makeSummary({ linearIssueId: 'INT-99', linearIssueNumber: 99, linearIssueSortKey: 99, aggregateStatus: 'done' }),
+      makeSummary({ linearIssueId: 'INT-100', linearIssueNumber: 100, linearIssueSortKey: 100, aggregateStatus: 'done' }),
+      makeSummary({ linearIssueId: 'INT-2', linearIssueNumber: 2, linearIssueSortKey: 2, aggregateStatus: 'done' }),
     ];
     mockCounts = { ...mockCounts, done: 3, totalGroups: 3 };
 
@@ -628,7 +632,7 @@ describe('GET /code/issue-groups', () => {
     const body = JSON.parse(response.body) as { data: { groups: { linearIssueId: string | null }[] } };
     const issueIds = body.data.groups.map((g) => g.linearIssueId);
     // linear-id sort is descending by issue number
-    expect(issueIds).toEqual(['INT-300', 'INT-200', 'INT-100']);
+    expect(issueIds).toEqual(['INT-100', 'INT-99', 'INT-2']);
   });
 
   it('sorts by pr-number when requested', async () => {
@@ -1108,7 +1112,7 @@ describe('GET /code/issue-groups', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -1214,7 +1218,7 @@ describe('GET /code/issue-groups', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -1445,7 +1449,7 @@ describe('GET /code/issue-groups', () => {
         taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
         mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
         mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
-        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
         autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         prTriagePublisher: {} as never,
         groupSummaryRepo: makeGroupSummaryRepo({
@@ -1484,6 +1488,8 @@ describe('GET /code/issue-groups', () => {
       const fakeSummary: TaskGroupSummary = {
         userId: 'test-user-id',
         linearIssueId: 'INT-9001',
+        linearIssueNumber: 9001,
+        linearIssueSortKey: 9001,
         groupKey: 'INT-9001',
         taskCount: 1,
         activeTaskCount: 1,
@@ -1543,7 +1549,7 @@ describe('GET /code/issue-groups', () => {
         taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
         mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
         mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
-        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
         autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         prTriagePublisher: {} as never,
         groupSummaryRepo: makeGroupSummaryRepo({
@@ -1607,7 +1613,7 @@ describe('GET /code/issue-groups', () => {
         taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
         mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
         mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
-        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, logger }),
+        archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: codeTaskRepo, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
         autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: codeTaskRepo, logger }),
         prTriagePublisher: {} as never,
         groupSummaryRepo: makeGroupSummaryRepo({
@@ -1754,6 +1760,8 @@ describe('GET /code/issue-groups', () => {
     const standaloneSummary: TaskGroupSummary = {
       userId: 'test-user-id',
       linearIssueId: null,
+      linearIssueNumber: null,
+      linearIssueSortKey: Number.MAX_SAFE_INTEGER,
       groupKey: `standalone_${standaloneTaskId}`,
       taskCount: 1,
       activeTaskCount: 1,
@@ -2130,6 +2138,8 @@ describe('GET /code/issue-groups', () => {
       const standalonePhantomSummary: TaskGroupSummary = {
         userId: 'test-user-id',
         linearIssueId: null,
+        linearIssueNumber: null,
+        linearIssueSortKey: Number.MAX_SAFE_INTEGER,
         groupKey: 'standalone_phantom-err-task',
         taskCount: 1,
         activeTaskCount: 1,
@@ -2190,6 +2200,8 @@ describe('GET /code/issue-groups', () => {
       const standalonePhantomSummary: TaskGroupSummary = {
         userId: 'test-user-id',
         linearIssueId: null,
+        linearIssueNumber: null,
+        linearIssueSortKey: Number.MAX_SAFE_INTEGER,
         groupKey: `standalone_${standaloneTaskId}`,
         taskCount: 1,
         activeTaskCount: 1,
@@ -2250,6 +2262,8 @@ describe('GET /code/issue-groups', () => {
       const standaloneSummary: TaskGroupSummary = {
         userId: 'test-user-id',
         linearIssueId: null,
+        linearIssueNumber: null,
+        linearIssueSortKey: Number.MAX_SAFE_INTEGER,
         groupKey: `standalone_${standaloneTaskId}`,
         taskCount: 1,
         activeTaskCount: 1,
@@ -2425,7 +2439,7 @@ describe('POST /code/issue-groups/:groupKey/important', () => {
       taskEnqueueService: { enqueue: vi.fn().mockResolvedValue(ok({ taskId: 'test', queuePosition: 1 })) } as never,
       mergeConflictDetector: { detectOnPush: vi.fn().mockResolvedValue(undefined), reconcile: vi.fn().mockResolvedValue(EMPTY_RECONCILE_RESULT) },
       mergeQueueWatchRepo: createFirestoreMergeQueueWatchRepository({ logger }),
-      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repoToUse, logger }),
+      archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repoToUse, gitHubPRSummaryRepo: { findAllOpen: async () => ok([]) }, logger }),
       autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: repoToUse, logger }),
       groupSummaryRepo: overrides.groupSummaryRepo ?? makeGroupSummaryRepo(),
       prTriagePublisher: { publishPRTriage: async () => ok(undefined) } as never,

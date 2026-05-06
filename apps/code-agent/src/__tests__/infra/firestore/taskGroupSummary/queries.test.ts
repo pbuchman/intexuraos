@@ -53,6 +53,8 @@ describe('queries: buildListQuery', () => {
         userId: 'u1',
         groupKey: id.replace('u1_', ''),
         linearIssueId: id.replace('u1_', ''),
+        linearIssueNumber: null,
+        linearIssueSortKey: 0,
         taskCount: 1,
         activeTaskCount: 0,
         latestTaskStatus: 'planned',
@@ -77,9 +79,9 @@ describe('queries: buildListQuery', () => {
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Firestore);
     fakeFirestore.seedCollection('task_group_summaries', [
-      seedDoc('u1_INT-A', { aggregateStatus: 'active', prNumber: 10, mostRecentDispatchedAt: now, latestTaskUpdatedAt: now }),
-      seedDoc('u1_INT-B', { aggregateStatus: 'done', prNumber: 20, mostRecentDispatchedAt: later, latestTaskUpdatedAt: later }),
-      seedDoc('u1_INT-C', { aggregateStatus: 'failed', prNumber: 30, mostRecentDispatchedAt: null, latestTaskUpdatedAt: now }),
+      seedDoc('u1_INT-A', { aggregateStatus: 'active', prNumber: 10, mostRecentDispatchedAt: now, latestTaskUpdatedAt: now, linearIssueId: 'INT-2', linearIssueNumber: 2, linearIssueSortKey: 2 }),
+      seedDoc('u1_INT-B', { aggregateStatus: 'done', prNumber: 20, mostRecentDispatchedAt: later, latestTaskUpdatedAt: later, linearIssueId: 'INT-10', linearIssueNumber: 10, linearIssueSortKey: 10 }),
+      seedDoc('u1_INT-C', { aggregateStatus: 'failed', prNumber: 30, mostRecentDispatchedAt: null, latestTaskUpdatedAt: now, linearIssueId: 'INT-1', linearIssueNumber: 1, linearIssueSortKey: 1 }),
       seedDoc('u2_INT-D', { userId: 'u2', aggregateStatus: 'done', prNumber: 40 }),
     ]);
   });
@@ -115,11 +117,23 @@ describe('queries: buildListQuery', () => {
     expect(snap.docs).toHaveLength(3);
   });
 
-  it('sorts by linear-id descending', async () => {
+  it('sorts by linear-id using numeric sort key descending', async () => {
     const q = buildListQuery(fakeFirestore as unknown as Firestore, { userId: 'u1', sortBy: 'linear-id', limit: 10 });
     const snap = await q.get();
     const ids = snap.docs.map((d) => d.data()?.['linearIssueId']);
-    expect(ids).toEqual(['INT-C', 'INT-B', 'INT-A']);
+    expect(ids).toEqual(['INT-10', 'INT-2', 'INT-1']);
+  });
+
+  it('breaks linear-id numeric ties by latestTaskUpdatedAt descending', async () => {
+    fakeFirestore.seedCollection('task_group_summaries', [
+      seedDoc('u3_INT-2-old', { userId: 'u3', groupKey: 'INT-2-old', linearIssueId: 'INT-2', linearIssueNumber: 2, linearIssueSortKey: 2, latestTaskUpdatedAt: now }),
+      seedDoc('u3_INT-2-new', { userId: 'u3', groupKey: 'INT-2-new', linearIssueId: 'INT-2', linearIssueNumber: 2, linearIssueSortKey: 2, latestTaskUpdatedAt: later }),
+    ]);
+
+    const q = buildListQuery(fakeFirestore as unknown as Firestore, { userId: 'u3', sortBy: 'linear-id', limit: 10 });
+    const snap = await q.get();
+    const groupKeys = snap.docs.map((d) => d.data()?.['groupKey']);
+    expect(groupKeys).toEqual(['INT-2-new', 'INT-2-old']);
   });
 
   it('sorts by pr-number descending', async () => {

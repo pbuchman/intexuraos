@@ -32,6 +32,42 @@ export function createTaskGroupSummaryFirestoreRepository(deps: { firestore: Fir
     tx.set(countsDocRef(firestore, userId), { ...counts, userId, updatedAt: now } as unknown as DocumentData);
   }
 
+  async function listLinearIdCompatible(input: ListGroupSummariesInput): Promise<ListGroupSummariesOutput> {
+    let query = firestore.collection(SUMMARIES_COLLECTION).where('userId', '==', input.userId);
+    if (input.statusFilter !== undefined && input.statusFilter.length > 0) {
+      query = query.where('aggregateStatus', 'in', input.statusFilter);
+    }
+
+    const snapshot = await query.get();
+    const summaries = snapshot.docs
+      .map((doc) => ({ docId: doc.id, summary: docToSummary(doc.data() as Record<string, unknown>) }))
+      .sort((a, b) => {
+        const keyDiff = b.summary.linearIssueSortKey - a.summary.linearIssueSortKey;
+        if (keyDiff !== 0) return keyDiff;
+        const updatedDiff = b.summary.latestTaskUpdatedAt.toMillis() - a.summary.latestTaskUpdatedAt.toMillis();
+        if (updatedDiff !== 0) return updatedDiff;
+        return a.docId.localeCompare(b.docId);
+      });
+
+    let startIndex = 0;
+    if (input.cursor !== undefined) {
+      const cursorDocId = Buffer.from(input.cursor, 'base64').toString('utf-8');
+      const cursorIndex = summaries.findIndex((entry) => entry.docId === cursorDocId);
+      if (cursorIndex >= 0) startIndex = cursorIndex + 1;
+    }
+
+    const page = summaries.slice(startIndex, startIndex + input.limit);
+    const nextEntry = summaries[startIndex + input.limit - 1];
+    const hasMore = startIndex + input.limit < summaries.length;
+
+    return {
+      summaries: page.map((entry) => entry.summary),
+      ...(hasMore && nextEntry !== undefined
+        ? { nextCursor: Buffer.from(nextEntry.docId, 'utf-8').toString('base64') }
+        : {}),
+    };
+  }
+
   return {
     async updateAfterCreate(task: CodeTask): Promise<void> {
       try {
@@ -149,6 +185,10 @@ export function createTaskGroupSummaryFirestoreRepository(deps: { firestore: Fir
 
     async listGroupSummaries(input: ListGroupSummariesInput): Promise<Result<ListGroupSummariesOutput, GroupSummaryError>> {
       try {
+        if (input.sortBy === 'linear-id') {
+          return ok(await listLinearIdCompatible(input));
+        }
+
         let startAfterDoc: DocumentSnapshot | undefined;
         if (input.cursor !== undefined) {
           const cursorDocId = Buffer.from(input.cursor, 'base64').toString('utf-8');
