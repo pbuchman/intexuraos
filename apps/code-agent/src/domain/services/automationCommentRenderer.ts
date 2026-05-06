@@ -184,7 +184,7 @@ function renderTriageFailed(
 ): string {
   const summary = `**${ts}** -- **Triage failed** | ${event.fallbackAction}`;
   const details = event.error;
-  return summary + '\n' + wrapDetails('Error', details);
+  return summary + '\n' + wrapDetails('Details', details);
 }
 
 function renderTaskDispatchFailed(

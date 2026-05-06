@@ -329,6 +329,7 @@ describe('createMergeConflictTask', () => {
         commentId: 1000,
         existingTask: null,
         ownerUserId: 'user-1',
+        workerType: 'auto',
       }
     );
     expect(result.ok).toBe(true);
@@ -348,6 +349,7 @@ describe('createMergeConflictTask', () => {
         commentId: 1000,
         existingTask: null,
         ownerUserId: 'user-1',
+        workerType: 'auto',
       }
     );
     expect(deps.linearIssueService.ensureIssueExists).toHaveBeenCalledWith(expect.objectContaining({
@@ -368,6 +370,7 @@ describe('createMergeConflictTask', () => {
         commentId: 1000,
         existingTask: null,
         ownerUserId: 'user-1',
+        workerType: 'auto',
       }
     );
     expect(result.ok).toBe(false);
@@ -386,6 +389,7 @@ describe('createMergeConflictTask', () => {
         commentId: 1000,
         existingTask: null,
         ownerUserId: 'user-1',
+        workerType: 'auto',
       }
     );
     expect(result.ok).toBe(false);
@@ -407,6 +411,7 @@ describe('createMergeConflictTask', () => {
         commentId: 1000,
         existingTask: existing,
         ownerUserId: 'user-1',
+        workerType: 'auto',
       }
     );
     expect(deps.codeTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -421,6 +426,46 @@ describe('executeConflictWorkflow — auto-resolvable and manual-intervention pa
     const result = await executeConflictWorkflow(params);
     expect(result.taskId).toBe('task_11111111-1111-4111-8111-111111111111');
     expect(params.deps.codeTaskRepo.create).toHaveBeenCalled();
+  });
+
+  it('routes merge-conflict tasks through the default pull-request worker type', async () => {
+    const deps = createResolveDeps();
+    deps.workerSettingsRepo.getSettings = vi.fn().mockResolvedValue(ok({
+      userId: 'user-1',
+      workers: [{
+        name: 'home-mac',
+        url: 'https://w',
+        cfAccessClientId: 'c',
+        cfAccessClientSecret: 's',
+        dispatchSigningSecret: 'd',
+        enabled: true,
+      }],
+      defaultPullRequestWorkerType: 'codex-xhigh',
+      createdAt: '2026-03-11T09:00:00Z',
+      updatedAt: '2026-03-11T09:00:00Z',
+    }));
+    const params = createParams({ deps });
+
+    await executeConflictWorkflow(params);
+
+    expect(deps.codeTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'pull_request',
+      followUpReason: 'merge_conflict',
+      systemPromptHash: MERGE_CONFLICT_SYSTEM_PROMPT_HASH,
+      workerType: 'codex-xhigh',
+    }));
+  });
+
+  it('falls back to auto for merge-conflict tasks when no pull-request default is configured', async () => {
+    const params = createParams();
+
+    await executeConflictWorkflow(params);
+
+    expect(params.deps.codeTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      agentType: 'pull_request',
+      followUpReason: 'merge_conflict',
+      workerType: 'auto',
+    }));
   });
 
   it('emits no-worker phase when no enabled worker (manual-intervention)', async () => {
