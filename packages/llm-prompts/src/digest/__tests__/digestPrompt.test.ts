@@ -16,7 +16,7 @@ describe('digestPrompt.build', () => {
     date: '2026-04-15',
     previousState: null,
     last3Summaries: [],
-    todaysMessages: [{ sender: 'Test', text: 'Cześć', postTimeSec: 1776380400 }],
+    todaysMessages: [{ sender: 'Test', text: 'Hello', postTimeSec: 1776380400 }],
   };
 
   it('returns a non-empty prompt with the date and group key', () => {
@@ -32,9 +32,10 @@ describe('digestPrompt.build', () => {
     expect(prompt).toContain('2026-04-11');
   });
 
-  it('instructs the model to write Polish narratives', () => {
+  it('instructs the model to write English narratives', () => {
     const prompt = digestPrompt.build(baseInput);
-    expect(prompt.toLowerCase()).toContain('po polsku');
+    expect(prompt.toLowerCase()).toContain('in english');
+    expect(prompt.toLowerCase()).not.toContain(['po', 'polsku'].join(' '));
   });
 
   it('instructs the model to output headline + bullets (hybrid format)', () => {
@@ -46,10 +47,10 @@ describe('digestPrompt.build', () => {
 
   it('forbids copying from last3Summaries', () => {
     const prompt = digestPrompt.build(baseInput);
-    expect(prompt.toLowerCase()).toContain('nie kopiuj');
+    expect(prompt.toLowerCase()).toContain('do not copy');
   });
 
-  it('exposes semver version 2.x', () => {
-    expect(DIGEST_PROMPT_VERSION).toMatch(/^2\.\d+\.\d+$/);
+  it('exposes semver version 3.x', () => {
+    expect(DIGEST_PROMPT_VERSION).toMatch(/^3\.\d+\.\d+$/);
   });
 });

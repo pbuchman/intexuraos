@@ -23,9 +23,9 @@ export function BackfillRangeModal({
   const [toDate, setToDate] = useState<string>(() => today);
 
   const validationError = useMemo<string | null>(() => {
-    if (fromDate === '' || toDate === '') return 'Wybierz obie daty';
-    if (fromDate > toDate) return 'Data „od" musi być wcześniejsza lub równa „do"';
-    if (toDate > today) return 'Data „do" nie może być w przyszłości';
+    if (fromDate === '' || toDate === '') return 'Select both dates';
+    if (fromDate > toDate) return 'The "from" date must be before or equal to the "to" date';
+    if (toDate > today) return 'The "to" date cannot be in the future';
     return null;
   }, [fromDate, toDate, today]);
 
@@ -35,7 +35,7 @@ export function BackfillRangeModal({
       onOpenChange={(open): void => {
         if (!open && !busy) onCancel();
       }}
-      title="Uzupełnij podsumowania z zakresu dat"
+      title="Backfill digests for a date range"
       hideTitle
       padded={false}
       contentClassName="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-800"
@@ -44,16 +44,16 @@ export function BackfillRangeModal({
         <CalendarRange className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-500" />
         <div>
           <h3 className="font-semibold text-slate-900 dark:text-slate-100">
-            Uzupełnij podsumowania z zakresu dat
+            Backfill digests for a date range
           </h3>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Każdy dzień w zakresie zostanie przetworzony osobno. Postęp możesz śledzić na osobnej stronie.
+            Each day in the range will be processed separately. Progress is tracked on a separate page.
           </p>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Od</span>
+          <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">From</span>
           <input
             type="date"
             value={fromDate}
@@ -63,7 +63,7 @@ export function BackfillRangeModal({
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Do</span>
+          <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">To</span>
           <input
             type="date"
             value={toDate}
@@ -86,7 +86,7 @@ export function BackfillRangeModal({
           disabled={busy}
           className="rounded-lg px-3 py-2 text-sm font-medium text-slate-500 transition-colors hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-200"
         >
-          Anuluj
+          Cancel
         </button>
         <button
           type="button"
@@ -94,7 +94,7 @@ export function BackfillRangeModal({
           disabled={busy || validationError !== null}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {busy ? 'Uruchamianie…' : 'Rozpocznij'}
+          {busy ? 'Starting...' : 'Start'}
         </button>
       </div>
     </Modal>
