@@ -138,7 +138,7 @@ describe('aggregateDigest', () => {
     expect(result.ok).toBe(true);
     // Verify the prompt embedded an empty-state placeholder (not "null")
     const prompt = llmClient.calls[0]?.prompt ?? '';
-    expect(prompt).toContain('previousState (lub {} dla cold start)');
+    expect(prompt).toContain('previousState (or {} for cold start)');
   });
 
   it('handles previousState = empty object equivalently to null', async () => {

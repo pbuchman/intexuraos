@@ -37,16 +37,16 @@ export function BackfillProgressGrid({ run }: BackfillProgressGridProps): React.
       <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
         <span>
           <span className="mr-1 inline-block h-2 w-2 rounded-full bg-emerald-500" />
-          Ukończone: {String(countByStatus.completed)}
+          Completed: {String(countByStatus.completed)}
         </span>
         <span>
           <span className="mr-1 inline-block h-2 w-2 rounded-full bg-red-500" />
-          Błędy: {String(countByStatus.failed)}
+          Errors: {String(countByStatus.failed)}
         </span>
         {countByStatus.running > 0 ? (
           <span>
             <span className="mr-1 inline-block h-2 w-2 rounded-full bg-blue-500" />
-            Trwa: {run.currentDate ?? ''}
+            Running: {run.currentDate ?? ''}
           </span>
         ) : null}
         <span className="ml-auto font-mono text-[10px]">{run.runId}</span>
@@ -56,7 +56,7 @@ export function BackfillProgressGrid({ run }: BackfillProgressGridProps): React.
           const s = classify(date);
           const failure = failuresByDate.get(date);
           const title = failure !== undefined
-            ? `${date} (błąd): ${failure.error}`
+            ? `${date} (error): ${failure.error}`
             : `${date} · ${s}`;
           return (
             <div
@@ -69,7 +69,7 @@ export function BackfillProgressGrid({ run }: BackfillProgressGridProps): React.
         })}
       </div>
       <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-        {String(dates.length)} dni · status: {run.status}
+        {String(dates.length)} days · status: {run.status}
       </p>
     </div>
   );

@@ -39,7 +39,7 @@ function ThreadCard({ thread }: { thread: DigestThread }): React.JSX.Element {
           }`}
         >
           {thread.resolved ? <CheckCircle2 className="h-3 w-3" /> : <MessageCircle className="h-3 w-3" />}
-          {thread.resolved ? 'Rozwiązany' : 'Otwarty'}
+          {thread.resolved ? 'Resolved' : 'Open'}
         </span>
       </div>
       {hasKeyFacts ? (
@@ -50,7 +50,7 @@ function ThreadCard({ thread }: { thread: DigestThread }): React.JSX.Element {
             className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline dark:text-blue-400"
           >
             {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            {expanded ? 'Ukryj fakty' : `Pokaż ${String(thread.keyFacts.length)} faktów`}
+            {expanded ? 'Hide facts' : `Show ${String(thread.keyFacts.length)} facts`}
           </button>
           {expanded ? (
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700 dark:text-slate-200">
@@ -70,7 +70,7 @@ export function DigestThreads({ threads }: DigestThreadsProps): React.JSX.Elemen
   return (
     <Card className="mb-6">
       <h3 className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">
-        Wątki ({String(threads.length)})
+        Threads ({String(threads.length)})
       </h3>
       <div className="space-y-3">
         {threads.map((thread, i) => (
