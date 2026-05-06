@@ -71,7 +71,7 @@ Modify:
 - `apps/code-agent/src/scripts/backfillTaskGroupSummarySortKeys.ts` - add an idempotent focused backfill for existing summary docs.
 - `apps/code-agent/src/domain/usecases/archiveStaleGroups.ts` - skip stale archival when any group task belongs to an open PR.
 - `apps/code-agent/src/services.ts` and `apps/code-agent/src/services/types.ts` - wire `gitHubPRSummaryRepo` into stale archival.
-- `migrations/078_task-group-summaries-linear-sort-key-indexes.mjs` - add composite indexes for new sort keys.
+- `migrations/105_task-group-summaries-linear-sort-key-indexes.mjs` - add composite indexes for new sort keys.
 
 Test:
 
@@ -80,7 +80,7 @@ Test:
 - `apps/code-agent/src/__tests__/infra/firestore/taskGroupSummaryFirestoreRepository.test.ts`
 - `apps/code-agent/src/__tests__/routes/code/issueGroups.test.ts`
 - `apps/code-agent/src/__tests__/usecases/archiveStaleGroups.test.ts`
-- `migrations/__tests__/078-task-group-summaries-linear-sort-key-indexes.test.ts`
+- `migrations/__tests__/105-task-group-summaries-linear-sort-key-indexes.test.ts`
 
 ## Task 1: Persist Numeric Linear Sort Keys
 
@@ -169,11 +169,11 @@ Expected: PASS.
 
 **Files:**
 - Modify: `apps/code-agent/src/infra/firestore/taskGroupSummary/queries.ts`
-- Modify: `migrations/078_task-group-summaries-linear-sort-key-indexes.mjs`
+- Modify: `migrations/105_task-group-summaries-linear-sort-key-indexes.mjs`
 - Test: `apps/code-agent/src/__tests__/infra/firestore/taskGroupSummary/queries.test.ts`
 - Test: `apps/code-agent/src/__tests__/infra/firestore/taskGroupSummaryFirestoreRepository.test.ts`
 - Test: `apps/code-agent/src/__tests__/routes/code/issueGroups.test.ts`
-- Test: `migrations/__tests__/078-task-group-summaries-linear-sort-key-indexes.test.ts`
+- Test: `migrations/__tests__/105-task-group-summaries-linear-sort-key-indexes.test.ts`
 
 - [ ] **Step 1: Add failing query and repository tests**
 
@@ -231,11 +231,11 @@ Keep cursor handling based on `DocumentSnapshot`. Firestore will use all declare
 
 - [ ] **Step 4: Add immutable Firestore index migration**
 
-Create `migrations/078_task-group-summaries-linear-sort-key-indexes.mjs`:
+Create `migrations/105_task-group-summaries-linear-sort-key-indexes.mjs`:
 
 ```javascript
 export const metadata = {
-  id: '078',
+  id: '105',
   name: 'task-group-summaries-linear-sort-key-indexes',
   description:
     'Composite indexes for task_group_summaries supporting numeric Linear issue sort keys with and without status filters',
@@ -282,7 +282,7 @@ Run:
 
 ```bash
 pnpm --filter code-agent test -- src/__tests__/infra/firestore/taskGroupSummary/queries.test.ts src/__tests__/infra/firestore/taskGroupSummaryFirestoreRepository.test.ts src/__tests__/routes/code/issueGroups.test.ts
-pnpm test -- migrations/__tests__/078-task-group-summaries-linear-sort-key-indexes.test.ts
+pnpm test -- migrations/__tests__/105-task-group-summaries-linear-sort-key-indexes.test.ts
 ```
 
 Expected: PASS.
@@ -301,9 +301,11 @@ Create a script that scans `task_group_summaries`, computes `getLinearIssueSortF
 const BATCH_SIZE = 500;
 
 async function main(): Promise<void> {
+  const dryRun = process.argv.includes('--dry-run');
   const db = new Firestore();
   let updated = 0;
   let scanned = 0;
+  const wouldUpdate: Array<{ id: string; linearIssueNumber: number | null; linearIssueSortKey: number }> = [];
   let batch = db.batch();
   let pending = 0;
 
@@ -321,24 +323,30 @@ async function main(): Promise<void> {
     ) {
       continue;
     }
-    batch.set(doc.ref, fields, { merge: true });
+    if (dryRun) {
+      wouldUpdate.push({ id: doc.id, ...fields });
+    } else {
+      batch.set(doc.ref, fields, { merge: true });
+    }
     updated++;
     pending++;
     if (pending >= BATCH_SIZE) {
-      await batch.commit();
+      if (!dryRun) {
+        await batch.commit();
+      }
       batch = db.batch();
       pending = 0;
     }
   }
 
-  if (pending > 0) {
+  if (!dryRun && pending > 0) {
     await batch.commit();
   }
-  console.log(JSON.stringify({ scanned, updated }));
+  console.log(JSON.stringify({ dryRun, scanned, updated, wouldUpdate }));
 }
 ```
 
-Also update `backfillGroupSummaries.ts` so any full recompute writes the two new fields.
+Also update `backfillGroupSummaries.ts` so any full recompute writes the two new fields. Its inline `computeSummaryFromTasks()` returns a full `TaskGroupSummary`, so it must compute `getLinearIssueSortFields(linearIssueId)` and include both `linearIssueNumber` and `linearIssueSortKey` in the returned object rather than relying on the serializer path.
 
 - [ ] **Step 2: Dry-run against dev/prod Firestore before deployment**
 
@@ -371,6 +379,8 @@ Expected: all existing `task_group_summaries` have `linearIssueNumber` and `line
 - [ ] **Step 1: Add a failing stale-archive test**
 
 Add a test where an old group has a task with `repository='pbuchman/intexuraos'`, `prNumber=1903`, and the GitHub PR summary repo reports that PR as open. The stale archive use case must retain the group.
+
+Define this test's `makePrSummary()` helper in `archiveStaleGroups.test.ts` by importing or duplicating the helper shape currently used in `apps/code-agent/src/__tests__/domain/usecases/mergeQueueTick.test.ts`; it is not already local to the stale-archive test file.
 
 ```typescript
 it('retains stale groups when any task belongs to an open GitHub PR', async () => {
@@ -499,7 +509,7 @@ Run from repo root:
 
 ```bash
 pnpm --filter code-agent test -- src/__tests__/infra/firestore/taskGroupSummary/serializer.test.ts src/__tests__/infra/firestore/taskGroupSummary/queries.test.ts src/__tests__/infra/firestore/taskGroupSummaryFirestoreRepository.test.ts src/__tests__/routes/code/issueGroups.test.ts src/__tests__/usecases/archiveStaleGroups.test.ts
-pnpm test -- migrations/__tests__/078-task-group-summaries-linear-sort-key-indexes.test.ts
+pnpm test -- migrations/__tests__/105-task-group-summaries-linear-sort-key-indexes.test.ts
 pnpm run verify:workspace:tracked -- code-agent
 pnpm run ci:tracked
 ```
