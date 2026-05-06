@@ -8,8 +8,8 @@ export interface PromptGenerationError {
 }
 
 export interface PromptGenerationOptions {
-  promptType?: string;
-  correlation?: LLMCorrelationOptions;
+  promptType?: string | undefined;
+  correlation?: LLMCorrelationOptions | undefined;
 }
 
 export interface PromptGenerator {

@@ -90,10 +90,10 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     // for adapters constructed inside the synthesis path (where the same
     // adapter would not otherwise see the researchId).
     const callResearchId = options?.researchId ?? this.researchId;
-    const researchOptions =
-      callResearchId !== undefined
-        ? { correlation: { researchId: callResearchId } }
-        : undefined;
+    const researchOptions = {
+      promptType: options?.promptType ?? 'research-web-search',
+      ...(callResearchId !== undefined && { correlation: { researchId: callResearchId } }),
+    };
     const result = await this.client.research(builtPrompt, researchOptions);
     if (!result.ok) {
       const error = mapToLlmError(result.error);
