@@ -15,6 +15,7 @@ import { createAppLogger } from '@intexuraos/infra-sentry';
 import { deriveAggregateStatusFromSummary } from '../domain/issueGrouping/deriveAggregateStatusFromSummary.js';
 import type { TaskGroupSummary, UserGroupCounts } from '../domain/models/taskGroupSummary.js';
 import type { CodeTask } from '../domain/models/codeTask.js';
+import { getLinearIssueSortFields } from '../infra/firestore/taskGroupSummary/serializer.js';
 
 /* v8 ignore start -- module-init: standalone backfill script is never imported by test suites; cannot be unit-tested without a live Firestore connection @preserve */
 
@@ -97,6 +98,7 @@ function computeSummaryFromTasks(
 
   const firstTask = tasks[0];
   const linearIssueId = firstTask?.linearIssueId ?? null;
+  const sortFields = getLinearIssueSortFields(linearIssueId);
 
   for (const task of tasks) {
     taskCount++;
@@ -190,6 +192,8 @@ function computeSummaryFromTasks(
     userId,
     linearIssueId,
     groupKey,
+    linearIssueNumber: sortFields.linearIssueNumber,
+    linearIssueSortKey: sortFields.linearIssueSortKey,
     taskCount,
     activeTaskCount,
     latestTaskStatus,
