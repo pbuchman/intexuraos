@@ -6,6 +6,8 @@
 
 **Architecture:** Keep `/code/issue-groups` as the authoritative grouped-list endpoint and keep the response schema unchanged. Add stable Firestore sort keys to `task_group_summaries`, page by those keys instead of raw `linearIssueId`, and prevent stale archival from hiding groups that still have open GitHub pull requests.
 
+**Safe Rollout:** Do not deploy the `GET /code/issue-groups` query switch until existing `task_group_summaries` documents have been backfilled with `linearIssueSortKey`. Firestore excludes documents that lack an `orderBy` field, so rollout must be sequenced as: add model/serializer fields and indexes, deploy and run the focused backfill, verify zero missing sort keys, then enable the new query shape.
+
 **Tech Stack:** TypeScript, Fastify, Firestore, Vite/React consumer, Vitest, existing migration scripts.
 
 ---
@@ -42,7 +44,7 @@ Root causes:
 
 Modified:
 
-- `GET /code/issue-groups`: keep request/response schema unchanged; change backend ordering for `sortBy=linear-id` so Firestore pagination uses the same numeric sort semantics as the UI.
+- `GET /code/issue-groups`: keep request/response schema unchanged; change backend ordering for `sortBy=linear-id` so Firestore pagination uses the same numeric sort semantics as the UI only after the sort-key backfill has completed.
 - `POST /internal/archive-stale-groups`: keep request/response schema unchanged; retain groups with open GitHub PRs instead of archiving them as stale.
 
 Created:
@@ -58,6 +60,21 @@ Unchanged:
 - `GET /code/github-pr-summaries`: remains the source of GitHub PR summary data and keeps the existing response schema.
 - `GET /code/tasks`: unchanged.
 - Web API client response types in `apps/web/src/types/issueGroups.ts`: unchanged unless implementation chooses to expose optional diagnostics.
+
+## Rollout Safety Gate
+
+The implementation must keep legacy summary documents visible throughout rollout. Firestore `orderBy('linearIssueSortKey')` returns only documents that already contain `linearIssueSortKey`, so enabling that query before the backfill can hide existing groups from `/code/issue-groups`.
+
+Required rollout order:
+
+1. Ship Task 1 serializer/model changes so all newly written and recomputed summaries include `linearIssueNumber` and `linearIssueSortKey`.
+2. Ship Task 2 Step 4 index migration and wait until the composite indexes are ready.
+3. Ship Task 3 backfill script without enabling the new `linear-id` query shape.
+4. Run `backfillTaskGroupSummarySortKeys.ts --dry-run`, then run it without `--dry-run`.
+5. Verify the backfill reports `updated=0` on a second dry run and a direct Firestore scan finds no `task_group_summaries` documents missing `linearIssueSortKey`.
+6. Only after Step 5, deploy the Task 2 Step 3 query switch from `linearIssueId` to `linearIssueSortKey`.
+
+If the implementation must land in a single code deployment, add a temporary compatibility path instead of switching directly: either keep using `linearIssueId` until a runtime backfill-complete flag is enabled, or merge a bounded fallback query for missing-field documents before applying response pagination. Do not rely on an in-place post-deploy backfill alone to protect the query.
 
 ## File Structure
 
@@ -215,7 +232,9 @@ pnpm --filter code-agent test -- src/__tests__/infra/firestore/taskGroupSummary/
 
 Expected: FAIL while `queries.ts` still orders by `linearIssueId`.
 
-- [ ] **Step 3: Change the query builder**
+- [ ] **Step 3: Change the query builder after the backfill safety gate**
+
+Do this step only after the Rollout Safety Gate is complete. If the implementation is shipped before the production backfill can run, keep the existing `linearIssueId` query active behind a backfill-complete flag or add a temporary compatibility path that keeps documents missing `linearIssueSortKey` visible.
 
 Change the `linear-id` case in `buildListQuery()`:
 
@@ -358,7 +377,9 @@ GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json pnpm --filter code-agent exe
 
 Expected: logs total scanned and the number of summary docs needing the new keys.
 
-- [ ] **Step 3: Apply after indexes exist**
+- [ ] **Step 3: Apply after indexes exist and before enabling the new query**
+
+This is a required precondition for deploying Task 2 Step 3. The new `orderBy('linearIssueSortKey')` query must not be enabled while any legacy `task_group_summaries` document is missing the field.
 
 Run:
 
@@ -367,6 +388,24 @@ GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json pnpm --filter code-agent exe
 ```
 
 Expected: all existing `task_group_summaries` have `linearIssueNumber` and `linearIssueSortKey`.
+
+- [ ] **Step 4: Verify the backfill completion gate**
+
+Run the dry-run again:
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json pnpm --filter code-agent exec tsx src/scripts/backfillTaskGroupSummarySortKeys.ts --dry-run
+```
+
+Expected: `updated=0`.
+
+Run a direct missing-field scan:
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json node -e "const {Firestore}=require('@google-cloud/firestore'); const db=new Firestore({projectId:'intexuraos-dev-pbuchman'}); db.collection('task_group_summaries').get().then((s)=>{ const missing=s.docs.filter((d)=>d.get('linearIssueSortKey')===undefined).map((d)=>d.id); console.log(JSON.stringify({missingCount:missing.length, missing:missing.slice(0,20)})); process.exit(missing.length === 0 ? 0 : 1); }).catch((e)=>{ console.error(e); process.exit(1); });"
+```
+
+Expected: `missingCount=0`. Only then enable or deploy the Task 2 Step 3 query switch.
 
 ## Task 4: Do Not Hide Groups with Open Pull Requests During Stale Archival
 
@@ -515,6 +554,8 @@ pnpm run ci:tracked
 ```
 
 Expected: all commands pass.
+
+Pre-query-switch production safety check: run Task 3 Step 4 and confirm no summary docs are missing `linearIssueSortKey`.
 
 Manual production data check after deployment and sort-key backfill: use the same Firestore query shape as `GET /code/issue-groups` for `sortBy=linear-id` and confirm `linearIssueSortKey` orders numerically. A quick one-off check can run from `apps/code-agent`:
 
