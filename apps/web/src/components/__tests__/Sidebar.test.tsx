@@ -113,4 +113,26 @@ describe('Sidebar', () => {
     // Sub-item padding must not be applied.
     expect(classes).not.toContain('py-2');
   });
+
+  it('renders the Fishing Assistant section with digest, knowledge, and chat entries', () => {
+    render(
+      <MemoryRouter initialEntries={['/fishing-assistant/digests']}>
+        <Sidebar />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('button', { name: /fishing assistant/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /current digests/i })).toHaveAttribute(
+      'href',
+      '/fishing-assistant/digests'
+    );
+    expect(screen.getByRole('link', { name: /knowledge base/i })).toHaveAttribute(
+      'href',
+      '/fishing-assistant/knowledge'
+    );
+    expect(screen.getByRole('link', { name: /^chat$/i })).toHaveAttribute(
+      'href',
+      '/fishing-assistant/chat'
+    );
+  });
 });

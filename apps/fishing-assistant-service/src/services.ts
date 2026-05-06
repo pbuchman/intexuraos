@@ -1,4 +1,4 @@
-import { err, getErrorMessage, ok, type Logger, type Result } from '@intexuraos/common-core';
+import type { Logger } from '@intexuraos/common-core';
 import { getFirestore, type Firestore } from '@intexuraos/infra-firestore';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import {
@@ -7,25 +7,23 @@ import {
   type MobileNotificationsServiceClient,
   type UserServiceClient,
 } from '@intexuraos/internal-clients';
-import { createOpenRouterModelId, type LLMModel } from '@intexuraos/llm-contract';
-import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
 import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import OpenAI from 'openai';
 import type { Config } from './config.js';
+import type { FishingChatRepository } from './domain/ports/chatRepository.js';
+import type { FixedModelChatAdapter } from './domain/ports/chatModel.js';
 import type { KnowledgeEmbeddingClient } from './domain/ports/embeddingClient.js';
 import type {
   KnowledgeChunkRepository,
   KnowledgeFolderRepository,
   KnowledgePageRepository,
 } from './domain/ports/knowledgeRepositories.js';
+import { createFirestoreChatRepository } from './infra/firestore/chatRepository.js';
 import { createFirestoreChunkRepository } from './infra/firestore/chunkRepository.js';
 import { createFirestoreFolderRepository } from './infra/firestore/folderRepository.js';
 import { createFirestorePageRepository } from './infra/firestore/pageRepository.js';
-
-export const FISHING_ASSISTANT_CHAT_MODEL_ID = 'or:google/gemini-3-flash-preview';
-const FISHING_ASSISTANT_CHAT_MODEL = createOpenRouterModelId(
-  'google/gemini-3-flash-preview'
-) as unknown as LLMModel;
+import { createOpenAiKnowledgeEmbeddingClient } from './infra/llm/embeddingClient.js';
+import { createFixedGeminiFlashClient } from './infra/llm/fixedGeminiFlashClient.js';
 
 export interface FirestoreRepositories {
   firestore: Firestore;
@@ -34,22 +32,11 @@ export interface FirestoreRepositories {
   chunkRepository: KnowledgeChunkRepository;
 }
 
-export interface FishingChatClientError {
-  code: 'USER_KEYS_UNAVAILABLE' | 'NO_OPENROUTER_API_KEY';
-  message: string;
-}
-
-export interface FixedModelChatAdapter {
-  modelId: string;
-  createClientForUser(
-    userId: string
-  ): Promise<Result<LlmGenerateClient, FishingChatClientError>>;
-}
-
 export interface ServiceContainer {
   generateId: () => string;
   logger: Logger;
   repositories: FirestoreRepositories;
+  chatRepository: FishingChatRepository;
   embeddingClient: KnowledgeEmbeddingClient;
   openAiClient: OpenAI;
   userServiceClient: UserServiceClient;
@@ -58,68 +45,7 @@ export interface ServiceContainer {
   chatAdapter: FixedModelChatAdapter;
 }
 
-function createOpenAiKnowledgeEmbeddingClient(deps: {
-  openAiClient: OpenAI;
-  logger: Logger;
-}): KnowledgeEmbeddingClient {
-  return {
-    async embedTexts(input): ReturnType<KnowledgeEmbeddingClient['embedTexts']> {
-      try {
-        const response = await deps.openAiClient.embeddings.create({
-          model: 'text-embedding-3-small',
-          input: input.texts,
-        });
-
-        return ok(response.data.map((item) => item.embedding));
-      } catch (error) {
-        deps.logger.error({ error: getErrorMessage(error), userId: input.userId }, 'Failed to embed fishing knowledge chunks');
-        return err({ code: 'EMBEDDING_FAILED', message: getErrorMessage(error) });
-      }
-    },
-  };
-}
-
 let container: ServiceContainer | null = null;
-
-function createFixedModelChatAdapter(deps: {
-  userServiceClient: UserServiceClient;
-  logger: Logger;
-  usageSink: HttpInternalAuthUsageSink;
-}): FixedModelChatAdapter {
-  return {
-    modelId: FISHING_ASSISTANT_CHAT_MODEL_ID,
-    async createClientForUser(
-      userId: string
-    ): Promise<Result<LlmGenerateClient, FishingChatClientError>> {
-      const keysResult = await deps.userServiceClient.getApiKeys(userId);
-      if (!keysResult.ok) {
-        return err({
-          code: 'USER_KEYS_UNAVAILABLE',
-          message: keysResult.error.message,
-        });
-      }
-
-      const openRouterApiKey = keysResult.value.openrouter;
-      if (openRouterApiKey === undefined || openRouterApiKey === '') {
-        return err({
-          code: 'NO_OPENROUTER_API_KEY',
-          message: 'No OpenRouter API key configured for Fishing Assistant chat.',
-        });
-      }
-
-      return ok(
-        createLlmClient({
-          apiKey: openRouterApiKey,
-          model: FISHING_ASSISTANT_CHAT_MODEL,
-          userId,
-          logger: deps.logger,
-          usageSink: deps.usageSink,
-          ownerType: 'user',
-        })
-      );
-    },
-  };
-}
 
 export function initServices(config: Config): void {
   const logger = createAppLogger({
@@ -162,6 +88,7 @@ export function initServices(config: Config): void {
       pageRepository: createFirestorePageRepository({ firestore, logger }),
       chunkRepository: createFirestoreChunkRepository({ firestore, logger }),
     },
+    chatRepository: createFirestoreChatRepository({ firestore, logger }),
     embeddingClient: createOpenAiKnowledgeEmbeddingClient({ openAiClient, logger }),
     openAiClient,
     userServiceClient,
@@ -171,7 +98,7 @@ export function initServices(config: Config): void {
       logger,
     }),
     usageSink,
-    chatAdapter: createFixedModelChatAdapter({
+    chatAdapter: createFixedGeminiFlashClient({
       userServiceClient,
       logger,
       usageSink,

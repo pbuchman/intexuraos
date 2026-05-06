@@ -9,6 +9,7 @@ import {
   GitBranch,
   GitMerge,
   Key,
+  Library,
   LayoutList,
   List,
   MessageCircle,
@@ -70,6 +71,12 @@ export const llmUsageItems: NavItem[] = [
 export const cronAgentItems: NavItem[] = [
   { to: '/cron-agent', label: 'Schedules', icon: List },
   { to: '/cron-agent/executions', label: 'Executions', icon: Activity },
+];
+
+export const fishingAssistantItems: NavItem[] = [
+  { to: '/fishing-assistant/digests', label: 'Current Digests', icon: FileText },
+  { to: '/fishing-assistant/knowledge', label: 'Knowledge Base', icon: Library },
+  { to: '/fishing-assistant/chat', label: 'Chat', icon: MessageCircle },
 ];
 
 /**

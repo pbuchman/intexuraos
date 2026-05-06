@@ -61,6 +61,27 @@ const CronScheduleViewPage = React.lazy(() =>
 const DispatchQueuePage = React.lazy(() =>
   import('@/pages/DispatchQueuePage').then((m) => ({ default: m.DispatchQueuePage })),
 );
+const FishingChatPage = React.lazy(() =>
+  import('@/pages/fishing/FishingChatPage').then((m) => ({ default: m.FishingChatPage })),
+);
+const FishingDigestsPage = React.lazy(() =>
+  import('@/pages/fishing/FishingDigestsPage').then((m) => ({ default: m.FishingDigestsPage })),
+);
+const FishingDigestViewPage = React.lazy(() =>
+  import('@/pages/fishing/FishingDigestViewPage').then((m) => ({
+    default: m.FishingDigestViewPage,
+  })),
+);
+const FishingKnowledgeBasePage = React.lazy(() =>
+  import('@/pages/fishing/FishingKnowledgeBasePage').then((m) => ({
+    default: m.FishingKnowledgeBasePage,
+  })),
+);
+const FishingKnowledgePageEditor = React.lazy(() =>
+  import('@/pages/fishing/FishingKnowledgePageEditor').then((m) => ({
+    default: m.FishingKnowledgePageEditor,
+  })),
+);
 const MergeQueuePage = React.lazy(() =>
   import('@/pages/MergeQueuePage').then((m) => ({ default: m.MergeQueuePage })),
 );
@@ -323,6 +344,22 @@ function AppRoutes(): React.JSX.Element {
             element={<NotificationDigestViewPage />}
           />
           <Route path="/notifications/digests" element={<NotificationDigestsPage />} />
+          {/* Fishing Assistant routes */}
+          <Route
+            path="/fishing-assistant/digests/:groupKey/:date"
+            element={<FishingDigestViewPage />}
+          />
+          <Route path="/fishing-assistant/digests" element={<FishingDigestsPage />} />
+          <Route
+            path="/fishing-assistant/knowledge/pages/:pageId"
+            element={<FishingKnowledgePageEditor />}
+          />
+          <Route
+            path="/fishing-assistant/knowledge"
+            element={<FishingKnowledgeBasePage />}
+          />
+          <Route path="/fishing-assistant/chat/:chatId" element={<FishingChatPage />} />
+          <Route path="/fishing-assistant/chat" element={<FishingChatPage />} />
         </Route>
         {/* Redirects for old URLs (backward compatibility) */}
         <Route path="/notion" element={<Navigate to="/settings/notion" replace />} />
