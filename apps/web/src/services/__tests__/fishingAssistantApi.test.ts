@@ -157,6 +157,123 @@ describe('fishingAssistantApi', () => {
     expect(pageResult).toEqual(pages);
   });
 
+  it('normalizes Firestore timestamp-like dates in knowledge and chat responses', async () => {
+    const timestampLike = (iso: string): { toDate: () => Date } => ({
+      toDate: () => new Date(iso),
+    });
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest)
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 'folder-1',
+            userId: 'user-1',
+            name: 'Recipes',
+            parentId: null,
+            sortOrder: 0,
+            pageCount: 1,
+            createdAt: timestampLike('2026-05-06T10:00:00.000Z'),
+            updatedAt: timestampLike('2026-05-06T11:00:00.000Z'),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 'page-1',
+            userId: 'user-1',
+            folderId: 'folder-1',
+            title: 'Spring Bait',
+            rawText: 'raw',
+            normalizedText: 'normalized',
+            contentType: 'recipe',
+            indexingStatus: 'ready',
+            chunkCount: 1,
+            createdAt: timestampLike('2026-05-06T10:00:00.000Z'),
+            updatedAt: timestampLike('2026-05-06T12:00:00.000Z'),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 'chat-1',
+            userId: 'user-1',
+            title: 'Spring bait',
+            lastMessagePreview: 'Use pinka',
+            lastMessageAt: timestampLike('2026-05-06T09:30:00.000Z'),
+            createdAt: timestampLike('2026-05-06T09:00:00.000Z'),
+            updatedAt: timestampLike('2026-05-06T10:00:00.000Z'),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 'message-1',
+            chatId: 'chat-1',
+            userId: 'user-1',
+            role: 'assistant',
+            content: 'Use pinka',
+            citations: [],
+            createdAt: timestampLike('2026-05-06T10:01:00.000Z'),
+            confidence: 'high',
+          },
+        ],
+      });
+
+    await expect(listFishingKnowledgeFolders(accessToken)).resolves.toEqual([
+      {
+        id: 'folder-1',
+        userId: 'user-1',
+        name: 'Recipes',
+        parentId: null,
+        sortOrder: 0,
+        pageCount: 1,
+        createdAt: '2026-05-06T10:00:00.000Z',
+        updatedAt: '2026-05-06T11:00:00.000Z',
+      },
+    ]);
+    await expect(listFishingKnowledgePages(accessToken, 'folder-1')).resolves.toEqual([
+      {
+        id: 'page-1',
+        userId: 'user-1',
+        folderId: 'folder-1',
+        title: 'Spring Bait',
+        rawText: 'raw',
+        normalizedText: 'normalized',
+        contentType: 'recipe',
+        indexingStatus: 'ready',
+        chunkCount: 1,
+        createdAt: '2026-05-06T10:00:00.000Z',
+        updatedAt: '2026-05-06T12:00:00.000Z',
+      },
+    ]);
+    await expect(listFishingChats(accessToken)).resolves.toEqual([
+      {
+        id: 'chat-1',
+        userId: 'user-1',
+        title: 'Spring bait',
+        lastMessagePreview: 'Use pinka',
+        lastMessageAt: '2026-05-06T09:30:00.000Z',
+        createdAt: '2026-05-06T09:00:00.000Z',
+        updatedAt: '2026-05-06T10:00:00.000Z',
+      },
+    ]);
+    await expect(listFishingChatMessages(accessToken, 'chat-1')).resolves.toEqual([
+      {
+        id: 'message-1',
+        chatId: 'chat-1',
+        userId: 'user-1',
+        role: 'assistant',
+        content: 'Use pinka',
+        citations: [],
+        createdAt: '2026-05-06T10:01:00.000Z',
+        confidence: 'high',
+      },
+    ]);
+  });
+
   it('creates, updates, deletes, and reindexes knowledge resources', async () => {
     const page: FishingKnowledgePage = {
       id: 'page-1',
