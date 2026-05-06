@@ -213,7 +213,7 @@ describe('evaluateEvent', () => {
       }
     });
 
-    it('rejects non-opened/synchronize actions', async () => {
+    it('rejects non-triage pull_request actions', async () => {
       const deps = createDeps();
       const event = createFakePREvent({ action: 'closed' });
 
@@ -222,6 +222,7 @@ describe('evaluateEvent', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_EVENT');
+        expect(result.error.message).toContain('Expected opened/synchronize/ready_for_review action');
       }
     });
 
@@ -509,6 +510,15 @@ describe('evaluateEvent', () => {
     it('handles synchronize action', async () => {
       const deps = createDeps();
       const event = createFakePREvent({ action: 'synchronize' });
+
+      const result = await evaluateEvent(deps, event);
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('handles ready_for_review action', async () => {
+      const deps = createDeps();
+      const event = createFakePREvent({ action: 'ready_for_review' });
 
       const result = await evaluateEvent(deps, event);
 
@@ -1462,6 +1472,11 @@ describe('isGitHubAgentEvent', () => {
 
   it('returns true for pull_request.synchronize', () => {
     const event = createFakePREvent({ eventType: 'pull_request', action: 'synchronize' });
+    expect(isGitHubAgentEvent(event)).toBe(true);
+  });
+
+  it('returns true for pull_request.ready_for_review', () => {
+    const event = createFakePREvent({ eventType: 'pull_request', action: 'ready_for_review' });
     expect(isGitHubAgentEvent(event)).toBe(true);
   });
 
