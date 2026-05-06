@@ -2911,6 +2911,50 @@ describe('drainTaskQueue', () => {
       expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
     });
 
+    it('logs future-scheduled eligibility as the all-candidates reason instead of active-resource blocking', async () => {
+      const now = Date.now();
+      const task = createMockTask({
+        id: 'cooloff-retry-waiting',
+        queuedAt: Timestamp.fromDate(new Date(now - 60 * 1000)),
+        dispatchSchedule: {
+          notBeforeAt: Timestamp.fromDate(new Date(now + 5 * 60 * 1000)),
+          source: 'retry_cooloff',
+          derivedBy: 'fallback',
+        },
+      });
+      const laterTask = createMockTask({
+        id: 'cooloff-retry-waiting-later',
+        createdAt: Timestamp.fromDate(new Date(now + 1)),
+        queuedAt: Timestamp.fromDate(new Date(now - 30 * 1000)),
+        dispatchSchedule: {
+          notBeforeAt: Timestamp.fromDate(new Date(now + 10 * 60 * 1000)),
+          source: 'retry_cooloff',
+          derivedBy: 'fallback',
+        },
+      });
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task, laterTask]));
+      setupWorkerSettings();
+
+      const result = await drainTaskQueue(createDeps());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual({ action: 'still_busy' });
+      }
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          candidateCount: 2,
+          futureScheduledCount: 2,
+          nextEligibleAt: expect.any(String),
+        }),
+        'All queued tasks are future-scheduled and not yet eligible',
+      );
+      expect(mockLogger.info).not.toHaveBeenCalledWith(
+        expect.anything(),
+        'All queued tasks blocked by active resources',
+      );
+    });
+
     it('dispatches an eligible unscheduled task ahead of an older future-scheduled row', async () => {
       const now = Date.now();
       const olderScheduled = createMockTask({

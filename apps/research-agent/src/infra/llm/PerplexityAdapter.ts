@@ -45,10 +45,10 @@ export class PerplexityAdapter implements LlmResearchProvider {
   ): Promise<Result<LlmResearchResult, LlmError>> {
     const builtPrompt = researchPrompt.build({ userPrompt: prompt, ctx });
     this.logger.info({ model: this.model, promptLength: builtPrompt.length }, 'Perplexity research started');
-    const researchOptions =
-      options?.researchId !== undefined
-        ? { correlation: { researchId: options.researchId } }
-        : undefined;
+    const researchOptions = {
+      promptType: options?.promptType ?? 'research-web-search',
+      ...(options?.researchId !== undefined && { correlation: { researchId: options.researchId } }),
+    };
     const result = await this.client.research(builtPrompt, researchOptions);
     if (!result.ok) {
       const error = mapToLlmError(result.error);

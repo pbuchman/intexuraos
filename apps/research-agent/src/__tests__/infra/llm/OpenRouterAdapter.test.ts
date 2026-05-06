@@ -125,7 +125,10 @@ describe('OpenRouterAdapter', () => {
         expect(result.value.content).toBe('Research result');
         expect(result.value.sources).toContain('https://source.com');
       }
-      expect(mockResearch).toHaveBeenCalledWith(expect.stringContaining('Test prompt'), undefined);
+      expect(mockResearch).toHaveBeenCalledWith(
+        expect.stringContaining('Test prompt'),
+        { promptType: 'research-web-search' }
+      );
     });
 
     it('threads researchId through per-call correlation when provided', async () => {
@@ -138,11 +141,11 @@ describe('OpenRouterAdapter', () => {
         },
       });
 
-      await adapter.research('Test prompt', undefined, { researchId: 'r-1' });
+      await adapter.research('Test prompt', undefined, { researchId: 'r-1', promptType: 'research-web-search' });
 
       expect(mockResearch).toHaveBeenCalledWith(
         expect.stringContaining('Test prompt'),
-        { correlation: { researchId: 'r-1' } }
+        { promptType: 'research-web-search', correlation: { researchId: 'r-1' } }
       );
     });
 
@@ -341,7 +344,7 @@ describe('OpenRouterAdapter', () => {
       await adapterWithBaked.research('Test prompt');
       expect(mockResearch).toHaveBeenCalledWith(
         expect.any(String),
-        { correlation: { researchId: 'baked-or' } }
+        { promptType: 'research-web-search', correlation: { researchId: 'baked-or' } }
       );
     });
 

@@ -270,6 +270,14 @@
     "fishing_knowledge_chunks": {
       "owner": "fishing-assistant-service",
       "description": "Per-user Fishing Assistant searchable page chunks with vector embeddings for RAG retrieval."
+    },
+    "fishing_chats": {
+      "owner": "fishing-assistant-service",
+      "description": "Per-user Fishing Assistant chat sessions with derived titles and latest-message summary fields."
+    },
+    "fishing_chat_messages": {
+      "owner": "fishing-assistant-service",
+      "description": "Per-user Fishing Assistant user/assistant messages with citations and confidence metadata."
     }
   }
 }

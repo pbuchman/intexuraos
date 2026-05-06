@@ -91,7 +91,10 @@ describe('GeminiAdapter', () => {
       if (result.ok) {
         expect(result.value.content).toBe('Research result');
       }
-      expect(mockResearch).toHaveBeenCalledWith(expect.stringContaining('Test prompt'), undefined);
+      expect(mockResearch).toHaveBeenCalledWith(
+        expect.stringContaining('Test prompt'),
+        { promptType: 'research-web-search' }
+      );
     });
 
     it('threads researchId through per-call correlation when provided', async () => {
@@ -100,11 +103,11 @@ describe('GeminiAdapter', () => {
         value: { content: 'Research result', sources: [], usage: mockUsage },
       });
 
-      await adapter.research('Test prompt', undefined, { researchId: 'r-1' });
+      await adapter.research('Test prompt', undefined, { researchId: 'r-1', promptType: 'research-web-search' });
 
       expect(mockResearch).toHaveBeenCalledWith(
         expect.stringContaining('Test prompt'),
-        { correlation: { researchId: 'r-1' } }
+        { promptType: 'research-web-search', correlation: { researchId: 'r-1' } }
       );
     });
 
@@ -126,7 +129,7 @@ describe('GeminiAdapter', () => {
 
       expect(mockResearch).toHaveBeenCalledWith(
         expect.stringContaining('Test prompt'),
-        { correlation: { researchId: 'baked-research' } }
+        { promptType: 'research-web-search', correlation: { researchId: 'baked-research' } }
       );
     });
 
@@ -148,7 +151,7 @@ describe('GeminiAdapter', () => {
 
       expect(mockResearch).toHaveBeenCalledWith(
         expect.stringContaining('Test prompt'),
-        { correlation: { researchId: 'override' } }
+        { promptType: 'research-web-search', correlation: { researchId: 'override' } }
       );
     });
 

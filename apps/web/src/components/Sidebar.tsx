@@ -1,6 +1,7 @@
 import { useLocation } from 'react-router-dom';
 import {
   Bookmark,
+  BookOpenText,
   Calendar,
   CheckSquare,
   Code2,
@@ -23,6 +24,7 @@ import { NotificationsSection } from './sidebar/NotificationsSection.js';
 import { TopLevelNavLink } from './sidebar/TopLevelNavLink.js';
 import {
   codeTasksItems,
+  fishingAssistantItems,
   cronAgentItems,
   hellscriptItems,
   linearItems,
@@ -69,6 +71,17 @@ export function Sidebar(): React.JSX.Element {
           <TopLevelNavLink to="/inbox" label="Inbox" icon={Inbox} isCollapsed={s.isCollapsed} />
           <TopLevelNavLink to="/code-tasks" label="Battlefield" icon={Swords} isCollapsed={s.isCollapsed} />
           <TopLevelNavLink to="/notifications/digests" label="Digests" icon={Newspaper} isCollapsed={s.isCollapsed} />
+
+          <CollapsibleNavSection
+            label="Fishing Assistant"
+            icon={BookOpenText}
+            items={fishingAssistantItems}
+            isOpen={s.isFishingAssistantOpen}
+            onToggle={s.setIsFishingAssistantOpen}
+            isCollapsed={s.isCollapsed}
+            isActive={location.pathname.startsWith('/fishing-assistant')}
+            navigateFallback="/fishing-assistant/digests"
+          />
 
           <CollapsibleNavSection
             label="Hellscript"

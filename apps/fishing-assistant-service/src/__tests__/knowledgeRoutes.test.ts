@@ -85,6 +85,7 @@ function createServices(): Omit<RouteTestContext, 'app'> {
       pageRepository: pages,
       chunkRepository: chunks,
     },
+    chatRepository: {} as ServiceContainer['chatRepository'],
     embeddingClient: {
       embedTexts(input) {
         return embeddingClient.embedTexts(input);

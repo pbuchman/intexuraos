@@ -19,11 +19,16 @@ import type {
   ShareStoragePort,
 } from '../ports/index.js';
 import type { ContextInferenceProvider } from '../ports/contextInference.js';
-import type { ShareInfo, AttributionStatus } from '../models/Research.js';
+import type { Research, ShareInfo, AttributionStatus } from '../models/Research.js';
 import type { CoverImageInput, GeneratedByUserInfo } from '../utils/htmlGenerator.js';
 import { generateShareableHtml, slugify, generateShareToken } from '../utils/index.js';
 import type { ImageServiceClient, GeneratedImageData, PromptModel, ImageModel } from '../../../services.js';
 import type { ResearchExportSettingsPort } from '../ports/researchExportSettings.js';
+import type {
+  ResearchCostSummary,
+  ResearchCostSummaryClient,
+  ResearchCostSummaryTimeRange,
+} from '../ports/researchCostSummary.js';
 import { repairAttribution } from './repairAttribution.js';
 
 export const LOW_QUALITY_WARNING_PREFIX =
@@ -56,6 +61,14 @@ export interface RunSynthesisDeps {
   // Use `as NotionServiceClient` when consuming (e.g., in synthesis export)
   notionServiceClient?: unknown;
   researchExportSettings?: ResearchExportSettingsPort | null;
+  researchCostSummaryClient?: ResearchCostSummaryClient | null;
+  usageSummarySettleDelayMs?: number;
+}
+
+interface AggregateTotals {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCostUsd: number;
 }
 
 export async function runSynthesis(
@@ -77,6 +90,8 @@ export async function runSynthesis(
     imageApiKeys,
     notionServiceClient,
     researchExportSettings,
+    researchCostSummaryClient,
+    usageSummarySettleDelayMs,
   } = deps;
 
   logger.info({}, '[4.1] Loading research from database');
@@ -118,11 +133,26 @@ export async function runSynthesis(
     const now = new Date();
     const startedAt = new Date(research.startedAt);
     const totalDurationMs = now.getTime() - startedAt.getTime();
+    const fallbackTotals = calculateAggregateTotals(research);
+    const authoritativeTotals = await resolveAuthoritativeTotals({
+      researchId,
+      userId: research.userId,
+      existingTotals: existingAggregateTotals(research),
+      fallbackTotals,
+      sourceLlmCostUsd: research.sourceLlmCostUsd,
+      timeRange: researchUsageTimeRange(research.startedAt, now),
+      settleDelayMs: usageSummarySettleDelayMs,
+      researchCostSummaryClient,
+      logger,
+    });
 
     await researchRepo.update(researchId, {
       status: 'completed',
       completedAt: now.toISOString(),
       totalDurationMs,
+      totalInputTokens: authoritativeTotals.totalInputTokens,
+      totalOutputTokens: authoritativeTotals.totalOutputTokens,
+      totalCostUsd: authoritativeTotals.totalCostUsd,
     });
 
     void notificationSender.sendResearchComplete(
@@ -263,40 +293,14 @@ export async function runSynthesis(
 
   logger.info({}, `[4.3.4] Attribution status: ${attributionStatus}`);
 
-  // Calculate aggregate totals from all LLM results + synthesis
-  // For enhanced research: exclude copiedFromSource results (costs tracked in sourceLlmCostUsd)
-  const completedResults = research.llmResults.filter((r) => r.status === 'completed');
-  const newCompletedResults =
-    research.sourceResearchId !== undefined
-      ? completedResults.filter((r) => r.copiedFromSource !== true)
-      : completedResults;
-
-  const llmTotals = newCompletedResults.reduce(
-    (acc, r) => ({
-      inputTokens: acc.inputTokens + (r.inputTokens ?? 0),
-      outputTokens: acc.outputTokens + (r.outputTokens ?? 0),
-      costUsd: acc.costUsd + (r.costUsd ?? 0),
-    }),
-    { inputTokens: 0, outputTokens: 0, costUsd: 0 }
-  );
-
-  const totalInputTokens = llmTotals.inputTokens + (synthesisUsage?.inputTokens ?? 0);
-  const totalOutputTokens = llmTotals.outputTokens + (synthesisUsage?.outputTokens ?? 0);
-  const totalCostUsd =
-    llmTotals.costUsd +
-    (synthesisUsage?.costUsd ?? 0) +
-    (research.auxiliaryCostUsd ?? 0) +
-    (research.sourceLlmCostUsd ?? 0) +
-    additionalCostUsd;
+  const fallbackTotals = calculateAggregateTotals(research, synthesisUsage, additionalCostUsd);
 
   logger.info(
     {},
-    `[4.3.5] Aggregate usage: inputTokens=${String(totalInputTokens)}, outputTokens=${String(totalOutputTokens)}, costUsd=${totalCostUsd.toFixed(6)} (llm=${llmTotals.costUsd.toFixed(6)}, synth=${(synthesisUsage?.costUsd ?? 0).toFixed(6)}, aux=${(research.auxiliaryCostUsd ?? 0).toFixed(6)}, source=${(research.sourceLlmCostUsd ?? 0).toFixed(6)}, add=${additionalCostUsd.toFixed(6)})`
+    `[4.3.5] Aggregate usage fallback: inputTokens=${String(fallbackTotals.totalInputTokens)}, outputTokens=${String(fallbackTotals.totalOutputTokens)}, costUsd=${fallbackTotals.totalCostUsd.toFixed(6)} (synth=${(synthesisUsage?.costUsd ?? 0).toFixed(6)}, aux=${(research.auxiliaryCostUsd ?? 0).toFixed(6)}, source=${(research.sourceLlmCostUsd ?? 0).toFixed(6)}, add=${additionalCostUsd.toFixed(6)})`
   );
 
-  const now = new Date();
   const startedAt = new Date(research.startedAt);
-  const totalDurationMs = now.getTime() - startedAt.getTime();
 
   let coverImage: CoverImageInput | undefined;
   let coverImageId: string | undefined;
@@ -305,11 +309,11 @@ export async function runSynthesis(
     logger.info({}, '[4.4.1] Starting cover image generation');
     const imageResult = await generateCoverImage(
       imageServiceClient,
-      researchId,
       processedContent,
       userId,
       imageApiKeys,
       research.synthesisModel,
+      researchId,
       logger
     );
     if (imageResult !== null) {
@@ -358,7 +362,7 @@ export async function runSynthesis(
       title: research.title,
       synthesizedResult: processedContent,
       shareUrl,
-      sharedAt: now.toISOString(),
+      sharedAt: new Date().toISOString(),
       staticAssetsUrl: shareConfig.staticAssetsUrl,
       llmResults: research.llmResults,
       /* v8 ignore start -- ts-type: exactOptionalPropertyTypes spread for input-contexts on synthesis-completed event @preserve */
@@ -379,7 +383,7 @@ export async function runSynthesis(
         shareToken,
         slug,
         shareUrl,
-        sharedAt: now.toISOString(),
+        sharedAt: new Date().toISOString(),
         gcsPath: uploadResult.value.gcsPath,
         ...(coverImageId !== undefined && { coverImageId }),
         ...(coverImage !== undefined && { coverImageUrl: coverImage.fullSizeUrl }),
@@ -390,15 +394,30 @@ export async function runSynthesis(
     }
   }
 
+  const completedAt = new Date();
+  const totalDurationMs = completedAt.getTime() - startedAt.getTime();
+
+  const authoritativeTotals = await resolveAuthoritativeTotals({
+    researchId,
+    userId: research.userId,
+    existingTotals: existingAggregateTotals(research),
+    fallbackTotals,
+    sourceLlmCostUsd: research.sourceLlmCostUsd,
+    timeRange: researchUsageTimeRange(research.startedAt, completedAt),
+    settleDelayMs: usageSummarySettleDelayMs,
+    researchCostSummaryClient,
+    logger,
+  });
+
   logger.info({}, '[4.6] Saving final research result to database');
   await researchRepo.update(researchId, {
     status: 'completed',
     synthesizedResult: processedContent,
-    completedAt: now.toISOString(),
+    completedAt: completedAt.toISOString(),
     totalDurationMs,
-    totalInputTokens,
-    totalOutputTokens,
-    totalCostUsd,
+    totalInputTokens: authoritativeTotals.totalInputTokens,
+    totalOutputTokens: authoritativeTotals.totalOutputTokens,
+    totalCostUsd: authoritativeTotals.totalCostUsd,
     attributionStatus,
     ...(shareInfo !== undefined && { shareInfo }),
   });
@@ -479,11 +498,11 @@ function getAvailableProviderPipelines(
 
 async function generateCoverImage(
   client: ImageServiceClient,
-  researchId: string,
   synthesizedResult: string,
   userId: string,
   imageApiKeys: ImageApiKeys | undefined,
   synthesisModel: string | undefined,
+  researchId: string,
   logger: Logger
 ): Promise<GeneratedImageData | null> {
   const pipelines = getAvailableProviderPipelines(imageApiKeys, synthesisModel);
@@ -589,4 +608,159 @@ async function generateCoverImage(
     `[4.4.4] Cover image generation failed — all ${String(pipelines.length)} provider(s) exhausted. HTML will be generated without a cover image.`
   );
   return null;
+}
+
+async function resolveAuthoritativeTotals(params: {
+  researchId: string;
+  userId: string;
+  existingTotals: Partial<AggregateTotals>;
+  fallbackTotals: AggregateTotals;
+  sourceLlmCostUsd: number | undefined;
+  timeRange: ResearchCostSummaryTimeRange;
+  settleDelayMs: number | undefined;
+  researchCostSummaryClient: ResearchCostSummaryClient | null | undefined;
+  logger: Logger;
+}): Promise<AggregateTotals> {
+  const {
+    researchId,
+    userId,
+    existingTotals,
+    fallbackTotals,
+    sourceLlmCostUsd,
+    timeRange,
+    settleDelayMs,
+    researchCostSummaryClient,
+    logger,
+  } = params;
+
+  if (researchCostSummaryClient === undefined || researchCostSummaryClient === null) {
+    return preserveExistingNonzeroTotals(existingTotals, fallbackTotals);
+  }
+
+  await waitForUsageSummarySettle(settleDelayMs);
+
+  const summaryResult = await researchCostSummaryClient.getResearchCostSummary(
+    researchId,
+    { type: 'system', id: userId },
+    timeRange
+  );
+
+  if (!summaryResult.ok) {
+    logger.error(
+      { researchId, error: summaryResult.error },
+      '[4.6] Failed to fetch usage-service research cost summary'
+    );
+    return preserveExistingNonzeroTotals(existingTotals, fallbackTotals);
+  }
+
+  const summary = summaryResult.value;
+  if (summary.diagnostics.missingAttribution.costUsd > 0) {
+    logger.error(
+      { researchId, missingAttribution: summary.diagnostics.missingAttribution },
+      '[4.6] Usage summary has billed events missing research correlation'
+    );
+  }
+
+  if (summary.totals.costUsd > 0) {
+    const totals = totalsFromSummary(summary, sourceLlmCostUsd);
+    logger.info(
+      {
+        researchId,
+        costUsd: totals.totalCostUsd,
+        inputTokens: totals.totalInputTokens,
+        outputTokens: totals.totalOutputTokens,
+      },
+      '[4.6] Using usage-service research cost summary totals'
+    );
+    return totals;
+  }
+
+  return preserveExistingNonzeroTotals(existingTotals, fallbackTotals);
+}
+
+function calculateAggregateTotals(
+  research: Research,
+  synthesisUsage?: { inputTokens?: number; outputTokens?: number; costUsd?: number },
+  additionalCostUsd = 0
+): AggregateTotals {
+  // For enhanced research: exclude copiedFromSource results (costs tracked in sourceLlmCostUsd)
+  const completedResults = research.llmResults.filter((r) => r.status === 'completed');
+  const newCompletedResults =
+    research.sourceResearchId !== undefined
+      ? completedResults.filter((r) => r.copiedFromSource !== true)
+      : completedResults;
+
+  const llmTotals = newCompletedResults.reduce(
+    (acc, r) => ({
+      inputTokens: acc.inputTokens + (r.inputTokens ?? 0),
+      outputTokens: acc.outputTokens + (r.outputTokens ?? 0),
+      costUsd: acc.costUsd + (r.costUsd ?? 0),
+    }),
+    { inputTokens: 0, outputTokens: 0, costUsd: 0 }
+  );
+
+  return {
+    totalInputTokens: llmTotals.inputTokens + (synthesisUsage?.inputTokens ?? 0),
+    totalOutputTokens: llmTotals.outputTokens + (synthesisUsage?.outputTokens ?? 0),
+    totalCostUsd:
+      llmTotals.costUsd +
+      (synthesisUsage?.costUsd ?? 0) +
+      (research.auxiliaryCostUsd ?? 0) +
+      (research.sourceLlmCostUsd ?? 0) +
+      additionalCostUsd,
+  };
+}
+
+function researchUsageTimeRange(startedAt: string, completedAt: Date): ResearchCostSummaryTimeRange {
+  return {
+    from: new Date(startedAt).toISOString(),
+    to: completedAt.toISOString(),
+  };
+}
+
+async function waitForUsageSummarySettle(settleDelayMs: number | undefined): Promise<void> {
+  const delayMs = settleDelayMs ?? 750;
+  if (delayMs <= 0) {
+    return;
+  }
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+function totalsFromSummary(
+  summary: ResearchCostSummary,
+  sourceLlmCostUsd: number | undefined
+): AggregateTotals {
+  return {
+    totalInputTokens: summary.totals.inputTokens,
+    totalOutputTokens: summary.totals.outputTokens,
+    totalCostUsd: summary.totals.costUsd + (sourceLlmCostUsd ?? 0),
+  };
+}
+
+function existingAggregateTotals(research: Research): Partial<AggregateTotals> {
+  return {
+    ...(research.totalInputTokens !== undefined && { totalInputTokens: research.totalInputTokens }),
+    ...(research.totalOutputTokens !== undefined && { totalOutputTokens: research.totalOutputTokens }),
+    ...(research.totalCostUsd !== undefined && { totalCostUsd: research.totalCostUsd }),
+  };
+}
+
+function preserveExistingNonzeroTotals(
+  existingTotals: Partial<AggregateTotals>,
+  fallbackTotals: AggregateTotals
+): AggregateTotals {
+  return {
+    totalInputTokens:
+      fallbackTotals.totalInputTokens === 0 && (existingTotals.totalInputTokens ?? 0) > 0
+        ? (existingTotals.totalInputTokens as number)
+        : fallbackTotals.totalInputTokens,
+    totalOutputTokens:
+      fallbackTotals.totalOutputTokens === 0 && (existingTotals.totalOutputTokens ?? 0) > 0
+        ? (existingTotals.totalOutputTokens as number)
+        : fallbackTotals.totalOutputTokens,
+    totalCostUsd:
+      fallbackTotals.totalCostUsd === 0 && (existingTotals.totalCostUsd ?? 0) > 0
+        ? (existingTotals.totalCostUsd as number)
+        : fallbackTotals.totalCostUsd,
+  };
 }

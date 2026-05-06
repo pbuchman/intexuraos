@@ -33,9 +33,9 @@ export interface UsageTokens {
  * scaled integer math with `Math.round()` for precision.
  *
  * Image generation costs are also handled: when `imageCount > 0` and the
- * model has `imagePricing`, the per-image price for `imageSize` is multiplied
- * by `imageCount` and added to the token cost. Missing size falls back to
- * `1024x1024` for older events.
+ * model has `imagePricing`, the per-image price for `usage.imageSize` is
+ * multiplied by `imageCount`. Events emitted before image dimensions were
+ * tracked fall back to the default size (`1024x1024`).
  *
  * @param provider - The LLM provider identifier
  * @param usage - Token usage counts from the request
@@ -177,7 +177,8 @@ function calculateOpenRouterCost(usage: UsageTokens, pricing: ModelPricing): num
  * Calculate image generation cost.
  *
  * Consolidated from `infra-gemini` and `infra-gpt` `calculateImageCost`.
- * Uses the default image size (`1024x1024`) when only a count is available.
+ * Uses the default image size (`1024x1024`) for older events that only carry
+ * `imageCount`.
  *
  * @returns Total image cost in USD (0 when no images or no imagePricing)
  */

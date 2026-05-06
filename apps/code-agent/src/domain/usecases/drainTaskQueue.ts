@@ -192,16 +192,24 @@ export async function drainTaskQueue(
 
     // Find first dispatchable candidate with per-PR guard + TTL check
     let task: CodeTask | null = null;
+    let futureScheduledCount = 0;
+    let activeResourceBlockedCount = 0;
+    let nextEligibleAt: Date | undefined;
     for (const candidate of roundRobinCandidates) {
       // INT-1463: schedule-aware skip — if the task is not yet eligible for dispatch,
       // skip BEFORE the PR-lock check and BEFORE the TTL check. Do not touch queuedAt
       // (TTL must remain independent of the schedule wait — see notBeforeAt branch below).
       const notBeforeAt = candidate.dispatchSchedule?.notBeforeAt;
       if (notBeforeAt !== undefined && notBeforeAt.toMillis() > Date.now()) {
+        futureScheduledCount += 1;
+        const notBeforeDate = notBeforeAt.toDate();
+        if (nextEligibleAt === undefined || notBeforeDate.getTime() < nextEligibleAt.getTime()) {
+          nextEligibleAt = notBeforeDate;
+        }
         logger.info(
           {
             taskId: candidate.id,
-            notBeforeAt: notBeforeAt.toDate().toISOString(),
+            notBeforeAt: notBeforeDate.toISOString(),
             source: candidate.dispatchSchedule?.source,
           },
           'Skipping future-scheduled task — not yet eligible',
@@ -213,6 +221,7 @@ export async function drainTaskQueue(
       if (candidate.prNumber !== undefined) {
         const prActiveResult = await codeTaskRepo.hasDispatchedOrRunningForPR(candidate.repository, candidate.prNumber);
         if (prActiveResult.ok && prActiveResult.value.hasActive) {
+          activeResourceBlockedCount += 1;
           logger.info({
             taskId: candidate.id,
             repository: candidate.repository,
@@ -242,6 +251,7 @@ export async function drainTaskQueue(
           candidate.linearIssueId,
         );
         if (siblingResult.ok && siblingResult.value.hasActive) {
+          activeResourceBlockedCount += 1;
           logger.info(
             {
               taskId: candidate.id,
@@ -302,7 +312,25 @@ export async function drainTaskQueue(
     }
 
     if (task === null) {
-      logger.info({ candidateCount: roundRobinCandidates.length }, 'All queued tasks blocked by active resources');
+      if (futureScheduledCount === roundRobinCandidates.length && futureScheduledCount > 0) {
+        logger.info(
+          {
+            candidateCount: roundRobinCandidates.length,
+            futureScheduledCount,
+            ...(nextEligibleAt !== undefined && { nextEligibleAt: nextEligibleAt.toISOString() }),
+          },
+          'All queued tasks are future-scheduled and not yet eligible'
+        );
+      } else {
+        logger.info(
+          {
+            candidateCount: roundRobinCandidates.length,
+            futureScheduledCount,
+            activeResourceBlockedCount,
+          },
+          'All queued tasks blocked by active resources'
+        );
+      }
       return ok({ action: 'still_busy' });
     }
 
