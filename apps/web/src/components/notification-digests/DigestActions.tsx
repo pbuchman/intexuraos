@@ -6,7 +6,7 @@ function buildMarkdown(summary: DailySummary): string {
   const lines: string[] = [];
   lines.push(`# ${summary.date} · ${summary.groupKey}`);
   lines.push('');
-  lines.push(`Wiadomości: ${String(summary.messageCount)}`);
+  lines.push(`Messages: ${String(summary.messageCount)}`);
   lines.push('');
   if (summary.headline.trim() !== '') {
     lines.push(`## ${summary.headline}`);
@@ -17,22 +17,22 @@ function buildMarkdown(summary: DailySummary): string {
     lines.push('');
   }
   if (summary.threads.length > 0) {
-    lines.push('## Wątki');
+    lines.push('## Threads');
     for (const t of summary.threads) {
-      lines.push(`- **${t.topic}** (${t.resolved ? 'rozwiązany' : 'otwarty'}) — uczestnicy: ${t.participants.join(', ')}`);
+      lines.push(`- **${t.topic}** (${t.resolved ? 'resolved' : 'open'}) - participants: ${t.participants.join(', ')}`);
       for (const f of t.keyFacts) lines.push(`  - ${f}`);
     }
     lines.push('');
   }
   if (summary.moderatorPosts.length > 0) {
-    lines.push('## Posty moderatora');
+    lines.push('## Moderator posts');
     for (const p of summary.moderatorPosts) {
-      lines.push(`- \`${p.time}\` **${p.topic}** — ${p.summary}`);
+      lines.push(`- \`${p.time}\` **${p.topic}** - ${p.summary}`);
     }
     lines.push('');
   }
   if (summary.openQuestions.length > 0) {
-    lines.push('## Otwarte pytania');
+    lines.push('## Open questions');
     for (const q of summary.openQuestions) lines.push(`- ${q}`);
   }
   return lines.join('\n');
@@ -52,7 +52,7 @@ export function DigestActions({ summary }: DigestActionsProps): React.JSX.Elemen
       setCopied(true);
       setTimeout(() => { setCopied(false); }, 2000);
     }).catch(() => {
-      setCopyError('Schowek niedostępny');
+      setCopyError('Clipboard unavailable');
     });
   }, [summary]);
 
@@ -64,7 +64,7 @@ export function DigestActions({ summary }: DigestActionsProps): React.JSX.Elemen
         className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-800 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-200"
       >
         {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-        {copied ? 'Skopiowano' : 'Kopiuj jako Markdown'}
+        {copied ? 'Copied' : 'Copy as Markdown'}
       </button>
       {copyError !== null ? (
         <span className="text-xs text-red-600 dark:text-red-400">{copyError}</span>

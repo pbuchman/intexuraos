@@ -54,7 +54,7 @@ export function NotificationDigestViewPage(): React.JSX.Element {
       <Layout>
         <Card className="mt-4">
           <p className="text-slate-600 dark:text-slate-300">
-            Brak podsumowania dla dnia {safeDate}. Kliknij poniżej, aby je wygenerować.
+            No digest for {safeDate}. Click below to generate it.
           </p>
           <button
             type="button"
@@ -62,7 +62,7 @@ export function NotificationDigestViewPage(): React.JSX.Element {
             className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={regenerating}
           >
-            {regenerating ? 'Generowanie…' : 'Wygeneruj podsumowanie'}
+            {regenerating ? 'Generating...' : 'Generate digest'}
           </button>
           <RegenerateConfirmModal
             isOpen={confirmOpen}
@@ -89,7 +89,7 @@ export function NotificationDigestViewPage(): React.JSX.Element {
       {lastRegenerateResult?.lockSkipped === true ? (
         <Card variant="warning" className="mb-6">
           <p className="text-sm text-amber-800 dark:text-amber-200">
-            Inne zadanie wygenerowania tego dnia jest już w toku. Spróbuj ponownie za chwilę.
+            Another generation job for this day is already running. Try again shortly.
           </p>
         </Card>
       ) : null}
