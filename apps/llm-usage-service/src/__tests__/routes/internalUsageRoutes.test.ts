@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { buildServer } from '../../server.js';
 import { setServices, resetServices, type ServiceContainer } from '../../services.js';
 import { FakeUsageEventRepository } from '../fakeUsageEventRepository.js';
@@ -162,6 +162,64 @@ describe('internalUsageRoutes', () => {
       expect(event?.cost.calculatedUsd).toBeGreaterThan(0);
       expect(event?.cost.billedUsd).toBe(event?.cost.calculatedUsd);
       expect(event?.cost.providerReportedUsd).toBeNull();
+    });
+
+    it('accepts imageSize and bills image generation with the matching image price', async () => {
+      const pricingCache = new FakePricingCache();
+      pricingCache.setPricing(LlmProviders.OpenAI, LlmModels.GPTImage1, {
+        inputPricePerMillion: 0,
+        outputPricePerMillion: 0,
+        imagePricing: { '1024x1024': 0.04, '1536x1024': 0.08, '1024x1536': 0.09 },
+      });
+      setServices({
+        usageEventRepository: eventRepo,
+        usageAggregateRepository: aggregateRepo,
+        pricingRepository: new FakePricingRepository(),
+        pricingCache,
+        orchestratorSecret: 'test-secret',
+      } satisfies ServiceContainer);
+
+      const event = createTestEventInput({
+        eventId: 'evt_image_size',
+        request: {
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPTImage1,
+          operation: 'image_generation',
+          success: true,
+          durationMs: 900,
+          promptType: 'image-generation',
+        },
+        usage: {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cachedTokens: 0,
+          reasoningTokens: 0,
+          thinkingTokens: 0,
+          webSearchCalls: 0,
+          groundingEnabled: false,
+          imageCount: 1,
+          imageSize: '1536x1024',
+        },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/events',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: {
+          schemaVersion: 2,
+          events: [event],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const stored = eventRepo.getStoredEvents();
+      expect(stored).toHaveLength(1);
+      expect(stored[0]?.usage.imageSize).toBe('1536x1024');
+      expect(stored[0]?.cost.billedUsd).toBe(0.08);
     });
 
     it('rejects events missing source.environment', async () => {
