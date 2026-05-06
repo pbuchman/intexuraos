@@ -13,6 +13,8 @@ import type { GroupStatus } from '../../../domain/issueGrouping/types.js';
 import { deriveAggregateStatusFromSummary } from '../../../domain/issueGrouping/deriveAggregateStatusFromSummary.js';
 import { REMEDIATION_NOT_NEEDED } from '../../../domain/issueGrouping/constants.js';
 
+const LINEAR_ISSUE_NUMBER_REGEX = /-(\d+)$/;
+
 // =============================================================================
 // Domain predicates (pure)
 // =============================================================================
@@ -26,6 +28,27 @@ export function getGroupKey(task: CodeTask): string {
     return task.linearIssueId;
   }
   return `standalone_${task.id}`;
+}
+
+export function getLinearIssueSortFields(linearIssueId: string | null): {
+  linearIssueNumber: number | null;
+  linearIssueSortKey: number;
+} {
+  if (linearIssueId === null) {
+    return { linearIssueNumber: null, linearIssueSortKey: Number.MAX_SAFE_INTEGER };
+  }
+
+  const match = LINEAR_ISSUE_NUMBER_REGEX.exec(linearIssueId);
+  const rawNumber = match?.[1];
+  if (rawNumber === undefined) {
+    return { linearIssueNumber: null, linearIssueSortKey: Number.MAX_SAFE_INTEGER };
+  }
+
+  const issueNumber = Number(rawNumber);
+  if (!Number.isFinite(issueNumber)) {
+    return { linearIssueNumber: null, linearIssueSortKey: Number.MAX_SAFE_INTEGER };
+  }
+  return { linearIssueNumber: issueNumber, linearIssueSortKey: issueNumber };
 }
 
 /**
@@ -116,12 +139,20 @@ export function toTimestamp(value: unknown): Timestamp {
  */
 export function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
   /* v8 ignore start -- ts-type: FakeFirestore always returns well-formed documents written by this repo; null/missing field fallbacks are unreachable in tests @preserve */
+  const linearIssueId = data['linearIssueId'] !== undefined && data['linearIssueId'] !== null
+    ? String(data['linearIssueId'])
+    : null;
+  const fallbackSortFields = getLinearIssueSortFields(linearIssueId);
   return {
     userId: String(data['userId'] ?? ''),
-    linearIssueId: data['linearIssueId'] !== undefined && data['linearIssueId'] !== null
-      ? String(data['linearIssueId'])
-      : null,
+    linearIssueId,
     groupKey: String(data['groupKey'] ?? ''),
+    linearIssueNumber: data['linearIssueNumber'] !== undefined && data['linearIssueNumber'] !== null
+      ? Number(data['linearIssueNumber'])
+      : fallbackSortFields.linearIssueNumber,
+    linearIssueSortKey: data['linearIssueSortKey'] !== undefined && data['linearIssueSortKey'] !== null
+      ? Number(data['linearIssueSortKey'])
+      : fallbackSortFields.linearIssueSortKey,
     taskCount: Number(data['taskCount'] ?? 0),
     activeTaskCount: Number(data['activeTaskCount'] ?? 0),
     latestTaskStatus: String(data['latestTaskStatus'] ?? ''),
@@ -208,6 +239,7 @@ export function docToCounts(data: Record<string, unknown>): UserGroupCounts {
  */
 export function buildInitialSummary(task: CodeTask, now: Timestamp): Omit<TaskGroupSummary, 'aggregateStatus'> {
   const groupKey = getGroupKey(task);
+  const sortFields = getLinearIssueSortFields(task.linearIssueId ?? null);
   const agentTypesPresent: string[] = task.agentType !== undefined ? [task.agentType] : [];
   const hasPrUrl = task.result?.prUrl !== undefined;
   const hasCompletedPlanning = task.agentType === 'planning' && task.status === 'planned';
@@ -222,6 +254,7 @@ export function buildInitialSummary(task: CodeTask, now: Timestamp): Omit<TaskGr
     userId: task.userId,
     linearIssueId: task.linearIssueId ?? null,
     groupKey,
+    ...sortFields,
     taskCount: task.status === 'archived' ? 0 : 1,
     activeTaskCount: isActiveStatus(task.status) ? 1 : 0,
     latestTaskStatus: task.status,
@@ -471,6 +504,7 @@ export function computeSummaryFromTasks(
 
   const firstTask = nonArchivedTasks[0];
   const linearIssueId = firstTask?.linearIssueId ?? null;
+  const sortFields = getLinearIssueSortFields(linearIssueId);
 
   for (const task of nonArchivedTasks) {
     taskCount++;
@@ -538,6 +572,7 @@ export function computeSummaryFromTasks(
     userId,
     linearIssueId,
     groupKey,
+    ...sortFields,
     taskCount,
     activeTaskCount,
     latestTaskStatus,

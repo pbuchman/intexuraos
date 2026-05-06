@@ -78,6 +78,8 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('userId')).toBe('user-1');
       expect(doc.get('groupKey')).toBe('INT-100');
       expect(doc.get('linearIssueId')).toBe('INT-100');
+      expect(doc.get('linearIssueNumber')).toBe(100);
+      expect(doc.get('linearIssueSortKey')).toBe(100);
       expect(doc.get('taskCount')).toBe(1);
       expect(doc.get('activeTaskCount')).toBe(0);
       expect(doc.get('hasCompletedPlanning')).toBe(true);
@@ -113,6 +115,8 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-100').get();
       expect(doc.get('taskCount')).toBe(2);
       expect(doc.get('hasCompletedExecution')).toBe(true);
+      expect(doc.get('linearIssueNumber')).toBe(100);
+      expect(doc.get('linearIssueSortKey')).toBe(100);
       const agentTypes = doc.get('agentTypesPresent') as string[];
       expect(agentTypes).toContain('planning');
       expect(agentTypes).toContain('execution');
@@ -1878,6 +1882,259 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(result.value.nextCursor).toBeDefined();
     });
 
+    it('uses a bounded Firestore query for linear-id pagination', async () => {
+      const now = Timestamp.fromDate(new Date('2026-05-06T00:00:00Z'));
+      const makeDoc = (id: string, issueNumber: number): { id: string; data: () => Record<string, unknown> } => ({
+        id,
+        data: (): Record<string, unknown> => ({
+          userId: 'user-1',
+          groupKey: id.replace('user-1_', ''),
+          linearIssueId: `INT-${String(issueNumber)}`,
+          linearIssueNumber: issueNumber,
+          linearIssueSortKey: issueNumber,
+          taskCount: 1,
+          activeTaskCount: 0,
+          latestTaskStatus: 'planned',
+          latestTaskUpdatedAt: now,
+          agentTypesPresent: ['planning'],
+          hasCompletedPlanning: true,
+          hasCompletedExecution: false,
+          hasImplementationTaskId: false,
+          hasPrUrl: false,
+          prNumber: null,
+          latestReviewNeedsRemediation: null,
+          oldestTaskCreatedAt: now,
+          mostRecentDispatchedAt: null,
+          aggregateStatus: 'done',
+          updatedAt: now,
+        }),
+      });
+      const query = {
+        where: vi.fn(),
+        orderBy: vi.fn(),
+        limit: vi.fn(),
+        get: vi.fn(),
+      };
+      query.where.mockReturnValue(query);
+      query.orderBy.mockReturnValue(query);
+      query.limit.mockReturnValue(query);
+      query.get.mockResolvedValue({
+        docs: [
+          makeDoc('user-1_INT-30', 30),
+          makeDoc('user-1_INT-20', 20),
+          makeDoc('user-1_INT-10', 10),
+        ],
+      });
+      const firestore = {
+        collection: vi.fn().mockReturnValue(query),
+      };
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: firestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.listGroupSummaries({
+        userId: 'user-1',
+        sortBy: 'linear-id',
+        limit: 2,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(query.orderBy).toHaveBeenCalledWith('linearIssueSortKey', 'desc');
+      expect(query.orderBy).toHaveBeenCalledWith('latestTaskUpdatedAt', 'desc');
+      expect(query.limit).toHaveBeenCalledWith(3);
+      expect(query.get).toHaveBeenCalledTimes(1);
+    });
+
+    it('paginates backfilled summaries by linear-id numerically', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.fromDate(new Date('2026-05-06T00:00:00Z'));
+      const later = Timestamp.fromDate(new Date('2026-05-06T01:00:00Z'));
+
+      const makeSummaryDoc = (
+        groupKey: string,
+        linearIssueId: string | null,
+        latestTaskUpdatedAt: Timestamp,
+        sortFields?: { linearIssueNumber: number | null; linearIssueSortKey: number },
+      ): { id: string; data: Record<string, unknown> } => ({
+        id: `user-1_${groupKey}`,
+        data: {
+          userId: 'user-1',
+          groupKey,
+          linearIssueId,
+          ...(sortFields ?? {}),
+          taskCount: 1,
+          activeTaskCount: 0,
+          latestTaskStatus: 'planned',
+          latestTaskUpdatedAt,
+          agentTypesPresent: ['planning'],
+          hasCompletedPlanning: true,
+          hasCompletedExecution: false,
+          hasImplementationTaskId: false,
+          hasPrUrl: false,
+          prNumber: null,
+          latestReviewNeedsRemediation: null,
+          oldestTaskCreatedAt: now,
+          mostRecentDispatchedAt: null,
+          aggregateStatus: 'done',
+          updatedAt: now,
+        },
+      });
+
+      fakeFirestore.seedCollection('task_group_summaries', [
+        makeSummaryDoc('INT-999', 'INT-999', now, { linearIssueNumber: 999, linearIssueSortKey: 999 }),
+        makeSummaryDoc('INT-1601', 'INT-1601', now, { linearIssueNumber: 1601, linearIssueSortKey: 1601 }),
+        makeSummaryDoc('INT-1601-newer', 'INT-1601', later, { linearIssueNumber: 1601, linearIssueSortKey: 1601 }),
+        makeSummaryDoc('standalone_task-1', null, later, { linearIssueNumber: null, linearIssueSortKey: Number.MAX_SAFE_INTEGER }),
+      ]);
+
+      const page1 = await repo.listGroupSummaries({
+        userId: 'user-1',
+        sortBy: 'linear-id',
+        limit: 2,
+      });
+
+      expect(page1.ok).toBe(true);
+      if (!page1.ok) return;
+      expect(page1.value.summaries.map((summary) => summary.groupKey)).toEqual([
+        'standalone_task-1',
+        'INT-1601-newer',
+      ]);
+      expect(page1.value.nextCursor).toBeDefined();
+
+      const page2 = await repo.listGroupSummaries({
+        userId: 'user-1',
+        sortBy: 'linear-id',
+        limit: 2,
+        ...(page1.value.nextCursor !== undefined ? { cursor: page1.value.nextCursor } : {}),
+      });
+
+      expect(page2.ok).toBe(true);
+      if (!page2.ok) return;
+      // FakeFirestore accepts DocumentSnapshot cursors but does not emulate startAfter pagination.
+      // This assertion keeps the linear-id cursor branch covered without pretending cursor advancement is implemented in the fake.
+      expect(page2.value.summaries.map((summary) => summary.groupKey)).toEqual([
+        'standalone_task-1',
+        'INT-1601-newer',
+      ]);
+    });
+
+    it('accepts existing document cursors for non-linear sorts', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+
+      const makeSummaryDoc = (groupKey: string, prNumber: number): { id: string; data: Record<string, unknown> } => ({
+        id: `user-1_${groupKey}`,
+        data: {
+          userId: 'user-1',
+          groupKey,
+          linearIssueId: groupKey,
+          linearIssueNumber: Number(groupKey.replace('INT-', '')),
+          linearIssueSortKey: Number(groupKey.replace('INT-', '')),
+          taskCount: 1,
+          activeTaskCount: 0,
+          latestTaskStatus: 'planned',
+          latestTaskUpdatedAt: now,
+          agentTypesPresent: ['planning'],
+          hasCompletedPlanning: true,
+          hasCompletedExecution: false,
+          hasImplementationTaskId: false,
+          hasPrUrl: true,
+          prNumber,
+          latestReviewNeedsRemediation: null,
+          oldestTaskCreatedAt: now,
+          mostRecentDispatchedAt: null,
+          aggregateStatus: 'done',
+          updatedAt: now,
+        },
+      });
+
+      fakeFirestore.seedCollection('task_group_summaries', [
+        makeSummaryDoc('INT-1', 10),
+        makeSummaryDoc('INT-2', 20),
+        makeSummaryDoc('INT-3', 30),
+      ]);
+
+      const page1 = await repo.listGroupSummaries({
+        userId: 'user-1',
+        sortBy: 'pr-number',
+        limit: 1,
+      });
+
+      expect(page1.ok).toBe(true);
+      if (!page1.ok) return;
+      expect(page1.value.summaries.map((summary) => summary.groupKey)).toEqual(['INT-3']);
+      expect(page1.value.nextCursor).toBeDefined();
+
+      const page2 = await repo.listGroupSummaries({
+        userId: 'user-1',
+        sortBy: 'pr-number',
+        limit: 5,
+        ...(page1.value.nextCursor !== undefined ? { cursor: page1.value.nextCursor } : {}),
+      });
+
+      expect(page2.ok).toBe(true);
+      if (!page2.ok) return;
+      // FakeFirestore accepts DocumentSnapshot cursors but does not emulate startAfter pagination.
+      // This assertion keeps the non-linear cursor branch covered without pretending cursor advancement is implemented in the fake.
+      expect(page2.value.summaries.map((summary) => summary.groupKey)).toEqual(['INT-3', 'INT-2', 'INT-1']);
+      expect(page2.value.nextCursor).toBeUndefined();
+    });
+
+    it('ignores missing document cursors for non-linear sorts', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+
+      fakeFirestore.seedCollection('task_group_summaries', [
+        {
+          id: 'user-1_INT-1',
+          data: {
+            userId: 'user-1',
+            groupKey: 'INT-1',
+            linearIssueId: 'INT-1',
+            linearIssueNumber: 1,
+            linearIssueSortKey: 1,
+            taskCount: 1,
+            activeTaskCount: 0,
+            latestTaskStatus: 'planned',
+            latestTaskUpdatedAt: now,
+            agentTypesPresent: ['planning'],
+            hasCompletedPlanning: true,
+            hasCompletedExecution: false,
+            hasImplementationTaskId: false,
+            hasPrUrl: true,
+            prNumber: 10,
+            latestReviewNeedsRemediation: null,
+            oldestTaskCreatedAt: now,
+            mostRecentDispatchedAt: null,
+            aggregateStatus: 'done',
+            updatedAt: now,
+          },
+        },
+      ]);
+
+      const missingCursor = Buffer.from('user-1_missing', 'utf-8').toString('base64');
+      const result = await repo.listGroupSummaries({
+        userId: 'user-1',
+        sortBy: 'pr-number',
+        limit: 10,
+        cursor: missingCursor,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.summaries.map((summary) => summary.groupKey)).toEqual(['INT-1']);
+    });
+
     it('returns all results when no statusFilter provided', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -2160,6 +2417,8 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('prNumber')).toBe(42);
       expect(doc.get('userId')).toBe('user-3');
       expect(doc.get('groupKey')).toBe('INT-700');
+      expect(doc.get('linearIssueNumber')).toBe(700);
+      expect(doc.get('linearIssueSortKey')).toBe(700);
     });
 
     it('does nothing when tasks array is empty', async () => {
@@ -2749,6 +3008,8 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
       const doc = await fakeFirestore.collection('task_group_summaries').doc('user-4_standalone_task-standalone-rc').get();
       expect(doc.get('linearIssueId')).toBeNull();
+      expect(doc.get('linearIssueNumber')).toBeNull();
+      expect(doc.get('linearIssueSortKey')).toBe(Number.MAX_SAFE_INTEGER);
     });
 
     it('prNumber is null when prUrl present but prNumber is undefined', async () => {
