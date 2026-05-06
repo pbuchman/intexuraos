@@ -66,7 +66,7 @@ export function buildListQuery(
   // Order by sort field
   switch (input.sortBy) {
     case 'linear-id':
-      query = query.orderBy('linearIssueId', 'desc');
+      query = query.orderBy('linearIssueSortKey', 'desc').orderBy('latestTaskUpdatedAt', 'desc');
       break;
     case 'pr-number':
       query = query.orderBy('prNumber', 'desc');

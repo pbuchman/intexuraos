@@ -150,7 +150,11 @@ export function initServices(config: ServiceConfig): void {
     taskDispatcher, whatsappNotifier, actionsAgentClient, linearAgentClient, statusMirrorService, linearIssueService,
     processHeartbeat: createProcessHeartbeatUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
     detectZombieTasks: createDetectZombieTasksUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
-    archiveStaleGroups: createArchiveStaleGroupsUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
+    archiveStaleGroups: createArchiveStaleGroupsUseCase({
+      codeTaskRepository: repos.codeTaskRepo,
+      gitHubPRSummaryRepo: repos.gitHubPRSummaryRepo,
+      logger,
+    }),
     autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({ codeTaskRepository: repos.codeTaskRepo, logger }),
     metricsClient, workerSettingsRepo: repos.workerSettingsRepo, workerHealthProbe,
     gitHubPREventRepo: repos.gitHubPREventRepo, gitHubPRSummaryRepo: repos.gitHubPRSummaryRepo,

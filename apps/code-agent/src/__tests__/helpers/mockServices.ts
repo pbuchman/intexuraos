@@ -228,6 +228,9 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
         firestore: fakeFirestore,
         logger,
       }),
+      gitHubPRSummaryRepo: createFirestoreGitHubPRSummariesRepository({
+        logger,
+      }),
       logger,
     }),
     autoArchiveMergedTasks: createAutoArchiveMergedTasksUseCase({
