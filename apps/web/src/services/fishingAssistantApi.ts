@@ -16,6 +16,76 @@ import type {
   UpdateFishingKnowledgePageInput,
 } from '@/types/fishingAssistant';
 
+interface TimestampLike {
+  toDate: () => Date;
+}
+
+type FishingKnowledgeFolderResponse = Omit<FishingKnowledgeFolder, 'createdAt' | 'updatedAt'> & {
+  createdAt: unknown;
+  updatedAt: unknown;
+};
+
+type FishingKnowledgePageResponse = Omit<FishingKnowledgePage, 'createdAt' | 'updatedAt'> & {
+  createdAt: unknown;
+  updatedAt: unknown;
+};
+
+type FishingChatResponse = Omit<FishingChat, 'lastMessageAt' | 'createdAt' | 'updatedAt'> & {
+  lastMessageAt: unknown;
+  createdAt: unknown;
+  updatedAt: unknown;
+};
+
+type FishingChatMessageResponse = Omit<FishingChatMessage, 'createdAt'> & {
+  createdAt: unknown;
+};
+
+function toIsoString(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (value !== null && typeof value === 'object' && 'toDate' in value) {
+    const timestamp = value as TimestampLike;
+    return timestamp.toDate().toISOString();
+  }
+  return new Date(String(value)).toISOString();
+}
+
+function normalizeKnowledgeFolder(folder: FishingKnowledgeFolderResponse): FishingKnowledgeFolder {
+  return {
+    ...folder,
+    createdAt: toIsoString(folder.createdAt),
+    updatedAt: toIsoString(folder.updatedAt),
+  };
+}
+
+function normalizeKnowledgePage(page: FishingKnowledgePageResponse): FishingKnowledgePage {
+  return {
+    ...page,
+    createdAt: toIsoString(page.createdAt),
+    updatedAt: toIsoString(page.updatedAt),
+  };
+}
+
+function normalizeChat(chat: FishingChatResponse): FishingChat {
+  return {
+    ...chat,
+    lastMessageAt: toIsoString(chat.lastMessageAt),
+    createdAt: toIsoString(chat.createdAt),
+    updatedAt: toIsoString(chat.updatedAt),
+  };
+}
+
+function normalizeChatMessage(message: FishingChatMessageResponse): FishingChatMessage {
+  return {
+    ...message,
+    createdAt: toIsoString(message.createdAt),
+  };
+}
+
 function buildDigestQuery(options: ListFishingDigestsOptions): string {
   const params = new URLSearchParams();
   params.set('groupKey', options.groupKey);
@@ -65,19 +135,19 @@ export async function getFishingDigestDetail(
 export async function listFishingKnowledgeFolders(
   accessToken: string
 ): Promise<FishingKnowledgeFolder[]> {
-  const response = await apiRequest<{ items: FishingKnowledgeFolder[] }>(
+  const response = await apiRequest<{ items: FishingKnowledgeFolderResponse[] }>(
     config.fishingAssistantServiceUrl,
     '/fishing/folders',
     accessToken
   );
-  return response.items;
+  return response.items.map(normalizeKnowledgeFolder);
 }
 
 export async function createFishingKnowledgeFolder(
   accessToken: string,
   input: CreateFishingKnowledgeFolderInput
 ): Promise<FishingKnowledgeFolder> {
-  const response = await apiRequest<{ folder: FishingKnowledgeFolder }>(
+  const response = await apiRequest<{ folder: FishingKnowledgeFolderResponse }>(
     config.fishingAssistantServiceUrl,
     '/fishing/folders',
     accessToken,
@@ -86,7 +156,7 @@ export async function createFishingKnowledgeFolder(
       body: input,
     }
   );
-  return response.folder;
+  return normalizeKnowledgeFolder(response.folder);
 }
 
 export async function updateFishingKnowledgeFolder(
@@ -94,7 +164,7 @@ export async function updateFishingKnowledgeFolder(
   folderId: string,
   input: UpdateFishingKnowledgeFolderInput
 ): Promise<FishingKnowledgeFolder> {
-  const response = await apiRequest<{ folder: FishingKnowledgeFolder }>(
+  const response = await apiRequest<{ folder: FishingKnowledgeFolderResponse }>(
     config.fishingAssistantServiceUrl,
     `/fishing/folders/${encodeURIComponent(folderId)}`,
     accessToken,
@@ -103,7 +173,7 @@ export async function updateFishingKnowledgeFolder(
       body: input,
     }
   );
-  return response.folder;
+  return normalizeKnowledgeFolder(response.folder);
 }
 
 export async function deleteFishingKnowledgeFolder(
@@ -127,19 +197,19 @@ export async function listFishingKnowledgePages(
     params.set('folderId', folderId);
   }
   const suffix = params.size > 0 ? `?${params.toString()}` : '';
-  const response = await apiRequest<{ items: FishingKnowledgePage[] }>(
+  const response = await apiRequest<{ items: FishingKnowledgePageResponse[] }>(
     config.fishingAssistantServiceUrl,
     `/fishing/pages${suffix}`,
     accessToken
   );
-  return response.items;
+  return response.items.map(normalizeKnowledgePage);
 }
 
 export async function createFishingKnowledgePage(
   accessToken: string,
   input: CreateFishingKnowledgePageInput
 ): Promise<FishingKnowledgePage> {
-  const response = await apiRequest<{ page: FishingKnowledgePage }>(
+  const response = await apiRequest<{ page: FishingKnowledgePageResponse }>(
     config.fishingAssistantServiceUrl,
     '/fishing/pages',
     accessToken,
@@ -148,19 +218,19 @@ export async function createFishingKnowledgePage(
       body: input,
     }
   );
-  return response.page;
+  return normalizeKnowledgePage(response.page);
 }
 
 export async function getFishingKnowledgePage(
   accessToken: string,
   pageId: string
 ): Promise<FishingKnowledgePage> {
-  const response = await apiRequest<{ page: FishingKnowledgePage }>(
+  const response = await apiRequest<{ page: FishingKnowledgePageResponse }>(
     config.fishingAssistantServiceUrl,
     `/fishing/pages/${encodeURIComponent(pageId)}`,
     accessToken
   );
-  return response.page;
+  return normalizeKnowledgePage(response.page);
 }
 
 export async function updateFishingKnowledgePage(
@@ -168,7 +238,7 @@ export async function updateFishingKnowledgePage(
   pageId: string,
   input: UpdateFishingKnowledgePageInput
 ): Promise<FishingKnowledgePage> {
-  const response = await apiRequest<{ page: FishingKnowledgePage }>(
+  const response = await apiRequest<{ page: FishingKnowledgePageResponse }>(
     config.fishingAssistantServiceUrl,
     `/fishing/pages/${encodeURIComponent(pageId)}`,
     accessToken,
@@ -177,7 +247,7 @@ export async function updateFishingKnowledgePage(
       body: input,
     }
   );
-  return response.page;
+  return normalizeKnowledgePage(response.page);
 }
 
 export async function deleteFishingKnowledgePage(
@@ -196,44 +266,44 @@ export async function reindexFishingKnowledgePage(
   accessToken: string,
   pageId: string
 ): Promise<FishingKnowledgePage> {
-  const response = await apiRequest<{ page: FishingKnowledgePage }>(
+  const response = await apiRequest<{ page: FishingKnowledgePageResponse }>(
     config.fishingAssistantServiceUrl,
     `/fishing/pages/${encodeURIComponent(pageId)}/reindex`,
     accessToken,
     { method: 'POST' }
   );
-  return response.page;
+  return normalizeKnowledgePage(response.page);
 }
 
 export async function listFishingChats(accessToken: string): Promise<FishingChat[]> {
-  const response = await apiRequest<{ items: FishingChat[] }>(
+  const response = await apiRequest<{ items: FishingChatResponse[] }>(
     config.fishingAssistantServiceUrl,
     '/fishing/chats',
     accessToken
   );
-  return response.items;
+  return response.items.map(normalizeChat);
 }
 
 export async function createFishingChat(accessToken: string): Promise<FishingChat> {
-  const response = await apiRequest<{ chat: FishingChat }>(
+  const response = await apiRequest<{ chat: FishingChatResponse }>(
     config.fishingAssistantServiceUrl,
     '/fishing/chats',
     accessToken,
     { method: 'POST' }
   );
-  return response.chat;
+  return normalizeChat(response.chat);
 }
 
 export async function listFishingChatMessages(
   accessToken: string,
   chatId: string
 ): Promise<FishingChatMessage[]> {
-  const response = await apiRequest<{ items: FishingChatMessage[] }>(
+  const response = await apiRequest<{ items: FishingChatMessageResponse[] }>(
     config.fishingAssistantServiceUrl,
     `/fishing/chats/${encodeURIComponent(chatId)}/messages`,
     accessToken
   );
-  return response.items;
+  return response.items.map(normalizeChatMessage);
 }
 
 export async function sendFishingChatMessage(
@@ -241,7 +311,10 @@ export async function sendFishingChatMessage(
   chatId: string,
   message: string
 ): Promise<SendFishingChatMessageResponse> {
-  return await apiRequest<SendFishingChatMessageResponse>(
+  const response = await apiRequest<{
+    chat: FishingChatResponse;
+    message: FishingChatMessageResponse;
+  }>(
     config.fishingAssistantServiceUrl,
     `/fishing/chats/${encodeURIComponent(chatId)}/messages`,
     accessToken,
@@ -250,4 +323,8 @@ export async function sendFishingChatMessage(
       body: { message },
     }
   );
+  return {
+    chat: normalizeChat(response.chat),
+    message: normalizeChatMessage(response.message),
+  };
 }
