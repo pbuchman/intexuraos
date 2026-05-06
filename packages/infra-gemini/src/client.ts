@@ -201,7 +201,6 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       options?: ImageGenerateOptions
     ): Promise<Result<ImageGenerationResult, GeminiError>> {
       const start = Date.now();
-      void options;
       try {
         const response = await ai.models.generateContent({
           model: IMAGE_MODEL,

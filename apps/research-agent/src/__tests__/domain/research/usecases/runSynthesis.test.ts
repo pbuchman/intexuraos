@@ -130,23 +130,23 @@ function createUsageSummary(overrides: {
 }
 
 function expectedImagePromptOptions(): {
-  promptType: 'research-cover-image-prompt';
+  promptType: 'image-thumbnail-prompt';
   correlation: { researchId: string };
 } {
   return {
-    promptType: 'research-cover-image-prompt',
+    promptType: 'image-thumbnail-prompt',
     correlation: { researchId: 'research-1' },
   };
 }
 
 function expectedImageGenerationOptions(title: string): {
   title: string;
-  promptType: 'research-cover-image-generation';
+  promptType: 'image-generation';
   correlation: { researchId: string };
 } {
   return {
     title,
-    promptType: 'research-cover-image-generation',
+    promptType: 'image-generation',
     correlation: { researchId: 'research-1' },
   };
 }
@@ -2312,7 +2312,7 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
         'user-1',
         expect.objectContaining({
           title: expect.any(String),
-          promptType: 'research-cover-image-generation',
+          promptType: 'image-generation',
           correlation: { researchId: 'research-1' },
         })
       );

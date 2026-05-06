@@ -60,7 +60,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         { userServiceClient, createPromptGenerator, logger: request.log },
         modelConfig
       );
-      const result = await useCase({ text, model, userId, promptType, correlation });
+      const result = await useCase({
+        text,
+        model,
+        userId,
+        ...(promptType !== undefined && { promptType }),
+        ...(correlation !== undefined && { correlation }),
+      });
 
       if (!result.ok) {
         if (result.error.code === 'API_KEYS_UNAVAILABLE') {
@@ -130,9 +136,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         prompt,
         model: model as ImageGenerationModel,
         userId,
-        title,
-        promptType,
-        correlation,
+        ...(title !== undefined && { title }),
+        ...(promptType !== undefined && { promptType }),
+        ...(correlation !== undefined && { correlation }),
       });
 
       if (!result.ok) {

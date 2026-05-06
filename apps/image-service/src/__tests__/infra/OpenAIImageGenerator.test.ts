@@ -173,13 +173,13 @@ describe('OpenAIImageGenerator', () => {
 
       await generator.generate(testPrompt, {
         slug: 'test-slug',
-        promptType: 'research-cover-image-generation',
+        promptType: 'image-generation',
         correlation: { researchId: 'research-1' },
       });
 
       expect(mockGenerateImage).toHaveBeenCalledWith(testPrompt, {
         slug: 'test-slug',
-        promptType: 'research-cover-image-generation',
+        promptType: 'image-generation',
         correlation: { researchId: 'research-1' },
       });
     });
@@ -215,6 +215,42 @@ describe('OpenAIImageGenerator', () => {
       }
       expect(mockStorage.uploadMock).toHaveBeenCalledWith(testImageId, fakeImageData, {
         slug: 'my-cool-image',
+      });
+    });
+
+    it('passes usage metadata to the LLM image client', async () => {
+      const fakeImageData = Buffer.from('fake image data');
+
+      mockGenerateImage.mockResolvedValue(
+        ok({
+          imageData: fakeImageData,
+          model: LlmModels.GPTImage1,
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
+        })
+      );
+
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
+
+      const generator = new OpenAIImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+        userId: 'test-user-id',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await generator.generate(testPrompt, {
+        slug: 'my-cool-image',
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-123' },
+      });
+
+      expect(mockGenerateImage).toHaveBeenCalledWith(testPrompt, {
+        slug: 'my-cool-image',
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-123' },
       });
     });
 

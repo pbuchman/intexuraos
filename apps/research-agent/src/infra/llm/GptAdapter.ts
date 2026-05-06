@@ -71,10 +71,10 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     // Per-call researchId wins over the constructor-baked one (see
     // GeminiAdapter for rationale).
     const callResearchId = options?.researchId ?? this.researchId;
-    const researchOptions =
-      callResearchId !== undefined
-        ? { correlation: { researchId: callResearchId } }
-        : undefined;
+    const researchOptions = {
+      promptType: options?.promptType ?? 'research-web-search',
+      ...(callResearchId !== undefined && { correlation: { researchId: callResearchId } }),
+    };
     const result = await this.client.research(builtPrompt, researchOptions);
     if (!result.ok) {
       const error = mapToLlmError(result.error);

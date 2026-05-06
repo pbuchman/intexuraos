@@ -532,7 +532,7 @@ async function generateCoverImage(
         pipeline.promptModel,
         userId,
         {
-          promptType: 'research-cover-image-prompt',
+          promptType: 'image-thumbnail-prompt',
           correlation: { researchId },
         }
       );
@@ -563,7 +563,7 @@ async function generateCoverImage(
         userId,
         {
           title: promptResult.value.title,
-          promptType: 'research-cover-image-generation',
+          promptType: 'image-generation',
           correlation: { researchId },
         }
       );

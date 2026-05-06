@@ -884,6 +884,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const startTime = Date.now();
         const llmResult = await llmProvider.research(event.prompt, research.researchContext, {
           researchId: event.researchId,
+          promptType: 'research-web-search',
         });
         const durationMs = Date.now() - startTime;
 

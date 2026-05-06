@@ -228,16 +228,32 @@ describe('Internal Routes', () => {
           text: 'This is a test article about machine learning.',
           model: 'gpt-4.1',
           userId: TEST_USER_ID,
-          promptType: 'research-cover-image-prompt',
+          promptType: 'image-thumbnail-prompt',
           correlation: { researchId: 'research-1' },
         },
       });
 
       expect(response.statusCode).toBe(200);
       expect(fakePromptGenerator.lastOptions).toEqual({
-        promptType: 'research-cover-image-prompt',
+        promptType: 'image-thumbnail-prompt',
         correlation: { researchId: 'research-1' },
       });
+    });
+
+    it('returns 400 when prompt correlation has invalid shape', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/images/prompts/generate',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          text: 'This is a test article about machine learning.',
+          model: 'gpt-4.1',
+          userId: TEST_USER_ID,
+          correlation: { researchId: 123 },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
     });
 
     it('generates prompt with gemini model', async () => {
@@ -509,7 +525,7 @@ describe('Internal Routes', () => {
           model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
           title: 'My Cool Image Title!!!',
-          promptType: 'research-cover-image-generation',
+          promptType: 'image-generation',
           correlation: { researchId: 'research-1' },
         },
       });
@@ -517,9 +533,25 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(200);
       expect(fakeGenerator.lastOptions).toEqual({
         slug: 'my-cool-image-title',
-        promptType: 'research-cover-image-generation',
+        promptType: 'image-generation',
         correlation: { researchId: 'research-1' },
       });
+    });
+
+    it('returns 400 when image correlation has invalid shape', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/images/generate',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          prompt: 'A beautiful sunset over mountains',
+          model: LlmModels.GPTImage1,
+          userId: TEST_USER_ID,
+          correlation: { researchId: 123 },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
     });
   });
 
