@@ -14,7 +14,7 @@ import { thumbnailPrompt } from './thumbnailPrompt.js';
 interface GeneratingClient {
   generate(
     prompt: string,
-    options: { promptType: string; correlation?: LLMCorrelationOptions }
+    options: { promptType: string; correlation?: LLMCorrelationOptions | undefined }
   ): Promise<Result<GenerateResult, LLMError>>;
 }
 
@@ -45,8 +45,8 @@ export interface ThumbnailPromptResult {
 }
 
 export interface ThumbnailPromptOptions {
-  promptType?: string;
-  correlation?: LLMCorrelationOptions;
+  promptType?: string | undefined;
+  correlation?: LLMCorrelationOptions | undefined;
 }
 
 const VALID_REALISM_VALUES: RealismStyle[] = [

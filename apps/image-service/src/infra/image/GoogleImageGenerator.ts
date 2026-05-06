@@ -61,7 +61,7 @@ export class GoogleImageGenerator implements ImageGenerator {
 
     const generateResult = await client.generateImage(prompt, {
       ...(options?.slug !== undefined && { slug: options.slug }),
-      ...(options?.promptType !== undefined && { promptType: options.promptType }),
+      promptType: options?.promptType ?? 'image-generation',
       ...(options?.correlation !== undefined && { correlation: options.correlation }),
     });
 

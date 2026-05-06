@@ -96,13 +96,13 @@ describe('generateThumbnailPrompt', () => {
       const client = createMockClient(validResponse);
 
       const result = await generateThumbnailPrompt(client, 'Test text content', {
-        promptType: 'research-cover-image-prompt',
+        promptType: 'image-thumbnail-prompt',
         correlation: { researchId: 'research-1' },
       });
 
       expect(result.ok).toBe(true);
       expect(client.generate).toHaveBeenCalledWith(expect.any(String), {
-        promptType: 'research-cover-image-prompt',
+        promptType: 'image-thumbnail-prompt',
         correlation: { researchId: 'research-1' },
       });
     });

@@ -73,14 +73,14 @@ describe('createImageServiceClient', () => {
           text: 'correlated prompt text',
           model: 'gpt-4.1',
           userId: 'user-1',
-          promptType: 'research-cover-image-prompt',
+          promptType: 'image-thumbnail-prompt',
           correlation: { researchId: 'research-1' },
         })
         .reply(200, { success: true, data: mockPrompt });
 
       const client = createImageServiceClient({ baseUrl, internalAuthToken });
       const result = await client.generatePrompt('correlated prompt text', 'gpt-4.1', 'user-1', {
-        promptType: 'research-cover-image-prompt',
+        promptType: 'image-thumbnail-prompt',
         correlation: { researchId: 'research-1' },
       });
 
@@ -176,7 +176,7 @@ describe('createImageServiceClient', () => {
           model: LlmModels.Gemini25FlashImage,
           userId: 'user-1',
           title: 'My Mountain Photo',
-          promptType: 'research-cover-image-generation',
+          promptType: 'image-generation',
           correlation: { researchId: 'research-1' },
         })
         .reply(200, { success: true, data: mockImageData });
@@ -188,7 +188,7 @@ describe('createImageServiceClient', () => {
         'user-1',
         {
           title: 'My Mountain Photo',
-          promptType: 'research-cover-image-generation',
+          promptType: 'image-generation',
           correlation: { researchId: 'research-1' },
         }
       );

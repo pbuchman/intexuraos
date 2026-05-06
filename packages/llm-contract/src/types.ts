@@ -309,7 +309,7 @@ export interface LLMClient {
    */
   generate(
     prompt: string,
-    options: { promptType: string }
+    options: { promptType: string; correlation?: LLMCorrelationOptions }
   ): Promise<Result<GenerateResult, LLMError>>;
 
   /**

@@ -3,7 +3,12 @@
  * Provides access to thumbnail prompt generation, image generation, and deletion.
  */
 
-import type { Gemini25Pro, GPTImage1, Gemini25FlashImage } from '@intexuraos/llm-contract';
+import type {
+  Gemini25FlashImage,
+  Gemini25Pro,
+  GPTImage1,
+  LLMCorrelationOptions,
+} from '@intexuraos/llm-contract';
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 
@@ -41,12 +46,12 @@ export type ImageModel = GPTImage1 | Gemini25FlashImage;
 export interface GenerateImageOptions {
   title?: string;
   promptType?: string;
-  correlation?: { researchId: string };
+  correlation?: LLMCorrelationOptions;
 }
 
 export interface GeneratePromptOptions {
   promptType?: string;
-  correlation?: { researchId: string };
+  correlation?: LLMCorrelationOptions;
 }
 
 export interface ImageServiceClient {
@@ -126,7 +131,7 @@ export function createImageServiceClient(config: ImageServiceConfig): ImageServi
             prompt,
             model,
             userId,
-            title: options?.title,
+            ...(options?.title !== undefined && { title: options.title }),
             ...(options?.promptType !== undefined && { promptType: options.promptType }),
             ...(options?.correlation !== undefined && { correlation: options.correlation }),
           }),
