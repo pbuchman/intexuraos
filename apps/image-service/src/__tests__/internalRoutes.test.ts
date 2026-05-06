@@ -217,24 +217,7 @@ describe('Internal Routes', () => {
       expect(body.data.title).toBe('Test Title');
     });
 
-    it('generates prompt with gemini model', async () => {
-      fakeUserClient.setApiKeys({ google: 'test-key' });
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/images/prompts/generate',
-        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
-        payload: {
-          text: 'This is a test article about machine learning.',
-          model: LlmModels.Gemini25Pro,
-          userId: TEST_USER_ID,
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-    });
-
-    it('accepts optional prompt usage metadata and forwards it', async () => {
+    it('forwards prompt usage metadata to the prompt generator', async () => {
       fakeUserClient.setApiKeys({ openai: 'test-key' });
 
       const response = await app.inject({
@@ -246,14 +229,14 @@ describe('Internal Routes', () => {
           model: 'gpt-4.1',
           userId: TEST_USER_ID,
           promptType: 'image-thumbnail-prompt',
-          correlation: { researchId: 'research-123' },
+          correlation: { researchId: 'research-1' },
         },
       });
 
       expect(response.statusCode).toBe(200);
-      expect(fakePromptGenerator.lastOptions).toStrictEqual({
+      expect(fakePromptGenerator.lastOptions).toEqual({
         promptType: 'image-thumbnail-prompt',
-        correlation: { researchId: 'research-123' },
+        correlation: { researchId: 'research-1' },
       });
     });
 
@@ -271,6 +254,23 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
+    });
+
+    it('generates prompt with gemini model', async () => {
+      fakeUserClient.setApiKeys({ google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/images/prompts/generate',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          text: 'This is a test article about machine learning.',
+          model: LlmModels.Gemini25Pro,
+          userId: TEST_USER_ID,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
     });
   });
 
@@ -513,7 +513,7 @@ describe('Internal Routes', () => {
       expect(savedImage?.slug).toBe('my-cool-image-title');
     });
 
-    it('accepts optional image usage metadata and forwards it', async () => {
+    it('forwards image usage metadata to the image generator', async () => {
       fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
 
       const response = await app.inject({
@@ -524,17 +524,17 @@ describe('Internal Routes', () => {
           prompt: 'A beautiful sunset over mountains',
           model: LlmModels.GPTImage1,
           userId: TEST_USER_ID,
-          title: 'Research Cover',
+          title: 'My Cool Image Title!!!',
           promptType: 'image-generation',
-          correlation: { researchId: 'research-123' },
+          correlation: { researchId: 'research-1' },
         },
       });
 
       expect(response.statusCode).toBe(200);
-      expect(fakeGenerator.lastOptions).toStrictEqual({
-        slug: 'research-cover',
+      expect(fakeGenerator.lastOptions).toEqual({
+        slug: 'my-cool-image-title',
         promptType: 'image-generation',
-        correlation: { researchId: 'research-123' },
+        correlation: { researchId: 'research-1' },
       });
     });
 

@@ -152,6 +152,38 @@ describe('OpenAIImageGenerator', () => {
       });
     });
 
+    it('forwards usage metadata to the tracked image client', async () => {
+      mockGenerateImage.mockResolvedValue(
+        ok({
+          imageData: Buffer.from('fake image data'),
+          model: LlmModels.GPTImage1,
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0.04 },
+        })
+      );
+      mockStorage.uploadMock.mockResolvedValue(ok({ thumbnailUrl: 'thumb', fullSizeUrl: 'full' }));
+      const generator = new OpenAIImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+        userId: 'test-user-id',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await generator.generate(testPrompt, {
+        slug: 'test-slug',
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-1' },
+      });
+
+      expect(mockGenerateImage).toHaveBeenCalledWith(testPrompt, {
+        slug: 'test-slug',
+        promptType: 'image-generation',
+        correlation: { researchId: 'research-1' },
+      });
+    });
+
     it('passes slug option to storage when provided', async () => {
       const fakeImageData = Buffer.from('fake image data');
 

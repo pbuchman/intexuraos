@@ -73,7 +73,10 @@ describe('PerplexityAdapter', () => {
         expect(result.value.content).toBe('Research result');
         expect(result.value.sources).toContain('https://source.com');
       }
-      expect(mockResearch).toHaveBeenCalledWith(expect.stringContaining('Test prompt'), undefined);
+      expect(mockResearch).toHaveBeenCalledWith(
+        expect.stringContaining('Test prompt'),
+        { promptType: 'research-web-search' }
+      );
     });
 
     it('threads researchId through per-call correlation when provided', async () => {
@@ -82,11 +85,11 @@ describe('PerplexityAdapter', () => {
         value: { content: 'Research result', sources: [] },
       });
 
-      await adapter.research('Test prompt', undefined, { researchId: 'r-1' });
+      await adapter.research('Test prompt', undefined, { researchId: 'r-1', promptType: 'research-web-search' });
 
       expect(mockResearch).toHaveBeenCalledWith(
         expect.stringContaining('Test prompt'),
-        { correlation: { researchId: 'r-1' } }
+        { promptType: 'research-web-search', correlation: { researchId: 'r-1' } }
       );
     });
 

@@ -25,6 +25,8 @@ export interface SidebarState {
   setIsLlmUsageOpen: (next: boolean) => void;
   isCronAgentOpen: boolean;
   setIsCronAgentOpen: (next: boolean) => void;
+  isFishingAssistantOpen: boolean;
+  setIsFishingAssistantOpen: (next: boolean) => void;
   savedFilters: SavedNotificationFilter[];
   navRef: React.RefObject<HTMLElement | null>;
 }
@@ -54,6 +56,9 @@ export function useSidebarState(): SidebarState {
   );
   const [isCronAgentOpen, setIsCronAgentOpen] = useState(() =>
     window.location.hash.includes('/cron-agent')
+  );
+  const [isFishingAssistantOpen, setIsFishingAssistantOpen] = useState(() =>
+    window.location.hash.includes('/fishing-assistant')
   );
   const [savedFilters, setSavedFilters] = useState<SavedNotificationFilter[]>([]);
   const location = useLocation();
@@ -130,6 +135,12 @@ export function useSidebarState(): SidebarState {
   useEffect(() => {
     if (location.pathname.startsWith('/cron-agent')) {
       setIsCronAgentOpen(true);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/fishing-assistant')) {
+      setIsFishingAssistantOpen(true);
     }
   }, [location.pathname]);
 
@@ -210,6 +221,8 @@ export function useSidebarState(): SidebarState {
     setIsLlmUsageOpen,
     isCronAgentOpen,
     setIsCronAgentOpen,
+    isFishingAssistantOpen,
+    setIsFishingAssistantOpen,
     savedFilters,
     navRef,
   };

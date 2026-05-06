@@ -90,10 +90,10 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     // for adapters constructed inside the synthesis path (where the same
     // adapter would not otherwise see the researchId).
     const callResearchId = options?.researchId ?? this.researchId;
-    const researchOptions =
-      callResearchId !== undefined
-        ? { correlation: { researchId: callResearchId } }
-        : undefined;
+    const researchOptions = {
+      promptType: options?.promptType ?? 'research-web-search',
+      ...(callResearchId !== undefined && { correlation: { researchId: callResearchId } }),
+    };
     const result = await this.client.research(builtPrompt, researchOptions);
     if (!result.ok) {
       const error = mapToLlmError(result.error);
@@ -114,7 +114,8 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
     originalPrompt: string,
     reports: { model: string; content: string }[],
     additionalSources?: { content: string; label?: string }[],
-    synthesisContext?: SynthesisContext
+    synthesisContext?: SynthesisContext,
+    options?: { promptType?: string }
   ): Promise<Result<LlmSynthesisResult, LlmError>> {
     this.logger.info(
       { model: this.model, reportCount: reports.length, sourceCount: additionalSources?.length ?? 0 },
@@ -126,7 +127,10 @@ export class GeminiAdapter implements LlmResearchProvider, LlmSynthesisProvider 
       ctx: synthesisContext,
       additionalSources,
     });
-    const result = await this.client.generate(synthesisPromptText, this.generateOptions('research-synthesis'));
+    const result = await this.client.generate(
+      synthesisPromptText,
+      this.generateOptions(options?.promptType ?? 'research-synthesis')
+    );
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);

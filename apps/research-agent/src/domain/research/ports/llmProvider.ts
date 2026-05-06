@@ -41,11 +41,16 @@ export interface LlmSynthesisResult {
 
 /**
  * Per-call options forwarded by the adapter into the underlying infra
- * client's correlation bag. Currently only carries the originating
- * researchId so the emitted usage event can be attributed end-to-end.
+ * client's usage metadata bag so emitted usage events can be attributed
+ * and categorized end-to-end.
  */
 export interface ResearchProviderCallOptions {
   researchId?: string;
+  promptType?: string;
+}
+
+export interface SynthesisCallOptions {
+  promptType?: string;
 }
 
 export interface LlmResearchProvider {
@@ -61,7 +66,8 @@ export interface LlmSynthesisProvider {
     originalPrompt: string,
     reports: { model: string; content: string }[],
     additionalSources?: { content: string; label?: string }[],
-    synthesisContext?: SynthesisContext
+    synthesisContext?: SynthesisContext,
+    options?: SynthesisCallOptions
   ): Promise<Result<LlmSynthesisResult, LlmError>>;
 
   generateTitle(prompt: string): Promise<Result<TitleGenerateResult, LlmError>>;

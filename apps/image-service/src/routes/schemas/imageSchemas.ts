@@ -27,18 +27,18 @@ export const generateImageBodySchema = {
     promptType: {
       type: 'string',
       minLength: 1,
-      description: 'Optional semantic prompt purpose for usage reporting',
+      description: 'Optional usage tracking prompt type',
     },
     correlation: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        researchId: {
-          type: ['string', 'null'],
-          description: 'Optional originating research ID for usage attribution',
-        },
+        researchId: { type: ['string', 'null'] },
+        sessionId: { type: ['string', 'null'] },
+        taskId: { type: ['string', 'null'] },
+        requestId: { type: ['string', 'null'] },
       },
-      description: 'Optional usage correlation metadata',
+      description: 'Optional usage attribution correlation fields',
     },
   },
   additionalProperties: false,
@@ -75,17 +75,19 @@ export const generateImageResponseSchema = {
   },
 } as const;
 
-import type { GPTImage1, Gemini25FlashImage } from '@intexuraos/llm-contract';
+import type {
+  Gemini25FlashImage,
+  GPTImage1,
+  LLMCorrelationOptions,
+} from '@intexuraos/llm-contract';
 
 export interface GenerateImageBody {
   prompt: string;
   model: GPTImage1 | Gemini25FlashImage;
   userId: string;
   title?: string;
-  promptType?: string;
-  correlation?: {
-    researchId?: string | null;
-  };
+  promptType?: string | undefined;
+  correlation?: LLMCorrelationOptions | undefined;
 }
 
 export const deleteImageParamsSchema = {
