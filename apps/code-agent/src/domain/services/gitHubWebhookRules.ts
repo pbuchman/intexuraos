@@ -62,7 +62,7 @@ export class RepositoryScopeRule implements WebhookRule {
 
 /**
  * Rule that gates events from code-worker bots to prevent feedback loops.
- * Allows pull_request.opened and pull_request.synchronize (so reviews get dispatched),
+ * Allows PR lifecycle events that can trigger review dispatch,
  * but blocks comments, reviews, and other events the bot generates as output.
  */
 export class CodeWorkerOutputRule implements WebhookRule {
@@ -75,7 +75,10 @@ export class CodeWorkerOutputRule implements WebhookRule {
       return { action: 'dispatch', reason: 'NOT_A_CODE_WORKER_BOT' };
     }
 
-    if (event.eventType === 'pull_request' && (event.action === 'opened' || event.action === 'synchronize')) {
+    if (
+      event.eventType === 'pull_request' &&
+      (event.action === 'opened' || event.action === 'synchronize' || event.action === 'ready_for_review')
+    ) {
       return { action: 'dispatch', reason: 'CODE_WORKER_PR_EVENT' };
     }
 

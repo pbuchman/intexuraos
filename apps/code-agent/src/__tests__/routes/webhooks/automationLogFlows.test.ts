@@ -615,6 +615,54 @@ describe('Automation log integration flows', () => {
   // --- Flows 14+15: Review dispatched ---
 
   describe('review dispatched (flows 14+15)', () => {
+    it('records triage_dispatch and creates review task for pull_request ready_for_review without triage_failed', async () => {
+      mockEvaluateEvent.mockResolvedValueOnce(ok({
+        triage: {
+          action: 'request_review',
+          reviewTypes: ['code_review'],
+          workerType: 'qwen' as const,
+        },
+        usage: { costUsd: 0.004, toolCalls: [{ tool: 'get_pr_diff', args: { prNumber: 42 } }] },
+        reasoning: 'Draft PR is ready for automated review',
+      }));
+      mockCreateReviewTask.mockResolvedValueOnce(ok({
+        status: 'created' as const,
+        taskId: 'task-review-ready',
+        workerType: 'qwen' as const,
+      }));
+
+      const { statusCode } = await sendWebhook(
+        'pull_request',
+        createPullRequestPayload({ action: 'ready_for_review' }),
+      );
+      expect(statusCode).toBe(200);
+
+      await waitForDetachedAsync(() => getRecordedEvents().some((e) => e.event.type === 'triage_dispatch'));
+
+      const events = getRecordedEvents();
+      const triageDispatch = events.find((e) => e.event.type === 'triage_dispatch');
+      expect(triageDispatch).toBeDefined();
+      expect(triageDispatch?.event).toMatchObject({
+        type: 'triage_dispatch',
+        reviewTypes: ['code_review'],
+        workerType: 'qwen',
+        cost: 0.004,
+        reasoning: 'Draft PR is ready for automated review',
+      });
+      expect(events.some((e) => e.event.type === 'triage_failed')).toBe(false);
+
+      expect(mockCreateReviewTask).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          repository: 'intexuraos/intexuraos',
+          prNumber: 42,
+          reviewTypes: ['code_review'],
+          prTitle: 'Test PR',
+          prBody: 'Test description',
+        }),
+      );
+    });
+
     it('records triage_dispatch with review types', async () => {
       mockEvaluateEvent.mockResolvedValueOnce(ok({
         triage: {
