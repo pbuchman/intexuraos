@@ -16,6 +16,7 @@ import { buildServer } from '../../../server.js';
 import { resetServices, setServices } from '../../../services.js';
 import type { ServiceContainer } from '../../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
+import { Timestamp } from '@google-cloud/firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../../../infra/repositories/firestoreLogChunkRepository.js';
@@ -118,12 +119,15 @@ function makeTaskInput(overrides: Partial<CreateTaskInput> = {}): CreateTaskInpu
 }
 
 function makeSummary(overrides: Partial<TaskGroupSummary> & { linearIssueId: string }): TaskGroupSummary {
-  const now = new Date() as unknown as import('@google-cloud/firestore').Timestamp;
+  const now = Timestamp.fromDate(new Date('2026-05-06T00:00:00Z'));
+  const issueNumber = Number(overrides.linearIssueId.match(/^INT-(\d+)$/u)?.[1] ?? Number.NaN);
+  const sortFields = Number.isFinite(issueNumber)
+    ? { linearIssueNumber: issueNumber, linearIssueSortKey: issueNumber }
+    : { linearIssueNumber: null, linearIssueSortKey: Number.MAX_SAFE_INTEGER };
   return {
     userId: 'test-user-id',
     groupKey: overrides.linearIssueId,
-    linearIssueNumber: null,
-    linearIssueSortKey: 0,
+    ...sortFields,
     taskCount: 1,
     activeTaskCount: overrides.aggregateStatus === 'active' ? 1 : 0,
     latestTaskStatus: 'queued',
