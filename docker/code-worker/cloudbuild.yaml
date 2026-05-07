@@ -14,4 +14,6 @@ steps:
 options:
   logging: CLOUD_LOGGING_ONLY
 
-timeout: '600s'
+# code-worker performs a multi-arch buildx export/push and regularly runs
+# close to the default 10 minute ceiling on cold cache days.
+timeout: '900s'
