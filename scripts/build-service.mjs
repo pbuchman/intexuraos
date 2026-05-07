@@ -13,6 +13,53 @@ if (!service) {
   process.exit(1);
 }
 
+function readCatalogVersions() {
+  const workspaceYaml = readFileSync(resolve(rootDir, 'pnpm-workspace.yaml'), 'utf8');
+  const lines = workspaceYaml.split('\n');
+  const catalog = new Map();
+  let inCatalog = false;
+
+  for (const line of lines) {
+    if (!inCatalog) {
+      if (line.trim() === 'catalog:') {
+        inCatalog = true;
+      }
+      continue;
+    }
+
+    if (!line.startsWith('  ')) {
+      break;
+    }
+
+    const match = line.match(/^\s{2}(?:'([^']+)'|([^:]+)):\s*(.+)$/);
+    if (!match) {
+      continue;
+    }
+
+    const key = match[1] ?? match[2]?.trim();
+    const value = match[3]?.trim();
+    if (key && value) {
+      catalog.set(key, value);
+    }
+  }
+
+  return catalog;
+}
+
+const catalogVersions = readCatalogVersions();
+
+function resolveDependencyVersion(dep, version) {
+  if (version === 'catalog:') {
+    const resolved = catalogVersions.get(dep);
+    if (!resolved) {
+      throw new Error(`Missing catalog version for dependency: ${dep}`);
+    }
+    return resolved;
+  }
+
+  return version;
+}
+
 /**
  * Recursively collect all pnpm dependencies from workspace packages.
  * @intexuraos/* packages are bundled, their pnpm deps must be external.
@@ -87,7 +134,7 @@ function collectExternalDepsWithVersions(pkgName, visited = new Set()) {
       const subExternals = collectExternalDepsWithVersions(dep, visited);
       subExternals.forEach((v, k) => externals.set(k, v));
     } else {
-      externals.set(dep, version);
+      externals.set(dep, resolveDependencyVersion(dep, version));
     }
   }
 
