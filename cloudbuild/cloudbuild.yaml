@@ -54,6 +54,7 @@
 # ├─────────────────────────────────────────────────────────────────────────┤
 # │ BATCH 9 - Cloud Functions Workers (parallel with Batch 1-8)             │
 # │   1. vm-lifecycle                                                       │
+# │   2. transcription                                                      │
 # ├─────────────────────────────────────────────────────────────────────────┤
 # │ BATCH 10 - Web Frontend                                                 │
 # │   1. web (frontend - after all services deployed)                       │
@@ -721,6 +722,7 @@ steps:
       - '-c'
       - |
         corepack enable
+        corepack prepare pnpm@10 --activate
         bash cloudbuild/scripts/build-all-workers.sh
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'

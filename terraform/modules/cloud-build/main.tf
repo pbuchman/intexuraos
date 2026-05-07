@@ -170,6 +170,7 @@ locals {
     "linear-agent",
     "web-agent",
     "code-agent",
+    "chat-agent",
     "cron-agent",
     "hellscript-agent",
     "llm-usage-service",
@@ -178,7 +179,7 @@ locals {
   # Cloud Function workers (zip + upload to GCS)
   cloud_function_workers = [
     "vm-lifecycle",
-    "log-cleanup",
+    "transcription",
   ]
 }
 
@@ -271,7 +272,7 @@ resource "google_cloudbuild_trigger" "firestore" {
 # -----------------------------------------------------------------------------
 # Cloud Function Worker Triggers
 # -----------------------------------------------------------------------------
-# Individual triggers for Cloud Function workers (vm-lifecycle, log-cleanup).
+# Individual triggers for Cloud Function workers (vm-lifecycle, transcription).
 # These deploy function source to GCS without triggering on git push.
 
 resource "google_cloudbuild_trigger" "worker" {

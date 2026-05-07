@@ -180,7 +180,7 @@ jobs:
             bash "cloudbuild/scripts/deploy-${svc}.sh" &
           done
           bash cloudbuild/scripts/deploy-function.sh vm-lifecycle &
-          bash cloudbuild/scripts/deploy-function.sh log-cleanup &
+          bash cloudbuild/scripts/deploy-function.sh transcription &
           wait
 
       - name: Fetch web config
