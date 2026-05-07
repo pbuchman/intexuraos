@@ -86,6 +86,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async findByPR(): ReturnType<CodeTaskRepository['findByPR']> {
       return ok(null);
     },
+    async findRecentTasksByPR(): ReturnType<CodeTaskRepository['findRecentTasksByPR']> {
+      return ok([]);
+    },
     async findActiveReviewForPR(): ReturnType<CodeTaskRepository['findActiveReviewForPR']> {
       return ok(null);
     },
