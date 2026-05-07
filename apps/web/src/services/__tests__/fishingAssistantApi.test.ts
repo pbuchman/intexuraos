@@ -116,7 +116,16 @@ describe('fishingAssistantApi', () => {
 
   it('lists folders and pages from the knowledge base', async () => {
     const folders: FishingKnowledgeFolder[] = [
-      { id: 'folder-1', userId: 'user-1', name: 'Recipes', parentId: null, sortOrder: 0, pageCount: 1, createdAt: '', updatedAt: '' },
+      {
+        id: 'folder-1',
+        userId: 'user-1',
+        name: 'Recipes',
+        parentId: null,
+        sortOrder: 0,
+        pageCount: 1,
+        createdAt: '2026-05-06T10:00:00.000Z',
+        updatedAt: '2026-05-06T11:00:00.000Z',
+      },
     ];
     const pages: FishingKnowledgePage[] = [
       {
@@ -129,8 +138,8 @@ describe('fishingAssistantApi', () => {
         contentType: 'recipe',
         indexingStatus: 'ready',
         chunkCount: 1,
-        createdAt: '',
-        updatedAt: '',
+        createdAt: '2026-05-06T10:00:00.000Z',
+        updatedAt: '2026-05-06T12:00:00.000Z',
       },
     ];
     const { apiRequest } = await import('../apiClient.js');
@@ -158,9 +167,13 @@ describe('fishingAssistantApi', () => {
   });
 
   it('normalizes Firestore timestamp-like dates in knowledge and chat responses', async () => {
-    const timestampLike = (iso: string): { toDate: () => Date } => ({
-      toDate: () => new Date(iso),
-    });
+    const firestoreJsonTimestamp = (iso: string): { _seconds: number; _nanoseconds: number } => {
+      const millis = Date.parse(iso);
+      return {
+        _seconds: Math.floor(millis / 1000),
+        _nanoseconds: (millis % 1000) * 1_000_000,
+      };
+    };
     const { apiRequest } = await import('../apiClient.js');
     vi.mocked(apiRequest)
       .mockResolvedValueOnce({
@@ -172,8 +185,8 @@ describe('fishingAssistantApi', () => {
             parentId: null,
             sortOrder: 0,
             pageCount: 1,
-            createdAt: timestampLike('2026-05-06T10:00:00.000Z'),
-            updatedAt: timestampLike('2026-05-06T11:00:00.000Z'),
+            createdAt: firestoreJsonTimestamp('2026-05-06T10:00:00.000Z'),
+            updatedAt: firestoreJsonTimestamp('2026-05-06T11:00:00.000Z'),
           },
         ],
       })
@@ -189,8 +202,8 @@ describe('fishingAssistantApi', () => {
             contentType: 'recipe',
             indexingStatus: 'ready',
             chunkCount: 1,
-            createdAt: timestampLike('2026-05-06T10:00:00.000Z'),
-            updatedAt: timestampLike('2026-05-06T12:00:00.000Z'),
+            createdAt: firestoreJsonTimestamp('2026-05-06T10:00:00.000Z'),
+            updatedAt: firestoreJsonTimestamp('2026-05-06T12:00:00.000Z'),
           },
         ],
       })
@@ -201,9 +214,9 @@ describe('fishingAssistantApi', () => {
             userId: 'user-1',
             title: 'Spring bait',
             lastMessagePreview: 'Use pinka',
-            lastMessageAt: timestampLike('2026-05-06T09:30:00.000Z'),
-            createdAt: timestampLike('2026-05-06T09:00:00.000Z'),
-            updatedAt: timestampLike('2026-05-06T10:00:00.000Z'),
+            lastMessageAt: firestoreJsonTimestamp('2026-05-06T09:30:00.000Z'),
+            createdAt: firestoreJsonTimestamp('2026-05-06T09:00:00.000Z'),
+            updatedAt: firestoreJsonTimestamp('2026-05-06T10:00:00.000Z'),
           },
         ],
       })
@@ -216,7 +229,7 @@ describe('fishingAssistantApi', () => {
             role: 'assistant',
             content: 'Use pinka',
             citations: [],
-            createdAt: timestampLike('2026-05-06T10:01:00.000Z'),
+            createdAt: firestoreJsonTimestamp('2026-05-06T10:01:00.000Z'),
             confidence: 'high',
           },
         ],
@@ -274,6 +287,87 @@ describe('fishingAssistantApi', () => {
     ]);
   });
 
+  it('normalizes Date, callable toDate, and seconds/nanoseconds timestamp values', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest).mockResolvedValueOnce({
+      items: [
+        {
+          id: 'folder-1',
+          userId: 'user-1',
+          name: 'Recipes',
+          parentId: null,
+          sortOrder: 0,
+          pageCount: 1,
+          createdAt: new Date('2026-05-06T10:00:00.000Z'),
+          updatedAt: {
+            toDate: (): Date => new Date('2026-05-06T11:00:00.000Z'),
+          },
+        },
+        {
+          id: 'folder-2',
+          userId: 'user-1',
+          name: 'Tactics',
+          parentId: null,
+          sortOrder: 1,
+          pageCount: 0,
+          createdAt: { seconds: 1778061600, nanoseconds: 123_000_000 },
+          updatedAt: { seconds: 1778065200 },
+        },
+      ],
+    });
+
+    await expect(listFishingKnowledgeFolders(accessToken)).resolves.toEqual([
+      {
+        id: 'folder-1',
+        userId: 'user-1',
+        name: 'Recipes',
+        parentId: null,
+        sortOrder: 0,
+        pageCount: 1,
+        createdAt: '2026-05-06T10:00:00.000Z',
+        updatedAt: '2026-05-06T11:00:00.000Z',
+      },
+      {
+        id: 'folder-2',
+        userId: 'user-1',
+        name: 'Tactics',
+        parentId: null,
+        sortOrder: 1,
+        pageCount: 0,
+        createdAt: '2026-05-06T10:00:00.123Z',
+        updatedAt: '2026-05-06T11:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('throws a clear error for invalid timestamp fallback values', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    const invalidTimestampResponses = [
+      { createdAt: { toDate: 'not-callable' }, updatedAt: '2026-05-06T11:00:00.000Z' },
+      { createdAt: 'not-a-date', updatedAt: '2026-05-06T11:00:00.000Z' },
+    ];
+
+    for (const response of invalidTimestampResponses) {
+      vi.mocked(apiRequest).mockResolvedValueOnce({
+        items: [
+          {
+            id: 'folder-1',
+            userId: 'user-1',
+            name: 'Recipes',
+            parentId: null,
+            sortOrder: 0,
+            pageCount: 1,
+            ...response,
+          },
+        ],
+      });
+
+      await expect(listFishingKnowledgeFolders(accessToken)).rejects.toThrow(
+        new Error('Invalid Fishing Assistant timestamp value')
+      );
+    }
+  });
+
   it('creates, updates, deletes, and reindexes knowledge resources', async () => {
     const page: FishingKnowledgePage = {
       id: 'page-1',
@@ -285,8 +379,8 @@ describe('fishingAssistantApi', () => {
       contentType: 'recipe',
       indexingStatus: 'ready',
       chunkCount: 1,
-      createdAt: '',
-      updatedAt: '',
+      createdAt: '2026-05-06T10:00:00.000Z',
+      updatedAt: '2026-05-06T12:00:00.000Z',
     };
     const folder: FishingKnowledgeFolder = {
       id: 'folder-1',
@@ -295,8 +389,8 @@ describe('fishingAssistantApi', () => {
       parentId: null,
       sortOrder: 0,
       pageCount: 1,
-      createdAt: '',
-      updatedAt: '',
+      createdAt: '2026-05-06T10:00:00.000Z',
+      updatedAt: '2026-05-06T11:00:00.000Z',
     };
     const { apiRequest } = await import('../apiClient.js');
     vi.mocked(apiRequest)
@@ -403,9 +497,9 @@ describe('fishingAssistantApi', () => {
         userId: 'user-1',
         title: 'Spring bait',
         lastMessagePreview: 'Use pinka',
-        lastMessageAt: '',
-        createdAt: '',
-        updatedAt: '',
+        lastMessageAt: '2026-05-06T09:30:00.000Z',
+        createdAt: '2026-05-06T09:00:00.000Z',
+        updatedAt: '2026-05-06T10:00:00.000Z',
       },
     ];
     const createdChat: FishingChat = {
@@ -413,9 +507,9 @@ describe('fishingAssistantApi', () => {
       userId: 'user-1',
       title: 'New Chat',
       lastMessagePreview: '',
-      lastMessageAt: '',
-      createdAt: '',
-      updatedAt: '',
+      lastMessageAt: '2026-05-06T09:30:00.000Z',
+      createdAt: '2026-05-06T09:00:00.000Z',
+      updatedAt: '2026-05-06T10:00:00.000Z',
     };
     const messages: FishingChatMessage[] = [
       {
@@ -425,7 +519,7 @@ describe('fishingAssistantApi', () => {
         role: 'user',
         content: 'Hello',
         citations: [],
-        createdAt: '',
+        createdAt: '2026-05-06T10:01:00.000Z',
       },
     ];
     const { apiRequest } = await import('../apiClient.js');
@@ -442,7 +536,7 @@ describe('fishingAssistantApi', () => {
           role: 'assistant',
           content: 'Use pinka',
           citations: [],
-          createdAt: '',
+          createdAt: '2026-05-06T10:02:00.000Z',
           confidence: 'high',
         },
       });

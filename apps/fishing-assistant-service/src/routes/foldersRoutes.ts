@@ -3,6 +3,7 @@ import { logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { sendKnowledgeError } from './routeErrors.js';
 import { withAuth } from './authRoute.js';
+import { serializeKnowledgeFolder } from './responseSerializers.js';
 
 interface FolderBody {
   name?: string;
@@ -20,7 +21,7 @@ export function registerFoldersRoutes(app: FastifyInstance): void {
     return await withAuth(request, reply, async (user) => {
       const result = await getServices().repositories.folderRepository.listByUserId(user.userId);
       if (!result.ok) return await sendKnowledgeError(reply, result.error);
-      return await reply.ok({ items: result.value });
+      return await reply.ok({ items: result.value.map(serializeKnowledgeFolder) });
     });
   });
 
@@ -40,7 +41,7 @@ export function registerFoldersRoutes(app: FastifyInstance): void {
         sortOrder: body.sortOrder ?? 0,
       });
       if (!result.ok) return await sendKnowledgeError(reply, result.error);
-      return await reply.ok({ folder: result.value });
+      return await reply.ok({ folder: serializeKnowledgeFolder(result.value) });
     });
   });
 
@@ -61,7 +62,7 @@ export function registerFoldersRoutes(app: FastifyInstance): void {
         sortOrder: body.sortOrder ?? 0,
       });
       if (!result.ok) return await sendKnowledgeError(reply, result.error);
-      return await reply.ok({ folder: result.value });
+      return await reply.ok({ folder: serializeKnowledgeFolder(result.value) });
     });
   });
 
