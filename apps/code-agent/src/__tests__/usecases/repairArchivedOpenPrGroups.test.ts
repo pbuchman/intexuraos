@@ -362,6 +362,140 @@ describe('repairArchivedOpenPrGroups', () => {
     );
   });
 
+  it('prefers a planning sibling over weaker candidates when the cached summary marks implementation readiness', async () => {
+    const archivedOpenPrTask = makeTask({
+      id: 'task-open-pr-review',
+      agentType: 'review',
+      prNumber: 1903,
+      status: 'archived',
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T09:00:00Z')),
+    });
+    const planningSibling = makeTask({
+      id: 'task-planning-sibling',
+      agentType: 'planning',
+      status: 'archived',
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T08:00:00Z')),
+    }) as CodeTask & { prNumber?: number };
+    delete planningSibling.prNumber;
+    const weakerSibling = makeTask({
+      id: 'task-weaker-sibling',
+      agentType: 'pull_request',
+      status: 'archived',
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T10:00:00Z')),
+    }) as CodeTask & { prNumber?: number };
+    delete weakerSibling.prNumber;
+    const archivedSummary: TaskGroupSummary = {
+      userId: 'user-1',
+      linearIssueId: 'INT-1423',
+      groupKey: 'INT-1423',
+      linearIssueNumber: 1423,
+      linearIssueSortKey: 1423,
+      taskCount: 0,
+      activeTaskCount: 0,
+      latestTaskStatus: 'planned',
+      latestTaskUpdatedAt: Timestamp.fromDate(new Date('2026-05-07T10:00:00Z')),
+      agentTypesPresent: ['review', 'planning', 'pull_request'],
+      hasCompletedPlanning: true,
+      hasCompletedExecution: false,
+      hasCompletedExecutionAgent: false,
+      hasImplementationTaskId: false,
+      hasPrUrl: true,
+      prNumber: 1903,
+      latestReviewNeedsRemediation: null,
+      oldestTaskCreatedAt: Timestamp.fromDate(new Date('2026-05-07T07:00:00Z')),
+      mostRecentDispatchedAt: null,
+      aggregateStatus: 'archived',
+      hasImplementationReadyLabel: true,
+      hasMergeReadyLabel: false,
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T10:00:01Z')),
+    };
+
+    findRecentTasksByPRMock.mockResolvedValue(ok([archivedOpenPrTask]));
+    findRecentTasksByLinearIssueMock.mockResolvedValue(
+      ok([archivedOpenPrTask, planningSibling, weakerSibling]),
+    );
+    getSummaryMock.mockResolvedValue(ok(archivedSummary));
+    updateMock.mockResolvedValue(ok({
+      ...planningSibling,
+      status: 'planned',
+    }));
+
+    const useCase = createRepairArchivedOpenPrGroupsUseCase(deps);
+    const result = await useCase();
+
+    expect(result.ok).toBe(true);
+    expect(updateMock).toHaveBeenCalledWith('task-planning-sibling', {
+      status: 'planned',
+      updatedAt: new Date('2026-05-07T08:00:00Z'),
+    });
+  });
+
+  it('repairs archived groups when getSummary is not implemented on the repository adapter', async () => {
+    const archivedOpenPrTask = makeTask({
+      id: 'task-open-pr-review',
+      agentType: 'review',
+      prNumber: 1903,
+      status: 'archived',
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T09:00:00Z')),
+    });
+    const stableExecutionSibling = makeTask({
+      id: 'task-stable-execution-sibling',
+      agentType: 'execution',
+      status: 'archived',
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T08:00:00Z')),
+    }) as CodeTask & { prNumber?: number };
+    delete stableExecutionSibling.prNumber;
+
+    findRecentTasksByPRMock.mockResolvedValue(ok([archivedOpenPrTask]));
+    findRecentTasksByLinearIssueMock.mockResolvedValue(
+      ok([archivedOpenPrTask, stableExecutionSibling]),
+    );
+    updateMock.mockResolvedValue(ok({
+      ...stableExecutionSibling,
+      status: 'implemented',
+    }));
+
+    const useCase = createRepairArchivedOpenPrGroupsUseCase({
+      ...deps,
+      groupSummaryRepo: {
+        recomputeGroupFromTasks: recomputeGroupFromTasksMock,
+      },
+    });
+    const result = await useCase();
+
+    expect(result.ok).toBe(true);
+    expect(updateMock).toHaveBeenCalledWith('task-stable-execution-sibling', {
+      status: 'implemented',
+      updatedAt: new Date('2026-05-07T08:00:00Z'),
+    });
+  });
+
+  it('returns an error when fetching the existing summary for repair fails', async () => {
+    const archivedOpenPrTask = makeTask({
+      id: 'task-open-pr-review',
+      agentType: 'review',
+      prNumber: 1903,
+      status: 'archived',
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T09:00:00Z')),
+    });
+
+    findRecentTasksByPRMock.mockResolvedValue(ok([archivedOpenPrTask]));
+    findRecentTasksByLinearIssueMock.mockResolvedValue(ok([archivedOpenPrTask]));
+    getSummaryMock.mockResolvedValue(err({
+      code: 'FIRESTORE_ERROR',
+      message: 'summary read failed',
+    }));
+
+    const useCase = createRepairArchivedOpenPrGroupsUseCase(deps);
+    const result = await useCase();
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe('summary read failed');
+    }
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
   it('restores pull_request tasks to implemented', async () => {
     const latestPullRequestTask = makeTask({
       id: 'task-pr',

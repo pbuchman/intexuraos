@@ -2431,6 +2431,68 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
   });
 
+  describe('getSummary', () => {
+    it('returns null when the summary document does not exist', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.getSummary('missing-user', 'INT-404');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('returns an existing summary document', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+
+      await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-321').set({
+        userId: 'user-1',
+        linearIssueId: 'INT-321',
+        groupKey: 'INT-321',
+        linearIssueNumber: 321,
+        linearIssueSortKey: 321,
+        taskCount: 1,
+        activeTaskCount: 0,
+        latestTaskStatus: 'planned',
+        latestTaskUpdatedAt: now,
+        agentTypesPresent: ['planning'],
+        hasCompletedPlanning: true,
+        hasCompletedExecution: false,
+        hasCompletedExecutionAgent: false,
+        hasImplementationTaskId: false,
+        hasPrUrl: false,
+        prNumber: null,
+        latestReviewNeedsRemediation: null,
+        oldestTaskCreatedAt: now,
+        mostRecentDispatchedAt: null,
+        aggregateStatus: 'needs-action',
+        updatedAt: now,
+      });
+
+      const result = await repo.getSummary('user-1', 'INT-321');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toMatchObject({
+          userId: 'user-1',
+          groupKey: 'INT-321',
+          linearIssueId: 'INT-321',
+          linearIssueNumber: 321,
+          linearIssueSortKey: 321,
+          aggregateStatus: 'needs-action',
+        });
+      }
+    });
+  });
+
   describe('recomputeGroupFromTasks', () => {
     it('builds summary from task array', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
