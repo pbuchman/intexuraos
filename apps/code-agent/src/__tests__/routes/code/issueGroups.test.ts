@@ -48,6 +48,11 @@ import type { TaskGroupSummaryRepository } from '../../../domain/ports/taskGroup
 import type { UserGroupCounts, TaskGroupSummary } from '../../../domain/models/taskGroupSummary.js';
 import { createFakeTaskGroupSummaryRepository } from '../../fakes/fakeTaskGroupSummaryRepository.js';
 import type { FakeTaskGroupSummaryRepository } from '../../fakes/fakeTaskGroupSummaryRepository.js';
+import { createTaskGroupSummaryFirestoreRepository } from '../../../infra/firestore/taskGroupSummaryFirestoreRepository.js';
+import {
+  createRepairArchivedOpenPrGroupsUseCase,
+  type RepairArchivedOpenPrGroupsDeps,
+} from '../../../domain/usecases/repairArchivedOpenPrGroups.js';
 
 function makeLinearAgentClient(): LinearAgentClient {
   const client: LinearAgentClient = {
@@ -95,7 +100,7 @@ function makeGroupSummaryRepo(overrides: Partial<TaskGroupSummaryRepository> = {
     updateAfterDelete: async (): Promise<void> => { return; },
     getUserGroupCounts: async (): ReturnType<TaskGroupSummaryRepository['getUserGroupCounts']> => ok(defaultCounts),
     listGroupSummaries: async (): ReturnType<TaskGroupSummaryRepository['listGroupSummaries']> => ok({ summaries: [] }),
-    recomputeGroupFromTasks: async (): Promise<void> => { return; },
+    recomputeGroupFromTasks: async (): ReturnType<TaskGroupSummaryRepository['recomputeGroupFromTasks']> => ok(undefined),
     recomputeWithLabels: async (): ReturnType<TaskGroupSummaryRepository['recomputeWithLabels']> => ok(undefined),
     setImportant: async (): ReturnType<TaskGroupSummaryRepository['setImportant']> => ok(undefined),
     ...overrides,
@@ -2348,6 +2353,165 @@ describe('GET /code/issue-groups', () => {
       };
       // Task is not a phantom (it exists), so done count stays at 1
       expect(body.data.counts['done']).toBe(1);
+    });
+
+    it('returns archived groups for archived linear-id queries when summary sort keys exist', async () => {
+      const summaryRepo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      async function createArchivedGroup(linearIssueId: string, traceId: string): Promise<void> {
+        const createResult = await codeTaskRepo.create(makeTaskInput({
+          linearIssueId,
+          traceId,
+          agentType: 'planning',
+        }));
+        expect(createResult.ok).toBe(true);
+        if (!createResult.ok) {
+          return;
+        }
+
+        await summaryRepo.updateAfterCreate(createResult.value);
+        const archivedResult = await codeTaskRepo.update(createResult.value.id, { status: 'archived' });
+        expect(archivedResult.ok).toBe(true);
+        if (!archivedResult.ok) {
+          return;
+        }
+        await summaryRepo.updateAfterStatusChange(createResult.value, archivedResult.value);
+      }
+
+      await createArchivedGroup('INT-1606', 'trace-archived-1606');
+      await createArchivedGroup('INT-1607', 'trace-archived-1607');
+
+      setServices(makeBaseServices({
+        groupSummaryRepo: summaryRepo as unknown as ReturnType<typeof makeGroupSummaryRepo>,
+      }));
+      await server.close();
+      server = await buildServer();
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/issue-groups?groupStatus=archived&sortBy=linear-id',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        data: {
+          groups: { linearIssueId: string | null }[];
+          counts: Record<string, number>;
+          totalGroups: number;
+        };
+      };
+      expect(body.data.groups.map((group) => group.linearIssueId)).toEqual(['INT-1607', 'INT-1606']);
+      expect(body.data.counts['archived']).toBe(2);
+      expect(body.data.totalGroups).toBe(2);
+    });
+
+    it('shows a repaired open PR group in the default non-archived view', async () => {
+      const summaryRepo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      async function createArchivedTask(
+        traceId: string,
+        agentType: 'planning' | 'review',
+        updatedAt: Date,
+      ): Promise<void> {
+        const createResult = await codeTaskRepo.create(makeTaskInput({
+          linearIssueId: 'INT-1423',
+          traceId,
+          agentType,
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          prNumber: 1903,
+        }));
+        expect(createResult.ok).toBe(true);
+        if (!createResult.ok) {
+          return;
+        }
+
+        await summaryRepo.updateAfterCreate(createResult.value);
+        const archivedResult = await codeTaskRepo.update(createResult.value.id, {
+          status: 'archived',
+          updatedAt,
+        });
+        expect(archivedResult.ok).toBe(true);
+        if (!archivedResult.ok) {
+          return;
+        }
+        await summaryRepo.updateAfterStatusChange(createResult.value, archivedResult.value);
+      }
+
+      await createArchivedTask('trace-int-1423-planning', 'planning', new Date('2026-05-07T08:00:00Z'));
+      await createArchivedTask('trace-int-1423-review', 'review', new Date('2026-05-07T09:00:00Z'));
+
+      const repairUseCase = createRepairArchivedOpenPrGroupsUseCase({
+        codeTaskRepo: codeTaskRepo as unknown as RepairArchivedOpenPrGroupsDeps['codeTaskRepo'],
+        gitHubPRSummaryRepo: {
+          findAllOpen: async () => ok([{
+            repository: 'pbuchman/intexuraos',
+            pullRequestNumber: 1903,
+            title: 'Open PR',
+            state: 'open',
+            mergedAt: null,
+            baseBranch: 'development',
+            authorLogin: 'pbuchman',
+            headBranch: 'worker/int-1423',
+            mergeConflictStatus: null,
+            lastConflictCheckedAt: null,
+            conflictEpisodeStartedAt: null,
+            conflictResolvedAt: null,
+            managedConflictCommentId: null,
+            managedConflictTaskId: null,
+            managedConflictTaskOwnerUserId: null,
+            lastActivityAt: new Date('2026-05-07T10:00:00Z'),
+            firstSeenAt: new Date('2026-05-07T10:00:00Z'),
+            lastReviewedCommitSha: null,
+            lastReviewNeedsRemediation: null,
+          }]),
+        },
+        groupSummaryRepo: summaryRepo,
+        logger,
+      });
+
+      const repairResult = await repairUseCase();
+      expect(repairResult.ok).toBe(true);
+
+      setServices(makeBaseServices({
+        groupSummaryRepo: summaryRepo as unknown as ReturnType<typeof makeGroupSummaryRepo>,
+      }));
+      await server.close();
+      server = await buildServer();
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/issue-groups',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        data: {
+          groups: {
+            linearIssueId: string | null;
+            aggregateStatus: string;
+            tasks: { status: string }[];
+          }[];
+          counts: Record<string, number>;
+          totalGroups: number;
+        };
+      };
+      const repairedGroup = body.data.groups.find((group) => group.linearIssueId === 'INT-1423');
+      expect(repairedGroup).toBeDefined();
+      expect(repairedGroup?.aggregateStatus).toBe('done');
+      expect(repairedGroup?.tasks).toEqual([
+        expect.objectContaining({ status: 'reviewed' }),
+      ]);
+      expect(body.data.counts['done']).toBe(1);
+      expect(body.data.totalGroups).toBe(1);
     });
   });
 });

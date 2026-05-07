@@ -58,6 +58,7 @@ import { drainTaskQueue } from './drainTaskQueue.js';
 import { triageFailedTask } from './triageFailedTask.js';
 import { deletePRTaskLock } from '../utils/prTaskLock.js';
 import { fetchGitHubToken } from '../utils/gitHubTokenResolver.js';
+import { resolveCompletedTaskStatus } from '../utils/resolveCompletedTaskStatus.js';
 import { validatePrUrl } from '../utils/validatePrUrl.js';
 import {
   flushPendingTaskLogLines,
@@ -1249,9 +1250,7 @@ export async function handleTaskCompletion(
           prNumber = task.prNumber;
         }
 
-        const resolvedStatus =
-          task.agentType === 'planning' ? 'planned' :
-          task.agentType === 'review' ? 'reviewed' : 'implemented';
+        const resolvedStatus = resolveCompletedTaskStatus(task.agentType);
         const executionMemoryPostRun = shouldQueueExecutionMemoryPostRun({
           agentType: task.agentType,
           existingStatus: task.executionMemoryPostRun?.status,

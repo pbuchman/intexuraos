@@ -100,6 +100,13 @@ export function hasImplementationLink(task: CodeTask): boolean {
   return task.implementationTaskId !== undefined || (task.fanOutChildTaskIds !== undefined && task.fanOutChildTaskIds.length > 0);
 }
 
+function normalizeSummarySortFields(summary: TaskGroupSummary): TaskGroupSummary {
+  return {
+    ...summary,
+    ...getLinearIssueSortFields(summary.linearIssueId),
+  };
+}
+
 // =============================================================================
 // Timestamp helper (pure)
 // =============================================================================
@@ -343,7 +350,7 @@ export function applyIncrementalCreateUpdate(current: TaskGroupSummary, task: Co
   }
 
   updated.aggregateStatus = deriveAggregateStatusFromSummary(updated);
-  return updated;
+  return normalizeSummarySortFields(updated);
 }
 
 /**
@@ -405,7 +412,7 @@ export function applyStatusChangeUpdate(
     if (updated.taskCount <= 0) {
       // All tasks archived — preserve summary with 'archived' status instead of deleting
       updated.aggregateStatus = 'archived';
-      return { updated, allArchived: true };
+      return { updated: normalizeSummarySortFields(updated), allArchived: true };
     }
   }
 
@@ -429,7 +436,7 @@ export function applyStatusChangeUpdate(
   }
 
   updated.aggregateStatus = deriveAggregateStatusFromSummary(updated);
-  return { updated, allArchived: false };
+  return { updated: normalizeSummarySortFields(updated), allArchived: false };
 }
 
 /**
@@ -465,7 +472,7 @@ export function applyDeleteUpdate(
   };
 
   updated.aggregateStatus = deriveAggregateStatusFromSummary(updated);
-  return { updated, shouldDelete: false };
+  return { updated: normalizeSummarySortFields(updated), shouldDelete: false };
 }
 
 /**
