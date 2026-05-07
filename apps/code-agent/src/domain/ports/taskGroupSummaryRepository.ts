@@ -27,7 +27,7 @@ export interface TaskGroupSummaryRepository {
   listGroupSummaries(input: ListGroupSummariesInput): Promise<Result<ListGroupSummariesOutput, GroupSummaryError>>;
 
   /** Full recompute of a group from its tasks (for backfill/repair). */
-  recomputeGroupFromTasks(userId: string, groupKey: string, tasks: CodeTask[]): Promise<void>;
+  recomputeGroupFromTasks(userId: string, groupKey: string, tasks: CodeTask[]): Promise<Result<void, GroupSummaryError>>;
 
   /**
    * Recompute aggregateStatus and persist label flags for the group identified by

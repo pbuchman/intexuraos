@@ -432,6 +432,21 @@ describe('serializer: applyIncrementalCreateUpdate', () => {
     );
     expect(updated.mostRecentDispatchedAt?.toMillis()).toBe(100);
   });
+
+  it('repairs missing linear sort fields on legacy summaries', () => {
+    const legacy = { ...base, linearIssueId: 'INT-1606', groupKey: 'INT-1606' } as TaskGroupSummary;
+    delete (legacy as unknown as Record<string, unknown>)['linearIssueNumber'];
+    delete (legacy as unknown as Record<string, unknown>)['linearIssueSortKey'];
+
+    const updated = applyIncrementalCreateUpdate(
+      legacy,
+      makeTask({ status: 'planned', linearIssueId: 'INT-1606', createdAt: t2, updatedAt: t2 }),
+      t2,
+    );
+
+    expect(updated.linearIssueNumber).toBe(1606);
+    expect(updated.linearIssueSortKey).toBe(1606);
+  });
 });
 
 describe('serializer: applyStatusChangeUpdate', () => {
@@ -527,6 +542,22 @@ describe('serializer: applyStatusChangeUpdate', () => {
     );
     expect(updated.mostRecentDispatchedAt?.toMillis()).toBe(100);
   });
+
+  it('repairs missing linear sort fields on legacy summaries during status change', () => {
+    const legacy = { ...base, linearIssueId: 'INT-1606', groupKey: 'INT-1606' } as TaskGroupSummary;
+    delete (legacy as unknown as Record<string, unknown>)['linearIssueNumber'];
+    delete (legacy as unknown as Record<string, unknown>)['linearIssueSortKey'];
+
+    const { updated } = applyStatusChangeUpdate(
+      legacy,
+      makeTask({ status: 'running', linearIssueId: 'INT-1606' }),
+      makeTask({ status: 'archived', linearIssueId: 'INT-1606', updatedAt: t2 }),
+      t2,
+    );
+
+    expect(updated.linearIssueNumber).toBe(1606);
+    expect(updated.linearIssueSortKey).toBe(1606);
+  });
 });
 
 describe('serializer: applyDeleteUpdate', () => {
@@ -557,6 +588,22 @@ describe('serializer: applyDeleteUpdate', () => {
   it('does not decrement for archived task', () => {
     const { updated } = applyDeleteUpdate(base, makeTask({ status: 'archived' }), now);
     expect(updated.taskCount).toBe(2);
+  });
+
+  it('repairs missing linear sort fields on legacy summaries during delete', () => {
+    const legacy = { ...base, linearIssueId: 'INT-1606', groupKey: 'INT-1606' } as TaskGroupSummary;
+    delete (legacy as unknown as Record<string, unknown>)['linearIssueNumber'];
+    delete (legacy as unknown as Record<string, unknown>)['linearIssueSortKey'];
+
+    const { updated, shouldDelete } = applyDeleteUpdate(
+      legacy,
+      makeTask({ status: 'planned', linearIssueId: 'INT-1606' }),
+      now,
+    );
+
+    expect(shouldDelete).toBe(false);
+    expect(updated.linearIssueNumber).toBe(1606);
+    expect(updated.linearIssueSortKey).toBe(1606);
   });
 });
 

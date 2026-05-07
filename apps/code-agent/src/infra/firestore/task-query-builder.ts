@@ -57,13 +57,14 @@ export async function buildListQuery(
 export function prTasksByCreatedAt(
   collection: CollectionReference,
   repository: string,
-  prNumber: number
+  prNumber: number,
+  limit = 50,
 ): Query {
   return collection
     .where('repository', '==', repository)
     .where('prNumber', '==', prNumber)
     .orderBy('createdAt', 'desc')
-    .limit(50);
+    .limit(limit);
 }
 
 /** Active review task for a PR (limit 1). */

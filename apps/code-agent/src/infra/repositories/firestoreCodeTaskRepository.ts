@@ -215,6 +215,10 @@ export const createFirestoreCodeTaskRepository = (deps: {
       ),
       { repository, prNumber }, 'Failed to find task by PR',
     ),
+    findRecentTasksByPR: (repository, prNumber, limit) => guarded(
+      () => docsToTasks(prTasksByCreatedAt(collection, repository, prNumber, limit)),
+      { repository, prNumber, limit }, 'Failed to find recent tasks by PR',
+    ),
     findActiveReviewForPR: (repository, prNumber) => guarded(
       () => firstOrNull(activeReviewForPR(collection, repository, prNumber)),
       { repository, prNumber }, 'Failed to find active review task by PR',
