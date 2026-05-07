@@ -202,6 +202,31 @@ export function deriveAggregateStatus(tasks: SerializedTask[], pipeline: Pipelin
     return 'active';
   }
 
+  // Active: execution completed but review has not explicitly cleared it yet.
+  // Keep this aligned with summary-based status derivation so repaired groups do
+  // not disappear from the active filter after the route re-groups tasks.
+  const hasActionableMerge = pipeline.steps.some(
+    (step) => step.agentType === 'merge' && step.state === 'actionable',
+  );
+  const latestCompletedExecution = tasks.find(
+    (task) =>
+      task.status !== 'archived' &&
+      task.agentType === 'execution' &&
+      (task.status === 'implemented' || task.status === 'reviewed'),
+  );
+  const latestNonArchivedReview = tasks.find(
+    (task) => task.status !== 'archived' && task.agentType === 'review',
+  );
+  if (
+    latestCompletedExecution !== undefined &&
+    !hasActionableMerge &&
+    pipeline.pr?.status !== 'closed' &&
+    pipeline.pr?.status !== 'merged' &&
+    latestNonArchivedReview?.result?.needs_remediation !== REMEDIATION_NOT_NEEDED
+  ) {
+    return 'active';
+  }
+
   // Needs-action: has actionable step
   if (pipeline.steps.some((s) => s.state === 'actionable')) {
     return 'needs-action';
