@@ -510,9 +510,11 @@ emit_bootstrap_evidence
 # invocation. No background watcher needed.
 
 # ------------------------------------------------------------------------------
-# Configure pnpm to use persistent store (shared volume across containers)
+# Shared store path is already baked into /etc/npmrc and the restored ~/.npmrc.
+# Avoid pnpm global config writes here: newer pnpm releases fail fast when the
+# default global bin dir is not present on PATH, which kills bootstrap before
+# the worker reaches managed mode.
 # ------------------------------------------------------------------------------
-pnpm config set store-dir /home/claude/pnpm-store --global
 
 # ------------------------------------------------------------------------------
 # Install dependencies (Linux-native node_modules via shared pnpm store)
