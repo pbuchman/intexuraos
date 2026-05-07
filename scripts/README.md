@@ -164,6 +164,18 @@ Creates an isolated Docker network for code-worker containers with IP-level rest
 ./scripts/setup-worker-network.sh
 ```
 
+### Artifact Registry Cleanup Tools
+
+Safe inventory and prune tooling for `intexuraos-dev` lives under `scripts/artifact-registry/`.
+
+```bash
+node scripts/artifact-registry/export-live-images.mjs ...
+node scripts/artifact-registry/generate-prune-plan.mjs ...
+node scripts/artifact-registry/apply-prune-plan.mjs ...
+```
+
+See [docs/operations/artifact-registry-cleanup.md](../docs/operations/artifact-registry-cleanup.md) for the full runbook.
+
 ## Development Scripts
 
 ### dev-setup.mjs
