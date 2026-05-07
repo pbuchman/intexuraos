@@ -358,10 +358,14 @@ resource "google_project_service" "apis" {
 module "artifact_registry" {
   source = "../../modules/artifact-registry"
 
-  project_id  = var.project_id
-  region      = var.region
-  environment = var.environment
-  labels      = local.common_labels
+  project_id                              = var.project_id
+  region                                  = var.region
+  environment                             = var.environment
+  labels                                  = local.common_labels
+  cleanup_policy_dry_run                  = false
+  cleanup_keep_count                      = 3
+  cleanup_delete_older_than               = "86400s"
+  code_worker_cleanup_delete_older_than   = "86400s"
 
   depends_on = [google_project_service.apis]
 }
