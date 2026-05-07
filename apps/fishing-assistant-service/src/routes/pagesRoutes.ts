@@ -8,6 +8,7 @@ import {
 } from '../domain/usecases/indexKnowledgePage.js';
 import { sendKnowledgeError } from './routeErrors.js';
 import { withAuth } from './authRoute.js';
+import { serializeKnowledgePage } from './responseSerializers.js';
 
 interface PageBody {
   folderId?: string;
@@ -38,7 +39,7 @@ export function registerPagesRoutes(app: FastifyInstance): void {
         ...(query.folderId !== undefined ? { folderId: query.folderId } : {}),
       });
       if (!result.ok) return await sendKnowledgeError(reply, result.error);
-      return await reply.ok({ items: result.value });
+      return await reply.ok({ items: result.value.map(serializeKnowledgePage) });
     });
   });
 
@@ -59,7 +60,7 @@ export function registerPagesRoutes(app: FastifyInstance): void {
         rawText: body.rawText,
       });
       if (!result.ok) return await sendKnowledgeError(reply, result.error);
-      return await reply.ok({ page: result.value });
+      return await reply.ok({ page: serializeKnowledgePage(result.value) });
     });
   });
 
@@ -73,7 +74,7 @@ export function registerPagesRoutes(app: FastifyInstance): void {
       });
       if (!result.ok) return await sendKnowledgeError(reply, result.error);
       if (result.value === null) return await reply.fail('NOT_FOUND', `Fishing knowledge page ${params.pageId} not found`);
-      return await reply.ok({ page: result.value });
+      return await reply.ok({ page: serializeKnowledgePage(result.value) });
     });
   });
 
@@ -92,7 +93,7 @@ export function registerPagesRoutes(app: FastifyInstance): void {
         rawText: body.rawText,
       });
       if (!result.ok) return await sendKnowledgeError(reply, result.error);
-      return await reply.ok({ page: result.value });
+      return await reply.ok({ page: serializeKnowledgePage(result.value) });
     });
   });
 
@@ -118,7 +119,7 @@ export function registerPagesRoutes(app: FastifyInstance): void {
         pageId: params.pageId,
       });
       if (!result.ok) return await sendKnowledgeError(reply, result.error);
-      return await reply.ok({ page: result.value });
+      return await reply.ok({ page: serializeKnowledgePage(result.value) });
     });
   });
 }

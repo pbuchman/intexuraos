@@ -20,6 +20,13 @@ interface TimestampLike {
   toDate: () => Date;
 }
 
+interface FirestoreJsonTimestamp {
+  _seconds?: number;
+  _nanoseconds?: number;
+  seconds?: number;
+  nanoseconds?: number;
+}
+
 type FishingKnowledgeFolderResponse = Omit<FishingKnowledgeFolder, 'createdAt' | 'updatedAt'> & {
   createdAt: unknown;
   updatedAt: unknown;
@@ -40,18 +47,64 @@ type FishingChatMessageResponse = Omit<FishingChatMessage, 'createdAt'> & {
   createdAt: unknown;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
+function isTimestampLike(value: unknown): value is TimestampLike {
+  return isRecord(value) && 'toDate' in value && typeof value['toDate'] === 'function';
+}
+
+function dateToIsoString(date: Date): string {
+  if (Number.isNaN(date.getTime())) {
+    throw new Error('Invalid Fishing Assistant timestamp value');
+  }
+  return date.toISOString();
+}
+
+function getTimestampNumber(
+  timestamp: FirestoreJsonTimestamp,
+  underscoreKey: '_seconds' | '_nanoseconds',
+  camelKey: 'seconds' | 'nanoseconds'
+): number | undefined {
+  const underscoreValue = timestamp[underscoreKey];
+  if (typeof underscoreValue === 'number' && Number.isFinite(underscoreValue)) {
+    return underscoreValue;
+  }
+
+  const camelValue = timestamp[camelKey];
+  if (typeof camelValue === 'number' && Number.isFinite(camelValue)) {
+    return camelValue;
+  }
+
+  return undefined;
+}
+
 function toIsoString(value: unknown): string {
   if (typeof value === 'string') {
-    return value;
+    return dateToIsoString(new Date(value));
   }
   if (value instanceof Date) {
-    return value.toISOString();
+    return dateToIsoString(value);
   }
-  if (value !== null && typeof value === 'object' && 'toDate' in value) {
-    const timestamp = value as TimestampLike;
-    return timestamp.toDate().toISOString();
+  if (isTimestampLike(value)) {
+    return dateToIsoString(value.toDate());
   }
-  return new Date(String(value)).toISOString();
+  if (isRecord(value)) {
+    const timestamp = value as FirestoreJsonTimestamp;
+    const seconds = getTimestampNumber(timestamp, '_seconds', 'seconds');
+    const nanoseconds = getTimestampNumber(timestamp, '_nanoseconds', 'nanoseconds') ?? 0;
+
+    if (seconds !== undefined) {
+      return dateToIsoString(new Date(seconds * 1000 + Math.floor(nanoseconds / 1_000_000)));
+    }
+  }
+
+  const parsed = new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error('Invalid Fishing Assistant timestamp value');
+  }
+  return parsed.toISOString();
 }
 
 function normalizeKnowledgeFolder(folder: FishingKnowledgeFolderResponse): FishingKnowledgeFolder {

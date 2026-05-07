@@ -4,6 +4,7 @@ import { getServices } from '../services.js';
 import { sendChatError } from './chatRouteErrors.js';
 import { withAuth } from './authRoute.js';
 import { sendChatMessage } from '../domain/usecases/sendChatMessage.js';
+import { serializeFishingChat, serializeFishingChatMessage } from './responseSerializers.js';
 
 interface ChatMessageBody {
   message?: string;
@@ -23,7 +24,7 @@ export function registerChatsRoutes(app: FastifyInstance): void {
     return await withAuth(request, reply, async (user) => {
       const result = await getServices().chatRepository.listChatsByUserId(user.userId);
       if (!result.ok) return await sendChatError(reply, result.error);
-      return await reply.ok({ items: result.value });
+      return await reply.ok({ items: result.value.map(serializeFishingChat) });
     });
   });
 
@@ -36,7 +37,7 @@ export function registerChatsRoutes(app: FastifyInstance): void {
         title: 'New Chat',
       });
       if (!result.ok) return await sendChatError(reply, result.error);
-      return await reply.ok({ chat: result.value });
+      return await reply.ok({ chat: serializeFishingChat(result.value) });
     });
   });
 
@@ -52,7 +53,7 @@ export function registerChatsRoutes(app: FastifyInstance): void {
       if (result.value === null) {
         return await reply.fail('NOT_FOUND', `Fishing chat ${params.chatId} not found`);
       }
-      return await reply.ok({ chat: result.value });
+      return await reply.ok({ chat: serializeFishingChat(result.value) });
     });
   });
 
@@ -65,7 +66,7 @@ export function registerChatsRoutes(app: FastifyInstance): void {
         chatId: params.chatId,
       });
       if (!result.ok) return await sendChatError(reply, result.error);
-      return await reply.ok({ items: result.value });
+      return await reply.ok({ items: result.value.map(serializeFishingChatMessage) });
     });
   });
 
@@ -96,7 +97,10 @@ export function registerChatsRoutes(app: FastifyInstance): void {
         }
       );
       if (!result.ok) return await sendChatError(reply, result.error);
-      return await reply.ok(result.value);
+      return await reply.ok({
+        chat: serializeFishingChat(result.value.chat),
+        message: serializeFishingChatMessage(result.value.message),
+      });
     });
   });
 }

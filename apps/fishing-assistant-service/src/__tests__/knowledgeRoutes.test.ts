@@ -147,6 +147,12 @@ function replacePageRepository(overrides: Partial<KnowledgePageRepository>): voi
   });
 }
 
+function expectIsoTimestamp(value: unknown): void {
+  expect(typeof value).toBe('string');
+  expect(value).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  expect(Number.isNaN(Date.parse(value as string))).toBe(false);
+}
+
 describe('Fishing Assistant knowledge routes', () => {
   let ctx: RouteTestContext;
 
@@ -200,6 +206,20 @@ describe('Fishing Assistant knowledge routes', () => {
     expect(createResponse.json().data.folder).toMatchObject({ id: 'folder-1', userId: 'user-1', name: 'Kurs' });
     expect(listResponse.json().data.items.map((folder: { id: string }) => folder.id)).toEqual(['folder-1']);
     expect(updateResponse.json().data.folder.name).toBe('Kurs główny');
+
+    const createdFolder = createResponse.json().data.folder as { createdAt: unknown; updatedAt: unknown };
+    const listedFolder = listResponse.json().data.items[0] as { createdAt: unknown; updatedAt: unknown };
+    const updatedFolder = updateResponse.json().data.folder as { createdAt: unknown; updatedAt: unknown };
+    for (const value of [
+      createdFolder.createdAt,
+      createdFolder.updatedAt,
+      listedFolder.createdAt,
+      listedFolder.updatedAt,
+      updatedFolder.createdAt,
+      updatedFolder.updatedAt,
+    ]) {
+      expectIsoTimestamp(value);
+    }
   });
 
   it('validates folder write payloads', async () => {
@@ -291,6 +311,29 @@ describe('Fishing Assistant knowledge routes', () => {
     expect(listAllResponse.json().data.items.map((page: { id: string }) => page.id)).toEqual(['page-1']);
     expect(getResponse.json().data.page.rawText).toContain('Zanęta delikatna');
     expect(updateResponse.json().data.page.title).toBe('Zanęta wiosenna');
+
+    const createdPage = createResponse.json().data.page as { createdAt: unknown; updatedAt: unknown };
+    const listedPage = listResponse.json().data.items[0] as { createdAt: unknown; updatedAt: unknown };
+    const listedAllPage = listAllResponse.json().data.items[0] as { createdAt: unknown; updatedAt: unknown };
+    const fetchedPage = getResponse.json().data.page as { createdAt: unknown; updatedAt: unknown };
+    const updatedPage = updateResponse.json().data.page as { createdAt: unknown; updatedAt: unknown };
+    const reindexedPage = reindexResponse.json().data.page as { createdAt: unknown; updatedAt: unknown };
+    for (const value of [
+      createdPage.createdAt,
+      createdPage.updatedAt,
+      listedPage.createdAt,
+      listedPage.updatedAt,
+      listedAllPage.createdAt,
+      listedAllPage.updatedAt,
+      fetchedPage.createdAt,
+      fetchedPage.updatedAt,
+      updatedPage.createdAt,
+      updatedPage.updatedAt,
+      reindexedPage.createdAt,
+      reindexedPage.updatedAt,
+    ]) {
+      expectIsoTimestamp(value);
+    }
   });
 
   it('validates page payloads and returns not found for missing pages', async () => {
