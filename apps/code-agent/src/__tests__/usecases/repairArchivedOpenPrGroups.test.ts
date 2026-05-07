@@ -4,6 +4,7 @@ import { err, ok } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
 import type { CodeTask } from '../../domain/models/codeTask.js';
 import type { GitHubPRSummary } from '../../domain/models/gitHubPRSummary.js';
+import type { TaskGroupSummary } from '../../domain/models/taskGroupSummary.js';
 import {
   createRepairArchivedOpenPrGroupsUseCase,
   type RepairArchivedOpenPrGroupsDeps,
@@ -81,6 +82,7 @@ describe('repairArchivedOpenPrGroups', () => {
   let findRecentTasksByLinearIssueMock: MockedFunction<RepairArchivedOpenPrGroupsDeps['codeTaskRepo']['findRecentTasksByLinearIssue']>;
   let updateMock: MockedFunction<RepairArchivedOpenPrGroupsDeps['codeTaskRepo']['update']>;
   let recomputeGroupFromTasksMock: MockedFunction<RepairArchivedOpenPrGroupsDeps['groupSummaryRepo']['recomputeGroupFromTasks']>;
+  let getSummaryMock: MockedFunction<NonNullable<RepairArchivedOpenPrGroupsDeps['groupSummaryRepo']['getSummary']>>;
 
   beforeEach(() => {
     findAllOpenMock = vi.fn().mockResolvedValue(ok([makeOpenPrSummary()])) as MockedFunction<
@@ -98,6 +100,9 @@ describe('repairArchivedOpenPrGroups', () => {
     recomputeGroupFromTasksMock = vi.fn().mockResolvedValue(ok(undefined)) as MockedFunction<
       RepairArchivedOpenPrGroupsDeps['groupSummaryRepo']['recomputeGroupFromTasks']
     >;
+    getSummaryMock = vi.fn().mockResolvedValue(ok(null)) as MockedFunction<
+      NonNullable<RepairArchivedOpenPrGroupsDeps['groupSummaryRepo']['getSummary']>
+    >;
 
     deps = {
       codeTaskRepo: {
@@ -109,6 +114,7 @@ describe('repairArchivedOpenPrGroups', () => {
         findAllOpen: findAllOpenMock,
       },
       groupSummaryRepo: {
+        getSummary: getSummaryMock,
         recomputeGroupFromTasks: recomputeGroupFromTasksMock,
       },
       logger: createMockLogger(),
@@ -228,26 +234,36 @@ describe('repairArchivedOpenPrGroups', () => {
     );
   });
 
-  it('restores the newest archived task from the full group, not just the open PR slice', async () => {
+  it('prefers a stable execution sibling over a newer merged-PR sibling when repairing visibility', async () => {
     const archivedOpenPrTask = makeTask({
       id: 'task-open-pr-review',
       agentType: 'review',
       prNumber: 1903,
       status: 'archived',
-      updatedAt: Timestamp.fromDate(new Date('2026-05-07T08:00:00Z')),
-    });
-    const newerArchivedSibling = makeTask({
-      id: 'task-newer-sibling',
-      agentType: 'pull_request',
-      prNumber: 1994,
-      status: 'archived',
       updatedAt: Timestamp.fromDate(new Date('2026-05-07T09:00:00Z')),
     });
+    const newerMergedSibling = makeTask({
+      id: 'task-newer-merged-sibling',
+      agentType: 'execution',
+      prNumber: 1994,
+      status: 'archived',
+      prMergedAt: Timestamp.fromDate(new Date('2026-04-30T12:00:05Z')),
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T10:00:00Z')),
+    });
+    const stableExecutionSibling = makeTask({
+      id: 'task-stable-execution-sibling',
+      agentType: 'execution',
+      status: 'archived',
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T08:00:00Z')),
+    }) as CodeTask & { prNumber?: number };
+    delete stableExecutionSibling.prNumber;
 
     findRecentTasksByPRMock.mockResolvedValue(ok([archivedOpenPrTask]));
-    findRecentTasksByLinearIssueMock.mockResolvedValue(ok([archivedOpenPrTask, newerArchivedSibling]));
+    findRecentTasksByLinearIssueMock.mockResolvedValue(
+      ok([archivedOpenPrTask, newerMergedSibling, stableExecutionSibling]),
+    );
     updateMock.mockResolvedValue(ok({
-      ...newerArchivedSibling,
+      ...stableExecutionSibling,
       status: 'implemented',
     }));
 
@@ -255,8 +271,83 @@ describe('repairArchivedOpenPrGroups', () => {
     const result = await useCase();
 
     expect(result.ok).toBe(true);
-    expect(updateMock).toHaveBeenCalledWith('task-newer-sibling', {
+    expect(updateMock).toHaveBeenCalledWith('task-stable-execution-sibling', {
       status: 'implemented',
+      updatedAt: new Date('2026-05-07T08:00:00Z'),
+    });
+    expect(recomputeGroupFromTasksMock).toHaveBeenCalledWith(
+      'user-1',
+      'INT-1423',
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'task-stable-execution-sibling',
+          status: 'implemented',
+        }),
+      ]),
+    );
+  });
+
+  it('prefers a merge-ready review sibling over an execution sibling when the cached summary already marks merge readiness', async () => {
+    const mergeReadyReview = makeTask({
+      id: 'task-merge-ready-review',
+      agentType: 'review',
+      prNumber: 1903,
+      status: 'archived',
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T09:00:00Z')),
+      result: {
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/1903',
+        needs_remediation: '0',
+      },
+    });
+    const stableExecutionSibling = makeTask({
+      id: 'task-stable-execution',
+      agentType: 'execution',
+      status: 'archived',
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T08:00:00Z')),
+    }) as CodeTask & { prNumber?: number };
+    delete stableExecutionSibling.prNumber;
+    const archivedSummary: TaskGroupSummary = {
+      userId: 'user-1',
+      linearIssueId: 'INT-1423',
+      groupKey: 'INT-1423',
+      linearIssueNumber: 1423,
+      linearIssueSortKey: 1423,
+      taskCount: 0,
+      activeTaskCount: 0,
+      latestTaskStatus: 'reviewed',
+      latestTaskUpdatedAt: Timestamp.fromDate(new Date('2026-05-07T09:00:00Z')),
+      agentTypesPresent: ['review', 'execution'],
+      hasCompletedPlanning: false,
+      hasCompletedExecution: true,
+      hasCompletedExecutionAgent: true,
+      hasImplementationTaskId: false,
+      hasPrUrl: true,
+      prNumber: 1903,
+      latestReviewNeedsRemediation: false,
+      oldestTaskCreatedAt: Timestamp.fromDate(new Date('2026-05-07T07:00:00Z')),
+      mostRecentDispatchedAt: null,
+      aggregateStatus: 'archived',
+      hasImplementationReadyLabel: true,
+      hasMergeReadyLabel: true,
+      updatedAt: Timestamp.fromDate(new Date('2026-05-07T10:00:01Z')),
+    };
+
+    findRecentTasksByPRMock.mockResolvedValue(ok([mergeReadyReview]));
+    findRecentTasksByLinearIssueMock.mockResolvedValue(
+      ok([mergeReadyReview, stableExecutionSibling]),
+    );
+    getSummaryMock.mockResolvedValue(ok(archivedSummary));
+    updateMock.mockResolvedValue(ok({
+      ...mergeReadyReview,
+      status: 'reviewed',
+    }));
+
+    const useCase = createRepairArchivedOpenPrGroupsUseCase(deps);
+    const result = await useCase();
+
+    expect(result.ok).toBe(true);
+    expect(updateMock).toHaveBeenCalledWith('task-merge-ready-review', {
+      status: 'reviewed',
       updatedAt: new Date('2026-05-07T09:00:00Z'),
     });
     expect(recomputeGroupFromTasksMock).toHaveBeenCalledWith(
@@ -264,8 +355,8 @@ describe('repairArchivedOpenPrGroups', () => {
       'INT-1423',
       expect.arrayContaining([
         expect.objectContaining({
-          id: 'task-newer-sibling',
-          status: 'implemented',
+          id: 'task-merge-ready-review',
+          status: 'reviewed',
         }),
       ]),
     );

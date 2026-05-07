@@ -2,8 +2,9 @@ import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import type { CodeTask } from '../models/codeTask.js';
+import type { TaskGroupSummary } from '../models/taskGroupSummary.js';
 import type { GitHubPRSummaryRepository } from '../repositories/gitHubPRSummaryRepository.js';
-import type { TaskGroupSummaryRepository } from '../ports/taskGroupSummaryRepository.js';
+import type { GroupSummaryError, TaskGroupSummaryRepository } from '../ports/taskGroupSummaryRepository.js';
 import { resolveCompletedTaskStatus } from '../utils/resolveCompletedTaskStatus.js';
 
 export interface RepairArchivedOpenPrGroupsDeps {
@@ -23,7 +24,12 @@ export interface RepairArchivedOpenPrGroupsDeps {
     ): Promise<Result<CodeTask>>;
   };
   gitHubPRSummaryRepo: Pick<GitHubPRSummaryRepository, 'findAllOpen'>;
-  groupSummaryRepo: Pick<TaskGroupSummaryRepository, 'recomputeGroupFromTasks'>;
+  groupSummaryRepo: Pick<TaskGroupSummaryRepository, 'recomputeGroupFromTasks'> & {
+    getSummary?: (
+      userId: string,
+      groupKey: string,
+    ) => Promise<Result<TaskGroupSummary | null, GroupSummaryError>>;
+  };
   logger: Logger;
 }
 
@@ -72,6 +78,53 @@ function isNonArchived(task: CodeTask): boolean {
 
 function compareByUpdatedAtDesc(left: CodeTask, right: CodeTask): number {
   return right.updatedAt.toMillis() - left.updatedAt.toMillis();
+}
+
+function hasClosedOrMergedPr(task: CodeTask): boolean {
+  return task.prMergedAt !== undefined || task.prClosedAt !== undefined;
+}
+
+function candidateVisibilityRank(
+  task: CodeTask,
+  existingSummary: TaskGroupSummary | null,
+): number {
+  if (task.agentType === 'planning') {
+    return existingSummary?.hasImplementationReadyLabel === true ? 2 : 1;
+  }
+
+  if (
+    task.agentType === 'review' &&
+    task.result?.needs_remediation !== '1' &&
+    existingSummary?.hasMergeReadyLabel === true
+  ) {
+    return 4;
+  }
+
+  if (task.agentType === 'execution') {
+    return 3;
+  }
+
+  return 1;
+}
+
+function compareRepairCandidates(
+  left: CodeTask,
+  right: CodeTask,
+  existingSummary: TaskGroupSummary | null,
+): number {
+  const leftStable = hasClosedOrMergedPr(left) ? 0 : 1;
+  const rightStable = hasClosedOrMergedPr(right) ? 0 : 1;
+  if (leftStable !== rightStable) {
+    return rightStable - leftStable;
+  }
+
+  const leftVisibility = candidateVisibilityRank(left, existingSummary);
+  const rightVisibility = candidateVisibilityRank(right, existingSummary);
+  if (leftVisibility !== rightVisibility) {
+    return rightVisibility - leftVisibility;
+  }
+
+  return compareByUpdatedAtDesc(left, right);
 }
 
 export function createRepairArchivedOpenPrGroupsUseCase(
@@ -217,7 +270,29 @@ export function createRepairArchivedOpenPrGroupsUseCase(
           continue;
         }
 
-        const latestGroupTask = [...groupTasks].sort(compareByUpdatedAtDesc)[0];
+        let existingSummary: TaskGroupSummary | null = null;
+        if (groupSummaryRepo.getSummary !== undefined) {
+          const summaryResult = await groupSummaryRepo.getSummary(
+            latestPrTask.userId,
+            groupKeyOf(latestPrTask),
+          );
+          if (!summaryResult.ok) {
+            logger.error(
+              {
+                userId: latestPrTask.userId,
+                groupKey: groupKeyOf(latestPrTask),
+                error: summaryResult.error,
+              },
+              'Failed to fetch existing summary for archived-group repair',
+            );
+            return err(new Error(summaryResult.error.message));
+          }
+          existingSummary = summaryResult.value;
+        }
+
+        const latestGroupTask = [...groupTasks].sort((left, right) =>
+          compareRepairCandidates(left, right, existingSummary),
+        )[0];
         if (latestGroupTask === undefined) {
           continue;
         }

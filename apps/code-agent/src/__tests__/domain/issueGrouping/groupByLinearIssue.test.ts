@@ -385,6 +385,19 @@ describe('deriveAggregateStatus', () => {
     expect(deriveAggregateStatus(tasks, pipeline)).toBe('needs-action');
   });
 
+  it('returns active when execution completed and no review cleared it yet', () => {
+    const tasks = [
+      makeTask({
+        id: 'task-execution',
+        agentType: 'execution',
+        status: 'implemented',
+        updatedAt: '2026-03-05T10:00:00.000Z',
+      }),
+    ];
+    const pipeline = derivePipeline(tasks);
+    expect(deriveAggregateStatus(tasks, pipeline)).toBe('active');
+  });
+
   it('returns failed when latest non-archived task is failed', () => {
     const tasks = [
       makeTask({ id: 'task-1', status: 'failed', updatedAt: '2026-03-05T10:00:00.000Z' }),
