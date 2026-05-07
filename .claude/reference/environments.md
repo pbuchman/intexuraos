@@ -52,6 +52,8 @@ STEP 4: Check service status with the right tool (pm2 for dev, gcloud for prod)
 
 **Auto-deploy via webhook handler.** A GitHub webhook at `~/tools/webhook-handler/` receives push events to `development`, detects changed files, and restarts affected services. PM2 services restart via `pm2 restart`; the orchestrator rebuilds (`pnpm --filter orchestrator build`) then restarts via `systemctl restart`. PM2 file watching is disabled (`watch: false`).
 
+**Pub/Sub on home-dev uses emulator aliases, not Terraform topic names.** PM2 services publish to `PUBSUB_EMULATOR_HOST=localhost:8102`, so `ecosystem.config.cjs` fallbacks MUST match the aliases configured in `tools/pubsub-ui/server.mjs` (for WhatsApp: `whatsapp-send-message`, `whatsapp-media-cleanup`, `whatsapp-webhook-process`, `whatsapp-transcription`, `commands-ingest`, `approval-reply`). Do NOT use Terraform-managed `intexuraos-*-dev` topic names as PM2 fallbacks on home-dev; those names exist in Cloud Run/GCP, not in the local emulator.
+
 **Port reference:** See `ecosystem.config.cjs` for the full port map of all dev services.
 
 ## Development Machines
