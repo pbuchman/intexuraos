@@ -159,6 +159,19 @@ describe('loadEnvConfig', () => {
     expect(config.preserveWorkerContainers).toBe(false);
   });
 
+  it('normalizes digest-pinned worker image overrides back to latest', () => {
+    const config = loadEnvConfig(
+      makeValidEnv({
+        INTEXURAOS_CODE_WORKER_IMAGE:
+          'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker@sha256:323593e1f8d4687612b42a8f7e94c3ba1d761407886d4cad9ae5f90ef1326f18',
+      })
+    );
+
+    expect(config.workerImage).toBe(
+      'europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest'
+    );
+  });
+
   it('surfaces optional string overrides', () => {
     const config = loadEnvConfig(
       makeValidEnv({
