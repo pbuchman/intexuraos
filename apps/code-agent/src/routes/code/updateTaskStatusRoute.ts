@@ -25,6 +25,7 @@ import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-htt
 import { getServices } from '../../services.js';
 import { validateOrchestratorSignature } from '../../infra/webhookValidation.js';
 import { loadConfig } from '../../config.js';
+import { resolveCompletedTaskStatus } from '../../domain/utils/resolveCompletedTaskStatus.js';
 
 interface UpdateTaskStatusBody {
   taskId: string;
@@ -170,16 +171,12 @@ const updateTaskStatusRoute: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Map orchestrator-vocabulary 'completed' to code-agent's agent-type-specific
       // terminal status, mirroring /internal/webhooks/task-complete (webhookRoutes.ts
-       // around line 1451). The Firestore TaskStatus type does not include 'completed';
+      // around line 1451). The Firestore TaskStatus type does not include 'completed';
       // it uses 'planned' | 'implemented' | 'reviewed'. Other terminal values
       // ('failed' | 'interrupted' | 'cancelled') pass through unchanged.
       const resolvedStatus =
         status === 'completed'
-          ? task.agentType === 'planning'
-            ? 'planned'
-            : task.agentType === 'review'
-              ? 'reviewed'
-              : 'implemented'
+          ? resolveCompletedTaskStatus(task.agentType)
           : status;
 
       // Always write `error`: either the provided value or explicit null to

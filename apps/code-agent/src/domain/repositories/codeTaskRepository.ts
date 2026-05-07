@@ -223,6 +223,16 @@ export interface CodeTaskRepository {
   ): Promise<Result<CodeTask | null, RepositoryError>>;
 
   /**
+   * Find newest tasks for a PR, ordered by createdAt descending.
+   * Used by archived-open-PR repair to inspect the recent task window safely.
+   */
+  findRecentTasksByPR(
+    repository: string,
+    prNumber: number,
+    limit: number,
+  ): Promise<Result<CodeTask[], RepositoryError>>;
+
+  /**
    * Find an active review task for a PR.
    * Used to deduplicate review-task creation for rapid synchronize events.
    * Returns null if no queued/dispatched/running review task exists.

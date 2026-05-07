@@ -301,10 +301,14 @@ export function createFakeTaskGroupSummaryRepository(): FakeTaskGroupSummaryRepo
       return ok({ summaries: page, ...(nextCursor !== undefined && { nextCursor }) });
     },
 
-    async recomputeGroupFromTasks(userId: string, groupKey: string, tasks: CodeTask[]): Promise<void> {
+    async recomputeGroupFromTasks(
+      userId: string,
+      groupKey: string,
+      tasks: CodeTask[],
+    ): Promise<Result<void, GroupSummaryError>> {
       if (tasks.length === 0) {
         removeSummary(userId, groupKey);
-        return;
+        return ok(undefined);
       }
       const current = summaries.get(summaryKey(userId, groupKey));
       const next = computeSummaryFromTasks(userId, groupKey, tasks);
@@ -321,6 +325,7 @@ export function createFakeTaskGroupSummaryRepository(): FakeTaskGroupSummaryRepo
         next.aggregateStatus = deriveAggregateStatusFromSummary(next);
       }
       upsertSummary(next);
+      return ok(undefined);
     },
 
     async recomputeWithLabels(
