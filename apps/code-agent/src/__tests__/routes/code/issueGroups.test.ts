@@ -2513,6 +2513,134 @@ describe('GET /code/issue-groups', () => {
       expect(body.data.counts['done']).toBe(1);
       expect(body.data.totalGroups).toBe(1);
     });
+
+    it('restores a mixed open PR group back into the active view with a stable execution sibling', async () => {
+      const summaryRepo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      async function createArchivedTask(input: {
+        traceId: string;
+        agentType: 'execution' | 'review';
+        updatedAt: Date;
+        prNumber?: number;
+        prMergedAt?: Date;
+      }): Promise<void> {
+        const createResult = await codeTaskRepo.create(makeTaskInput({
+          linearIssueId: 'INT-1423',
+          traceId: input.traceId,
+          agentType: input.agentType,
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          ...(input.prNumber !== undefined ? { prNumber: input.prNumber } : {}),
+        }));
+        expect(createResult.ok).toBe(true);
+        if (!createResult.ok) {
+          return;
+        }
+
+        await summaryRepo.updateAfterCreate(createResult.value);
+        const archivedResult = await codeTaskRepo.update(createResult.value.id, {
+          status: 'archived',
+          updatedAt: input.updatedAt,
+          ...(input.prMergedAt !== undefined ? { prMergedAt: input.prMergedAt } : {}),
+        });
+        expect(archivedResult.ok).toBe(true);
+        if (!archivedResult.ok) {
+          return;
+        }
+        await summaryRepo.updateAfterStatusChange(createResult.value, archivedResult.value);
+      }
+
+      await createArchivedTask({
+        traceId: 'trace-int-1423-stable-execution',
+        agentType: 'execution',
+        updatedAt: new Date('2026-05-07T08:00:00Z'),
+      });
+      await createArchivedTask({
+        traceId: 'trace-int-1423-open-pr-review',
+        agentType: 'review',
+        prNumber: 1903,
+        updatedAt: new Date('2026-05-07T09:00:00Z'),
+      });
+      await createArchivedTask({
+        traceId: 'trace-int-1423-merged-execution',
+        agentType: 'execution',
+        prNumber: 1994,
+        prMergedAt: new Date('2026-04-30T12:00:05Z'),
+        updatedAt: new Date('2026-05-07T10:00:00Z'),
+      });
+
+      const repairUseCase = createRepairArchivedOpenPrGroupsUseCase({
+        codeTaskRepo: codeTaskRepo as unknown as RepairArchivedOpenPrGroupsDeps['codeTaskRepo'],
+        gitHubPRSummaryRepo: {
+          findAllOpen: async () => ok([{
+            repository: 'pbuchman/intexuraos',
+            pullRequestNumber: 1903,
+            title: 'Open PR',
+            state: 'open',
+            mergedAt: null,
+            baseBranch: 'development',
+            authorLogin: 'pbuchman',
+            headBranch: 'worker/int-1423',
+            mergeConflictStatus: null,
+            lastConflictCheckedAt: null,
+            conflictEpisodeStartedAt: null,
+            conflictResolvedAt: null,
+            managedConflictCommentId: null,
+            managedConflictTaskId: null,
+            managedConflictTaskOwnerUserId: null,
+            lastActivityAt: new Date('2026-05-07T10:00:00Z'),
+            firstSeenAt: new Date('2026-05-07T10:00:00Z'),
+            lastReviewedCommitSha: null,
+            lastReviewNeedsRemediation: null,
+          }]),
+        },
+        groupSummaryRepo: summaryRepo,
+        logger,
+      });
+
+      const repairResult = await repairUseCase();
+      expect(repairResult.ok).toBe(true);
+
+      setServices(makeBaseServices({
+        groupSummaryRepo: summaryRepo as unknown as ReturnType<typeof makeGroupSummaryRepo>,
+      }));
+      await server.close();
+      server = await buildServer();
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/issue-groups?groupStatus=active,needs-action',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        data: {
+          groups: {
+            linearIssueId: string | null;
+            aggregateStatus: string;
+            tasks: { status: string; agentType?: string }[];
+          }[];
+          counts: Record<string, number>;
+          totalGroups: number;
+        };
+      };
+
+      const repairedGroup = body.data.groups.find((group) => group.linearIssueId === 'INT-1423');
+      expect(repairedGroup).toBeDefined();
+      expect(repairedGroup?.aggregateStatus).toBe('active');
+      expect(repairedGroup?.tasks).toEqual([
+        expect.objectContaining({
+          status: 'implemented',
+          agentType: 'execution',
+        }),
+      ]);
+      expect(body.data.counts['active']).toBe(1);
+      expect(body.data.totalGroups).toBe(1);
+    });
   });
 });
 

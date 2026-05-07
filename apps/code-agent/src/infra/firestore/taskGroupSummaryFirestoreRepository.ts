@@ -20,7 +20,13 @@ import {
 } from './taskGroupSummary/serializer.js';
 import { SUMMARIES_COLLECTION, buildListQuery, countsDocRef, summaryDocRef } from './taskGroupSummary/queries.js';
 
-export function createTaskGroupSummaryFirestoreRepository(deps: { firestore: Firestore; logger: Logger }): TaskGroupSummaryRepository {
+export interface RepairReadableTaskGroupSummaryRepository extends TaskGroupSummaryRepository {
+  getSummary(userId: string, groupKey: string): Promise<Result<TaskGroupSummary | null, GroupSummaryError>>;
+}
+
+export function createTaskGroupSummaryFirestoreRepository(
+  deps: { firestore: Firestore; logger: Logger }
+): RepairReadableTaskGroupSummaryRepository {
   const { firestore, logger } = deps;
 
   async function loadCounts(tx: Transaction, userId: string): Promise<UserGroupCounts> {
@@ -175,6 +181,18 @@ export function createTaskGroupSummaryFirestoreRepository(deps: { firestore: Fir
         return ok({ summaries, nextCursor });
       } catch (error) {
         return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error, 'Failed to list group summaries') });
+      }
+    },
+
+    async getSummary(userId: string, groupKey: string): Promise<Result<TaskGroupSummary | null, GroupSummaryError>> {
+      try {
+        const snapshot = await summaryDocRef(firestore, userId, groupKey).get();
+        if (!snapshot.exists) {
+          return ok(null);
+        }
+        return ok(docToSummary(snapshot.data() as Record<string, unknown>));
+      } catch (error) {
+        return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error, 'Failed to get group summary') });
       }
     },
 
