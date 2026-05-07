@@ -76,6 +76,16 @@ describe('code-worker image Codex skill bootstrap', () => {
     expect(entrypoint).toContain('return "$raw_exit"');
   });
 
+  it('relies on the staged npmrc for pnpm store configuration instead of global config writes', () => {
+    const dockerfile = readFileSync(dockerfilePath, 'utf8');
+    const entrypoint = readFileSync(entrypointPath, 'utf8');
+
+    expect(dockerfile).toContain(
+      'COPY --chown=claude:claude docker/code-worker/.npmrc /opt/claude-defaults/.npmrc'
+    );
+    expect(entrypoint).not.toContain('pnpm config set store-dir /home/claude/pnpm-store --global');
+  });
+
   it('includes a codex stub in the test Dockerfile for E2E Codex-path coverage', () => {
     const dockerfileTest = readFileSync(dockerfileTestPath, 'utf8');
 

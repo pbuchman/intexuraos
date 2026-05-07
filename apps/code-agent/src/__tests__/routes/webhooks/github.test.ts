@@ -132,6 +132,7 @@ describe('POST /webhooks/github', () => {
       findZombieTasks: vi.fn().mockResolvedValue(ok([])),
       countByUserToday: vi.fn().mockResolvedValue(ok(0)),
       findByPR: vi.fn().mockResolvedValue(ok(null)),
+      findRecentTasksByPR: vi.fn().mockResolvedValue(ok([])),
       findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
       hasDispatchedOrRunningForPR: vi.fn().mockResolvedValue(ok({ hasActive: false })),
       hasOtherDispatchedOrRunningForLinearIssue: vi.fn().mockResolvedValue(ok({ hasActive: false })),
