@@ -1,4 +1,4 @@
-# Manual trigger: Deploy vm-lifecycle Cloud Function only
+# Manual trigger: Deploy transcription Cloud Function only
 steps:
   - name: 'node:22-slim'
     id: 'install'
@@ -19,13 +19,13 @@ steps:
       - |
         corepack enable
         corepack prepare pnpm@10 --activate
-        pnpm --filter @intexuraos/vm-lifecycle build
+        pnpm --filter @intexuraos/transcription build
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy'
     waitFor: ['build']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/deploy-function.sh', 'vm-lifecycle']
+    args: ['cloudbuild/scripts/deploy-function.sh', 'transcription']
     env:
       - 'REGION=${_REGION}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'

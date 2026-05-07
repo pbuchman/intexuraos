@@ -19,6 +19,12 @@ describe('artifact registry prevention config', () => {
     expect(monolithCloudBuild).not.toContain("id: 'build-push-code-worker'");
   });
 
+  it('gives the standalone code-worker Cloud Build extra time for multi-arch export and push', () => {
+    const codeWorkerCloudBuild = readRepoFile('docker/code-worker/cloudbuild.yaml');
+
+    expect(codeWorkerCloudBuild).toContain("timeout: '900s'");
+  });
+
   it('defines active delete cleanup policies and aggressive env retention settings', () => {
     const moduleMain = readRepoFile('terraform/modules/artifact-registry/main.tf');
     const moduleVariables = readRepoFile('terraform/modules/artifact-registry/variables.tf');
