@@ -764,6 +764,61 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(countsAfterRevive.get('archived')).toBe(0);
       expect(countsAfterRevive.get('totalGroups')).toBe(1);
     });
+
+    it('repairs missing linear sort fields when a legacy summary receives a new task', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.now();
+
+      await fakeFirestore.collection('task_group_summaries').doc('user-legacy_INT-1606').set({
+        userId: 'user-legacy',
+        linearIssueId: 'INT-1606',
+        groupKey: 'INT-1606',
+        taskCount: 1,
+        activeTaskCount: 0,
+        latestTaskStatus: 'planned',
+        latestTaskUpdatedAt: now,
+        agentTypesPresent: ['planning'],
+        hasCompletedPlanning: true,
+        hasCompletedExecution: false,
+        hasCompletedExecutionAgent: false,
+        hasImplementationTaskId: false,
+        hasPrUrl: false,
+        prNumber: null,
+        latestReviewNeedsRemediation: null,
+        oldestTaskCreatedAt: now,
+        mostRecentDispatchedAt: null,
+        aggregateStatus: 'needs-action',
+        updatedAt: now,
+      });
+
+      await fakeFirestore.collection('user_group_counts').doc('user-legacy').set({
+        userId: 'user-legacy',
+        active: 0,
+        needsAction: 1,
+        done: 0,
+        failed: 0,
+        archived: 0,
+        totalGroups: 1,
+        updatedAt: now,
+      });
+
+      await repo.updateAfterCreate(makeTask({
+        id: 'task-legacy-2',
+        userId: 'user-legacy',
+        linearIssueId: 'INT-1606',
+        status: 'implemented',
+        agentType: 'execution',
+        createdAt: now,
+        updatedAt: now,
+      }));
+
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-legacy_INT-1606').get();
+      expect(doc.get('linearIssueNumber')).toBe(1606);
+      expect(doc.get('linearIssueSortKey')).toBe(1606);
+    });
   });
 
   describe('updateAfterStatusChange', () => {

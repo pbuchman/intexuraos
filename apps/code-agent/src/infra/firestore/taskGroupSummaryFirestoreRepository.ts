@@ -178,12 +178,16 @@ export function createTaskGroupSummaryFirestoreRepository(deps: { firestore: Fir
       }
     },
 
-    async recomputeGroupFromTasks(userId: string, groupKey: string, tasks: CodeTask[]): Promise<void> {
+    async recomputeGroupFromTasks(
+      userId: string,
+      groupKey: string,
+      tasks: CodeTask[],
+    ): Promise<Result<void, GroupSummaryError>> {
       try {
-        if (tasks.length === 0) return;
+        if (tasks.length === 0) return ok(undefined);
         const now = Timestamp.fromDate(new Date());
         const summary = computeSummaryFromTasks(userId, groupKey, tasks, now);
-        if (summary === null) return;
+        if (summary === null) return ok(undefined);
 
         const summaryRef = summaryDocRef(firestore, userId, groupKey);
         await firestore.runTransaction(async (tx) => {
@@ -216,11 +220,16 @@ export function createTaskGroupSummaryFirestoreRepository(deps: { firestore: Fir
             writeCounts(tx, userId, applyStatusChangeDelta(existingCounts, existingSummary.aggregateStatus, summary.aggregateStatus), now);
           }
         });
+        return ok(undefined);
       } catch (error) {
         logger.warn(
           { userId, groupKey, error: getErrorMessage(error, 'Unknown error') },
           'recomputeGroupFromTasks: failed to recompute group summary (non-critical)',
         );
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Failed to recompute group summary'),
+        });
       }
     },
 

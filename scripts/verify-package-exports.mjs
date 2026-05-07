@@ -19,8 +19,9 @@
  * See `docs/architecture/package-build-output.md` for the full rationale.
  */
 
-import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
+import { listPackageDirs } from './lib/package-export-utils.mjs';
 
 const repoRoot = resolve(import.meta.dirname, '..');
 const packagesRoot = join(repoRoot, 'packages');
@@ -94,13 +95,7 @@ function stripJsonComments(src) {
   return out;
 }
 
-const packageDirs = readdirSync(packagesRoot)
-  .filter((name) => {
-    const full = join(packagesRoot, name);
-    if (!statSync(full).isDirectory()) return false;
-    return existsSync(join(full, 'package.json'));
-  })
-  .sort();
+const packageDirs = listPackageDirs(packagesRoot);
 
 const violations = [];
 let checkedPackages = 0;
