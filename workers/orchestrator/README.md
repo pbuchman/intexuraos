@@ -141,8 +141,8 @@ export INTEXURAOS_REPOSITORY_PATH=$HOME/.code-orchestrator/repo
 export INTEXURAOS_PROJECT_ID=$PROJECT_ID
 export INTEXURAOS_CODE_AGENT_URL=https://intexuraos-code-agent-cj44trunra-lm.a.run.app/
 export INTEXURAOS_USAGE_WEBHOOK_URL=https://intexuraos-code-agent-cj44trunra-lm.a.run.app/internal/webhooks/usage-events
-# Optional but recommended: pin to immutable digest
-# export INTEXURAOS_CODE_WORKER_IMAGE=europe-central2-docker.pkg.dev/.../code-worker@sha256:<digest>
+# Optional explicit override; the orchestrator follows :latest by default
+# export INTEXURAOS_CODE_WORKER_IMAGE=europe-central2-docker.pkg.dev/.../code-worker:latest
 export GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json
 EOF
 

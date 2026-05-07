@@ -78,10 +78,11 @@ Or via systemd (Linux) or macOS LaunchAgent (see `workers/orchestrator/README.md
 europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest
 ```
 
-For deterministic runtime behavior, prefer digest pinning in orchestrator env:
+The orchestrator should follow the mutable `:latest` tag so every worker launch
+pulls the newest published image:
 
 ```bash
-export INTEXURAOS_CODE_WORKER_IMAGE=europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker@sha256:<digest>
+export INTEXURAOS_CODE_WORKER_IMAGE=europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest
 ```
 
 ### Build
@@ -107,7 +108,8 @@ PUSH=true ./scripts/build-worker-image.sh latest
 docker push europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest
 ```
 
-After push, capture digest and update `INTEXURAOS_CODE_WORKER_IMAGE` (digest form) on orchestrator host.
+No digest pin update is needed after push. The orchestrator should keep following
+`code-worker:latest`.
 
 ### Cache Busting
 
@@ -244,7 +246,7 @@ pnpm --filter orchestrator test:e2e
 
 1. Build image: `docker build --no-cache ...`
 2. Push image: `docker push europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest`
-3. Capture pushed digest and update `INTEXURAOS_CODE_WORKER_IMAGE` to that digest
+3. Ensure `INTEXURAOS_CODE_WORKER_IMAGE` still points at `code-worker:latest`
 4. Running containers use the old image until recreated (no hot reload)
 
 ### When Orchestrator Source Changes
@@ -261,7 +263,7 @@ pnpm --filter orchestrator test:e2e
 
 1. Commit and push code
 2. Build and push code-worker image (`--no-cache`)
-3. Update orchestrator env (`INTEXURAOS_CODE_WORKER_IMAGE=@sha256:...`)
+3. Ensure orchestrator env uses `INTEXURAOS_CODE_WORKER_IMAGE=.../code-worker:latest`
 4. Rebuild orchestrator: `pnpm --filter orchestrator build`
 5. Restart orchestrator process
 
