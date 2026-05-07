@@ -102,18 +102,18 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_PUBSUB_LLM_CALL_TOPIC: process.env.INTEXURAOS_PUBSUB_LLM_CALL_TOPIC ?? 'llm-call',
   },
   'whatsapp-service': {
-    // INT-1451: fallbacks MUST match the Terraform-managed topic names
-    // (`intexuraos-*-dev`). Mismatched fallbacks silently break audio
-    // transcription when the home-dev shell does not export the topic env vars.
+    // home-dev publishes to the local Pub/Sub emulator on localhost:8102.
+    // These fallbacks must match the emulator topic aliases configured in
+    // tools/pubsub-ui/server.mjs, not the Terraform-managed Cloud Run topic
+    // names (`intexuraos-*-dev`), or inbound webhooks fail before processing.
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'intexuraos-whatsapp-send-dev',
+      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION:
-      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION ??
-      'intexuraos-whatsapp-send-dev-push',
+      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_SUBSCRIPTION ?? 'whatsapp-send-message-push',
     INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC ?? 'intexuraos-whatsapp-media-cleanup-dev',
+      process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC ?? 'whatsapp-media-cleanup',
     INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC ?? 'intexuraos-commands-ingest-dev',
+      process.env.INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC ?? 'commands-ingest',
     INTEXURAOS_WHATSAPP_ACCESS_TOKEN: process.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN,
     INTEXURAOS_WHATSAPP_APP_SECRET: process.env.INTEXURAOS_WHATSAPP_APP_SECRET,
     INTEXURAOS_WHATSAPP_WABA_ID: process.env.INTEXURAOS_WHATSAPP_WABA_ID,
@@ -122,15 +122,13 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_WHATSAPP_MEDIA_BUCKET:
       process.env.INTEXURAOS_WHATSAPP_MEDIA_BUCKET ?? 'intexuraos-whatsapp-media-dev',
     INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION:
-      process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION ??
-      'intexuraos-whatsapp-media-cleanup-dev-push',
+      process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION ?? 'whatsapp-media-cleanup-push',
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC ??
-      'intexuraos-whatsapp-webhook-process-dev',
+      process.env.INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC ?? 'whatsapp-webhook-process',
     INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC ?? 'intexuraos-audio-stored-dev',
+      process.env.INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC ?? 'whatsapp-transcription',
     INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC ?? 'intexuraos-approval-reply-dev',
+      process.env.INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC ?? 'approval-reply',
   },
   'actions-agent': {
     INTEXURAOS_PUBSUB_ACTIONS_QUEUE: process.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE ?? 'actions-queue',
