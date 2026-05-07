@@ -122,6 +122,14 @@ function readOptionalString(env: EnvReader, name: string): string | undefined {
   return raw !== undefined && raw !== '' ? raw : undefined;
 }
 
+function normalizeWorkerImageRef(image: string): string {
+  const digestIndex = image.indexOf('@sha256:');
+  if (digestIndex < 0) {
+    return image;
+  }
+  return `${image.slice(0, digestIndex)}:latest`;
+}
+
 /**
  * Loads the full bootstrap configuration from the environment.
  *
@@ -161,7 +169,9 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
     DEFAULT_VALIDATION_MODELS,
     env
   );
-  const workerImage = getOptionalEnv('INTEXURAOS_CODE_WORKER_IMAGE', DEFAULT_WORKER_IMAGE, env);
+  const workerImage = normalizeWorkerImageRef(
+    getOptionalEnv('INTEXURAOS_CODE_WORKER_IMAGE', DEFAULT_WORKER_IMAGE, env)
+  );
 
   const keepContainersAlive = env['KEEP_CONTAINERS_ALIVE'] === '1';
   const workerForensicsMode = getOptionalEnv('INTEXURAOS_CODE_WORKER_FORENSICS', '0', env) === '1';

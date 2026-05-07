@@ -32,8 +32,6 @@ uname -n
 grep '^INTEXURAOS_CODE_WORKER_IMAGE=' ~/.code-orchestrator/env || true
 ```
 
-If `INTEXURAOS_CODE_WORKER_IMAGE` is missing, the orchestrator is still following the default `code-worker:latest` image and must be pinned before any aggressive `code-worker` prune.
-
 ## Export Live Images
 
 ```bash
@@ -101,7 +99,7 @@ node scripts/artifact-registry/apply-prune-plan.mjs \
   --batch-size=50
 ```
 
-`code-worker` after pinning the orchestrator:
+`code-worker` after confirming the orchestrator follows `code-worker:latest`:
 
 ```bash
 node scripts/artifact-registry/apply-prune-plan.mjs \
@@ -111,17 +109,20 @@ node scripts/artifact-registry/apply-prune-plan.mjs \
   --batch-size=50
 ```
 
-## Pin The Orchestrator Before Code-Worker Prune
+## Ensure The Orchestrator Follows Latest Before Code-Worker Prune
 
-Choose a retained `code-worker` digest from the prune plan and update the orchestrator env:
+The orchestrator should keep following `code-worker:latest` so each task pull
+refreshes to the newest worker image. Before pruning `code-worker`, make sure the
+env file does not pin an old digest:
 
 ```bash
 grep '^INTEXURAOS_CODE_WORKER_IMAGE=' ~/.code-orchestrator/env || true
-sed -i 's#^INTEXURAOS_CODE_WORKER_IMAGE=.*#INTEXURAOS_CODE_WORKER_IMAGE=europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker@sha256:RETAINED_DIGEST#' ~/.code-orchestrator/env
+sed -i 's#^INTEXURAOS_CODE_WORKER_IMAGE=.*#INTEXURAOS_CODE_WORKER_IMAGE=europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/code-worker:latest#' ~/.code-orchestrator/env
 sudo systemctl restart intexuraos-orchestrator@pbuchman
 ```
 
-Re-export live images after the restart and verify the pinned digest appears in `protected-digests.json`.
+Re-export live images after the restart and verify the current `latest` digest
+appears in `protected-digests.json`.
 
 ## Terraform Cleanup Policies
 
