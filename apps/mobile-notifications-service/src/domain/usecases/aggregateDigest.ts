@@ -49,6 +49,7 @@ export async function aggregateDigest(
       originalPrompt: initialPrompt,
       invalidResponse: lastResponseContent,
       errorMessage: lastErrorMessage,
+      outputLanguage: input.outputLanguage,
     });
     const repaired = await callAndParse(deps, repairPrompt, PROMPT_TYPE_REPAIR);
     if (repaired.kind === 'ok') return ok(repaired.value);
