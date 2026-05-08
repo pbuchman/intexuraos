@@ -40,18 +40,18 @@ export function FishingDigestViewPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <div className="mb-6">
+      <div className="mb-6 min-w-0">
         <Link
           to="/fishing-assistant/digests"
           className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
         >
           Back to Current Digests
         </Link>
-        <h2 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
+        <h2 className="mt-2 break-words text-2xl font-bold text-slate-900 dark:text-slate-100">
           {detail?.digest.title ?? 'Fishing Digest'}
         </h2>
         {detail !== null ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="break-words text-sm text-slate-500 dark:text-slate-400">
             {detail.digest.date} · {detail.digest.groupKey} · {String(detail.digest.messageCount)} messages
           </p>
         ) : null}
@@ -70,8 +70,8 @@ export function FishingDigestViewPage(): React.JSX.Element {
           Digest not found.
         </div>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
             <MarkdownContent content={detail.digest.summaryMarkdown} />
           </div>
           {detail.state !== null ? <DigestState state={detail.state} /> : null}

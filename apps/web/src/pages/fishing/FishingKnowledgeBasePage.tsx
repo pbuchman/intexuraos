@@ -72,7 +72,7 @@ export function FishingKnowledgeBasePage(): React.JSX.Element {
         </div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
         <FishingKnowledgeTree
           folders={knowledge.folders}
           selectedFolderId={selectedFolderId}
@@ -89,13 +89,13 @@ export function FishingKnowledgeBasePage(): React.JSX.Element {
           }}
         />
 
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            <div className="min-w-0">
+              <h3 className="break-words text-lg font-semibold text-slate-900 dark:text-slate-100">
                 {selectedFolder?.name ?? 'Select a folder'}
               </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
+              <p className="break-words text-sm text-slate-500 dark:text-slate-400">
                 {selectedFolder !== undefined
                   ? `${String(selectedFolder.pageCount)} page${selectedFolder.pageCount === 1 ? '' : 's'}`
                   : 'Choose a folder to browse and edit pages.'}
@@ -122,19 +122,19 @@ export function FishingKnowledgeBasePage(): React.JSX.Element {
                   key={page.id}
                   className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/40"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h4 className="font-medium text-slate-900 dark:text-slate-100">
+                  <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <h4 className="break-words font-medium text-slate-900 dark:text-slate-100">
                         {page.title}
                       </h4>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                      <p className="break-words text-sm text-slate-500 dark:text-slate-400">
                         {page.contentType} · {page.indexingStatus} · {String(page.chunkCount)} chunk{page.chunkCount === 1 ? '' : 's'}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex w-full shrink-0 gap-2 sm:w-auto">
                       <Link
                         to={`/fishing-assistant/knowledge/pages/${encodeURIComponent(page.id)}`}
-                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:border-slate-300 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-500"
+                        className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-center text-sm font-medium text-slate-700 transition-colors hover:border-slate-300 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-500 sm:flex-none"
                       >
                         Open
                       </Link>
@@ -145,17 +145,17 @@ export function FishingKnowledgeBasePage(): React.JSX.Element {
                             void knowledge.deletePage(page.id);
                           }
                         }}
-                        className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30"
+                        className="flex-1 rounded-lg border border-red-200 px-3 py-1.5 text-center text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30 sm:flex-none"
                       >
                         Delete
                       </button>
                     </div>
                   </div>
-                  <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+                  <p className="mt-3 break-words text-sm text-slate-600 dark:text-slate-300">
                     {page.rawText.slice(0, 180)}
                     {page.rawText.length > 180 ? '...' : ''}
                   </p>
-                  <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                  <p className="mt-3 break-words text-xs text-slate-500 dark:text-slate-400">
                     Updated {formatRelative(page.updatedAt)}
                   </p>
                 </div>
