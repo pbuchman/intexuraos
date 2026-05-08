@@ -19,7 +19,7 @@ export function setMockServices(overrides: Partial<ServiceContainer>): ServiceCo
     digestLockRepository: overrides.digestLockRepository ?? stub('digestLockRepository'),
     backfillRunRepository: overrides.backfillRunRepository ?? stub('backfillRunRepository'),
     digestSubscriptions: overrides.digestSubscriptions ?? [
-      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G' },
+      { userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish' },
     ],
     digestNotifier: overrides.digestNotifier ?? new NoopDigestNotifier(),
   };

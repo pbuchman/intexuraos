@@ -310,6 +310,7 @@ Internal response maps `text` to `body` and `receivedAt` to `timestamp` for comp
 | `userId`           | string | Subscribed user ID                                    |
 | `groupKey`         | string | Group identifier slug                                 |
 | `groupTitlePrefix` | string | WhatsApp group title prefix for notification matching |
+| `outputLanguage`   | `"English"` or `"Polish"` | Language used for generated digest summaries, group state text, and fishing digest Markdown labels |
 
 Currently hard-coded in `digestSubscriptions.ts`. See Future Plans in `technical-debt.md`.
 
@@ -335,7 +336,7 @@ Day boundaries are computed using `Europe/Warsaw` timezone (CET/CEST). The `cetD
 
 ### LLM Aggregation
 
-`aggregateDigest` sends a prompt to OpenRouter with the day's filtered messages, previous group state, and last 3 summaries. The response is validated against a Zod schema (`AggregationOutputSchema`). If validation fails, up to 3 repair attempts are made using `buildDigestRepairPrompt`. LLM usage is reported to `llm-usage-service` via `HttpInternalAuthUsageSink`.
+`aggregateDigest` sends a prompt to OpenRouter with the day's filtered messages, previous group state, last 3 summaries, and the subscription `outputLanguage`. All human-readable summary and group-state fields must be generated in that target language; for `grupa-wedkarska-skool`, the target is Polish. If previous state or prior summaries contain English from earlier generations, the prompt requires translated/normalized Polish carry-forward text rather than copying English. The response is validated against a Zod schema (`AggregationOutputSchema`). If validation fails, up to 3 repair attempts are made using `buildDigestRepairPrompt`. LLM usage is reported to `llm-usage-service` via `HttpInternalAuthUsageSink`.
 
 ### Message Filtering
 
@@ -344,6 +345,8 @@ Day boundaries are computed using `Europe/Warsaw` timezone (CET/CEST). The `cetD
 ### Backfill Chaining
 
 Backfill processes dates sequentially via self-referential HTTP calls. Each completed day triggers the next via `POST /internal/notifications/digest/run` with a `chainNext` payload. Progress is tracked in `notification_digest_backfill_runs`.
+
+After changing digest prompt language behavior, rerun the affected date range through the existing backfill/regeneration flow so `notification_daily_digests` and `notification_group_states` are overwritten in the target language. Existing generation numbers increment; WhatsApp notifications remain suppressed for regenerations.
 
 ### Daily Cron
 

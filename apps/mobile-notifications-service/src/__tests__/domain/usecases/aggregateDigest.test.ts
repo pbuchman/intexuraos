@@ -26,6 +26,7 @@ describe('aggregateDigest', () => {
         userId: 'google-oauth2|test',
         groupKey: 'grupa-wedkarska-skool',
         date: '2026-04-15',
+        outputLanguage: 'Polish',
         previousState: null,
         last3Summaries: [],
         todaysMessages: [],
@@ -49,6 +50,7 @@ describe('aggregateDigest', () => {
       { llmClient, logger: noopLogger },
       {
         userId: 'u', groupKey: 'g', date: '2026-04-15',
+        outputLanguage: 'Polish',
         previousState: null, last3Summaries: [], todaysMessages: [],
       },
     );
@@ -57,6 +59,30 @@ describe('aggregateDigest', () => {
     expect(llmClient.calls).toHaveLength(2);
     expect(llmClient.calls[0]?.options?.promptType).toBe(PROMPT_TYPE_AGGREGATE);
     expect(llmClient.calls[1]?.options?.promptType).toBe(PROMPT_TYPE_REPAIR);
+  });
+
+  it('passes the target output language into initial and repair prompts', async () => {
+    const llmClient = new FakeLlmClient([
+      { type: 'content', value: 'not json' },
+      { type: 'content', value: JSON.stringify(COLD_START_EXAMPLE) },
+    ]);
+
+    const result = await aggregateDigest(
+      { llmClient, logger: noopLogger },
+      {
+        userId: 'u',
+        groupKey: 'grupa-wedkarska-skool',
+        date: '2026-04-15',
+        outputLanguage: 'Polish',
+        previousState: null,
+        last3Summaries: [],
+        todaysMessages: [{ sender: 'Mateusz', text: 'Zanęta zaczęła pracować.', postTimeSec: 1776380400 }],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(llmClient.calls[0]?.prompt).toContain('Target output language: Polish');
+    expect(llmClient.calls[1]?.prompt).toContain('Target output language: Polish');
   });
 
   it('returns repair-exhausted when LLM never produces valid JSON', async () => {
@@ -71,6 +97,7 @@ describe('aggregateDigest', () => {
       { llmClient, logger: noopLogger },
       {
         userId: 'u', groupKey: 'g', date: '2026-04-15',
+        outputLanguage: 'Polish',
         previousState: null, last3Summaries: [], todaysMessages: [],
       },
     );
@@ -90,6 +117,7 @@ describe('aggregateDigest', () => {
       { llmClient, logger: noopLogger },
       {
         userId: 'u', groupKey: 'g', date: '2026-04-15',
+        outputLanguage: 'Polish',
         previousState: null, last3Summaries: [], todaysMessages: [],
       },
     );
@@ -109,6 +137,7 @@ describe('aggregateDigest', () => {
       { llmClient, logger: noopLogger },
       {
         userId: 'u', groupKey: 'g', date: '2026-04-15',
+        outputLanguage: 'Polish',
         previousState: null, last3Summaries: [], todaysMessages: [],
       },
     );
@@ -129,6 +158,7 @@ describe('aggregateDigest', () => {
       { llmClient, logger: noopLogger },
       {
         userId: 'u', groupKey: 'grupa-wedkarska-skool', date: '2026-04-15',
+        outputLanguage: 'Polish',
         previousState: null,
         last3Summaries: [],
         todaysMessages: [],
@@ -150,6 +180,7 @@ describe('aggregateDigest', () => {
       { llmClient, logger: noopLogger },
       {
         userId: 'u', groupKey: 'grupa-wedkarska-skool', date: '2026-04-15',
+        outputLanguage: 'Polish',
         previousState: {},
         last3Summaries: [],
         todaysMessages: [],

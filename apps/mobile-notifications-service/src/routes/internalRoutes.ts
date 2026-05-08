@@ -8,7 +8,7 @@ import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-htt
 import { getServices } from '../services.js';
 import { listNotifications } from '../domain/notifications/index.js';
 import type { Notification, PaginationOptions } from '../domain/notifications/index.js';
-import { findSubscription } from '../domain/digestSubscriptions.js';
+import { findSubscription, type DigestOutputLanguage } from '../domain/digestSubscriptions.js';
 import type { DailySummary } from '../domain/schemas/digestSchemas.js';
 import type { PersistedDailySummary } from '../domain/repositories/digestRepositories.js';
 import { cetDayBounds } from '../domain/usecases/cetDayBounds.js';
@@ -94,6 +94,31 @@ const MAX_GROUP_MESSAGE_LIMIT = 500;
 const MAX_GROUP_MESSAGE_RANGE_DAYS = 31;
 const RAW_NOTIFICATION_PAGE_SIZE = 1000;
 const MAX_RAW_NOTIFICATIONS_TO_SCAN = 5000;
+const DIGEST_MARKDOWN_LABELS: Record<DigestOutputLanguage, {
+  readonly date: string;
+  readonly messages: string;
+  readonly keyPoints: string;
+  readonly threads: string;
+  readonly moderatorPosts: string;
+  readonly openQuestions: string;
+}> = {
+  English: {
+    date: 'Date',
+    messages: 'Messages',
+    keyPoints: 'Key points',
+    threads: 'Threads',
+    moderatorPosts: 'Moderator posts',
+    openQuestions: 'Open questions',
+  },
+  Polish: {
+    date: 'Data',
+    messages: 'Wiadomości',
+    keyPoints: 'Najważniejsze punkty',
+    threads: 'Wątki',
+    moderatorPosts: 'Wpisy moderatorów',
+    openQuestions: 'Otwarte pytania',
+  },
+};
 
 async function rejectInvalidInternalAuth(
   request: FastifyRequest,
@@ -155,21 +180,22 @@ function textMatchesTerms(text: string, terms: readonly string[]): boolean {
   return terms.some((term) => haystack.includes(term));
 }
 
-function buildDigestMarkdown(summary: DailySummary): string {
+function buildDigestMarkdown(summary: DailySummary, outputLanguage: DigestOutputLanguage): string {
+  const labels = DIGEST_MARKDOWN_LABELS[outputLanguage];
   const lines: string[] = [
     `# ${summary.headline}`,
     '',
-    `Date: ${summary.date}`,
-    `Messages: ${String(summary.messageCount)}`,
+    `${labels.date}: ${summary.date}`,
+    `${labels.messages}: ${String(summary.messageCount)}`,
   ];
 
   if (summary.bullets.length > 0) {
-    lines.push('', '## Key points');
+    lines.push('', `## ${labels.keyPoints}`);
     for (const bullet of summary.bullets) lines.push(`- ${bullet}`);
   }
 
   if (summary.threads.length > 0) {
-    lines.push('', '## Threads');
+    lines.push('', `## ${labels.threads}`);
     for (const thread of summary.threads) {
       const facts = thread.keyFacts.length > 0 ? `: ${thread.keyFacts.join('; ')}` : '';
       lines.push(`- ${thread.topic}${facts}`);
@@ -177,27 +203,30 @@ function buildDigestMarkdown(summary: DailySummary): string {
   }
 
   if (summary.moderatorPosts.length > 0) {
-    lines.push('', '## Moderator posts');
+    lines.push('', `## ${labels.moderatorPosts}`);
     for (const post of summary.moderatorPosts) {
       lines.push(`- ${post.time} ${post.topic}: ${post.summary}`);
     }
   }
 
   if (summary.openQuestions.length > 0) {
-    lines.push('', '## Open questions');
+    lines.push('', `## ${labels.openQuestions}`);
     for (const question of summary.openQuestions) lines.push(`- ${question}`);
   }
 
   return lines.join('\n');
 }
 
-function toDigestEvidenceItem(doc: PersistedDailySummary): DigestEvidenceItem {
+function toDigestEvidenceItem(
+  doc: PersistedDailySummary,
+  outputLanguage: DigestOutputLanguage
+): DigestEvidenceItem {
   const { summary } = doc;
   return {
     groupKey: summary.groupKey,
     date: summary.date,
     title: summary.headline,
-    summaryMarkdown: buildDigestMarkdown(summary),
+    summaryMarkdown: buildDigestMarkdown(summary, outputLanguage),
     messageCount: summary.messageCount,
   };
 }
@@ -482,7 +511,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const rangeError = validateDateRange(dateFrom, dateTo);
       if (rangeError !== null) return await reply.fail('INVALID_REQUEST', rangeError);
       const limit = request.body.limit as number;
-      if (findSubscription(getServices().digestSubscriptions, userId, groupKey) === undefined) {
+      const subscription = findSubscription(getServices().digestSubscriptions, userId, groupKey);
+      if (subscription === undefined) {
         return await reply.fail('INVALID_REQUEST', `no digest subscription for userId=${userId} groupKey=${groupKey}`);
       }
 
@@ -497,7 +527,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const terms = normalizeTerms(request.body.terms as string[]);
       const matchedItems = result.value.items
-        .map(toDigestEvidenceItem)
+        .map((doc) => toDigestEvidenceItem(doc, subscription.outputLanguage))
         .filter((item) => textMatchesTerms(`${item.title}\n${item.summaryMarkdown}`, terms));
       const items = matchedItems.slice(0, limit);
 
@@ -536,7 +566,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { userId, groupKey, date } = request.body;
       const rangeError = validateDateRange(date, date);
       if (rangeError !== null) return await reply.fail('INVALID_REQUEST', rangeError);
-      if (findSubscription(getServices().digestSubscriptions, userId, groupKey) === undefined) {
+      const subscription = findSubscription(getServices().digestSubscriptions, userId, groupKey);
+      if (subscription === undefined) {
         return await reply.fail('INVALID_REQUEST', `no digest subscription for userId=${userId} groupKey=${groupKey}`);
       }
 
@@ -545,7 +576,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // @allow-raw-send -- reply.fail only supports 5xx; 404 needs typed body via reply.status(404).send()
       if (result.value === null) return await reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Digest not found' } });
 
-      return await reply.ok(toDigestEvidenceItem(result.value));
+      return await reply.ok(toDigestEvidenceItem(result.value, subscription.outputLanguage));
     }
   );
 

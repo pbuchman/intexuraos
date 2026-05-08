@@ -23,6 +23,7 @@ export interface RunDigestForGroupInput {
   readonly userId: string;
   readonly groupKey: string;
   readonly groupTitlePrefix: string;
+  readonly outputLanguage: string;
   readonly date: string; // YYYY-MM-DD (CET interpretation)
   readonly holder: DigestLockHolder;
 }
@@ -86,6 +87,7 @@ export async function runDigestForGroup(
         userId: input.userId,
         groupKey: input.groupKey,
         date: input.date,
+        outputLanguage: input.outputLanguage,
         previousState: previousState.value,
         last3Summaries: lastSummaries.value.map((p) => p.summary),
         todaysMessages: filtered.map((m) => ({

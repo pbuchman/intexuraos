@@ -731,6 +731,65 @@ describe('POST /notifications/digests/run', () => {
     await app.close();
   });
 
+  it('uses the subscription output language when regenerating a digest', async () => {
+    let capturedPrompt = '';
+    vi.doMock('@intexuraos/llm-factory', async (): Promise<typeof import('@intexuraos/llm-factory')> => {
+      const actual = await vi.importActual<typeof import('@intexuraos/llm-factory')>('@intexuraos/llm-factory');
+      return {
+        ...actual,
+        createLlmClient: () => ({
+          generate: async (prompt: string): Promise<{ ok: true; value: { content: string; usage: { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number } } }> => {
+            capturedPrompt = prompt;
+            return { ok: true, value: { content: JSON.stringify(COLD_START_EXAMPLE), usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 } } };
+          },
+        }),
+      } as typeof import('@intexuraos/llm-factory');
+    });
+    vi.resetModules();
+    const { buildServer: freshBuildServer } = await import('../../server.js');
+    const { setMockServices: freshSetMockServices } = await import('../helpers/mockServices.js');
+    const { __resetUsageSinkForTests: freshResetSink } = await import('../../routes/digestRoutes.js');
+    freshResetSink();
+    freshSetMockServices({
+      digestSubscriptions: [{ userId: 'u', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish' }],
+      digestLockRepository: {
+        acquire: async () => ({ ok: true, value: { acquired: true } }),
+        release: async () => ({ ok: true, value: undefined }),
+      },
+      notificationRepository: {
+        findByUserIdPaginated: async () => ({ ok: true, value: { notifications: [] } }),
+        save: async () => ({ ok: true, value: NULL_NOTIFICATION }),
+        findById: async () => ({ ok: true, value: null }),
+        existsByNotificationIdAndUserId: async () => ({ ok: true, value: false }),
+        delete: async () => ({ ok: true, value: undefined }),
+      },
+      digestRepository: {
+        save: async () => ({ ok: true, value: { ...EXAMPLE_PERSISTED, generation: 2 } }),
+        findByDate: async () => ({ ok: true, value: null }),
+        findRecentByGroup: async () => ({ ok: true, value: [] }),
+        findInRange: async () => ({ ok: true, value: { items: [] } }),
+      },
+      groupStateRepository: {
+        getByDate: async () => ({ ok: true, value: null }),
+        getLatest: async () => ({ ok: true, value: null }),
+        save: async () => ({ ok: true, value: undefined }),
+      },
+    });
+    const token = await createToken({ sub: 'u' });
+    const app = await freshBuildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/notifications/digests/run',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { groupKey: 'g', date: '2026-04-15' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(capturedPrompt).toContain('Target output language: Polish');
+    await app.close();
+    vi.doUnmock('@intexuraos/llm-factory');
+  });
+
   it('returns 500 when digest run fails with non-lock-held error', async () => {
     setMockServices({
       digestLockRepository: {

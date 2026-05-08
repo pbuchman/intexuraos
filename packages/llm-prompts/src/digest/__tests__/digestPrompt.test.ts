@@ -14,9 +14,10 @@ describe('digestPrompt.build', () => {
     userId: 'google-oauth2|test-user',
     groupKey: 'grupa-wedkarska-skool',
     date: '2026-04-15',
+    outputLanguage: 'Polish',
     previousState: null,
     last3Summaries: [],
-    todaysMessages: [{ sender: 'Test', text: 'Hello', postTimeSec: 1776380400 }],
+    todaysMessages: [{ sender: 'Test', text: 'Testowa polska wiadomość', postTimeSec: 1776380400 }],
   };
 
   it('returns a non-empty prompt with the date and group key', () => {
@@ -32,10 +33,12 @@ describe('digestPrompt.build', () => {
     expect(prompt).toContain('2026-04-11');
   });
 
-  it('instructs the model to write English narratives', () => {
+  it('instructs the model to write in the configured target language', () => {
     const prompt = digestPrompt.build(baseInput);
-    expect(prompt.toLowerCase()).toContain('in english');
-    expect(prompt.toLowerCase()).not.toContain(['po', 'polsku'].join(' '));
+    expect(prompt).toContain('Target output language: Polish');
+    expect(prompt).toContain('dailySummary.headline');
+    expect(prompt).toContain('stateUpdate.openThreads[].lastSignal');
+    expect(prompt.toLowerCase()).not.toContain('in english');
   });
 
   it('instructs the model to output headline + bullets (hybrid format)', () => {
@@ -50,7 +53,7 @@ describe('digestPrompt.build', () => {
     expect(prompt.toLowerCase()).toContain('do not copy');
   });
 
-  it('exposes semver version 3.x', () => {
-    expect(DIGEST_PROMPT_VERSION).toMatch(/^3\.\d+\.\d+$/);
+  it('exposes semver version 4.x', () => {
+    expect(DIGEST_PROMPT_VERSION).toMatch(/^4\.\d+\.\d+$/);
   });
 });

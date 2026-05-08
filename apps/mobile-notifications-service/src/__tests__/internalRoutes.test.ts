@@ -578,8 +578,8 @@ describe('Internal Routes', () => {
       setMockServices({
         notificationRepository: ctx.notificationRepo,
         digestSubscriptions: [
-          { userId: 'u', groupKey: 'g', groupTitlePrefix: 'Group One' },
-          { userId: 'other', groupKey: 'hidden', groupTitlePrefix: 'Hidden Group' },
+          { userId: 'u', groupKey: 'g', groupTitlePrefix: 'Group One', outputLanguage: 'Polish' },
+          { userId: 'other', groupKey: 'hidden', groupTitlePrefix: 'Hidden Group', outputLanguage: 'English' },
         ],
       });
 
@@ -705,6 +705,10 @@ describe('Internal Routes', () => {
       expect(body.data.items).toHaveLength(1);
       expect(body.data.items[0]?.title).toBe('Spring ground bait discussion');
       expect(body.data.items[0]?.summaryMarkdown).toContain('Ground bait worked in spring');
+      expect(body.data.items[0]?.summaryMarkdown).toContain('Data: 2026-04-15');
+      expect(body.data.items[0]?.summaryMarkdown).toContain('Wiadomości: 3');
+      expect(body.data.items[0]?.summaryMarkdown).toContain('## Najważniejsze punkty');
+      expect(body.data.items[0]?.summaryMarkdown).not.toContain('## Key points');
       expect(body.data.items[0]?.messageCount).toBe(3);
       expect(body.data.truncated).toBe(false);
     });
@@ -765,8 +769,8 @@ describe('Internal Routes', () => {
         items: { summaryMarkdown: string }[];
         truncated: boolean;
       }>;
-      expect(body.data.items[0]?.summaryMarkdown).toContain('## Moderator posts');
-      expect(body.data.items[0]?.summaryMarkdown).toContain('## Open questions');
+      expect(body.data.items[0]?.summaryMarkdown).toContain('## Wpisy moderatorów');
+      expect(body.data.items[0]?.summaryMarkdown).toContain('## Otwarte pytania');
       expect(body.data.items[0]?.summaryMarkdown).toContain('- Loose feed');
       expect(body.data.truncated).toBe(true);
     });
@@ -812,9 +816,14 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body) as SuccessResponse<{
         groupKey: string;
         title: string;
+        summaryMarkdown: string;
       }>;
       expect(body.data.groupKey).toBe('g');
       expect(body.data.title).toBe('Spring ground bait discussion');
+      expect(body.data.summaryMarkdown).toContain('Data: 2026-04-15');
+      expect(body.data.summaryMarkdown).toContain('Wiadomości: 3');
+      expect(body.data.summaryMarkdown).toContain('## Najważniejsze punkty');
+      expect(body.data.summaryMarkdown).not.toContain('## Key points');
     });
 
     it('validates digest get dates', async () => {
@@ -1019,7 +1028,7 @@ describe('Internal Routes', () => {
       setInternalAuth();
       setMockServices({
         notificationRepository: ctx.notificationRepo,
-        digestSubscriptions: [{ userId: 'other', groupKey: 'g', groupTitlePrefix: 'G' }],
+        digestSubscriptions: [{ userId: 'other', groupKey: 'g', groupTitlePrefix: 'G', outputLanguage: 'Polish' }],
       });
 
       const response = await ctx.app.inject({
@@ -1069,7 +1078,7 @@ describe('Internal Routes', () => {
       addNotification('wrong-day', { text: 'Spring ground bait outside range', timestamp: bounds.fromSec - 60, postTime: String(bounds.fromSec - 60) });
       setMockServices({
         notificationRepository: ctx.notificationRepo,
-        digestSubscriptions: [{ userId: 'u', groupKey: 'g', groupTitlePrefix: 'G fishing chat' }],
+        digestSubscriptions: [{ userId: 'u', groupKey: 'g', groupTitlePrefix: 'G fishing chat', outputLanguage: 'Polish' }],
       });
 
       const response = await ctx.app.inject({
@@ -1123,7 +1132,7 @@ describe('Internal Routes', () => {
       ctx.notificationRepo.setFailNextFind(true);
       setMockServices({
         notificationRepository: ctx.notificationRepo,
-        digestSubscriptions: [{ userId: 'u', groupKey: 'g', groupTitlePrefix: 'G fishing chat' }],
+        digestSubscriptions: [{ userId: 'u', groupKey: 'g', groupTitlePrefix: 'G fishing chat', outputLanguage: 'Polish' }],
       });
 
       const response = await ctx.app.inject({
@@ -1157,7 +1166,7 @@ describe('Internal Routes', () => {
       });
       setMockServices({
         notificationRepository: ctx.notificationRepo,
-        digestSubscriptions: [{ userId: 'u', groupKey: 'g', groupTitlePrefix: 'G fishing chat' }],
+        digestSubscriptions: [{ userId: 'u', groupKey: 'g', groupTitlePrefix: 'G fishing chat', outputLanguage: 'Polish' }],
       });
 
       const response = await ctx.app.inject({
@@ -1202,7 +1211,7 @@ describe('Internal Routes', () => {
       };
       setMockServices({
         notificationRepository,
-        digestSubscriptions: [{ userId: 'u', groupKey: 'g', groupTitlePrefix: 'G fishing chat' }],
+        digestSubscriptions: [{ userId: 'u', groupKey: 'g', groupTitlePrefix: 'G fishing chat', outputLanguage: 'Polish' }],
       });
 
       const response = await ctx.app.inject({
@@ -1239,7 +1248,7 @@ describe('Internal Routes', () => {
       };
       setMockServices({
         notificationRepository,
-        digestSubscriptions: [{ userId: 'u', groupKey: 'g', groupTitlePrefix: 'G fishing chat' }],
+        digestSubscriptions: [{ userId: 'u', groupKey: 'g', groupTitlePrefix: 'G fishing chat', outputLanguage: 'Polish' }],
       });
 
       const response = await ctx.app.inject({
