@@ -6,11 +6,72 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { FishingDigestList } from '../FishingDigestList.js';
+import { FishingChatPanel } from '../FishingChatPanel.js';
 import { FishingKnowledgeTree } from '../FishingKnowledgeTree.js';
 import { FishingPageEditor } from '../FishingPageEditor.js';
-import type { FishingKnowledgePage } from '@/types/fishingAssistant';
+import type {
+  FishingChat,
+  FishingChatMessage,
+  FishingKnowledgePage,
+} from '@/types/fishingAssistant';
 
 describe('Fishing responsive layout contracts', () => {
+  it('contains long unbroken assistant markdown inside a shrinkable chat bubble', () => {
+    const chat: FishingChat = {
+      id: 'chat-1',
+      userId: 'user-1',
+      title: 'Long assistant response',
+      lastMessagePreview: 'Long response',
+      lastMessageAt: '2026-05-01T00:00:00.000Z',
+      createdAt: '2026-05-01T00:00:00.000Z',
+      updatedAt: '2026-05-01T00:00:00.000Z',
+    };
+    const longToken = 'x'.repeat(180);
+    const assistantMessage: FishingChatMessage = {
+      id: 'message-long',
+      chatId: chat.id,
+      userId: chat.userId,
+      role: 'assistant',
+      content: `**${longToken}**\n\n\`${longToken}\``,
+      citations: [],
+      confidence: 'medium',
+      createdAt: '2026-05-01T00:01:00.000Z',
+    };
+    const onSelectMessage = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <FishingChatPanel
+          chats={[chat]}
+          selectedChatId={chat.id}
+          messages={[assistantMessage]}
+          loading={false}
+          sending={false}
+          error={null}
+          errorCode={null}
+          selectedMessageId={assistantMessage.id}
+          onSelectChat={vi.fn()}
+          onCreateChat={vi.fn()}
+          onSendMessage={vi.fn()}
+          onSelectMessage={onSelectMessage}
+        />
+      </MemoryRouter>
+    );
+
+    const bubble = screen.getByTestId('fishing-chat-message-message-long');
+    expect(bubble).toHaveClass('min-w-0', 'max-w-full', 'overflow-hidden');
+    expect(bubble).toHaveClass('ring-2', 'ring-blue-500');
+    expect(screen.getByTestId('fishing-chat-message-markdown-message-long')).toHaveClass(
+      'min-w-0',
+      'max-w-full',
+      'overflow-x-auto',
+      'break-words'
+    );
+
+    bubble.click();
+    expect(onSelectMessage).toHaveBeenCalledWith(assistantMessage.id);
+  });
+
   it('keeps digest rows stackable on narrow screens', () => {
     render(
       <MemoryRouter>
