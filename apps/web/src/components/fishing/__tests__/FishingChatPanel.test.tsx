@@ -89,6 +89,12 @@ describe('FishingChatPanel', () => {
     });
     expect(onSelectChat).toHaveBeenCalledWith('chat-1');
     expect(onCreateChat).toHaveBeenCalledTimes(1);
+    const panel = screen.getByTestId('fishing-chat-panel');
+    expect(panel).toHaveClass('grid', 'gap-4', 'lg:grid-cols-[260px_minmax(0,1fr)]');
+
+    const selectedMessage = screen.getByTestId('fishing-chat-message-message-2');
+    expect(selectedMessage).toHaveClass('w-full', 'max-w-full', 'sm:max-w-[90%]');
+
     expect(screen.getByText('Use pinka', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '[1]' })).toHaveAttribute(
       'href',
@@ -119,9 +125,7 @@ describe('FishingChatPanel', () => {
     const input = screen.getByLabelText(/ask fishing assistant/i);
 
     fireEvent.change(input, { target: { value: 'Line one' } });
-    expect(
-      fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', cancelable: true })
-    ).toBe(false);
+    expect(fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', cancelable: true })).toBe(false);
     expect(
       fireEvent.keyDown(input, {
         key: 'Enter',

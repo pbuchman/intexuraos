@@ -95,8 +95,8 @@ export function FishingDigestsPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
+      <div className="mb-6 flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
             Current Digests
           </h2>
@@ -104,10 +104,12 @@ export function FishingDigestsPage(): React.JSX.Element {
             Browse recent fishing-group summaries through the Fishing Assistant service.
           </p>
         </div>
-        <MonthPicker month={month} onChange={setMonth} />
+        <div className="w-full sm:w-auto">
+          <MonthPicker month={month} onChange={setMonth} />
+        </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-4 flex min-w-0 flex-wrap gap-2">
         {groups.map((group) => {
           const isActive = group.groupKey === selectedGroupKey;
           return (
@@ -115,7 +117,7 @@ export function FishingDigestsPage(): React.JSX.Element {
               key={group.groupKey}
               type="button"
               onClick={(): void => { setSelectedGroupKey(group.groupKey); }}
-              className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+              className={`min-w-0 break-words rounded-full border px-3 py-1.5 text-sm transition-colors ${
                 isActive
                   ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950/30 dark:text-blue-300'
                   : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-600'
