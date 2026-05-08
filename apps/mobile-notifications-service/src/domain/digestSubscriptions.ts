@@ -8,13 +8,17 @@ export interface DigestSubscription {
   readonly userId: string;
   readonly groupKey: string;
   readonly groupTitlePrefix: string;
+  readonly outputLanguage: DigestOutputLanguage;
 }
+
+export type DigestOutputLanguage = 'English' | 'Polish';
 
 export const DIGEST_SUBSCRIPTIONS: readonly DigestSubscription[] = [
   {
     userId: 'google-oauth2|113131655542389277022',
     groupKey: 'grupa-wedkarska-skool',
     groupTitlePrefix: 'Grupa Wędkarska Skool',
+    outputLanguage: 'Polish',
   },
 ] as const;
 
