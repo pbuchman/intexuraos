@@ -31,7 +31,7 @@ function sanitizeHistoryContent(content: string): string {
 export const fishingAnswerPrompt: PromptBuilder<BuildFishingAnswerPromptInput> = {
   name: 'fishing-assistant-answer',
   description: 'Builds a grounded JSON-answer prompt for Fishing Assistant chat responses',
-  version: '2.0.0',
+  version: '3.0.0',
 
   build(input: BuildFishingAnswerPromptInput): string {
     const history = input.recentMessages
@@ -47,6 +47,10 @@ export const fishingAnswerPrompt: PromptBuilder<BuildFishingAnswerPromptInput> =
     return [
       'Answer the fishing question using only the evidence below.',
       'Return strict JSON with shape {"answerMarkdown": string, "citations": [{"sourceId": string, "usedFor": string}], "confidence": "high"|"medium"|"low"}.',
+      'In citations[].sourceId, copy one of the evidence sourceIds exactly as written in the square brackets. Never translate, shorten, reorder, or invent a sourceId.',
+      input.evidence.length > 0
+        ? `Allowed citation sourceIds: ${input.evidence.map((item) => item.id).join(', ')}`
+        : '',
       history !== '' ? `Conversation history:\n${history}` : '',
       `Question:\n${input.question}`,
       `Evidence:\n${evidenceBlocks}`,
