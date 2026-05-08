@@ -9,7 +9,14 @@ import type { FishingKnowledgePage } from '@/types/fishingAssistant';
 export function FishingKnowledgePageEditor(): React.JSX.Element {
   const { pageId } = useParams<{ pageId: string }>();
   const navigate = useNavigate();
-  const knowledge = useFishingKnowledge();
+  const {
+    folders,
+    error: knowledgeError,
+    loadPage: loadKnowledgePage,
+    updatePage,
+    reindexPage,
+    deletePage,
+  } = useFishingKnowledge();
   const [page, setPage] = useState<FishingKnowledgePage | null>(null);
   const [rawText, setRawText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -28,7 +35,7 @@ export function FishingKnowledgePageEditor(): React.JSX.Element {
     setLoading(true);
     setError(null);
     try {
-      const nextPage = await knowledge.loadPage(pageId);
+      const nextPage = await loadKnowledgePage(pageId);
       setPage(nextPage);
       setRawText(nextPage.rawText);
     } catch (err: unknown) {
@@ -36,7 +43,7 @@ export function FishingKnowledgePageEditor(): React.JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [knowledge, pageId]);
+  }, [loadKnowledgePage, pageId]);
 
   useEffect(() => {
     void loadPage();
@@ -46,8 +53,8 @@ export function FishingKnowledgePageEditor(): React.JSX.Element {
     if (page === null) {
       return 'Unknown folder';
     }
-    return knowledge.folders.find((folder) => folder.id === page.folderId)?.name ?? page.folderId;
-  }, [knowledge.folders, page]);
+    return folders.find((folder) => folder.id === page.folderId)?.name ?? page.folderId;
+  }, [folders, page]);
 
   return (
     <Layout>
@@ -67,13 +74,13 @@ export function FishingKnowledgePageEditor(): React.JSX.Element {
           saving={saving}
           reindexing={reindexing}
           deleting={deleting}
-          error={error ?? knowledge.error}
+          error={error ?? knowledgeError}
           onRawTextChange={setRawText}
           onSave={async (): Promise<void> => {
             setSaving(true);
             setError(null);
             try {
-              const updated = await knowledge.updatePage(page.id, rawText);
+              const updated = await updatePage(page.id, rawText);
               setPage(updated);
               setRawText(updated.rawText);
             } catch (err: unknown) {
@@ -86,7 +93,7 @@ export function FishingKnowledgePageEditor(): React.JSX.Element {
             setReindexing(true);
             setError(null);
             try {
-              const updated = await knowledge.reindexPage(page.id);
+              const updated = await reindexPage(page.id);
               setPage(updated);
             } catch (err: unknown) {
               setError(getErrorMessage(err, 'Failed to reindex knowledge page'));
@@ -101,7 +108,7 @@ export function FishingKnowledgePageEditor(): React.JSX.Element {
             setDeleting(true);
             setError(null);
             try {
-              await knowledge.deletePage(page.id);
+              await deletePage(page.id);
               void navigate('/fishing-assistant/knowledge');
             } catch (err: unknown) {
               setError(getErrorMessage(err, 'Failed to delete knowledge page'));
