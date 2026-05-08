@@ -395,6 +395,101 @@ describe('sendChatMessage', () => {
     ]);
   });
 
+  it('maps prompt citation aliases back to canonical digest source ids without invoking repair', async () => {
+    const ctx = createContext({
+      chat: makeChat({ title: 'Spring Session' }),
+      updatedChat: makeChat({ title: 'Spring Session' }),
+    });
+    ctx.chatRepository.createMessage.mockReset()
+      .mockResolvedValueOnce(
+        okResult(makeMessage({ id: 'message-user', role: 'user', content: 'Need the coconut recipe' }))
+      )
+      .mockResolvedValueOnce(
+        okResult(
+          makeMessage({
+            id: 'message-assistant',
+            citations: [
+              {
+                sourceId: 'digest:feeder:2026-05-07',
+                sourceType: 'digest',
+                title: 'May 7 digest',
+                quote: 'Members recommended krill extract for the hemp-coconut base.',
+                usedFor: 'method-feeder modification',
+                date: '2026-05-07',
+                url: '/fishing-assistant/digests/feeder/2026-05-07',
+              },
+            ],
+            confidence: 'high',
+          })
+        )
+      );
+    ctx.chunkRepository.findNearestByUserId.mockResolvedValue(okResult([]));
+    ctx.mobileNotificationsClient.listDigestSubscriptions.mockResolvedValue(
+      okResult({ items: [{ groupKey: 'feeder', displayName: 'Feeder Team' }] })
+    );
+    ctx.mobileNotificationsClient.queryDigests.mockResolvedValue(
+      okResult({
+        items: [
+          {
+            groupKey: 'feeder',
+            date: '2026-05-07',
+            title: 'May 7 digest',
+            summaryMarkdown: 'Members recommended krill extract for the hemp-coconut base.',
+            messageCount: 18,
+          },
+        ],
+        truncated: false,
+      })
+    );
+    ctx.mobileNotificationsClient.queryGroupMessages.mockResolvedValue(
+      okResult({
+        messages: [],
+        totalRaw: 0,
+        totalCleaned: 0,
+        returned: 0,
+        truncated: false,
+      })
+    );
+    ctx.llmClient.generate.mockReset()
+      .mockResolvedValueOnce(
+        okResult({
+          content:
+            '{"answerMarkdown":"Add krill extract to the hemp-coconut base.","citations":[{"sourceId":"S1","usedFor":"method-feeder modification"}],"confidence":"high"}',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.01 },
+        })
+      )
+      .mockResolvedValueOnce(errResult({ code: 'DOWNSTREAM_ERROR', message: 'repair should not run' }));
+
+    const result = await sendChatMessage(ctx.deps, {
+      userId: 'user-1',
+      chatId: 'chat-1',
+      message: 'How should I adapt the coconut recipe for method feeder?',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(ctx.llmClient.generate).toHaveBeenCalledTimes(1);
+    expect(ctx.chatRepository.createMessage).toHaveBeenNthCalledWith(2, {
+      id: 'message-assistant',
+      chatId: 'chat-1',
+      userId: 'user-1',
+      role: 'assistant',
+      content: 'Add krill extract to the hemp-coconut base.',
+      confidence: 'high',
+      citations: [
+        {
+          sourceId: 'digest:feeder:2026-05-07',
+          sourceType: 'digest',
+          title: 'May 7 digest',
+          quote: 'Members recommended krill extract for the hemp-coconut base.',
+          usedFor: 'method-feeder modification',
+          date: '2026-05-07',
+          url: '/fishing-assistant/digests/feeder/2026-05-07',
+        },
+      ],
+    });
+  });
+
   it('returns repository errors when recent messages cannot be listed', async () => {
     const ctx = createContext({
       chat: makeChat({ title: 'Spring Session' }),
