@@ -349,6 +349,17 @@ interface BackfillRun {
 
 **Auth:** `X-Internal-Auth` header
 
+Digest subscriptions use this shape:
+
+```typescript
+interface DigestSubscription {
+  userId: string;
+  groupKey: string;
+  groupTitlePrefix: string;
+  outputLanguage: 'English' | 'Polish';
+}
+```
+
 ### Run Yesterday Digest (Internal/Cron)
 
 **Endpoint:** `POST /internal/notifications/digest/run-yesterday`
@@ -439,6 +450,8 @@ interface CreateSavedFilterInput {
 - Internal auth token for `POST /internal/mobile-notifications/query` and `POST /internal/notifications/digest/run`
 - OIDC token or internal auth for `POST /internal/notifications/digest/run-yesterday`
 - Digest subscription must exist for the (userId, groupKey) pair
+
+For fishing digest language fixes, regenerate the affected date range after deploy. The hard-coded `grupa-wedkarska-skool` subscription uses `outputLanguage: 'Polish'`, so regenerated summaries, state carry-forward text, and internal fishing digest Markdown labels should be Polish.
 
 ---
 

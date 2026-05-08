@@ -232,7 +232,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const holder = chainNext !== undefined ? 'backfill' : 'manual';
       const result = await runDigestForGroup(
         { llmClient, logger, modelId },
-        { userId, groupKey, groupTitlePrefix: subscription.groupTitlePrefix, date, holder },
+        { userId, groupKey, groupTitlePrefix: subscription.groupTitlePrefix, outputLanguage: subscription.outputLanguage, date, holder },
       );
 
       if (chainNext !== undefined) {
@@ -315,7 +315,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           const llm = buildLlmClient(sub.userId);
           const r = await runDigestForGroup(
             { llmClient: llm, logger, modelId: getDigestModel() },
-            { userId: sub.userId, groupKey: sub.groupKey, groupTitlePrefix: sub.groupTitlePrefix, date, holder: 'cron' },
+            { userId: sub.userId, groupKey: sub.groupKey, groupTitlePrefix: sub.groupTitlePrefix, outputLanguage: sub.outputLanguage, date, holder: 'cron' },
           );
           return r.ok ? 1 as const : 0 as const;
         }),
@@ -483,7 +483,7 @@ export const digestRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const modelId = getDigestModel();
       const result = await runDigestForGroup(
         { llmClient, logger, modelId },
-        { userId: user.userId, groupKey, groupTitlePrefix: subscription.groupTitlePrefix, date, holder: 'manual' },
+        { userId: user.userId, groupKey, groupTitlePrefix: subscription.groupTitlePrefix, outputLanguage: subscription.outputLanguage, date, holder: 'manual' },
       );
       if (!result.ok) {
         if (result.error.code === 'lock-held') {
