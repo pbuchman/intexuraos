@@ -51,9 +51,66 @@ export interface SendChatMessageInput {
   message: string;
 }
 
+interface PromptEvidenceContext {
+  promptEvidence: EvidenceItem[];
+  promptSourceIds: string[];
+  sourceIdAliases: ReadonlyMap<string, string>;
+}
+
 function deriveChatTitle(input: string): string {
   const trimmed = input.trim().replace(/\s+/g, ' ');
   return trimmed === '' ? DEFAULT_CHAT_TITLE : trimmed.slice(0, 120);
+}
+
+function createPromptEvidenceContext(evidence: EvidenceItem[]): PromptEvidenceContext {
+  const sourceIdAliases = new Map<string, string>();
+  const promptEvidence = evidence.map((item, index) => {
+    const alias = `S${String(index + 1)}`;
+    sourceIdAliases.set(alias, item.id);
+    return {
+      ...item,
+      id: alias,
+    };
+  });
+
+  return {
+    promptEvidence,
+    promptSourceIds: promptEvidence.map((item) => item.id),
+    sourceIdAliases,
+  };
+}
+
+function remapCitationAliases(
+  citations: { sourceId: string; usedFor: string }[],
+  sourceIdAliases: ReadonlyMap<string, string>
+): { sourceId: string; usedFor: string }[] {
+  return citations.map((citation) => {
+    const canonicalSourceId = sourceIdAliases.get(citation.sourceId);
+    if (canonicalSourceId === undefined) {
+      return citation;
+    }
+    return {
+      ...citation,
+      sourceId: canonicalSourceId,
+    };
+  });
+}
+
+function buildRepairPrompt(input: {
+  prompt: string;
+  previousAnswer: string;
+  failureMessage: string;
+  promptSourceIds: string[];
+}): string {
+  return [
+    input.prompt,
+    'The previous answer was invalid.',
+    `Validation error: ${input.failureMessage}`,
+    `Allowed citation sourceIds: ${input.promptSourceIds.join(', ')}`,
+    'Return strict JSON only.',
+    'In citations[].sourceId, copy one allowed sourceId exactly as written. Do not translate, shorten, reorder, or invent sourceIds.',
+    `Previous invalid answer:\n${input.previousAnswer}`,
+  ].join('\n\n');
 }
 
 function buildCitations(
@@ -85,6 +142,8 @@ async function generateValidatedAnswer(input: {
   llmClient: LlmGenerateClient;
   prompt: string;
   evidence: EvidenceItem[];
+  promptSourceIds: string[];
+  sourceIdAliases: ReadonlyMap<string, string>;
   chatId: string;
 }): Promise<
   Result<
@@ -108,8 +167,17 @@ async function generateValidatedAnswer(input: {
   }
 
   const parsed = parseFishingAnswer(first.value.content);
+  let repairReason = parsed.ok
+    ? 'Fishing Assistant response failed citation validation.'
+    : parsed.error.message;
   if (parsed.ok) {
-    const validated = validateCitations(parsed.value, input.evidence);
+    const validated = validateCitations(
+      {
+        ...parsed.value,
+        citations: remapCitationAliases(parsed.value.citations, input.sourceIdAliases),
+      },
+      input.evidence
+    );
     if (validated.ok) {
       return ok({
         answerMarkdown: validated.value.answerMarkdown,
@@ -117,9 +185,15 @@ async function generateValidatedAnswer(input: {
         citations: buildCitations(validated.value.citations, input.evidence),
       });
     }
+    repairReason = validated.error.message;
   }
 
-  const repairPrompt = `${input.prompt}\n\nRepair the previous answer so it is valid JSON and only cites known sourceIds.`;
+  const repairPrompt = buildRepairPrompt({
+    prompt: input.prompt,
+    previousAnswer: first.value.content,
+    failureMessage: repairReason,
+    promptSourceIds: input.promptSourceIds,
+  });
   const repair = await input.llmClient.generate(repairPrompt, {
     promptType: 'fishing-assistant-chat-repair',
     correlation: { sessionId: input.chatId },
@@ -139,7 +213,13 @@ async function generateValidatedAnswer(input: {
     });
   }
 
-  const revalidated = validateCitations(reparsed.value, input.evidence);
+  const revalidated = validateCitations(
+    {
+      ...reparsed.value,
+      citations: remapCitationAliases(reparsed.value.citations, input.sourceIdAliases),
+    },
+    input.evidence
+  );
   if (!revalidated.ok) {
     return revalidated;
   }
@@ -239,14 +319,17 @@ export async function sendChatMessage(
   let citations: FishingMessageCitation[] = [];
 
   if (evidence.length > 0) {
+    const promptEvidence = createPromptEvidenceContext(evidence);
     const answerResult = await generateValidatedAnswer({
       llmClient: chatClientResult.value,
       prompt: fishingAnswerPrompt.build({
         question: input.message,
         recentMessages: recentMessages.value,
-        evidence,
+        evidence: promptEvidence.promptEvidence,
       }),
       evidence,
+      promptSourceIds: promptEvidence.promptSourceIds,
+      sourceIdAliases: promptEvidence.sourceIdAliases,
       chatId: input.chatId,
     });
     if (!answerResult.ok) return answerResult;
