@@ -192,7 +192,7 @@ export function FishingChatPanel({
               const content = (
                 <div
                   data-testid={`fishing-chat-message-${message.id}`}
-                  className={`w-full max-w-full rounded-2xl border px-4 py-3 text-sm sm:max-w-[90%] ${
+                  className={`w-full min-w-0 max-w-full overflow-hidden rounded-2xl border px-4 py-3 text-sm sm:max-w-[90%] ${
                     isAssistant ? wrapperClass : wrapperClass
                   } ${message.role === 'user' ? 'ml-auto' : ''}`}
                 >
@@ -205,7 +205,10 @@ export function FishingChatPanel({
                     </span>
                   </div>
                   {isAssistant ? (
-                    <div className="min-w-0 break-words text-slate-800 dark:text-slate-200">
+                    <div
+                      data-testid={`fishing-chat-message-markdown-${message.id}`}
+                      className="min-w-0 max-w-full overflow-x-auto break-words text-slate-800 dark:text-slate-200"
+                    >
                       <MarkdownContent content={message.content} />
                     </div>
                   ) : (
