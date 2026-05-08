@@ -93,6 +93,17 @@ describe('Fishing Assistant prompt and ranking helpers', () => {
     expect(extractSearchTerms('123 !!!')).toEqual([]);
   });
 
+  it('omits allowed citation ids when no evidence is available', () => {
+    const prompt = fishingAnswerPrompt.build({
+      question: 'What changed today?',
+      recentMessages: [],
+      evidence: [],
+    });
+
+    expect(prompt).not.toContain('Allowed citation sourceIds:');
+    expect(prompt).toContain('Evidence:\n');
+  });
+
   it('parses invalid JSON and schema failures explicitly', () => {
     expect(parseFishingAnswer('not-json')).toEqual({
       ok: false,
