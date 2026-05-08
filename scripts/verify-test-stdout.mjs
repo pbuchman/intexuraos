@@ -21,6 +21,7 @@ function stripAnsi(str) {
 const VITEST_PATTERNS = [
   /^\s*$/,
   /^>/,
+  /^\$\s+vitest run(?:\s|$)/,
   /^\s*(RUN|PASS|FAIL)\b/,
   /Coverage enabled with/,
   /^\s*[✓✗×↓]/,
