@@ -81,16 +81,23 @@ export function FishingChatPanel({
   };
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-      <Card className="h-full">
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <div>
+    <div
+      data-testid="fishing-chat-panel"
+      className="grid min-w-0 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]"
+    >
+      <Card className="h-full min-w-0">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Chats</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Persisted fishing sessions
-            </p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Persisted fishing sessions</p>
           </div>
-          <Button size="sm" onClick={(): void => { void onCreateChat(); }}>
+          <Button
+            size="sm"
+            className="w-full sm:w-auto"
+            onClick={(): void => {
+              void onCreateChat();
+            }}
+          >
             <MessageSquarePlus className="mr-1 h-4 w-4" />
             New Chat
           </Button>
@@ -108,23 +115,27 @@ export function FishingChatPanel({
                 <button
                   key={chat.id}
                   type="button"
-                  onClick={(): void => { onSelectChat(chat.id); }}
-                  className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                  onClick={(): void => {
+                    onSelectChat(chat.id);
+                  }}
+                  className={`w-full min-w-0 rounded-lg border p-3 text-left transition-colors ${
                     isActive
                       ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-950/30'
                       : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/40 dark:hover:border-slate-600'
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-slate-900 dark:text-slate-100">
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <span className="min-w-0 break-words font-medium text-slate-900 dark:text-slate-100">
                       {chat.title}
                     </span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                    <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">
                       {formatRelative(chat.updatedAt)}
                     </span>
                   </div>
                   <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">
-                    {chat.lastMessagePreview === '' ? 'No assistant answer yet.' : chat.lastMessagePreview}
+                    {chat.lastMessagePreview === ''
+                      ? 'No assistant answer yet.'
+                      : chat.lastMessagePreview}
                   </p>
                 </button>
               );
@@ -133,9 +144,9 @@ export function FishingChatPanel({
         </div>
       </Card>
 
-      <Card className="flex min-h-[620px] flex-col">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
+      <Card className="flex min-h-[520px] min-w-0 flex-col sm:min-h-[620px]">
+        <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
+          <div className="min-w-0">
             <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               Fishing Assistant
             </h3>
@@ -162,12 +173,13 @@ export function FishingChatPanel({
           </div>
         ) : null}
 
-        <div className="flex-1 space-y-3 overflow-y-auto pr-1">
+        <div className="min-w-0 flex-1 space-y-3 overflow-y-auto pr-1">
           {messages.length === 0 ? (
             <div className="flex h-full min-h-[320px] flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 px-6 text-center dark:border-slate-600 dark:bg-slate-900/30">
               <Sparkles className="mb-3 h-8 w-8 text-blue-500" />
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                Start a chat and the assistant will answer from your knowledge base and digest evidence.
+                Start a chat and the assistant will answer from your knowledge base and digest
+                evidence.
               </p>
             </div>
           ) : (
@@ -179,24 +191,25 @@ export function FishingChatPanel({
                 : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/40';
               const content = (
                 <div
-                  className={`max-w-[90%] rounded-2xl border px-4 py-3 text-sm ${
+                  data-testid={`fishing-chat-message-${message.id}`}
+                  className={`w-full max-w-full rounded-2xl border px-4 py-3 text-sm sm:max-w-[90%] ${
                     isAssistant ? wrapperClass : wrapperClass
                   } ${message.role === 'user' ? 'ml-auto' : ''}`}
                 >
-                  <div className="mb-2 flex items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
-                    <span className="font-semibold uppercase tracking-wide">
+                  <div className="mb-2 flex min-w-0 items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+                    <span className="min-w-0 font-semibold uppercase tracking-wide">
                       {message.role === 'assistant' ? 'Assistant' : 'You'}
                     </span>
-                    <span title={formatDateTime(message.createdAt)}>
+                    <span className="shrink-0" title={formatDateTime(message.createdAt)}>
                       {formatRelative(message.createdAt)}
                     </span>
                   </div>
                   {isAssistant ? (
-                    <div className="text-slate-800 dark:text-slate-200">
+                    <div className="min-w-0 break-words text-slate-800 dark:text-slate-200">
                       <MarkdownContent content={message.content} />
                     </div>
                   ) : (
-                    <p className="whitespace-pre-wrap text-slate-800 dark:text-slate-200">
+                    <p className="whitespace-pre-wrap break-words text-slate-800 dark:text-slate-200">
                       {message.content}
                     </p>
                   )}
@@ -247,7 +260,8 @@ export function FishingChatPanel({
                   ) : null}
                   {message.citations.length > 0 ? (
                     <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                      {String(message.citations.length)} reference{message.citations.length === 1 ? '' : 's'}
+                      {String(message.citations.length)} reference
+                      {message.citations.length === 1 ? '' : 's'}
                     </p>
                   ) : null}
                 </div>
@@ -257,13 +271,15 @@ export function FishingChatPanel({
                 <button
                   key={message.id}
                   type="button"
-                  onClick={(): void => { onSelectMessage(message.id); }}
-                  className="flex w-full justify-start text-left"
+                  onClick={(): void => {
+                    onSelectMessage(message.id);
+                  }}
+                  className="flex w-full min-w-0 justify-start text-left"
                 >
                   {content}
                 </button>
               ) : (
-                <div key={message.id} className="flex w-full justify-start">
+                <div key={message.id} className="flex w-full min-w-0 justify-start">
                   {content}
                 </div>
               );
@@ -271,7 +287,12 @@ export function FishingChatPanel({
           )}
         </div>
 
-        <form onSubmit={(event): void => { void handleSubmit(event); }} className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700">
+        <form
+          onSubmit={(event): void => {
+            void handleSubmit(event);
+          }}
+          className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700"
+        >
           <label
             htmlFor="fishing-assistant-chat-input"
             className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300"
@@ -281,7 +302,9 @@ export function FishingChatPanel({
           <textarea
             id="fishing-assistant-chat-input"
             value={draft}
-            onChange={(event): void => { setDraft(event.target.value); }}
+            onChange={(event): void => {
+              setDraft(event.target.value);
+            }}
             onKeyDown={(event): void => {
               if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
                 return;
@@ -294,8 +317,13 @@ export function FishingChatPanel({
             disabled={sending}
             className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
           />
-          <div className="mt-3 flex justify-end">
-            <Button type="submit" isLoading={sending} loadingText="Sending...">
+          <div className="mt-3 flex sm:justify-end">
+            <Button
+              type="submit"
+              isLoading={sending}
+              loadingText="Sending..."
+              className="w-full sm:w-auto"
+            >
               <Send className="mr-2 h-4 w-4" />
               Send
             </Button>
