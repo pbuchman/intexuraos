@@ -36,7 +36,7 @@ export function FishingKnowledgeTree({
   });
 
   return (
-    <Card title="Folders" className="h-full">
+    <Card title="Folders" className="h-full min-w-0">
       <form
         onSubmit={(event): void => {
           event.preventDefault();
@@ -57,7 +57,12 @@ export function FishingKnowledgeTree({
           placeholder="Recipes"
           disabled={busy}
         />
-        <Button type="submit" size="sm" disabled={busy || newFolderName.trim() === ''}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={busy || newFolderName.trim() === ''}
+          className="w-full sm:w-auto"
+        >
           Create Folder
         </Button>
       </form>
@@ -73,7 +78,8 @@ export function FishingKnowledgeTree({
             return (
               <div
                 key={folder.id}
-                className={`rounded-lg border p-3 ${
+                data-testid={`fishing-folder-row-${folder.id}`}
+                className={`min-w-0 rounded-lg border p-3 ${
                   isSelected
                     ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-950/30'
                     : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/40'
@@ -95,7 +101,7 @@ export function FishingKnowledgeTree({
                       </p>
                     </div>
                   </button>
-                  <div className="flex items-center gap-1">
+                  <div className="flex shrink-0 items-center gap-1">
                     <button
                       type="button"
                       aria-label={`Rename ${folder.name}`}

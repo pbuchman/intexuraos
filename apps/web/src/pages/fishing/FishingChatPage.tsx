@@ -48,7 +48,7 @@ export function FishingChatPage(): React.JSX.Element {
         </p>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <FishingChatPanel
           chats={chat.chats}
           selectedChatId={chatId}
@@ -76,7 +76,10 @@ export function FishingChatPage(): React.JSX.Element {
           }}
           onSelectMessage={setSelectedMessageId}
         />
-        <FishingReferencesPanel citations={selectedAssistant?.citations ?? []} />
+        <FishingReferencesPanel
+          citations={selectedAssistant?.citations ?? []}
+          selectionKey={selectedAssistant?.id ?? null}
+        />
       </div>
     </Layout>
   );
