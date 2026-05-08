@@ -144,6 +144,12 @@ function createServices(): Omit<RouteTestContext, 'app'> {
   };
 }
 
+function expectIsoTimestamp(value: unknown): void {
+  expect(typeof value).toBe('string');
+  expect(value).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  expect(Number.isNaN(Date.parse(value as string))).toBe(false);
+}
+
 describe('Fishing Assistant chat routes', () => {
   let ctx: RouteTestContext;
 
@@ -176,6 +182,27 @@ describe('Fishing Assistant chat routes', () => {
     expect(listResponse.statusCode).toBe(200);
     expect(createResponse.json().data.chat.id).toBe('chat-1');
     expect(listResponse.json().data.items.map((chat: { id: string }) => chat.id)).toEqual(['chat-1']);
+
+    const createdChat = createResponse.json().data.chat as {
+      lastMessageAt: unknown;
+      createdAt: unknown;
+      updatedAt: unknown;
+    };
+    const listedChat = listResponse.json().data.items[0] as {
+      lastMessageAt: unknown;
+      createdAt: unknown;
+      updatedAt: unknown;
+    };
+    for (const value of [
+      createdChat.lastMessageAt,
+      createdChat.createdAt,
+      createdChat.updatedAt,
+      listedChat.lastMessageAt,
+      listedChat.createdAt,
+      listedChat.updatedAt,
+    ]) {
+      expectIsoTimestamp(value);
+    }
   });
 
   it('sends a message, stores assistant output, and derives the title from the first user message', async () => {
@@ -210,6 +237,31 @@ describe('Fishing Assistant chat routes', () => {
       sourceId: 'chunk-1',
       sourceType: 'knowledge_page',
     });
+
+    const sentChat = sendResponse.json().data.chat as {
+      lastMessageAt: unknown;
+      createdAt: unknown;
+      updatedAt: unknown;
+    };
+    const sentMessage = sendResponse.json().data.message as { createdAt: unknown };
+    const listedMessages = messagesResponse.json().data.items as { createdAt: unknown }[];
+    const fetchedChat = chatResponse.json().data.chat as {
+      lastMessageAt: unknown;
+      createdAt: unknown;
+      updatedAt: unknown;
+    };
+    for (const value of [
+      sentChat.lastMessageAt,
+      sentChat.createdAt,
+      sentChat.updatedAt,
+      sentMessage.createdAt,
+      ...listedMessages.map((message) => message.createdAt),
+      fetchedChat.lastMessageAt,
+      fetchedChat.createdAt,
+      fetchedChat.updatedAt,
+    ]) {
+      expectIsoTimestamp(value);
+    }
   });
 
   it('returns a typed NO_API_KEY error when the user has no OpenRouter key', async () => {
