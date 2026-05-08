@@ -436,7 +436,7 @@ In `FishingChatPanel.tsx`:
 
 - Add `min-w-0` to message header wrappers that contain timestamps.
 - Add `break-words` to user message content.
-- Change the form action row to `className="mt-3 flex justify-stretch sm:justify-end"`.
+- Change the form action row to `className="mt-3 flex sm:justify-end"`.
 - Change the send button to `className="w-full sm:w-auto"`.
 
 Use this exact button shape:
