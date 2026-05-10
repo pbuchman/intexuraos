@@ -42,10 +42,5 @@ export async function* paginatedScan<T extends DocumentData>(
     }
 
     lastDoc = snapshot.docs[snapshot.docs.length - 1];
-    /* v8 ignore start -- upstream: Firestore QuerySnapshot.empty=false guarantees at least one doc; undefined guard is defensive for adapter corruption @preserve */
-    if (lastDoc === undefined) {
-      return;
-    }
-    /* v8 ignore stop @preserve */
   }
 }

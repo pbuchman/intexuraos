@@ -1,5 +1,5 @@
-import { Firestore } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
+import { getFirestore } from '@intexuraos/infra-firestore';
 import { createFirestoreTurnMetricsRepository } from '../infra/firestore/firestoreTurnMetricsRepository.js';
 import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 
@@ -322,8 +322,8 @@ async function readStdin(): Promise<string> {
 }
 
 async function fetchFromFirestore(taskId: string): Promise<TurnMetrics[]> {
-  const projectId = process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? 'intexuraos-dev-pbuchman';
-  const db = new Firestore({ projectId });
+  process.env['INTEXURAOS_GCP_PROJECT_ID'] ??= 'intexuraos-dev-pbuchman';
+  const db = getFirestore();
   const repository = createFirestoreTurnMetricsRepository({ firestore: db, logger: silentLogger });
   const result = await repository.listByTask(taskId);
   if (!result.ok) {
