@@ -1,102 +1,27 @@
 import type { Result } from '@intexuraos/common-core';
-import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type { Action } from '../../domain/models/action.js';
 import type { Logger } from 'pino';
 import type {
   ActionsAgentClient,
   CreateActionParams,
 } from '../../domain/ports/actionsAgentClient.js';
+import {
+  createActionsAgentServiceClient,
+  type ActionsAgentServiceConfig,
+} from '@intexuraos/internal-clients';
 
 export type { ActionsAgentClient, CreateActionParams };
 
-export interface ActionsAgentClientConfig {
-  baseUrl: string;
-  internalAuthToken: string;
+export interface ActionsAgentClientConfig extends ActionsAgentServiceConfig {
   logger: Logger;
 }
 
 export function createActionsAgentClient(config: ActionsAgentClientConfig): ActionsAgentClient {
+  const client = createActionsAgentServiceClient(config);
+
   return {
     async createAction(params: CreateActionParams): Promise<Result<Action>> {
-      const endpoint = `${config.baseUrl}/internal/actions`;
-
-      config.logger.info(
-        {
-          userId: params.userId,
-          commandId: params.commandId,
-          actionType: params.type,
-          title: params.title,
-        },
-        'Creating action via actions-agent'
-      );
-
-      let response: Response;
-      try {
-        response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            'x-internal-auth': config.internalAuthToken,
-          },
-          body: JSON.stringify(params),
-        });
-      } catch (error) {
-        config.logger.error(
-          {
-            userId: params.userId,
-            commandId: params.commandId,
-            error: getErrorMessage(error),
-          },
-          'Failed to call actions-agent'
-        );
-        return err(new Error(`Failed to create action: ${getErrorMessage(error)}`));
-      }
-
-      if (!response.ok) {
-        const text = await response.text();
-        config.logger.error(
-          {
-            userId: params.userId,
-            commandId: params.commandId,
-            status: response.status,
-            statusText: response.statusText,
-            body: text.substring(0, 500),
-          },
-          'actions-agent returned error'
-        );
-        return err(
-          new Error(
-            `Failed to create action: ${String(response.status)} ${response.statusText} - ${text}`
-          )
-        );
-      }
-
-      const body = (await response.json()) as {
-        success: boolean;
-        data: Action;
-      };
-
-      if (!body.success) {
-        config.logger.error(
-          {
-            userId: params.userId,
-            commandId: params.commandId,
-          },
-          'actions-agent returned success=false'
-        );
-        return err(new Error('Failed to create action: response.success is false'));
-      }
-
-      config.logger.info(
-        {
-          userId: params.userId,
-          commandId: params.commandId,
-          actionId: body.data.id,
-        },
-        'Action created via actions-agent'
-      );
-
-      return ok(body.data);
+      return await client.createAction<Action>(params);
     },
   };
 }

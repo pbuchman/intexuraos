@@ -31,6 +31,7 @@ function createMockUsageServiceClient(
     fetchPricing: vi.fn(),
     listUsageEvents: vi.fn(),
     getUsageEvent: vi.fn(),
+    getResearchCostSummary: vi.fn(),
   };
 }
 

@@ -90,6 +90,27 @@ describe('createCodeAgentHttpClient', () => {
       }
     });
 
+    it('maps duplicate code-task responses to INVALID_REQUEST', async () => {
+      nock(BASE_URL)
+        .post('/internal/code/process')
+        .reply(409, {
+          success: false,
+          error: {
+            code: 'DUPLICATE',
+            message: 'Task already exists for this approval',
+          },
+        });
+
+      const client = createTestClient();
+      const result = await client.triggerCodeTask(validRequest);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_REQUEST');
+        expect(result.error.message).toBe('Task already exists for this approval');
+      }
+    });
+
     it('returns UNAVAILABLE on 5xx response', async () => {
       nock(BASE_URL)
         .post('/internal/code/process')
