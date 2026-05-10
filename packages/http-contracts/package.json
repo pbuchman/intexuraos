@@ -12,5 +12,10 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint:local": "eslint src --max-warnings 0"
+  },
+  "dependencies": {
+    "@intexuraos/llm-contract": "workspace:*",
+    "zod": "catalog:",
+    "zod-to-json-schema": "^3.25.1"
   }
 }

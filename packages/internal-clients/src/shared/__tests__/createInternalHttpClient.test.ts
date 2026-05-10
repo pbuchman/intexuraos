@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import nock from 'nock';
 import { runWithRequestId } from '@intexuraos/common-http';
+import { runWithRequestContext } from '@intexuraos/common-core';
 import { createInternalHttpClient } from '../createInternalHttpClient.js';
 
 const noopLogger = {
@@ -59,6 +60,30 @@ describe('createInternalHttpClient', () => {
         path: '/internal/bar',
       })
     );
+    expect(result).toEqual({ ok: true, value: { ok: true } });
+  });
+
+  it('prefers request context requestId and forwards correlation id when available', async () => {
+    nock(BASE)
+      .get('/internal/context')
+      .matchHeader('x-request-id', 'ctx-request-id')
+      .matchHeader('x-correlation-id', 'ctx-correlation-id')
+      .reply(200, { success: true, data: { ok: true } });
+
+    const client = createInternalHttpClient({
+      baseUrl: BASE,
+      token: 'secret',
+      logger: noopLogger,
+    });
+    const result = await runWithRequestContext(
+      { requestId: 'ctx-request-id', correlationId: 'ctx-correlation-id' },
+      async () =>
+        client.request<{ ok: boolean }>({
+          method: 'GET',
+          path: '/internal/context',
+        })
+    );
+
     expect(result).toEqual({ ok: true, value: { ok: true } });
   });
 

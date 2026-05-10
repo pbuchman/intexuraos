@@ -28,6 +28,8 @@ const terraformMainPath = resolve(repoRoot, 'terraform/environments/dev/main.tf'
 
 const NAME_REGEX = /^[a-z][a-z0-9-]+$/;
 const ENV_SUFFIX_REGEX = /^[A-Z][A-Z0-9_]+$/;
+const API_PATH_REGEX = /^\/api\/[a-z0-9-]+$/;
+const URL_REGEX = /^https?:\/\/\S+$/;
 
 describe('apps/web/service-manifest.json', () => {
   it('exists and parses as JSON', () => {
@@ -42,7 +44,7 @@ describe('apps/web/service-manifest.json', () => {
     expect(manifest.services.length).toBeGreaterThanOrEqual(20);
   });
 
-  it('each entry has valid name and envSuffix strings', () => {
+  it('each entry has valid name, envSuffix, apiPath, proxyTarget, and serviceUrl fields', () => {
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
     for (const entry of manifest.services) {
       expect(typeof entry.name).toBe('string');
@@ -51,6 +53,28 @@ describe('apps/web/service-manifest.json', () => {
       expect(typeof entry.envSuffix).toBe('string');
       expect(entry.envSuffix.length).toBeGreaterThan(0);
       expect(entry.envSuffix).toMatch(ENV_SUFFIX_REGEX);
+      expect(typeof entry.apiPath).toBe('string');
+      expect(entry.apiPath).toMatch(API_PATH_REGEX);
+      expect(typeof entry.proxyTarget).toBe('string');
+      expect(entry.proxyTarget).toMatch(URL_REGEX);
+      expect(typeof entry.serviceUrl).toBe('string');
+      expect(entry.serviceUrl).toMatch(URL_REGEX);
+    }
+  });
+
+  it('does not duplicate names, envSuffixes, or apiPath values', () => {
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    const names = new Set();
+    const envSuffixes = new Set();
+    const apiPaths = new Set();
+
+    for (const entry of manifest.services) {
+      expect(names.has(entry.name)).toBe(false);
+      expect(envSuffixes.has(entry.envSuffix)).toBe(false);
+      expect(apiPaths.has(entry.apiPath)).toBe(false);
+      names.add(entry.name);
+      envSuffixes.add(entry.envSuffix);
+      apiPaths.add(entry.apiPath);
     }
   });
 

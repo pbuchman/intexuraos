@@ -6,6 +6,7 @@ import {
   ApiErrorSchema,
   ApiOkSchema,
   bearerAuthSecurityScheme,
+  contractComponentSchemas,
   coreComponentSchemas,
   DiagnosticsSchema,
   ERROR_CODES,
@@ -135,6 +136,48 @@ describe('OpenAPI Schemas', () => {
       expect(coreComponentSchemas.ApiError).toBe(ApiErrorSchema);
       expect(coreComponentSchemas.HealthCheck).toBe(HealthCheckSchema);
       expect(coreComponentSchemas.HealthResponse).toBe(HealthResponseSchema);
+    });
+  });
+
+  describe('contractComponentSchemas', () => {
+    it('includes generated schemas for internal client contracts', () => {
+      expect((contractComponentSchemas.ServiceFeedback as { type?: string }).type).toBe('object');
+      expect((contractComponentSchemas.NotesCreateNoteRequest as { type?: string }).type).toBe(
+        'object'
+      );
+      expect((contractComponentSchemas.TodosCreateTodoRequest as { type?: string }).type).toBe(
+        'object'
+      );
+      expect((contractComponentSchemas.ResearchCreateDraftRequest as { type?: string }).type).toBe(
+        'object'
+      );
+      expect(
+        (contractComponentSchemas.CalendarProcessActionRequest as { type?: string }).type
+      ).toBe('object');
+      expect((contractComponentSchemas.CalendarPreview as { type?: string }).type).toBe('object');
+      expect((contractComponentSchemas.LinearProcessActionRequest as { type?: string }).type).toBe(
+        'object'
+      );
+    });
+
+    it('derives strict object fields from Zod contracts', () => {
+      const notesSchema = contractComponentSchemas.NotesCreateNoteRequest as {
+        additionalProperties?: boolean;
+      };
+      const calendarPreviewSchema = contractComponentSchemas.CalendarPreview as {
+        properties?: {
+          status?: {
+            enum?: string[];
+          };
+        };
+      };
+
+      expect(notesSchema.additionalProperties).toBe(false);
+      expect(calendarPreviewSchema.properties?.status?.enum).toEqual([
+        'pending',
+        'ready',
+        'failed',
+      ]);
     });
   });
 

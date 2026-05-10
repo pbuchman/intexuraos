@@ -1,6 +1,8 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import { fetchWithAuth } from '../shared/errors.js';
+import { unwrapEnvelope } from '../shared/envelope.js';
+import { sendInternalRequest } from '../shared/request.js';
 import type {
   UsageServiceConfig,
   UsageServiceError,
@@ -13,6 +15,8 @@ import type {
   UsageListEventsRequest,
   UsageListEventsResponse,
   UsageGetEventResponse,
+  ResearchCostSummary,
+  ResearchCostSummaryTimeRange,
 } from './types.js';
 
 interface ApiResponse<T> {
@@ -135,6 +139,56 @@ export function createUsageServiceClient(config: UsageServiceConfig): UsageServi
         return err({ code: result.error.code, message: result.error.message });
       }
       return ok(result.value.data);
+    },
+
+    async getResearchCostSummary(
+      researchId: string,
+      owner: { type: 'user' | 'system'; id: string },
+      timeRange: ResearchCostSummaryTimeRange,
+      options?: { traceId?: string }
+    ): Promise<Result<ResearchCostSummary, UsageServiceError>> {
+      const headers: Record<string, string> = {};
+      if (options?.traceId !== undefined) {
+        headers['X-Trace-Id'] = options.traceId;
+      }
+
+      const transport = await sendInternalRequest({
+        baseUrl: config.baseUrl,
+        path: '/internal/usage/research-cost-summary',
+        method: 'POST',
+        token: config.internalAuthToken,
+        logger: config.logger,
+        ...(Object.keys(headers).length > 0 ? { headers } : {}),
+        jsonBody: {
+          researchId,
+          owner,
+          timeRange,
+        },
+      });
+
+      if (!transport.ok) {
+        return err({
+          code: 'NETWORK_ERROR',
+          message: transport.error.message,
+        });
+      }
+
+      if (!transport.response.ok) {
+        return err({
+          code: 'API_ERROR',
+          message: `HTTP ${String(transport.response.status)}: ${transport.rawText}`,
+        });
+      }
+
+      const envelope = unwrapEnvelope<ResearchCostSummary>(transport.body);
+      if (!envelope.ok) {
+        return err({
+          code: 'API_ERROR',
+          message: envelope.error.message,
+        });
+      }
+
+      return ok(envelope.value);
     },
   };
 }

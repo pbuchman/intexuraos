@@ -15,10 +15,10 @@
  * service-specific logic.
  */
 
-import { getCurrentRequestId } from '@intexuraos/common-http';
 import { unwrapEnvelope } from './envelope.js';
+import { sendInternalRequest } from './request.js';
 
-type LogFn = (obj: unknown, msg?: string) => void;
+type LogFn = (obj: object, msg?: string) => void;
 export interface InternalHttpClientLogger {
   info: LogFn;
   warn: LogFn;
@@ -37,9 +37,9 @@ export interface InternalHttpClientRequest {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   body?: unknown;
-  timeoutMs?: number;
-  requestId?: string;
-  extraHeaders?: Record<string, string>;
+  timeoutMs?: number | undefined;
+  requestId?: string | undefined;
+  extraHeaders?: Record<string, string> | undefined;
 }
 
 export type InternalHttpClientError =
@@ -65,71 +65,48 @@ export function createInternalHttpClient(cfg: InternalHttpClientConfig): Interna
   return {
     async request<T>(args: InternalHttpClientRequest): Promise<InternalHttpClientResult<T>> {
       const timeoutMs = args.timeoutMs ?? cfg.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
-      const controller = new AbortController();
-      const timer = setTimeout(() => {
-        controller.abort();
-      }, timeoutMs);
+      const transport = await sendInternalRequest({
+        baseUrl,
+        path: args.path,
+        method: args.method,
+        token: cfg.token,
+        logger: cfg.logger,
+        headers: args.extraHeaders,
+        ...(args.body !== undefined ? { jsonBody: args.body } : {}),
+        timeoutMs,
+        requestId: args.requestId,
+      });
 
-      const headers: Record<string, string> = {
-        'x-internal-auth': cfg.token,
-        ...(args.extraHeaders ?? {}),
-      };
-      if (args.body !== undefined) {
-        headers['content-type'] = 'application/json';
-      }
-      const requestId = args.requestId ?? getCurrentRequestId();
-      if (requestId !== undefined) {
-        headers['x-request-id'] = requestId;
+      if (!transport.ok) {
+        return { ok: false, error: transport.error };
       }
 
-      const url = `${baseUrl}${args.path}`;
-      try {
-        const init: RequestInit = {
-          method: args.method,
-          headers,
-          signal: controller.signal,
+      const { response, body } = transport;
+      if (!response.ok) {
+        return {
+          ok: false,
+          error: {
+            code: 'API_ERROR',
+            message: `HTTP ${String(response.status)}`,
+            status: response.status,
+          },
         };
-        if (args.body !== undefined) {
-          init.body = JSON.stringify(args.body);
-        }
-        const response = await fetch(url, init);
-        if (!response.ok) {
-          return {
-            ok: false,
-            error: {
-              code: 'API_ERROR',
-              message: `HTTP ${String(response.status)}`,
-              status: response.status,
-            },
-          };
-        }
-        const body: unknown = await response.json();
+      }
+
+      try {
         const envelope = unwrapEnvelope<T>(body);
         if (envelope.ok) {
           return { ok: true, value: envelope.value };
         }
         return { ok: false, error: envelope.error };
-      } catch (err: unknown) {
-        const error = err as { name?: string; message?: string };
-        if (error.name === 'AbortError') {
-          return {
-            ok: false,
-            error: {
-              code: 'TIMEOUT',
-              message: `Request exceeded ${String(timeoutMs)}ms`,
-            },
-          };
-        }
-        cfg.logger.warn({ url, err }, 'internal-client network error');
+      } catch {
         return {
           ok: false,
           error: {
-            code: 'NETWORK_ERROR',
-            message: error.message ?? 'unknown',
+            code: 'MALFORMED_ENVELOPE',
+            message: 'Invalid JSON response body',
           },
         };
-      } finally {
-        clearTimeout(timer);
       }
     },
   };

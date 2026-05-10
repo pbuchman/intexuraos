@@ -1,5 +1,6 @@
 import type { Result } from '@intexuraos/common-core';
-import { err, getErrorMessage, getRequestContext, ok } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok } from '@intexuraos/common-core';
+import { sendInternalRequest } from './request.js';
 
 /**
  * Error from service client operations.
@@ -49,53 +50,36 @@ export async function fetchWithAuth<T>(
   options?: ServiceClientOptions
 ): Promise<Result<T, ServiceClientError>> {
   try {
-    const headersInit = options?.headers;
-
-    // Build headers
-    const headers: Record<string, string> = {
-      ...(headersInit ?? {}),
-      'X-Internal-Auth': config.internalAuthToken,
-    };
-
-    // Plan §4 — propagate request/correlation ids from AsyncLocalStorage when
-    // a request context is in scope. Caller-supplied non-empty headers win;
-    // empty strings are treated as missing to mirror the inbound side
-    // (`buildRequestContext` in `@intexuraos/http-server`), preventing the
-    // wire from carrying a useless `x-request-id: ` header.
-    const ctx = getRequestContext();
-    if (ctx !== undefined) {
-      const existingRequestId = headers['x-request-id'];
-      if (existingRequestId === undefined || existingRequestId === '') {
-        headers['x-request-id'] = ctx.requestId;
-      }
-      const existingCorrelationId = headers['x-correlation-id'];
-      if (existingCorrelationId === undefined || existingCorrelationId === '') {
-        headers['x-correlation-id'] = ctx.correlationId;
-      }
-    }
-
-    // Include traceId in legacy header if provided
+    const headers: Record<string, string> = { ...(options?.headers ?? {}) };
     if (options?.traceId !== undefined) {
       headers['X-Trace-Id'] = options.traceId;
     }
 
-    // Build request init without traceId (it's now in headers)
-    const { traceId: _traceId, body, ...requestInit } = options ?? {};
-
-    const response = await fetch(`${config.baseUrl}${path}`, {
-      ...requestInit,
+    const response = await sendInternalRequest({
+      baseUrl: config.baseUrl,
+      path,
+      method: options?.method ?? 'GET',
+      token: config.internalAuthToken,
+      logger: config.logger,
       headers,
-      ...(body !== undefined && { body }),
+      body: options?.body,
     });
 
     if (!response.ok) {
       return err({
-        code: 'API_ERROR',
-        message: `HTTP ${String(response.status)}`,
+        code: response.error.code === 'TIMEOUT' ? 'NETWORK_ERROR' : response.error.code,
+        message: response.error.message,
       });
     }
 
-    const data = (await response.json()) as T;
+    if (!response.response.ok) {
+      return err({
+        code: 'API_ERROR',
+        message: `HTTP ${String(response.response.status)}`,
+      });
+    }
+
+    const data = response.body as T;
     return ok(data);
   } catch (error) {
     const message = getErrorMessage(error);
