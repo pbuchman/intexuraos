@@ -511,6 +511,7 @@ Changes since v3.5.0, sourced from release context and git history:
 - **`taskMode` on `/code/submit` is optional.** When omitted, the default behavior applies. Set `'planning'` for design-first or `'execution'` for direct implementation.
 - **Auto-retry excludes the failed worker location.** Tasks that fail with `TASK_EXIT_CODE_OVERRIDE` are retried up to 3 times (`autoRetryAttempt`), each time excluding the `failedWorkerLocation` from dispatch.
 - **Zombie sweep runs every 5 minutes.** The `POST /internal/code/detect-zombies` endpoint is triggered by Cloud Scheduler on a 5-minute interval, using `lastHeartbeat` field for detection.
+- **The turn-metrics viewer moved into code-agent.** To inspect `code_tasks/{taskId}/turn_metrics` locally, run `pnpm --filter @intexuraos/code-agent view-metrics <taskId>` or pipe JSON into the same command.
 
 ## File Structure
 

@@ -5,7 +5,7 @@ import type { Firestore } from '@intexuraos/infra-firestore';
 import {
   createFirestoreLogLineRepository,
   FirestoreLogLineRepository,
-} from '../../../infra/repositories/firestoreLogLineRepository.js';
+} from '../../../infra/firestore/firestoreLogLineRepository.js';
 import type { FormattedLogLine } from '../../../domain/models/logLine.js';
 
 describe('firestoreLogLineRepository', () => {
@@ -114,6 +114,8 @@ describe('firestoreLogLineRepository', () => {
         text: 'log message',
         timestamp,
         expireAt: EXPECTED_EXPIRE_AT,
+        schemaVersion: 1,
+        schemaUpdatedAt: expect.any(Timestamp),
       });
     });
 

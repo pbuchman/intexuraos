@@ -14,7 +14,7 @@ import type { Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { CodeTaskRepository, CreateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
-import { withGroupUpdates } from '../../../infra/repositories/codeTaskRepositoryWithGroupUpdates.js';
+import { withGroupUpdates } from '../../../infra/firestore/codeTaskRepositoryWithGroupUpdates.js';
 import {
   createFakeTaskGroupSummaryRepository,
   type FakeTaskGroupSummaryRepository,

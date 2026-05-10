@@ -15,6 +15,7 @@ import type {
   DocumentSnapshot,
   QueryDocumentSnapshot,
 } from '@google-cloud/firestore';
+import { withSchemaVersion, type SchemaVersionedFields } from '@intexuraos/infra-firestore';
 import type {
   CodeTask,
   DispatchSchedule,
@@ -155,7 +156,7 @@ export function serializeDispatchSchedule(
 export function toFirestoreDoc(
   input: CreateTaskInput,
   opts: { taskId: string; dedupKey: string; now: Date }
-): CodeTask {
+): CodeTask & SchemaVersionedFields {
   const taskTimestamp = Timestamp.fromDate(opts.now);
   const taskData: CodeTask = {
     id: opts.taskId,
@@ -240,7 +241,7 @@ export function toFirestoreDoc(
     taskData.timeoutHours = input.timeoutHours;
   }
 
-  return taskData;
+  return withSchemaVersion(taskData, 1, taskTimestamp);
 }
 
 /**

@@ -6,7 +6,12 @@
  * the entire Linear workspace. Document IDs use the Linear issue UUID.
  */
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { getFirestore } from '@intexuraos/infra-firestore';
+import {
+  getFirestore,
+  type DocumentData,
+  type Query,
+  type QueryDocumentSnapshot,
+} from '@intexuraos/infra-firestore';
 import type { StoredPruneCandidate, PruneCandidateRepository, LinearError } from '../../domain/index.js';
 
 const COLLECTION_NAME = 'linear_prune_candidates';
@@ -26,6 +31,38 @@ function toStoredPruneCandidate(doc: PruneCandidateDoc): StoredPruneCandidate {
 }
 
 const BATCH_LIMIT = 500;
+
+async function collectOrderedQuery<T extends DocumentData>(
+  query: Query<T>,
+  batchSize = BATCH_LIMIT,
+): Promise<QueryDocumentSnapshot<T>[]> {
+  const docs: QueryDocumentSnapshot<T>[] = [];
+  let lastDoc: QueryDocumentSnapshot<T> | undefined;
+
+  for (;;) {
+    let pageQuery = query.limit(batchSize);
+    if (lastDoc !== undefined) {
+      pageQuery = pageQuery.startAfter(lastDoc);
+    }
+
+    const snapshot = await pageQuery.get();
+    if (snapshot.empty) {
+      return docs;
+    }
+
+    docs.push(...snapshot.docs);
+    if (snapshot.size < batchSize) {
+      return docs;
+    }
+
+    lastDoc = snapshot.docs[snapshot.docs.length - 1];
+    /* v8 ignore start -- upstream: Firestore QuerySnapshot.empty=false guarantees at least one doc; undefined guard is defensive for adapter corruption @preserve */
+    if (lastDoc === undefined) {
+      return docs;
+    }
+    /* v8 ignore stop @preserve */
+  }
+}
 
 async function clearAll(): Promise<Result<void, LinearError>> {
   try {
@@ -83,12 +120,11 @@ async function storeAll(candidates: StoredPruneCandidate[]): Promise<Result<void
 async function listAll(): Promise<Result<StoredPruneCandidate[], LinearError>> {
   try {
     const db = getFirestore();
-    const snapshot = await db
+    const docs = await collectOrderedQuery(db
       .collection(COLLECTION_NAME)
-      .orderBy('score', 'desc')
-      .get();
+      .orderBy('score', 'desc'));
 
-    return ok(snapshot.docs.map((doc) => toStoredPruneCandidate(doc.data() as PruneCandidateDoc)));
+    return ok(docs.map((doc) => toStoredPruneCandidate(doc.data() as PruneCandidateDoc)));
   } catch (error) {
     return err({
       code: 'INTERNAL_ERROR',

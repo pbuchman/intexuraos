@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Logger } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { Timestamp, type Firestore } from '@intexuraos/infra-firestore';
+import { Timestamp, type Firestore, withSchemaVersion } from '@intexuraos/infra-firestore';
 
 import type { ExecutionMemoryApplication } from '../../domain/models/executionMemoryApplication.js';
 import type {
@@ -81,11 +81,11 @@ implements ExecutionMemoryApplicationRepository {
     const docRef = this.firestore.collection('execution_memory_applications').doc(id);
 
     try {
-      await docRef.set({
+      await docRef.set(withSchemaVersion({
         ...input,
         createdAt: now,
         updatedAt: now,
-      });
+      }, 1, now));
 
       return ok({
         id,

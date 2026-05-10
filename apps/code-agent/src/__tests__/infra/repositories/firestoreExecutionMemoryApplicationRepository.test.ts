@@ -4,7 +4,7 @@ import type { Firestore } from '@google-cloud/firestore';
 import { Timestamp } from '@google-cloud/firestore';
 import { err, type Logger } from '@intexuraos/common-core';
 
-import { createFirestoreExecutionMemoryApplicationRepository } from '../../../infra/repositories/firestoreExecutionMemoryApplicationRepository.js';
+import { createFirestoreExecutionMemoryApplicationRepository } from '../../../infra/firestore/firestoreExecutionMemoryApplicationRepository.js';
 
 describe('firestoreExecutionMemoryApplicationRepository', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -107,6 +107,10 @@ describe('firestoreExecutionMemoryApplicationRepository', () => {
 
     expect(found.value.id).toBe(created.value.id);
     expect(found.value.status).toBe('matched');
+
+    const stored = await fakeFirestore.collection('execution_memory_applications').doc(created.value.id).get();
+    expect(stored.get('schemaVersion')).toBe(1);
+    expect(stored.get('schemaUpdatedAt')).toBeInstanceOf(Timestamp);
   });
 
   it('updates usage feedback and evaluation fields', async () => {
