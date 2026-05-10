@@ -3,7 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { FieldValue, Timestamp } from '@google-cloud/firestore';
+import { FieldPath, FieldValue, Timestamp } from '@google-cloud/firestore';
 import { IntexuraOSError } from '@intexuraos/common-core';
 import { createFakeFirestore, type FakeFirestore } from '../testing/firestoreFake.js';
 
@@ -462,6 +462,23 @@ describe('FakeFirestore', () => {
       it('returns empty when no matching start value', async () => {
         const snapshot = await db.collection('users').orderBy('age').startAfter(100).get();
         expect(snapshot.size).toBe(4); // No match found, returns all
+      });
+
+      it('supports paging by document snapshot when ordered by documentId', async () => {
+        const firstPage = await db
+          .collection('users')
+          .orderBy(FieldPath.documentId())
+          .limit(2)
+          .get();
+
+        const secondPage = await db
+          .collection('users')
+          .orderBy(FieldPath.documentId())
+          .startAfter(firstPage.docs[1])
+          .get();
+
+        expect(firstPage.docs.map((doc) => doc.id)).toEqual(['user-1', 'user-2']);
+        expect(secondPage.docs.map((doc) => doc.id)).toEqual(['user-3', 'user-4']);
       });
     });
 

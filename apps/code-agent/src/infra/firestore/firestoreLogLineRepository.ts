@@ -2,7 +2,7 @@ import type { Logger } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type { LogLineRepository, RepositoryError } from '../../domain/repositories/logLineRepository.js';
 import type { FormattedLogLine } from '../../domain/models/logLine.js';
-import { computeExpireAt, RETENTION_7D_MS, type Firestore } from '@intexuraos/infra-firestore';
+import { computeExpireAt, RETENTION_7D_MS, type Firestore, withSchemaVersion } from '@intexuraos/infra-firestore';
 
 export interface FirestoreLogLineRepositoryDeps {
   firestore: Firestore;
@@ -38,12 +38,12 @@ export class FirestoreLogLineRepository implements LogLineRepository {
             .collection('log_lines')
             .doc(String(line.sequence).padStart(16, '0'));
 
-          batch.set(docRef, {
+          batch.set(docRef, withSchemaVersion({
             sequence: line.sequence,
             text: line.text,
             timestamp: line.timestamp,
             expireAt,
-          });
+          }, 1));
         }
 
         await batch.commit();

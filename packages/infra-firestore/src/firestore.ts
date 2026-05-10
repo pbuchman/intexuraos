@@ -2,14 +2,19 @@
  * Firestore client singleton.
  * Provides initialized Firestore instance for all services.
  */
-import { FieldValue, Firestore, Timestamp } from '@google-cloud/firestore';
+import { FieldPath, FieldValue, Firestore, Timestamp } from '@google-cloud/firestore';
 import { IntexuraOSError } from '@intexuraos/common-core';
 
 // Re-export Firestore primitives for use in repositories.
-export { FieldValue, Timestamp };
+export { FieldPath, FieldValue, Timestamp };
 
 // Re-export Firestore type for type annotations
-export type { Firestore };
+export type {
+  DocumentData,
+  Firestore,
+  Query,
+  QueryDocumentSnapshot,
+} from '@google-cloud/firestore';
 
 let firestoreInstance: Firestore | null = null;
 

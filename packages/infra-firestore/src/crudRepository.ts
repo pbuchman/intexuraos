@@ -22,7 +22,7 @@
  * await repo.create({ id: 'n1', title: 't', body: 'b' });
  * ```
  */
-import type { Firestore } from '@google-cloud/firestore';
+import { FieldPath, type Firestore, type QueryDocumentSnapshot } from '@google-cloud/firestore';
 
 export interface CrudRepositoryOptions<T> {
   firestore: Firestore;
@@ -46,6 +46,8 @@ export interface CrudRepository<T extends { id: string }> {
   delete: (id: string) => Promise<void>;
 }
 
+const LIST_BATCH_SIZE = 500;
+
 export function createFirestoreCrudRepository<T extends { id: string }>(
   opts: CrudRepositoryOptions<T>
 ): CrudRepository<T> {
@@ -59,8 +61,37 @@ export function createFirestoreCrudRepository<T extends { id: string }>(
       return fromFirestore(id, (snap.data() ?? {}) as Record<string, unknown>);
     },
     list: async (): Promise<T[]> => {
-      const snap = await firestore.collection(collection).get();
-      return snap.docs.map((d) => fromFirestore(d.id, d.data() as Record<string, unknown>));
+      const docs: QueryDocumentSnapshot[] = [];
+      let lastDoc: QueryDocumentSnapshot | undefined;
+
+      for (;;) {
+        let query = firestore
+          .collection(collection)
+          .orderBy(FieldPath.documentId())
+          .limit(LIST_BATCH_SIZE);
+        if (lastDoc !== undefined) {
+          query = query.startAfter(lastDoc);
+        }
+
+        const snap = await query.get();
+        if (snap.empty) {
+          break;
+        }
+
+        docs.push(...snap.docs);
+        if (snap.size < LIST_BATCH_SIZE) {
+          break;
+        }
+
+        lastDoc = snap.docs[snap.docs.length - 1];
+        /* v8 ignore start -- upstream: Firestore QuerySnapshot.empty=false guarantees at least one doc; undefined guard is defensive for adapter corruption @preserve */
+        if (lastDoc === undefined) {
+          break;
+        }
+        /* v8 ignore stop @preserve */
+      }
+
+      return docs.map((d) => fromFirestore(d.id, d.data() as Record<string, unknown>));
     },
     create: async (entity: T): Promise<void> => {
       await firestore.collection(collection).doc(entity.id).set(toFirestore(entity));

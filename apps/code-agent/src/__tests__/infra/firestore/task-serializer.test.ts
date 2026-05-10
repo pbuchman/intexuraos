@@ -216,6 +216,8 @@ describe('toFirestoreDoc', () => {
     expect(doc.createdAt).toBeInstanceOf(Timestamp);
     expect(doc.updatedAt).toBeInstanceOf(Timestamp);
     expect(doc.createdAt.toMillis()).toBe(opts.now.getTime());
+    expect(doc.schemaVersion).toBe(1);
+    expect(doc.schemaUpdatedAt.toMillis()).toBe(opts.now.getTime());
   });
 
   it('honors initialStatus', () => {

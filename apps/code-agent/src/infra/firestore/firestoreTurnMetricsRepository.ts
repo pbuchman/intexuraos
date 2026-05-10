@@ -5,7 +5,49 @@ import type {
   RepositoryError,
 } from '../../domain/repositories/turnMetricsRepository.js';
 import type { TurnMetrics } from '../../domain/models/turnMetrics.js';
-import { computeExpireAt, RETENTION_7D_MS, type Firestore } from '@intexuraos/infra-firestore';
+import {
+  computeExpireAt,
+  RETENTION_7D_MS,
+  type DocumentData,
+  type Firestore,
+  type Query,
+  type QueryDocumentSnapshot,
+  withSchemaVersion,
+} from '@intexuraos/infra-firestore';
+
+const LIST_BATCH_SIZE = 500;
+
+async function collectOrderedQuery<T extends DocumentData>(
+  query: Query<T>,
+  batchSize = LIST_BATCH_SIZE,
+): Promise<QueryDocumentSnapshot<T>[]> {
+  const docs: QueryDocumentSnapshot<T>[] = [];
+  let lastDoc: QueryDocumentSnapshot<T> | undefined;
+
+  for (;;) {
+    let pageQuery = query.limit(batchSize);
+    if (lastDoc !== undefined) {
+      pageQuery = pageQuery.startAfter(lastDoc);
+    }
+
+    const snapshot = await pageQuery.get();
+    if (snapshot.empty) {
+      return docs;
+    }
+
+    docs.push(...snapshot.docs);
+    if (snapshot.size < batchSize) {
+      return docs;
+    }
+
+    lastDoc = snapshot.docs[snapshot.docs.length - 1];
+    /* v8 ignore start -- upstream: Firestore QuerySnapshot.empty=false guarantees at least one doc; undefined guard is defensive for adapter corruption @preserve */
+    if (lastDoc === undefined) {
+      return docs;
+    }
+    /* v8 ignore stop @preserve */
+  }
+}
 
 export interface FirestoreTurnMetricsRepositoryDeps {
   firestore: Firestore;
@@ -34,7 +76,7 @@ export class FirestoreTurnMetricsRepository implements TurnMetricsRepository {
       .doc(docId);
 
     try {
-      await docRef.set({ ...metrics, expireAt: computeExpireAt(RETENTION_7D_MS) });
+      await docRef.set(withSchemaVersion({ ...metrics, expireAt: computeExpireAt(RETENTION_7D_MS) }, 1));
       this.logger.debug({ taskId, attempt }, 'Stored turn metrics');
       return ok(undefined);
     } catch (error) {
@@ -48,14 +90,13 @@ export class FirestoreTurnMetricsRepository implements TurnMetricsRepository {
 
   async listByTask(taskId: string): Promise<Result<TurnMetrics[], RepositoryError>> {
     try {
-      const snapshot = await this.firestore
+      const docs = await collectOrderedQuery(this.firestore
         .collection('code_tasks')
         .doc(taskId)
         .collection('turn_metrics')
-        .orderBy('attempt', 'asc')
-        .get();
+        .orderBy('attempt', 'asc'));
 
-      return ok(snapshot.docs.map((doc) => doc.data() as TurnMetrics));
+      return ok(docs.map((doc) => doc.data() as TurnMetrics));
     } catch (error) {
       this.logger.error({ taskId, error: getErrorMessage(error) }, 'Failed to list turn metrics');
       return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error) });

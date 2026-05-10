@@ -52,6 +52,7 @@
     "verify:incoming-request-logging": "node scripts/verify-incoming-request-logging.mjs",
     "verify:workspace-deps": "node scripts/verify-workspace-deps.mjs",
     "verify:migrations": "node scripts/verify-migrations.mjs",
+    "verify:firestore-artifacts": "node scripts/verify-firestore-artifacts.mjs",
     "verify:no-console": "node scripts/verify-no-console.mjs",
     "verify:reply-send": "node scripts/verify-reply-send.mjs",
     "verify:sentry-logging": "node scripts/verify-sentry-logging.mjs",

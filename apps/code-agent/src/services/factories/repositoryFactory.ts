@@ -7,12 +7,12 @@
 
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from 'pino';
-import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
-import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createFirestoreLogLineRepository } from '../../infra/repositories/firestoreLogLineRepository.js';
-import { createFirestoreTurnMetricsRepository } from '../../infra/repositories/firestoreTurnMetricsRepository.js';
-import { createFirestoreExecutionMemoryRepository } from '../../infra/repositories/firestoreExecutionMemoryRepository.js';
-import { createFirestoreExecutionMemoryApplicationRepository } from '../../infra/repositories/firestoreExecutionMemoryApplicationRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../infra/firestore/firestoreCodeTaskRepository.js';
+import { createFirestoreLogChunkRepository } from '../../infra/firestore/firestoreLogChunkRepository.js';
+import { createFirestoreLogLineRepository } from '../../infra/firestore/firestoreLogLineRepository.js';
+import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/firestoreTurnMetricsRepository.js';
+import { createFirestoreExecutionMemoryRepository } from '../../infra/firestore/firestoreExecutionMemoryRepository.js';
+import { createFirestoreExecutionMemoryApplicationRepository } from '../../infra/firestore/firestoreExecutionMemoryApplicationRepository.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import { createFirestoreGitHubPREventsRepository } from '../../infra/firestore/gitHubPREventsRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from '../../infra/firestore/gitHubPRSummariesRepository.js';
@@ -23,7 +23,7 @@ import { createFirestoreMergeQueueWatchRepository } from '../../infra/firestore/
 import { createFirestoreEventDecisionRepository } from '../../infra/firestore/eventDecisionRepository.js';
 import { createTaskGroupSummaryFirestoreRepository } from '../../infra/firestore/taskGroupSummaryFirestoreRepository.js';
 import { createFirestorePRAutomationCommentRepository } from '../../infra/firestore/prAutomationCommentRepository.js';
-import { withGroupUpdates } from '../../infra/repositories/codeTaskRepositoryWithGroupUpdates.js';
+import { withGroupUpdates } from '../../infra/firestore/codeTaskRepositoryWithGroupUpdates.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { LogLineRepository } from '../../domain/repositories/logLineRepository.js';

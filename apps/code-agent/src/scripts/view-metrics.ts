@@ -1,5 +1,7 @@
-import { Firestore } from '@google-cloud/firestore';
-import type { TurnMetrics } from '../services/turn-metrics-collector.js';
+import type { Logger } from '@intexuraos/common-core';
+import { getFirestore } from '@intexuraos/infra-firestore';
+import { createFirestoreTurnMetricsRepository } from '../infra/firestore/firestoreTurnMetricsRepository.js';
+import type { TurnMetrics } from '../domain/models/turnMetrics.js';
 
 /* v8 ignore start -- module-init: standalone CLI entry point, not reachable from test imports @preserve */
 const RESET = '\x1b[0m';
@@ -17,6 +19,13 @@ const BG_YELLOW = '\x1b[43m';
 const BG_MAGENTA = '\x1b[45m';
 const BG_BLUE = '\x1b[44m';
 
+const silentLogger: Logger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+  debug: () => undefined,
+};
+
 const BAR_FULL = '█';
 const BAR_SEVEN = '▉';
 const BAR_SIX = '▊';
@@ -33,6 +42,7 @@ const BOX_BL = '╰';
 const BOX_BR = '╯';
 const BOX_H = '─';
 const BOX_V = '│';
+const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
 
 function bar(pct: number, width: number, color: string): string {
   const clamped = Math.max(0, Math.min(100, pct));
@@ -111,7 +121,7 @@ function boxBottom(width: number): string {
 }
 
 function boxRow(content: string, width: number): string {
-  const stripped = content.replace(/\x1b\[[0-9;]*m/g, '');
+  const stripped = content.replace(ANSI_ESCAPE_PATTERN, '');
   const pad = Math.max(0, width - 4 - stripped.length);
   return DIM + BOX_V + RESET + ' ' + content + ' '.repeat(pad) + ' ' + DIM + BOX_V + RESET;
 }
@@ -172,13 +182,13 @@ function renderMetrics(m: TurnMetrics, width: number): string {
   const overPct = (m.overheadSeconds / total) * 100;
 
   const timeBarWidth = w - 20;
-  const timeEntries: Array<{
+  const timeEntries: {
     label: string;
     seconds: number;
     pct: number;
     color: string;
     bgColor: string;
-  }> = [
+  }[] = [
     { label: 'API Wait', seconds: m.apiWaitSeconds, pct: apiPct, color: BLUE, bgColor: BG_BLUE },
     {
       label: 'Tool Exec',
@@ -257,7 +267,7 @@ function renderMetrics(m: TurnMetrics, width: number): string {
   lines.push(boxRow(`${BOLD}API Calls${RESET}  ${WHITE}${String(m.apiCallCount)}${RESET}`, w));
   lines.push(boxRow('', w));
 
-  const tokenEntries: Array<{ label: string; value: number; color: string }> = [
+  const tokenEntries: { label: string; value: number; color: string }[] = [
     { label: 'Input', value: m.totalInputTokens, color: WHITE },
     { label: 'Output', value: m.totalOutputTokens, color: GREEN },
     { label: 'Cache Read', value: m.totalCacheReadTokens, color: BLUE },
@@ -312,15 +322,22 @@ async function readStdin(): Promise<string> {
 }
 
 async function fetchFromFirestore(taskId: string): Promise<TurnMetrics[]> {
-  const projectId = process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? 'intexuraos-dev-pbuchman';
-  const db = new Firestore({ projectId });
-  const snap = await db
-    .collection('code_tasks')
-    .doc(taskId)
-    .collection('turn_metrics')
-    .orderBy('attempt')
-    .get();
-  return snap.docs.map((doc) => doc.data() as TurnMetrics);
+  process.env['INTEXURAOS_GCP_PROJECT_ID'] ??= 'intexuraos-dev-pbuchman';
+  const db = getFirestore();
+  const repository = createFirestoreTurnMetricsRepository({ firestore: db, logger: silentLogger });
+  const result = await repository.listByTask(taskId);
+  if (!result.ok) {
+    throw new Error(result.error.message);
+  }
+  return result.value;
+}
+
+function writeStdout(line: string): void {
+  process.stdout.write(`${line}\n`);
+}
+
+function writeStderr(line: string): void {
+  process.stderr.write(`${line}\n`);
 }
 
 async function main(): Promise<void> {
@@ -331,31 +348,31 @@ async function main(): Promise<void> {
     const metrics = JSON.parse(input) as TurnMetrics | TurnMetrics[];
     const list = Array.isArray(metrics) ? metrics : [metrics];
     for (const m of list) {
-      console.log(renderMetrics(m, width));
+      writeStdout(renderMetrics(m, width));
     }
     return;
   }
 
   const taskId = process.argv[2];
   if (taskId === undefined) {
-    console.error('Usage: npx tsx src/scripts/view-metrics.ts <taskId>');
-    console.error('   or: echo \'{"taskId":...}\' | npx tsx src/scripts/view-metrics.ts');
+    writeStderr('Usage: pnpm view-metrics <taskId>');
+    writeStderr('   or: echo \'{"taskId":...}\' | pnpm view-metrics');
     process.exit(1);
   }
 
   const metrics = await fetchFromFirestore(taskId);
   if (metrics.length === 0) {
-    console.log(`${DIM}No turn metrics found for ${taskId}${RESET}`);
+    writeStdout(`${DIM}No turn metrics found for ${taskId}${RESET}`);
     process.exit(0);
   }
 
   for (const m of metrics) {
-    console.log(renderMetrics(m, width));
+    writeStdout(renderMetrics(m, width));
   }
 }
 
 main().catch((err: unknown) => {
-  console.error('Error:', err);
+  writeStderr(`Error: ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
   process.exit(1);
 });
 /* v8 ignore stop @preserve */
