@@ -7,7 +7,7 @@ import pino from 'pino';
 import { ok, err, type Logger } from '@intexuraos/common-core';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
-import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../../infra/firestore/firestoreCodeTaskRepository.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import type { WorkerSettingsRepository } from '../../../domain/ports/workerSettingsRepository.js';
 import type { TaskEnqueueService } from '../../../domain/services/taskEnqueueService.js';

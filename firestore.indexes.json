@@ -1060,28 +1060,6 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "linearIssueSortKey",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "latestTaskUpdatedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "task_group_summaries",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "aggregateStatus",
-          "order": "ASCENDING"
-        },
-        {
           "fieldPath": "prNumber",
           "order": "DESCENDING"
         }
@@ -1149,24 +1127,6 @@
         },
         {
           "fieldPath": "linearIssueId",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "task_group_summaries",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "linearIssueSortKey",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "latestTaskUpdatedAt",
           "order": "DESCENDING"
         }
       ]
@@ -1791,6 +1751,50 @@
       ]
     },
     {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "correlation.researchId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "occurredAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "llm_usage_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "correlation.researchId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "owner.type",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "owner.id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "occurredAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "fishing_chats",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1819,6 +1823,46 @@
         {
           "fieldPath": "createdAt",
           "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "aggregateStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "linearIssueSortKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "latestTaskUpdatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "task_group_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "linearIssueSortKey",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "latestTaskUpdatedAt",
+          "order": "DESCENDING"
         }
       ]
     }

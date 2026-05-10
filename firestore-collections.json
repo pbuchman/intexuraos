@@ -142,7 +142,7 @@
       "owner": "code-agent",
       "description": "Code execution tasks",
       "subcollections": ["logs", "log_lines", "turn_metrics", "compliance_reports"],
-      "scanPaths": ["apps/code-agent/src/infra/repositories", "apps/code-agent/src/scripts"]
+      "scanPaths": ["apps/code-agent/src/infra/firestore", "apps/code-agent/src/scripts"]
     },
     "user_spend": {
       "owner": "code-agent",
@@ -195,22 +195,22 @@
     "execution_memories": {
       "owner": "code-agent",
       "description": "Execution memory lessons distilled from completed code tasks with vector embeddings for similarity retrieval",
-      "scanPaths": ["apps/code-agent/src/infra/repositories", "apps/code-agent/src/scripts"]
+      "scanPaths": ["apps/code-agent/src/infra/firestore"]
     },
     "execution_memory_applications": {
       "owner": "code-agent",
       "description": "Tracks how execution memories were applied to tasks and their post-run evaluation results",
-      "scanPaths": ["apps/code-agent/src/infra/repositories", "apps/code-agent/src/scripts"]
+      "scanPaths": ["apps/code-agent/src/infra/firestore"]
     },
     "task_group_summaries": {
       "owner": "code-agent",
       "description": "Precomputed group-level aggregates for code task issue groups (one doc per userId+linearIssueId)",
-      "scanPaths": ["apps/code-agent/src/infra/repositories", "apps/code-agent/src/scripts"]
+      "scanPaths": ["apps/code-agent/src/infra/firestore", "apps/code-agent/src/scripts"]
     },
     "user_group_counts": {
       "owner": "code-agent",
       "description": "Per-user group status counts for code task filter badges (active, needs-action, done, failed)",
-      "scanPaths": ["apps/code-agent/src/infra/repositories", "apps/code-agent/src/scripts"]
+      "scanPaths": ["apps/code-agent/src/infra/firestore", "apps/code-agent/src/scripts"]
     },
     "cron_schedules": {
       "owner": "cron-agent",

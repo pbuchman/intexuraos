@@ -83,6 +83,46 @@ describe('backfillTaskGroupSummarySortKeys', () => {
     expect(doc.get('linearIssueSortKey')).toBe(5);
   });
 
+  it('scans every summary across multiple pages before batching updates', async () => {
+    const fakeFirestore = createFakeFirestore();
+    await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-201').set({
+      userId: 'user-1',
+      groupKey: 'INT-201',
+      linearIssueId: 'INT-201',
+      linearIssueNumber: 1,
+      linearIssueSortKey: 1,
+    });
+    await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-202').set({
+      userId: 'user-1',
+      groupKey: 'INT-202',
+      linearIssueId: 'INT-202',
+      linearIssueNumber: 2,
+      linearIssueSortKey: 2,
+    });
+    await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-203').set({
+      userId: 'user-1',
+      groupKey: 'INT-203',
+      linearIssueId: 'INT-203',
+      linearIssueNumber: 3,
+      linearIssueSortKey: 3,
+    });
+
+    const result = await runTaskGroupSummarySortKeyBackfill({
+      firestore: fakeFirestore as unknown as Firestore,
+      batchSize: 2,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.scanned).toBe(3);
+    expect(result.value.updated).toBe(3);
+    expect((await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-203').get())
+      .get('linearIssueNumber')).toBe(203);
+  });
+
   it('returns an error when the Firestore scan fails', async () => {
     const firestore = {
       collection: vi.fn(() => {

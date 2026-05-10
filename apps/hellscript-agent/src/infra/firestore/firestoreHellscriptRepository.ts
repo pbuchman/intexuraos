@@ -1,6 +1,11 @@
 import type { Result } from '@intexuraos/common-core';
 import { getErrorMessage } from '@intexuraos/common-core';
-import { getFirestore } from '@intexuraos/infra-firestore';
+import {
+  getFirestore,
+  type DocumentData,
+  type Query,
+  type QueryDocumentSnapshot,
+} from '@intexuraos/infra-firestore';
 import type { HellscriptBuffer } from '../../domain/models/hellscriptBuffer.js';
 import type { HellscriptEvent } from '../../domain/models/hellscriptEvent.js';
 import type { HellscriptDraftVersion } from '../../domain/models/hellscriptDraftVersion.js';
@@ -8,6 +13,7 @@ import type { MaterializedBufferState } from '../../domain/models/materializedBu
 import type { HellscriptRepository, BufferWithState } from '../../domain/ports/hellscriptRepository.js';
 
 const COLLECTION = 'hellscript_buffers';
+const PAGINATED_SCAN_BATCH_SIZE = 500;
 
 // Subcollection paths under hellscript_buffers/{id}/ - these are NOT top-level collections.
 // Registered in firestore-collections.json as subcollections of hellscript_buffers.
@@ -27,6 +33,38 @@ function deriveTitle(state: MaterializedBufferState): string {
   }
   const text = firstThought.text.trim();
   return text.length > 80 ? text.slice(0, 80) : text;
+}
+
+async function collectOrderedQuery<T extends DocumentData>(
+  query: Query<T>,
+  batchSize = PAGINATED_SCAN_BATCH_SIZE,
+): Promise<QueryDocumentSnapshot<T>[]> {
+  const docs: QueryDocumentSnapshot<T>[] = [];
+  let lastDoc: QueryDocumentSnapshot<T> | undefined;
+
+  for (;;) {
+    let pageQuery = query.limit(batchSize);
+    if (lastDoc !== undefined) {
+      pageQuery = pageQuery.startAfter(lastDoc);
+    }
+
+    const snapshot = await pageQuery.get();
+    if (snapshot.empty) {
+      return docs;
+    }
+
+    docs.push(...snapshot.docs);
+    if (snapshot.size < batchSize) {
+      return docs;
+    }
+
+    lastDoc = snapshot.docs[snapshot.docs.length - 1];
+    /* v8 ignore start -- upstream: Firestore QuerySnapshot.empty=false guarantees at least one doc; undefined guard is defensive for adapter corruption @preserve */
+    if (lastDoc === undefined) {
+      return docs;
+    }
+    /* v8 ignore stop @preserve */
+  }
 }
 
 interface BufferDocument {
@@ -232,12 +270,11 @@ export class FirestoreHellscriptRepository implements HellscriptRepository {
   async getEvents(bufferId: string): Promise<Result<HellscriptEvent[]>> {
     try {
       const db = getFirestore();
-      const snapshot = await db
+      const docs = await collectOrderedQuery(db
         .collection(eventsPath(bufferId))
-        .orderBy('createdAt', 'asc')
-        .get();
+        .orderBy('createdAt', 'asc'));
 
-      const events = snapshot.docs.map((doc) => toEvent(doc.id, doc.data() as EventDocument));
+      const events = docs.map((doc) => toEvent(doc.id, doc.data() as EventDocument));
 
       return { ok: true, value: events };
     } catch (error) {
@@ -330,12 +367,11 @@ export class FirestoreHellscriptRepository implements HellscriptRepository {
   ): Promise<Result<HellscriptDraftVersion[]>> {
     try {
       const db = getFirestore();
-      const snapshot = await db
+      const docs = await collectOrderedQuery(db
         .collection(draftsPath(bufferId))
-        .orderBy('versionNumber', 'asc')
-        .get();
+        .orderBy('versionNumber', 'asc'));
 
-      const drafts = snapshot.docs.map((doc) => toDraft(doc.id, doc.data() as DraftDocument));
+      const drafts = docs.map((doc) => toDraft(doc.id, doc.data() as DraftDocument));
 
       return { ok: true, value: drafts };
     } catch (error) {

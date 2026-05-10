@@ -678,8 +678,6 @@ workers/orchestrator/src/
 ├── github/
 │   ├── octokit-client.ts
 │   └── token-service.ts
-├── scripts/
-│   └── view-metrics.ts
 ├── services/
 │   ├── isolation/
 │   │   ├── credential-monitor.ts

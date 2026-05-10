@@ -233,18 +233,19 @@ npx tsx scripts/test-llm-clients.ts <userId>
 
 ### migrate.mjs
 
-Runs pending Firestore database migrations in order by numeric prefix. Tracks applied migrations in the `_migrations` collection.
+Runs pending Firestore database migrations in order by numeric prefix. Tracks applied migrations in the `_migrations` collection. Also supports regenerating the tracked Firestore artifacts without deploying.
 
 ```bash
 node scripts/migrate.mjs                    # Run pending migrations
 node scripts/migrate.mjs --status           # Show applied/pending
 node scripts/migrate.mjs --dry-run          # Preview without applying
 node scripts/migrate.mjs --project <id>     # Target specific project
+node scripts/migrate.mjs --write-artifacts-only
 ```
 
 ### generate-firestore-config.mjs
 
-Aggregates Firestore indexes and rules from all migration files and generates `firestore.indexes.json` and `firestore.rules`.
+Aggregates Firestore indexes and rules from all migration files and writes the tracked `firestore.indexes.json` and `firestore.rules` artifacts. This is equivalent to `node scripts/migrate.mjs --write-artifacts-only`.
 
 ```bash
 node scripts/generate-firestore-config.mjs
@@ -300,6 +301,10 @@ Verifies that all logger configurations include error serializers to prevent `{ 
 
 Verifies that each Firestore collection is only accessed by its owning service, as registered in `firestore-collections.json`.
 
+### verify-firestore-artifacts.mjs
+
+Verifies that committed `firestore.indexes.json` and `firestore.rules` still match the current migration aggregation.
+
 ### verify-hash-routing.mjs
 
 Verifies that `apps/web` uses `HashRouter` and not `BrowserRouter` (required for GCS static hosting).
@@ -314,7 +319,7 @@ Verifies that factory functions accepting optional loggers are always called wit
 
 ### verify-migrations.mjs
 
-Verifies migration files follow naming conventions (`NNN_name.mjs`), have sequential IDs, and export required metadata and `up` functions.
+Verifies migration files follow naming conventions (`NNN_name.mjs`), have sequential IDs, export required metadata and `up` functions, and match the tracked `migrations/manifest.json` checksums.
 
 ### verify-no-console.mjs
 
@@ -395,7 +400,10 @@ pnpm run verify:workspace:tracked -- <workspace-name>
 
 ### install-hooks.mjs
 
-Installs the git pre-commit hook that blocks modifications to `vitest.config.ts`.
+Installs:
+
+- a `pre-commit` hook that blocks modifications to `vitest.config.ts`
+- a `pre-push` hook that runs `pnpm verify:migrations` and `pnpm verify:firestore-artifacts`
 
 ```bash
 node scripts/install-hooks.mjs

@@ -9,7 +9,7 @@ import type { Firestore } from '@intexuraos/infra-firestore';
 import {
   createFirestoreLogChunkRepository,
   FirestoreLogChunkRepository,
-} from '../../../infra/repositories/firestoreLogChunkRepository.js';
+} from '../../../infra/firestore/firestoreLogChunkRepository.js';
 import type { LogChunk } from '../../../domain/models/logChunk.js';
 
 describe('FirestoreLogChunkRepository', () => {
@@ -207,6 +207,8 @@ describe('FirestoreLogChunkRepository', () => {
           timestamp,
           size: 11,
           expireAt: EXPECTED_EXPIRE_AT,
+          schemaVersion: 1,
+          schemaUpdatedAt: expect.any(Timestamp),
         });
       });
 
@@ -276,6 +278,8 @@ describe('FirestoreLogChunkRepository', () => {
           timestamp: timestamp1,
           size: 5,
           expireAt: EXPECTED_EXPIRE_AT,
+          schemaVersion: 1,
+          schemaUpdatedAt: expect.any(Timestamp),
         });
         expect(mockBatch.set).toHaveBeenNthCalledWith(2, mockDocRef, {
           sequence: 2,
@@ -283,6 +287,8 @@ describe('FirestoreLogChunkRepository', () => {
           timestamp: timestamp2,
           size: 6,
           expireAt: EXPECTED_EXPIRE_AT,
+          schemaVersion: 1,
+          schemaUpdatedAt: expect.any(Timestamp),
         });
       });
 

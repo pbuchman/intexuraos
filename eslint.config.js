@@ -2,6 +2,10 @@ import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import boundaries from 'eslint-plugin-boundaries';
 import globals from 'globals';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const noUnboundedFirestoreGetRule = require('./eslint-rules/no-unbounded-firestore-get.cjs');
 export default tseslint.config(
   // Global ignores - must be first
   {
@@ -228,6 +232,20 @@ export default tseslint.config(
           ],
         },
       ],
+    },
+  },
+  {
+    files: ['apps/*/src/**/*.ts', 'workers/*/src/**/*.ts', 'packages/*/src/**/*.ts'],
+    ignores: ['**/__tests__/**'],
+    plugins: {
+      local: {
+        rules: {
+          'no-unbounded-firestore-get': noUnboundedFirestoreGetRule,
+        },
+      },
+    },
+    rules: {
+      'local/no-unbounded-firestore-get': 'error',
     },
   },
   // Apps must use @intexuraos/infra-* wrappers, not direct SDK imports

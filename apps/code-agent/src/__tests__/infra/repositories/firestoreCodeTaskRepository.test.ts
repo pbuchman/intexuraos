@@ -6,7 +6,7 @@ import { Timestamp, createFakeFirestore, resetFirestore, setFirestore } from '@i
 import type FirebaseFirestore from '@google-cloud/firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
-import { createFirestoreCodeTaskRepository } from '../../../infra/repositories/firestoreCodeTaskRepository.js';
+import { createFirestoreCodeTaskRepository } from '../../../infra/firestore/firestoreCodeTaskRepository.js';
 import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH } from '../../../domain/models/codeTask.js';
 import type { CreateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
 
@@ -61,6 +61,10 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.dedupKey).toMatch(/^[a-f0-9]{16}$/);
       expect(result.value.createdAt).toBeDefined();
       expect(result.value.updatedAt).toBeDefined();
+
+      const stored = await fakeFirestore.collection('code_tasks').doc(result.value.id).get();
+      expect(stored.get('schemaVersion')).toBe(1);
+      expect(stored.get('schemaUpdatedAt')).toBeInstanceOf(Timestamp);
     });
 
     it('creates task with dispatched status when initialStatus is dispatched', async () => {
