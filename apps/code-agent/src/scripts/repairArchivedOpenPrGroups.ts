@@ -10,7 +10,7 @@
 import { Firestore } from '@google-cloud/firestore';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { setFirestore } from '@intexuraos/infra-firestore';
-import { createFirestoreCodeTaskRepository } from '../infra/repositories/firestoreCodeTaskRepository.js';
+import { createFirestoreCodeTaskRepository } from '../infra/firestore/firestoreCodeTaskRepository.js';
 import { createFirestoreGitHubPRSummariesRepository } from '../infra/firestore/gitHubPRSummariesRepository.js';
 import { createTaskGroupSummaryFirestoreRepository } from '../infra/firestore/taskGroupSummaryFirestoreRepository.js';
 import {

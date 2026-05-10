@@ -114,7 +114,9 @@ export const rules = {
 - **Idempotent**: Migrations should be safe to re-run
 - **Sequential**: IDs must be sequential with no gaps (001, 002, 003)
 - **Additive**: Each migration adds to previous - don't repeat existing indexes/rules
-- **Immutable**: Applied migrations cannot be modified (checksum validation enforced)
+- **Immutable**: Applied migrations cannot be modified. CI enforces this two ways:
+  - `_migrations` Firestore records store deployment-time checksums for already-applied migrations
+  - `migrations/manifest.json` tracks the committed bytes on `development`
 
 ## Tracking
 

@@ -2,6 +2,7 @@ import type { Firestore } from '@google-cloud/firestore';
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import { getLinearIssueSortFields } from '../../infra/firestore/taskGroupSummary/serializer.js';
+import { paginatedScan } from '../../infra/firestore/paginatedScan.js';
 
 const SUMMARIES_COLLECTION = 'task_group_summaries';
 const DEFAULT_BATCH_SIZE = 500;
@@ -51,10 +52,11 @@ export async function runTaskGroupSummarySortKeyBackfill(
   const batchSize = input.batchSize ?? DEFAULT_BATCH_SIZE;
 
   try {
-    const snapshot = await input.firestore.collection(SUMMARIES_COLLECTION).get();
     const updates: TaskGroupSummarySortKeyBackfillUpdate[] = [];
+    let scanned = 0;
 
-    for (const doc of snapshot.docs) {
+    for await (const doc of paginatedScan(input.firestore.collection(SUMMARIES_COLLECTION), { batchSize })) {
+      scanned++;
       const data = doc.data() as Record<string, unknown>;
       const linearIssueId = normalizeLinearIssueId(data['linearIssueId']);
       const expected = getLinearIssueSortFields(linearIssueId);
@@ -90,7 +92,7 @@ export async function runTaskGroupSummarySortKeyBackfill(
 
     return ok({
       dryRun,
-      scanned: snapshot.size,
+      scanned,
       updated: updates.length,
       updates,
     });

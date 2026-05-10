@@ -24,181 +24,15 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import {
+  aggregateIndexes,
+  normalizeVectorFields,
+  writeAggregatedFirestoreArtifacts,
+} from './lib/firestore-artifacts.mjs';
 
 const repoRoot = resolve(import.meta.dirname, '..');
 const migrationsDir = join(repoRoot, 'migrations');
 const MIGRATIONS_COLLECTION = '_migrations';
-
-function normalizeVectorFields(index) {
-  const hasVector = index.fields?.some((f) => f.vectorConfig != null) === true;
-  if (!hasVector) return index;
-
-  return {
-    ...index,
-    fields: index.fields.map((field) => {
-      if (field.vectorConfig == null) return field;
-      // Firebase CLI requires vector fields to have vectorConfig WITHOUT order.
-      // Using both causes composites to silently deploy as regular indexes.
-      const { order, vectorConfig, ...rest } = field;
-      return {
-        ...rest,
-        vectorConfig: {
-          dimension: vectorConfig.dimension,
-          flat: {},
-        },
-      };
-    }),
-  };
-}
-
-function aggregateIndexes(migrations) {
-  const allIndexes = [];
-  const allFieldOverrides = [];
-  const seenIndexes = new Set();
-  const seenOverrides = new Set();
-
-  // Build the union of removed collection groups across ALL migrations first,
-  // so order does not matter (a cleanup migration may appear before or after
-  // the source migration that introduced the collection group).
-  const removedCollectionGroups = new Set();
-  for (const migration of migrations) {
-    for (const group of migration.removedCollectionGroups ?? []) {
-      removedCollectionGroups.add(group);
-    }
-  }
-
-  for (const migration of migrations) {
-    for (const index of migration.indexes ?? []) {
-      // Skip single-field indexes - Firestore creates them automatically
-      // UNLESS the index has a vectorConfig field (Firestore does NOT auto-create vector indexes)
-      // __name__ is always implicitly appended by Firestore, so an index like
-      // [occurredAt ASC, __name__ ASC] is effectively single-field and must be skipped.
-      const hasVectorField = index.fields?.some((f) => f.vectorConfig != null) === true;
-      const realFields = index.fields?.filter((f) => f.fieldPath !== '__name__') ?? [];
-      if (realFields.length < 2 && !hasVectorField) {
-        continue;
-      }
-      const normalized = normalizeVectorFields(index);
-      const key = JSON.stringify(normalized);
-      if (!seenIndexes.has(key)) {
-        seenIndexes.add(key);
-        allIndexes.push(normalized);
-      }
-    }
-    for (const override of migration.fieldOverrides ?? []) {
-      const key = JSON.stringify(override);
-      if (!seenOverrides.has(key)) {
-        seenOverrides.add(key);
-        allFieldOverrides.push(override);
-      }
-    }
-  }
-
-  // Filter both sets by the unioned removedCollectionGroups. Doing this AFTER
-  // dedup keeps the existing dedup logic untouched and makes the orphan-cleanup
-  // semantics independent of migration ordering.
-  const filteredIndexes = allIndexes.filter(
-    (index) => !removedCollectionGroups.has(index.collectionGroup)
-  );
-  const filteredFieldOverrides = allFieldOverrides.filter(
-    (override) => !removedCollectionGroups.has(override.collectionGroup)
-  );
-
-  return { indexes: filteredIndexes, fieldOverrides: filteredFieldOverrides };
-}
-
-function aggregateRules(migrations) {
-  const functions = {};
-  const collections = {};
-
-  for (const migration of migrations) {
-    const rules = migration.rules ?? {};
-    if (rules.functions) {
-      Object.assign(functions, rules.functions);
-    }
-    if (rules.collections) {
-      Object.assign(collections, rules.collections);
-    }
-  }
-
-  return { functions, collections };
-}
-
-function generateRulesFile({ functions, collections }) {
-  const lines = [];
-
-  lines.push("rules_version = '2';");
-  lines.push('');
-  lines.push('service cloud.firestore {');
-  lines.push('  match /databases/{database}/documents {');
-
-  for (const [name, body] of Object.entries(functions)) {
-    const params = body.includes('userId') ? '(userId)' : '()';
-    lines.push(`    function ${name}${params} {`);
-    lines.push(`      ${body}`);
-    lines.push('    }');
-    lines.push('');
-  }
-
-  const collectionEntries = Object.entries(collections);
-  const catchAllIndex = collectionEntries.findIndex(([path]) => path.includes('{document=**}'));
-  if (catchAllIndex > -1) {
-    const [catchAll] = collectionEntries.splice(catchAllIndex, 1);
-    collectionEntries.push(catchAll);
-  }
-
-  for (const [path, rules] of collectionEntries) {
-    if (rules.comment) {
-      lines.push(`    // ${rules.comment}`);
-    }
-    lines.push(`    match /${path} {`);
-
-    if (rules.get) {
-      lines.push(`      allow get: if ${rules.get};`);
-    }
-    if (rules.list) {
-      lines.push('');
-      if (rules.listComment) {
-        lines.push(`      // ${rules.listComment}`);
-      }
-      lines.push(`      allow list: if ${rules.list};`);
-    }
-    if (rules.write && (rules.get || rules.list)) {
-      lines.push('');
-      if (rules.writeComment) {
-        lines.push(`      // ${rules.writeComment}`);
-      }
-      lines.push(`      allow write: if ${rules.write};`);
-    }
-    if (rules.read !== undefined && !rules.get && !rules.list) {
-      lines.push(`      allow read, write: if ${rules.read};`);
-    }
-
-    lines.push('    }');
-    lines.push('');
-  }
-
-  lines.push('  }');
-  lines.push('}');
-
-  return lines.join('\n') + '\n';
-}
-
-function generateFirestoreConfig(migrations) {
-  const indexesData = aggregateIndexes(migrations);
-  const rulesData = aggregateRules(migrations);
-
-  const indexesPath = join(repoRoot, 'firestore.indexes.json');
-  const rulesPath = join(repoRoot, 'firestore.rules');
-
-  writeFileSync(indexesPath, JSON.stringify(indexesData, null, 2) + '\n');
-  writeFileSync(rulesPath, generateRulesFile(rulesData));
-
-  return {
-    indexCount: indexesData.indexes.length,
-    collectionCount: Object.keys(rulesData.collections).length,
-  };
-}
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -320,7 +154,7 @@ async function runMigration(migration, firestore, projectId, dryRun, allMigratio
     repoRoot,
     deployIndexes: async () => {
       console.log('  Generating firestore.indexes.json from migrations...');
-      const stats = generateFirestoreConfig(allMigrations);
+      const stats = await writeAggregatedFirestoreArtifacts({ repoRoot, silent: true });
       console.log(`    Aggregated ${stats.indexCount} indexes`);
 
       if (dryRun) {
@@ -331,7 +165,7 @@ async function runMigration(migration, firestore, projectId, dryRun, allMigratio
     },
     deployRules: async () => {
       console.log('  Generating firestore.rules from migrations...');
-      const stats = generateFirestoreConfig(allMigrations);
+      const stats = await writeAggregatedFirestoreArtifacts({ repoRoot, silent: true });
       console.log(`    Aggregated ${stats.collectionCount} collection rules`);
 
       if (dryRun) {
@@ -402,10 +236,8 @@ async function main() {
     console.log('[WRITE-ARTIFACTS-ONLY MODE]');
     console.log('');
 
-    const migrations = await discoverMigrations();
-    const stats = generateFirestoreConfig(migrations);
-    console.log(`✓ Wrote firestore.indexes.json (${stats.indexCount} indexes)`);
-    console.log(`✓ Wrote firestore.rules (${stats.collectionCount} collection rules)`);
+    await discoverMigrations();
+    await writeAggregatedFirestoreArtifacts({ repoRoot });
     return;
   }
 

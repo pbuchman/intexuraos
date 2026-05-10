@@ -19,7 +19,7 @@
 | 7   | `calendar_failed_events`         | calendar-agent               | `apps/calendar-agent/src/infra/firestore/`       | OK     |
 | 8   | `calendar_previews`              | calendar-agent               | `apps/calendar-agent/src/infra/firestore/`       | OK     |
 | 9   | `calendar_processed_actions`     | calendar-agent               | `apps/calendar-agent/src/infra/firestore/`       | OK     |
-| 10  | `code_tasks`                     | code-agent                   | `apps/code-agent/src/infra/repositories/`        | OK     |
+| 10  | `code_tasks`                     | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
 | 11  | `code_worker_settings`           | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
 | 12  | `commands`                       | commands-agent               | `apps/commands-agent/src/infra/firestore/`       | OK     |
 | 16  | `dispatch_retries`               | code-agent                   | `apps/code-agent/src/infra/firestore/`           | OK     |
@@ -121,7 +121,7 @@ All production Firestore collection access is within the owning service's `src/i
 
 ### 6a. `log_entries` subcollection in `code_tasks`
 
-**File:** `apps/code-agent/src/infra/repositories/firestoreCodeTaskRepository.ts:645`
+**File:** `apps/code-agent/src/infra/firestore/firestoreCodeTaskRepository.ts:645`
 
 ```typescript
 const logEntriesRef = taskRef.collection('log_entries');

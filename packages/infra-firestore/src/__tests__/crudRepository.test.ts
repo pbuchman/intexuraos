@@ -60,6 +60,18 @@ describe('createFirestoreCrudRepository', () => {
     expect(await repo.list()).toEqual([]);
   });
 
+  it('lists documents across multiple paginated batches', async () => {
+    for (let i = 0; i < 501; i++) {
+      const id = `n-${String(i).padStart(3, '0')}`;
+      await repo.create({ id, title: `t${String(i)}`, body: `b${String(i)}` });
+    }
+
+    const all = await repo.list();
+
+    expect(all).toHaveLength(501);
+    expect(all.some((note) => note.id === 'n-500')).toBe(true);
+  });
+
   it('deletes a document', async () => {
     await repo.create({ id: 'n3', title: 't', body: 'b' });
     await repo.delete('n3');

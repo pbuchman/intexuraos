@@ -194,6 +194,15 @@ describe('FirestoreHellscriptRepository', () => {
   });
 
   describe('events', () => {
+    it('returns an empty list when a buffer has no events', async () => {
+      const result = await repository.getEvents('buffer-without-events');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([]);
+      }
+    });
+
     it('saves and retrieves events', async () => {
       const buffer = await repository.createBuffer('user-1', 'Buffer');
       expect(buffer.ok).toBe(true);
@@ -239,6 +248,30 @@ describe('FirestoreHellscriptRepository', () => {
       expect(events.ok).toBe(true);
       if (events.ok) {
         expect(events.value[0]?.intent.fallbackReason).toBe('Could not classify');
+      }
+    });
+
+    it('paginates events across multiple ordered batches', async () => {
+      const bufferId = 'buffer-paginated-events';
+      const seed = Array.from({ length: 501 }, (_, index) => ({
+        id: `event-${String(index).padStart(3, '0')}`,
+        data: {
+          bufferId,
+          rawUtterance: `utterance-${String(index)}`,
+          intent: { kind: 'append_thought', payload: { text: `thought-${String(index)}` } },
+          createdAt: new Date(Date.UTC(2024, 0, 1, 0, 0, index)).toISOString(),
+        },
+      }));
+
+      fakeFirestore.seedCollection(`hellscript_buffers/${bufferId}/events`, seed);
+
+      const result = await repository.getEvents(bufferId);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(501);
+        expect(result.value[0]?.rawUtterance).toBe('utterance-0');
+        expect(result.value[500]?.rawUtterance).toBe('utterance-500');
       }
     });
 

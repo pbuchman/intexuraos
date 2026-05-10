@@ -13,7 +13,8 @@
     "lint:local": "eslint src --max-warnings 0",
     "start": "node dist/index.js",
     "start:local": "tsx src/index.ts",
-    "dev": "node --watch --experimental-strip-types src/index.ts"
+    "dev": "node --watch --experimental-strip-types src/index.ts",
+    "view-metrics": "tsx src/scripts/view-metrics.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",

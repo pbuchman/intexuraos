@@ -2069,12 +2069,12 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
       expect(page2.ok).toBe(true);
       if (!page2.ok) return;
-      // FakeFirestore accepts DocumentSnapshot cursors but does not emulate startAfter pagination.
-      // This assertion keeps the linear-id cursor branch covered without pretending cursor advancement is implemented in the fake.
+      // FakeFirestore now honors DocumentSnapshot cursors for multi-order pagination.
       expect(page2.value.summaries.map((summary) => summary.groupKey)).toEqual([
-        'standalone_task-1',
-        'INT-1601-newer',
+        'INT-1601',
+        'INT-999',
       ]);
+      expect(page2.value.nextCursor).toBeUndefined();
     });
 
     it('accepts existing document cursors for non-linear sorts', async () => {
@@ -2136,9 +2136,8 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
       expect(page2.ok).toBe(true);
       if (!page2.ok) return;
-      // FakeFirestore accepts DocumentSnapshot cursors but does not emulate startAfter pagination.
-      // This assertion keeps the non-linear cursor branch covered without pretending cursor advancement is implemented in the fake.
-      expect(page2.value.summaries.map((summary) => summary.groupKey)).toEqual(['INT-3', 'INT-2', 'INT-1']);
+      // FakeFirestore now honors DocumentSnapshot cursors for non-linear sorts as well.
+      expect(page2.value.summaries.map((summary) => summary.groupKey)).toEqual(['INT-2', 'INT-1']);
       expect(page2.value.nextCursor).toBeUndefined();
     });
 

@@ -8,7 +8,7 @@
 
 import { Firestore } from '@google-cloud/firestore';
 import { createAppLogger } from '@intexuraos/infra-sentry';
-import { createFirestoreCodeTaskRepository } from '../infra/repositories/firestoreCodeTaskRepository.js';
+import { createFirestoreCodeTaskRepository } from '../infra/firestore/firestoreCodeTaskRepository.js';
 import { createTaskGroupSummaryFirestoreRepository } from '../infra/firestore/taskGroupSummaryFirestoreRepository.js';
 import type { GroupStatus, SortOption } from '../domain/issueGrouping/index.js';
 import type { CodeTask } from '../domain/models/codeTask.js';

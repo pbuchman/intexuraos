@@ -16,8 +16,8 @@ import type {
 import { NON_ARCHIVED_STATUSES } from '../../domain/issueGrouping/constants.js';
 import {
   buildUpdateData, fromFirestoreDoc, mergeUpdateForTransaction, toFirestoreDoc,
-} from '../firestore/task-serializer.js';
-import { checkDedupLayers, generateDedupKey } from '../firestore/task-dedup.js';
+} from './task-serializer.js';
+import { checkDedupLayers, generateDedupKey } from './task-dedup.js';
 import {
   activeByLinearIssue, activeReviewForPR, allNotArchived, buildListQuery,
   dispatchedOrRunningForLinearIssue, dispatchedOrRunningForPR, erroredExecutionMemoryPostRun, latestAskAgentForUser,
@@ -26,8 +26,8 @@ import {
   queuedOrderedByAge, recentByLinearIssue, recentRemediationForPR, scanPrWindow,
   selectLatestExecutionTask, selectNonMergeConflict, selectOriginTask,
   selectPreservedPullRequest, tasksCreatedSince, zombieTasks,
-} from '../firestore/task-query-builder.js';
-import { LIST_QUEUED_DEFAULT_LIMIT } from '../firestore/task-constants.js';
+} from './task-query-builder.js';
+import { LIST_QUEUED_DEFAULT_LIMIT } from './task-constants.js';
 
 function firestoreError(error: unknown): RepositoryError {
   /* v8 ignore start -- ts-type: catch blocks always throw Error instances so non-Error branch is unreachable in unit tests @preserve */

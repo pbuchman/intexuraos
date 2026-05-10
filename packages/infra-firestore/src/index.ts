@@ -10,9 +10,13 @@ export {
   getFirestore,
   resetFirestore,
   setFirestore,
+  FieldPath,
   FieldValue,
   Timestamp,
   type Firestore,
+  type DocumentData,
+  type Query,
+  type QueryDocumentSnapshot,
 } from './firestore.js';
 
 // Schema-version write helper
