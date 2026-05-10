@@ -252,6 +252,26 @@ describe('executeCalendarAction usecase', () => {
     expect(messages[0]?.message).not.toContain('https://app.test.com/https://');
   });
 
+  it('marks calendar completion WhatsApp notification as important', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: createMockLogger(),
+    });
+
+    await usecase('action-123');
+
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.correlationId).toBe('calendar-complete-action-123');
+    expect(messages[0]?.important).toBe(true);
+  });
+
   it('publishes WhatsApp notification with relative URL prepended by webAppUrl (legacy)', async () => {
     const action = createAction({ status: 'awaiting_approval' });
     await fakeActionRepo.save(action);

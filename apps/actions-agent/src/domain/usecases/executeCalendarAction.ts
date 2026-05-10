@@ -191,6 +191,7 @@ export function createExecuteCalendarActionUseCase(
         message: whatsappMessage,
         ctaUrl: { displayText: 'View in Calendar', url: fullUrl },
         correlationId: `calendar-complete-${actionId}`,
+        important: true,
       });
 
       if (!publishResult.ok) {
