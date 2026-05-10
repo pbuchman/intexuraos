@@ -141,4 +141,21 @@ describe('verifyFirestoreArtifacts', () => {
     );
     expect(result.exitCode).toBe(1);
   });
+
+  it('fails when firestore.indexes.json diverges from the migration aggregation', async () => {
+    const root = setup();
+    writeMigration(root);
+    writeExpectedArtifacts(root);
+    writeFileSync(
+      join(root, 'firestore.indexes.json'),
+      JSON.stringify({ indexes: [], fieldOverrides: [] }, null, 2) + '\n'
+    );
+
+    const result = await verifyFirestoreArtifacts({ repoRoot: root });
+
+    expect(result.errors).toEqual(
+      expect.arrayContaining([expect.stringContaining('firestore.indexes.json')])
+    );
+    expect(result.exitCode).toBe(1);
+  });
 });
