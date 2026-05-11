@@ -88,4 +88,19 @@ describe('createImageServiceClient', () => {
       },
     });
   });
+
+  it('treats delete success envelopes as deleted', async () => {
+    const scope = nock(BASE_URL)
+      .delete('/internal/images/image-1')
+      .reply(200, { success: true, data: null });
+
+    const client = createImageServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+    });
+    const result = await client.deleteImage('image-1');
+
+    expect(scope.isDone()).toBe(true);
+    expect(result).toEqual({ ok: true, value: undefined });
+  });
 });

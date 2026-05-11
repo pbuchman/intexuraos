@@ -40,6 +40,7 @@ export interface InternalHttpClientRequest {
   timeoutMs?: number | undefined;
   requestId?: string | undefined;
   extraHeaders?: Record<string, string> | undefined;
+  allowRawSuccess?: boolean | undefined;
 }
 
 export type InternalHttpClientError =
@@ -53,7 +54,7 @@ export type InternalHttpClientError =
       rawText: string;
       body: unknown;
     }
-  | { code: 'ENVELOPE_ERROR' | 'MALFORMED_ENVELOPE'; message: string };
+  | { code: 'ENVELOPE_ERROR' | 'MALFORMED_ENVELOPE'; message: string; body?: unknown };
 
 export type InternalHttpClientResult<T> =
   | { ok: true; value: T }
@@ -107,6 +108,18 @@ export function createInternalHttpClient(cfg: InternalHttpClientConfig): Interna
       if (envelope.ok) {
         return { ok: true, value: envelope.value };
       }
+      if (
+        args.allowRawSuccess === true &&
+        body !== null &&
+        typeof body === 'object' &&
+        !('success' in body)
+      ) {
+        return { ok: true, value: body as T };
+      }
+      Object.defineProperty(envelope.error, 'body', {
+        value: body,
+        enumerable: false,
+      });
       return { ok: false, error: envelope.error };
     },
   };

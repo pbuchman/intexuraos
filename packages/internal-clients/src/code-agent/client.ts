@@ -1,5 +1,4 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
-import { sendInternalRequest } from '../shared/request.js';
 import { createInternalHttpClient } from '../shared/createInternalHttpClient.js';
 import type {
   CancelTaskError,
@@ -89,6 +88,16 @@ function readErrorDetails(body: unknown): { existingTaskId?: string; serverCode?
 
 function toNetworkErrorMessage(errorMessage: string): string {
   return `Failed to call code-agent: ${errorMessage}`;
+}
+
+function isSuccessWithoutDataEnvelope(error: { body?: unknown }): boolean {
+  return (
+    error.body !== null &&
+    typeof error.body === 'object' &&
+    'success' in error.body &&
+    error.body.success === true &&
+    !('data' in error.body)
+  );
 }
 
 export function createCodeAgentServiceClient(
@@ -197,40 +206,52 @@ export function createCodeAgentServiceClient(
       input: CancelTaskWithNonceInput,
       options?: CodeAgentRequestOptions
     ): Promise<Result<CancelTaskWithNonceOutput, CancelTaskError>> {
-      const transport = await sendInternalRequest({
-        baseUrl: config.baseUrl,
+      const result = await httpClient.request<unknown>({
         path: '/internal/code/cancel-with-nonce',
         method: 'POST',
-        token: config.internalAuthToken,
-        logger: config.logger,
-        jsonBody: input,
+        body: input,
         timeoutMs: resolveTimeoutMs(30_000, config, options),
         requestId: options?.requestId,
+        allowRawSuccess: true,
       });
 
-      if (!transport.ok) {
-        return err({
-          code: 'NETWORK_ERROR',
-          message: toNetworkErrorMessage(transport.error.message),
-        });
-      }
-
-      if (transport.response.status === 200) {
+      if (result.ok) {
         return ok({ cancelled: true });
       }
 
-      const errorCode = readErrorCode(transport.body) ?? '';
-      const errorMessage = readErrorMessage(transport.body, 'Unknown error');
+      if (
+        result.error.code === 'MALFORMED_ENVELOPE' &&
+        isSuccessWithoutDataEnvelope(result.error)
+      ) {
+        return ok({ cancelled: true });
+      }
 
-      if (transport.response.status === 404) {
+      if (result.error.code === 'NETWORK_ERROR' || result.error.code === 'TIMEOUT') {
+        return err({
+          code: 'NETWORK_ERROR',
+          message: toNetworkErrorMessage(result.error.message),
+        });
+      }
+
+      if (result.error.code !== 'API_ERROR') {
+        return err({
+          code: 'UNKNOWN',
+          message: result.error.message,
+        });
+      }
+
+      const errorCode = readErrorCode(result.error.body) ?? '';
+      const errorMessage = readErrorMessage(result.error.body, 'Unknown error');
+
+      if (result.error.status === 404) {
         return err({ code: 'TASK_NOT_FOUND', message: errorMessage });
       }
 
-      if (transport.response.status === 403) {
+      if (result.error.status === 403) {
         return err({ code: 'NOT_OWNER', message: errorMessage });
       }
 
-      if (transport.response.status === 400) {
+      if (result.error.status === 400) {
         const codeMap: Record<string, CancelTaskError['code']> = {
           INVALID_NONCE: 'INVALID_NONCE',
           NONCE_EXPIRED: 'NONCE_EXPIRED',
@@ -248,7 +269,7 @@ export function createCodeAgentServiceClient(
 
       return err({
         code: 'UNKNOWN',
-        message: `Unexpected response: ${String(transport.response.status)}`,
+        message: `Unexpected response: ${String(result.error.status)}`,
       });
     },
 
@@ -256,44 +277,41 @@ export function createCodeAgentServiceClient(
       input: SubmitToPhase2Input,
       options?: CodeAgentRequestOptions
     ): Promise<Result<SubmitToPhase2Output, SubmitToPhase2Error>> {
-      const transport = await sendInternalRequest({
-        baseUrl: config.baseUrl,
+      const result = await httpClient.request<SubmitToPhase2Output>({
         path: '/internal/code/submit-phase2',
         method: 'POST',
-        token: config.internalAuthToken,
-        logger: config.logger,
-        jsonBody: input,
+        body: input,
         timeoutMs: resolveTimeoutMs(30_000, config, options),
         requestId: options?.requestId,
       });
 
-      if (!transport.ok) {
+      if (result.ok) {
+        return ok(result.value);
+      }
+
+      if (result.error.code === 'NETWORK_ERROR' || result.error.code === 'TIMEOUT') {
         return err({
           code: 'NETWORK_ERROR',
-          message: toNetworkErrorMessage(transport.error.message),
+          message: toNetworkErrorMessage(result.error.message),
         });
       }
 
-      if (transport.response.status === 200) {
-        const body = transport.body as { success?: boolean; data?: SubmitToPhase2Output };
-        if (body.success !== true || body.data === undefined) {
-          return err({
-            code: 'UNKNOWN',
-            message: 'Invalid response from code-agent',
-          });
-        }
-        return ok(body.data);
+      if (result.error.code !== 'API_ERROR') {
+        return err({
+          code: 'UNKNOWN',
+          message: result.error.message,
+        });
       }
 
-      const errorCode = readErrorCode(transport.body) ?? '';
-      const errorMessage = readErrorMessage(transport.body, 'Unknown error');
-      const { existingTaskId, serverCode } = readErrorDetails(transport.body);
+      const errorCode = readErrorCode(result.error.body) ?? '';
+      const errorMessage = readErrorMessage(result.error.body, 'Unknown error');
+      const { existingTaskId, serverCode } = readErrorDetails(result.error.body);
 
-      if (transport.response.status === 404) {
+      if (result.error.status === 404) {
         return err({ code: 'TASK_NOT_FOUND', message: errorMessage });
       }
 
-      if (transport.response.status === 400) {
+      if (result.error.status === 400) {
         const serverCodeMap: Record<string, SubmitToPhase2Error['code']> = {
           invalid_status: 'INVALID_STATUS',
           no_linear_issue: 'NO_LINEAR_ISSUE',
@@ -310,7 +328,7 @@ export function createCodeAgentServiceClient(
         return err({ code: 'UNKNOWN', message: errorMessage });
       }
 
-      if (transport.response.status === 409) {
+      if (result.error.status === 409) {
         if (serverCode === 'active_task_exists') {
           return err({ code: 'ACTIVE_TASK_EXISTS', message: errorMessage });
         }
@@ -321,13 +339,13 @@ export function createCodeAgentServiceClient(
         });
       }
 
-      if (transport.response.status === 503) {
+      if (result.error.status === 503) {
         return err({ code: 'WORKER_NOT_CONFIGURED', message: errorMessage });
       }
 
       return err({
         code: 'UNKNOWN',
-        message: `Unexpected response: ${String(transport.response.status)}`,
+        message: `Unexpected response: ${String(result.error.status)}`,
       });
     },
 
@@ -335,27 +353,34 @@ export function createCodeAgentServiceClient(
       request: NotifyGroupSummaryRecomputeRequest,
       options?: CodeAgentRequestOptions
     ): Promise<Result<void, NotifyGroupSummaryRecomputeError>> {
-      const transport = await sendInternalRequest({
-        baseUrl: config.baseUrl,
+      const result = await httpClient.request<unknown>({
         path: '/internal/code/group-summary/recompute',
         method: 'POST',
-        token: config.internalAuthToken,
-        logger: config.logger,
-        jsonBody: request,
+        body: request,
         timeoutMs: resolveTimeoutMs(30_000, config, options),
         requestId: options?.requestId,
       });
 
-      if (!transport.ok) {
+      if (result.ok) {
+        return ok(undefined);
+      }
+
+      if (
+        result.error.code === 'MALFORMED_ENVELOPE' &&
+        isSuccessWithoutDataEnvelope(result.error)
+      ) {
+        return ok(undefined);
+      }
+
+      if (result.error.code === 'NETWORK_ERROR' || result.error.code === 'TIMEOUT') {
         return err({
-          code: transport.error.code === 'TIMEOUT' ? 'UNAVAILABLE' : 'UNKNOWN',
-          message:
-            transport.error.code === 'TIMEOUT' ? 'Request timed out' : transport.error.message,
+          code: result.error.code === 'TIMEOUT' ? 'UNAVAILABLE' : 'UNKNOWN',
+          message: result.error.code === 'TIMEOUT' ? 'Request timed out' : result.error.message,
         });
       }
 
-      if (!transport.response.ok) {
-        if (transport.response.status >= 500) {
+      if (result.error.code === 'API_ERROR') {
+        if (result.error.status >= 500) {
           return err({
             code: 'UNAVAILABLE',
             message: 'code-agent unavailable',
@@ -364,14 +389,17 @@ export function createCodeAgentServiceClient(
         return err({
           code: 'INVALID_REQUEST',
           message:
-            transport.rawText !== ''
-              ? transport.rawText
-              : `HTTP ${String(transport.response.status)}: ${transport.response.statusText}`,
-          status: transport.response.status,
+            result.error.rawText !== ''
+              ? result.error.rawText
+              : `HTTP ${String(result.error.status)}: ${result.error.statusText}`,
+          status: result.error.status,
         });
       }
 
-      return ok(undefined);
+      return err({
+        code: 'INVALID_REQUEST',
+        message: result.error.message,
+      });
     },
   };
 }

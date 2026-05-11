@@ -255,4 +255,29 @@ describe('createCalendarAgentServiceClient', () => {
       error: new Error('HTTP 500: Internal Server Error'),
     });
   });
+
+  it('uses default timeout for preview requests when configured', async () => {
+    nock(BASE_URL)
+      .get('/internal/calendar/preview/action-timeout')
+      .delay(50)
+      .reply(200, {
+        success: true,
+        data: {
+          preview: null,
+        },
+      });
+
+    const client = createCalendarAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+      defaultTimeoutMs: 1,
+    });
+    const result = await client.getPreview('action-timeout');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe('Failed to fetch calendar preview: Request exceeded 1ms');
+    }
+  });
 });

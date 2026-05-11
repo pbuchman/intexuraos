@@ -1,7 +1,6 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { ImageGeneratedImageData, ImageThumbnailPrompt } from '@intexuraos/http-contracts';
-import { unwrapEnvelope } from '../shared/envelope.js';
-import { sendInternalRequest } from '../shared/request.js';
+import { createInternalHttpClient } from '../shared/createInternalHttpClient.js';
 import type {
   GeneratedImageData,
   GenerateImageOptions,
@@ -20,28 +19,42 @@ async function parseImageResponse<T>(
   body: unknown,
   method: 'POST' | 'DELETE'
 ): Promise<Result<T, ImageServiceError>> {
-  const transport = await sendInternalRequest({
+  const httpClient = createInternalHttpClient({
     baseUrl: config.baseUrl,
-    path,
-    method,
     token: config.internalAuthToken,
     logger: {
+      info: () => undefined,
       warn: () => undefined,
+      error: () => undefined,
+      debug: () => undefined,
     },
-    ...(body !== undefined ? { jsonBody: body } : {}),
   });
 
-  if (!transport.ok) {
+  const result = await httpClient.request<T>({
+    path,
+    method,
+    ...(body !== undefined ? { body } : {}),
+  });
+
+  if (method === 'DELETE' && result.ok) {
+    return ok(undefined as T);
+  }
+
+  if (result.ok) {
+    return ok(result.value);
+  }
+
+  if (result.error.code === 'NETWORK_ERROR' || result.error.code === 'TIMEOUT') {
     return err({
       code: 'NETWORK_ERROR',
-      message: transport.error.message,
+      message: result.error.message,
     });
   }
 
-  if (!transport.response.ok) {
+  if (result.error.code === 'API_ERROR') {
     return err({
       code: 'API_ERROR',
-      message: `HTTP ${String(transport.response.status)}: ${transport.rawText}`,
+      message: `HTTP ${String(result.error.status)}: ${result.error.rawText}`,
     });
   }
 
@@ -49,15 +62,10 @@ async function parseImageResponse<T>(
     return ok(undefined as T);
   }
 
-  const envelope = unwrapEnvelope<T>(transport.body);
-  if (!envelope.ok) {
-    return err({
-      code: 'API_ERROR',
-      message: envelope.error.message,
-    });
-  }
-
-  return ok(envelope.value);
+  return err({
+    code: 'API_ERROR',
+    message: result.error.message,
+  });
 }
 
 export function createImageServiceClient(config: ImageServiceConfig): ImageServiceClient {

@@ -201,6 +201,34 @@ describe('createCodeAgentServiceClient', () => {
     });
   });
 
+  it('returns UNKNOWN when cancelTaskWithNonce returns success=false with 200', async () => {
+    nock(BASE_URL)
+      .post('/internal/code/cancel-with-nonce')
+      .reply(200, {
+        success: false,
+        error: { code: 'FAILED', message: 'Cannot cancel' },
+      });
+
+    const client = createCodeAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.cancelTaskWithNonce({
+      taskId: 'task-1',
+      nonce: 'nonce-1',
+      userId: 'user-1',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'UNKNOWN',
+        message: 'FAILED: Cannot cancel',
+      },
+    });
+  });
+
   it('returns INVALID_REQUEST for notifyGroupSummaryRecompute 4xx responses', async () => {
     nock(BASE_URL).post('/internal/code/group-summary/recompute').reply(400, 'Bad request');
 
@@ -222,6 +250,55 @@ describe('createCodeAgentServiceClient', () => {
         code: 'INVALID_REQUEST',
         message: 'Bad request',
         status: 400,
+      },
+    });
+  });
+
+  it('returns ok when recompute succeeds with a data envelope', async () => {
+    nock(BASE_URL)
+      .post('/internal/code/group-summary/recompute')
+      .reply(200, { success: true, data: null });
+
+    const client = createCodeAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.notifyGroupSummaryRecompute({
+      userId: 'user-1',
+      linearIssueId: 'INT-1',
+      labels: [{ id: 'label-1', name: 'feature' }],
+      sourceTimestamp: '2026-01-01T12:00:00.000Z',
+    });
+
+    expect(result).toEqual({ ok: true, value: undefined });
+  });
+
+  it('returns INVALID_REQUEST when recompute returns success=false with 200', async () => {
+    nock(BASE_URL)
+      .post('/internal/code/group-summary/recompute')
+      .reply(200, {
+        success: false,
+        error: { code: 'FAILED', message: 'Cannot recompute' },
+      });
+
+    const client = createCodeAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.notifyGroupSummaryRecompute({
+      userId: 'user-1',
+      linearIssueId: 'INT-1',
+      labels: [{ id: 'label-1', name: 'feature' }],
+      sourceTimestamp: '2026-01-01T12:00:00.000Z',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'INVALID_REQUEST',
+        message: 'FAILED: Cannot recompute',
       },
     });
   });

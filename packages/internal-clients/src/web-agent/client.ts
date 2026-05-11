@@ -3,7 +3,7 @@ import type {
   WebAgentFetchLinkPreviewsData,
   WebAgentSummarizePageData,
 } from '@intexuraos/http-contracts';
-import { sendInternalRequest } from '../shared/request.js';
+import { createInternalHttpClient } from '../shared/createInternalHttpClient.js';
 import type {
   WebAgentPageSummary,
   WebAgentPageSummaryError,
@@ -14,18 +14,6 @@ import type {
   WebAgentServiceClient,
   WebAgentServiceConfig,
 } from './types.js';
-
-interface WebAgentPreviewEnvelope {
-  success: boolean;
-  data?: WebAgentFetchLinkPreviewsData;
-  error?: { code?: string; message?: string };
-}
-
-interface WebAgentSummaryEnvelope {
-  success: boolean;
-  data?: WebAgentSummarizePageData;
-  error?: string;
-}
 
 function mapErrorCode(code: string): WebAgentLinkPreviewError['code'] {
   switch (code) {
@@ -68,74 +56,84 @@ function normalizeSummaryErrorCode(code: string): WebAgentPageSummaryError['code
 }
 
 export function createWebAgentServiceClient(config: WebAgentServiceConfig): WebAgentServiceClient {
+  const httpClient = createInternalHttpClient({
+    baseUrl: config.baseUrl,
+    token: config.internalAuthToken,
+    logger: config.logger,
+    ...(config.defaultTimeoutMs !== undefined ? { defaultTimeoutMs: config.defaultTimeoutMs } : {}),
+  });
+
   return {
     async fetchPreview(
       url: string,
       options?: WebAgentRequestOptions
     ): Promise<Result<WebAgentLinkPreview, WebAgentLinkPreviewError>> {
-      const transport = await sendInternalRequest({
-        baseUrl: config.baseUrl,
+      const result = await httpClient.request<WebAgentFetchLinkPreviewsData>({
         path: '/internal/link-previews',
         method: 'POST',
-        token: config.internalAuthToken,
-        logger: config.logger,
-        jsonBody: { urls: [url] },
+        body: { urls: [url] },
         timeoutMs: options?.timeoutMs ?? config.defaultTimeoutMs,
         requestId: options?.requestId,
       });
 
-      if (!transport.ok) {
+      if (
+        !result.ok &&
+        (result.error.code === 'NETWORK_ERROR' || result.error.code === 'TIMEOUT')
+      ) {
         return err({
           code: 'FETCH_FAILED',
-          message: `Failed to call web-agent: ${transport.error.message}`,
+          message: `Failed to call web-agent: ${result.error.message}`,
         });
       }
 
-      if (!transport.response.ok) {
+      if (!result.ok && result.error.code === 'API_ERROR') {
         return err({
           code: 'FETCH_FAILED',
-          message: `HTTP ${String(transport.response.status)}: ${transport.response.statusText}`,
+          message: `HTTP ${String(result.error.status)}: ${result.error.statusText}`,
         });
       }
 
-      const body = transport.body as WebAgentPreviewEnvelope;
-      if (!body.success || body.data === undefined) {
+      if (!result.ok) {
+        if (result.error.code === 'ENVELOPE_ERROR') {
+          const body = result.error.body as { error?: { message?: string } };
+          return err({
+            code: 'FETCH_FAILED',
+            message: body.error?.message ?? 'Invalid response from web-agent',
+          });
+        }
         return err({
           code: 'FETCH_FAILED',
-          message: body.error?.message ?? 'Invalid response from web-agent',
+          message: 'Invalid response from web-agent',
         });
       }
 
-      const result = body.data.results[0];
-      if (result === undefined) {
+      const previewResult = result.value.results[0];
+      if (previewResult === undefined) {
         return err({ code: 'FETCH_FAILED', message: 'No results returned' });
       }
 
-      if (result.status === 'failed') {
+      if (previewResult.status === 'failed') {
         return err({
-          code: mapErrorCode(result.error?.code ?? 'FETCH_FAILED'),
-          message: result.error?.message ?? 'Unknown error',
+          code: mapErrorCode(previewResult.error?.code ?? 'FETCH_FAILED'),
+          message: previewResult.error?.message ?? 'Unknown error',
         });
       }
 
-      if (result.preview === undefined) {
+      if (previewResult.preview === undefined) {
         return err({ code: 'FETCH_FAILED', message: 'No preview in successful result' });
       }
 
-      return ok(result.preview);
+      return ok(previewResult.preview);
     },
 
     async summarizePage(
       request: WebAgentPageSummaryRequest,
       options?: WebAgentRequestOptions
     ): Promise<Result<WebAgentPageSummary, WebAgentPageSummaryError>> {
-      const transport = await sendInternalRequest({
-        baseUrl: config.baseUrl,
+      const result = await httpClient.request<WebAgentSummarizePageData>({
         path: '/internal/page-summaries',
         method: 'POST',
-        token: config.internalAuthToken,
-        logger: config.logger,
-        jsonBody: {
+        body: {
           url: request.url,
           userId: request.userId,
           ...(request.title !== undefined ? { title: request.title } : {}),
@@ -149,42 +147,52 @@ export function createWebAgentServiceClient(config: WebAgentServiceConfig): WebA
         requestId: options?.requestId,
       });
 
-      if (!transport.ok) {
+      if (
+        !result.ok &&
+        (result.error.code === 'NETWORK_ERROR' || result.error.code === 'TIMEOUT')
+      ) {
         return err({
-          code: transport.error.code === 'TIMEOUT' ? 'TIMEOUT' : 'FETCH_FAILED',
-          message: `Failed to call web-agent: ${transport.error.message}`,
+          code: result.error.code === 'TIMEOUT' ? 'TIMEOUT' : 'FETCH_FAILED',
+          message: `Failed to call web-agent: ${result.error.message}`,
           transient: true,
         });
       }
 
-      if (!transport.response.ok) {
+      if (!result.ok && result.error.code === 'API_ERROR') {
         return err({
           code: 'API_ERROR',
-          message: `HTTP ${String(transport.response.status)}: ${transport.response.statusText}`,
-          transient: isTransientHttpStatus(transport.response.status),
+          message: `HTTP ${String(result.error.status)}: ${result.error.statusText}`,
+          transient: isTransientHttpStatus(result.error.status),
         });
       }
 
-      const body = transport.body as WebAgentSummaryEnvelope;
-      if (!body.success || body.data === undefined) {
+      if (!result.ok) {
+        if (result.error.code === 'ENVELOPE_ERROR') {
+          const body = result.error.body as { error?: string };
+          return err({
+            code: 'API_ERROR',
+            message: body.error ?? 'Invalid response from web-agent',
+            transient: false,
+          });
+        }
         return err({
           code: 'API_ERROR',
-          message: body.error ?? 'Invalid response from web-agent',
+          message: 'Invalid response from web-agent',
           transient: false,
         });
       }
 
-      const result = body.data.result;
-      if (result.status === 'failed') {
-        const code = result.error?.code ?? 'API_ERROR';
+      const summaryResult = result.value.result;
+      if (summaryResult.status === 'failed') {
+        const code = summaryResult.error?.code ?? 'API_ERROR';
         return err({
           code: normalizeSummaryErrorCode(code),
-          message: result.error?.message ?? 'Unknown error',
+          message: summaryResult.error?.message ?? 'Unknown error',
           transient: isTransientErrorCode(code),
         });
       }
 
-      if (result.summary === undefined) {
+      if (summaryResult.summary === undefined) {
         return err({
           code: 'API_ERROR',
           message: 'No summary in successful result',
@@ -192,7 +200,7 @@ export function createWebAgentServiceClient(config: WebAgentServiceConfig): WebA
         });
       }
 
-      return ok(result.summary);
+      return ok(summaryResult.summary);
     },
   };
 }

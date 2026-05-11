@@ -81,6 +81,23 @@ describe('createActionsAgentServiceClient', () => {
     expect(result).toEqual({ ok: true, value: null });
   });
 
+  it('updates action status through the shared client facade', async () => {
+    const scope = nock(BASE_URL)
+      .patch('/internal/actions/action-123', { status: 'completed' })
+      .matchHeader('x-internal-auth', 'secret')
+      .reply(200, { success: true, data: null });
+
+    const client = createActionsAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.updateActionStatus('action-123', 'completed');
+
+    expect(scope.isDone()).toBe(true);
+    expect(result).toEqual({ ok: true, value: undefined });
+  });
+
   it('updates resource status through the status endpoint and forwards trace ids', async () => {
     const scope = nock(BASE_URL)
       .patch('/internal/actions/action-123/status', {
@@ -91,7 +108,7 @@ describe('createActionsAgentServiceClient', () => {
       })
       .matchHeader('x-internal-auth', 'secret')
       .matchHeader('x-trace-id', 'trace-123')
-      .reply(200, { success: true, data: undefined });
+      .reply(200, { success: true, data: null });
 
     const client = createActionsAgentServiceClient({
       baseUrl: BASE_URL,
@@ -115,7 +132,7 @@ describe('createActionsAgentServiceClient', () => {
         resource_status: 'failed',
       })
       .matchHeader('x-internal-auth', 'secret')
-      .reply(200, { success: true, data: undefined });
+      .reply(200, { success: true, data: null });
 
     const client = createActionsAgentServiceClient({
       baseUrl: BASE_URL,
@@ -123,6 +140,25 @@ describe('createActionsAgentServiceClient', () => {
       logger,
     });
     const result = await client.updateResourceStatus('action-plain', 'failed');
+
+    expect(scope.isDone()).toBe(true);
+    expect(result).toEqual({ ok: true, value: undefined });
+  });
+
+  it('accepts legacy resource-status success envelopes without data', async () => {
+    const scope = nock(BASE_URL)
+      .patch('/internal/actions/action-malformed/status', {
+        resource_status: 'completed',
+      })
+      .matchHeader('x-internal-auth', 'secret')
+      .reply(200, { success: true });
+
+    const client = createActionsAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.updateResourceStatus('action-malformed', 'completed');
 
     expect(scope.isDone()).toBe(true);
     expect(result).toEqual({ ok: true, value: undefined });
@@ -171,6 +207,30 @@ describe('createActionsAgentServiceClient', () => {
       error: {
         code: 'API_ERROR',
         message: 'HTTP 500',
+      },
+    });
+  });
+
+  it('returns API_ERROR when resource-status returns success=false with 200', async () => {
+    nock(BASE_URL)
+      .patch('/internal/actions/action-envelope/status')
+      .reply(200, {
+        success: false,
+        error: { code: 'FAILED', message: 'nope' },
+      });
+
+    const client = createActionsAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.updateResourceStatus('action-envelope', 'completed');
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'API_ERROR',
+        message: 'FAILED: nope',
       },
     });
   });
