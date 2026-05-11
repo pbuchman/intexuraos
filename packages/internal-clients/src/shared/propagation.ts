@@ -15,7 +15,8 @@ export function resolvePropagationHeaders(
   const requestId = options.requestId ?? ctx?.requestId ?? getCurrentRequestId();
   if (
     (headers['x-request-id'] === undefined || headers['x-request-id'] === '') &&
-    requestId !== undefined
+    requestId !== undefined &&
+    requestId !== ''
   ) {
     headers['x-request-id'] = requestId;
   }

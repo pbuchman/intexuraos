@@ -101,6 +101,40 @@ describe('createCodeAgentServiceClient', () => {
     });
   });
 
+  it('rejects submit responses that omit resourceUrl without a legacy taskId', async () => {
+    nock(BASE_URL)
+      .post('/internal/code/process')
+      .reply(200, {
+        success: true,
+        data: {
+          codeTaskId: 'task-1',
+        },
+      });
+
+    const client = createCodeAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.submitTask({
+      actionId: 'action-1',
+      userId: 'user-1',
+      approvalEventId: 'approval-1',
+      payload: {
+        prompt: 'Fix bug',
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'UNKNOWN',
+        message: 'Invalid response from code-agent',
+        status: 200,
+      },
+    });
+  });
+
   it('preserves duplicate submit details', async () => {
     nock(BASE_URL)
       .post('/internal/code/process')

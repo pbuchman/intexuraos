@@ -1,5 +1,6 @@
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { sendInternalRequest } from '../shared/request.js';
+import { createInternalHttpClient } from '../shared/createInternalHttpClient.js';
 import type { ServiceClientError } from '../shared/errors.js';
 import type {
   ActionsAgentServiceClient,
@@ -10,11 +11,6 @@ import type {
   UpdateActionRequest,
   UpdateActionResourceResult,
 } from './types.js';
-
-interface CreateActionEnvelope<TAction> {
-  success: boolean;
-  data?: TAction;
-}
 
 function timeoutFor(
   config: ActionsAgentServiceConfig,
@@ -67,40 +63,43 @@ function mapTransportToServiceClientError(transportError: {
 export function createActionsAgentServiceClient(
   config: ActionsAgentServiceConfig
 ): ActionsAgentServiceClient {
+  const httpClient = createInternalHttpClient({
+    baseUrl: config.baseUrl,
+    token: config.internalAuthToken,
+    logger: config.logger,
+    ...(config.defaultTimeoutMs !== undefined ? { defaultTimeoutMs: config.defaultTimeoutMs } : {}),
+  });
+
   return {
     async createAction<TAction>(
       request: CreateActionRequest,
       options?: ActionsAgentRequestOptions
     ): Promise<Result<TAction>> {
-      const transport = await sendInternalRequest({
-        baseUrl: config.baseUrl,
+      const result = await httpClient.request<TAction>({
         path: '/internal/actions',
         method: 'POST',
-        token: config.internalAuthToken,
-        logger: config.logger,
-        jsonBody: request,
+        body: request,
         timeoutMs: timeoutFor(config, options),
         requestId: options?.requestId,
       });
 
-      if (!transport.ok) {
-        return err(new Error(`Failed to create action: ${transport.error.message}`));
+      if (result.ok) {
+        return ok(result.value);
       }
 
-      if (!transport.response.ok) {
+      if (result.error.code === 'API_ERROR') {
         return err(
           new Error(
-            `Failed to create action: ${String(transport.response.status)} ${transport.response.statusText} - ${transport.rawText}`
+            `Failed to create action: ${String(result.error.status)} ${result.error.statusText} - ${result.error.rawText}`
           )
         );
       }
 
-      const body = transport.body as CreateActionEnvelope<TAction>;
-      if (!body.success || body.data === undefined) {
+      if (result.error.code === 'ENVELOPE_ERROR' || result.error.code === 'MALFORMED_ENVELOPE') {
         return err(new Error('Failed to create action: response.success is false'));
       }
 
-      return ok(body.data);
+      return err(new Error(`Failed to create action: ${result.error.message}`));
     },
 
     async getAction<TAction>(
