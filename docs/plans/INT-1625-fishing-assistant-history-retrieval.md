@@ -92,7 +92,10 @@ export interface QueryGroupMessagesResponse {
 - Modify `packages/internal-clients/src/mobile-notifications-service/client.ts` only if request body handling needs adjustment; it currently passes request bodies through unchanged.
 - Modify `packages/internal-clients/src/mobile-notifications-service/__tests__/client.test.ts` for cursor request/response coverage.
 - Modify `apps/mobile-notifications-service/src/routes/internalRoutes.ts` to accept and return cursors for digest and group-message queries.
+- Modify `apps/mobile-notifications-service/src/infra/firestore/firestoreNotificationRepository.ts` so timestamp-range notification queries use a Firestore-compatible order and stable cursor.
+- Modify `apps/mobile-notifications-service/src/__tests__/infra/firestoreNotificationRepository.test.ts` for timestamp-range pagination, cursor stability, and mismatch between `timestamp` and `receivedAt` ordering.
 - Modify `apps/mobile-notifications-service/src/__tests__/internalRoutes.test.ts` for digest cursor propagation, group-message cursor propagation, and long-range historical message access.
+- Create a migration such as `migrations/107_mobile-notifications-timestamp-range-pagination-index.mjs` plus a migration test under `migrations/__tests__/` for the raw-message timestamp-range query index.
 - Modify `apps/fishing-assistant-service/src/domain/retrieval/retrieveEvidence.ts` to scan all digest groups and all paginated historical digest/message pages.
 - Modify `apps/fishing-assistant-service/src/domain/usecases/sendChatMessage.ts` only if dependency typing needs a local paginated mobile client port.
 - Modify `apps/fishing-assistant-service/src/domain/prompts/buildFishingAnswerPrompt.ts` only if prompt wording changes; if changed, bump the prompt semver version because `PromptBuilder` prompts require semver versioning.
@@ -107,7 +110,11 @@ export interface QueryGroupMessagesResponse {
 - Modify: `packages/internal-clients/src/mobile-notifications-service/client.ts`
 - Modify: `packages/internal-clients/src/mobile-notifications-service/__tests__/client.test.ts`
 - Modify: `apps/mobile-notifications-service/src/routes/internalRoutes.ts`
+- Modify: `apps/mobile-notifications-service/src/infra/firestore/firestoreNotificationRepository.ts`
+- Modify: `apps/mobile-notifications-service/src/__tests__/infra/firestoreNotificationRepository.test.ts`
 - Modify: `apps/mobile-notifications-service/src/__tests__/internalRoutes.test.ts`
+- Create: `migrations/107_mobile-notifications-timestamp-range-pagination-index.mjs`
+- Create: `migrations/__tests__/107-mobile-notifications-timestamp-range-pagination-index.test.ts`
 
 - [ ] **Step 1: Add failing internal-client tests for cursors**
 
@@ -231,7 +238,103 @@ it('propagates digest query cursor and returns nextCursor', async () => {
 });
 ```
 
-- [ ] **Step 4: Add failing mobile route tests for group-message cursor propagation**
+- [ ] **Step 4: Add failing repository tests for timestamp-range raw-message pagination**
+
+In `apps/mobile-notifications-service/src/__tests__/infra/firestoreNotificationRepository.test.ts`, add repository-level tests before the route tests. These tests must exercise the same path that `/internal/notifications/group-messages/query` uses:
+
+- `findByUserIdPaginated` with `filter: { app: ['com.whatsapp'], title: 'Group prefix', postTimeSecFrom, postTimeSecTo }` returns results ordered by notification `timestamp` descending, not by `receivedAt`.
+- Pagination round-trips with this timestamp-range filter and returns no duplicate notification IDs across pages.
+- A dataset where `receivedAt` ordering differs from `timestamp` ordering still returns all in-range rows in stable `timestamp desc` order.
+
+Example assertion shape:
+
+```typescript
+const firstPage = await repository.findByUserIdPaginated('user-history', {
+  limit: 2,
+  filter: {
+    app: ['com.whatsapp'],
+    title: 'Fishing Group',
+    postTimeSecFrom: 100,
+    postTimeSecTo: 500,
+  },
+});
+expect(firstPage.ok).toBe(true);
+if (!firstPage.ok) return;
+expect(firstPage.value.notifications.map((n) => n.timestamp)).toEqual([400, 300]);
+expect(firstPage.value.nextCursor).toBeDefined();
+
+const cursor = firstPage.value.nextCursor;
+if (cursor === undefined) throw new Error('Expected nextCursor');
+const secondPage = await repository.findByUserIdPaginated('user-history', {
+  limit: 2,
+  cursor,
+  filter: {
+    app: ['com.whatsapp'],
+    title: 'Fishing Group',
+    postTimeSecFrom: 100,
+    postTimeSecTo: 500,
+  },
+});
+expect(secondPage.ok).toBe(true);
+if (!secondPage.ok) return;
+expect(secondPage.value.notifications.map((n) => n.timestamp)).toEqual([200, 100]);
+expect(new Set([...firstPage.value.notifications, ...secondPage.value.notifications].map((n) => n.id)).size).toBe(4);
+```
+
+Expected: fail because the current Firestore repository applies `timestamp` range filters but orders and cursors by `receivedAt`.
+
+- [ ] **Step 5: Add failing migration test for the timestamp-range pagination index**
+
+Create a migration test asserting the new migration declares the composite index needed by historical raw-message paging. The index must cover the exact DB-level filters and ordering used by the repository path:
+
+```typescript
+expect(indexes).toContainEqual({
+  collectionGroup: 'mobile_notifications',
+  queryScope: 'COLLECTION',
+  fields: [
+    { fieldPath: 'app', order: 'ASCENDING' },
+    { fieldPath: 'userId', order: 'ASCENDING' },
+    { fieldPath: 'timestamp', order: 'DESCENDING' },
+  ],
+});
+```
+
+If the implementation explicitly orders by document ID as a tie-breaker and the migration framework supports declaring it, include the `__name__` field in the test. If Firestore's generated index treats document ID as the implicit final tie-breaker, document that in the migration comment and keep the test focused on `app`, `userId`, and `timestamp`.
+
+- [ ] **Step 6: Redesign `findByUserIdPaginated` for timestamp-range queries**
+
+In `apps/mobile-notifications-service/src/infra/firestore/firestoreNotificationRepository.ts`, keep the existing `receivedAt` pagination for normal notification lists, but branch when `postTimeSecFrom` or `postTimeSecTo` is present:
+
+- Apply DB filters for `userId`, `app`, and the `timestamp` range.
+- Order by `timestamp` descending for timestamp-range queries so Firestore accepts the inequality query and pages by the same field being ranged.
+- Add a stable tie-breaker to the cursor. Prefer encoding both `{ timestamp, id }` and using a matching tie-break order; keep the old `{ receivedAt, id }` cursor shape for non-range list queries.
+- Continue applying `title` filtering in memory unless a separate indexed title-prefix design is introduced.
+- Preserve the scan safety guard and ensure `nextCursor` tracks DB position, not only matched title-filtered rows.
+
+The route must not paper over repository errors; this repository path has to be Firestore-compatible for the full-history Fishing Assistant query shape.
+
+- [ ] **Step 7: Add the timestamp-range pagination migration**
+
+Create `migrations/107_mobile-notifications-timestamp-range-pagination-index.mjs` for the raw-message historical paging query shape. The migration comment must name the call path:
+
+```text
+/internal/notifications/group-messages/query -> NotificationRepository.findByUserIdPaginated
+filter: app + userId + timestamp range, order: timestamp desc
+```
+
+This is separate from migration 096, which documents the existing `receivedAt`-ordered digest query shape and does not prove the new full-history raw-message pagination shape.
+
+- [ ] **Step 8: Run repository and migration tests and confirm they fail**
+
+Run:
+
+```bash
+pnpm vitest run apps/mobile-notifications-service/src/__tests__/infra/firestoreNotificationRepository.test.ts migrations/__tests__/107-mobile-notifications-timestamp-range-pagination-index.test.ts
+```
+
+Expected: fail until the repository query/cursor redesign and migration are implemented.
+
+- [ ] **Step 9: Add failing mobile route tests for group-message cursor propagation**
 
 Add a route test that configures `ctx.notificationRepo.findByUserIdPaginated` to capture the incoming cursor and return a `nextCursor`:
 
@@ -279,6 +382,8 @@ it('propagates group-message cursor and returns nextCursor for historical paging
 
   expect(response.statusCode).toBe(200);
   expect(capturedOptions[0]?.cursor).toBe('raw-cursor-1');
+  expect(capturedOptions[0]?.filter?.postTimeSecFrom).toBe(bounds.fromSec);
+  expect(capturedOptions[0]?.filter?.postTimeSecTo).toBe(bounds.toSec);
   const body = JSON.parse(response.body) as SuccessResponse<{
     messages: { text: string }[];
     nextCursor?: string;
@@ -290,7 +395,9 @@ it('propagates group-message cursor and returns nextCursor for historical paging
 });
 ```
 
-- [ ] **Step 5: Run mobile route tests and confirm they fail**
+Also add an internal route integration-style test that uses the real fake notification repository with several WhatsApp notifications whose `timestamp` order differs from insertion/`receivedAt` order, requests a historical range with `limit: 1`, follows `nextCursor`, and asserts every in-range matching message is reachable without duplicate `messageRef` values. This catches regressions where the route contract is green but the repository query/cursor shape is still unstable.
+
+- [ ] **Step 10: Run mobile route tests and confirm they fail**
 
 Run:
 
@@ -300,7 +407,7 @@ pnpm vitest run apps/mobile-notifications-service/src/__tests__/internalRoutes.t
 
 Expected: fail because schemas reject `cursor` and responses do not include `nextCursor`.
 
-- [ ] **Step 6: Update shared client types**
+- [ ] **Step 11: Update shared client types**
 
 In `packages/internal-clients/src/mobile-notifications-service/types.ts`, apply the shared contract from this plan:
 
@@ -344,7 +451,7 @@ export interface QueryGroupMessagesResponse {
 
 `packages/internal-clients/src/mobile-notifications-service/client.ts` should continue to pass request bodies through with `withRequestOptions`; no filtering should be introduced.
 
-- [ ] **Step 7: Update mobile internal route body types and schemas**
+- [ ] **Step 12: Update mobile internal route body types and schemas**
 
 In `apps/mobile-notifications-service/src/routes/internalRoutes.ts`, add cursor fields:
 
@@ -377,7 +484,7 @@ In both JSON schemas, add:
 cursor: { type: 'string', minLength: 1 },
 ```
 
-- [ ] **Step 8: Return digest `nextCursor`**
+- [ ] **Step 13: Return digest `nextCursor`**
 
 In the `/internal/notifications/digests/query` handler, pass the cursor into the repository and include the response cursor:
 
@@ -405,7 +512,7 @@ return await reply.ok({
 });
 ```
 
-- [ ] **Step 9: Return group-message `nextCursor`**
+- [ ] **Step 14: Return group-message `nextCursor`**
 
 In the `/internal/notifications/group-messages/query` handler, seed raw pagination with `request.body.cursor`, keep the existing scan budget per request, and return continuation when there is more raw history:
 
@@ -459,19 +566,19 @@ return await reply.ok({
 });
 ```
 
-Do not apply the `MAX_GROUP_MESSAGE_RANGE_DAYS` limit to internal historical paging if `cursor` support is present. The historical range is protected by cursor pagination and the per-request raw scan budget.
+Do not apply the `MAX_GROUP_MESSAGE_RANGE_DAYS` limit to internal historical paging if `cursor` support is present. The historical range is protected by cursor pagination and the per-request raw scan budget, but only after the repository timestamp-range query path from Steps 4-7 is implemented.
 
-- [ ] **Step 10: Run focused tests for the producer contract**
+- [ ] **Step 15: Run focused tests for the producer contract**
 
 Run:
 
 ```bash
-pnpm vitest run packages/internal-clients/src/mobile-notifications-service/__tests__/client.test.ts apps/mobile-notifications-service/src/__tests__/internalRoutes.test.ts
+pnpm vitest run packages/internal-clients/src/mobile-notifications-service/__tests__/client.test.ts apps/mobile-notifications-service/src/__tests__/internalRoutes.test.ts apps/mobile-notifications-service/src/__tests__/infra/firestoreNotificationRepository.test.ts migrations/__tests__/107-mobile-notifications-timestamp-range-pagination-index.test.ts
 ```
 
 Expected: pass.
 
-- [ ] **Step 11: Run workspace verification**
+- [ ] **Step 16: Run workspace verification**
 
 Run:
 
