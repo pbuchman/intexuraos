@@ -3,6 +3,7 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import { performHttpFetch } from '@intexuraos/common-http';
 import type { Auth0Client, AuthError, RefreshResult } from '../../domain/identity/index.js';
 
 /**
@@ -54,7 +55,7 @@ async function postTokenRequest(
   url: string,
   body: string
 ): Promise<{ status: number; body: unknown }> {
-  const response = await fetch(url, {
+  const response = await performHttpFetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',

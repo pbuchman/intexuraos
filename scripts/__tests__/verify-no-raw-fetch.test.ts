@@ -74,6 +74,23 @@ export async function bad() {
     expect(result.stderr).toMatch(/apps\/actions-agent\/src\/infra\/http\/bad\.ts:3/);
   });
 
+  it('fails when any app infra file uses raw fetch outside the migrated client directories', () => {
+    writeFixture(
+      rootDir,
+      'apps/code-agent/src/infra/services/badDispatcher.ts',
+      `
+export async function dispatch(url: string) {
+  return fetch(url);
+}
+`
+    );
+
+    const result = runScript(rootDir);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/raw fetch\(\) is forbidden here/);
+    expect(result.stderr).toMatch(/apps\/code-agent\/src\/infra\/services\/badDispatcher\.ts:3/);
+  });
+
   it('ignores comment and string literals that mention fetch', () => {
     writeFixture(
       rootDir,
