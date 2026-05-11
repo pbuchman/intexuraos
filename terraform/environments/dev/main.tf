@@ -112,6 +112,12 @@ variable "slack_channel_name" {
   default     = "#alerts"
 }
 
+variable "service_urls" {
+  description = "Generated service URL map emitted from apps/web/service-manifest.json for drift visibility."
+  type        = map(string)
+  default     = {}
+}
+
 # -----------------------------------------------------------------------------
 # Data Sources
 # -----------------------------------------------------------------------------

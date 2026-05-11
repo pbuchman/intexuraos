@@ -1,4 +1,5 @@
 import { validateRequiredEnv } from '@intexuraos/http-server';
+import { assertOtelActive } from '@intexuraos/infra-otel';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { installUsageSinkShutdownHandler } from '@intexuraos/llm-pricing';
 import { buildServer } from './server.js';
@@ -19,6 +20,7 @@ const REQUIRED_ENV = [
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
+assertOtelActive({ serviceName: 'chat-agent' });
 
 const sentryConfig: Parameters<typeof initSentry>[0] = {
   environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',

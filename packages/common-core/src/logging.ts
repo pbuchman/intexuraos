@@ -1,3 +1,5 @@
+import { context, trace, type Context } from '@opentelemetry/api';
+
 /**
  * Logger interface for infrastructure adapters.
  * Matches the pino logger signature for compatibility.
@@ -40,4 +42,25 @@ export function getLogLevel(): 'silent' | 'debug' | 'info' | 'warn' | 'error' {
     | 'error'
     | undefined;
   return logLevel ?? 'info';
+}
+
+export interface OtelTraceLogFields {
+  traceId?: string;
+  spanId?: string;
+}
+
+export function getOtelTraceLogFields(activeContext: Context): OtelTraceLogFields {
+  const spanContext = trace.getSpanContext(activeContext);
+  if (spanContext === undefined || !trace.isSpanContextValid(spanContext)) {
+    return {};
+  }
+
+  return {
+    traceId: spanContext.traceId,
+    spanId: spanContext.spanId,
+  };
+}
+
+export function createOtelTraceMixin(): () => OtelTraceLogFields {
+  return () => getOtelTraceLogFields(context.active());
 }

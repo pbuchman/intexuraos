@@ -1743,7 +1743,11 @@ importers:
 
   packages/code-task-domain: {}
 
-  packages/common-core: {}
+  packages/common-core:
+    dependencies:
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.0
 
   packages/common-http:
     dependencies:

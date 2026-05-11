@@ -1,4 +1,5 @@
 import { initSentry } from '@intexuraos/infra-sentry';
+import { assertOtelActive } from '@intexuraos/infra-otel';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { installUsageSinkShutdownHandler } from '@intexuraos/llm-pricing';
@@ -53,6 +54,7 @@ const PRODUCTION_ONLY_ENV = [
 // In E2E mode, only validate core env vars; others have sensible defaults
 const isE2eMode = process.env['E2E_MODE'] === 'true';
 validateRequiredEnv(isE2eMode ? REQUIRED_ENV : [...REQUIRED_ENV, ...PRODUCTION_ONLY_ENV]);
+assertOtelActive({ serviceName: 'code-agent' });
 
 // Initialize Sentry (required - DSN is validated above)
 const dsn = process.env['INTEXURAOS_SENTRY_DSN'];

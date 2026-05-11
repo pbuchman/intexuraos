@@ -1,11 +1,16 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { generateServiceWiring, loadServiceManifest } from '../generate-service-wiring.mjs';
+import {
+  generateServiceWiring,
+  loadServiceManifest,
+  writeServiceWiringArtifacts,
+} from '../generate-service-wiring.mjs';
 
 const SCRIPT = path.resolve(import.meta.dirname, '..', 'verify-service-wiring.mjs');
+const GENERATOR_SCRIPT = path.resolve(import.meta.dirname, '..', 'generate-service-wiring.mjs');
 
 const MANIFEST_FIXTURE = JSON.stringify(
   {
@@ -70,6 +75,11 @@ function runScript(rootDir: string) {
   });
 }
 
+function writeGeneratedFixture(rootDir: string): void {
+  const manifest = loadServiceManifest(path.join(rootDir, 'apps/web/service-manifest.json'));
+  writeServiceWiringArtifacts(rootDir, generateServiceWiring(manifest));
+}
+
 describe('verify-service-wiring', () => {
   let rootDir: string;
 
@@ -105,6 +115,7 @@ describe('verify-service-wiring', () => {
     writeFixture(rootDir, 'apps/web/src/config.ts', CONFIG_FIXTURE);
     writeFixture(rootDir, 'apps/web/vite.config.ts', VITE_FIXTURE);
     writeFixture(rootDir, 'ecosystem.config.cjs', ECOSYSTEM_FIXTURE);
+    writeGeneratedFixture(rootDir);
 
     const result = runScript(rootDir);
     expect(result.status).toBe(0);
@@ -114,6 +125,7 @@ describe('verify-service-wiring', () => {
   it('fails when vite proxy target drifts from the manifest', () => {
     writeFixture(rootDir, 'apps/web/service-manifest.json', MANIFEST_FIXTURE);
     writeFixture(rootDir, 'apps/web/src/config.ts', CONFIG_FIXTURE);
+    writeGeneratedFixture(rootDir);
     writeFixture(
       rootDir,
       'apps/web/vite.config.ts',
@@ -132,6 +144,7 @@ describe('verify-service-wiring', () => {
     writeFixture(rootDir, 'apps/web/service-manifest.json', MANIFEST_FIXTURE);
     writeFixture(rootDir, 'apps/web/src/config.ts', CONFIG_FIXTURE);
     writeFixture(rootDir, 'apps/web/vite.config.ts', VITE_FIXTURE);
+    writeGeneratedFixture(rootDir);
     writeFixture(
       rootDir,
       'ecosystem.config.cjs',
@@ -149,5 +162,33 @@ describe('verify-service-wiring', () => {
   it('passes against the real repo files', () => {
     const output = execFileSync('node', [SCRIPT], { encoding: 'utf-8' });
     expect(output).toMatch(/Service wiring verified/);
+  });
+
+  it('writes the required generated service-wiring artifacts', () => {
+    writeFixture(rootDir, 'apps/web/service-manifest.json', MANIFEST_FIXTURE);
+
+    const output = execFileSync('node', [GENERATOR_SCRIPT, '--root', rootDir], {
+      encoding: 'utf-8',
+    });
+
+    expect(output).toMatch(/Generated service wiring artifacts/);
+    const configPath = path.join(rootDir, 'apps/web/src/config.generated.ts');
+    const ecosystemPath = path.join(rootDir, 'ecosystem.generated.cjs');
+    const terraformPath = path.join(
+      rootDir,
+      'terraform/environments/dev/service-urls.auto.tfvars.json'
+    );
+
+    expect(existsSync(configPath)).toBe(true);
+    expect(existsSync(ecosystemPath)).toBe(true);
+    expect(existsSync(terraformPath)).toBe(true);
+    expect(readFileSync(configPath, 'utf8')).toContain('INTEXURAOS_CODE_AGENT_URL');
+    expect(readFileSync(ecosystemPath, 'utf8')).toContain('INTEXURAOS_USER_SERVICE_URL');
+    expect(JSON.parse(readFileSync(terraformPath, 'utf8'))).toEqual({
+      service_urls: {
+        INTEXURAOS_CODE_AGENT_URL: 'https://dev.intexuraos.cloud/api/code',
+        INTEXURAOS_USER_SERVICE_URL: 'http://localhost:8110',
+      },
+    });
   });
 });

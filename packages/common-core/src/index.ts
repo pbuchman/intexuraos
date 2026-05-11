@@ -20,8 +20,8 @@ export {
 } from './errors.js';
 
 // Logger interface for adapters
-export type { Logger } from './logging.js';
-export { getLogLevel } from './logging.js';
+export type { Logger, OtelTraceLogFields } from './logging.js';
+export { createOtelTraceMixin, getLogLevel, getOtelTraceLogFields } from './logging.js';
 
 // Typed env reader
 export { loadEnv } from './loadEnv.js';
