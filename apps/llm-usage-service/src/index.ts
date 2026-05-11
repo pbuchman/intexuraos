@@ -1,4 +1,5 @@
 import { initSentry } from '@intexuraos/infra-sentry';
+import { assertOtelActive } from '@intexuraos/infra-otel';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
@@ -11,6 +12,7 @@ const REQUIRED_ENV = [
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
+assertOtelActive({ serviceName: 'llm-usage-service' });
 
 const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
 initSentry({

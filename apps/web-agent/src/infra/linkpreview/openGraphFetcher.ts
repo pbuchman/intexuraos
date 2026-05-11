@@ -1,4 +1,5 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
+import { performHttpFetch } from '@intexuraos/common-http';
 import type { LinkPreviewFetcherPort } from '../../domain/linkpreview/ports/linkPreviewFetcher.js';
 import type { LinkPreview, LinkPreviewError } from '../../domain/linkpreview/models/LinkPreview.js';
 import type { Logger } from 'pino';
@@ -75,7 +76,7 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
     }, this.config.timeoutMs);
 
     try {
-      const response = await fetch(url, {
+      const response = await performHttpFetch(url, {
         method: 'GET',
         headers: {
           'User-Agent': this.config.userAgent,
@@ -267,4 +268,3 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
     }
   }
 }
-

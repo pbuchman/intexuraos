@@ -5,6 +5,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { resolve } from 'path';
 import { execSync } from 'child_process';
 import { readFileSync } from 'fs';
+import { WEB_SERVICE_URLS } from './src/config.generated';
 
 interface BuildInfo {
   version: string;
@@ -74,30 +75,12 @@ export default defineConfig(({ mode }) => {
   const buildInfo = getBuildInfo();
   const buildVersion = `${buildInfo.version}-${buildInfo.shortSha}`;
 
-  // Proxy routes shared between dev server and preview — strips /api/<service> prefix
-  const apiProxy = {
-    '/api/user': { target: 'http://localhost:8110', rewrite: (p: string) => p.replace(/^\/api\/user/, '') },
-    '/api/notion': { target: 'http://localhost:8112', rewrite: (p: string) => p.replace(/^\/api\/notion/, '') },
-    '/api/whatsapp': { target: 'http://localhost:8113', rewrite: (p: string) => p.replace(/^\/api\/whatsapp/, '') },
-    '/api/notifications': { target: 'http://localhost:8114', rewrite: (p: string) => p.replace(/^\/api\/notifications/, '') },
-    '/api/fishing-assistant': { target: 'http://localhost:8119', rewrite: (p: string) => p.replace(/^\/api\/fishing-assistant/, '') },
-    '/api/research': { target: 'http://localhost:8116', rewrite: (p: string) => p.replace(/^\/api\/research/, '') },
-    '/api/commands': { target: 'http://localhost:8117', rewrite: (p: string) => p.replace(/^\/api\/commands/, '') },
-    '/api/actions': { target: 'http://localhost:8118', rewrite: (p: string) => p.replace(/^\/api\/actions/, '') },
-    '/api/images': { target: 'http://localhost:8120', rewrite: (p: string) => p.replace(/^\/api\/images/, '') },
-    '/api/notes': { target: 'http://localhost:8121', rewrite: (p: string) => p.replace(/^\/api\/notes/, '') },
-    '/api/settings': { target: 'http://localhost:8122', rewrite: (p: string) => p.replace(/^\/api\/settings/, '') },
-    '/api/todos': { target: 'http://localhost:8123', rewrite: (p: string) => p.replace(/^\/api\/todos/, '') },
-    '/api/bookmarks': { target: 'http://localhost:8124', rewrite: (p: string) => p.replace(/^\/api\/bookmarks/, '') },
-    '/api/calendar': { target: 'http://localhost:8125', rewrite: (p: string) => p.replace(/^\/api\/calendar/, '') },
-    '/api/linear': { target: 'http://localhost:8126', rewrite: (p: string) => p.replace(/^\/api\/linear/, '') },
-    '/api/web': { target: 'http://localhost:8127', rewrite: (p: string) => p.replace(/^\/api\/web/, '') },
-    '/api/code': { target: 'http://localhost:8128', rewrite: (p: string) => p.replace(/^\/api\/code/, '') },
-    '/api/chat': { target: 'http://localhost:8129', rewrite: (p: string) => p.replace(/^\/api\/chat/, '') },
-    '/api/cron-agent': { target: 'http://localhost:8130', rewrite: (p: string) => p.replace(/^\/api\/cron-agent/, '') },
-    '/api/hellscript-agent': { target: 'http://localhost:8131', rewrite: (p: string) => p.replace(/^\/api\/hellscript-agent/, '') },
-    '/api/llm-usage': { target: 'http://localhost:8132', rewrite: (p: string) => p.replace(/^\/api\/llm-usage/, '') },
-  };
+  const apiProxy = Object.fromEntries(
+    WEB_SERVICE_URLS.map(({ apiPath, proxyTarget }) => [
+      apiPath,
+      { target: proxyTarget, rewrite: (path: string) => path.replace(new RegExp(`^${apiPath}`), '') },
+    ])
+  );
 
   return {
     plugins: [

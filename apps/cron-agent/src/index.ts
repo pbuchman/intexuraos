@@ -1,4 +1,5 @@
 import { initSentry } from '@intexuraos/infra-sentry';
+import { assertOtelActive } from '@intexuraos/infra-otel';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
@@ -30,6 +31,7 @@ const PRODUCTION_ONLY_ENV = [
 /* v8 ignore start -- module-init: entry point bootstrapping not unit-testable @preserve */
 const isProd = process.env['INTEXURAOS_ENVIRONMENT'] === 'production';
 validateRequiredEnv([...REQUIRED_ENV, ...(isProd ? PRODUCTION_ONLY_ENV : [])]);
+assertOtelActive({ serviceName: 'cron-agent' });
 
 const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
 if (sentryDsn === undefined || sentryDsn === '') {

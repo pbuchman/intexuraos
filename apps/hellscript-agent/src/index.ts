@@ -1,4 +1,5 @@
 import { initSentry, createAppLogger } from '@intexuraos/infra-sentry';
+import { assertOtelActive } from '@intexuraos/infra-otel';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { HttpInternalAuthUsageSink, installUsageSinkShutdownHandler } from '@intexuraos/llm-pricing';
@@ -20,6 +21,7 @@ const REQUIRED_ENV = [
 
 /* v8 ignore start -- module-init: entry point bootstrapping not unit-testable @preserve */
 validateRequiredEnv(REQUIRED_ENV);
+assertOtelActive({ serviceName: 'hellscript-agent' });
 
 const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
 if (sentryDsn === undefined || sentryDsn === '') {

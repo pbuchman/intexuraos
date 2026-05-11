@@ -1,4 +1,5 @@
 import type { Result } from '@intexuraos/common-core';
+import { performHttpFetch } from '@intexuraos/common-http';
 import type { ImageProxyPort, ImageProxyError, ImageProxyResult } from '../../domain/ports/imageProxy.js';
 
 export function createFetchImageProxy(): ImageProxyPort {
@@ -31,7 +32,7 @@ export function createFetchImageProxy(): ImageProxyPort {
       }, 10000);
 
       try {
-        const response = await fetch(imageUrl, {
+        const response = await performHttpFetch(imageUrl, {
           signal: controller.signal,
           headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; IntexuraOS/1.0; +https://intexuraos.cloud)',

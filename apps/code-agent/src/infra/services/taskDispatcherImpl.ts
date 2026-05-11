@@ -5,6 +5,7 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import { performHttpFetch } from '@intexuraos/common-http';
 import type { AgentType, WorkerType } from '../../domain/models/codeTask.js';
 import type { WorkerCredentials } from '../../domain/models/workerSettings.js';
 import type {
@@ -410,7 +411,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
    * Fetch with timeout using AbortSignal.
    */
   private async fetchWithTimeout(url: string, options: RequestInit & { signal: AbortSignal }): Promise<Response> {
-    return await fetch(url, options);
+    return await performHttpFetch(url, options);
   }
 
   /**

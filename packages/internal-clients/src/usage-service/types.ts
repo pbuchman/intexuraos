@@ -180,6 +180,40 @@ export interface UsageGetEventResponse {
   event: StoredUsageEvent;
 }
 
+export interface ResearchCostSummaryMetrics {
+  calls: number;
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  cachedTokens: number;
+  reasoningTokens: number;
+  thinkingTokens: number;
+  webSearchCalls: number;
+  imageCount: number;
+}
+
+export interface ResearchCostSummaryDiagnostics {
+  missingAttribution: {
+    count: number;
+    costUsd: number;
+    eventIds: string[];
+  };
+}
+
+export interface ResearchCostSummary {
+  researchId: string;
+  totals: ResearchCostSummaryMetrics;
+  diagnostics: ResearchCostSummaryDiagnostics;
+}
+
+export interface ResearchCostSummaryTimeRange {
+  from: string;
+  to: string;
+}
+
 export interface UsageServiceError {
   code: 'NETWORK_ERROR' | 'API_ERROR' | 'VALIDATION_ERROR';
   message: string;
@@ -235,4 +269,11 @@ export interface UsageServiceClient {
     eventId: string,
     options?: { traceId?: string }
   ): Promise<Result<UsageGetEventResponse, UsageServiceError>>;
+
+  getResearchCostSummary(
+    researchId: string,
+    owner: { type: 'user' | 'system'; id: string },
+    timeRange: ResearchCostSummaryTimeRange,
+    options?: { traceId?: string }
+  ): Promise<Result<ResearchCostSummary, UsageServiceError>>;
 }

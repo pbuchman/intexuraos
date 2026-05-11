@@ -96,10 +96,10 @@ describe('createResearchCostSummaryClient', () => {
       'https://usage.example.com/internal/usage/research-cost-summary',
       expect.objectContaining({
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Internal-Auth': 'internal-token',
-        },
+        headers: expect.objectContaining({
+          'content-type': 'application/json',
+          'x-internal-auth': 'internal-token',
+        }),
         body: JSON.stringify({
           researchId: 'research-1',
           owner: { type: 'user', id: 'user-1' },
