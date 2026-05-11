@@ -5,6 +5,33 @@
  * Note: These are JSON Schema definitions (for OpenAPI), not TypeScript types.
  * TypeScript types are defined separately in @intexuraos/common.
  */
+import {
+  bookmarksBookmarkSchema,
+  bookmarksCreateBookmarkDataSchema,
+  bookmarksCreateBookmarkRequestSchema,
+  calendarGeneratePreviewRequestSchema,
+  calendarPreviewDataSchema,
+  calendarPreviewSchema,
+  calendarProcessActionRequestSchema,
+  commandsCommandWithTextSchema,
+  commandsGetCommandDataSchema,
+  imageGenerateImageRequestSchema,
+  imageGeneratePromptRequestSchema,
+  imageGeneratedImageDataSchema,
+  imageThumbnailPromptSchema,
+  linearProcessActionRequestSchema,
+  notionPagePreviewSchema,
+  notionTokenContextSchema,
+  notesCreateNoteRequestSchema,
+  researchCreateDraftRequestSchema,
+  serviceFeedbackZodSchema,
+  todosCreateTodoRequestSchema,
+  webAgentFetchLinkPreviewsRequestSchema,
+  webAgentLinkPreviewSchema,
+  webAgentPageSummarySchema,
+  webAgentSummarizePageRequestSchema,
+} from './zod/index.js';
+import { toOpenApiComponentSchema } from './zod/json-schema.js';
 
 /**
  * Error codes supported by IntexuraOS APIs.
@@ -134,6 +161,81 @@ export const coreComponentSchemas = {
   ApiError: ApiErrorSchema,
   HealthCheck: HealthCheckSchema,
   HealthResponse: HealthResponseSchema,
+};
+
+export const contractComponentSchemas = {
+  ServiceFeedback: toOpenApiComponentSchema('ServiceFeedback', serviceFeedbackZodSchema),
+  BookmarksCreateBookmarkRequest: toOpenApiComponentSchema(
+    'BookmarksCreateBookmarkRequest',
+    bookmarksCreateBookmarkRequestSchema
+  ),
+  BookmarksCreateBookmarkData: toOpenApiComponentSchema(
+    'BookmarksCreateBookmarkData',
+    bookmarksCreateBookmarkDataSchema
+  ),
+  BookmarksBookmark: toOpenApiComponentSchema('BookmarksBookmark', bookmarksBookmarkSchema),
+  CommandsCommandWithText: toOpenApiComponentSchema(
+    'CommandsCommandWithText',
+    commandsCommandWithTextSchema
+  ),
+  CommandsGetCommandData: toOpenApiComponentSchema(
+    'CommandsGetCommandData',
+    commandsGetCommandDataSchema
+  ),
+  ImageGeneratePromptRequest: toOpenApiComponentSchema(
+    'ImageGeneratePromptRequest',
+    imageGeneratePromptRequestSchema
+  ),
+  ImageThumbnailPrompt: toOpenApiComponentSchema(
+    'ImageThumbnailPrompt',
+    imageThumbnailPromptSchema
+  ),
+  ImageGenerateImageRequest: toOpenApiComponentSchema(
+    'ImageGenerateImageRequest',
+    imageGenerateImageRequestSchema
+  ),
+  ImageGeneratedImageData: toOpenApiComponentSchema(
+    'ImageGeneratedImageData',
+    imageGeneratedImageDataSchema
+  ),
+  NotesCreateNoteRequest: toOpenApiComponentSchema(
+    'NotesCreateNoteRequest',
+    notesCreateNoteRequestSchema
+  ),
+  NotionTokenContext: toOpenApiComponentSchema('NotionTokenContext', notionTokenContextSchema),
+  NotionPagePreview: toOpenApiComponentSchema('NotionPagePreview', notionPagePreviewSchema),
+  TodosCreateTodoRequest: toOpenApiComponentSchema(
+    'TodosCreateTodoRequest',
+    todosCreateTodoRequestSchema
+  ),
+  ResearchCreateDraftRequest: toOpenApiComponentSchema(
+    'ResearchCreateDraftRequest',
+    researchCreateDraftRequestSchema
+  ),
+  CalendarProcessActionRequest: toOpenApiComponentSchema(
+    'CalendarProcessActionRequest',
+    calendarProcessActionRequestSchema
+  ),
+  CalendarPreview: toOpenApiComponentSchema('CalendarPreview', calendarPreviewSchema),
+  CalendarPreviewData: toOpenApiComponentSchema('CalendarPreviewData', calendarPreviewDataSchema),
+  CalendarGeneratePreviewRequest: toOpenApiComponentSchema(
+    'CalendarGeneratePreviewRequest',
+    calendarGeneratePreviewRequestSchema
+  ),
+  LinearProcessActionRequest: toOpenApiComponentSchema(
+    'LinearProcessActionRequest',
+    linearProcessActionRequestSchema
+  ),
+  WebAgentFetchLinkPreviewsRequest: toOpenApiComponentSchema(
+    'WebAgentFetchLinkPreviewsRequest',
+    webAgentFetchLinkPreviewsRequestSchema
+  ),
+  WebAgentLinkPreview: toOpenApiComponentSchema('WebAgentLinkPreview', webAgentLinkPreviewSchema),
+  WebAgentSummarizePageRequest: toOpenApiComponentSchema(
+    'WebAgentSummarizePageRequest',
+    webAgentSummarizePageRequestSchema
+  ),
+  WebAgentPageSummary: toOpenApiComponentSchema('WebAgentPageSummary', webAgentPageSummarySchema),
 };
 
 /**

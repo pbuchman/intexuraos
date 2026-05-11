@@ -7,6 +7,7 @@
 
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { getErrorMessage } from '@intexuraos/common-core';
+import { performHttpFetch } from '@intexuraos/common-http';
 import type { Logger } from 'pino';
 import type { WorkerConfig } from '../../domain/models/workerSettings.js';
 import type { WorkerHealthState } from '../../domain/models/workerSettings.js';
@@ -51,7 +52,7 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
     try {
       this.logger.info({ worker: worker.name }, 'Probing worker health');
 
-      const response = await fetch(`${worker.url}/health`, {
+      const response = await performHttpFetch(`${worker.url}/health`, {
         method: 'GET',
         headers: {
           'CF-Access-Client-Id': worker.cfAccessClientId,

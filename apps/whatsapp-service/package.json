@@ -29,6 +29,7 @@
     "@intexuraos/infra-pubsub": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/infra-whatsapp": "workspace:*",
+    "@intexuraos/internal-clients": "workspace:*",
     "fastify": "catalog:",
     "libphonenumber-js": "^1.12.33",
     "pino": "catalog:",

@@ -6,7 +6,9 @@
  * Cloud Run services injected into the web bundle at build time.
  *
  * Checks:
- *   1. Manifest shape: { services: Array<{ name, envSuffix }> } with regex-validated values.
+ *   1. Manifest shape:
+ *      { services: Array<{ name, envSuffix, apiPath, proxyTarget, serviceUrl }> }
+ *      with regex-validated values.
  *   2. Each manifest entry has a corresponding `module "<name_with_underscores>" {`
  *      declaration in terraform/environments/dev/main.tf.
  *   3. No `CLOUD_RUN_SERVICES=(` literal array remains in apps/web/cloudbuild.yaml —
@@ -32,6 +34,8 @@ const cloudbuildPath = resolve(repoRoot, 'apps/web/cloudbuild.yaml');
 
 const NAME_REGEX = /^[a-z][a-z0-9-]+$/;
 const ENV_SUFFIX_REGEX = /^[A-Z][A-Z0-9_]+$/;
+const API_PATH_REGEX = /^\/api\/[a-z0-9-]+$/;
+const URL_REGEX = /^https?:\/\/\S+$/;
 const FORBIDDEN_LITERAL = /CLOUD_RUN_SERVICES=\(/;
 
 function fail(message) {
@@ -59,6 +63,9 @@ function validateShape(manifest) {
   if (manifest.services.length === 0) {
     fail('Manifest "services" array is empty');
   }
+  const seenNames = new Set();
+  const seenEnvSuffixes = new Set();
+  const seenApiPaths = new Set();
   manifest.services.forEach((entry, idx) => {
     if (!entry || typeof entry !== 'object') {
       fail(`services[${idx}] is not an object`);
@@ -75,6 +82,30 @@ function validateShape(manifest) {
     if (!ENV_SUFFIX_REGEX.test(entry.envSuffix)) {
       fail(`services[${idx}].envSuffix "${entry.envSuffix}" must match ${ENV_SUFFIX_REGEX}`);
     }
+    if (typeof entry.apiPath !== 'string' || entry.apiPath.length === 0) {
+      fail(`services[${idx}].apiPath must be a non-empty string`);
+    }
+    if (!API_PATH_REGEX.test(entry.apiPath)) {
+      fail(`services[${idx}].apiPath "${entry.apiPath}" must match ${API_PATH_REGEX}`);
+    }
+    if (typeof entry.proxyTarget !== 'string' || !URL_REGEX.test(entry.proxyTarget)) {
+      fail(`services[${idx}].proxyTarget must be an absolute http(s) URL`);
+    }
+    if (typeof entry.serviceUrl !== 'string' || !URL_REGEX.test(entry.serviceUrl)) {
+      fail(`services[${idx}].serviceUrl must be an absolute http(s) URL`);
+    }
+    if (seenNames.has(entry.name)) {
+      fail(`Duplicate service name in manifest: ${entry.name}`);
+    }
+    if (seenEnvSuffixes.has(entry.envSuffix)) {
+      fail(`Duplicate envSuffix in manifest: ${entry.envSuffix}`);
+    }
+    if (seenApiPaths.has(entry.apiPath)) {
+      fail(`Duplicate apiPath in manifest: ${entry.apiPath}`);
+    }
+    seenNames.add(entry.name);
+    seenEnvSuffixes.add(entry.envSuffix);
+    seenApiPaths.add(entry.apiPath);
   });
 }
 

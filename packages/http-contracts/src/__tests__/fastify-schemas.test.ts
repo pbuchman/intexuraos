@@ -3,6 +3,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import {
+  contractFastifySchemas,
   fastifyDiagnosticsSchema,
   fastifyErrorBodySchema,
   fastifyErrorCodeSchema,
@@ -78,10 +79,12 @@ describe('Fastify Schemas', () => {
 
       registerCoreSchemas(mockApp);
 
-      expect(addSchema).toHaveBeenCalledTimes(3);
+      expect(addSchema).toHaveBeenCalledTimes(3 + Object.keys(contractFastifySchemas).length);
       expect(addSchema).toHaveBeenCalledWith(fastifyDiagnosticsSchema);
       expect(addSchema).toHaveBeenCalledWith(fastifyErrorCodeSchema);
       expect(addSchema).toHaveBeenCalledWith(fastifyErrorBodySchema);
+      expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.ServiceFeedback);
+      expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.CalendarPreview);
     });
   });
 });

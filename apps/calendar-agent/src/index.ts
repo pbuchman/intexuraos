@@ -1,6 +1,7 @@
 /**
  * Calendar Agent entry point.
  */
+import { assertOtelActive } from '@intexuraos/infra-otel';
 
 import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
@@ -19,6 +20,7 @@ const REQUIRED_ENV = [
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
+assertOtelActive({ serviceName: 'calendar-agent' });
 
 const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
 if (sentryDsn === undefined || sentryDsn === '') {

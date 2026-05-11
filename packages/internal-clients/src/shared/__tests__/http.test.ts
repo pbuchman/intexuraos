@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import nock from 'nock';
 import { runWithRequestContext } from '@intexuraos/common-core';
+import { runWithRequestId } from '@intexuraos/common-http';
 import { fetchWithAuth } from '../http.js';
 
 describe('fetchWithAuth', () => {
@@ -235,6 +236,20 @@ describe('fetchWithAuth', () => {
 
       expect(result.ok).toBe(true);
       expect(scope.isDone()).toBe(true);
+    });
+
+    it('falls back to common-http request id when common-core context is absent', async () => {
+      const mockData = { ok: true };
+      nock('http://localhost:3000')
+        .get('/test')
+        .matchHeader('x-request-id', 'legacy-request-id')
+        .reply(200, mockData);
+
+      const result = await runWithRequestId('legacy-request-id', async () =>
+        fetchWithAuth(config, '/test')
+      );
+
+      expect(result.ok).toBe(true);
     });
   });
 

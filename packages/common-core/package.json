@@ -11,6 +11,9 @@
     "./errors": "./src/errors.ts",
     "./redaction": "./src/redaction.ts"
   },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint:local": "eslint src --max-warnings 0"

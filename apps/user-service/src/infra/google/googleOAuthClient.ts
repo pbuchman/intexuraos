@@ -4,6 +4,7 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import { performHttpFetch } from '@intexuraos/common-http';
 import type {
   GoogleOAuthClient,
   GoogleTokenResponse,
@@ -53,7 +54,7 @@ export class GoogleOAuthClientImpl implements GoogleOAuthClient {
     redirectUri: string
   ): Promise<Result<GoogleTokenResponse, OAuthError>> {
     try {
-      const response = await fetch(GOOGLE_TOKEN_URL, {
+      const response = await performHttpFetch(GOOGLE_TOKEN_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -110,7 +111,7 @@ export class GoogleOAuthClientImpl implements GoogleOAuthClient {
     refreshToken: string
   ): Promise<Result<GoogleTokenResponse, OAuthError>> {
     try {
-      const response = await fetch(GOOGLE_TOKEN_URL, {
+      const response = await performHttpFetch(GOOGLE_TOKEN_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -164,7 +165,7 @@ export class GoogleOAuthClientImpl implements GoogleOAuthClient {
 
   async getUserInfo(accessToken: string): Promise<Result<GoogleUserInfo, OAuthError>> {
     try {
-      const response = await fetch(GOOGLE_USERINFO_URL, {
+      const response = await performHttpFetch(GOOGLE_USERINFO_URL, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -198,7 +199,7 @@ export class GoogleOAuthClientImpl implements GoogleOAuthClient {
 
   async revokeToken(token: string): Promise<Result<void, OAuthError>> {
     try {
-      const response = await fetch(`${GOOGLE_REVOKE_URL}?token=${token}`, {
+      const response = await performHttpFetch(`${GOOGLE_REVOKE_URL}?token=${token}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',

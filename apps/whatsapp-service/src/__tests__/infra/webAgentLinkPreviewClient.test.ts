@@ -101,6 +101,35 @@ describe('webAgentLinkPreviewClient', () => {
         expect(result.value.description).toBeUndefined();
       }
     });
+
+    it('omits undefined optional metadata fields from the normalized preview', async () => {
+      nock(baseUrl)
+        .post('/internal/link-previews')
+        .reply(200, {
+          success: true,
+          data: {
+            results: [
+              {
+                url: 'https://example.com/minimal',
+                status: 'success',
+                preview: {
+                  url: 'https://example.com/minimal',
+                },
+              },
+            ],
+            metadata: { requestedCount: 1, successCount: 1, failedCount: 0, durationMs: 25 },
+          },
+        });
+
+      const result = await client.fetchPreview('https://example.com/minimal');
+
+      expect(result).toEqual({
+        ok: true,
+        value: {
+          url: 'https://example.com/minimal',
+        },
+      });
+    });
   });
 
   describe('HTTP errors', () => {

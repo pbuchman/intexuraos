@@ -9,6 +9,8 @@
  * NOT exported from any index — endpoint modules import directly.
  */
 
+import { sendInternalRequest } from '@intexuraos/internal-clients';
+
 export type LinearFetchResult<T> =
   | { kind: 'ok'; data: T }
   | { kind: 'http-error'; status: number; errorText: string }
@@ -54,40 +56,41 @@ export async function fetchLinearAgent<T>(
     body,
     requireData = true,
   } = options;
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, timeoutMs);
+  const parsedUrl = new URL(url);
+  const baseUrl = parsedUrl.origin;
+  const path = `${parsedUrl.pathname}${parsedUrl.search}`;
 
   try {
-    const headers: Record<string, string> = {
-      'X-Internal-Auth': internalAuthToken,
-    };
-    if (body !== undefined) {
-      headers['Content-Type'] = 'application/json';
-    }
-    if (userId !== undefined) {
-      headers['X-User-Id'] = userId;
-    }
-
-    const fetchInit: RequestInit = {
+    const transport = await sendInternalRequest({
+      baseUrl,
+      path,
       method,
-      headers,
-      signal: controller.signal,
-    };
-    if (body !== undefined) {
-      fetchInit.body = JSON.stringify(body);
+      token: internalAuthToken,
+      logger: { warn: () => undefined },
+      ...(userId !== undefined ? { headers: { 'X-User-Id': userId } } : {}),
+      ...(body !== undefined ? { jsonBody: body } : {}),
+      timeoutMs,
+    });
+
+    if (!transport.ok) {
+      if (transport.error.code === 'TIMEOUT') {
+        return { kind: 'timeout' };
+      }
+      return {
+        kind: 'network-error',
+        error: new Error(transport.error.message),
+      };
     }
 
-    const response = await fetch(url, fetchInit);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { kind: 'http-error', status: response.status, errorText };
+    if (!transport.response.ok) {
+      return {
+        kind: 'http-error',
+        status: transport.response.status,
+        errorText: transport.rawText,
+      };
     }
 
-    const parsed = (await response.json()) as { success?: boolean; data?: unknown };
+    const parsed = transport.body as { success?: boolean; data?: unknown };
 
     // Two paths to `invalid-body`: (1) success !== true, (2) success === true
     // but data is absent AND caller opted in to requireData. When
@@ -106,11 +109,6 @@ export async function fetchLinearAgent<T>(
 
     return { kind: 'ok', data: parsed.data as T };
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      return { kind: 'timeout' };
-    }
     return { kind: 'network-error', error };
-  } finally {
-    clearTimeout(timeoutId);
   }
 }

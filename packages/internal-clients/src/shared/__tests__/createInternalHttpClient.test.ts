@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import nock from 'nock';
 import { runWithRequestId } from '@intexuraos/common-http';
+import { runWithRequestContext } from '@intexuraos/common-core';
 import { createInternalHttpClient } from '../createInternalHttpClient.js';
 
 const noopLogger = {
@@ -62,6 +63,30 @@ describe('createInternalHttpClient', () => {
     expect(result).toEqual({ ok: true, value: { ok: true } });
   });
 
+  it('prefers request context requestId and forwards correlation id when available', async () => {
+    nock(BASE)
+      .get('/internal/context')
+      .matchHeader('x-request-id', 'ctx-request-id')
+      .matchHeader('x-correlation-id', 'ctx-correlation-id')
+      .reply(200, { success: true, data: { ok: true } });
+
+    const client = createInternalHttpClient({
+      baseUrl: BASE,
+      token: 'secret',
+      logger: noopLogger,
+    });
+    const result = await runWithRequestContext(
+      { requestId: 'ctx-request-id', correlationId: 'ctx-correlation-id' },
+      async () =>
+        client.request<{ ok: boolean }>({
+          method: 'GET',
+          path: '/internal/context',
+        })
+    );
+
+    expect(result).toEqual({ ok: true, value: { ok: true } });
+  });
+
   it('explicit requestId overrides ALS-provided value', async () => {
     nock(BASE)
       .get('/internal/baz')
@@ -119,7 +144,58 @@ describe('createInternalHttpClient', () => {
     });
     expect(result).toEqual({
       ok: false,
-      error: { code: 'API_ERROR', message: 'HTTP 500', status: 500 },
+      error: {
+        code: 'API_ERROR',
+        message: 'HTTP 500',
+        status: 500,
+        statusText: 'Internal Server Error',
+        rawText: 'boom',
+        body: 'boom',
+      },
+    });
+  });
+
+  it('non-2xx API errors preserve parsed body and raw text for domain mappers', async () => {
+    nock(BASE)
+      .post('/conflict')
+      .reply(409, {
+        success: false,
+        error: {
+          code: 'DUPLICATE',
+          message: 'Already exists',
+          details: { existingTaskId: 'task-existing' },
+        },
+      });
+
+    const client = createInternalHttpClient({
+      baseUrl: BASE,
+      token: 'secret',
+      logger: noopLogger,
+    });
+    const result = await client.request<unknown>({
+      method: 'POST',
+      path: '/conflict',
+      body: { id: 'task-new' },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'API_ERROR',
+        message: 'HTTP 409',
+        status: 409,
+        statusText: 'Conflict',
+        rawText:
+          '{"success":false,"error":{"code":"DUPLICATE","message":"Already exists","details":{"existingTaskId":"task-existing"}}}',
+        body: {
+          success: false,
+          error: {
+            code: 'DUPLICATE',
+            message: 'Already exists',
+            details: { existingTaskId: 'task-existing' },
+          },
+        },
+      },
     });
   });
 
