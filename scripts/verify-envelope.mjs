@@ -9,28 +9,6 @@ const ROUTE_START_RE = new RegExp(
   String.raw`\b(?:fastify|app)\.(${HTTP_METHODS.join('|')})\s*[<(]`,
   'g'
 );
-const TARGET_ROUTE_PREFIXES = [
-  '/internal/actions',
-  '/internal/bookmarks',
-  '/internal/calendar/',
-  '/internal/code/cancel-with-nonce',
-  '/internal/code/group-summary/recompute',
-  '/internal/code/process',
-  '/internal/code/submit-phase2',
-  '/internal/commands',
-  '/internal/images',
-  '/internal/issues',
-  '/internal/linear/',
-  '/internal/link-previews',
-  '/internal/notion/',
-  '/internal/notes',
-  '/internal/page-summaries',
-  '/internal/research/',
-  '/internal/retry-pending',
-  '/internal/todos',
-  '/internal/usage/',
-];
-
 function parseArgs(argv) {
   const args = argv.slice(2);
   let root = resolve(import.meta.dirname, '..');
@@ -148,10 +126,13 @@ function lineNumberOf(source, offset) {
 }
 
 function shouldCheckRoute(routePath) {
-  return TARGET_ROUTE_PREFIXES.some((prefix) => routePath.startsWith(prefix));
+  return routePath.startsWith('/internal/');
 }
 
 function lineHasAllowComment(lines, lineIndex, marker) {
+  if (lines[lineIndex].includes(marker)) {
+    return true;
+  }
   if (lineIndex === 0) {
     return false;
   }
@@ -166,8 +147,13 @@ function inspectRouteSlice(filePath, repoRoot, routePath, source, startLine) {
     const line = lines[i];
     const trimmed = line.trim();
 
+    if (trimmed.startsWith('//')) {
+      continue;
+    }
+
     if (
-      (/reply\.send\s*\(/.test(line) || /reply\.status\s*\([^)]+\)\.send\s*\(/.test(line)) &&
+      (/reply\.send\s*\(/.test(line) ||
+        /reply\.(?:code|status)\s*\([^)]+\)\.send\s*\(/.test(line)) &&
       !lineHasAllowComment(lines, i, '@allow-raw-send')
     ) {
       violations.push(
@@ -277,4 +263,4 @@ if (invokedDirectly) {
   main();
 }
 
-export { findRouteFiles, parseArgs, scanFile, shouldCheckRoute, TARGET_ROUTE_PREFIXES };
+export { findRouteFiles, parseArgs, scanFile, shouldCheckRoute };

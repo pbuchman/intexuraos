@@ -72,6 +72,27 @@ export const routes = (fastify) => {
     expect(result.stderr).toMatch(/\/internal\/bookmarks/);
   });
 
+  it('fails when any internal route outside the old target list uses reply.send', () => {
+    writeRoute(
+      rootDir,
+      'apps/notifications-agent/src/routes/webhookRoutes.ts',
+      `
+export const routes = (fastify) => {
+  fastify.post('/internal/webhooks/example', async (_request, reply) => {
+    return await reply.code(200).send({ bad: true });
+  });
+};
+`
+    );
+
+    const result = runScript(rootDir);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(
+      /must use reply\.ok\(\)\/reply\.fail\(\) instead of reply\.send\(\)/
+    );
+    expect(result.stderr).toMatch(/\/internal\/webhooks\/example/);
+  });
+
   it('ignores raw send in non-target routes', () => {
     writeRoute(
       rootDir,
