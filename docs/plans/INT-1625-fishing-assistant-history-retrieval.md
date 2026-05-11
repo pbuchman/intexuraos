@@ -891,7 +891,7 @@ interface PaginatedMobileNotificationsClient {
 }
 ```
 
-Then use `PaginatedMobileNotificationsClient` in `RetrieveEvidenceDeps`. If the local port is needed, import the response/result types from `@intexuraos/internal-clients/mobile-notifications-service` alongside `MobileNotificationsServiceClient`.
+Then use `PaginatedMobileNotificationsClient` in `RetrieveEvidenceDeps`. If the local port is needed, import the response/result types from the root `@intexuraos/internal-clients` entrypoint alongside `MobileNotificationsServiceClient`.
 
 - [ ] **Step 8: Implement digest and raw-message collectors**
 
