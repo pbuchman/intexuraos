@@ -864,30 +864,34 @@ function extractDateRange(question: string, now: Date): { dateFrom: string; date
 }
 ```
 
-Add local structural types if the shared client task is not merged yet:
+Add local structural types if the shared client task is not merged yet. The fallback must widen both request inputs and successful response values so INT-1627 can compile independently before INT-1626 lands:
 
 ```typescript
-type PaginatedQueryDigests = MobileNotificationsServiceClient['queryDigests'];
-type PaginatedQueryGroupMessages = MobileNotificationsServiceClient['queryGroupMessages'];
+type PaginatedQueryDigestsRequest =
+  Parameters<MobileNotificationsServiceClient['queryDigests']>[0] & { cursor?: string };
+type PaginatedQueryGroupMessagesRequest =
+  Parameters<MobileNotificationsServiceClient['queryGroupMessages']>[0] & { cursor?: string };
+type PaginatedQueryDigestsResponse = QueryDigestsResponse & { nextCursor?: string };
+type PaginatedQueryGroupMessagesResponse = QueryGroupMessagesResponse & { nextCursor?: string };
 ```
 
-If TypeScript rejects `cursor` before the shared package lands, introduce a local port:
+If TypeScript rejects `cursor` or `nextCursor` before the shared package lands, introduce a local port:
 
 ```typescript
 interface PaginatedMobileNotificationsClient {
   listDigestSubscriptions: MobileNotificationsServiceClient['listDigestSubscriptions'];
   queryDigests: (
-    input: Parameters<MobileNotificationsServiceClient['queryDigests']>[0] & { cursor?: string },
+    input: PaginatedQueryDigestsRequest,
     options?: Parameters<MobileNotificationsServiceClient['queryDigests']>[1]
-  ) => ReturnType<MobileNotificationsServiceClient['queryDigests']>;
+  ) => Promise<MobileNotificationsServiceResult<PaginatedQueryDigestsResponse>>;
   queryGroupMessages: (
-    input: Parameters<MobileNotificationsServiceClient['queryGroupMessages']>[0] & { cursor?: string },
+    input: PaginatedQueryGroupMessagesRequest,
     options?: Parameters<MobileNotificationsServiceClient['queryGroupMessages']>[1]
-  ) => ReturnType<MobileNotificationsServiceClient['queryGroupMessages']>;
+  ) => Promise<MobileNotificationsServiceResult<PaginatedQueryGroupMessagesResponse>>;
 }
 ```
 
-Then use `PaginatedMobileNotificationsClient` in `RetrieveEvidenceDeps`.
+Then use `PaginatedMobileNotificationsClient` in `RetrieveEvidenceDeps`. If the local port is needed, import the response/result types from `@intexuraos/internal-clients/mobile-notifications-service` alongside `MobileNotificationsServiceClient`.
 
 - [ ] **Step 8: Implement digest and raw-message collectors**
 
