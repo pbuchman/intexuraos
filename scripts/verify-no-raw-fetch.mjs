@@ -4,21 +4,6 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { maskNonCode } from './verify-incoming-request-logging.mjs';
 
-const TARGET_DIRECTORIES = [
-  'apps/actions-agent/src/infra/action',
-  'apps/actions-agent/src/infra/http',
-  'apps/actions-agent/src/infra/research',
-  'apps/bookmarks-agent/src/infra/linkpreview',
-  'apps/bookmarks-agent/src/infra/summary',
-  'apps/code-agent/src/infra/http/linear',
-  'apps/commands-agent/src/infra/actionsAgent',
-  'apps/linear-agent/src/infra/http',
-  'apps/research-agent/src/infra/image',
-  'apps/research-agent/src/infra/notion',
-  'apps/research-agent/src/infra/usage',
-  'apps/whatsapp-service/src/infra/linkpreview',
-];
-
 const RAW_FETCH_RE = /\b(?:globalThis\.)?fetch\s*\(/g;
 
 function parseArgs(argv) {
@@ -72,9 +57,13 @@ function walk(dir, out) {
 
 function findTargetFiles(root) {
   const files = [];
+  const appsDir = resolve(root, 'apps');
+  if (!existsSync(appsDir)) {
+    return files;
+  }
 
-  for (const relativeDir of TARGET_DIRECTORIES) {
-    const dir = resolve(root, relativeDir);
+  for (const appName of readdirSync(appsDir)) {
+    const dir = join(appsDir, appName, 'src', 'infra');
     if (!existsSync(dir)) {
       continue;
     }
@@ -133,4 +122,4 @@ if (invokedDirectly) {
   main();
 }
 
-export { findTargetFiles, parseArgs, scanFile, TARGET_DIRECTORIES };
+export { findTargetFiles, parseArgs, scanFile };

@@ -5,6 +5,7 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import { performHttpFetch } from '@intexuraos/common-http';
 import type {
   GitHubOAuthClient,
   GitHubTokenResponse,
@@ -47,7 +48,7 @@ export class GitHubOAuthClientImpl implements GitHubOAuthClient {
     redirectUri: string
   ): Promise<Result<GitHubTokenResponse, OAuthError>> {
     try {
-      const response = await fetch(GITHUB_TOKEN_URL, {
+      const response = await performHttpFetch(GITHUB_TOKEN_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -91,7 +92,7 @@ export class GitHubOAuthClientImpl implements GitHubOAuthClient {
 
   async getUserInfo(accessToken: string): Promise<Result<GitHubUserInfo, OAuthError>> {
     try {
-      const response = await fetch(GITHUB_USER_URL, {
+      const response = await performHttpFetch(GITHUB_USER_URL, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -129,7 +130,7 @@ export class GitHubOAuthClientImpl implements GitHubOAuthClient {
         `${this.config.clientId}:${this.config.clientSecret}`
       ).toString('base64');
 
-      const response = await fetch(
+      const response = await performHttpFetch(
         `https://api.github.com/applications/${this.config.clientId}/grant`,
         {
           method: 'DELETE',

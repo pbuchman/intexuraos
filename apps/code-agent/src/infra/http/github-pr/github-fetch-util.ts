@@ -10,6 +10,7 @@
  */
 
 import { ok, err, getErrorMessage, type Result } from '@intexuraos/common-core';
+import { performHttpFetch } from '@intexuraos/common-http';
 import type { GitHubPRClientError } from '../../../domain/ports/gitHubPRClient.js';
 
 export const GITHUB_API = 'https://api.github.com';
@@ -90,7 +91,7 @@ export async function fetchGitHub(
       requestInit.body = JSON.stringify(init.body);
     }
 
-    const response = await fetch(url, requestInit);
+    const response = await performHttpFetch(url, requestInit);
     return ok(response);
   } catch (error) {
     return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
