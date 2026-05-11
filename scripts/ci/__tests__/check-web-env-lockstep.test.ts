@@ -24,6 +24,25 @@ export function getConfig(): AppConfig {
 }
 `;
 
+const GENERATED_CONFIG_FIXTURE = `
+export const WEB_SERVICE_URLS = [
+  { envVar: 'INTEXURAOS_USER_SERVICE_URL', apiPath: '/api/user', proxyTarget: 'http://localhost:8110' },
+  { envVar: 'INTEXURAOS_IMAGE_SERVICE_URL', apiPath: '/api/images', proxyTarget: 'http://localhost:8120' },
+] as const;
+`;
+
+const GENERATED_CONSUMING_CONFIG_FIXTURE = `
+import { WEB_SERVICE_URLS } from './config.generated';
+function getServiceUrl(envVar: string, apiPath: string): string { return apiPath; }
+const urls = Object.fromEntries(WEB_SERVICE_URLS.map(({ envVar, apiPath }) => [envVar, getServiceUrl(envVar, apiPath)]));
+export function getConfig() {
+  return {
+    authServiceUrl: urls.INTEXURAOS_USER_SERVICE_URL,
+    imageServiceUrl: urls.INTEXURAOS_IMAGE_SERVICE_URL,
+  };
+}
+`;
+
 const DEPLOY_FIXTURE = `
 jobs:
   monolith:
@@ -70,6 +89,20 @@ describe('check-web-env-lockstep', () => {
     const r = run({
       WEB_ENV_LOCKSTEP_MANIFEST: writeFixture('service-manifest.json', MANIFEST_FIXTURE),
       WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', CONFIG_FIXTURE),
+      WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', DEPLOY_FIXTURE),
+    });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/lockstep OK/);
+  });
+
+  test('passes when config consumes service URLs through generated wiring', () => {
+    const r = run({
+      WEB_ENV_LOCKSTEP_MANIFEST: writeFixture('service-manifest.json', MANIFEST_FIXTURE),
+      WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', GENERATED_CONSUMING_CONFIG_FIXTURE),
+      WEB_ENV_LOCKSTEP_CONFIG_GENERATED: writeFixture(
+        'config.generated.ts',
+        GENERATED_CONFIG_FIXTURE
+      ),
       WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', DEPLOY_FIXTURE),
     });
     expect(r.status).toBe(0);
