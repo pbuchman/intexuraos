@@ -1,6 +1,6 @@
 import { err, ok, ServiceErrorCodes, type Result } from '@intexuraos/common-core';
 import type { BookmarksBookmark, BookmarksCreateBookmarkData } from '@intexuraos/http-contracts';
-import { sendInternalRequest } from '../shared/request.js';
+import { createInternalHttpClient } from '../shared/createInternalHttpClient.js';
 import type {
   BookmarksAgentRequestOptions,
   BookmarksAgentServiceClient,
@@ -37,7 +37,10 @@ function getTimeoutMs(
   return options?.timeoutMs ?? config.defaultTimeoutMs;
 }
 
-function toCreateBookmarkError(response: Response, body: unknown): CreateBookmarkError {
+function toCreateBookmarkError(
+  response: { status: number; statusText: string },
+  body: unknown
+): CreateBookmarkError {
   if (body === null || typeof body !== 'object') {
     return {
       message: `HTTP ${String(response.status)}: ${response.statusText}`,
@@ -58,7 +61,10 @@ function toCreateBookmarkError(response: Response, body: unknown): CreateBookmar
   };
 }
 
-function toHttpErrorMessage(response: Response, body: unknown): string {
+function toHttpErrorMessage(
+  response: { status: number; statusText: string },
+  body: unknown
+): string {
   if (body === null || typeof body !== 'object') {
     return `HTTP ${String(response.status)}: ${response.statusText}`;
   }
@@ -67,47 +73,94 @@ function toHttpErrorMessage(response: Response, body: unknown): string {
   return apiResponse.error?.message ?? `HTTP ${String(response.status)}: ${response.statusText}`;
 }
 
+function toCreateEnvelopeError(error: {
+  code: 'ENVELOPE_ERROR' | 'MALFORMED_ENVELOPE';
+  message: string;
+  body?: unknown;
+}): CreateBookmarkError {
+  if (error.code === 'ENVELOPE_ERROR') {
+    const body = error.body as ApiResponse;
+    return {
+      message: body.error?.message ?? 'Invalid response from bookmarks-agent',
+      ...(body.error?.code !== undefined ? { errorCode: body.error.code } : {}),
+    };
+  }
+
+  return {
+    message: 'Invalid response from bookmarks-agent',
+  };
+}
+
+function toForceRefreshEnvelopeError(error: {
+  code: 'ENVELOPE_ERROR' | 'MALFORMED_ENVELOPE';
+  message: string;
+  body?: unknown;
+}): Error {
+  if (error.code === 'ENVELOPE_ERROR') {
+    const body = error.body as ApiResponse;
+    return new Error(body.error?.message ?? 'Invalid response from bookmarks-agent');
+  }
+
+  return new Error('Invalid response from bookmarks-agent');
+}
+
 export function createBookmarksAgentServiceClient(
   config: BookmarksAgentServiceConfig
 ): BookmarksAgentServiceClient {
+  const httpClient = createInternalHttpClient({
+    baseUrl: config.baseUrl,
+    token: config.internalAuthToken,
+    logger: config.logger,
+    ...(config.defaultTimeoutMs !== undefined ? { defaultTimeoutMs: config.defaultTimeoutMs } : {}),
+  });
+
   return {
     async createBookmark(
       request: CreateBookmarkRequest,
       options?: BookmarksAgentRequestOptions
     ): Promise<Result<CreateBookmarkResponse, CreateBookmarkError>> {
-      const transport = await sendInternalRequest({
-        baseUrl: config.baseUrl,
+      const result = await httpClient.request<
+        BookmarksCreateBookmarkData | LegacyCreateBookmarkData
+      >({
         path: '/internal/bookmarks',
         method: 'POST',
-        token: config.internalAuthToken,
-        logger: config.logger,
-        jsonBody: request,
+        body: request,
         timeoutMs: getTimeoutMs(config, options),
         requestId: options?.requestId,
       });
 
-      if (!transport.ok) {
+      if (
+        !result.ok &&
+        (result.error.code === 'NETWORK_ERROR' || result.error.code === 'TIMEOUT')
+      ) {
         return err({
-          message: `Failed to call bookmarks-agent: ${transport.error.message}`,
+          message: `Failed to call bookmarks-agent: ${result.error.message}`,
           errorCode: ServiceErrorCodes.SERVICE_UNAVAILABLE,
         });
       }
 
-      if (!transport.response.ok) {
-        return err(toCreateBookmarkError(transport.response, transport.body));
+      if (!result.ok && result.error.code === 'API_ERROR') {
+        return err(
+          toCreateBookmarkError(
+            { status: result.error.status, statusText: result.error.statusText },
+            result.error.body
+          )
+        );
       }
 
-      const body = transport.body as ApiResponse & {
-        data?: BookmarksCreateBookmarkData | LegacyCreateBookmarkData;
-      };
-      if (!body.success || body.data === undefined) {
-        return err({
-          message: body.error?.message ?? 'Invalid response from bookmarks-agent',
-          ...(body.error?.code !== undefined ? { errorCode: body.error.code } : {}),
-        });
+      if (!result.ok) {
+        return err(
+          toCreateEnvelopeError(
+            result.error as {
+              code: 'ENVELOPE_ERROR' | 'MALFORMED_ENVELOPE';
+              message: string;
+              body?: unknown;
+            }
+          )
+        );
       }
 
-      const data = body.data;
+      const data = result.value;
       if ('bookmark' in data) {
         return ok({
           id: data.id,
@@ -129,30 +182,44 @@ export function createBookmarksAgentServiceClient(
       bookmarkId: string,
       options?: BookmarksAgentRequestOptions
     ): Promise<Result<ForceRefreshBookmarkResponse>> {
-      const transport = await sendInternalRequest({
-        baseUrl: config.baseUrl,
+      const result = await httpClient.request<BookmarksBookmark>({
         path: `/internal/bookmarks/${bookmarkId}/force-refresh`,
         method: 'POST',
-        token: config.internalAuthToken,
-        logger: config.logger,
         timeoutMs: getTimeoutMs(config, options),
         requestId: options?.requestId,
       });
 
-      if (!transport.ok) {
-        return err(new Error(`Failed to call bookmarks-agent: ${transport.error.message}`));
+      if (
+        !result.ok &&
+        (result.error.code === 'NETWORK_ERROR' || result.error.code === 'TIMEOUT')
+      ) {
+        return err(new Error(`Failed to call bookmarks-agent: ${result.error.message}`));
       }
 
-      if (!transport.response.ok) {
-        return err(new Error(toHttpErrorMessage(transport.response, transport.body)));
+      if (!result.ok && result.error.code === 'API_ERROR') {
+        return err(
+          new Error(
+            toHttpErrorMessage(
+              { status: result.error.status, statusText: result.error.statusText },
+              result.error.body
+            )
+          )
+        );
       }
 
-      const body = transport.body as ApiResponse;
-      if (!body.success || body.data === undefined) {
-        return err(new Error(body.error?.message ?? 'Invalid response from bookmarks-agent'));
+      if (!result.ok) {
+        return err(
+          toForceRefreshEnvelopeError(
+            result.error as {
+              code: 'ENVELOPE_ERROR' | 'MALFORMED_ENVELOPE';
+              message: string;
+              body?: unknown;
+            }
+          )
+        );
       }
 
-      const bookmark = body.data as BookmarksBookmark;
+      const bookmark = result.value;
       return ok({
         id: bookmark.id,
         url: bookmark.url,

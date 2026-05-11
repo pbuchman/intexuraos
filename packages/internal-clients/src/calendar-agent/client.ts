@@ -1,6 +1,9 @@
 import type { CalendarPreview as ContractCalendarPreview } from '@intexuraos/http-contracts';
 import { err, ok, type Result, type ServiceFeedback } from '@intexuraos/common-core';
-import { sendInternalRequest } from '../shared/request.js';
+import {
+  createInternalHttpClient,
+  type InternalHttpClient,
+} from '../shared/createInternalHttpClient.js';
 import { postServiceFeedback } from '../shared/serviceFeedback.js';
 import type {
   CalendarAgentRequestOptions,
@@ -14,11 +17,8 @@ import type {
 const PROCESS_ACTION_TIMEOUT_MS = 60_000;
 const GENERATE_PREVIEW_TIMEOUT_MS = 30_000;
 
-interface CalendarPreviewEnvelope {
+interface CalendarErrorEnvelope {
   success?: boolean;
-  data?: {
-    preview: ContractCalendarPreview | null;
-  };
   error?: {
     message?: string;
   };
@@ -66,6 +66,7 @@ function toCalendarPreview(preview: ContractCalendarPreview | null): CalendarPre
 
 async function readPreviewResponse(
   config: CalendarAgentServiceConfig,
+  httpClient: InternalHttpClient,
   path: string,
   errorPrefix: string,
   body: unknown,
@@ -73,30 +74,28 @@ async function readPreviewResponse(
   options: CalendarAgentRequestOptions | undefined,
   fallbackTimeoutMs?: number
 ): Promise<Result<CalendarPreview | null>> {
-  const transport = await sendInternalRequest({
-    baseUrl: config.baseUrl,
+  const result = await httpClient.request<{ preview: ContractCalendarPreview | null }>({
     path,
     method,
-    token: config.internalAuthToken,
-    logger: config.logger,
-    ...(body !== undefined ? { jsonBody: body } : {}),
+    ...(body !== undefined ? { body } : {}),
     timeoutMs: resolveTimeoutMs(fallbackTimeoutMs, config, options),
     requestId: options?.requestId,
   });
 
-  if (!transport.ok) {
-    return err(new Error(`${errorPrefix}: ${transport.error.message}`));
+  if (result.ok) {
+    return ok(toCalendarPreview(result.value.preview));
   }
 
-  const responseBody = transport.body as CalendarPreviewEnvelope;
-  if (!transport.response.ok) {
+  if (result.error.code === 'API_ERROR') {
+    const responseBody = result.error.body as CalendarErrorEnvelope;
     const message =
       (responseBody.success === true ? undefined : responseBody.error?.message) ??
-      `HTTP ${String(transport.response.status)}: ${transport.response.statusText}`;
+      `HTTP ${String(result.error.status)}: ${result.error.statusText}`;
     return err(new Error(message));
   }
 
-  if (responseBody.success !== true || responseBody.data === undefined) {
+  if (result.error.code === 'ENVELOPE_ERROR' || result.error.code === 'MALFORMED_ENVELOPE') {
+    const responseBody = result.error.body as CalendarErrorEnvelope;
     return err(
       new Error(
         (responseBody.success === true ? undefined : responseBody.error?.message) ??
@@ -105,12 +104,19 @@ async function readPreviewResponse(
     );
   }
 
-  return ok(toCalendarPreview(responseBody.data.preview));
+  return err(new Error(`${errorPrefix}: ${result.error.message}`));
 }
 
 export function createCalendarAgentServiceClient(
   config: CalendarAgentServiceConfig
 ): CalendarAgentServiceClient {
+  const httpClient = createInternalHttpClient({
+    baseUrl: config.baseUrl,
+    token: config.internalAuthToken,
+    logger: config.logger,
+    ...(config.defaultTimeoutMs !== undefined ? { defaultTimeoutMs: config.defaultTimeoutMs } : {}),
+  });
+
   return {
     async processAction(
       request: ProcessCalendarRequest,
@@ -148,6 +154,7 @@ export function createCalendarAgentServiceClient(
     ): Promise<Result<CalendarPreview | null>> {
       return await readPreviewResponse(
         config,
+        httpClient,
         `/internal/calendar/preview/${actionId}`,
         'Failed to fetch calendar preview',
         undefined,
@@ -162,6 +169,7 @@ export function createCalendarAgentServiceClient(
     ): Promise<Result<CalendarPreview | null>> {
       return await readPreviewResponse(
         config,
+        httpClient,
         '/internal/calendar/preview',
         'Failed to generate calendar preview',
         request,

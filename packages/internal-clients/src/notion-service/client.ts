@@ -3,8 +3,7 @@ import type {
   NotionPagePreview,
   NotionTokenContext as SharedNotionTokenContext,
 } from '@intexuraos/http-contracts';
-import { unwrapEnvelope } from '../shared/envelope.js';
-import { sendInternalRequest } from '../shared/request.js';
+import { createInternalHttpClient } from '../shared/createInternalHttpClient.js';
 import type {
   NotionServiceClient,
   NotionServiceConfig,
@@ -36,92 +35,93 @@ function extractErrorMessage(body: unknown): string | undefined {
 }
 
 export function createNotionServiceClient(config: NotionServiceConfig): NotionServiceClient {
-  const authToken = config.internalAuthToken;
+  const httpClient = createInternalHttpClient({
+    baseUrl: config.baseUrl,
+    token: config.internalAuthToken,
+    logger: {
+      info: () => undefined,
+      warn: () => undefined,
+      error: () => undefined,
+      debug: () => undefined,
+    },
+  });
 
   return {
     async getNotionToken(userId: string): Promise<Result<NotionTokenContext, NotionServiceError>> {
-      const transport = await sendInternalRequest({
-        baseUrl: config.baseUrl,
+      const result = await httpClient.request<SharedNotionTokenContext>({
         path: `/internal/notion/users/${userId}/context`,
         method: 'GET',
-        token: authToken,
-        logger: { warn: () => undefined },
-        headers: {
+        extraHeaders: {
           'content-type': 'application/json',
         },
       });
 
-      if (!transport.ok) {
+      if (result.ok) {
+        return ok(result.value);
+      }
+
+      if (result.error.code === 'NETWORK_ERROR' || result.error.code === 'TIMEOUT') {
         return err({
           code: 'INTERNAL_ERROR',
-          message: `Failed to fetch Notion token from notion-service: ${transport.error.message}`,
+          message: `Failed to fetch Notion token from notion-service: ${result.error.message}`,
         });
       }
 
-      if (transport.response.status === 401) {
+      if (result.error.code === 'API_ERROR' && result.error.status === 401) {
         return err({
           code: 'UNAUTHORIZED',
           message: 'Internal auth failed when calling notion-service',
         });
       }
 
-      if (!transport.response.ok) {
+      if (result.error.code === 'API_ERROR') {
         return err({
           code: 'DOWNSTREAM_ERROR',
-          message: `notion-service returned ${String(transport.response.status)}: ${transport.response.statusText}`,
+          message: `notion-service returned ${String(result.error.status)}: ${result.error.statusText}`,
         });
       }
 
-      const envelope = unwrapEnvelope<SharedNotionTokenContext>(transport.body);
-      if (!envelope.ok) {
-        return err({
-          code: 'DOWNSTREAM_ERROR',
-          message: envelope.error.message,
-        });
-      }
-
-      return ok(envelope.value);
+      return err({
+        code: 'DOWNSTREAM_ERROR',
+        message: result.error.message,
+      });
     },
 
     async getPagePreview(
       userId: string,
       pageId: string
     ): Promise<Result<PagePreview, NotionServiceError>> {
-      const transport = await sendInternalRequest({
-        baseUrl: config.baseUrl,
+      const result = await httpClient.request<NotionPagePreview>({
         path: `/internal/notion/users/${encodeURIComponent(userId)}/pages/${encodeURIComponent(pageId)}/preview`,
         method: 'GET',
-        token: authToken,
-        logger: { warn: () => undefined },
-        headers: {
+        extraHeaders: {
           'content-type': 'application/json',
         },
       });
 
-      if (!transport.ok) {
+      if (result.ok) {
+        return ok(result.value);
+      }
+
+      if (result.error.code === 'NETWORK_ERROR' || result.error.code === 'TIMEOUT') {
         return err({
           code: 'INTERNAL_ERROR',
-          message: `Failed to fetch page preview: ${transport.error.message}`,
+          message: `Failed to fetch page preview: ${result.error.message}`,
         });
       }
 
-      if (!transport.response.ok) {
-        const message = extractErrorMessage(transport.body) ?? 'Unknown error';
-        if (transport.response.status === 404) {
+      if (result.error.code === 'API_ERROR') {
+        const message = extractErrorMessage(result.error.body) ?? 'Unknown error';
+        if (result.error.status === 404) {
           return err({ code: 'NOT_FOUND', message });
         }
         return err({ code: 'UNAVAILABLE', message });
       }
 
-      const envelope = unwrapEnvelope<NotionPagePreview>(transport.body);
-      if (!envelope.ok) {
-        return err({
-          code: 'UNAVAILABLE',
-          message: envelope.error.message,
-        });
-      }
-
-      return ok(envelope.value);
+      return err({
+        code: 'UNAVAILABLE',
+        message: result.error.message,
+      });
     },
   };
 }

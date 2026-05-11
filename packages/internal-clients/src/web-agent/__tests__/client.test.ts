@@ -316,4 +316,76 @@ describe('createWebAgentServiceClient', () => {
       },
     });
   });
+
+  it('maps success=false page summary envelopes to API_ERROR', async () => {
+    nock(BASE_URL).post('/internal/page-summaries').reply(200, {
+      success: false,
+      error: 'Summary unavailable',
+    });
+
+    const client = createWebAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.summarizePage({
+      url: 'https://example.com/article',
+      userId: 'user-1',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'API_ERROR',
+        message: 'Summary unavailable',
+        transient: false,
+      },
+    });
+  });
+
+  it('uses a fallback error for success=false page summary envelopes without messages', async () => {
+    nock(BASE_URL).post('/internal/page-summaries').reply(200, { success: false });
+
+    const client = createWebAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.summarizePage({
+      url: 'https://example.com/article',
+      userId: 'user-1',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'API_ERROR',
+        message: 'Invalid response from web-agent',
+        transient: false,
+      },
+    });
+  });
+
+  it('uses a fallback error for malformed page summary success envelopes', async () => {
+    nock(BASE_URL).post('/internal/page-summaries').reply(200, { success: true });
+
+    const client = createWebAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.summarizePage({
+      url: 'https://example.com/article',
+      userId: 'user-1',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'API_ERROR',
+        message: 'Invalid response from web-agent',
+        transient: false,
+      },
+    });
+  });
 });

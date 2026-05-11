@@ -136,4 +136,58 @@ describe('createCommandsAgentServiceClient', () => {
       expect(result.error.message).toBe('Invalid response from commands-agent');
     }
   });
+
+  it('rejects non-object command payloads', async () => {
+    nock(BASE_URL)
+      .get('/internal/commands/cmd-null')
+      .reply(200, {
+        success: true,
+        data: {
+          command: null,
+        },
+      });
+
+    const client = createCommandsAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.getCommand('cmd-null');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe('Invalid response from commands-agent');
+    }
+  });
+
+  it('uses the configured default timeout', async () => {
+    nock(BASE_URL)
+      .get('/internal/commands/cmd-timeout')
+      .delay(50)
+      .reply(200, {
+        success: true,
+        data: {
+          command: {
+            id: 'cmd-timeout',
+            text: 'Too slow',
+          },
+        },
+      });
+
+    const client = createCommandsAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+      defaultTimeoutMs: 1,
+    });
+    const result = await client.getCommand('cmd-timeout');
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'TIMEOUT',
+        message: 'Request exceeded 1ms',
+      },
+    });
+  });
 });

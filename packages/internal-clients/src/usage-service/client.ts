@@ -1,8 +1,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import { fetchWithAuth } from '../shared/errors.js';
-import { unwrapEnvelope } from '../shared/envelope.js';
-import { sendInternalRequest } from '../shared/request.js';
+import { createInternalHttpClient } from '../shared/createInternalHttpClient.js';
 import type {
   UsageServiceConfig,
   UsageServiceError,
@@ -25,6 +24,12 @@ interface ApiResponse<T> {
 }
 
 export function createUsageServiceClient(config: UsageServiceConfig): UsageServiceClient {
+  const httpClient = createInternalHttpClient({
+    baseUrl: config.baseUrl,
+    token: config.internalAuthToken,
+    logger: config.logger,
+  });
+
   return {
     async ingestEvents(
       request: UsageIngestRequest,
@@ -147,48 +152,41 @@ export function createUsageServiceClient(config: UsageServiceConfig): UsageServi
       timeRange: ResearchCostSummaryTimeRange,
       options?: { traceId?: string }
     ): Promise<Result<ResearchCostSummary, UsageServiceError>> {
-      const headers: Record<string, string> = {};
-      if (options?.traceId !== undefined) {
-        headers['X-Trace-Id'] = options.traceId;
-      }
-
-      const transport = await sendInternalRequest({
-        baseUrl: config.baseUrl,
+      const result = await httpClient.request<ResearchCostSummary>({
         path: '/internal/usage/research-cost-summary',
         method: 'POST',
-        token: config.internalAuthToken,
-        logger: config.logger,
-        ...(Object.keys(headers).length > 0 ? { headers } : {}),
-        jsonBody: {
+        ...(options?.traceId !== undefined
+          ? { extraHeaders: { 'X-Trace-Id': options.traceId } }
+          : {}),
+        body: {
           researchId,
           owner,
           timeRange,
         },
       });
 
-      if (!transport.ok) {
+      if (result.ok) {
+        return ok(result.value);
+      }
+
+      if (result.error.code === 'NETWORK_ERROR' || result.error.code === 'TIMEOUT') {
         return err({
           code: 'NETWORK_ERROR',
-          message: transport.error.message,
+          message: result.error.message,
         });
       }
 
-      if (!transport.response.ok) {
+      if (result.error.code === 'API_ERROR') {
         return err({
           code: 'API_ERROR',
-          message: `HTTP ${String(transport.response.status)}: ${transport.rawText}`,
+          message: `HTTP ${String(result.error.status)}: ${result.error.rawText}`,
         });
       }
 
-      const envelope = unwrapEnvelope<ResearchCostSummary>(transport.body);
-      if (!envelope.ok) {
-        return err({
-          code: 'API_ERROR',
-          message: envelope.error.message,
-        });
-      }
-
-      return ok(envelope.value);
+      return err({
+        code: 'API_ERROR',
+        message: result.error.message,
+      });
     },
   };
 }

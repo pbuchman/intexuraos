@@ -1,6 +1,8 @@
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { sendInternalRequest } from '../shared/request.js';
-import { createInternalHttpClient } from '../shared/createInternalHttpClient.js';
+import {
+  createInternalHttpClient,
+  type InternalHttpClient,
+} from '../shared/createInternalHttpClient.js';
 import type { ServiceClientError } from '../shared/errors.js';
 import type {
   ActionsAgentServiceClient,
@@ -21,33 +23,33 @@ function timeoutFor(
 
 async function sendActionMutation(
   config: ActionsAgentServiceConfig,
+  httpClient: InternalHttpClient,
   path: string,
   body: unknown,
   options: ActionsAgentRequestOptions | undefined,
   actionDescription: string
 ): Promise<Result<void>> {
-  const transport = await sendInternalRequest({
-    baseUrl: config.baseUrl,
+  const result = await httpClient.request<unknown>({
     path,
     method: 'PATCH',
-    token: config.internalAuthToken,
-    logger: config.logger,
-    jsonBody: body,
+    body,
     timeoutMs: timeoutFor(config, options),
     requestId: options?.requestId,
   });
 
-  if (!transport.ok) {
-    return err(new Error(`Network error: ${transport.error.message}`));
+  if (result.ok) {
+    return ok(undefined);
   }
 
-  if (!transport.response.ok) {
-    return err(
-      new Error(`HTTP ${String(transport.response.status)}: Failed to ${actionDescription}`)
-    );
+  if (result.error.code === 'MALFORMED_ENVELOPE') {
+    return ok(undefined);
   }
 
-  return ok(undefined);
+  if (result.error.code === 'API_ERROR') {
+    return err(new Error(`HTTP ${String(result.error.status)}: Failed to ${actionDescription}`));
+  }
+
+  return err(new Error(`Network error: ${result.error.message}`));
 }
 
 function mapTransportToServiceClientError(transportError: {
@@ -106,30 +108,28 @@ export function createActionsAgentServiceClient(
       actionId: string,
       options?: ActionsAgentRequestOptions
     ): Promise<Result<TAction | null>> {
-      const transport = await sendInternalRequest({
-        baseUrl: config.baseUrl,
+      const result = await httpClient.request<TAction>({
         path: `/internal/actions/${actionId}`,
         method: 'GET',
-        token: config.internalAuthToken,
-        logger: config.logger,
-        headers: { 'Content-Type': 'application/json' },
+        extraHeaders: { 'Content-Type': 'application/json' },
         timeoutMs: timeoutFor(config, options),
         requestId: options?.requestId,
+        allowRawSuccess: true,
       });
 
-      if (!transport.ok) {
-        return err(new Error(`Network error: ${transport.error.message}`));
+      if (result.ok) {
+        return ok(result.value);
       }
 
-      if (transport.response.status === 404) {
+      if (result.error.code === 'API_ERROR' && result.error.status === 404) {
         return ok(null);
       }
 
-      if (!transport.response.ok) {
-        return err(new Error(`HTTP ${String(transport.response.status)}: Failed to get action`));
+      if (result.error.code === 'API_ERROR') {
+        return err(new Error(`HTTP ${String(result.error.status)}: Failed to get action`));
       }
 
-      return ok(transport.body as TAction);
+      return err(new Error(`Network error: ${result.error.message}`));
     },
 
     async updateActionStatus(
@@ -139,6 +139,7 @@ export function createActionsAgentServiceClient(
     ): Promise<Result<void>> {
       return await sendActionMutation(
         config,
+        httpClient,
         `/internal/actions/${actionId}`,
         { status },
         options,
@@ -153,6 +154,7 @@ export function createActionsAgentServiceClient(
     ): Promise<Result<void>> {
       return await sendActionMutation(
         config,
+        httpClient,
         `/internal/actions/${actionId}`,
         update,
         options,
@@ -163,37 +165,46 @@ export function createActionsAgentServiceClient(
     async updateResourceStatus(
       actionId: string,
       status: string,
-      result?: UpdateActionResourceResult,
+      resourceResult?: UpdateActionResourceResult,
       options?: ActionsAgentTraceOptions
     ): Promise<Result<void, ServiceClientError>> {
       try {
-        const transport = await sendInternalRequest({
-          baseUrl: config.baseUrl,
+        const result = await httpClient.request<unknown>({
           path: `/internal/actions/${actionId}/status`,
           method: 'PATCH',
-          token: config.internalAuthToken,
-          logger: config.logger,
-          headers: options?.traceId === undefined ? undefined : { 'X-Trace-Id': options.traceId },
-          jsonBody: {
+          extraHeaders:
+            options?.traceId === undefined ? undefined : { 'X-Trace-Id': options.traceId },
+          body: {
             resource_status: status,
-            ...(result !== undefined ? { resource_result: result } : {}),
+            ...(resourceResult !== undefined ? { resource_result: resourceResult } : {}),
           },
           timeoutMs: timeoutFor(config, options),
           requestId: options?.requestId,
         });
 
-        if (!transport.ok) {
-          return err(mapTransportToServiceClientError(transport.error));
+        if (result.ok) {
+          return ok(undefined);
         }
 
-        if (!transport.response.ok) {
+        if (result.error.code === 'MALFORMED_ENVELOPE') {
+          return ok(undefined);
+        }
+
+        if (result.error.code === 'TIMEOUT' || result.error.code === 'NETWORK_ERROR') {
+          return err(mapTransportToServiceClientError(result.error));
+        }
+
+        if (result.error.code === 'API_ERROR') {
           return err({
             code: 'API_ERROR',
-            message: `HTTP ${String(transport.response.status)}`,
+            message: `HTTP ${String(result.error.status)}`,
           });
         }
 
-        return ok(undefined);
+        return err({
+          code: 'API_ERROR',
+          message: result.error.message,
+        });
       } catch (error) {
         return err({
           code: 'NETWORK_ERROR',

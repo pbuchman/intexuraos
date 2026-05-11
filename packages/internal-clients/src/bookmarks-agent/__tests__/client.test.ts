@@ -154,6 +154,65 @@ describe('createBookmarksAgentServiceClient', () => {
     });
   });
 
+  it('maps success=false create envelopes without details to typed errors', async () => {
+    nock(BASE_URL)
+      .post('/internal/bookmarks')
+      .reply(200, {
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'URL is invalid',
+        },
+      });
+
+    const client = createBookmarksAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.createBookmark({
+      userId: 'user-1',
+      url: 'not-a-url',
+      source: 'actions-agent',
+      sourceId: 'action-1',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        message: 'URL is invalid',
+        errorCode: 'VALIDATION_ERROR',
+      },
+    });
+  });
+
+  it('uses fallback create error values when success=false omits error details', async () => {
+    nock(BASE_URL).post('/internal/bookmarks').reply(200, {
+      success: false,
+      error: {},
+    });
+
+    const client = createBookmarksAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+      defaultTimeoutMs: 1000,
+    });
+    const result = await client.createBookmark({
+      userId: 'user-1',
+      url: 'https://example.com/article',
+      source: 'actions-agent',
+      sourceId: 'action-1',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        message: 'Invalid response from bookmarks-agent',
+      },
+    });
+  });
+
   it('maps create transport failures to SERVICE_UNAVAILABLE', async () => {
     nock(BASE_URL).post('/internal/bookmarks').replyWithError('Connection refused');
 
@@ -285,6 +344,49 @@ describe('createBookmarksAgentServiceClient', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.message).toBe('Bookmark not found');
+    }
+  });
+
+  it('maps success=false refresh envelopes to their error message', async () => {
+    nock(BASE_URL)
+      .post('/internal/bookmarks/bookmark-1/force-refresh')
+      .reply(200, {
+        success: false,
+        error: {
+          code: 'REFRESH_FAILED',
+          message: 'Refresh failed',
+        },
+      });
+
+    const client = createBookmarksAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.forceRefreshBookmark('bookmark-1');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe('Refresh failed');
+    }
+  });
+
+  it('uses fallback refresh message when success=false omits error details', async () => {
+    nock(BASE_URL).post('/internal/bookmarks/bookmark-1/force-refresh').reply(200, {
+      success: false,
+      error: {},
+    });
+
+    const client = createBookmarksAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const result = await client.forceRefreshBookmark('bookmark-1');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe('Invalid response from bookmarks-agent');
     }
   });
 });

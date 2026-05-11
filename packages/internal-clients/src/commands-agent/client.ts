@@ -1,5 +1,7 @@
-import { sendInternalRequest } from '../shared/request.js';
-import type { InternalHttpClientResult } from '../shared/createInternalHttpClient.js';
+import {
+  createInternalHttpClient,
+  type InternalHttpClientResult,
+} from '../shared/createInternalHttpClient.js';
 import type {
   CommandWithText,
   CommandsAgentServiceClient,
@@ -27,67 +29,73 @@ function normalizeCommand(body: unknown): CommandWithText | null {
   };
 }
 
-interface CommandsGetCommandEnvelope {
-  success?: boolean;
-  data?: {
-    command?: unknown;
-  };
-}
-
 export function createCommandsAgentServiceClient(
   config: CommandsAgentServiceConfig
 ): CommandsAgentServiceClient {
+  const httpClient = createInternalHttpClient({
+    baseUrl: config.baseUrl,
+    token: config.internalAuthToken,
+    logger: config.logger,
+    ...(config.defaultTimeoutMs !== undefined ? { defaultTimeoutMs: config.defaultTimeoutMs } : {}),
+  });
+
   return {
     async getCommand(
       commandId: string,
       options?: CommandsAgentRequestOptions
     ): Promise<InternalHttpClientResult<CommandWithText | null>> {
-      const transport = await sendInternalRequest({
-        baseUrl: config.baseUrl,
+      const result = await httpClient.request<{ command?: unknown }>({
         path: `/internal/commands/${commandId}`,
         method: 'GET',
-        token: config.internalAuthToken,
-        logger: config.logger,
-        headers: { 'Content-Type': 'application/json' },
+        extraHeaders: { 'Content-Type': 'application/json' },
         timeoutMs: options?.timeoutMs ?? config.defaultTimeoutMs,
         requestId: options?.requestId,
       });
 
-      if (!transport.ok) {
-        return { ok: false, error: transport.error } as const;
+      if (result.ok) {
+        const command = normalizeCommand(result.value.command);
+        if (command === null) {
+          return {
+            ok: false,
+            error: {
+              code: 'MALFORMED_ENVELOPE' as const,
+              message: 'Invalid response from commands-agent',
+            },
+          };
+        }
+
+        return { ok: true, value: command } as const;
       }
 
-      if (transport.response.status === 404) {
+      if (result.error.code === 'API_ERROR' && result.error.status === 404) {
         return { ok: true, value: null } as const;
       }
 
-      if (!transport.response.ok) {
+      if (result.error.code === 'API_ERROR') {
         return {
           ok: false,
           error: {
             code: 'API_ERROR' as const,
-            message: `HTTP ${String(transport.response.status)}: Failed to fetch command`,
-            status: transport.response.status,
-            statusText: transport.response.statusText,
-            rawText: transport.rawText,
-            body: transport.body,
+            message: `HTTP ${String(result.error.status)}: Failed to fetch command`,
+            status: result.error.status,
+            statusText: result.error.statusText,
+            rawText: result.error.rawText,
+            body: result.error.body,
           },
         };
       }
 
-      const body = transport.body as CommandsGetCommandEnvelope;
-      const command = normalizeCommand(body.data?.command);
-      if (body.success !== true || command === null) {
+      if (result.error.code === 'ENVELOPE_ERROR' || result.error.code === 'MALFORMED_ENVELOPE') {
         return {
           ok: false,
           error: {
-            code: 'MALFORMED_ENVELOPE' as const,
+            code: result.error.code,
             message: 'Invalid response from commands-agent',
           },
         };
       }
 
-      return { ok: true, value: command } as const;
+      return { ok: false, error: result.error } as const;
     },
   };
 }
