@@ -7,6 +7,9 @@ const MANIFEST =
   process.env.WEB_ENV_LOCKSTEP_MANIFEST ?? path.join(REPO_ROOT, 'apps/web/service-manifest.json');
 const CONFIG_TS =
   process.env.WEB_ENV_LOCKSTEP_CONFIG ?? path.join(REPO_ROOT, 'apps/web/src/config.ts');
+const CONFIG_GENERATED =
+  process.env.WEB_ENV_LOCKSTEP_CONFIG_GENERATED ??
+  path.join(REPO_ROOT, 'apps/web/src/config.generated.ts');
 const DEPLOY_YML =
   process.env.WEB_ENV_LOCKSTEP_DEPLOY_YML ?? path.join(REPO_ROOT, '.github/workflows/deploy.yml');
 
@@ -43,6 +46,11 @@ function extractFromConfig(src) {
   return new Set(m.map((x) => x[1]));
 }
 
+function extractFromGeneratedConfig(src) {
+  const m = [...src.matchAll(/envVar:\s*'([A-Z0-9_]+)'/g)];
+  return new Set(m.map((x) => x[1]));
+}
+
 // deploy.yml carries TWO independent CLOUD_RUN_SERVICES arrays (monolith-deploy
 // and per-service web-deploy). Both must agree with the manifest or the
 // workflow you happen to take in prod will silently bake the wrong env. The
@@ -66,7 +74,10 @@ function diff(label, expected, actual) {
 
 function main() {
   const cloudbuild = extractFromManifest(fs.readFileSync(MANIFEST, 'utf-8'));
-  const config = extractFromConfig(fs.readFileSync(CONFIG_TS, 'utf-8'));
+  const configSource = fs.readFileSync(CONFIG_TS, 'utf-8');
+  const config = configSource.includes('WEB_SERVICE_URLS')
+    ? extractFromGeneratedConfig(fs.readFileSync(CONFIG_GENERATED, 'utf-8'))
+    : extractFromConfig(configSource);
   const deployArrays = extractFromDeployYml(fs.readFileSync(DEPLOY_YML, 'utf-8'));
 
   const errors = [];
@@ -91,4 +102,9 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { extractFromManifest, extractFromConfig, extractFromDeployYml };
+module.exports = {
+  extractFromManifest,
+  extractFromConfig,
+  extractFromDeployYml,
+  extractFromGeneratedConfig,
+};

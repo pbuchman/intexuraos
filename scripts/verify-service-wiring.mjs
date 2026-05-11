@@ -23,24 +23,6 @@ function parseArgs(argv) {
   return parseGeneratorArgs(argv);
 }
 
-function parseConfigServiceUrls(source) {
-  return new Map(
-    [...source.matchAll(/getServiceUrl\(\s*'([A-Z0-9_]+)'\s*,\s*'([^']+)'\s*\)/g)].map((match) => [
-      match[1],
-      match[2],
-    ])
-  );
-}
-
-function parseViteApiProxy(source) {
-  return new Map(
-    [...source.matchAll(/^\s*'([^']+)':\s*\{\s*target:\s*'([^']+)'/gm)].map((match) => [
-      match[1],
-      match[2],
-    ])
-  );
-}
-
 function parseObjectLiteralEntries(source, objectName) {
   const blockMatch = source.match(
     new RegExp(`const\\s+${objectName}\\s*=\\s*\\{([\\s\\S]*?)\\n\\};`)
@@ -106,6 +88,10 @@ function compareGeneratedFile(expected, actualPath, label) {
     : [`${label} is stale; run node scripts/generate-service-wiring.mjs`];
 }
 
+function requireGeneratedConsumption(source, pattern, message) {
+  return pattern.test(source) ? [] : [message];
+}
+
 function main() {
   try {
     const { root } = parseArgs(process.argv);
@@ -122,34 +108,34 @@ function main() {
 
     const manifest = loadServiceManifest(manifestPath);
     const wiring = generateServiceWiring(manifest);
-    const configMap = parseConfigServiceUrls(
-      readRequiredFile(configPath, 'apps/web/src/config.ts')
-    );
-    const viteProxyMap = parseViteApiProxy(
-      readRequiredFile(viteConfigPath, 'apps/web/vite.config.ts')
-    );
-    const commonServiceUrls = parseObjectLiteralEntries(
-      readRequiredFile(ecosystemPath, 'ecosystem.config.cjs'),
-      'COMMON_SERVICE_URLS'
+    const configSource = readRequiredFile(configPath, 'apps/web/src/config.ts');
+    const viteConfigSource = readRequiredFile(viteConfigPath, 'apps/web/vite.config.ts');
+    const ecosystemSource = readRequiredFile(ecosystemPath, 'ecosystem.config.cjs');
+    const generatedCommonServiceUrls = parseObjectLiteralEntries(
+      readRequiredFile(generatedEcosystemPath, 'ecosystem.generated.cjs'),
+      'COMMON_SERVICE_URLS_GENERATED'
     );
 
     const errors = [
-      ...compareExactMap(
-        wiring.configEntries.map(({ envVar, apiPath }) => ({ key: envVar, value: apiPath })),
-        configMap,
-        'apiPath',
-        'apps/web/src/config.ts'
+      ...requireGeneratedConsumption(
+        configSource,
+        /WEB_SERVICE_URLS/,
+        'apps/web/src/config.ts must import WEB_SERVICE_URLS from config.generated.ts'
       ),
-      ...compareExactMap(
-        wiring.proxyEntries.map(({ apiPath, target }) => ({ key: apiPath, value: target })),
-        viteProxyMap,
-        'proxy target',
-        'apps/web/vite.config.ts'
+      ...requireGeneratedConsumption(
+        viteConfigSource,
+        /WEB_SERVICE_URLS[\s\S]*proxyTarget|proxyTarget[\s\S]*WEB_SERVICE_URLS/,
+        'apps/web/vite.config.ts must import WEB_SERVICE_URLS and use generated proxyTarget values'
       ),
       ...compareSubsetMap(
         wiring.commonServiceUrls.map(({ envVar, url }) => ({ key: envVar, value: url })),
-        commonServiceUrls,
-        'ecosystem.config.cjs COMMON_SERVICE_URLS'
+        generatedCommonServiceUrls,
+        'ecosystem.generated.cjs COMMON_SERVICE_URLS_GENERATED'
+      ),
+      ...requireGeneratedConsumption(
+        ecosystemSource,
+        /ecosystem\.generated\.cjs[\s\S]*COMMON_SERVICE_URLS_GENERATED|COMMON_SERVICE_URLS_GENERATED[\s\S]*ecosystem\.generated\.cjs/,
+        'ecosystem.config.cjs must require ecosystem.generated.cjs and use COMMON_SERVICE_URLS_GENERATED'
       ),
       ...compareGeneratedFile(
         renderConfigGenerated(wiring),
@@ -194,8 +180,7 @@ export {
   compareExactMap,
   compareSubsetMap,
   parseArgs,
-  parseConfigServiceUrls,
   compareGeneratedFile,
   parseObjectLiteralEntries,
-  parseViteApiProxy,
+  requireGeneratedConsumption,
 };

@@ -36,24 +36,29 @@ const MANIFEST_FIXTURE = JSON.stringify(
 );
 
 const CONFIG_FIXTURE = `
+import { WEB_SERVICE_URLS } from './config.generated';
 function getServiceUrl(envVar, apiPath) { return apiPath; }
+const generatedServiceUrls = Object.fromEntries(WEB_SERVICE_URLS.map(({ envVar, apiPath }) => [envVar, getServiceUrl(envVar, apiPath)]));
 export function getConfig() {
   return {
-    authServiceUrl: getServiceUrl('INTEXURAOS_USER_SERVICE_URL', '/api/user'),
-    codeAgentUrl: getServiceUrl('INTEXURAOS_CODE_AGENT_URL', '/api/code'),
+    authServiceUrl: generatedServiceUrls.INTEXURAOS_USER_SERVICE_URL,
+    codeAgentUrl: generatedServiceUrls.INTEXURAOS_CODE_AGENT_URL,
   };
 }
 `;
 
 const VITE_FIXTURE = `
-const apiProxy = {
-  '/api/user': { target: 'http://localhost:8110', rewrite: (p) => p.replace(/^\\/api\\/user/, '') },
-  '/api/code': { target: 'http://localhost:8128', rewrite: (p) => p.replace(/^\\/api\\/code/, '') },
-};
+import { WEB_SERVICE_URLS } from './src/config.generated';
+const apiProxy = Object.fromEntries(WEB_SERVICE_URLS.map(({ apiPath, proxyTarget }) => [
+  apiPath,
+  { target: proxyTarget, rewrite: (p) => p.replace(new RegExp('^' + apiPath), '') },
+]));
 `;
 
 const ECOSYSTEM_FIXTURE = `
+const { COMMON_SERVICE_URLS_GENERATED } = require('./ecosystem.generated.cjs');
 const COMMON_SERVICE_URLS = {
+  ...COMMON_SERVICE_URLS_GENERATED,
   INTEXURAOS_USER_SERVICE_URL: 'http://localhost:8110',
   INTEXURAOS_CODE_AGENT_URL: 'https://dev.intexuraos.cloud/api/code',
   INTEXURAOS_API_DOCS_HUB_URL: 'http://localhost:8133',
@@ -97,8 +102,16 @@ describe('verify-service-wiring', () => {
     const wiring = generateServiceWiring(manifest);
 
     expect(wiring.configEntries).toEqual([
-      { envVar: 'INTEXURAOS_USER_SERVICE_URL', apiPath: '/api/user' },
-      { envVar: 'INTEXURAOS_CODE_AGENT_URL', apiPath: '/api/code' },
+      {
+        envVar: 'INTEXURAOS_USER_SERVICE_URL',
+        apiPath: '/api/user',
+        proxyTarget: 'http://localhost:8110',
+      },
+      {
+        envVar: 'INTEXURAOS_CODE_AGENT_URL',
+        apiPath: '/api/code',
+        proxyTarget: 'http://localhost:8128',
+      },
     ]);
     expect(wiring.proxyEntries).toEqual([
       { apiPath: '/api/user', target: 'http://localhost:8110' },
@@ -122,25 +135,28 @@ describe('verify-service-wiring', () => {
     expect(result.stdout).toMatch(/Service wiring verified/);
   });
 
-  it('fails when vite proxy target drifts from the manifest', () => {
+  it('fails when vite config does not consume generated service URLs', () => {
     writeFixture(rootDir, 'apps/web/service-manifest.json', MANIFEST_FIXTURE);
     writeFixture(rootDir, 'apps/web/src/config.ts', CONFIG_FIXTURE);
     writeGeneratedFixture(rootDir);
     writeFixture(
       rootDir,
       'apps/web/vite.config.ts',
-      VITE_FIXTURE.replace('http://localhost:8128', 'http://localhost:9999')
+      `
+const apiProxy = {
+  '/api/user': { target: 'http://localhost:8110' },
+  '/api/code': { target: 'http://localhost:8128' },
+};
+`
     );
     writeFixture(rootDir, 'ecosystem.config.cjs', ECOSYSTEM_FIXTURE);
 
     const result = runScript(rootDir);
     expect(result.status).toBe(1);
-    expect(result.stderr).toMatch(
-      /apps\/web\/vite\.config\.ts has \/api\/code -> http:\/\/localhost:9999; expected http:\/\/localhost:8128/
-    );
+    expect(result.stderr).toMatch(/apps\/web\/vite\.config\.ts must import WEB_SERVICE_URLS/);
   });
 
-  it('fails when ecosystem COMMON_SERVICE_URLS is missing a manifest env var', () => {
+  it('fails when ecosystem config does not consume generated service URLs', () => {
     writeFixture(rootDir, 'apps/web/service-manifest.json', MANIFEST_FIXTURE);
     writeFixture(rootDir, 'apps/web/src/config.ts', CONFIG_FIXTURE);
     writeFixture(rootDir, 'apps/web/vite.config.ts', VITE_FIXTURE);
@@ -149,14 +165,14 @@ describe('verify-service-wiring', () => {
       rootDir,
       'ecosystem.config.cjs',
       ECOSYSTEM_FIXTURE.replace(
-        "  INTEXURAOS_CODE_AGENT_URL: 'https://dev.intexuraos.cloud/api/code',\n",
+        "const { COMMON_SERVICE_URLS_GENERATED } = require('./ecosystem.generated.cjs');\n",
         ''
-      )
+      ).replace('...COMMON_SERVICE_URLS_GENERATED,\n', '')
     );
 
     const result = runScript(rootDir);
     expect(result.status).toBe(1);
-    expect(result.stderr).toMatch(/COMMON_SERVICE_URLS is missing INTEXURAOS_CODE_AGENT_URL/);
+    expect(result.stderr).toMatch(/ecosystem\.config\.cjs must require ecosystem\.generated\.cjs/);
   });
 
   it('passes against the real repo files', () => {
