@@ -1,4 +1,5 @@
 import { initSentry } from '@intexuraos/infra-sentry';
+import { assertOtelActive } from '@intexuraos/infra-otel';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { buildServer } from './server.js';
 
@@ -10,6 +11,7 @@ const REQUIRED_ENV = [
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
+assertOtelActive({ serviceName: 'notion-service' });
 
 const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
 initSentry(

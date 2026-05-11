@@ -6,6 +6,9 @@ import {
   generateServiceWiring,
   loadServiceManifest,
   parseArgs as parseGeneratorArgs,
+  renderConfigGenerated,
+  renderEcosystemGenerated,
+  renderTerraformServiceUrls,
 } from './generate-service-wiring.mjs';
 
 function readRequiredFile(filePath, label) {
@@ -96,6 +99,13 @@ function compareSubsetMap(expectedEntries, actualMap, actualLabel) {
   return errors;
 }
 
+function compareGeneratedFile(expected, actualPath, label) {
+  const actual = readRequiredFile(actualPath, label);
+  return actual === expected
+    ? []
+    : [`${label} is stale; run node scripts/generate-service-wiring.mjs`];
+}
+
 function main() {
   try {
     const { root } = parseArgs(process.argv);
@@ -103,6 +113,12 @@ function main() {
     const configPath = resolve(root, 'apps/web/src/config.ts');
     const viteConfigPath = resolve(root, 'apps/web/vite.config.ts');
     const ecosystemPath = resolve(root, 'ecosystem.config.cjs');
+    const generatedConfigPath = resolve(root, 'apps/web/src/config.generated.ts');
+    const generatedEcosystemPath = resolve(root, 'ecosystem.generated.cjs');
+    const generatedTerraformPath = resolve(
+      root,
+      'terraform/environments/dev/service-urls.auto.tfvars.json'
+    );
 
     const manifest = loadServiceManifest(manifestPath);
     const wiring = generateServiceWiring(manifest);
@@ -135,6 +151,21 @@ function main() {
         commonServiceUrls,
         'ecosystem.config.cjs COMMON_SERVICE_URLS'
       ),
+      ...compareGeneratedFile(
+        renderConfigGenerated(wiring),
+        generatedConfigPath,
+        'apps/web/src/config.generated.ts'
+      ),
+      ...compareGeneratedFile(
+        renderEcosystemGenerated(wiring),
+        generatedEcosystemPath,
+        'ecosystem.generated.cjs'
+      ),
+      ...compareGeneratedFile(
+        renderTerraformServiceUrls(wiring),
+        generatedTerraformPath,
+        'terraform/environments/dev/service-urls.auto.tfvars.json'
+      ),
     ];
 
     if (errors.length > 0) {
@@ -164,6 +195,7 @@ export {
   compareSubsetMap,
   parseArgs,
   parseConfigServiceUrls,
+  compareGeneratedFile,
   parseObjectLiteralEntries,
   parseViteApiProxy,
 };

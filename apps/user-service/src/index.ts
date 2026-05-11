@@ -7,6 +7,7 @@
  * via `loadEnv(REQUIRED_ENV)` get a typed `Record<...>` without re-listing
  * the keys. `startFastifyService` validates presence before the listen.
  */
+import { assertOtelActive } from '@intexuraos/infra-otel';
 import { startFastifyService } from '@intexuraos/http-server';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
@@ -28,6 +29,8 @@ const REQUIRED_ENV = [
   'INTEXURAOS_GITHUB_OAUTH_CLIENT_ID',
   'INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET',
 ] as const;
+
+assertOtelActive({ serviceName: 'user-service' });
 
 await startFastifyService({
   serviceName: 'user-service',
