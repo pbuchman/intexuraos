@@ -68,6 +68,9 @@ export function createCommandsAgentServiceClient(
             code: 'API_ERROR' as const,
             message: `HTTP ${String(transport.response.status)}: Failed to fetch command`,
             status: transport.response.status,
+            statusText: transport.response.statusText,
+            rawText: transport.rawText,
+            body: transport.body,
           },
         };
       }

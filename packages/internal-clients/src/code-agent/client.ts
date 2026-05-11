@@ -1,5 +1,6 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
 import { sendInternalRequest } from '../shared/request.js';
+import { createInternalHttpClient } from '../shared/createInternalHttpClient.js';
 import type {
   CancelTaskError,
   CancelTaskWithNonceInput,
@@ -31,13 +32,10 @@ interface ErrorBody {
     | string;
 }
 
-interface SubmitTaskBody {
-  success?: boolean;
-  data?: {
-    codeTaskId?: string;
-    taskId?: string;
-    resourceUrl?: string;
-  };
+interface SubmitTaskData {
+  codeTaskId?: string;
+  taskId?: string;
+  resourceUrl?: string;
 }
 
 function resolveTimeoutMs(
@@ -96,38 +94,42 @@ function toNetworkErrorMessage(errorMessage: string): string {
 export function createCodeAgentServiceClient(
   config: CodeAgentServiceConfig
 ): CodeAgentServiceClient {
+  const httpClient = createInternalHttpClient({
+    baseUrl: config.baseUrl,
+    token: config.internalAuthToken,
+    logger: config.logger,
+    ...(config.defaultTimeoutMs !== undefined ? { defaultTimeoutMs: config.defaultTimeoutMs } : {}),
+  });
+
   return {
     async submitTask(
       input: SubmitTaskRequest,
       options?: CodeAgentRequestOptions
     ): Promise<Result<SubmitTaskResponse, SubmitTaskError>> {
-      const transport = await sendInternalRequest({
-        baseUrl: config.baseUrl,
+      const result = await httpClient.request<SubmitTaskData>({
         path: '/internal/code/process',
         method: 'POST',
-        token: config.internalAuthToken,
-        logger: config.logger,
-        jsonBody: input,
+        body: input,
         timeoutMs: resolveTimeoutMs(60_000, config, options),
         requestId: options?.requestId,
       });
 
-      if (!transport.ok) {
+      if (
+        !result.ok &&
+        (result.error.code === 'NETWORK_ERROR' || result.error.code === 'TIMEOUT')
+      ) {
         return err({
           code: 'NETWORK_ERROR',
-          message: toNetworkErrorMessage(transport.error.message),
+          message: toNetworkErrorMessage(result.error.message),
         });
       }
 
-      if (transport.response.status === 200) {
-        const body = transport.body as SubmitTaskBody;
-        const responseData = body.data;
-        const legacyTaskId = responseData?.taskId;
-        const codeTaskId = responseData?.codeTaskId ?? responseData?.taskId;
+      if (result.ok) {
+        const legacyTaskId = result.value.taskId;
+        const codeTaskId = result.value.codeTaskId ?? result.value.taskId;
         if (
-          body.success !== true ||
           codeTaskId === undefined ||
-          (responseData?.resourceUrl === undefined && legacyTaskId === undefined)
+          (result.value.resourceUrl === undefined && legacyTaskId === undefined)
         ) {
           return err({
             code: 'UNKNOWN',
@@ -140,13 +142,23 @@ export function createCodeAgentServiceClient(
           // INT-1531 compatibility: older linear-agent tests still mock
           // `taskId` without `resourceUrl`; actions-agent callers still
           // receive the real resourceUrl from the route implementation.
-          resourceUrl: responseData?.resourceUrl ?? '',
+          resourceUrl: result.value.resourceUrl ?? '',
         });
       }
 
-      if (transport.response.status === 409) {
-        const message = readErrorMessage(transport.body, 'Task already exists for this approval');
-        const { existingTaskId } = readErrorDetails(transport.body);
+      if (result.error.code !== 'API_ERROR') {
+        return err({
+          code: 'UNKNOWN',
+          message: 'Invalid response from code-agent',
+        });
+      }
+
+      if (result.error.status === 409) {
+        const message = readErrorMessage(
+          result.error.body,
+          'Task already exists for this approval'
+        );
+        const { existingTaskId } = readErrorDetails(result.error.body);
         return err({
           code: 'DUPLICATE',
           message,
@@ -155,29 +167,29 @@ export function createCodeAgentServiceClient(
         });
       }
 
-      if (transport.response.status === 503) {
+      if (result.error.status === 503) {
         return err({
           code: 'WORKER_UNAVAILABLE',
-          message: readErrorMessage(transport.body, 'No workers available'),
+          message: readErrorMessage(result.error.body, 'No workers available'),
           status: 503,
         });
       }
 
-      if (transport.response.status >= 500) {
+      if (result.error.status >= 500) {
         return err({
           code: 'UNAVAILABLE',
           message: 'code-agent unavailable',
-          status: transport.response.status,
+          status: result.error.status,
         });
       }
 
       return err({
         code: 'INVALID_REQUEST',
         message:
-          transport.rawText !== ''
-            ? transport.rawText
-            : `Unexpected response: ${String(transport.response.status)}`,
-        status: transport.response.status,
+          result.error.rawText !== ''
+            ? result.error.rawText
+            : `Unexpected response: ${String(result.error.status)}`,
+        status: result.error.status,
       });
     },
 

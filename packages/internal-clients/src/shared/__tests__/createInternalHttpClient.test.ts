@@ -144,7 +144,58 @@ describe('createInternalHttpClient', () => {
     });
     expect(result).toEqual({
       ok: false,
-      error: { code: 'API_ERROR', message: 'HTTP 500', status: 500 },
+      error: {
+        code: 'API_ERROR',
+        message: 'HTTP 500',
+        status: 500,
+        statusText: 'Internal Server Error',
+        rawText: 'boom',
+        body: 'boom',
+      },
+    });
+  });
+
+  it('non-2xx API errors preserve parsed body and raw text for domain mappers', async () => {
+    nock(BASE)
+      .post('/conflict')
+      .reply(409, {
+        success: false,
+        error: {
+          code: 'DUPLICATE',
+          message: 'Already exists',
+          details: { existingTaskId: 'task-existing' },
+        },
+      });
+
+    const client = createInternalHttpClient({
+      baseUrl: BASE,
+      token: 'secret',
+      logger: noopLogger,
+    });
+    const result = await client.request<unknown>({
+      method: 'POST',
+      path: '/conflict',
+      body: { id: 'task-new' },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'API_ERROR',
+        message: 'HTTP 409',
+        status: 409,
+        statusText: 'Conflict',
+        rawText:
+          '{"success":false,"error":{"code":"DUPLICATE","message":"Already exists","details":{"existingTaskId":"task-existing"}}}',
+        body: {
+          success: false,
+          error: {
+            code: 'DUPLICATE',
+            message: 'Already exists',
+            details: { existingTaskId: 'task-existing' },
+          },
+        },
+      },
     });
   });
 

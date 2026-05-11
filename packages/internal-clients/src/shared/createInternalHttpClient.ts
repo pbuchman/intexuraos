@@ -45,7 +45,14 @@ export interface InternalHttpClientRequest {
 export type InternalHttpClientError =
   | { code: 'TIMEOUT'; message: string }
   | { code: 'NETWORK_ERROR'; message: string }
-  | { code: 'API_ERROR'; message: string; status?: number }
+  | {
+      code: 'API_ERROR';
+      message: string;
+      status: number;
+      statusText: string;
+      rawText: string;
+      body: unknown;
+    }
   | { code: 'ENVELOPE_ERROR' | 'MALFORMED_ENVELOPE'; message: string };
 
 export type InternalHttpClientResult<T> =
@@ -89,25 +96,18 @@ export function createInternalHttpClient(cfg: InternalHttpClientConfig): Interna
             code: 'API_ERROR',
             message: `HTTP ${String(response.status)}`,
             status: response.status,
+            statusText: response.statusText,
+            rawText: transport.rawText,
+            body,
           },
         };
       }
 
-      try {
-        const envelope = unwrapEnvelope<T>(body);
-        if (envelope.ok) {
-          return { ok: true, value: envelope.value };
-        }
-        return { ok: false, error: envelope.error };
-      } catch {
-        return {
-          ok: false,
-          error: {
-            code: 'MALFORMED_ENVELOPE',
-            message: 'Invalid JSON response body',
-          },
-        };
+      const envelope = unwrapEnvelope<T>(body);
+      if (envelope.ok) {
+        return { ok: true, value: envelope.value };
       }
+      return { ok: false, error: envelope.error };
     },
   };
 }
