@@ -983,7 +983,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(completeResponse.statusCode).toBe(200);
       expect(lineStoreSpy).toHaveBeenCalledOnce();
       const flushedLines = lineStoreSpy.mock.calls[0]?.[1];
-      expect(flushedLines?.[0]?.text).toBe(rawFragment);
+      expect(flushedLines?.[0]?.text).toBe('[error] boom');
     });
 
     it('does not flush extra log lines on task completion when Codex logs already ended with a newline', async () => {
@@ -1054,7 +1054,9 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(completeResponse.statusCode).toBe(200);
       expect(lineStoreSpy).toHaveBeenCalledTimes(1);
-      expect(lineStoreSpy.mock.calls[0]?.[1]?.[0]?.text).toBe(rawLine.trimEnd());
+      expect(lineStoreSpy.mock.calls[0]?.[1]?.[0]?.text).toBe(
+        '[codex] Turn completed | input: ? tokens (0% cached) | output: 1 tokens',
+      );
     });
 
     it('logs an error when flushing pending Codex log lines fails on task completion', async () => {
@@ -7980,7 +7982,7 @@ describe('POST /internal/logs', () => {
     expect(storedEntries?.[1]?.text).toBe('[claude] Hello');
   });
 
-  it('stores raw Codex JSON log lines without Claude formatting', async () => {
+  it('stores readable Codex log lines while preserving raw chunks', async () => {
     const createResult = await codeTaskRepo.create({
       userId: 'user-123',
       prompt: 'Review the PR',
@@ -8034,7 +8036,76 @@ describe('POST /internal/logs', () => {
     expect(entryStoreSpy).toHaveBeenCalledOnce();
     const storedEntries = entryStoreSpy.mock.calls[0]?.[1];
     expect(storedEntries).toHaveLength(1);
-    expect(storedEntries?.[0]?.text).toBe(jsonContent.trimEnd());
+    expect(storedEntries?.[0]?.text).toBe('[msg] READY');
+  });
+
+  it('stores readable Codex file change log lines', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Review the PR',
+      sanitizedPrompt: 'Review the PR',
+      systemPromptHash: 'default',
+      workerType: 'codex',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_codex_file_change_123',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    vi.spyOn(logChunkRepo, 'storeBatch').mockResolvedValueOnce(ok(undefined));
+    const entryStoreSpy = vi.spyOn(logLineRepo, 'storeBatch');
+
+    const jsonContent = JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item_105',
+        type: 'file_change',
+        changes: [
+          {
+            path: '/repo/apps/mobile-notifications-service/src/infra/firestore/firestoreNotificationRepository.ts',
+            kind: 'update',
+          },
+        ],
+        status: 'completed',
+      },
+    }) + '\n';
+
+    const payload = {
+      taskId: task.id,
+      chunks: [
+        {
+          sequence: 1,
+          content: jsonContent,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/logs',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(entryStoreSpy).toHaveBeenCalledOnce();
+    const storedEntries = entryStoreSpy.mock.calls[0]?.[1];
+    expect(storedEntries).toHaveLength(1);
+    expect(storedEntries?.[0]?.text).toBe(
+      '[file] update apps/mobile-notifications-service/src/infra/firestore/firestoreNotificationRepository.ts',
+    );
   });
 
   it('does not cache the Claude fallback when runtime lookup fails transiently for a Codex task', async () => {
@@ -8124,7 +8195,7 @@ describe('POST /internal/logs', () => {
     });
 
     expect(secondResponse.statusCode).toBe(200);
-    expect(entryStoreSpy.mock.calls[1]?.[1]?.[0]?.text).toBe(secondJson.trimEnd());
+    expect(entryStoreSpy.mock.calls[1]?.[1]?.[0]?.text).toBe('[msg] SECOND');
   });
 
   it('validates HMAC signature', async () => {

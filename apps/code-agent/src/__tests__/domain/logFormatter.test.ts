@@ -1880,7 +1880,7 @@ describe('formatLogChunkForRuntime', () => {
     expect(formatLogChunkForRuntime('codex', '', 0, ts())).toEqual([]);
   });
 
-  it('preserves Codex JSON lines exactly', () => {
+  it('formats Codex JSON lines into readable text', () => {
     const json = JSON.stringify({
       type: 'item.completed',
       item: { type: 'agent_message', text: 'READY' },
@@ -1889,10 +1889,10 @@ describe('formatLogChunkForRuntime', () => {
     const result = formatLogChunkForRuntime('codex', `${json}\n`, 0, ts());
 
     expect(result).toHaveLength(1);
-    expect(result[0]?.text).toBe(json);
+    expect(result[0]?.text).toBe('[msg] READY');
   });
 
-  it('does not truncate long Codex JSON payloads', () => {
+  it('does not leak raw JSON for long Codex message payloads', () => {
     const json = JSON.stringify({
       type: 'item.completed',
       item: { type: 'agent_message', text: 'x'.repeat(3000) },
@@ -1900,11 +1900,11 @@ describe('formatLogChunkForRuntime', () => {
 
     const result = formatLogChunkForRuntime('codex', `${json}\n`, 0, ts());
 
-    expect(result[0]?.text).toBe(json);
-    expect(result[0]?.text).not.toContain('[... TRUNCATED');
+    expect(result[0]?.text).toMatch(/^\[msg\] /);
+    expect(result[0]?.text).not.toContain('"type":"item.completed"');
   });
 
-  it('reassembles split Codex JSON lines exactly across chunk boundaries', () => {
+  it('reassembles split Codex JSON lines across chunk boundaries', () => {
     const state = createFormatterState();
     const json = JSON.stringify({
       type: 'item.completed',
@@ -1919,7 +1919,7 @@ describe('formatLogChunkForRuntime', () => {
     const result2 = formatLogChunkForRuntime('codex', `${json.slice(splitAt)}\n`, 1, ts(), state);
 
     expect(result2).toHaveLength(1);
-    expect(result2[0]?.text).toBe(json);
+    expect(result2[0]?.text).toBe('[msg] split-message');
     expect(state.partialLine).toBeUndefined();
   });
 
@@ -1935,7 +1935,7 @@ describe('formatLogChunkForRuntime', () => {
 
     const flushed = flushLogChunkFormatterForRuntime('codex', 8, ts(), state);
     expect(flushed).toHaveLength(1);
-    expect(flushed[0]?.text).toBe(json);
+    expect(flushed[0]?.text).toBe('[error] boom');
     expect(state.partialLine).toBeUndefined();
   });
 
