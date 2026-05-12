@@ -6,6 +6,7 @@ import {
   parseKeyValues,
   coerceFields,
 } from '../../../services/completion-verifier/block-parser.js';
+import { verifyCompletion } from '../../../services/completion-verifier.js';
 import { AGENT_CONTRACTS } from '../../../services/completion-verifier/contracts.js';
 import type { AgentContract } from '../../../services/completion-verifier/contracts.js';
 
@@ -306,6 +307,108 @@ describe('locateFinalBlock', () => {
     expect(block).not.toBeNull();
     expect(block).toContain('- summary: final');
     expect(block).not.toContain('Working on it');
+  });
+
+  it('stops a Codex final block before turn.completed usage telemetry', () => {
+    const transcript = [
+      JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'agent_message',
+          text: [
+            'REVIEW_AGENT_FINAL:',
+            '- PR: https://github.com/pbuchman/intexuraos/pull/2085',
+            '- review_id: 4270391498',
+            '- Summary: * Reviewed the plan-only PR.',
+            '* GH Actions are all passed.',
+          ].join('\n'),
+        },
+      }),
+      '[codex] {"type":"turn.completed","usage":{"input_tokens":1866673,"cached_input_tokens":1723008,"output_tokens":7853,"reasoning_output_tokens":2171}}',
+      'Codex attempt finished with exit code: 0',
+    ].join('\n');
+
+    const block = locateFinalBlock(transcript, 'REVIEW_AGENT_FINAL:');
+
+    expect(block).not.toBeNull();
+    expect(block).toContain('* GH Actions are all passed.');
+    expect(block).not.toContain('turn.completed');
+    expect(block).not.toContain('input_tokens');
+    expect(block).not.toContain('Codex attempt finished');
+
+    const parsed = parseKeyValues(block ?? '');
+    expect(parsed['Summary']).toBe('* Reviewed the plan-only PR.\n* GH Actions are all passed.');
+  });
+
+  it('stops a Codex final block before non-zero entrypoint completion lines', () => {
+    const transcript = [
+      JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'agent_message',
+          text: [
+            'REVIEW_AGENT_FINAL:',
+            '- PR: https://github.com/pbuchman/intexuraos/pull/2085',
+            '- review_id: 4270391498',
+            '- Summary: * Reviewed the plan-only PR.',
+          ].join('\n'),
+        },
+      }),
+      'Codex attempt finished with exit code: 1',
+    ].join('\n');
+
+    const block = locateFinalBlock(transcript, 'REVIEW_AGENT_FINAL:');
+
+    expect(block).not.toBeNull();
+    expect(block).not.toContain('Codex attempt finished');
+
+    const parsed = parseKeyValues(block ?? '');
+    expect(parsed['Summary']).toBe('* Reviewed the plan-only PR.');
+  });
+});
+
+describe('verifyCompletion summary boundaries', () => {
+  it('does not include Codex turn.completed usage telemetry in verified review summaries', () => {
+    const transcript = [
+      JSON.stringify({
+        type: 'item.completed',
+        item: {
+          type: 'agent_message',
+          text: [
+            'REVIEW_AGENT_FINAL:',
+            '- PR: https://github.com/pbuchman/intexuraos/pull/2085',
+            '- review_id: 4270391498',
+            '- review_comments_posted: 0',
+            '- review_types: plan_review',
+            '- requirements_tracker_updated: yes',
+            '- gh_actions_status: all passed',
+            '- needs_remediation: 0',
+            '- memory_ids_used: mem_c1f22d25-6115-4f38-825a-647ad37dec21',
+            '- memory_ids_rejected: mem_6d23663d-d332-4f26-9430-31c0979b0008',
+            '- memory_usage_summary: parser boundary checked',
+            '- Summary: * Reviewed the plan-only PR.',
+            '* GH Actions are all passed.',
+          ].join('\n'),
+        },
+      }),
+      '{"type":"turn.completed","usage":{"input_tokens":1866673,"cached_input_tokens":1723008,"output_tokens":7853,"reasoning_output_tokens":2171}}',
+      'Codex attempt finished with exit code: 0',
+    ].join('\n');
+
+    const verdict = verifyCompletion({
+      transcript,
+      agentType: 'review',
+      workerType: 'codex',
+      executionMemoryContext: undefined,
+      lastExitCode: undefined,
+    });
+
+    expect(verdict.kind).toBe('parsed');
+    if (verdict.kind !== 'parsed') return;
+    expect(verdict.missingRequired).toEqual([]);
+    expect(verdict.data['summary']).toBe(
+      '* Reviewed the plan-only PR.\n* GH Actions are all passed.'
+    );
   });
 });
 

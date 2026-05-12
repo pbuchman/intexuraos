@@ -73,6 +73,24 @@ export function locateFinalBlock(transcript: string, marker: string): string | n
   return locateBlockInLines(extracted.split('\n'), marker);
 }
 
+function isPostFinalRuntimeBoundary(line: string): boolean {
+  const trimmed = line.trim().replace(/^\[[^\]]+\]\s+/, '');
+  if (trimmed === '') return false;
+
+  if (trimmed.startsWith('Codex attempt finished with exit code:')) {
+    return true;
+  }
+
+  if (!trimmed.startsWith('{')) return false;
+
+  try {
+    const parsed = JSON.parse(trimmed) as { type?: unknown };
+    return parsed.type === 'turn.completed';
+  } catch {
+    return false;
+  }
+}
+
 function locateBlockInLines(lines: readonly string[], marker: string): string | null {
   // Match a line whose trimmed content is MARKER, optionally wrapped in:
   //   - leading log-driver prefix: [something]
@@ -101,6 +119,7 @@ function locateBlockInLines(lines: readonly string[], marker: string): string | 
   // End-of-block triggers (take the first one hit):
   //   - closing code fence ``` on its own line
   //   - another *_AGENT_FINAL: line
+  //   - Codex post-final runtime lifecycle telemetry
   //   - EOF
   const body: string[] = [];
   // [INT-1470] Restrict end-of-block detection to the known real markers
@@ -117,6 +136,7 @@ function locateBlockInLines(lines: readonly string[], marker: string): string | 
     if (i > lastMatchIdx) {
       if (/^\s*`{3}\s*$/.test(line)) break;
       if (anyAgentFinalPattern.test(line)) break;
+      if (isPostFinalRuntimeBoundary(line)) break;
     }
     // Strip log-driver prefix from body lines.
     body.push(line.replace(/^\s*\[[^\]]+\]\s+/, ''));
