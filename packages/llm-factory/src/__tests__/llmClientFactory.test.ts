@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LlmProviders, LlmModels } from '@intexuraos/llm-contract';
+import { OpenRouterToolCallingModels, LlmProviders, LlmModels } from '@intexuraos/llm-contract';
 import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
@@ -45,6 +45,10 @@ class MockPerplexityGenerateClient {
 vi.mock('@intexuraos/infra-gemini', () => ({
   createGeminiClient: vi.fn(() => new MockGeminiClient()),
   createGeminiToolCallingClient: vi.fn(() => ({ run: vi.fn() })),
+}));
+
+vi.mock('@intexuraos/infra-openrouter', () => ({
+  createOpenRouterToolCallingClient: vi.fn(() => ({ run: vi.fn() })),
 }));
 
 vi.mock('../openRouterGenerateClient.js', () => ({
@@ -280,9 +284,35 @@ describe('llmClientFactory', () => {
         userId: 'test-user',
         logger: mockLogger,
         usageSink: mockUsageSink,
+        ownerType: 'user',
       });
 
       expect(client.run).toBeDefined();
+    });
+
+    it('creates OpenRouter tool calling client for or: prefixed models', async () => {
+      const { createOpenRouterToolCallingClient } = await import('@intexuraos/infra-openrouter');
+
+      const client = createToolCallingClient({
+        apiKey: 'test-key',
+        model: OpenRouterToolCallingModels.Gemini3FlashPreview,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+        ownerType: 'user',
+      });
+
+      expect(client.run).toBeDefined();
+      expect(createOpenRouterToolCallingClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: 'test-key',
+          model: 'google/gemini-3-flash-preview',
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+          ownerType: 'user',
+        })
+      );
     });
 
     it('throws for invalid model', () => {
@@ -291,6 +321,32 @@ describe('llmClientFactory', () => {
           apiKey: 'test-key',
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           model: 'nonexistent-model' as any,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        })
+      ).toThrow('Unsupported LLM model');
+    });
+
+    it('throws for unsupported OpenRouter tool calling model', () => {
+      expect(() =>
+        createToolCallingClient({
+          apiKey: 'test-key',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model: 'or:some/unknown-model' as any,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        })
+      ).toThrow('Unsupported LLM model');
+    });
+
+    it('throws for valid Google model that is not a tool calling model', () => {
+      expect(() =>
+        createToolCallingClient({
+          apiKey: 'test-key',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          model: LlmModels.Gemini25Pro as any,
           userId: 'test-user',
           logger: mockLogger,
           usageSink: mockUsageSink,

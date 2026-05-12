@@ -153,10 +153,12 @@ describe('dispatchPRAgent', () => {
   it('invokes LLM with request_review and skip tools and returns llm outcome', async () => {
     let capturedTools: ToolDefinition[] = [];
     let capturedPrompt = '';
+    let capturedPromptType: string | undefined;
     const toolClient: ToolCallingClient = {
       async run(params): ReturnType<ToolCallingClient['run']> {
         capturedTools = params.tools;
         capturedPrompt = params.systemPrompt;
+        capturedPromptType = params.promptType;
         const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
         if (requestReview !== undefined) {
           await requestReview.run({ review_type: 'code_quality' });
@@ -185,6 +187,7 @@ describe('dispatchPRAgent', () => {
     }
     expect(capturedTools.map((t) => t.name).sort()).toEqual(['request_review', 'skip']);
     expect(capturedPrompt.length).toBeGreaterThan(0);
+    expect(capturedPromptType).toBe('github-agent-pr-triage');
   });
 
   it('returns error without retry when resolveToolCallingClient fails', async () => {
@@ -437,9 +440,11 @@ describe('dispatchPRAgent', () => {
 describe('dispatchCommentAgent', () => {
   it('uses request_review tool set for @review comments', async () => {
     let capturedTools: ToolDefinition[] = [];
+    let capturedPromptType: string | undefined;
     const toolClient: ToolCallingClient = {
       async run(params): ReturnType<ToolCallingClient['run']> {
         capturedTools = params.tools;
+        capturedPromptType = params.promptType;
         const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
         if (requestReview !== undefined) {
           await requestReview.run({ review_type: 'architecture', worker_type: 'qwen' });
@@ -467,6 +472,7 @@ describe('dispatchCommentAgent', () => {
       expect(result.value.state.reviewWorkerType).toBe('qwen');
     }
     expect(capturedTools.map((t) => t.name).sort()).toEqual(['request_review', 'skip']);
+    expect(capturedPromptType).toBe('github-agent-comment-triage');
   });
 
   it('comment request_review rejects unknown review type', async () => {
