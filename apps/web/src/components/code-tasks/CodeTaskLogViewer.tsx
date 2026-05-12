@@ -47,6 +47,7 @@ const TAG_STYLES: Record<string, TagStyle> = {
   cmd:          { text: 'text-amber-700 dark:text-yellow-300' },
   msg:          { text: 'text-blue-700 dark:text-blue-300' },
   codex:        { text: 'text-cyan-600 dark:text-cyan-300' },
+  file:         { text: 'text-emerald-700 dark:text-emerald-300' },
 };
 
 function extractTag(text: string): string | null {
@@ -377,7 +378,7 @@ export function CodeTaskLogViewer({
               }
               if (workerFilter) {
                 const tag = extractTag(line.text);
-                if (tag !== 'claude' && tag !== 'msg' && tag !== 'codex') return null;
+                if (tag !== 'claude' && tag !== 'msg' && tag !== 'codex' && tag !== 'file') return null;
               }
 
               const collapsible = block !== undefined && countVisualLines(logs, block.bodyStart, block.bodyEnd) >= 4;
