@@ -45,7 +45,7 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_USER_SERVICE_URL',
-  'INTEXURAOS_GEMINI_APP_API_KEY',
+  'INTEXURAOS_OPENROUTER_APP_API_KEY',
   'INTEXURAOS_EXECUTION_MEMORY_ENABLED', // Feature flag for execution memory retrieval/distillation
   'INTEXURAOS_OPENAI_APP_API_KEY', // OpenAI embeddings for execution memory retrieval/distillation
   'INTEXURAOS_LLM_USAGE_SERVICE_URL', // Usage event forwarding to llm-usage-service
@@ -83,7 +83,7 @@ async function main(): Promise<void> {
     orchestratorSecret: config.orchestratorSecret,
     serviceUrl: config.serviceUrl,
     userServiceUrl: config.userServiceUrl,
-    geminiAppApiKey: config.geminiAppApiKey,
+    openRouterAppApiKey: config.openRouterAppApiKey,
     openaiAppApiKey: config.openaiAppApiKey,
     llmUsageServiceUrl: config.llmUsageServiceUrl,
   });

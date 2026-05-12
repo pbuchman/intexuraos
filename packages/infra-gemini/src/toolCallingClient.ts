@@ -19,7 +19,7 @@ import type {
   ToolCallingClient,
   ToolCallingResult,
   ToolDefinition,
-  ToolCallingModel,
+  Gemini25Flash,
 } from '@intexuraos/llm-contract';
 import { LlmProviders } from '@intexuraos/llm-contract';
 import { createUsageLogger, type UsageSink } from '@intexuraos/llm-pricing';
@@ -34,7 +34,7 @@ const DEFAULT_MAX_ITERATIONS = 5;
  */
 export interface ToolCallingClientConfig {
   apiKey: string;
-  model: ToolCallingModel;
+  model: Gemini25Flash;
   userId: string;
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
@@ -54,7 +54,8 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
     usage: NormalizedUsage,
     success: boolean,
     durationMs: number,
-    errorMessage?: string
+    errorMessage?: string,
+    promptType?: string
   ): void {
     void usageLogger.log({
       userId,
@@ -65,6 +66,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
       success,
       durationMs,
       ...(errorMessage !== undefined && { errorMessage }),
+      ...(promptType !== undefined && { promptType }),
     });
   }
 
@@ -77,6 +79,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
         maxIterations = DEFAULT_MAX_ITERATIONS,
         onExhausted,
         repairIterations,
+        promptType,
       } = params;
 
       // Build function declarations (strip `run` callbacks — only schema goes to Gemini)
@@ -243,7 +246,8 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
                 aggregatedUsage,
                 false,
                 Date.now() - runStart,
-                'Empty response from model'
+                'Empty response from model',
+                promptType
               );
               return err({
                 code: 'API_ERROR',
@@ -268,7 +272,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
               'Tool calling: completed'
             );
 
-            trackUsage(aggregatedUsage, true, Date.now() - runStart);
+            trackUsage(aggregatedUsage, true, Date.now() - runStart, undefined, promptType);
 
             return ok({
               content: finalText,
@@ -300,7 +304,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
         const lastText = lastTextPart?.text ?? '';
 
         if (lastText !== '') {
-          trackUsage(aggregatedUsage, true, Date.now() - runStart);
+          trackUsage(aggregatedUsage, true, Date.now() - runStart, undefined, promptType);
 
           return ok({
             content: lastText,
@@ -314,7 +318,8 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
           aggregatedUsage,
           false,
           Date.now() - runStart,
-          'Tool calling loop exceeded maxIterations'
+          'Tool calling loop exceeded maxIterations',
+          promptType
         );
         return err({
           code: 'API_ERROR',
@@ -322,7 +327,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
         });
       } catch (error: unknown) {
         const errorMsg = getErrorMessage(error);
-        trackUsage(aggregatedUsage, false, Date.now() - runStart, errorMsg);
+        trackUsage(aggregatedUsage, false, Date.now() - runStart, errorMsg, promptType);
         return err(mapGeminiError(error));
       }
     },

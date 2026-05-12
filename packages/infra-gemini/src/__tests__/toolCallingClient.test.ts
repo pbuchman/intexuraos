@@ -563,6 +563,22 @@ describe('createGeminiToolCallingClient', () => {
     expect(createUsageLogger).toHaveBeenCalledWith(expect.objectContaining({ sink: fakeSink }));
   });
 
+  it('forwards promptType to usage logging when provided on the tool-calling run', async () => {
+    mockGenerateContent.mockResolvedValueOnce(textResponse('ok'));
+
+    const client = createClient();
+    await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+      promptType: 'github-agent-pr-triage',
+    });
+
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ promptType: 'github-agent-pr-triage' })
+    );
+  });
+
   it('maps assistant role to model in contents', async () => {
     mockGenerateContent.mockResolvedValueOnce(textResponse('ok'));
 

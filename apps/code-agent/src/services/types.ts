@@ -123,7 +123,7 @@ export interface ServiceConfig {
   serviceUrl: string;
   userServiceUrl: string;
   // GitHub Agent (INT-743)
-  geminiAppApiKey: string;
+  openRouterAppApiKey: string;
   openaiAppApiKey: string;
   llmUsageServiceUrl: string;
 }
