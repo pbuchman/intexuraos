@@ -8,6 +8,140 @@ import {
   type StreamJsonMessage,
 } from './markdownFormatter.js';
 
+interface CodexFileChange {
+  path?: string;
+  kind?: string;
+}
+
+interface CodexLogObject {
+  type?: string;
+  thread_id?: string;
+  message?: string;
+  error?: { message?: string };
+  usage?: {
+    input_tokens?: number;
+    cached_input_tokens?: number;
+    output_tokens?: number;
+  };
+  item?: {
+    type?: string;
+    text?: string;
+    message?: string;
+    command?: string;
+    aggregated_output?: string;
+    exit_code?: number | null;
+    changes?: CodexFileChange[];
+  };
+}
+
+const MAX_LINE_LENGTH = 200;
+const MAX_CMD_LENGTH = 300;
+const MAX_OUTPUT_LINES = 20;
+const OUTPUT_HEAD_LINES = 12;
+const OUTPUT_TAIL_LINES = 5;
+
+function truncateLine(line: string, max = MAX_LINE_LENGTH): string {
+  if (line.length <= max) return line;
+  return line.slice(0, max) + ' [...]';
+}
+
+function stripShellWrapper(command: string): string {
+  const match = /^\/bin\/sh -lc (?:"([\s\S]*)"|'([\s\S]*)')$/.exec(command);
+  /* v8 ignore start -- ts-type: regex alternation guarantees one capture group is always defined, but TS types both as string | undefined @preserve */
+  if (match !== null) return match[1] ?? match[2] ?? command;
+  /* v8 ignore stop @preserve */
+  return command;
+}
+
+function gutterLine(line: string): string {
+  return `    | ${truncateLine(line)}`;
+}
+
+function formatCommandOutput(output: string): string {
+  if (output === '') return '';
+
+  const lines = output.split('\n');
+  if (lines.length <= MAX_OUTPUT_LINES) {
+    return lines.map(gutterLine).join('\n') + '\n';
+  }
+
+  const head = lines.slice(0, OUTPUT_HEAD_LINES).map(gutterLine);
+  const tail = lines.slice(-OUTPUT_TAIL_LINES).map(gutterLine);
+  const omitted = lines.length - OUTPUT_HEAD_LINES - OUTPUT_TAIL_LINES;
+  return [...head, `    | [... ${String(omitted)} lines omitted ...]`, ...tail].join('\n') + '\n';
+}
+
+function formatRepoRelativePath(path: string): string {
+  return path.startsWith('/repo/') ? path.slice('/repo/'.length) : path;
+}
+
+function formatCodexTurnCompleted(obj: CodexLogObject): string {
+  const usage = obj.usage ?? {};
+  const input = usage.input_tokens;
+  const cached = usage.cached_input_tokens ?? 0;
+  const output = usage.output_tokens;
+  const cachePercent = input !== undefined && input > 0 ? Math.round((cached / input) * 100) : 0;
+  const inputStr = input !== undefined ? String(input) : '?';
+  const outputStr = output !== undefined ? String(output) : '?';
+  return `[codex] Turn completed | input: ${inputStr} tokens (${String(cachePercent)}% cached) | output: ${outputStr} tokens`;
+}
+
+function formatCodexItemCompleted(obj: CodexLogObject): string[] | null {
+  const item = obj.item;
+  if (item === undefined) return null;
+
+  if (item.type === 'agent_message' && typeof item.text === 'string') {
+    return [`[msg] ${item.text}`];
+  }
+
+  if (item.type === 'error' && typeof item.message === 'string') {
+    return [`[error] ${item.message}`];
+  }
+
+  if (item.type === 'command_execution' && typeof item.command === 'string') {
+    const cmd = truncateLine(stripShellWrapper(item.command), MAX_CMD_LENGTH);
+    const exitLabel = item.exit_code === 0 ? 'ok' : `EXIT ${String(item.exit_code ?? '?')}`;
+    const trimmedOutput = (item.aggregated_output ?? '').trimEnd();
+    const lineCount = trimmedOutput === '' ? 0 : trimmedOutput.split('\n').length;
+
+    let result = `[cmd] $ ${cmd}  -> ${exitLabel} (${String(lineCount)} lines)`;
+    const formattedOutput = formatCommandOutput(trimmedOutput);
+    if (formattedOutput !== '') {
+      result += '\n' + formattedOutput.slice(0, -1);
+    }
+    return [result];
+  }
+
+  if (item.type === 'file_change' && Array.isArray(item.changes)) {
+    return item.changes.flatMap((change) => {
+      if (typeof change.path !== 'string') return [];
+      return [`[file] ${change.kind ?? 'change'} ${formatRepoRelativePath(change.path)}`];
+    });
+  }
+
+  return null;
+}
+
+function formatCodexJsonLine(jsonLine: string): string[] | null {
+  try {
+    const obj = JSON.parse(jsonLine) as CodexLogObject;
+
+    if (obj.type === 'thread.started' && typeof obj.thread_id === 'string') {
+      return [`[codex] Session started: thread=${obj.thread_id}`];
+    }
+    if (obj.type === 'turn.started') return ['[codex] Turn started'];
+    if (obj.type === 'turn.completed') return [formatCodexTurnCompleted(obj)];
+    if (obj.type === 'turn.failed') return [`[error] ${obj.error?.message ?? 'Codex turn failed'}`];
+    if (obj.type === 'error' && typeof obj.message === 'string') return [`[error] ${obj.message}`];
+    if (obj.type === 'item.started') return null;
+    if (obj.type === 'item.completed') return formatCodexItemCompleted(obj) ?? ['[event] item.completed'];
+    if (typeof obj.type === 'string') return [`[event] ${obj.type}`];
+    return [jsonLine];
+  } catch {
+    return [jsonLine];
+  }
+}
+
 export function formatSystem(obj: StreamJsonMessage): string {
   const sub = obj.subtype;
 
@@ -120,7 +254,11 @@ export function formatRawCodexLogChunk(
     }
 
     if (line.trim() === '') continue;
-    result.push({ sequence: seq++, text: line, timestamp });
+    const formattedLines = formatCodexJsonLine(line);
+    if (formattedLines === null) continue;
+    for (const formatted of formattedLines) {
+      result.push({ sequence: seq++, text: formatted, timestamp });
+    }
   }
 
   return result;
@@ -142,6 +280,8 @@ export function flushCodexPartial(
     return [];
   }
 
-  return [{ sequence: startSequence * 1000, text: line, timestamp }];
+  const formattedLines = formatCodexJsonLine(line);
+  if (formattedLines === null) return [];
+  let seq = startSequence * 1000;
+  return formattedLines.map((formatted) => ({ sequence: seq++, text: formatted, timestamp }));
 }
-
