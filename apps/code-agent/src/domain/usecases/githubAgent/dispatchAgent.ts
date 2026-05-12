@@ -20,6 +20,8 @@ import { evaluatePlanFiles } from '../../utils/planDetection.js';
 import { LLM_TOOL_REVIEW_TYPES } from '../../constants/reviewTypes.js';
 
 const VALID_DISPATCH_TEMPLATES = ['pr_comment', 'bot_review_edit'] as const;
+const GITHUB_AGENT_PR_PROMPT_TYPE = 'github-agent-pr-triage';
+const GITHUB_AGENT_COMMENT_PROMPT_TYPE = 'github-agent-comment-triage';
 
 export interface GitHubAgentDeps {
   logger: Logger;
@@ -220,6 +222,7 @@ export async function dispatchPRAgent(
     systemPrompt,
     messages,
     tools,
+    promptType: GITHUB_AGENT_PR_PROMPT_TYPE,
     maxIterations: 5,
     onExhausted: () => buildTriageRepairMessage(
       { skipped: state.skipped, skipReason: state.skipReason, reviewsRequested },
@@ -428,6 +431,7 @@ export async function dispatchCommentAgent(
     systemPrompt,
     messages: commentMessages,
     tools,
+    promptType: GITHUB_AGENT_COMMENT_PROMPT_TYPE,
     maxIterations: 5,
     onExhausted: () => buildTriageRepairMessage(
       { skipped: state.skipped, skipReason: state.skipReason, reviewsRequested: state.reviewTypes },

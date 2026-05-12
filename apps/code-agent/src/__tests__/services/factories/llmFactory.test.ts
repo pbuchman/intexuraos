@@ -9,7 +9,7 @@
  * - resolveToolCallingClient errors when no key is available
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 import pino from 'pino';
 import type { Logger } from 'pino';
@@ -19,6 +19,14 @@ import type { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import { createLlmServices } from '../../../services/factories/llmFactory.js';
 import type { ServiceConfig } from '../../../services/types.js';
 
+const { mockCreateToolCallingClient } = vi.hoisted(() => ({
+  mockCreateToolCallingClient: vi.fn(() => ({ run: vi.fn() })),
+}));
+
+vi.mock('@intexuraos/llm-factory', () => ({
+  createToolCallingClient: mockCreateToolCallingClient,
+}));
+
 const logger = pino({ level: 'silent' }) as unknown as Logger;
 
 function makeConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
@@ -27,17 +35,17 @@ function makeConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
     whatsappServiceUrl: '', whatsappSendTopic: '', prTriageTopic: '',
     linearAgentUrl: '', actionsAgentUrl: '', webhookVerifySecret: '',
     orchestratorSecret: '', serviceUrl: '', userServiceUrl: '',
-    geminiAppApiKey: '', openaiAppApiKey: '', llmUsageServiceUrl: '',
+    openRouterAppApiKey: '', openaiAppApiKey: '', llmUsageServiceUrl: '',
     ...overrides,
   };
 }
 
-/** Produce a fake UserServiceClient whose getApiKeys returns the given google key. */
-function makeUserServiceClient(googleKey?: string, forceErr = false): UserServiceClient {
+/** Produce a fake UserServiceClient whose getApiKeys returns the given OpenRouter key. */
+function makeUserServiceClient(openRouterKey?: string, forceErr = false): UserServiceClient {
   return {
-    getApiKeys: async (): Promise<Result<{ google?: string }, { code: 'NO_API_KEY'; message: string }>> => {
+    getApiKeys: async (): Promise<Result<{ openrouter?: string }, { code: 'NO_API_KEY'; message: string }>> => {
       if (forceErr) return err({ code: 'NO_API_KEY' as const, message: 'fail' });
-      return ok(googleKey !== undefined ? { google: googleKey } : {});
+      return ok(openRouterKey !== undefined ? { openrouter: openRouterKey } : {});
     },
     getLlmClient: async () => err({ code: 'NO_API_KEY' as const, message: 'stub' }) as never,
     reportLlmSuccess: async () => undefined,
@@ -50,6 +58,10 @@ function makeUserServiceClient(googleKey?: string, forceErr = false): UserServic
 const buildUsageSink = (): HttpInternalAuthUsageSink => ({} as unknown as HttpInternalAuthUsageSink);
 
 describe('createLlmServices', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   describe('executionMemoryEmbeddingClient', () => {
     it('is undefined when openaiAppApiKey is empty', () => {
       const services = createLlmServices({
@@ -116,27 +128,41 @@ describe('createLlmServices', () => {
   });
 
   describe('resolveToolCallingClient', () => {
-    it('uses the user Google key when user-service returns one', async () => {
+    it('uses the user OpenRouter key with Gemini 3 Flash Preview when user-service returns one', async () => {
       const services = createLlmServices({
-        config: makeConfig({ geminiAppApiKey: 'platform-key' }), logger,
-        userServiceClient: makeUserServiceClient('user-google-key'), buildUsageSink,
+        config: makeConfig({ openRouterAppApiKey: 'platform-key' }), logger,
+        userServiceClient: makeUserServiceClient('user-openrouter-key'), buildUsageSink,
       });
       const result = await services.resolveToolCallingClient('user-123');
       expect(result.ok).toBe(true);
+      expect(mockCreateToolCallingClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: 'user-openrouter-key',
+          model: 'or:google/gemini-3-flash-preview',
+          userId: 'user-123',
+        })
+      );
     });
 
-    it('falls back to platform Gemini key when user has no key', async () => {
+    it('falls back to platform OpenRouter key when user has no key', async () => {
       const services = createLlmServices({
-        config: makeConfig({ geminiAppApiKey: 'platform-key' }), logger,
+        config: makeConfig({ openRouterAppApiKey: 'platform-key' }), logger,
         userServiceClient: makeUserServiceClient(undefined), buildUsageSink,
       });
       const result = await services.resolveToolCallingClient('user-123');
       expect(result.ok).toBe(true);
+      expect(mockCreateToolCallingClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: 'platform-key',
+          model: 'or:google/gemini-3-flash-preview',
+          userId: 'user-123',
+        })
+      );
     });
 
     it('falls back to platform key when user-service errors', async () => {
       const services = createLlmServices({
-        config: makeConfig({ geminiAppApiKey: 'platform-key' }), logger,
+        config: makeConfig({ openRouterAppApiKey: 'platform-key' }), logger,
         userServiceClient: makeUserServiceClient(undefined, true), buildUsageSink,
       });
       const result = await services.resolveToolCallingClient('user-123');
@@ -145,13 +171,14 @@ describe('createLlmServices', () => {
 
     it('returns LLM_FAILED error when no key is available anywhere', async () => {
       const services = createLlmServices({
-        config: makeConfig({ geminiAppApiKey: '' }), logger,
+        config: makeConfig({ openRouterAppApiKey: '' }), logger,
         userServiceClient: makeUserServiceClient(undefined), buildUsageSink,
       });
       const result = await services.resolveToolCallingClient('user-123');
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('LLM_FAILED');
+        expect(result.error.message).toContain('OpenRouter');
       }
     });
   });

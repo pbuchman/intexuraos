@@ -28,7 +28,7 @@ function makeConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
     orchestratorSecret: '',
     serviceUrl: '',
     userServiceUrl: '',
-    geminiAppApiKey: '',
+    openRouterAppApiKey: '',
     openaiAppApiKey: '',
     llmUsageServiceUrl: '',
     ...overrides,

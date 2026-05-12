@@ -9,7 +9,7 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import OpenAI from 'openai';
 import type { CreateEmbeddingResponse } from 'openai/resources';
-import { LlmModels, type ToolCallingClient } from '@intexuraos/llm-contract';
+import { OpenRouterToolCallingModels, type ToolCallingClient } from '@intexuraos/llm-contract';
 import { createToolCallingClient } from '@intexuraos/llm-factory';
 import { EmbeddingClient } from '@intexuraos/infra-gpt';
 import type { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
@@ -29,13 +29,13 @@ export interface LlmServices {
   executionMemoryEmbeddingClient?: EmbeddingClient;
 }
 
-const TOOL_CALLING_MODEL = LlmModels.Gemini25Flash;
+const TOOL_CALLING_MODEL = OpenRouterToolCallingModels.Gemini3FlashPreview;
 
 /**
  * Create LLM-backed services.
  *
- * `resolveToolCallingClient` first tries a per-user Google key from user-service,
- * then falls back to the platform `geminiAppApiKey`, then errors.
+ * `resolveToolCallingClient` first tries a per-user OpenRouter key from
+ * user-service, then falls back to the platform OpenRouter key, then errors.
  *
  * `executionMemoryEmbeddingClient` is returned only when `openaiAppApiKey` is set.
  */
@@ -46,11 +46,11 @@ export function createLlmServices(deps: LlmFactoryDeps): LlmServices {
   const resolveToolCallingClient = async (userId: string): Promise<Result<ToolCallingClient, GitHubAgentError>> => {
     const keysResult = await userServiceClient.getApiKeys(userId);
     if (keysResult.ok) {
-      const googleKey = keysResult.value.google;
-      if (googleKey !== undefined) {
-        logger.debug({ userId }, 'GitHub Agent: using user Google API key');
+      const openRouterKey = keysResult.value.openrouter;
+      if (openRouterKey !== undefined) {
+        logger.debug({ userId }, 'GitHub Agent: using user OpenRouter API key');
         return ok(createToolCallingClient({
-          apiKey: googleKey,
+          apiKey: openRouterKey,
           model: TOOL_CALLING_MODEL,
           userId,
           logger,
@@ -59,10 +59,10 @@ export function createLlmServices(deps: LlmFactoryDeps): LlmServices {
       }
     }
 
-    if (config.geminiAppApiKey !== '') {
-      logger.debug({ userId }, 'GitHub Agent: falling back to platform Gemini API key');
+    if (config.openRouterAppApiKey !== '') {
+      logger.debug({ userId }, 'GitHub Agent: falling back to platform OpenRouter API key');
       return ok(createToolCallingClient({
-        apiKey: config.geminiAppApiKey,
+        apiKey: config.openRouterAppApiKey,
         model: TOOL_CALLING_MODEL,
         userId,
         logger,
@@ -70,7 +70,7 @@ export function createLlmServices(deps: LlmFactoryDeps): LlmServices {
       }));
     }
 
-    return err({ code: 'LLM_FAILED' as const, message: 'No Google API key available for tool calling' });
+    return err({ code: 'LLM_FAILED' as const, message: 'No OpenRouter API key available for tool calling' });
   };
 
   const executionMemoryOpenAI = config.openaiAppApiKey !== ''
