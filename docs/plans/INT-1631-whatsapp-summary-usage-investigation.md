@@ -66,7 +66,7 @@ Add this test near the existing `parseKeyValues()` continuation tests:
 it('stops a Codex final block before turn.completed usage telemetry', () => {
   const transcript = [
     '{"type":"item.completed","item":{"type":"agent_message","text":"REVIEW_AGENT_FINAL:\\n- PR: https://github.com/pbuchman/intexuraos/pull/2085\\n- review_id: 4270391498\\n- Summary: * Reviewed the plan-only PR.\\n* GH Actions are all passed."}}',
-    '{"type":"turn.completed","usage":{"input_tokens":1866673,"cached_input_tokens":1723008,"output_tokens":7853,"reasoning_output_tokens":2171}}',
+    '[codex] {"type":"turn.completed","usage":{"input_tokens":1866673,"cached_input_tokens":1723008,"output_tokens":7853,"reasoning_output_tokens":2171}}',
     'Codex attempt finished with exit code: 0',
   ].join('\n');
 
@@ -80,6 +80,21 @@ it('stops a Codex final block before turn.completed usage telemetry', () => {
 
   const parsed = parseKeyValues(block ?? '');
   expect(parsed['Summary']).toBe('* Reviewed the plan-only PR.\n* GH Actions are all passed.');
+});
+
+it('stops a Codex final block before non-zero entrypoint completion lines', () => {
+  const transcript = [
+    '{"type":"item.completed","item":{"type":"agent_message","text":"REVIEW_AGENT_FINAL:\\n- PR: https://github.com/pbuchman/intexuraos/pull/2085\\n- review_id: 4270391498\\n- Summary: * Reviewed the plan-only PR."}}',
+    'Codex attempt finished with exit code: 1',
+  ].join('\n');
+
+  const block = locateFinalBlock(transcript, 'REVIEW_AGENT_FINAL:');
+
+  expect(block).not.toBeNull();
+  expect(block).not.toContain('Codex attempt finished');
+
+  const parsed = parseKeyValues(block ?? '');
+  expect(parsed['Summary']).toBe('* Reviewed the plan-only PR.');
 });
 ```
 
@@ -105,13 +120,11 @@ In `workers/orchestrator/src/services/completion-verifier/block-parser.ts`, add 
 
 ```typescript
 function isPostFinalRuntimeBoundary(line: string): boolean {
-  const trimmed = line.trim();
+  const trimmed = line.trim().replace(/^\s*\[[^\]]+\]\s+/, '');
   if (trimmed === '') return false;
 
   if (
-    trimmed === 'Codex attempt finished with exit code: 0' ||
-    trimmed.startsWith('Codex attempt finished with exit code:') ||
-    trimmed.startsWith('[entrypoint] Codex attempt finished with exit code:')
+    trimmed.startsWith('Codex attempt finished with exit code:')
   ) {
     return true;
   }
@@ -133,7 +146,9 @@ Update the loop in `locateBlockInLines()`:
 
 ```typescript
 for (let i = lastMatchIdx; i < lines.length; i += 1) {
+  /* v8 ignore start -- noUncheckedIndexedAccess requires fallback despite for-loop bounds */
   const line = lines[i] ?? '';
+  /* v8 ignore stop */
   if (i > lastMatchIdx) {
     if (/^\s*`{3}\s*$/.test(line)) break;
     if (anyAgentFinalPattern.test(line)) break;
@@ -181,6 +196,8 @@ it('does not include Codex turn.completed usage telemetry in verified review sum
     transcript,
     agentType: 'review',
     workerType: 'codex',
+    executionMemoryContext: undefined,
+    lastExitCode: undefined,
   });
 
   expect(verdict.kind).toBe('parsed');
