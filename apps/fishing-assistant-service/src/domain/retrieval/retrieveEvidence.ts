@@ -25,7 +25,9 @@ export interface RetrieveEvidenceInput {
 }
 
 const MOBILE_NOTIFICATIONS_TIMEOUT_MS = 5_000;
-const MAX_DIGEST_GROUPS = 8;
+const HISTORICAL_DATE_FROM = '1970-01-01';
+const DIGEST_PAGE_LIMIT = 100;
+const RAW_MESSAGE_PAGE_LIMIT = 500;
 
 function extractDateRange(question: string, now: Date): { dateFrom: string; dateTo: string } {
   const matches = [...question.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g)].map((match) => match[0]);
@@ -43,12 +45,92 @@ function extractDateRange(question: string, now: Date): { dateFrom: string; date
   }
 
   const dateTo = now.toISOString().slice(0, 10);
-  const from = new Date(now.getTime());
-  from.setUTCDate(from.getUTCDate() - 90);
   return {
-    dateFrom: from.toISOString().slice(0, 10),
+    dateFrom: HISTORICAL_DATE_FROM,
     dateTo,
   };
+}
+
+async function collectDigestEvidence(input: {
+  client: Pick<MobileNotificationsServiceClient, 'queryDigests'>;
+  userId: string;
+  groupKey: string;
+  dateFrom: string;
+  dateTo: string;
+  terms: string[];
+}): Promise<EvidenceItem[]> {
+  const evidence: EvidenceItem[] = [];
+  let cursor: string | undefined;
+  const seenCursors = new Set<string>();
+
+  do {
+    const digestResult = await input.client.queryDigests(
+      {
+        userId: input.userId,
+        groupKey: input.groupKey,
+        dateFrom: input.dateFrom,
+        dateTo: input.dateTo,
+        terms: input.terms,
+        limit: DIGEST_PAGE_LIMIT,
+        ...(cursor !== undefined ? { cursor } : {}),
+      },
+      { timeoutMs: MOBILE_NOTIFICATIONS_TIMEOUT_MS }
+    );
+    if (!digestResult.ok) break;
+
+    const nextCursor = digestResult.value.nextCursor;
+    if (nextCursor !== undefined && seenCursors.has(nextCursor)) {
+      break;
+    }
+    evidence.push(
+      ...digestResult.value.items.map((item) => rankDigestEvidence(item, input.terms))
+    );
+    cursor = nextCursor;
+    if (cursor !== undefined) seenCursors.add(cursor);
+  } while (cursor !== undefined);
+
+  return evidence;
+}
+
+async function collectRawMessageEvidence(input: {
+  client: Pick<MobileNotificationsServiceClient, 'queryGroupMessages'>;
+  userId: string;
+  groupKey: string;
+  dateFrom: string;
+  dateTo: string;
+  terms: string[];
+}): Promise<EvidenceItem[]> {
+  const evidence: EvidenceItem[] = [];
+  let cursor: string | undefined;
+  const seenCursors = new Set<string>();
+
+  do {
+    const rawResult = await input.client.queryGroupMessages(
+      {
+        userId: input.userId,
+        groupKey: input.groupKey,
+        dateFrom: input.dateFrom,
+        dateTo: input.dateTo,
+        terms: input.terms,
+        limit: RAW_MESSAGE_PAGE_LIMIT,
+        ...(cursor !== undefined ? { cursor } : {}),
+      },
+      { timeoutMs: MOBILE_NOTIFICATIONS_TIMEOUT_MS }
+    );
+    if (!rawResult.ok) break;
+
+    const nextCursor = rawResult.value.nextCursor;
+    if (nextCursor !== undefined && seenCursors.has(nextCursor)) {
+      break;
+    }
+    evidence.push(
+      ...rawResult.value.messages.map((message) => rankRawMessageEvidence(message, input.terms))
+    );
+    cursor = nextCursor;
+    if (cursor !== undefined) seenCursors.add(cursor);
+  } while (cursor !== undefined);
+
+  return evidence;
 }
 
 export async function retrieveEvidence(
@@ -87,57 +169,29 @@ export async function retrieveEvidence(
   const digestEvidence: EvidenceItem[] = [];
   if (groupsResult.ok) {
     const range = extractDateRange(input.question, deps.now);
-    for (const group of groupsResult.value.items.slice(0, MAX_DIGEST_GROUPS)) {
-      const digestResult = await deps.mobileNotificationsClient.queryDigests(
-        {
-          userId: input.userId,
-          groupKey: group.groupKey,
-          dateFrom: range.dateFrom,
-          dateTo: range.dateTo,
-          terms,
-          limit: 8,
-        },
-        { timeoutMs: MOBILE_NOTIFICATIONS_TIMEOUT_MS }
-      );
-      if (!digestResult.ok) continue;
+    for (const group of groupsResult.value.items) {
+      const groupDigestEvidence = await collectDigestEvidence({
+        client: deps.mobileNotificationsClient,
+        userId: input.userId,
+        groupKey: group.groupKey,
+        dateFrom: range.dateFrom,
+        dateTo: range.dateTo,
+        terms,
+      });
+      digestEvidence.push(...groupDigestEvidence);
 
-      digestEvidence.push(
-        ...digestResult.value.items.map((item) => rankDigestEvidence(item, terms)).slice(0, 8)
-      );
+      const rawMessageEvidence = await collectRawMessageEvidence({
+        client: deps.mobileNotificationsClient,
+        userId: input.userId,
+        groupKey: group.groupKey,
+        dateFrom: range.dateFrom,
+        dateTo: range.dateTo,
+        terms,
+      });
+      evidence.push(...rawMessageEvidence);
     }
   }
   evidence.push(...digestEvidence);
-
-  const topDigestDates = digestEvidence
-    .sort((left, right) => right.score - left.score)
-    .slice(0, 3)
-    .map((item) => {
-      const groupKey = typeof item.metadata?.['groupKey'] === 'string'
-        ? item.metadata['groupKey']
-        : '';
-      return {
-        groupKey,
-        date: item.date ?? '',
-      };
-    })
-    .filter((item) => item.groupKey !== '' && item.date !== '');
-
-  for (const item of topDigestDates) {
-    const rawResult = await deps.mobileNotificationsClient.queryGroupMessages(
-      {
-        userId: input.userId,
-        groupKey: item.groupKey,
-        date: item.date,
-        terms,
-        limit: 12,
-      },
-      { timeoutMs: MOBILE_NOTIFICATIONS_TIMEOUT_MS }
-    );
-    if (!rawResult.ok) continue;
-    evidence.push(
-      ...rawResult.value.messages.map((message) => rankRawMessageEvidence(message, terms)).slice(0, 12)
-    );
-  }
 
   const ranked = evidence
     .sort((left, right) => right.score - left.score)

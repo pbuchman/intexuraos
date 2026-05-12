@@ -713,6 +713,59 @@ describe('Internal Routes', () => {
       expect(body.data.truncated).toBe(false);
     });
 
+    it('propagates digest query cursor and returns nextCursor', async () => {
+      setInternalAuth();
+      let capturedInput: Parameters<DigestRepository['findInRange']>[0] | null = null;
+      const digestRepository = makeDigestRepository({
+        findInRange: async (input) => {
+          capturedInput = input;
+          return ok({
+            items: [
+              {
+                summary: makeSummary(),
+                generation: 1,
+                generatedAt: '2026-04-15T20:00:00.000Z',
+                modelId: 'm',
+              },
+            ],
+            nextCursor: '2026-04-14',
+          });
+        },
+      });
+      setMockServices({ notificationRepository: ctx.notificationRepo, digestRepository });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/digests/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          userId: 'u',
+          groupKey: 'g',
+          dateFrom: '2026-01-01',
+          dateTo: '2026-04-15',
+          limit: 10,
+          cursor: '2026-04-15',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedInput).toEqual({
+        userId: 'u',
+        groupKey: 'g',
+        fromDate: '2026-01-01',
+        toDate: '2026-04-15',
+        limit: 10,
+        cursor: '2026-04-15',
+      });
+      const body = JSON.parse(response.body) as SuccessResponse<{
+        items: { title: string }[];
+        truncated: boolean;
+        nextCursor?: string;
+      }>;
+      expect(body.data.nextCursor).toBe('2026-04-14');
+      expect(body.data.truncated).toBe(true);
+    });
+
     it('uses default digest query limit, skips empty terms, and formats optional markdown sections', async () => {
       setInternalAuth();
       const capturedInputs: Parameters<DigestRepository['findInRange']>[0][] = [];
@@ -1004,8 +1057,19 @@ describe('Internal Routes', () => {
       expect(body.error.code).toBe('INVALID_REQUEST');
     });
 
-    it('rejects group-message ranges that are too large', async () => {
+    it('accepts long historical group-message ranges', async () => {
       setInternalAuth();
+      setMockServices({
+        notificationRepository: ctx.notificationRepo,
+        digestSubscriptions: [
+          {
+            userId: 'u',
+            groupKey: 'g',
+            groupTitlePrefix: 'G fishing chat',
+            outputLanguage: 'Polish',
+          },
+        ],
+      });
 
       const response = await ctx.app.inject({
         method: 'POST',
@@ -1019,9 +1083,9 @@ describe('Internal Routes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as ErrorResponse;
-      expect(body.error.message).toContain('range');
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as SuccessResponse<{ messages: unknown[] }>;
+      expect(body.data.messages).toEqual([]);
     });
 
     it('validates group-message subscription ownership', async () => {
@@ -1187,7 +1251,7 @@ describe('Internal Routes', () => {
       expect(body.data.messages[0]?.senderLabel).toBeNull();
     });
 
-    it('continues group-message queries with repository cursors', async () => {
+    it('stops group-message scanning when a repository cursor repeats', async () => {
       setInternalAuth();
       const bounds = cetDayBounds('2026-04-15');
       const calls: PaginationOptions[] = [];
@@ -1196,14 +1260,9 @@ describe('Internal Routes', () => {
         findById: ctx.notificationRepo.findById.bind(ctx.notificationRepo),
         findByUserIdPaginated: async (_userId, options) => {
           calls.push(options);
-          if (calls.length === 1) {
-            return ok({
-              notifications: [makeNotification({ id: 'first', text: 'First spring bait', timestamp: bounds.fromSec + 1, postTime: String(bounds.fromSec + 1) })],
-              nextCursor: 'next-page',
-            });
-          }
           return ok({
-            notifications: [makeNotification({ id: 'second', text: 'Second spring bait', timestamp: bounds.fromSec + 2, postTime: String(bounds.fromSec + 2) })],
+            notifications: [makeNotification({ id: 'first', text: 'First spring bait', timestamp: bounds.fromSec + 1, postTime: String(bounds.fromSec + 1) })],
+            nextCursor: 'next-page',
           });
         },
         existsByNotificationIdAndUserId: ctx.notificationRepo.existsByNotificationIdAndUserId.bind(ctx.notificationRepo),
@@ -1223,7 +1282,290 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       expect(calls).toHaveLength(2);
-      expect(calls[1]?.cursor).toBe('next-page');
+      const body = JSON.parse(response.body) as SuccessResponse<{
+        nextCursor?: string;
+        truncated: boolean;
+      }>;
+      expect(body.data.nextCursor).toBeUndefined();
+      expect(body.data.truncated).toBe(true);
+    });
+
+    it('propagates group-message cursor and returns nextCursor', async () => {
+      setInternalAuth();
+      const bounds = cetDayBounds('2026-04-15');
+      const capturedOptions: PaginationOptions[] = [];
+      const notificationRepository: NotificationRepository = {
+        save: ctx.notificationRepo.save.bind(ctx.notificationRepo),
+        findById: ctx.notificationRepo.findById.bind(ctx.notificationRepo),
+        findByUserIdPaginated: async (_userId, options) => {
+          capturedOptions.push(options);
+          return ok({
+            notifications: [
+              makeNotification({
+                id: 'first',
+                text: 'Spring bait',
+                timestamp: bounds.fromSec + 1,
+                postTime: String(bounds.fromSec + 1),
+              }),
+            ],
+            nextCursor: 'raw-cursor-2',
+          });
+        },
+        existsByNotificationIdAndUserId:
+          ctx.notificationRepo.existsByNotificationIdAndUserId.bind(ctx.notificationRepo),
+        delete: ctx.notificationRepo.delete.bind(ctx.notificationRepo),
+      };
+      setMockServices({
+        notificationRepository,
+        digestSubscriptions: [
+          {
+            userId: 'u',
+            groupKey: 'g',
+            groupTitlePrefix: 'G fishing chat',
+            outputLanguage: 'Polish',
+          },
+        ],
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/group-messages/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          userId: 'u',
+          groupKey: 'g',
+          date: '2026-04-15',
+          limit: 1,
+          cursor: 'raw-cursor-1',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedOptions[0]?.cursor).toBe('raw-cursor-1');
+      const body = JSON.parse(response.body) as SuccessResponse<{
+        messages: { text: string }[];
+        truncated: boolean;
+        nextCursor?: string;
+      }>;
+      expect(body.data.messages).toHaveLength(1);
+      expect(body.data.nextCursor).toBeDefined();
+      expect(body.data.truncated).toBe(true);
+
+      const nextCursor = body.data.nextCursor;
+      if (nextCursor === undefined) throw new Error('Expected nextCursor to be defined');
+      const secondResponse = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/group-messages/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          userId: 'u',
+          groupKey: 'g',
+          date: '2026-04-15',
+          limit: 1,
+          cursor: nextCursor,
+        },
+      });
+
+      expect(secondResponse.statusCode).toBe(200);
+      expect(capturedOptions[1]?.cursor).toBe('raw-cursor-2');
+    });
+
+    it('uses buffered route cursors when a raw page has more matches than the response limit', async () => {
+      setInternalAuth();
+      const bounds = cetDayBounds('2026-04-15');
+      const firstMessageSec = bounds.fromSec + 100;
+      const secondMessageSec = bounds.fromSec + 200;
+      const notificationRepository: NotificationRepository = {
+        save: ctx.notificationRepo.save.bind(ctx.notificationRepo),
+        findById: ctx.notificationRepo.findById.bind(ctx.notificationRepo),
+        findByUserIdPaginated: async () =>
+          ok({
+            notifications: [
+              makeNotification({
+                id: 'newer',
+                text: 'Newer spring bait',
+                timestamp: secondMessageSec,
+                postTime: String(secondMessageSec),
+              }),
+              makeNotification({
+                id: 'older',
+                text: 'Older spring bait',
+                timestamp: firstMessageSec,
+                postTime: String(firstMessageSec),
+              }),
+            ],
+          }),
+        existsByNotificationIdAndUserId:
+          ctx.notificationRepo.existsByNotificationIdAndUserId.bind(ctx.notificationRepo),
+        delete: ctx.notificationRepo.delete.bind(ctx.notificationRepo),
+      };
+      setMockServices({
+        notificationRepository,
+        digestSubscriptions: [
+          {
+            userId: 'u',
+            groupKey: 'g',
+            groupTitlePrefix: 'G fishing chat',
+            outputLanguage: 'Polish',
+          },
+        ],
+      });
+
+      const firstResponse = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/group-messages/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { userId: 'u', groupKey: 'g', date: '2026-04-15', limit: 1 },
+      });
+
+      expect(firstResponse.statusCode).toBe(200);
+      const firstBody = JSON.parse(firstResponse.body) as SuccessResponse<{
+        messages: { text: string }[];
+        nextCursor?: string;
+        truncated: boolean;
+      }>;
+      expect(firstBody.data.messages).toEqual([expect.objectContaining({ text: 'Older spring bait' })]);
+      expect(firstBody.data.nextCursor).toBeDefined();
+      expect(firstBody.data.truncated).toBe(true);
+
+      const cursor = firstBody.data.nextCursor;
+      if (cursor === undefined) throw new Error('Expected nextCursor to be defined');
+      const secondResponse = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/group-messages/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { userId: 'u', groupKey: 'g', date: '2026-04-15', limit: 1, cursor },
+      });
+
+      expect(secondResponse.statusCode).toBe(200);
+      const secondBody = JSON.parse(secondResponse.body) as SuccessResponse<{
+        messages: { text: string }[];
+        nextCursor?: string;
+        truncated: boolean;
+      }>;
+      expect(secondBody.data.messages).toEqual([expect.objectContaining({ text: 'Newer spring bait' })]);
+      expect(secondBody.data.nextCursor).toBeUndefined();
+      expect(secondBody.data.truncated).toBe(false);
+    });
+
+    it('pages long historical group-message ranges through the route and repository', async () => {
+      setInternalAuth();
+      const bounds = cetDayBounds('2026-04-15');
+      const newestMessageSec = bounds.fromSec + 3600;
+      const notifications = Array.from({ length: 501 }, (_, index) =>
+        makeNotification({
+          id: `history-${String(index)}`,
+          notificationId: `history-${String(index)}`,
+          text: `Spring bait page ${String(index)}`,
+          timestamp: newestMessageSec - index,
+          postTime: String(newestMessageSec - index),
+          receivedAt: new Date((newestMessageSec - index) * 1000).toISOString(),
+        })
+      );
+      const capturedOptions: PaginationOptions[] = [];
+      const notificationRepository: NotificationRepository = {
+        save: ctx.notificationRepo.save.bind(ctx.notificationRepo),
+        findById: ctx.notificationRepo.findById.bind(ctx.notificationRepo),
+        findByUserIdPaginated: async (_userId, options) => {
+          capturedOptions.push(options);
+          const ordered = notifications
+            .filter((notification) => notification.timestamp >= (options.filter?.postTimeSecFrom ?? 0))
+            .filter((notification) => notification.timestamp < (options.filter?.postTimeSecTo ?? Number.MAX_SAFE_INTEGER))
+            .sort((a, b) => b.timestamp - a.timestamp);
+          const cursorIndex =
+            options.cursor === undefined
+              ? -1
+              : ordered.findIndex((notification) => notification.id === options.cursor);
+          const page = ordered.slice(cursorIndex + 1, cursorIndex + 1 + options.limit);
+          const result: { notifications: Notification[]; nextCursor?: string } = {
+            notifications: page,
+          };
+          const last = page[page.length - 1];
+          if (last !== undefined && ordered[cursorIndex + 1 + options.limit] !== undefined) {
+            result.nextCursor = last.id;
+          }
+          return ok(result);
+        },
+        existsByNotificationIdAndUserId:
+          ctx.notificationRepo.existsByNotificationIdAndUserId.bind(ctx.notificationRepo),
+        delete: ctx.notificationRepo.delete.bind(ctx.notificationRepo),
+      };
+      setMockServices({
+        notificationRepository,
+        digestSubscriptions: [
+          {
+            userId: 'u',
+            groupKey: 'g',
+            groupTitlePrefix: 'G fishing chat',
+            outputLanguage: 'Polish',
+          },
+        ],
+      });
+
+      const firstResponse = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/group-messages/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          userId: 'u',
+          groupKey: 'g',
+          dateFrom: '2026-01-01',
+          dateTo: '2026-04-30',
+          terms: ['spring'],
+          limit: 1,
+          cursor: 'raw-start',
+        },
+      });
+
+      expect(firstResponse.statusCode).toBe(200);
+      const firstBody = JSON.parse(firstResponse.body) as SuccessResponse<{
+        messages: { text: string; postTimeSec: number }[];
+        nextCursor?: string;
+        truncated: boolean;
+      }>;
+      expect(firstBody.data.messages).toEqual([
+        expect.objectContaining({
+          text: 'Spring bait page 499',
+          postTimeSec: newestMessageSec - 499,
+        }),
+      ]);
+      expect(capturedOptions[0]?.limit).toBe(500);
+      expect(capturedOptions[0]?.cursor).toBe('raw-start');
+      expect(firstBody.data.nextCursor).toBeDefined();
+      expect(firstBody.data.truncated).toBe(true);
+
+      const cursor = firstBody.data.nextCursor;
+      if (cursor === undefined) throw new Error('Expected nextCursor to be defined');
+      const secondResponse = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/notifications/group-messages/query',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          userId: 'u',
+          groupKey: 'g',
+          dateFrom: '2026-01-01',
+          dateTo: '2026-04-30',
+          terms: ['spring'],
+          limit: 1,
+          cursor,
+        },
+      });
+
+      expect(secondResponse.statusCode).toBe(200);
+      const secondBody = JSON.parse(secondResponse.body) as SuccessResponse<{
+        messages: { text: string; postTimeSec: number }[];
+        nextCursor?: string;
+        truncated: boolean;
+      }>;
+      expect(secondBody.data.messages).toEqual([
+        expect.objectContaining({
+          text: 'Spring bait page 498',
+          postTimeSec: newestMessageSec - 498,
+        }),
+      ]);
+      expect(capturedOptions[1]?.limit).toBe(500);
+      expect(secondBody.data.nextCursor).toBeDefined();
+      expect(secondBody.data.truncated).toBe(true);
     });
 
     it('marks group-message scans truncated when raw notification scan cap is reached', async () => {
@@ -1239,10 +1581,19 @@ describe('Internal Routes', () => {
           receivedAt: new Date((bounds.fromSec + index) * 1000).toISOString(),
         })
       );
+      const capturedOptions: PaginationOptions[] = [];
       const notificationRepository: NotificationRepository = {
         save: ctx.notificationRepo.save.bind(ctx.notificationRepo),
         findById: ctx.notificationRepo.findById.bind(ctx.notificationRepo),
-        findByUserIdPaginated: async () => ok({ notifications, nextCursor: 'still-more' }),
+        findByUserIdPaginated: async (_userId, options) => {
+          capturedOptions.push(options);
+          const start = options.cursor === undefined ? 0 : Number(options.cursor);
+          const page = notifications.slice(start, start + options.limit);
+          return ok({
+            notifications: page,
+            nextCursor: String(start + options.limit),
+          });
+        },
         existsByNotificationIdAndUserId: ctx.notificationRepo.existsByNotificationIdAndUserId.bind(ctx.notificationRepo),
         delete: ctx.notificationRepo.delete.bind(ctx.notificationRepo),
       };
@@ -1255,7 +1606,13 @@ describe('Internal Routes', () => {
         method: 'POST',
         url: '/internal/notifications/group-messages/query',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
-        payload: { userId: 'u', groupKey: 'g', date: '2026-04-15', limit: 1 },
+        payload: {
+          userId: 'u',
+          groupKey: 'g',
+          date: '2026-04-15',
+          terms: ['no-match'],
+          limit: 1,
+        },
       });
 
       expect(response.statusCode).toBe(200);
@@ -1265,6 +1622,8 @@ describe('Internal Routes', () => {
       }>;
       expect(body.data.totalRaw).toBe(5000);
       expect(body.data.truncated).toBe(true);
+      expect(capturedOptions).toHaveLength(10);
+      expect(capturedOptions.every((options) => options.limit === 500)).toBe(true);
     });
   });
 });

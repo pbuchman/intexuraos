@@ -53,11 +53,31 @@ function decodeCursor(cursor: string | undefined): { receivedAt: string; id: str
   }
 }
 
+function decodeTimestampCursor(cursor: string | undefined): { timestamp: number; id: string } | undefined {
+  if (cursor === undefined) {
+    return undefined;
+  }
+  try {
+    const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
+    const parsed = JSON.parse(decoded) as { timestamp?: unknown; id?: unknown };
+    if (typeof parsed.timestamp === 'number' && typeof parsed.id === 'string') {
+      return { timestamp: parsed.timestamp, id: parsed.id };
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Encode a cursor from notification data.
  */
 function encodeCursor(receivedAt: string, id: string): string {
   return Buffer.from(JSON.stringify({ receivedAt, id })).toString('base64');
+}
+
+function encodeTimestampCursor(timestamp: number, id: string): string {
+  return Buffer.from(JSON.stringify({ timestamp, id })).toString('base64');
 }
 
 /**
@@ -136,6 +156,8 @@ export class FirestoreNotificationRepository implements NotificationRepository {
       const db = getFirestore();
       const titleFilter = options.filter?.title?.toLowerCase();
       const hasTitleFilter = titleFilter !== undefined && titleFilter !== '';
+      const hasTimestampRangeFilter =
+        options.filter?.postTimeSecFrom !== undefined || options.filter?.postTimeSecTo !== undefined;
 
       logger.info({ userId, limit: options.limit, hasTitleFilter }, 'Querying notifications');
 
@@ -145,7 +167,11 @@ export class FirestoreNotificationRepository implements NotificationRepository {
           .collection(COLLECTION_NAME)
           .where('userId', '==', userId);
 
-        if (options.filter?.source !== undefined && options.filter.source.length > 0) {
+        if (
+          !hasTimestampRangeFilter &&
+          options.filter?.source !== undefined &&
+          options.filter.source.length > 0
+        ) {
           query = query.where('source', 'in', options.filter.source);
         }
         if (options.filter?.app !== undefined && options.filter.app.length > 0) {
@@ -159,11 +185,18 @@ export class FirestoreNotificationRepository implements NotificationRepository {
           query = query.where('timestamp', '<', options.filter.postTimeSecTo);
         }
 
-        query = query.orderBy('receivedAt', 'desc');
-
-        const cursorData = decodeCursor(cursor);
-        if (cursorData !== undefined) {
-          query = query.startAfter(cursorData.receivedAt);
+        if (hasTimestampRangeFilter) {
+          query = query.orderBy('timestamp', 'desc').orderBy('__name__', 'desc');
+          const cursorData = decodeTimestampCursor(cursor);
+          if (cursorData !== undefined) {
+            query = query.startAfter(cursorData.timestamp, cursorData.id);
+          }
+        } else {
+          query = query.orderBy('receivedAt', 'desc');
+          const cursorData = decodeCursor(cursor);
+          if (cursorData !== undefined) {
+            query = query.startAfter(cursorData.receivedAt);
+          }
         }
 
         return query;
@@ -182,6 +215,7 @@ export class FirestoreNotificationRepository implements NotificationRepository {
 
         const docs = snapshot.docs;
         hasMoreInDb = docs.length === batchSize;
+        let nextCursorCandidate = currentCursor;
 
         totalRowsScanned += docs.length;
         if (totalRowsScanned >= this.maxScanLimit) {
@@ -199,25 +233,27 @@ export class FirestoreNotificationRepository implements NotificationRepository {
 
           const data = docSnap.data() as NotificationDoc;
           const notification: Notification = { id: docSnap.id, ...data };
+          nextCursorCandidate = hasTimestampRangeFilter
+            ? encodeTimestampCursor(data.timestamp, docSnap.id)
+            : encodeCursor(data.receivedAt, docSnap.id);
 
           // Apply title filter in memory
           if (hasTitleFilter && !notification.title.toLowerCase().includes(titleFilter)) {
+            continue;
+          }
+          if (
+            hasTimestampRangeFilter &&
+            options.filter?.source !== undefined &&
+            options.filter.source.length > 0 &&
+            !options.filter.source.includes(notification.source)
+          ) {
             continue;
           }
 
           notifications.push(notification);
         }
 
-        // Update cursor for next iteration (tracks DB position, not filtered results)
-        if (docs.length > 0) {
-          const lastDoc = docs[docs.length - 1];
-          /* v8 ignore start -- ts-type: TypeScript narrows docs.length > 0 but array access returns T | undefined due to noUncheckedIndexedAccess @preserve */
-          if (lastDoc !== undefined) {
-            const lastData = lastDoc.data() as NotificationDoc;
-            currentCursor = encodeCursor(lastData.receivedAt, lastDoc.id);
-          }
-          /* v8 ignore stop @preserve */
-        }
+        currentCursor = nextCursorCandidate;
       }
 
       const result: PaginatedNotifications = { notifications };
@@ -279,4 +315,3 @@ export class FirestoreNotificationRepository implements NotificationRepository {
     }
   }
 }
-
