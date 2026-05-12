@@ -25,9 +25,10 @@ export interface RetrieveEvidenceInput {
 }
 
 const MOBILE_NOTIFICATIONS_TIMEOUT_MS = 5_000;
-const HISTORICAL_DATE_FROM = '1970-01-01';
+const HISTORICAL_DATE_FLOOR = '1970-01-01';
 const DIGEST_PAGE_LIMIT = 100;
 const RAW_MESSAGE_PAGE_LIMIT = 500;
+const FINAL_EVIDENCE_LIMIT = 16;
 
 function extractDateRange(question: string, now: Date): { dateFrom: string; dateTo: string } {
   const matches = [...question.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g)].map((match) => match[0]);
@@ -46,7 +47,7 @@ function extractDateRange(question: string, now: Date): { dateFrom: string; date
 
   const dateTo = now.toISOString().slice(0, 10);
   return {
-    dateFrom: HISTORICAL_DATE_FROM,
+    dateFrom: HISTORICAL_DATE_FLOOR,
     dateTo,
   };
 }
@@ -170,24 +171,25 @@ export async function retrieveEvidence(
   if (groupsResult.ok) {
     const range = extractDateRange(input.question, deps.now);
     for (const group of groupsResult.value.items) {
-      const groupDigestEvidence = await collectDigestEvidence({
-        client: deps.mobileNotificationsClient,
-        userId: input.userId,
-        groupKey: group.groupKey,
-        dateFrom: range.dateFrom,
-        dateTo: range.dateTo,
-        terms,
-      });
+      const [groupDigestEvidence, rawMessageEvidence] = await Promise.all([
+        collectDigestEvidence({
+          client: deps.mobileNotificationsClient,
+          userId: input.userId,
+          groupKey: group.groupKey,
+          dateFrom: range.dateFrom,
+          dateTo: range.dateTo,
+          terms,
+        }),
+        collectRawMessageEvidence({
+          client: deps.mobileNotificationsClient,
+          userId: input.userId,
+          groupKey: group.groupKey,
+          dateFrom: range.dateFrom,
+          dateTo: range.dateTo,
+          terms,
+        }),
+      ]);
       digestEvidence.push(...groupDigestEvidence);
-
-      const rawMessageEvidence = await collectRawMessageEvidence({
-        client: deps.mobileNotificationsClient,
-        userId: input.userId,
-        groupKey: group.groupKey,
-        dateFrom: range.dateFrom,
-        dateTo: range.dateTo,
-        terms,
-      });
       evidence.push(...rawMessageEvidence);
     }
   }
@@ -195,7 +197,7 @@ export async function retrieveEvidence(
 
   const ranked = evidence
     .sort((left, right) => right.score - left.score)
-    .slice(0, 16);
+    .slice(0, FINAL_EVIDENCE_LIMIT);
 
   if (ranked.length === 0) {
     return {

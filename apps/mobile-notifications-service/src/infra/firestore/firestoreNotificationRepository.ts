@@ -258,13 +258,13 @@ export class FirestoreNotificationRepository implements NotificationRepository {
 
       const result: PaginatedNotifications = { notifications };
 
-      logger.info({ userId, resultCount: notifications.length, hasNextPage: result.nextCursor !== undefined }, 'Query completed');
-
       // Set next cursor if there might be more results
       // Use currentCursor (DB position) so user can continue even if 0 results matched filter
       if (hasMoreInDb && currentCursor !== undefined) {
         result.nextCursor = currentCursor;
       }
+
+      logger.info({ userId, resultCount: notifications.length, hasNextPage: result.nextCursor !== undefined }, 'Query completed');
 
       return ok(result);
     } catch (error) {
