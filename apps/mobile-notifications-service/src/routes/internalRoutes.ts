@@ -39,6 +39,7 @@ interface DigestQueryBody {
   dateTo: string;
   terms?: string[];
   limit?: number;
+  cursor?: string;
 }
 
 interface DigestGetBody {
@@ -60,6 +61,7 @@ interface GroupMessagesQueryBody {
   dateTo?: string;
   terms?: string[];
   limit?: number;
+  cursor?: string;
 }
 
 interface DigestEvidenceItem {
@@ -87,13 +89,17 @@ interface DateRange {
 
 type DateRangeResolution = { ok: true; value: DateRange } | { ok: false; message: string };
 
+interface GroupMessagesCursor {
+  upstreamCursor?: string;
+  matchedOffset: number;
+}
+
 const DEFAULT_DIGEST_LIMIT = 30;
 const MAX_DIGEST_LIMIT = 100;
 const DEFAULT_GROUP_MESSAGE_LIMIT = 100;
 const MAX_GROUP_MESSAGE_LIMIT = 500;
-const MAX_GROUP_MESSAGE_RANGE_DAYS = 31;
-const RAW_NOTIFICATION_PAGE_SIZE = 1000;
-const MAX_RAW_NOTIFICATIONS_TO_SCAN = 5000;
+const RAW_NOTIFICATION_PAGE_SIZE = 500;
+const MAX_RAW_NOTIFICATIONS_TO_SCAN = 5_000;
 const DIGEST_MARKDOWN_LABELS: Record<DigestOutputLanguage, {
   readonly date: string;
   readonly messages: string;
@@ -147,31 +153,57 @@ function isValidIsoDate(value: string): boolean {
   );
 }
 
-function daysInclusive(dateFrom: string, dateTo: string): number {
-  const from = Date.parse(`${dateFrom}T00:00:00.000Z`);
-  const to = Date.parse(`${dateTo}T00:00:00.000Z`);
-  return Math.floor((to - from) / 86_400_000) + 1;
-}
-
-function validateDateRange(
-  dateFrom: string,
-  dateTo: string,
-  options: { maxDays?: number } = {}
-): string | null {
+function validateDateRange(dateFrom: string, dateTo: string): string | null {
   if (!isValidIsoDate(dateFrom) || !isValidIsoDate(dateTo)) {
     return 'dates must use YYYY-MM-DD format';
   }
   if (dateFrom > dateTo) {
     return 'dateFrom must be on or before dateTo';
   }
-  if (options.maxDays !== undefined && daysInclusive(dateFrom, dateTo) > options.maxDays) {
-    return `date range must be ${String(options.maxDays)} days or less`;
-  }
   return null;
 }
 
 function normalizeTerms(terms: readonly string[]): string[] {
   return terms.map((term) => term.trim().toLowerCase()).filter((term) => term.length > 0);
+}
+
+function decodeGroupMessagesCursor(cursor: string | undefined): GroupMessagesCursor {
+  if (cursor === undefined) return { matchedOffset: 0 };
+  try {
+    const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
+    const parsed = JSON.parse(decoded) as {
+      type?: unknown;
+      upstreamCursor?: unknown;
+      matchedOffset?: unknown;
+    };
+    const matchedOffset = parsed.matchedOffset;
+    if (
+      parsed.type === 'group-messages-v1' &&
+      typeof matchedOffset === 'number' &&
+      Number.isInteger(matchedOffset) &&
+      matchedOffset >= 0
+    ) {
+      return {
+        ...(typeof parsed.upstreamCursor === 'string'
+          ? { upstreamCursor: parsed.upstreamCursor }
+          : {}),
+        matchedOffset,
+      };
+    }
+  } catch {
+    // Existing callers may pass repository cursors directly; treat those as upstream cursors.
+  }
+  return { upstreamCursor: cursor, matchedOffset: 0 };
+}
+
+function encodeGroupMessagesCursor(cursor: GroupMessagesCursor): string {
+  return Buffer.from(
+    JSON.stringify({
+      type: 'group-messages-v1',
+      ...(cursor.upstreamCursor !== undefined ? { upstreamCursor: cursor.upstreamCursor } : {}),
+      matchedOffset: cursor.matchedOffset,
+    })
+  ).toString('base64');
 }
 
 function textMatchesTerms(text: string, terms: readonly string[]): boolean {
@@ -496,6 +528,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             dateTo: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
             terms: { type: 'array', items: { type: 'string' }, default: [] },
             limit: { type: 'integer', minimum: 1, maximum: MAX_DIGEST_LIMIT, default: DEFAULT_DIGEST_LIMIT },
+            cursor: { type: 'string', minLength: 1 },
           },
         },
       },
@@ -522,6 +555,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         fromDate: dateFrom,
         toDate: dateTo,
         limit,
+        ...(request.body.cursor !== undefined ? { cursor: request.body.cursor } : {}),
       });
       if (!result.ok) return await reply.fail('INTERNAL_ERROR', result.error.message);
 
@@ -534,6 +568,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       return await reply.ok({
         items,
         truncated: matchedItems.length > limit || result.value.nextCursor !== undefined,
+        ...(result.value.nextCursor !== undefined ? { nextCursor: result.value.nextCursor } : {}),
       });
     }
   );
@@ -641,6 +676,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               maximum: MAX_GROUP_MESSAGE_LIMIT,
               default: DEFAULT_GROUP_MESSAGE_LIMIT,
             },
+            cursor: { type: 'string', minLength: 1 },
           },
         },
       },
@@ -656,9 +692,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const resolvedRange = resolveGroupMessageRange(request.body);
       if (!resolvedRange.ok) return await reply.fail('INVALID_REQUEST', resolvedRange.message);
       const { dateFrom, dateTo } = resolvedRange.value;
-      const rangeError = validateDateRange(dateFrom, dateTo, {
-        maxDays: MAX_GROUP_MESSAGE_RANGE_DAYS,
-      });
+      const rangeError = validateDateRange(dateFrom, dateTo);
       if (rangeError !== null) return await reply.fail('INVALID_REQUEST', rangeError);
       const limit = request.body.limit as number;
 
@@ -670,8 +704,16 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const fromBounds = cetDayBounds(dateFrom);
       const toBounds = cetDayBounds(dateTo);
       const rawNotifications: Notification[] = [];
-      let cursor: string | undefined;
+      const terms = normalizeTerms(request.body.terms as string[]);
+      const routeCursor = decodeGroupMessagesCursor(request.body.cursor);
+      const matchedOffset = routeCursor.matchedOffset;
+      const startingUpstreamCursor = routeCursor.upstreamCursor;
+      let cursor = startingUpstreamCursor;
+      let nextCursor: string | undefined;
       let rawScanTruncated = false;
+      let repeatedCursorDetected = false;
+      const seenCursors = new Set<string>();
+      if (cursor !== undefined) seenCursors.add(cursor);
 
       do {
         const pageLimit = Math.min(
@@ -686,9 +728,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             postTimeSecFrom: fromBounds.fromSec,
             postTimeSecTo: toBounds.toSec,
           },
+          ...(cursor !== undefined ? { cursor } : {}),
         };
-        if (cursor !== undefined) options.cursor = cursor;
-
         const page = await getServices().notificationRepository.findByUserIdPaginated(
           userId,
           options
@@ -696,24 +737,53 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (!page.ok) return await reply.fail('INTERNAL_ERROR', page.error.message);
 
         rawNotifications.push(...page.value.notifications);
-        cursor = page.value.nextCursor;
+        nextCursor = page.value.nextCursor;
+        if (nextCursor !== undefined && seenCursors.has(nextCursor)) {
+          rawScanTruncated = true;
+          repeatedCursorDetected = true;
+          nextCursor = undefined;
+          break;
+        }
+        cursor = nextCursor;
+        if (cursor !== undefined) seenCursors.add(cursor);
+        const currentMatchedCount = filterAndDedupeNotifications(rawNotifications.map(toRawNotification))
+          .filter((message) => textMatchesTerms(message.text, terms))
+          .length;
+        if (currentMatchedCount >= matchedOffset + limit) {
+          break;
+        }
         if (cursor !== undefined && rawNotifications.length >= MAX_RAW_NOTIFICATIONS_TO_SCAN) {
           rawScanTruncated = true;
           break;
         }
-      } while (cursor !== undefined);
+      } while (cursor !== undefined && rawNotifications.length < MAX_RAW_NOTIFICATIONS_TO_SCAN);
 
       const cleaned = filterAndDedupeNotifications(rawNotifications.map(toRawNotification));
-      const terms = normalizeTerms(request.body.terms as string[]);
       const matched = cleaned.filter((message) => textMatchesTerms(message.text, terms));
-      const messages = matched.slice(0, limit).map((message) => toGroupMessageEvidence(groupKey, message));
+      const messages = matched
+        .slice(matchedOffset, matchedOffset + limit)
+        .map((message) => toGroupMessageEvidence(groupKey, message));
+      const hasBufferedMatches = matched.length > matchedOffset + limit;
+      const responseNextCursor = repeatedCursorDetected
+        ? undefined
+        : hasBufferedMatches
+          ? encodeGroupMessagesCursor({
+              ...(startingUpstreamCursor !== undefined
+                ? { upstreamCursor: startingUpstreamCursor }
+                : {}),
+              matchedOffset: matchedOffset + limit,
+            })
+          : nextCursor !== undefined
+            ? encodeGroupMessagesCursor({ upstreamCursor: nextCursor, matchedOffset: 0 })
+            : undefined;
 
       return await reply.ok({
         messages,
         totalRaw: rawNotifications.length,
         totalCleaned: cleaned.length,
         returned: messages.length,
-        truncated: rawScanTruncated || matched.length > limit,
+        truncated: rawScanTruncated || hasBufferedMatches || responseNextCursor !== undefined,
+        ...(responseNextCursor !== undefined ? { nextCursor: responseNextCursor } : {}),
       });
     }
   );
