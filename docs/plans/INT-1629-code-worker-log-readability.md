@@ -38,6 +38,7 @@
   - Update runtime-level expectations from “preserve raw Codex JSON exactly” to “format Codex JSON into readable log lines”.
 - Modify: `apps/code-agent/src/__tests__/routes/webhooks.test.ts`
   - Update `/internal/logs` route regression tests so Codex `log_lines` are readable while raw chunk storage remains unchanged.
+  - Update the existing completion-flush regression so a trailing Codex `turn.failed` fragment stores `[error] boom` instead of raw JSON.
 - Modify: `apps/web/src/components/code-tasks/CodeTaskLogViewer.tsx`
   - Add `[file]` tag styling and worker-filter inclusion if file changes should remain visible in focused worker output.
 - Modify: `apps/web/src/components/code-tasks/__tests__/CodeTaskLogViewer.test.tsx`
@@ -54,6 +55,7 @@
 - `item.completed` with `agent_message` -> `[msg] <text>`
 - `item.completed` with `command_execution` -> existing `[cmd] $ <command>  -> <ok|EXIT n> (<line-count> lines)` plus gutter output
 - `item.completed` with `file_change` -> one line per changed file: `[file] <kind> <repo-relative path>`
+- Formatter return contract: a single Codex JSON input line may produce zero, one, or many persisted UI lines. Multi-file `file_change` events MUST return one formatted line for each `changes[]` entry, and `formatRawCodexLogChunk()` MUST allocate a distinct incrementing `sequence` to each returned line.
 - Unknown JSON event -> `[event] <type>`
 - Non-JSON text -> unchanged
 - Incomplete Codex JSON across chunks -> buffer until complete, then format once
@@ -88,6 +90,36 @@ it('formats Codex file_change items into repo-relative [file] lines', () => {
   const result = formatRawCodexLogChunk(input, 0, ts(), state);
 
   expect(result.map((line) => line.text)).toEqual([
+    '[file] update apps/mobile-notifications-service/src/routes/internalRoutes.ts',
+  ]);
+});
+
+it('formats every changed file with a distinct sequence', () => {
+  const state = newState();
+  const input = JSON.stringify({
+    type: 'item.completed',
+    item: {
+      id: 'item_105',
+      type: 'file_change',
+      changes: [
+        {
+          path: '/repo/apps/mobile-notifications-service/src/infra/firestore/firestoreNotificationRepository.ts',
+          kind: 'update',
+        },
+        {
+          path: '/repo/apps/mobile-notifications-service/src/routes/internalRoutes.ts',
+          kind: 'update',
+        },
+      ],
+      status: 'completed',
+    },
+  }) + '\n';
+
+  const result = formatRawCodexLogChunk(input, 7, ts(), state);
+
+  expect(result.map((line) => line.sequence)).toEqual([7000, 7001]);
+  expect(result.map((line) => line.text)).toEqual([
+    '[file] update apps/mobile-notifications-service/src/infra/firestore/firestoreNotificationRepository.ts',
     '[file] update apps/mobile-notifications-service/src/routes/internalRoutes.ts',
   ]);
 });
@@ -225,35 +257,51 @@ function formatRepoRelativePath(path: string): string {
 Implement the same display contract already used by `workers/orchestrator/src/services/runtime/processors/codex-log-processor.ts`, adjusted to the existing code-agent formatter file:
 
 ```typescript
-function formatCodexJsonLine(jsonLine: string): string | null {
+function formatCodexJsonLine(jsonLine: string): string[] | null {
   try {
     const obj = JSON.parse(jsonLine) as CodexLogObject;
 
     if (obj.type === 'thread.started' && typeof obj.thread_id === 'string') {
-      return `[codex] Session started: thread=${obj.thread_id}`;
+      return [`[codex] Session started: thread=${obj.thread_id}`];
     }
-    if (obj.type === 'turn.started') return '[codex] Turn started';
-    if (obj.type === 'turn.completed') return formatCodexTurnCompleted(obj);
-    if (obj.type === 'turn.failed') return `[error] ${obj.error?.message ?? 'Codex turn failed'}`;
-    if (obj.type === 'error' && typeof obj.message === 'string') return `[error] ${obj.message}`;
+    if (obj.type === 'turn.started') return ['[codex] Turn started'];
+    if (obj.type === 'turn.completed') return [formatCodexTurnCompleted(obj)];
+    if (obj.type === 'turn.failed') return [`[error] ${obj.error?.message ?? 'Codex turn failed'}`];
+    if (obj.type === 'error' && typeof obj.message === 'string') return [`[error] ${obj.message}`];
     if (obj.type === 'item.started') return null;
-    if (obj.type === 'item.completed') return formatCodexItemCompleted(obj) ?? `[event] item.completed`;
-    if (typeof obj.type === 'string') return `[event] ${obj.type}`;
-    return jsonLine;
+    if (obj.type === 'item.completed') return formatCodexItemCompleted(obj) ?? ['[event] item.completed'];
+    if (typeof obj.type === 'string') return [`[event] ${obj.type}`];
+    return [jsonLine];
   } catch {
-    return jsonLine;
+    return [jsonLine];
   }
 }
 ```
+
+`formatCodexItemCompleted()` MUST also return `string[] | null`. For `item.type === 'file_change'`, map every valid `changes[]` entry:
+
+```typescript
+if (obj.item?.type === 'file_change' && Array.isArray(obj.item.changes)) {
+  return obj.item.changes.flatMap((change) => {
+    if (typeof change.path !== 'string') return [];
+    return [`[file] ${change.kind ?? 'change'} ${formatRepoRelativePath(change.path)}`];
+  });
+}
+```
+
+Other item helpers that format one UI line, such as agent messages and command executions, should return a single-element array.
 
 - [ ] **Step 3: Change `formatRawCodexLogChunk()` to format completed lines**
 
 Keep partial-line buffering unchanged, but run each complete non-empty line through `formatCodexJsonLine()` before pushing output:
 
 ```typescript
-const formatted = formatCodexJsonLine(line);
-if (formatted === null || formatted.trim() === '') continue;
-result.push({ sequence: seq++, text: formatted, timestamp });
+const formattedLines = formatCodexJsonLine(line);
+if (formattedLines === null) continue;
+for (const formatted of formattedLines) {
+  if (formatted.trim() === '') continue;
+  result.push({ sequence: seq++, text: formatted, timestamp });
+}
 ```
 
 - [ ] **Step 4: Update `flushCodexPartial()` to format the buffered line**
@@ -261,9 +309,12 @@ result.push({ sequence: seq++, text: formatted, timestamp });
 Apply the same formatting during terminal flush so trailing JSON without a newline does not leak raw JSON:
 
 ```typescript
-const formatted = formatCodexJsonLine(line);
-if (formatted === null || formatted.trim() === '') return [];
-return [{ sequence: startSequence * 1000, text: formatted, timestamp }];
+const formattedLines = formatCodexJsonLine(line);
+if (formattedLines === null) return [];
+let seq = startSequence * 1000;
+return formattedLines
+  .filter((formatted) => formatted.trim() !== '')
+  .map((formatted) => ({ sequence: seq++, text: formatted, timestamp }));
 ```
 
 - [ ] **Step 5: Run the focused test**
@@ -323,7 +374,18 @@ expect(storedEntries?.[0]?.text).toBe('[msg] READY');
 
 Leave raw chunk repository assertions intact where present; raw chunks must still preserve original content.
 
-- [ ] **Step 4: Add route-level file-change regression**
+- [ ] **Step 4: Update route-level completion-flush regression**
+
+In the existing test named `flushes a trailing Codex log fragment when the task completes`, keep the same task-completion trigger and raw chunk assertions, but update the stored `log_lines` expectation for the trailing `turn.failed` fragment:
+
+```typescript
+expect(storedEntries).toHaveLength(1);
+expect(storedEntries?.[0]?.text).toBe('[error] boom');
+```
+
+This keeps the terminal `flushCodexPartial()` path covered and proves completion-time buffered JSON uses the same formatter as newline-delimited chunks.
+
+- [ ] **Step 5: Add route-level file-change regression**
 
 Add a `/internal/logs` test that posts the sample `file_change` JSON and verifies `logLineRepo.storeBatch()` receives:
 
@@ -333,7 +395,7 @@ expect(storedEntries?.[0]?.text).toBe(
 );
 ```
 
-- [ ] **Step 5: Run code-agent focused tests**
+- [ ] **Step 6: Run code-agent focused tests**
 
 Run:
 
