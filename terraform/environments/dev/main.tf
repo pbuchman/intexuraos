@@ -1603,11 +1603,12 @@ module "code_agent" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/code-agent:latest"
 
   secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_WEBHOOK_VERIFY_SECRET = module.secret_manager.secret_ids["INTEXURAOS_WEBHOOK_VERIFY_SECRET"]
-    INTEXURAOS_ORCHESTRATOR_SECRET   = module.secret_manager.secret_ids["INTEXURAOS_ORCHESTRATOR_SECRET"]
-    INTEXURAOS_TOKEN_ENCRYPTION_KEY  = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
-    INTEXURAOS_GITHUB_WEBHOOK_SECRET = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_WEBHOOK_SECRET"]
-    INTEXURAOS_OPENAI_APP_API_KEY    = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_APP_API_KEY"]
+    INTEXURAOS_WEBHOOK_VERIFY_SECRET  = module.secret_manager.secret_ids["INTEXURAOS_WEBHOOK_VERIFY_SECRET"]
+    INTEXURAOS_ORCHESTRATOR_SECRET    = module.secret_manager.secret_ids["INTEXURAOS_ORCHESTRATOR_SECRET"]
+    INTEXURAOS_TOKEN_ENCRYPTION_KEY   = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
+    INTEXURAOS_GITHUB_WEBHOOK_SECRET  = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_WEBHOOK_SECRET"]
+    INTEXURAOS_OPENROUTER_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENROUTER_APP_API_KEY"]
+    INTEXURAOS_OPENAI_APP_API_KEY     = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_APP_API_KEY"]
   })
 
   env_vars = merge(local.common_service_env_vars, {

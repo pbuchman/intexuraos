@@ -355,19 +355,35 @@ export function isFastModel(model: string): model is FastModel {
 // =============================================================================
 
 /**
- * Narrowed subset of LLMModel for tool calling agent loops.
+ * Narrowed subset for tool calling agent loops.
  *
- * Every ToolCallingModel is also a valid LLMModel, so
- * getProviderForModel() works out of the box.
+ * Static Gemini models are valid LLMModel IDs. OpenRouter tool-calling models
+ * use the `or:`-prefixed OpenRouterModelId form and are routed through the
+ * OpenRouter client by the app-side factory.
  */
-export type ToolCallingModel = Gemini25Flash;
+export type OpenRouterGemini3FlashPreview = 'or:google/gemini-3-flash-preview' & OpenRouterModelId;
+
+export type OpenRouterToolCallingModel = OpenRouterGemini3FlashPreview;
+
+export const OpenRouterToolCallingModels = {
+  Gemini3FlashPreview: createOpenRouterModelId(
+    'google/gemini-3-flash-preview'
+  ) as OpenRouterGemini3FlashPreview,
+} as const;
+
+export type ToolCallingModel = Gemini25Flash | OpenRouterToolCallingModel;
 
 /** All models that support tool calling */
-export const ALL_TOOL_CALLING_MODELS: ToolCallingModel[] = ['gemini-2.5-flash'];
+export const ALL_TOOL_CALLING_MODELS: readonly ToolCallingModel[] = [
+  'gemini-2.5-flash',
+  OpenRouterToolCallingModels.Gemini3FlashPreview,
+];
+
+const TOOL_CALLING_MODEL_IDS: ReadonlySet<string> = new Set(ALL_TOOL_CALLING_MODELS);
 
 /**
  * Check if a string is a valid tool calling model.
  */
 export function isToolCallingModel(model: string): model is ToolCallingModel {
-  return ALL_TOOL_CALLING_MODELS.includes(model as ToolCallingModel);
+  return TOOL_CALLING_MODEL_IDS.has(model);
 }

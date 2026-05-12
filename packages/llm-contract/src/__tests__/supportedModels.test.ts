@@ -12,6 +12,8 @@ import {
   isOpenRouterModel,
   createOpenRouterModelId,
   getOpenRouterRawId,
+  isToolCallingModel,
+  OpenRouterToolCallingModels,
   DEFAULT_OPENROUTER_MODELS,
   isDefaultEligibleModel,
   DEFAULT_MODEL_DISPLAY_NAMES,
@@ -51,6 +53,23 @@ describe('OpenRouter model helpers', () => {
 
   it('getOpenRouterRawId returns input for non-OpenRouter models', () => {
     expect(getOpenRouterRawId('gemini-2.5-pro')).toBe('gemini-2.5-pro');
+  });
+});
+
+describe('Tool calling model helpers', () => {
+  it('accepts the static Gemini tool calling model', () => {
+    expect(isToolCallingModel('gemini-2.5-flash')).toBe(true);
+  });
+
+  it('accepts OpenRouter model IDs for tool calling', () => {
+    expect(isToolCallingModel(OpenRouterToolCallingModels.Gemini3FlashPreview)).toBe(true);
+  });
+
+  it('rejects non-tool-calling model IDs', () => {
+    expect(isToolCallingModel('gemini-2.5-pro')).toBe(false);
+    expect(isToolCallingModel('or:some/unknown-model')).toBe(false);
+    expect(isToolCallingModel('or:')).toBe(false);
+    expect(isToolCallingModel('not-a-model')).toBe(false);
   });
 });
 

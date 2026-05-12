@@ -30,19 +30,21 @@
  */
 
 import { createGeminiClient } from '@intexuraos/infra-gemini';
-import {
-  createGeminiToolCallingClient,
-  type ToolCallingClientConfig,
-} from '@intexuraos/infra-gemini';
+import { createGeminiToolCallingClient } from '@intexuraos/infra-gemini';
+import { createOpenRouterToolCallingClient } from '@intexuraos/infra-openrouter';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
+  getOpenRouterRawId,
   getProviderForModel,
   isOpenRouterModel,
+  isToolCallingModel,
   isValidModel,
   LlmProviders,
+  type Gemini25Flash,
   type LLMError,
   type LLMModel,
   type ToolCallingClient,
+  type ToolCallingModel,
   type OwnerType,
 } from '@intexuraos/llm-contract';
 import { createOpenRouterGenerateClient } from './openRouterGenerateClient.js';
@@ -70,6 +72,15 @@ export interface LlmClientConfig {
    * When omitted, downstream defaults to 'system' to preserve legacy behavior.
    * Pass 'user' for calls initiated directly by a human (e.g. chat, code tasks).
    */
+  ownerType?: OwnerType;
+}
+
+export interface ToolCallingClientConfig {
+  apiKey: string;
+  model: ToolCallingModel;
+  userId: string;
+  logger: Logger;
+  usageSink: UsageSink;
   ownerType?: OwnerType;
 }
 
@@ -202,20 +213,36 @@ export function isSupportedProvider(provider: string): provider is SupportedProv
  * Create a tool calling client for LLM agent loops.
  *
  * Routes to the appropriate provider-specific tool calling implementation.
- * Currently supports Google (Gemini) only.
+ * Currently supports Google (Gemini) and OpenRouter.
  *
  * @param config - Tool calling client configuration
  * @returns ToolCallingClient instance
  */
 export function createToolCallingClient(config: ToolCallingClientConfig): ToolCallingClient {
+  const model = config.model as string;
+
+  if (isOpenRouterModel(model)) {
+    if (!isToolCallingModel(model)) {
+      throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM model: ${model}`);
+    }
+
+    return createOpenRouterToolCallingClient({
+      apiKey: config.apiKey,
+      model: getOpenRouterRawId(model),
+      userId: config.userId,
+      logger: config.logger,
+      usageSink: config.usageSink,
+      ...(config.ownerType !== undefined && { ownerType: config.ownerType }),
+    });
+  }
+
   // Validate model is supported
-  if (!isValidModel(config.model)) {
-    const model = config.model as string;
+  if (!isValidModel(model)) {
     throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM model: ${model}`);
   }
 
   // Verify provider is Google (only supported provider for tool calling)
-  const providerForModel = getProviderForModel(config.model);
+  const providerForModel = getProviderForModel(model);
   if (providerForModel !== LlmProviders.Google) {
     throw new IntexuraOSError(
       'INVALID_REQUEST',
@@ -223,8 +250,18 @@ export function createToolCallingClient(config: ToolCallingClientConfig): ToolCa
     );
   }
 
-  return createGeminiToolCallingClient(config);
+  if (!isToolCallingModel(model)) {
+    throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM model: ${model}`);
+  }
+
+  return createGeminiToolCallingClient({
+    apiKey: config.apiKey,
+    model: model as Gemini25Flash,
+    userId: config.userId,
+    logger: config.logger,
+    usageSink: config.usageSink,
+  });
 }
 
 // Re-export for convenience
-export type { LLMError, ToolCallingClientConfig };
+export type { LLMError };
