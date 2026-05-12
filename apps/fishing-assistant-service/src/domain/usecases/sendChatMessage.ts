@@ -1,4 +1,5 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
+import type { MobileNotificationsServiceClient } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type {
   FishingChat,
@@ -21,7 +22,6 @@ import { validateCitations } from '../prompts/validateCitations.js';
 import { expandFollowUpEvidence } from '../retrieval/followUpExpansion.js';
 import { retrieveEvidence } from '../retrieval/retrieveEvidence.js';
 import type { EvidenceItem } from '../retrieval/types.js';
-import type { MobileNotificationsServiceClient } from '@intexuraos/internal-clients';
 
 const DEFAULT_CHAT_TITLE = 'New Chat';
 
@@ -300,25 +300,25 @@ export async function sendChatMessage(
   );
   evidence = [...followUpEvidence, ...evidence];
 
-  const chatClientResult = await deps.chatAdapter.createClientForUser(input.userId);
-  if (!chatClientResult.ok) {
-    if (chatClientResult.error.code === 'NO_API_KEY') {
-      return err({
-        code: 'NO_API_KEY',
-        message: chatClientResult.error.message,
-      });
-    }
-    return err({
-      code: 'DOWNSTREAM_ERROR',
-      message: chatClientResult.error.message,
-    });
-  }
-
   let answerMarkdown = 'I do not have enough evidence to answer that confidently.';
   let confidence: 'high' | 'medium' | 'low' = 'low';
   let citations: FishingMessageCitation[] = [];
 
   if (evidence.length > 0) {
+    const chatClientResult = await deps.chatAdapter.createClientForUser(input.userId);
+    if (!chatClientResult.ok) {
+      if (chatClientResult.error.code === 'NO_API_KEY') {
+        return err({
+          code: 'NO_API_KEY',
+          message: chatClientResult.error.message,
+        });
+      }
+      return err({
+        code: 'DOWNSTREAM_ERROR',
+        message: chatClientResult.error.message,
+      });
+    }
+
     const promptEvidence = createPromptEvidenceContext(evidence);
     const answerResult = await generateValidatedAnswer({
       llmClient: chatClientResult.value,

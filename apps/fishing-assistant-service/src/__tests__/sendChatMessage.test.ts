@@ -7,6 +7,7 @@ import type { KnowledgeEmbeddingClient } from '../domain/ports/embeddingClient.j
 import type { FishingChatRepository } from '../domain/ports/chatRepository.js';
 import type { FixedModelChatAdapter } from '../domain/ports/chatModel.js';
 import type { KnowledgeChunkRepository, KnowledgePageRepository } from '../domain/ports/knowledgeRepositories.js';
+import { fishingAnswerPrompt } from '../domain/prompts/buildFishingAnswerPrompt.js';
 import type { SendChatMessageDeps } from '../domain/usecases/sendChatMessage.js';
 import { sendChatMessage } from '../domain/usecases/sendChatMessage.js';
 
@@ -395,6 +396,40 @@ describe('sendChatMessage', () => {
     ]);
   });
 
+  it('passes every repository-returned current-chat message to the answer prompt', async () => {
+    const recentMessages = [
+      makeMessage({ id: 'history-1', role: 'user', content: 'First question' }),
+      makeMessage({ id: 'history-2', role: 'assistant', content: 'First answer' }),
+      makeMessage({ id: 'history-3', role: 'user', content: 'Follow-up detail' }),
+      makeMessage({ id: 'history-4', role: 'assistant', content: 'Follow-up answer' }),
+      makeMessage({ id: 'history-5', role: 'user', content: 'Latest stored user question' }),
+    ];
+    const ctx = createContext({ recentMessages });
+    const buildSpy = vi.spyOn(fishingAnswerPrompt, 'build');
+
+    const result = await sendChatMessage(ctx.deps, {
+      userId: 'user-1',
+      chatId: 'chat-1',
+      message: 'Need a recipe',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(buildSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        question: 'Need a recipe',
+        recentMessages,
+      })
+    );
+    expect(buildSpy.mock.calls[0]?.[0].recentMessages.map((message) => message.id)).toEqual([
+      'history-1',
+      'history-2',
+      'history-3',
+      'history-4',
+      'history-5',
+    ]);
+    buildSpy.mockRestore();
+  });
+
   it('maps prompt citation aliases back to canonical digest source ids without invoking repair', async () => {
     const ctx = createContext({
       chat: makeChat({ title: 'Spring Session' }),
@@ -510,7 +545,7 @@ describe('sendChatMessage', () => {
 
   it('returns DOWNSTREAM_ERROR when the chat client cannot be created for reasons other than missing keys', async () => {
     const ctx = createContext();
-    ctx.chunkRepository.findNearestByUserId.mockResolvedValue(okResult([]));
+    ctx.chunkRepository.findNearestByUserId.mockResolvedValue(okResult([makeChunk()]));
     ctx.chatAdapter.createClientForUser.mockResolvedValueOnce(
       errResult({ code: 'USER_KEYS_UNAVAILABLE', message: 'keys unavailable' })
     );
@@ -524,6 +559,32 @@ describe('sendChatMessage', () => {
     expect(result).toEqual(
       errResult({ code: 'DOWNSTREAM_ERROR', message: 'keys unavailable' })
     );
+  });
+
+  it('stores the fallback answer without an LLM client when no evidence is available', async () => {
+    const ctx = createContext();
+    ctx.chunkRepository.findNearestByUserId.mockResolvedValue(okResult([]));
+    ctx.chatAdapter.createClientForUser.mockResolvedValueOnce(
+      errResult({ code: 'NO_API_KEY', message: 'missing key' })
+    );
+
+    const result = await sendChatMessage(ctx.deps, {
+      userId: 'user-1',
+      chatId: 'chat-1',
+      message: 'Need a recipe',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(ctx.chatAdapter.createClientForUser).not.toHaveBeenCalled();
+    expect(ctx.chatRepository.createMessage).toHaveBeenNthCalledWith(2, {
+      id: 'message-assistant',
+      chatId: 'chat-1',
+      userId: 'user-1',
+      role: 'assistant',
+      content: 'I do not have enough evidence to answer that confidently.',
+      citations: [],
+      confidence: 'low',
+    });
   });
 
   it('repairs schema-valid but citation-invalid output before storing the answer', async () => {
