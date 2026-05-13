@@ -37,6 +37,7 @@ export interface QueryDigestsRequest {
   dateTo: string;
   terms?: string[];
   limit?: number;
+  cursor?: string;
 }
 
 export interface DigestEvidenceItem {
@@ -50,6 +51,7 @@ export interface DigestEvidenceItem {
 export interface QueryDigestsResponse {
   items: DigestEvidenceItem[];
   truncated: boolean;
+  nextCursor?: string;
 }
 
 export interface GetDigestRequest {
@@ -105,6 +107,7 @@ export interface QueryGroupMessagesRequest {
   dateTo?: string;
   terms?: string[];
   limit?: number;
+  cursor?: string;
 }
 
 export interface GroupMessageEvidence {
@@ -123,6 +126,7 @@ export interface QueryGroupMessagesResponse {
   totalCleaned: number;
   returned: number;
   truncated: boolean;
+  nextCursor?: string;
 }
 
 export interface MobileNotificationsServiceClient {

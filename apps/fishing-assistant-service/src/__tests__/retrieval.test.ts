@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Timestamp } from '@intexuraos/infra-firestore';
 import { retrieveEvidence } from '../domain/retrieval/retrieveEvidence.js';
+import type { RetrieveEvidenceDeps } from '../domain/retrieval/retrieveEvidence.js';
 import type { KnowledgeChunkMatch } from '../domain/models/knowledge.js';
 import type { KnowledgeChunkRepository } from '../domain/ports/knowledgeRepositories.js';
 
@@ -94,7 +95,16 @@ describe('retrieveEvidence', () => {
         ok: false,
         error: { code: 'API_ERROR', message: 'HTTP 503', status: 503 },
       }),
-      queryGroupMessages: vi.fn(),
+      queryGroupMessages: vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          messages: [],
+          totalRaw: 0,
+          totalCleaned: 0,
+          returned: 0,
+          truncated: false,
+        },
+      }),
     };
 
     const result = await retrieveEvidence(
@@ -117,7 +127,7 @@ describe('retrieveEvidence', () => {
         dateFrom: '2026-05-01',
         dateTo: '2026-05-03',
         terms: ['compare', 'notes', 'spring', 'feeder', 'bait'],
-        limit: 8,
+        limit: 100,
       },
       { timeoutMs: 5000 }
     );
@@ -126,7 +136,7 @@ describe('retrieveEvidence', () => {
     expect(result.value.some((item) => item.sourceType === 'knowledge_page')).toBe(true);
   });
 
-  it('queries raw messages for top digest dates and includes them in the final evidence set', async () => {
+  it('queries raw messages across the full historical range and includes them in the final evidence set', async () => {
     const embeddingClient = {
       embedTexts: vi.fn().mockResolvedValue({ ok: true, value: [[0.1, 0.2, 0.3]] }),
     };
@@ -190,9 +200,10 @@ describe('retrieveEvidence', () => {
       {
         userId: 'user-1',
         groupKey: 'feeder',
-        date: '2026-05-02',
+        dateFrom: '1970-01-01',
+        dateTo: '2026-05-05',
         terms: ['what', 'they', 'say', 'about', 'pinka'],
-        limit: 12,
+        limit: 500,
       },
       { timeoutMs: 5000 }
     );
@@ -201,7 +212,7 @@ describe('retrieveEvidence', () => {
     expect(result.value.map((item) => item.sourceType)).toContain('raw_message');
   });
 
-  it('uses a single explicit date for both bounds and skips raw lookups without valid digest metadata', async () => {
+  it('uses a single explicit date for digest and raw-message bounds', async () => {
     const embeddingClient = {
       embedTexts: vi.fn().mockResolvedValue({ ok: false, error: { code: 'DOWNSTREAM_ERROR', message: 'embed failed' } }),
     };
@@ -252,7 +263,7 @@ describe('retrieveEvidence', () => {
         dateFrom: '2026-05-02',
         dateTo: '2026-05-02',
         terms: ['what', 'happened'],
-        limit: 8,
+        limit: 100,
       },
       { timeoutMs: 5000 }
     );
@@ -260,9 +271,10 @@ describe('retrieveEvidence', () => {
       {
         userId: 'user-1',
         groupKey: 'feeder',
-        date: '2026-05-02',
+        dateFrom: '2026-05-02',
+        dateTo: '2026-05-02',
         terms: ['what', 'happened'],
-        limit: 12,
+        limit: 500,
       },
       { timeoutMs: 5000 }
     );
@@ -271,7 +283,7 @@ describe('retrieveEvidence', () => {
     expect(result.value.some((item) => item.sourceType === 'digest')).toBe(true);
   });
 
-  it('uses the rolling 90-day range when the question has no explicit dates', async () => {
+  it('uses the full historical range when the question has no explicit dates', async () => {
     const embeddingClient = {
       embedTexts: vi.fn().mockResolvedValue({ ok: true, value: [[0.1, 0.2, 0.3]] }),
     };
@@ -285,7 +297,16 @@ describe('retrieveEvidence', () => {
         ok: true,
         value: { items: [], truncated: false },
       }),
-      queryGroupMessages: vi.fn(),
+      queryGroupMessages: vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          messages: [],
+          totalRaw: 0,
+          totalCleaned: 0,
+          returned: 0,
+          truncated: false,
+        },
+      }),
     };
 
     await retrieveEvidence(
@@ -305,10 +326,21 @@ describe('retrieveEvidence', () => {
       {
         userId: 'user-1',
         groupKey: 'feeder',
-        dateFrom: '2026-02-04',
+        dateFrom: '1970-01-01',
         dateTo: '2026-05-05',
         terms: ['where', 'should', 'fish', 'now'],
-        limit: 8,
+        limit: 100,
+      },
+      { timeoutMs: 5000 }
+    );
+    expect(mobileNotificationsClient.queryGroupMessages).toHaveBeenCalledWith(
+      {
+        userId: 'user-1',
+        groupKey: 'feeder',
+        dateFrom: '1970-01-01',
+        dateTo: '2026-05-05',
+        terms: ['where', 'should', 'fish', 'now'],
+        limit: 500,
       },
       { timeoutMs: 5000 }
     );
@@ -318,7 +350,7 @@ describe('retrieveEvidence', () => {
     );
   });
 
-  it('caps digest group fan-out while preserving bounded downstream timeouts', async () => {
+  it('queries every digest subscription while preserving bounded downstream timeouts', async () => {
     const embeddingClient = {
       embedTexts: vi.fn().mockResolvedValue({ ok: false, error: { code: 'DOWNSTREAM_ERROR', message: 'embed failed' } }),
     };
@@ -336,7 +368,16 @@ describe('retrieveEvidence', () => {
         ok: true,
         value: { items: [], truncated: false },
       }),
-      queryGroupMessages: vi.fn(),
+      queryGroupMessages: vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          messages: [],
+          totalRaw: 0,
+          totalCleaned: 0,
+          returned: 0,
+          truncated: false,
+        },
+      }),
     };
 
     const result = await retrieveEvidence(
@@ -352,19 +393,534 @@ describe('retrieveEvidence', () => {
       }
     );
 
-    expect(mobileNotificationsClient.queryDigests).toHaveBeenCalledTimes(8);
+    expect(mobileNotificationsClient.queryDigests).toHaveBeenCalledTimes(10);
     expect(mobileNotificationsClient.queryDigests).toHaveBeenLastCalledWith(
       {
         userId: 'user-1',
-        groupKey: 'group-8',
-        dateFrom: '2026-02-04',
+        groupKey: 'group-10',
+        dateFrom: '1970-01-01',
         dateTo: '2026-05-05',
         terms: ['recent', 'feeder', 'reports'],
-        limit: 8,
+        limit: 100,
       },
       { timeoutMs: 5000 }
     );
-    expect(result.ok).toBe(false);
+    expect(mobileNotificationsClient.queryGroupMessages).toHaveBeenCalledTimes(10);
+    expect(mobileNotificationsClient.queryGroupMessages).toHaveBeenLastCalledWith(
+      {
+        userId: 'user-1',
+        groupKey: 'group-10',
+        dateFrom: '1970-01-01',
+        dateTo: '2026-05-05',
+        terms: ['recent', 'feeder', 'reports'],
+        limit: 500,
+      },
+      { timeoutMs: 5000 }
+    );
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'NO_EVIDENCE',
+        message: 'No Fishing Assistant evidence matched the request.',
+      },
+    });
+  });
+
+  it('collects digest and raw message evidence for each group in parallel', async () => {
+    const embeddingClient = {
+      embedTexts: vi.fn().mockResolvedValue({
+        ok: false,
+        error: { code: 'DOWNSTREAM_ERROR', message: 'embed failed' },
+      }),
+    };
+    const chunkRepository = makeChunkRepository({ ok: true, value: [] });
+    type QueryDigestsResult = Awaited<
+      ReturnType<RetrieveEvidenceDeps['mobileNotificationsClient']['queryDigests']>
+    >;
+    let resolveDigestValue: ((value: QueryDigestsResult) => void) | undefined;
+    const digestPromise = new Promise<QueryDigestsResult>((resolve) => {
+      resolveDigestValue = resolve;
+    });
+    const mobileNotificationsClient = {
+      listDigestSubscriptions: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { items: [{ groupKey: 'feeder', displayName: 'Feeder' }] },
+      }),
+      queryDigests: vi.fn().mockReturnValue(digestPromise),
+      queryGroupMessages: vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          messages: [],
+          totalRaw: 0,
+          totalCleaned: 0,
+          returned: 0,
+          truncated: false,
+        },
+      }),
+    };
+
+    const resultPromise = retrieveEvidence(
+      {
+        embeddingClient,
+        chunkRepository,
+        mobileNotificationsClient,
+        now: new Date('2026-05-05T12:00:00Z'),
+      },
+      {
+        userId: 'user-1',
+        question: 'recent feeder reports',
+      }
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(mobileNotificationsClient.queryDigests).toHaveBeenCalledTimes(1);
+    expect(mobileNotificationsClient.queryGroupMessages).toHaveBeenCalledTimes(1);
+
+    if (resolveDigestValue === undefined) throw new Error('Expected digest resolver to be set');
+    resolveDigestValue({
+      ok: true,
+      value: { items: [], truncated: false },
+    });
+    await expect(resultPromise).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'NO_EVIDENCE',
+        message: 'No Fishing Assistant evidence matched the request.',
+      },
+    });
+  });
+
+  it('paginates digest evidence until nextCursor is absent', async () => {
+    const embeddingClient = {
+      embedTexts: vi.fn().mockResolvedValue({ ok: true, value: [[0.1, 0.2, 0.3]] }),
+    };
+    const chunkRepository = makeChunkRepository({ ok: true, value: [] });
+    const mobileNotificationsClient = {
+      listDigestSubscriptions: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { items: [{ groupKey: 'feeder', displayName: 'Feeder' }] },
+      }),
+      queryDigests: vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          value: {
+            items: [
+              {
+                groupKey: 'feeder',
+                date: '2026-05-01',
+                title: 'Page 1',
+                summaryMarkdown: 'feeder bait first page',
+                messageCount: 4,
+              },
+            ],
+            truncated: true,
+            nextCursor: 'digest-cursor-2',
+          },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: {
+            items: [
+              {
+                groupKey: 'feeder',
+                date: '2026-04-30',
+                title: 'Page 2',
+                summaryMarkdown: 'feeder bait second page',
+                messageCount: 3,
+              },
+            ],
+            truncated: false,
+          },
+        }),
+      queryGroupMessages: vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          messages: [],
+          totalRaw: 0,
+          totalCleaned: 0,
+          returned: 0,
+          truncated: false,
+        },
+      }),
+    };
+
+    const result = await retrieveEvidence(
+      {
+        embeddingClient,
+        chunkRepository,
+        mobileNotificationsClient,
+        now: new Date('2026-05-05T12:00:00Z'),
+      },
+      {
+        userId: 'user-1',
+        question: 'feeder bait',
+      }
+    );
+
+    expect(mobileNotificationsClient.queryDigests).toHaveBeenNthCalledWith(
+      1,
+      {
+        userId: 'user-1',
+        groupKey: 'feeder',
+        dateFrom: '1970-01-01',
+        dateTo: '2026-05-05',
+        terms: ['feeder', 'bait'],
+        limit: 100,
+      },
+      { timeoutMs: 5000 }
+    );
+    expect(mobileNotificationsClient.queryDigests).toHaveBeenNthCalledWith(
+      2,
+      {
+        userId: 'user-1',
+        groupKey: 'feeder',
+        dateFrom: '1970-01-01',
+        dateTo: '2026-05-05',
+        terms: ['feeder', 'bait'],
+        limit: 100,
+        cursor: 'digest-cursor-2',
+      },
+      { timeoutMs: 5000 }
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.map((item) => item.id)).toEqual([
+      'digest:feeder:2026-05-01',
+      'digest:feeder:2026-04-30',
+    ]);
+  });
+
+  it('stops digest pagination when the downstream cursor repeats', async () => {
+    const embeddingClient = {
+      embedTexts: vi.fn().mockResolvedValue({ ok: true, value: [[0.1, 0.2, 0.3]] }),
+    };
+    const chunkRepository = makeChunkRepository({ ok: true, value: [] });
+    const mobileNotificationsClient = {
+      listDigestSubscriptions: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { items: [{ groupKey: 'feeder', displayName: 'Feeder' }] },
+      }),
+      queryDigests: vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          items: [
+            {
+              groupKey: 'feeder',
+              date: '2026-05-01',
+              title: 'Looped page',
+              summaryMarkdown: 'feeder bait repeated cursor',
+              messageCount: 4,
+            },
+          ],
+          truncated: true,
+          nextCursor: 'same-cursor',
+        },
+      }),
+      queryGroupMessages: vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          messages: [],
+          totalRaw: 0,
+          totalCleaned: 0,
+          returned: 0,
+          truncated: false,
+        },
+      }),
+    };
+
+    const result = await retrieveEvidence(
+      {
+        embeddingClient,
+        chunkRepository,
+        mobileNotificationsClient,
+        now: new Date('2026-05-05T12:00:00Z'),
+      },
+      {
+        userId: 'user-1',
+        question: 'feeder bait',
+      }
+    );
+
+    expect(mobileNotificationsClient.queryDigests).toHaveBeenCalledTimes(2);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.map((item) => item.id)).toEqual(['digest:feeder:2026-05-01']);
+  });
+
+  it('continues digest pagination past 100 pages until nextCursor is absent', async () => {
+    const embeddingClient = {
+      embedTexts: vi.fn().mockResolvedValue({ ok: true, value: [[0.1, 0.2, 0.3]] }),
+    };
+    const chunkRepository = makeChunkRepository({ ok: true, value: [] });
+    let pageNumber = 0;
+    const mobileNotificationsClient = {
+      listDigestSubscriptions: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { items: [{ groupKey: 'feeder', displayName: 'Feeder' }] },
+      }),
+      queryDigests: vi.fn().mockImplementation(() => {
+        pageNumber += 1;
+        return Promise.resolve({
+          ok: true,
+          value: {
+            items: [
+              {
+                groupKey: 'feeder',
+                date: '2026-05-01',
+                title: `Page ${String(pageNumber)}`,
+                summaryMarkdown: `feeder bait digest page ${String(pageNumber)}`,
+                messageCount: 1,
+              },
+            ],
+            truncated: pageNumber <= 100,
+            ...(pageNumber <= 100 ? { nextCursor: `digest-cursor-${String(pageNumber)}` } : {}),
+          },
+        });
+      }),
+      queryGroupMessages: vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          messages: [],
+          totalRaw: 0,
+          totalCleaned: 0,
+          returned: 0,
+          truncated: false,
+        },
+      }),
+    };
+
+    const result = await retrieveEvidence(
+      {
+        embeddingClient,
+        chunkRepository,
+        mobileNotificationsClient,
+        now: new Date('2026-05-05T12:00:00Z'),
+      },
+      {
+        userId: 'user-1',
+        question: 'feeder bait',
+      }
+    );
+
+    expect(mobileNotificationsClient.queryDigests).toHaveBeenCalledTimes(101);
+    expect(result.ok).toBe(true);
+  });
+
+  it('paginates raw group-message evidence across the full historical range', async () => {
+    const embeddingClient = {
+      embedTexts: vi.fn().mockResolvedValue({ ok: true, value: [[0.1, 0.2, 0.3]] }),
+    };
+    const chunkRepository = makeChunkRepository({ ok: true, value: [] });
+    const mobileNotificationsClient = {
+      listDigestSubscriptions: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { items: [{ groupKey: 'feeder', displayName: 'Feeder' }] },
+      }),
+      queryDigests: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { items: [], truncated: false },
+      }),
+      queryGroupMessages: vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          value: {
+            messages: [
+              {
+                messageRef: 'msg-1',
+                groupKey: 'feeder',
+                date: '2026-05-01',
+                postTimeSec: 123,
+                senderLabel: 'Piotr',
+                text: 'feeder bait first raw page',
+                quote: 'feeder bait first raw page',
+              },
+            ],
+            totalRaw: 2,
+            totalCleaned: 2,
+            returned: 1,
+            truncated: true,
+            nextCursor: 'raw-cursor-2',
+          },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: {
+            messages: [
+              {
+                messageRef: 'msg-2',
+                groupKey: 'feeder',
+                date: '2026-04-30',
+                postTimeSec: 122,
+                senderLabel: 'Adam',
+                text: 'feeder bait second raw page',
+                quote: 'feeder bait second raw page',
+              },
+            ],
+            totalRaw: 2,
+            totalCleaned: 2,
+            returned: 1,
+            truncated: false,
+          },
+        }),
+    };
+
+    const result = await retrieveEvidence(
+      {
+        embeddingClient,
+        chunkRepository,
+        mobileNotificationsClient,
+        now: new Date('2026-05-05T12:00:00Z'),
+      },
+      {
+        userId: 'user-1',
+        question: 'feeder bait',
+      }
+    );
+
+    expect(mobileNotificationsClient.queryGroupMessages).toHaveBeenNthCalledWith(
+      1,
+      {
+        userId: 'user-1',
+        groupKey: 'feeder',
+        dateFrom: '1970-01-01',
+        dateTo: '2026-05-05',
+        terms: ['feeder', 'bait'],
+        limit: 500,
+      },
+      { timeoutMs: 5000 }
+    );
+    expect(mobileNotificationsClient.queryGroupMessages).toHaveBeenNthCalledWith(
+      2,
+      {
+        userId: 'user-1',
+        groupKey: 'feeder',
+        dateFrom: '1970-01-01',
+        dateTo: '2026-05-05',
+        terms: ['feeder', 'bait'],
+        limit: 500,
+        cursor: 'raw-cursor-2',
+      },
+      { timeoutMs: 5000 }
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.map((item) => item.id)).toEqual(['msg-1', 'msg-2']);
+  });
+
+  it('stops raw-message pagination when the downstream cursor repeats', async () => {
+    const embeddingClient = {
+      embedTexts: vi.fn().mockResolvedValue({ ok: true, value: [[0.1, 0.2, 0.3]] }),
+    };
+    const chunkRepository = makeChunkRepository({ ok: true, value: [] });
+    const mobileNotificationsClient = {
+      listDigestSubscriptions: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { items: [{ groupKey: 'feeder', displayName: 'Feeder' }] },
+      }),
+      queryDigests: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { items: [], truncated: false },
+      }),
+      queryGroupMessages: vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          messages: [
+            {
+              messageRef: 'msg-loop',
+              groupKey: 'feeder',
+              date: '2026-05-01',
+              postTimeSec: 123,
+              senderLabel: 'Piotr',
+              text: 'feeder bait repeated raw cursor',
+              quote: 'feeder bait repeated raw cursor',
+            },
+          ],
+          totalRaw: 1,
+          totalCleaned: 1,
+          returned: 1,
+          truncated: true,
+          nextCursor: 'same-raw-cursor',
+        },
+      }),
+    };
+
+    const result = await retrieveEvidence(
+      {
+        embeddingClient,
+        chunkRepository,
+        mobileNotificationsClient,
+        now: new Date('2026-05-05T12:00:00Z'),
+      },
+      {
+        userId: 'user-1',
+        question: 'feeder bait',
+      }
+    );
+
+    expect(mobileNotificationsClient.queryGroupMessages).toHaveBeenCalledTimes(2);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.map((item) => item.id)).toEqual(['msg-loop']);
+  });
+
+  it('continues raw-message pagination past 100 pages until nextCursor is absent', async () => {
+    const embeddingClient = {
+      embedTexts: vi.fn().mockResolvedValue({ ok: true, value: [[0.1, 0.2, 0.3]] }),
+    };
+    const chunkRepository = makeChunkRepository({ ok: true, value: [] });
+    let pageNumber = 0;
+    const mobileNotificationsClient = {
+      listDigestSubscriptions: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { items: [{ groupKey: 'feeder', displayName: 'Feeder' }] },
+      }),
+      queryDigests: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { items: [], truncated: false },
+      }),
+      queryGroupMessages: vi.fn().mockImplementation(() => {
+        pageNumber += 1;
+        return Promise.resolve({
+          ok: true,
+          value: {
+            messages: [
+              {
+                messageRef: `msg-page-${String(pageNumber)}`,
+                groupKey: 'feeder',
+                date: '2026-05-01',
+                postTimeSec: pageNumber,
+                senderLabel: 'Piotr',
+                text: `feeder bait raw page ${String(pageNumber)}`,
+                quote: `feeder bait raw page ${String(pageNumber)}`,
+              },
+            ],
+            totalRaw: 1,
+            totalCleaned: 1,
+            returned: 1,
+            truncated: pageNumber <= 100,
+            ...(pageNumber <= 100 ? { nextCursor: `raw-cursor-${String(pageNumber)}` } : {}),
+          },
+        });
+      }),
+    };
+
+    const result = await retrieveEvidence(
+      {
+        embeddingClient,
+        chunkRepository,
+        mobileNotificationsClient,
+        now: new Date('2026-05-05T12:00:00Z'),
+      },
+      {
+        userId: 'user-1',
+        question: 'feeder bait',
+      }
+    );
+
+    expect(mobileNotificationsClient.queryGroupMessages).toHaveBeenCalledTimes(101);
+    expect(result.ok).toBe(true);
   });
 
   it('falls back to an empty embedding vector and digest-only evidence when chunk search fails', async () => {
@@ -401,7 +957,16 @@ describe('retrieveEvidence', () => {
           truncated: false,
         },
       }),
-      queryGroupMessages: vi.fn(),
+      queryGroupMessages: vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          messages: [],
+          totalRaw: 0,
+          totalCleaned: 0,
+          returned: 0,
+          truncated: false,
+        },
+      }),
     };
 
     const result = await retrieveEvidence(
@@ -422,7 +987,17 @@ describe('retrieveEvidence', () => {
       embedding: [],
       limit: 20,
     });
-    expect(mobileNotificationsClient.queryGroupMessages).not.toHaveBeenCalled();
+    expect(mobileNotificationsClient.queryGroupMessages).toHaveBeenCalledWith(
+      {
+        userId: 'user-1',
+        groupKey: 'feeder',
+        dateFrom: '1970-01-01',
+        dateTo: '2026-05-05',
+        terms: ['what', 'changed', 'today'],
+        limit: 500,
+      },
+      { timeoutMs: 5000 }
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.map((item) => item.sourceType)).toContain('digest');
