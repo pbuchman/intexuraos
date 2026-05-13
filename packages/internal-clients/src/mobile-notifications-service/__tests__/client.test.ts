@@ -49,6 +49,7 @@ describe('createMobileNotificationsServiceClient', () => {
       dateFrom: '2026-04-15',
       dateTo: '2026-04-16',
       limit: 5,
+      cursor: '2026-04-15',
     };
     const response = {
       items: [
@@ -60,7 +61,8 @@ describe('createMobileNotificationsServiceClient', () => {
           messageCount: 12,
         },
       ],
-      truncated: false,
+      truncated: true,
+      nextCursor: '2026-04-14',
     };
     const scope = nock(BASE_URL)
       .post('/internal/notifications/digests/query', request)
@@ -136,9 +138,11 @@ describe('createMobileNotificationsServiceClient', () => {
     const request = {
       userId: 'u',
       groupKey: 'g',
-      date: '2026-04-15',
+      dateFrom: '2026-01-01',
+      dateTo: '2026-04-15',
       terms: ['spring', 'bait'],
       limit: 10,
+      cursor: 'raw-cursor-1',
     };
     const response = {
       messages: [
@@ -155,7 +159,8 @@ describe('createMobileNotificationsServiceClient', () => {
       totalRaw: 3,
       totalCleaned: 1,
       returned: 1,
-      truncated: false,
+      truncated: true,
+      nextCursor: 'raw-cursor-2',
     };
     const scope = nock(BASE_URL)
       .post('/internal/notifications/group-messages/query', request)

@@ -387,6 +387,272 @@ describe('FirestoreNotificationRepository', () => {
       expect(texts).toEqual(['t2']);
     });
 
+    it('ignores malformed timestamp-range cursors and still returns matching notifications', async () => {
+      await repository.save(
+        createTestInput({
+          userId: 'user-range-invalid-cursor',
+          app: 'com.whatsapp',
+          title: 'Fishing Group',
+          timestamp: 200,
+          postTime: '200',
+        })
+      );
+
+      const malformedTimestampCursor = Buffer.from(
+        JSON.stringify({ timestamp: '200', id: 'not-a-number' })
+      ).toString('base64');
+      const result = await repository.findByUserIdPaginated('user-range-invalid-cursor', {
+        limit: 10,
+        cursor: malformedTimestampCursor,
+        filter: {
+          app: ['com.whatsapp'],
+          title: 'Fishing Group',
+          postTimeSecFrom: 100,
+          postTimeSecTo: 300,
+        },
+      });
+
+      if (!result.ok) throw new Error(`unexpected: ${result.error.message}`);
+      expect(result.value.notifications.map((notification) => notification.title)).toEqual([
+        'Fishing Group',
+      ]);
+    });
+
+    it('applies source filters after timestamp-range queries', async () => {
+      const mk = (
+        source: string,
+        text: string,
+        timestampSec: number,
+        notifId: string
+      ): CreateNotificationInput => ({
+        userId: 'user-range-source',
+        source,
+        device: 'dev',
+        app: 'com.whatsapp',
+        title: 'Fishing Group',
+        text,
+        timestamp: timestampSec,
+        postTime: String(timestampSec),
+        notificationId: notifId,
+      });
+      await repository.save(mk('android', 'kept', 200, 'source-1'));
+      await repository.save(mk('tasker', 'filtered', 201, 'source-2'));
+
+      const result = await repository.findByUserIdPaginated('user-range-source', {
+        limit: 10,
+        filter: {
+          app: ['com.whatsapp'],
+          source: ['android'],
+          title: 'Fishing Group',
+          postTimeSecFrom: 100,
+          postTimeSecTo: 300,
+        },
+      });
+
+      if (!result.ok) throw new Error(`unexpected: ${result.error.message}`);
+      expect(result.value.notifications.map((notification) => notification.text)).toEqual([
+        'kept',
+      ]);
+    });
+
+    it('orders timestamp-range pages by notification timestamp descending', async () => {
+      fakeFirestore.seedCollection('mobile_notifications', [
+        {
+          id: 'old-received-new-post',
+          data: {
+            userId: 'user-history',
+            source: 'android',
+            device: 'dev',
+            app: 'com.whatsapp',
+            title: 'Fishing Group',
+            text: 'newer post',
+            timestamp: 500,
+            postTime: '500',
+            receivedAt: '2026-01-01T00:00:00.000Z',
+            notificationId: 'history-1',
+          },
+        },
+        {
+          id: 'new-received-old-post',
+          data: {
+            userId: 'user-history',
+            source: 'android',
+            device: 'dev',
+            app: 'com.whatsapp',
+            title: 'Fishing Group',
+            text: 'older post',
+            timestamp: 100,
+            postTime: '100',
+            receivedAt: '2026-05-01T00:00:00.000Z',
+            notificationId: 'history-2',
+          },
+        },
+        {
+          id: 'middle-post',
+          data: {
+            userId: 'user-history',
+            source: 'android',
+            device: 'dev',
+            app: 'com.whatsapp',
+            title: 'Fishing Group',
+            text: 'middle post',
+            timestamp: 300,
+            postTime: '300',
+            receivedAt: '2026-03-01T00:00:00.000Z',
+            notificationId: 'history-3',
+          },
+        },
+      ]);
+
+      const result = await repository.findByUserIdPaginated('user-history', {
+        limit: 3,
+        filter: {
+          app: ['com.whatsapp'],
+          title: 'Fishing Group',
+          postTimeSecFrom: 100,
+          postTimeSecTo: 501,
+        },
+      });
+
+      if (!result.ok) throw new Error(`unexpected: ${result.error.message}`);
+      expect(result.value.notifications.map((n) => n.id)).toEqual([
+        'old-received-new-post',
+        'middle-post',
+        'new-received-old-post',
+      ]);
+    });
+
+    it('paginates timestamp-range filters without duplicate notification IDs', async () => {
+      fakeFirestore.seedCollection(
+        'mobile_notifications',
+        [500, 400, 300, 200, 100].map((timestamp) => ({
+          id: `history-${String(timestamp)}`,
+          data: {
+            userId: 'user-history-pages',
+            source: 'android',
+            device: 'dev',
+            app: 'com.whatsapp',
+            title: 'Fishing Group',
+            text: `post ${String(timestamp)}`,
+            timestamp,
+            postTime: String(timestamp),
+            receivedAt: `2026-01-01T00:0${String(timestamp / 100)}:00.000Z`,
+            notificationId: `history-${String(timestamp)}`,
+          },
+        }))
+      );
+
+      const firstPage = await repository.findByUserIdPaginated('user-history-pages', {
+        limit: 2,
+        filter: {
+          app: ['com.whatsapp'],
+          title: 'Fishing Group',
+          postTimeSecFrom: 100,
+          postTimeSecTo: 501,
+        },
+      });
+      if (!firstPage.ok) throw new Error(`unexpected: ${firstPage.error.message}`);
+      expect(firstPage.value.notifications.map((n) => n.id)).toEqual(['history-500', 'history-400']);
+      const cursor = firstPage.value.nextCursor;
+      if (cursor === undefined) throw new Error('Expected nextCursor to be defined');
+
+      const secondPage = await repository.findByUserIdPaginated('user-history-pages', {
+        limit: 2,
+        cursor,
+        filter: {
+          app: ['com.whatsapp'],
+          title: 'Fishing Group',
+          postTimeSecFrom: 100,
+          postTimeSecTo: 501,
+        },
+      });
+      if (!secondPage.ok) throw new Error(`unexpected: ${secondPage.error.message}`);
+      expect(secondPage.value.notifications.map((n) => n.id)).toEqual(['history-300', 'history-200']);
+
+      const firstIds = new Set(firstPage.value.notifications.map((n) => n.id));
+      for (const notification of secondPage.value.notifications) {
+        expect(firstIds.has(notification.id)).toBe(false);
+      }
+    });
+
+    it('keeps timestamp-range pagination stable when receivedAt order differs from timestamp order', async () => {
+      fakeFirestore.seedCollection('mobile_notifications', [
+        {
+          id: 'post-300',
+          data: {
+            userId: 'user-history-mismatch',
+            source: 'android',
+            device: 'dev',
+            app: 'com.whatsapp',
+            title: 'Fishing Group',
+            text: 'post 300',
+            timestamp: 300,
+            postTime: '300',
+            receivedAt: '2026-02-01T00:00:00.000Z',
+            notificationId: 'post-300',
+          },
+        },
+        {
+          id: 'post-500',
+          data: {
+            userId: 'user-history-mismatch',
+            source: 'android',
+            device: 'dev',
+            app: 'com.whatsapp',
+            title: 'Fishing Group',
+            text: 'post 500',
+            timestamp: 500,
+            postTime: '500',
+            receivedAt: '2026-01-01T00:00:00.000Z',
+            notificationId: 'post-500',
+          },
+        },
+        {
+          id: 'post-100',
+          data: {
+            userId: 'user-history-mismatch',
+            source: 'android',
+            device: 'dev',
+            app: 'com.whatsapp',
+            title: 'Fishing Group',
+            text: 'post 100',
+            timestamp: 100,
+            postTime: '100',
+            receivedAt: '2026-03-01T00:00:00.000Z',
+            notificationId: 'post-100',
+          },
+        },
+      ]);
+
+      const firstPage = await repository.findByUserIdPaginated('user-history-mismatch', {
+        limit: 1,
+        filter: {
+          app: ['com.whatsapp'],
+          title: 'Fishing Group',
+          postTimeSecFrom: 100,
+          postTimeSecTo: 501,
+        },
+      });
+      if (!firstPage.ok) throw new Error(`unexpected: ${firstPage.error.message}`);
+      expect(firstPage.value.notifications.map((n) => n.id)).toEqual(['post-500']);
+      const firstCursor = firstPage.value.nextCursor;
+      if (firstCursor === undefined) throw new Error('Expected nextCursor to be defined');
+
+      const secondPage = await repository.findByUserIdPaginated('user-history-mismatch', {
+        limit: 2,
+        cursor: firstCursor,
+        filter: {
+          app: ['com.whatsapp'],
+          title: 'Fishing Group',
+          postTimeSecFrom: 100,
+          postTimeSecTo: 501,
+        },
+      });
+      if (!secondPage.ok) throw new Error(`unexpected: ${secondPage.error.message}`);
+      expect(secondPage.value.notifications.map((n) => n.id)).toEqual(['post-300', 'post-100']);
+      expect(secondPage.value.nextCursor).toBeUndefined();
+    });
+
     // Migration 096 deploys the composite Firestore index (app + userId +
     // receivedAt + timestamp) required by digest backfill. FakeFirestore does
     // not surface missing-index errors, so this test cannot validate index
