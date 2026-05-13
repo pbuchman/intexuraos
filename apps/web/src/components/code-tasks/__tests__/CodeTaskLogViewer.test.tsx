@@ -249,6 +249,31 @@ describe('CodeTaskLogViewer integration', () => {
     expect(screen.queryByRole('link', { name: toolUrl })).not.toBeInTheDocument();
   });
 
+  it('renders formatted file change log lines', () => {
+    const logs: LogLine[] = [
+      makeLog(1, '[file] update apps/mobile-notifications-service/src/routes/internalRoutes.ts'),
+    ];
+
+    render(<CodeTaskLogViewer {...makeProps({ logs })} />);
+
+    expect(screen.getByText('[file] update apps/mobile-notifications-service/src/routes/internalRoutes.ts')).toBeInTheDocument();
+  });
+
+  it('keeps [file] lines visible when worker filter is active', async () => {
+    const logs: LogLine[] = [
+      makeLog(1, '[file] update apps/mobile-notifications-service/src/routes/internalRoutes.ts'),
+      makeLog(2, '[tool] Read: package.json'),
+    ];
+
+    render(<CodeTaskLogViewer {...makeProps({ logs })} />);
+
+    const workerButton = screen.getByRole('button', { name: 'Worker' });
+    await userEvent.click(workerButton);
+
+    expect(screen.getByText(/\[file\] update/)).toBeInTheDocument();
+    expect(screen.queryByText(/\[tool\] Read/)).not.toBeInTheDocument();
+  });
+
   it('collapsible blocks still work correctly when log lines contain URLs', async () => {
     const url = 'https://example.com/collapsible';
     const logs: LogLine[] = [

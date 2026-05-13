@@ -51,7 +51,7 @@ export interface Config {
   // Auto-retry chain bounds (INT-1560 Fix D)
   autoRetry: AutoRetryConfig;
   // GitHub Agent (INT-743)
-  geminiAppApiKey: string;
+  openRouterAppApiKey: string;
   executionMemoryEnabled: boolean;
   openaiAppApiKey: string;
   llmUsageServiceUrl: string;
@@ -76,7 +76,7 @@ export function loadConfig(): Config {
   const tokenEncryptionKey = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] ?? '';
   const githubWebhookSecret = process.env['INTEXURAOS_GITHUB_WEBHOOK_SECRET'] ?? '';
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'] ?? '';
-  const geminiAppApiKey = process.env['INTEXURAOS_GEMINI_APP_API_KEY'] ?? '';
+  const openRouterAppApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
   const executionMemoryEnabled =
     (process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] ?? '').toLowerCase() === 'true';
   const openaiAppApiKey = process.env['INTEXURAOS_OPENAI_APP_API_KEY'] ?? '';
@@ -112,7 +112,7 @@ export function loadConfig(): Config {
     autoRetry: {
       maxAttempts: parseInt(process.env['INTEXURAOS_AUTO_RETRY_MAX_ATTEMPTS'] ?? '3', 10),
     },
-    geminiAppApiKey,
+    openRouterAppApiKey,
     executionMemoryEnabled,
     openaiAppApiKey,
     llmUsageServiceUrl,

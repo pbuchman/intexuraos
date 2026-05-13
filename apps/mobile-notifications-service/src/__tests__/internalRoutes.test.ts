@@ -1448,6 +1448,98 @@ describe('Internal Routes', () => {
       expect(secondBody.data.truncated).toBe(false);
     });
 
+    it('pages timestamp-ordered group-message ranges through the real fake repository', async () => {
+      setInternalAuth();
+      const bounds = cetDayBounds('2026-04-15');
+      const oldestSec = bounds.fromSec + 100;
+      const middleSec = bounds.fromSec + 200;
+      const newestSec = bounds.fromSec + 300;
+      ctx.notificationRepo.addNotification(
+        makeNotification({
+          id: 'history-newest',
+          notificationId: 'history-newest',
+          text: 'Spring bait newest',
+          timestamp: newestSec,
+          postTime: String(newestSec),
+          receivedAt: new Date(oldestSec * 1000).toISOString(),
+        })
+      );
+      ctx.notificationRepo.addNotification(
+        makeNotification({
+          id: 'history-middle',
+          notificationId: 'history-middle',
+          text: 'Spring bait middle',
+          timestamp: middleSec,
+          postTime: String(middleSec),
+          receivedAt: new Date(newestSec * 1000).toISOString(),
+        })
+      );
+      ctx.notificationRepo.addNotification(
+        makeNotification({
+          id: 'history-oldest',
+          notificationId: 'history-oldest',
+          text: 'Spring bait oldest',
+          timestamp: oldestSec,
+          postTime: String(oldestSec),
+          receivedAt: new Date(middleSec * 1000).toISOString(),
+        })
+      );
+      ctx.notificationRepo.addNotification(
+        makeNotification({
+          id: 'outside-range',
+          notificationId: 'outside-range',
+          text: 'Spring bait outside',
+          timestamp: bounds.fromSec - 60,
+          postTime: String(bounds.fromSec - 60),
+        })
+      );
+      setMockServices({
+        notificationRepository: ctx.notificationRepo,
+        digestSubscriptions: [
+          {
+            userId: 'u',
+            groupKey: 'g',
+            groupTitlePrefix: 'G fishing chat',
+            outputLanguage: 'Polish',
+          },
+        ],
+      });
+
+      const messages: { messageRef: string; text: string }[] = [];
+      let cursor: string | undefined;
+      do {
+        const response = await ctx.app.inject({
+          method: 'POST',
+          url: '/internal/notifications/group-messages/query',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: {
+            userId: 'u',
+            groupKey: 'g',
+            dateFrom: '2026-04-15',
+            dateTo: '2026-04-15',
+            terms: ['spring', 'bait'],
+            limit: 1,
+            ...(cursor !== undefined ? { cursor } : {}),
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as SuccessResponse<{
+          messages: { messageRef: string; text: string }[];
+          nextCursor?: string;
+        }>;
+        messages.push(...body.data.messages);
+        cursor = body.data.nextCursor;
+      } while (cursor !== undefined);
+
+      expect(messages.map((message) => message.text)).toEqual([
+        'Spring bait oldest',
+        'Spring bait middle',
+        'Spring bait newest',
+      ]);
+      expect(new Set(messages.map((message) => message.messageRef)).size).toBe(messages.length);
+    });
+
     it('pages long historical group-message ranges through the route and repository', async () => {
       setInternalAuth();
       const bounds = cetDayBounds('2026-04-15');

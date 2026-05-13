@@ -50,6 +50,7 @@ describe('loadConfig', () => {
       expect(config.tokenEncryptionKey).toBe('');
       expect(config.serviceUrl).toBe('');
       expect(config.userServiceUrl).toBe('');
+      expect(config.openRouterAppApiKey).toBe('');
     });
 
     it('loads all env vars when set', () => {
@@ -62,6 +63,7 @@ describe('loadConfig', () => {
       process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = 'test-encryption-key-32chars!';
       process.env['INTEXURAOS_SERVICE_URL'] = 'https://code-agent.test.local';
       process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service';
+      process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'or-platform-key';
 
       const config = loadConfig();
       expect(config.gcpProjectId).toBe('test-project');
@@ -74,6 +76,7 @@ describe('loadConfig', () => {
       expect(config.tokenEncryptionKey).toBe('test-encryption-key-32chars!');
       expect(config.serviceUrl).toBe('https://code-agent.test.local');
       expect(config.userServiceUrl).toBe('http://user-service');
+      expect(config.openRouterAppApiKey).toBe('or-platform-key');
     });
   });
 });

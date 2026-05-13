@@ -224,9 +224,19 @@ export class FakeNotificationRepository implements NotificationRepository {
       return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated find failure' }));
     }
 
+    const usesTimestampRange =
+      options.filter?.postTimeSecFrom !== undefined || options.filter?.postTimeSecTo !== undefined;
     let notifications = Array.from(this.notifications.values())
       .filter((n) => n.userId === userId)
-      .sort((a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime());
+      .sort((a, b) => {
+        if (usesTimestampRange) {
+          const timestampDiff = b.timestamp - a.timestamp;
+          if (timestampDiff !== 0) return timestampDiff;
+        }
+        const receivedAtDiff = new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime();
+        if (receivedAtDiff !== 0) return receivedAtDiff;
+        return b.id.localeCompare(a.id);
+      });
 
     // Apply filters (arrays use 'in' logic - notification value must be in filter array)
     if (options.filter?.source !== undefined && options.filter.source.length > 0) {
@@ -255,9 +265,14 @@ export class FakeNotificationRepository implements NotificationRepository {
       const cursorData = JSON.parse(Buffer.from(options.cursor, 'base64').toString('utf-8')) as {
         receivedAt: string;
         id: string;
+        timestamp?: number;
       };
       const cursorIndex = notifications.findIndex(
-        (n) => n.receivedAt === cursorData.receivedAt && n.id === cursorData.id
+        (n) =>
+          n.id === cursorData.id &&
+          (usesTimestampRange
+            ? n.timestamp === cursorData.timestamp
+            : n.receivedAt === cursorData.receivedAt)
       );
       if (cursorIndex >= 0) {
         notifications = notifications.slice(cursorIndex + 1);
@@ -273,7 +288,11 @@ export class FakeNotificationRepository implements NotificationRepository {
       const lastNotif = resultNotifications[resultNotifications.length - 1];
       if (lastNotif !== undefined) {
         result.nextCursor = Buffer.from(
-          JSON.stringify({ receivedAt: lastNotif.receivedAt, id: lastNotif.id })
+          JSON.stringify({
+            receivedAt: lastNotif.receivedAt,
+            id: lastNotif.id,
+            ...(usesTimestampRange ? { timestamp: lastNotif.timestamp } : {}),
+          })
         ).toString('base64');
       }
     }

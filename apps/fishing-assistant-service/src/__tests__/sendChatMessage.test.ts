@@ -561,9 +561,10 @@ describe('sendChatMessage', () => {
     );
   });
 
-  it('stores the fallback answer without an LLM client when no evidence is available', async () => {
+  it('returns NO_API_KEY before fallback storage when no evidence is available', async () => {
     const ctx = createContext();
     ctx.chunkRepository.findNearestByUserId.mockResolvedValue(okResult([]));
+    ctx.mobileNotificationsClient.listDigestSubscriptions.mockResolvedValueOnce(okResult({ items: [] }));
     ctx.chatAdapter.createClientForUser.mockResolvedValueOnce(
       errResult({ code: 'NO_API_KEY', message: 'missing key' })
     );
@@ -574,8 +575,25 @@ describe('sendChatMessage', () => {
       message: 'Need a recipe',
     });
 
+    expect(result).toEqual(errResult({ code: 'NO_API_KEY', message: 'missing key' }));
+    expect(ctx.chatAdapter.createClientForUser).toHaveBeenCalledWith('user-1');
+    expect(ctx.chatRepository.createMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('stores the fallback answer without generating when no evidence is available', async () => {
+    const ctx = createContext();
+    ctx.chunkRepository.findNearestByUserId.mockResolvedValue(okResult([]));
+    ctx.mobileNotificationsClient.listDigestSubscriptions.mockResolvedValueOnce(okResult({ items: [] }));
+
+    const result = await sendChatMessage(ctx.deps, {
+      userId: 'user-1',
+      chatId: 'chat-1',
+      message: 'Need a recipe',
+    });
+
     expect(result.ok).toBe(true);
-    expect(ctx.chatAdapter.createClientForUser).not.toHaveBeenCalled();
+    expect(ctx.chatAdapter.createClientForUser).toHaveBeenCalledWith('user-1');
+    expect(ctx.llmClient.generate).not.toHaveBeenCalled();
     expect(ctx.chatRepository.createMessage).toHaveBeenNthCalledWith(2, {
       id: 'message-assistant',
       chatId: 'chat-1',

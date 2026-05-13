@@ -304,21 +304,21 @@ export async function sendChatMessage(
   let confidence: 'high' | 'medium' | 'low' = 'low';
   let citations: FishingMessageCitation[] = [];
 
-  if (evidence.length > 0) {
-    const chatClientResult = await deps.chatAdapter.createClientForUser(input.userId);
-    if (!chatClientResult.ok) {
-      if (chatClientResult.error.code === 'NO_API_KEY') {
-        return err({
-          code: 'NO_API_KEY',
-          message: chatClientResult.error.message,
-        });
-      }
+  const chatClientResult = await deps.chatAdapter.createClientForUser(input.userId);
+  if (!chatClientResult.ok) {
+    if (chatClientResult.error.code === 'NO_API_KEY') {
       return err({
-        code: 'DOWNSTREAM_ERROR',
+        code: 'NO_API_KEY',
         message: chatClientResult.error.message,
       });
     }
+    return err({
+      code: 'DOWNSTREAM_ERROR',
+      message: chatClientResult.error.message,
+    });
+  }
 
+  if (evidence.length > 0) {
     const promptEvidence = createPromptEvidenceContext(evidence);
     const answerResult = await generateValidatedAnswer({
       llmClient: chatClientResult.value,

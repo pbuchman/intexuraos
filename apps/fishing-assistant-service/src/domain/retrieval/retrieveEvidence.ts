@@ -25,10 +25,10 @@ export interface RetrieveEvidenceInput {
 }
 
 const MOBILE_NOTIFICATIONS_TIMEOUT_MS = 5_000;
-const HISTORICAL_DATE_FROM = '1970-01-01';
+const HISTORICAL_DATE_FLOOR = '1970-01-01';
 const DIGEST_PAGE_LIMIT = 100;
 const RAW_MESSAGE_PAGE_LIMIT = 500;
-const MAX_PAGES_PER_GROUP = 100;
+const FINAL_EVIDENCE_LIMIT = 16;
 
 function extractDateRange(question: string, now: Date): { dateFrom: string; dateTo: string } {
   const matches = [...question.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g)].map((match) => match[0]);
@@ -47,7 +47,7 @@ function extractDateRange(question: string, now: Date): { dateFrom: string; date
 
   const dateTo = now.toISOString().slice(0, 10);
   return {
-    dateFrom: HISTORICAL_DATE_FROM,
+    dateFrom: HISTORICAL_DATE_FLOOR,
     dateTo,
   };
 }
@@ -63,10 +63,8 @@ async function collectDigestEvidence(input: {
   const evidence: EvidenceItem[] = [];
   let cursor: string | undefined;
   const seenCursors = new Set<string>();
-  let pageCount = 0;
 
   do {
-    pageCount += 1;
     const digestResult = await input.client.queryDigests(
       {
         userId: input.userId,
@@ -81,18 +79,16 @@ async function collectDigestEvidence(input: {
     );
     if (!digestResult.ok) break;
 
+    const nextCursor = digestResult.value.nextCursor;
+    if (nextCursor !== undefined && seenCursors.has(nextCursor)) {
+      break;
+    }
     evidence.push(
       ...digestResult.value.items.map((item) => rankDigestEvidence(item, input.terms))
     );
-    if (
-      digestResult.value.nextCursor !== undefined
-      && seenCursors.has(digestResult.value.nextCursor)
-    ) {
-      break;
-    }
-    cursor = digestResult.value.nextCursor;
+    cursor = nextCursor;
     if (cursor !== undefined) seenCursors.add(cursor);
-  } while (cursor !== undefined && pageCount < MAX_PAGES_PER_GROUP);
+  } while (cursor !== undefined);
 
   return evidence;
 }
@@ -108,10 +104,8 @@ async function collectRawMessageEvidence(input: {
   const evidence: EvidenceItem[] = [];
   let cursor: string | undefined;
   const seenCursors = new Set<string>();
-  let pageCount = 0;
 
   do {
-    pageCount += 1;
     const rawResult = await input.client.queryGroupMessages(
       {
         userId: input.userId,
@@ -126,18 +120,16 @@ async function collectRawMessageEvidence(input: {
     );
     if (!rawResult.ok) break;
 
+    const nextCursor = rawResult.value.nextCursor;
+    if (nextCursor !== undefined && seenCursors.has(nextCursor)) {
+      break;
+    }
     evidence.push(
       ...rawResult.value.messages.map((message) => rankRawMessageEvidence(message, input.terms))
     );
-    if (
-      rawResult.value.nextCursor !== undefined
-      && seenCursors.has(rawResult.value.nextCursor)
-    ) {
-      break;
-    }
-    cursor = rawResult.value.nextCursor;
+    cursor = nextCursor;
     if (cursor !== undefined) seenCursors.add(cursor);
-  } while (cursor !== undefined && pageCount < MAX_PAGES_PER_GROUP);
+  } while (cursor !== undefined);
 
   return evidence;
 }
@@ -179,24 +171,25 @@ export async function retrieveEvidence(
   if (groupsResult.ok) {
     const range = extractDateRange(input.question, deps.now);
     for (const group of groupsResult.value.items) {
-      const groupDigestEvidence = await collectDigestEvidence({
-        client: deps.mobileNotificationsClient,
-        userId: input.userId,
-        groupKey: group.groupKey,
-        dateFrom: range.dateFrom,
-        dateTo: range.dateTo,
-        terms,
-      });
+      const [groupDigestEvidence, rawMessageEvidence] = await Promise.all([
+        collectDigestEvidence({
+          client: deps.mobileNotificationsClient,
+          userId: input.userId,
+          groupKey: group.groupKey,
+          dateFrom: range.dateFrom,
+          dateTo: range.dateTo,
+          terms,
+        }),
+        collectRawMessageEvidence({
+          client: deps.mobileNotificationsClient,
+          userId: input.userId,
+          groupKey: group.groupKey,
+          dateFrom: range.dateFrom,
+          dateTo: range.dateTo,
+          terms,
+        }),
+      ]);
       digestEvidence.push(...groupDigestEvidence);
-
-      const rawMessageEvidence = await collectRawMessageEvidence({
-        client: deps.mobileNotificationsClient,
-        userId: input.userId,
-        groupKey: group.groupKey,
-        dateFrom: range.dateFrom,
-        dateTo: range.dateTo,
-        terms,
-      });
       evidence.push(...rawMessageEvidence);
     }
   }
@@ -204,7 +197,7 @@ export async function retrieveEvidence(
 
   const ranked = evidence
     .sort((left, right) => right.score - left.score)
-    .slice(0, 16);
+    .slice(0, FINAL_EVIDENCE_LIMIT);
 
   if (ranked.length === 0) {
     return {

@@ -33,7 +33,7 @@ function makeConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
     orchestratorSecret: '',
     serviceUrl: '',
     userServiceUrl: 'http://user-service',
-    geminiAppApiKey: '',
+    openRouterAppApiKey: '',
     openaiAppApiKey: '',
     llmUsageServiceUrl: '',
     ...overrides,
