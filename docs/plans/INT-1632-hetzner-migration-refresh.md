@@ -6,7 +6,7 @@
 
 **Architecture:** Production app compute moves to one Hetzner VM running Node services under PM2 behind nginx. GCP remains the system of record for Firestore, Pub/Sub topics, Secret Manager, Cloud Storage buckets, Cloud Functions, Artifact Registry/code-worker, and the shared project `intexuraos-dev-pbuchman`. Terraform gets a new provider-isolated Hetzner root at `terraform/hetzner-prod/` plus the minimum retained-GCP resources needed to route Pub/Sub and Cloud Scheduler traffic to `https://intexuraos.cloud`.
 
-**Tech Stack:** Terraform `>= 1.5`, `hashicorp/google ~> 5.0`, `hetznercloud/hcloud`, Ubuntu 24.04, Node.js 22, pnpm, PM2, nginx, certbot DNS-01 via Cloudflare, Google OIDC JWT verification at the nginx edge.
+**Tech Stack:** Terraform `>= 1.5`, `hashicorp/google ~> 5.0`, `hetznercloud/hcloud ~> 1.45`, Ubuntu 24.04, Node.js 22, pnpm, PM2, nginx, certbot DNS-01 via Cloudflare, Google OIDC JWT verification at the nginx edge.
 
 ---
 
@@ -146,7 +146,7 @@ Use these PR #1747 files as reference inputs, not as files to merge directly:
 ```text
 terraform/hetzner-prod/**
 scripts/hetzner/**
-ecosystem.prod.config.cjs
+ecosystem.config.prod.cjs
 docs/superpowers/plans/2026-04-10-hetzner-prod-migration.md
 ```
 
@@ -178,7 +178,8 @@ terraform {
       version = "~> 5.0"
     }
     hcloud = {
-      source = "hetznercloud/hcloud"
+      source  = "hetznercloud/hcloud"
+      version = "~> 1.45"
     }
   }
 }
@@ -227,6 +228,10 @@ resource "hcloud_primary_ip" "prod_ipv4" {
   auto_delete   = false
   location      = var.hetzner_location
   labels        = local.common_labels
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "hcloud_server" "prod" {
@@ -235,6 +240,10 @@ resource "hcloud_server" "prod" {
   image       = "ubuntu-24.04"
   location    = var.hetzner_location
   ssh_keys    = [hcloud_ssh_key.deploy.id]
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 ```
 
@@ -242,7 +251,7 @@ Expected: no `nbg1-dc3` hardcoding unless the same value drives both server and 
 
 - [ ] **Step 4: Add lifecycle protection**
 
-Add `prevent_destroy = true` to the Hetzner server and keep retained GCP data resources out of this root unless they are read-only data references or additive subscription/job resources.
+Add `prevent_destroy = true` to the Hetzner server and stable primary IP, and keep retained GCP data resources out of this root unless they are read-only data references or additive subscription/job resources.
 
 Expected: `terraform plan` does not propose destroying Firestore, GCS buckets, Pub/Sub topics, Secret Manager secrets, or existing Cloud Run services.
 
@@ -376,6 +385,8 @@ The `/internal/*` route must verify Google OIDC JWTs before proxying, then fan o
 /internal/linear/ -> linear-agent or code-agent according to the current route owner
 /internal/cron/ -> cron-agent
 /internal/notifications/ -> mobile-notifications-service
+/internal/retry-pending -> commands-agent
+/internal/drain-queue -> code-agent
 ```
 
 Expected: every Pub/Sub and Scheduler path listed in Task 4 has an nginx target.
@@ -506,14 +517,15 @@ Expected: production web bundles no longer require Cloud Run `run.app` URLs afte
 
 - [ ] **Step 3: Keep retained GCS public assets reachable**
 
-Nginx must continue serving:
+Nginx must serve the built web SPA files copied to the Hetzner VM and continue serving retained GCS-backed public assets:
 
 ```text
+SPA static files -> /var/www/intexuraos with try_files $uri $uri/ /index.html
 /share/* -> retained shared content bucket
 /images/* -> retained generated images bucket
 ```
 
-Expected: generated images and shared research HTML continue to load after DNS flips to Hetzner.
+Expected: the SPA loads directly from Hetzner nginx after DNS flips, and generated images and shared research HTML continue to load from the retained buckets.
 
 - [ ] **Step 4: Prepare external integration cutover checklist**
 
