@@ -6,6 +6,7 @@ import path from 'node:path';
 import {
   generateServiceWiring,
   loadServiceManifest,
+  renderPublicServiceEnv,
   writeServiceWiringArtifacts,
 } from '../generate-service-wiring.mjs';
 
@@ -206,5 +207,52 @@ const apiProxy = {
         INTEXURAOS_USER_SERVICE_URL: 'http://localhost:8110',
       },
     });
+  });
+
+  it('renders public service env values from manifest API paths', () => {
+    writeFixture(rootDir, 'apps/web/service-manifest.json', MANIFEST_FIXTURE);
+    const manifest = loadServiceManifest(path.join(rootDir, 'apps/web/service-manifest.json'));
+    const wiring = generateServiceWiring(manifest);
+
+    expect(renderPublicServiceEnv(wiring, 'https://intexuraos.cloud/')).toBe(
+      [
+        'INTEXURAOS_USER_SERVICE_URL=https://intexuraos.cloud/api/user',
+        'INTEXURAOS_CODE_AGENT_URL=https://intexuraos.cloud/api/code',
+        '',
+      ].join('\n')
+    );
+  });
+
+  it('prints public service env values from the CLI', () => {
+    writeFixture(rootDir, 'apps/web/service-manifest.json', MANIFEST_FIXTURE);
+
+    const output = execFileSync(
+      'node',
+      [
+        GENERATOR_SCRIPT,
+        '--root',
+        rootDir,
+        '--public-env',
+        '--base-url',
+        'https://intexuraos.cloud',
+      ],
+      { encoding: 'utf-8' }
+    );
+
+    expect(output).toContain('INTEXURAOS_USER_SERVICE_URL=https://intexuraos.cloud/api/user');
+    expect(output).toContain('INTEXURAOS_CODE_AGENT_URL=https://intexuraos.cloud/api/code');
+  });
+
+  it('rejects malformed public base URLs', () => {
+    writeFixture(rootDir, 'apps/web/service-manifest.json', MANIFEST_FIXTURE);
+
+    const result = spawnSync(
+      'node',
+      [GENERATOR_SCRIPT, '--root', rootDir, '--public-env', '--base-url', 'not-a-url'],
+      { encoding: 'utf-8' }
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('--base-url requires an absolute http(s) URL');
   });
 });

@@ -3,7 +3,7 @@
  * Web Service Manifest Verification
  *
  * Validates apps/web/service-manifest.json — the single source of truth for
- * Cloud Run services injected into the web bundle at build time.
+ * service URLs injected into the web bundle at build time.
  *
  * Checks:
  *   1. Manifest shape:
@@ -11,8 +11,10 @@
  *      with regex-validated values.
  *   2. Each manifest entry has a corresponding `module "<name_with_underscores>" {`
  *      declaration in terraform/environments/dev/main.tf.
- *   3. No `CLOUD_RUN_SERVICES=(` literal array remains in apps/web/cloudbuild.yaml —
- *      anywhere, including comments. Substring match (matches the companion vitest).
+ *   3. No `CLOUD_RUN_SERVICES=(` literal array remains in Cloud Build YAMLs
+ *      that can build the web bundle — anywhere, including comments.
+ *   4. Cloud Build YAMLs support the public API URL mode used by Hetzner.
+ *   5. The PWA navigation fallback excludes retained bucket routes.
  *
  * NOTE: The plan also calls for forbidding the literal in `.github/workflows/deploy.yml`,
  *       but that file currently still contains the bash arrays. The code-worker GitHub
@@ -31,6 +33,8 @@ const repoRoot = resolve(import.meta.dirname, '..');
 const manifestPath = resolve(repoRoot, 'apps/web/service-manifest.json');
 const terraformMainPath = resolve(repoRoot, 'terraform/environments/dev/main.tf');
 const cloudbuildPath = resolve(repoRoot, 'apps/web/cloudbuild.yaml');
+const monolithCloudbuildPath = resolve(repoRoot, 'cloudbuild/cloudbuild.yaml');
+const viteConfigPath = resolve(repoRoot, 'apps/web/vite.config.ts');
 
 const NAME_REGEX = /^[a-z][a-z0-9-]+$/;
 const ENV_SUFFIX_REGEX = /^[A-Z][A-Z0-9_]+$/;
@@ -144,11 +148,49 @@ function assertNoLiteralArray(filePath, label) {
   }
 }
 
+function assertPublicApiMode(filePath, label) {
+  if (!existsSync(filePath)) {
+    fail(`${label} not found: ${filePath}`);
+  }
+  const content = readFileSync(filePath, 'utf8');
+  const requiredSnippets = [
+    '_WEB_SERVICE_URL_MODE',
+    '_WEB_PUBLIC_BASE_URL',
+    'public-api',
+    '.services[] | [.name, .envSuffix, .apiPath] | @tsv',
+    '$${WEB_PUBLIC_BASE_URL%/}$${API_PATH}',
+  ];
+  for (const snippet of requiredSnippets) {
+    if (!content.includes(snippet)) {
+      fail(`${label} is missing required public web service URL mode snippet: ${snippet}`);
+    }
+  }
+}
+
+function assertViteRetainedBucketDenylist() {
+  if (!existsSync(viteConfigPath)) {
+    fail(`apps/web/vite.config.ts not found: ${viteConfigPath}`);
+  }
+  const content = readFileSync(viteConfigPath, 'utf8');
+  if (!content.includes('navigateFallbackDenylist')) {
+    fail('apps/web/vite.config.ts must configure workbox navigateFallbackDenylist');
+  }
+  for (const snippet of ['/^\\/share\\//', '/^\\/images\\//']) {
+    if (!content.includes(snippet)) {
+      fail(`apps/web/vite.config.ts navigateFallbackDenylist must include ${snippet}`);
+    }
+  }
+}
+
 function main() {
   const manifest = loadManifest();
   validateShape(manifest);
   validateTerraformModules(manifest);
   assertNoLiteralArray(cloudbuildPath, 'apps/web/cloudbuild.yaml');
+  assertPublicApiMode(cloudbuildPath, 'apps/web/cloudbuild.yaml');
+  assertNoLiteralArray(monolithCloudbuildPath, 'cloudbuild/cloudbuild.yaml');
+  assertPublicApiMode(monolithCloudbuildPath, 'cloudbuild/cloudbuild.yaml');
+  assertViteRetainedBucketDenylist();
 
   console.log(`✓ Web service manifest valid (${manifest.services.length} services)`);
 }
