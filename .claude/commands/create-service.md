@@ -591,7 +591,7 @@ CLOUD_RUN_SERVICES=(
 )
 ```
 
-> **Note (INT-1544 manifest refactor):** `apps/web/cloudbuild.yaml` no longer carries a literal `CLOUD_RUN_SERVICES=( ... )` array — it reads from `apps/web/service-manifest.json` (see Step 11). The two arrays in `.github/workflows/deploy.yml` and the one in `cloudbuild/cloudbuild.yaml` still exist as literals (pending follow-up migration), so they MUST still be edited here. Keep the entries in sync with the manifest. CI guards: `pnpm run verify:web-service-manifest` (manifest shape + cloudbuild has no literal) and the new soft check in `scripts/verify-service-scaffolding.sh`.
+> **Note (INT-1544/INT-1636 manifest refactor):** `apps/web/cloudbuild.yaml` and `cloudbuild/cloudbuild.yaml` no longer carry literal `CLOUD_RUN_SERVICES=( ... )` arrays — they read from `apps/web/service-manifest.json` (see Step 11). The two arrays in `.github/workflows/deploy.yml` still exist as literals pending a `workflows`-permission migration, so they MUST still be edited here. Keep the entries in sync with the manifest. CI guard: `pnpm run verify:web-service-manifest` validates the manifest and Cloud Build readers.
 
 **Why this is critical:** Without these changes, the service will be built by pnpm (workspace auto-discovery) but will NOT be docker-pushed or deployed to Cloud Run in the `MONOLITH` strategy. The web frontend will also get an undefined URL for the service.
 
@@ -696,15 +696,14 @@ The format is `name:envSuffix` where:
 
 URLs are automatically fetched from Cloud Run API at build time — no secrets needed.
 
-**Until the follow-up migration lands, keep the manifest in sync with the legacy literals:**
+**Until the workflow-permission follow-up migration lands, keep the manifest in sync with the remaining legacy workflow literals:**
 
-- `cloudbuild/cloudbuild.yaml` — `CLOUD_RUN_SERVICES=( ... )` (monolith pipeline; still inline)
 - `.github/workflows/deploy.yml` — two `CLOUD_RUN_SERVICES=( ... )` blocks (still inline; tracked as a `workflows`-permission follow-up)
 
 **CI guards:**
 
-- `pnpm run verify:web-service-manifest` (also wired into `pnpm run ci:tracked`) validates manifest shape, terraform module agreement, and forbids any `CLOUD_RUN_SERVICES=(` literal in `apps/web/cloudbuild.yaml`.
-- `scripts/verify-service-scaffolding.sh` adds soft checks for both the manifest entry and the `cloudbuild/cloudbuild.yaml` literal.
+- `pnpm run verify:web-service-manifest` (also wired into `pnpm run ci:tracked`) validates manifest shape, terraform module agreement, Cloud Build manifest readers, and retained-bucket PWA fallback exclusions.
+- `scripts/verify-service-scaffolding.sh` adds a soft check for the manifest entry.
 
 **Also update the web app config** (`apps/web/src/config.ts`) if needed:
 
