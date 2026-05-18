@@ -39,6 +39,7 @@ export interface Config {
   tokenEncryptionKey: string;
   orchestratorSecret: string;
   serviceUrl: string;
+  webAppUrl: string;
   githubWebhookSecret: string;
   userServiceUrl: string;
   // Auth0 JWT validation
@@ -70,6 +71,7 @@ export function loadConfig(): Config {
   const webhookVerifySecret = process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] ?? '';
   const orchestratorSecret = process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] ?? '';
   const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? ''; // validated in REQUIRED_ENV
+  const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
   const auth0Audience = process.env['INTEXURAOS_AUTH_AUDIENCE'] ?? '';
   const auth0Issuer = process.env['INTEXURAOS_AUTH_ISSUER'] ?? '';
   const auth0JwksUri = process.env['INTEXURAOS_AUTH_JWKS_URL'] ?? '';
@@ -95,6 +97,7 @@ export function loadConfig(): Config {
     webhookVerifySecret,
     orchestratorSecret,
     serviceUrl,
+    webAppUrl,
     tokenEncryptionKey,
     githubWebhookSecret,
     userServiceUrl,

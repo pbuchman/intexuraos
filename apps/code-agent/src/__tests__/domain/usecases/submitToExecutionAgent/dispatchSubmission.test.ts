@@ -11,7 +11,7 @@
  *    queue_full / no_qualifying_children errors.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest';
 import { ok, err, type Logger } from '@intexuraos/common-core';
 import { Timestamp } from '@google-cloud/firestore';
 import type { CodeTask } from '../../../../domain/models/codeTask.js';
@@ -44,6 +44,7 @@ describe('dispatchSubmission', () => {
   let mockTaskEnqueueService: {
     enqueue: ReturnType<typeof vi.fn>;
   };
+  let originalWebAppUrl: string | undefined;
 
   function makeTask(): CodeTask {
     const now = Timestamp.now();
@@ -90,6 +91,7 @@ describe('dispatchSubmission', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
     mockLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as Logger;
     mockCodeTaskRepo = {
       create: vi.fn(),
@@ -102,6 +104,14 @@ describe('dispatchSubmission', () => {
     mockTaskEnqueueService = {
       enqueue: vi.fn(),
     };
+  });
+
+  afterEach(() => {
+    if (originalWebAppUrl === undefined) {
+      delete process.env['INTEXURAOS_WEB_APP_URL'];
+    } else {
+      process.env['INTEXURAOS_WEB_APP_URL'] = originalWebAppUrl;
+    }
   });
 
   it('returns the execution task ID when the orchestrator accepts the enqueue', async () => {
@@ -119,6 +129,20 @@ describe('dispatchSubmission', () => {
       expect(result.value.workerLocation).toBe('queued');
     }
     expect(mockTaskEnqueueService.enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses INTEXURAOS_WEB_APP_URL in the single-task Linear start comment', async () => {
+    process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';
+    mockCodeTaskRepo.create.mockImplementation((input: { id: string }) =>
+      Promise.resolve(ok({ ...makeTask(), id: input.id, agentType: 'execution' })),
+    );
+    mockTaskEnqueueService.enqueue.mockResolvedValue(ok({ taskId: 'ignored', queuePosition: 1 }));
+
+    await dispatchSubmission(createDeps(), createPrepared());
+
+    const body = mockLinearAgentClient.addComment.mock.calls[0]?.[0]?.body as string;
+    expect(body).toContain('https://dev.intexuraos.cloud/#/code-tasks/task_planning');
+    expect(body).toContain('https://dev.intexuraos.cloud/#/code-tasks/task_');
   });
 
   it('propagates queue_full and rolls back the optimistic lock when the orchestrator rejects', async () => {
@@ -200,6 +224,25 @@ describe('dispatchSubmission', () => {
       // create/update/enqueue should NOT be called — fan-out handles persistence.
       expect(mockCodeTaskRepo.create).not.toHaveBeenCalled();
       expect(mockTaskEnqueueService.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('uses INTEXURAOS_WEB_APP_URL in complex fan-out Linear comments', async () => {
+      process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';
+      mockFanOutChildTasks.mockResolvedValue(
+        ok({
+          childTaskIds: ['task_child_a', 'task_child_b'],
+          primaryChildTaskId: 'task_child_a',
+          primaryChildIssueId: 'INT-101',
+        }),
+      );
+
+      await dispatchSubmission(createDeps(), createComplexPrepared());
+
+      const parentBody = mockLinearAgentClient.addComment.mock.calls[0]?.[0]?.body as string;
+      const childBody = mockLinearAgentClient.addComment.mock.calls[1]?.[0]?.body as string;
+      expect(parentBody).toContain('https://dev.intexuraos.cloud/#/code-tasks/task_planning');
+      expect(parentBody).toContain('https://dev.intexuraos.cloud/#/code-tasks/task_child_a');
+      expect(childBody).toContain('https://dev.intexuraos.cloud/#/code-tasks/task_child_a');
     });
 
     it('propagates queue_full from fan-out', async () => {

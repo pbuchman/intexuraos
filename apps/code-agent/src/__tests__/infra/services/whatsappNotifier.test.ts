@@ -86,9 +86,12 @@ describe('WhatsAppNotifier', () => {
     return task;
   };
 
-  const createMockConfig = (): WhatsAppNotifierConfig => ({
+  const createMockConfig = (
+    overrides: Partial<WhatsAppNotifierConfig> = {}
+  ): WhatsAppNotifierConfig => ({
     whatsappPublisher: mockPublisher,
     linearAgentClient: mockLinearAgentClient as unknown as NonNullable<WhatsAppNotifierConfig['linearAgentClient']>,
+    ...overrides,
   });
 
   const createMockResult = (overrides?: Partial<TaskResult>): TaskResult => ({
@@ -103,9 +106,26 @@ describe('WhatsAppNotifier', () => {
       expect(buildTaskUrl('task-123')).toBe('https://intexuraos.cloud/#/code-tasks/task-123');
     });
 
+    it('builds task links from the configured web app URL', () => {
+      expect(buildTaskUrl('task-123', 'https://dev.intexuraos.cloud')).toBe(
+        'https://dev.intexuraos.cloud/#/code-tasks/task-123'
+      );
+    });
+
+    it('normalizes one trailing slash from the configured web app URL', () => {
+      expect(buildTaskUrl('task-123', 'https://dev.intexuraos.cloud/')).toBe(
+        'https://dev.intexuraos.cloud/#/code-tasks/task-123'
+      );
+    });
+
+    it('falls back to the default web app URL when configured web app URL is empty', () => {
+      expect(buildTaskUrl('task-123', '')).toBe('https://intexuraos.cloud/#/code-tasks/task-123');
+    });
+
     it('handles task IDs with special characters', () => {
       expect(buildTaskUrl('task_abc-def')).toBe('https://intexuraos.cloud/#/code-tasks/task_abc-def');
     });
+
   });
 
   describe('formatCompletionMessage', () => {
@@ -163,6 +183,29 @@ describe('WhatsAppNotifier', () => {
       expect(callArgs.ctaUrl).toEqual({
         displayText: 'View Progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-123',
+      });
+    });
+
+    it('uses configured web app URL for View Progress ctaUrl', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Fix login bug',
+        result: createMockResult({
+          prUrl: undefined as unknown as string,
+        }),
+      });
+
+      const notifier = createWhatsAppNotifier({
+        ...createMockConfig(),
+        webAppUrl: 'https://dev.intexuraos.cloud/',
+      });
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskComplete('user-123', task);
+
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
+      expect(callArgs.ctaUrl).toEqual({
+        displayText: 'View Progress',
+        url: 'https://dev.intexuraos.cloud/#/code-tasks/task-123',
       });
     });
 

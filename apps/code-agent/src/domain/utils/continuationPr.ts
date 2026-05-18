@@ -5,6 +5,7 @@ import type { GitHubPRClient } from '../ports/gitHubPRClient.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import { fetchGitHubToken } from './gitHubTokenResolver.js';
 import type { AutomationLog } from '../ports/automationLog.js';
+import { buildCodeTaskUrl } from './taskUrls.js';
 
 const SAME_ISSUE_SEARCH_LIMIT = 20;
 
@@ -95,7 +96,7 @@ function buildContinuationComment(input: PostContinuationCommentInput): string {
 
   lines.push(
     '',
-    `[View in IntexuraOS](https://intexuraos.cloud/#/code-tasks/${input.taskId})`
+    `[View in IntexuraOS](${buildCodeTaskUrl(input.taskId)})`
   );
 
   return lines.join('\n');
