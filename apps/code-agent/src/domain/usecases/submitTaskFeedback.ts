@@ -25,6 +25,7 @@ import {
   bootstrapContinuationPrTaskComment,
   resolveContinuationPr,
 } from '../../domain/utils/continuationPr.js';
+import { buildCodeTaskUrl } from '../../domain/utils/taskUrls.js';
 import type { AutomationLog } from '../../domain/ports/automationLog.js';
 
 /**
@@ -319,11 +320,10 @@ ${feedback.trim()}
     // Step 9: Add comment to Linear issue with feedback details
     // Sanitize feedback before embedding in Linear comment to prevent secret leakage
     const sanitizedFeedback = sanitizePrompt(feedback.trim());
-    const webUrl = process.env['INTEXURAOS_WEB_URL'] ?? 'https://intexuraos.cloud';
     const commentBody = `🔄 **Follow-up task created** based on user feedback
 
-**Original task:** [${originalTask.id}](${webUrl}/#/code-tasks/${originalTask.id})
-**Follow-up task:** [${followUpTask.id}](${webUrl}/#/code-tasks/${followUpTask.id})
+**Original task:** [${originalTask.id}](${buildCodeTaskUrl(originalTask.id)})
+**Follow-up task:** [${followUpTask.id}](${buildCodeTaskUrl(followUpTask.id)})
 
 **Feedback:**
 > ${sanitizedFeedback.split('\n').join('\n> ')}`;

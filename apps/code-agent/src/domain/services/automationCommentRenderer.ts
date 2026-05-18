@@ -7,6 +7,7 @@
 
 import type { AgentType } from '../models/codeTask.js';
 import type { AutomationEvent } from '../ports/automationLog.js';
+import { buildCodeTaskUrl } from '../utils/taskUrls.js';
 
 export interface RenderEventOptions {
   repository?: string;
@@ -50,7 +51,7 @@ export function renderEvent(
       return renderTriageFailed(ts, event);
 
     case 'task_dispatched':
-      return `**${ts}** -- ${agentTypeLabel(event.agentType)} dispatched | ${event.workerType} | [View task](https://intexuraos.cloud/#/code-tasks/${event.taskId})`;
+      return `**${ts}** -- ${agentTypeLabel(event.agentType)} dispatched | ${event.workerType} | [View task](${buildCodeTaskUrl(event.taskId)})`;
 
     case 'task_dispatch_failed':
       return renderTaskDispatchFailed(ts, event);

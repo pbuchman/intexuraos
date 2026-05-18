@@ -121,6 +121,7 @@ export interface ServiceConfig {
   webhookVerifySecret: string;
   orchestratorSecret: string;
   serviceUrl: string;
+  webAppUrl: string;
   userServiceUrl: string;
   // GitHub Agent (INT-743)
   openRouterAppApiKey: string;
