@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+IFS=$'\n\t'
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NGINX_SOURCE_DIR="${SCRIPT_DIR}/nginx"
+SITE_TARGET="/etc/nginx/sites-available/intexuraos.conf"
+SITE_ENABLED="/etc/nginx/sites-enabled/intexuraos.conf"
+LUA_TARGET_DIR="/etc/nginx/lua"
+RELOAD_NGINX=1
+
+usage() {
+  printf 'Usage: INTEXURAOS_ENVIRONMENT=prod %s [--skip-reload]\n' "$(basename "$0")"
+}
+
+fail() {
+  printf 'ERROR: %s\n' "$1" >&2
+  exit 1
+}
+
+require_prod() {
+  if [[ "${INTEXURAOS_ENVIRONMENT:-}" != "prod" ]]; then
+    fail "INTEXURAOS_ENVIRONMENT must be prod"
+  fi
+}
+
+require_root() {
+  if [[ "$(id -u)" -ne 0 ]]; then
+    fail "Run this script as root"
+  fi
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --skip-reload)
+        RELOAD_NGINX=0
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        fail "Unknown argument: $1"
+        ;;
+    esac
+  done
+}
+
+reload_nginx() {
+  if [[ "${RELOAD_NGINX}" -ne 1 ]]; then
+    return
+  fi
+
+  if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet nginx; then
+    systemctl reload nginx
+    return
+  fi
+
+  nginx -s reload
+}
+
+main() {
+  parse_args "$@"
+  require_prod
+  require_root
+
+  command -v nginx >/dev/null 2>&1 || fail "nginx is required"
+  [[ -r "${NGINX_SOURCE_DIR}/intexuraos.conf" ]] || fail "Missing nginx config source"
+  [[ -r "${NGINX_SOURCE_DIR}/jwt-verify.lua" ]] || fail "Missing JWT verifier source"
+
+  install -d -m 755 "$(dirname "${SITE_TARGET}")" "$(dirname "${SITE_ENABLED}")" "${LUA_TARGET_DIR}"
+  install -m 644 -o root -g root "${NGINX_SOURCE_DIR}/intexuraos.conf" "${SITE_TARGET}"
+  install -m 644 -o root -g root "${NGINX_SOURCE_DIR}/jwt-verify.lua" "${LUA_TARGET_DIR}/jwt-verify.lua"
+  ln -sfn "${SITE_TARGET}" "${SITE_ENABLED}"
+  rm -f /etc/nginx/sites-enabled/default
+
+  nginx -t
+  reload_nginx
+
+  printf 'Deployed nginx config for intexuraos.cloud\n'
+}
+
+main "$@"
