@@ -21,6 +21,7 @@ Complexity: PLAN-DOC. This is a cross-cutting environment/link-generation fix wi
 Relevant findings:
 
 - `ecosystem.config.cjs` currently injects `INTEXURAOS_WEB_APP_URL` through `COMMON_SERVICE_ENV` with a fallback of `http://localhost:3000`.
+- `ecosystem.config.cjs` also defines a service-specific `SERVICE_ENV_MAPPINGS['actions-agent'].INTEXURAOS_WEB_APP_URL` fallback of `http://localhost:3000`. Because `createServiceConfig()` spreads service-specific env after `COMMON_SERVICE_ENV`, this override takes precedence and must be removed or changed with the common fallback.
 - `apps/actions-agent/src/index.ts` requires `INTEXURAOS_WEB_APP_URL` and passes it into the action use cases; `handleActionTemplate.ts`, `executeCodeAction.ts`, `executeCalendarAction.ts`, `executeResearchAction.ts`, `executeTodoAction.ts`, `executeNoteAction.ts`, and `executeLinkAction.ts` use that value for WhatsApp approval or completion links.
 - `apps/mobile-notifications-service/src/services.ts` uses `INTEXURAOS_WEB_APP_URL` for digest CTA links.
 - `apps/research-agent/src/routes/helpers/completionHandlers.ts` and research synthesis flows use `INTEXURAOS_WEB_APP_URL` for generated web links.
@@ -32,7 +33,7 @@ Relevant findings:
 
 Modify:
 
-- `ecosystem.config.cjs` - change the dev fallback for `INTEXURAOS_WEB_APP_URL` from localhost to `https://dev.intexuraos.cloud`.
+- `ecosystem.config.cjs` - change the common dev fallback for `INTEXURAOS_WEB_APP_URL` from localhost to `https://dev.intexuraos.cloud`, and remove or align the `actions-agent` service-specific override that currently defeats the common value.
 - `scripts/__tests__/ecosystem.config.test.ts` - prove PM2-injected dev services receive the external dev web app URL when the shell does not override it.
 - `apps/code-agent/src/index.ts` - add `INTEXURAOS_WEB_APP_URL` to startup validation and replace the optional `INTEXURAOS_WEB_URL` note with the canonical env var.
 - `apps/code-agent/src/config.ts` - load `webAppUrl` from `INTEXURAOS_WEB_APP_URL`.
@@ -132,7 +133,7 @@ pnpm exec vitest run scripts/__tests__/ecosystem.config.test.ts
 
 Expected: FAIL because the services receive `http://localhost:3000`.
 
-- [ ] **Step 3: Change the PM2 fallback**
+- [ ] **Step 3: Change the PM2 fallback and actions-agent override**
 
 In `ecosystem.config.cjs`, update `COMMON_SERVICE_ENV.INTEXURAOS_WEB_APP_URL`.
 
@@ -149,6 +150,18 @@ const COMMON_SERVICE_ENV = {
 
 Keep `process.env.INTEXURAOS_WEB_APP_URL` first so operators can override the public base URL explicitly.
 
+Then remove the redundant `SERVICE_ENV_MAPPINGS['actions-agent'].INTEXURAOS_WEB_APP_URL` entry entirely so `actions-agent` inherits the common value. If the implementation keeps the service-specific entry for a concrete reason, update its fallback to the same `https://dev.intexuraos.cloud` value and document why the override still exists.
+
+```javascript
+'actions-agent': {
+  INTEXURAOS_PUBSUB_ACTIONS_QUEUE: process.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE ?? 'actions-queue',
+  INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
+    process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
+  INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC:
+    process.env.INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC ?? 'calendar-preview',
+},
+```
+
 - [ ] **Step 4: Run the targeted test and confirm it passes**
 
 Run:
@@ -157,7 +170,7 @@ Run:
 pnpm exec vitest run scripts/__tests__/ecosystem.config.test.ts
 ```
 
-Expected: PASS.
+Expected: PASS, including the `actions-agent` assertion. If only `actions-agent` still reports `http://localhost:3000`, the service-specific override was not removed or aligned.
 
 - [ ] **Step 5: Commit Task 1**
 
@@ -241,20 +254,30 @@ it('uses configured public web app URL in View Progress CTA', async () => {
 
 In `apps/code-agent/src/__tests__/domain/usecases/mergeConflicts/notifyConflicts.test.ts`, replace `INTEXURAOS_WEB_URL` with `INTEXURAOS_WEB_APP_URL` in the two `buildTaskUrl` tests.
 
+Add `afterEach` cleanup for any `process.env['INTEXURAOS_WEB_APP_URL']` mutation in this `describe` block so env state does not leak between tests.
+
 ```typescript
+let originalWebAppUrl: string | undefined;
+
+beforeEach(() => {
+  originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+});
+
+afterEach(() => {
+  if (originalWebAppUrl === undefined) {
+    delete process.env['INTEXURAOS_WEB_APP_URL'];
+    return;
+  }
+  process.env['INTEXURAOS_WEB_APP_URL'] = originalWebAppUrl;
+});
+
 it('uses INTEXURAOS_WEB_APP_URL when set', () => {
-  const original = process.env['INTEXURAOS_WEB_APP_URL'];
   process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud';
   expect(buildTaskUrl('task-1')).toBe('https://dev.intexuraos.cloud/#/code-tasks/task-1');
-  if (original === undefined) {
-    delete process.env['INTEXURAOS_WEB_APP_URL'];
-  } else {
-    process.env['INTEXURAOS_WEB_APP_URL'] = original;
-  }
 });
 ```
 
-Keep the existing fallback test, but delete and restore `INTEXURAOS_WEB_APP_URL` instead of `INTEXURAOS_WEB_URL`.
+Keep the existing fallback test, but delete `INTEXURAOS_WEB_APP_URL` inside the test instead of `INTEXURAOS_WEB_URL`; the shared `afterEach` restores the original value.
 
 - [ ] **Step 3: Run targeted tests and confirm they fail**
 
@@ -289,7 +312,7 @@ Update the optional-env comment in the same file so it names the canonical varia
  * - INTEXURAOS_WEB_APP_URL: Public web app URL for generating user-facing links
 ```
 
-In `apps/code-agent/src/config.ts`, add `webAppUrl` to `Config`, load it, and return it.
+In `apps/code-agent/src/config.ts`, add `webAppUrl` to `Config`, load it, and return it. Because `INTEXURAOS_WEB_APP_URL` is now required at startup, do not coerce a missing value to `''`; read it as a non-empty required string.
 
 ```typescript
 export interface Config {
@@ -314,7 +337,15 @@ export interface Config {
 ```
 
 ```typescript
-const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? '';
+function readRequiredStringEnv(key: string): string {
+  const value = process.env[key];
+  if (value === undefined || value.length === 0) {
+    throw new Error(`${key} is required`);
+  }
+  return value;
+}
+
+const webAppUrl = readRequiredStringEnv('INTEXURAOS_WEB_APP_URL');
 ```
 
 ```typescript
@@ -401,12 +432,15 @@ export interface WhatsAppNotifierConfig {
 }
 ```
 
-Inside `createWhatsAppNotifier`, capture the configured base.
+Inside `createWhatsAppNotifier`, capture a non-empty configured base. This avoids the empty-string fallback trap where `'' ?? DEFAULT_WEB_APP_URL` would keep `''` and generate malformed hash-only URLs.
 
 ```typescript
 export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsAppNotifier {
   const { whatsappPublisher, linearAgentClient } = config;
-  const webAppUrl = config.webAppUrl ?? DEFAULT_WEB_APP_URL;
+  const webAppUrl =
+    config.webAppUrl !== undefined && config.webAppUrl.length > 0
+      ? config.webAppUrl
+      : DEFAULT_WEB_APP_URL;
 ```
 
 Update `buildCtaUrl` and all direct `buildTaskUrl(...)` calls in the notifier to pass `webAppUrl`.
@@ -441,7 +475,11 @@ function stripTrailingSlash(value: string): string {
 }
 
 export function buildTaskUrl(taskId: string): string {
-  const webUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? DEFAULT_WEB_APP_URL;
+  const configuredWebUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+  const webUrl =
+    configuredWebUrl !== undefined && configuredWebUrl.length > 0
+      ? configuredWebUrl
+      : DEFAULT_WEB_APP_URL;
   return `${stripTrailingSlash(webUrl)}/#/code-tasks/${taskId}`;
 }
 ```
@@ -519,6 +557,7 @@ rg -n "INTEXURAOS_WEB_APP_URL|INTEXURAOS_WEB_URL|http://localhost:3000|https://i
 Expected findings after Tasks 1-2:
 
 - `ecosystem.config.cjs` uses `https://dev.intexuraos.cloud` as the `INTEXURAOS_WEB_APP_URL` fallback.
+- `ecosystem.config.cjs` has no `actions-agent` service-specific `INTEXURAOS_WEB_APP_URL` override pointing at `http://localhost:3000`; `actions-agent` inherits the common dev fallback or has an explicitly aligned `https://dev.intexuraos.cloud` fallback.
 - `apps/actions-agent/src/index.ts` still requires `INTEXURAOS_WEB_APP_URL` and passes it to services.
 - `apps/actions-agent/src/domain/usecases/*` use injected `webAppUrl`, not localhost literals, for user-facing WhatsApp links.
 - `apps/mobile-notifications-service/src/services.ts` uses `INTEXURAOS_WEB_APP_URL`.
@@ -576,4 +615,5 @@ Skip this commit when Step 4 passes without further edits.
 - Code-agent WhatsApp CTA URLs for task progress use the configured public web app URL.
 - Existing absolute external URLs such as GitHub PR URLs and Google Calendar URLs remain unchanged.
 - No WhatsApp notification path uses `http://localhost:3000` as the public URL in the dev environment.
+- Empty-string `INTEXURAOS_WEB_APP_URL` values fall back to `https://intexuraos.cloud` in code-agent URL builders instead of producing malformed `/#/code-tasks/...` links.
 - The final implementation passes `pnpm run ci:tracked`.
