@@ -38,7 +38,12 @@ Modify:
 - `apps/code-agent/src/index.ts` - add `INTEXURAOS_WEB_APP_URL` to startup validation and replace the optional `INTEXURAOS_WEB_URL` note with the canonical env var.
 - `apps/code-agent/src/config.ts` - load `webAppUrl` from `INTEXURAOS_WEB_APP_URL`.
 - `apps/code-agent/src/services/types.ts` - add `webAppUrl` to `ServiceConfig`.
+- `apps/code-agent/src/index.ts` - pass `config.webAppUrl` into `initServices`.
 - `apps/code-agent/src/services.ts` - pass `config.webAppUrl` into `createWhatsAppNotifier`.
+- `apps/code-agent/src/__tests__/services/factories/services.test.ts` - add a default `webAppUrl` to the `ServiceConfig` factory.
+- `apps/code-agent/src/__tests__/services/factories/clientFactory.test.ts` - add a default `webAppUrl` to the `ServiceConfig` factory.
+- `apps/code-agent/src/__tests__/services/factories/publisherFactory.test.ts` - add a default `webAppUrl` to the `ServiceConfig` factory.
+- `apps/code-agent/src/__tests__/services/factories/llmFactory.test.ts` - add a default `webAppUrl` to the `ServiceConfig` factory.
 - `apps/code-agent/src/infra/services/whatsappNotifierImpl.ts` - build task CTA URLs from configured web app URL.
 - `apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts` - cover configured dev URL and trailing slash normalization.
 - `apps/code-agent/src/domain/usecases/mergeConflicts/notifyConflicts.ts` - use `INTEXURAOS_WEB_APP_URL` instead of `INTEXURAOS_WEB_URL`.
@@ -191,6 +196,10 @@ git commit -m "fix(INT-1638): use dev web URL in PM2 WhatsApp link env"
 - Modify: `apps/code-agent/src/config.ts`
 - Modify: `apps/code-agent/src/services/types.ts`
 - Modify: `apps/code-agent/src/services.ts`
+- Modify: `apps/code-agent/src/__tests__/services/factories/services.test.ts`
+- Modify: `apps/code-agent/src/__tests__/services/factories/clientFactory.test.ts`
+- Modify: `apps/code-agent/src/__tests__/services/factories/publisherFactory.test.ts`
+- Modify: `apps/code-agent/src/__tests__/services/factories/llmFactory.test.ts`
 - Modify: `apps/code-agent/src/infra/services/whatsappNotifierImpl.ts`
 - Modify: `apps/code-agent/src/__tests__/infra/services/whatsappNotifier.test.ts`
 - Modify: `apps/code-agent/src/domain/usecases/mergeConflicts/notifyConflicts.ts`
@@ -401,6 +410,40 @@ const whatsappNotifier = createWhatsAppNotifier({
   linearAgentClient,
   webAppUrl: config.webAppUrl,
 });
+```
+
+In `apps/code-agent/src/index.ts`, update the `initServices({...})` call so the required `ServiceConfig.webAppUrl` value is passed through at startup.
+
+```typescript
+initServices({
+  gcpProjectId: config.gcpProjectId,
+  internalAuthToken: config.internalAuthToken,
+  firestoreProjectId: config.firestoreProjectId,
+  whatsappServiceUrl: config.whatsappServiceUrl,
+  whatsappSendTopic: config.whatsappSendTopic,
+  prTriageTopic: config.prTriageTopic,
+  linearAgentUrl: config.linearAgentUrl,
+  actionsAgentUrl: config.actionsAgentUrl,
+  webhookVerifySecret: config.webhookVerifySecret,
+  orchestratorSecret: config.orchestratorSecret,
+  serviceUrl: config.serviceUrl,
+  webAppUrl: config.webAppUrl,
+  userServiceUrl: config.userServiceUrl,
+  openRouterAppApiKey: config.openRouterAppApiKey,
+  openaiAppApiKey: config.openaiAppApiKey,
+  llmUsageServiceUrl: config.llmUsageServiceUrl,
+});
+```
+
+Update every test helper that constructs a complete `ServiceConfig` object so TypeScript continues compiling after `webAppUrl` becomes required. Add this default to the `makeConfig()` return object in:
+
+- `apps/code-agent/src/__tests__/services/factories/services.test.ts`
+- `apps/code-agent/src/__tests__/services/factories/clientFactory.test.ts`
+- `apps/code-agent/src/__tests__/services/factories/publisherFactory.test.ts`
+- `apps/code-agent/src/__tests__/services/factories/llmFactory.test.ts`
+
+```typescript
+webAppUrl: 'https://dev.intexuraos.cloud',
 ```
 
 - [ ] **Step 5: Change WhatsApp notifier URL construction**
