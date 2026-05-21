@@ -434,6 +434,58 @@ describe('taskDispatcherImpl', () => {
     });
   });
 
+  describe('dispatch non-OK response handling', () => {
+    it('returns dispatch_failed with worker error message for non-retryable status 400', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+        },
+      });
+
+      const service = createTaskDispatcherService(deps);
+
+      nock(WORKER_URL)
+        .post('/tasks')
+        .reply(400, { error: 'String must contain at least 1 character(s)' });
+
+      const result = await service.dispatch({
+        taskId: 'task-validation-failure',
+        prompt: 'Fix CI',
+        systemPromptHash: 'hash-123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'codex',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: '',
+        linearIssueLabels: [],
+        hasChildren: false,
+        agentType: 'pull_request',
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('dispatch_failed');
+        expect(result.error.message).toContain('400');
+        expect(result.error.message).toContain('String must contain at least 1 character(s)');
+      }
+    });
+  });
+
   describe('failedWorkerLocation filtering', () => {
     const WORKER_B_URL = 'https://worker-b.example.com';
 
