@@ -388,9 +388,17 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         throw error;
       }
 
+      const errorText = typeof response.text === 'function'
+        ? await response.text().catch(() => '')
+        : '';
+      const errorMessage = extractErrorMessage(errorText);
+
       return err({
         code: 'dispatch_failed',
-        message: `Worker returned HTTP ${String(response.status)}`,
+        message:
+          errorMessage.length > 0
+            ? `Worker returned HTTP ${String(response.status)}: ${errorMessage}`
+            : `Worker returned HTTP ${String(response.status)}`,
       });
     }
 

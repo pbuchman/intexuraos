@@ -6,6 +6,7 @@ import {
 } from '../../../../domain/services/gitHubDispatch/ciFailureDispatch.js';
 import type { WebhookDispatchServiceDeps } from '../../../../domain/services/gitHubDispatch/types.js';
 import type { GitHubPREvent } from '../../../../domain/models/gitHubPREvent.js';
+import { generateWebhookSecret } from '../../../../domain/utils/secrets.js';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -196,6 +197,12 @@ describe('executeCIFailureDispatch', () => {
       expect.objectContaining({ type: 'fix_task_dispatched', parentTaskId: 'task-parent', fixTaskId: 'task-fix' }),
       'user-1',
     );
+
+    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
+    expect(createCall?.id).toMatch(/^task_/);
+    expect(createCall?.webhookSecret).toBe(
+      generateWebhookSecret(deps.orchestratorSecret, createCall?.id ?? '')
+    );
   });
 
   it('returns failure when create fails', async () => {
@@ -237,6 +244,12 @@ describe('executeCIFailureDispatch', () => {
       expect.anything(),
       expect.objectContaining({ checkName: 'Unknown Check', headBranch: 'unknown', headSha: 'unknown', checkSuiteId: 0 }),
       'user-1',
+    );
+
+    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0]?.[0];
+    expect(createCall?.id).toMatch(/^task_/);
+    expect(createCall?.webhookSecret).toBe(
+      generateWebhookSecret(deps.orchestratorSecret, createCall?.id ?? '')
     );
   });
 
