@@ -793,6 +793,12 @@
       "description": "Architecture: firestore ownership"
     },
     {
+      "path": "architecture/gcp-hetzner-environment-comparison.md",
+      "title": "GCP and Hetzner Environment Comparison",
+      "category": "architecture",
+      "description": "Architecture: GCP and Hetzner environment comparison"
+    },
+    {
       "path": "architecture/llm-packages.md",
       "title": "LLM Packages Reference",
       "category": "architecture",
