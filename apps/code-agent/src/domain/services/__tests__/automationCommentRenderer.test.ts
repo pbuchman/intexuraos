@@ -18,6 +18,7 @@ let originalWebAppUrl: string | undefined;
 
 beforeEach(() => {
   originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+  delete process.env['INTEXURAOS_WEB_APP_URL'];
 });
 
 afterEach(() => {
