@@ -150,6 +150,25 @@ describe('DockerVolume', () => {
     expect(volume.getPnpmStorePath()).toBe(path.join('/tmp', 'pnpm-store'));
   });
 
+  it('binds package-manager caches outside the /home/claude tmpfs', () => {
+    const volume = makeVolume(mockDocker);
+    const binds = volume.buildBinds({
+      worktreePath: '/worktree',
+      taskSecretsPath: '/tmp/claude-secrets/task-1',
+      pnpmStorePath: '/tmp/pnpm-store',
+      taskRuntimeHomePath: '/tmp/claude-secrets/codex-state-task-1',
+      containerRuntimeHome: '/home/claude/.codex',
+      mainGitDir: null,
+      useSharedCreds: false,
+      useSharedCodexAuth: false,
+      taskForensicsPath: null,
+    });
+
+    expect(binds).toContain('/tmp/pnpm-store:/home/claude/pnpm-store:rw');
+    expect(binds).toContain('/tmp/pnpm-store/cache/pnpm:/home/claude/.cache/pnpm:rw');
+    expect(binds).toContain('/tmp/pnpm-store/cache/corepack:/home/claude/.cache/node/corepack:rw');
+  });
+
   it('buildTmpfs keeps exec on /repo/node_modules — required by pnpm .bin shims (INT-1524)', () => {
     const volume = makeVolume(mockDocker);
     const tmpfs = volume.buildTmpfs();

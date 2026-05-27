@@ -67,7 +67,11 @@ export function initServices(config: ServiceConfig): void {
   const metricsClient = isE2eMode || !enableMetrics ? createNoOpMetricsClient() : createMetricsClient();
   const workerHealthProbe = createWorkerHealthProbe();
   const taskDispatcher = createTaskDispatcherService({ logger, workerHealthProbe });
-  const whatsappNotifier = createWhatsAppNotifier({ whatsappPublisher, linearAgentClient });
+  const whatsappNotifier = createWhatsAppNotifier({
+    whatsappPublisher,
+    linearAgentClient,
+    webAppUrl: config.webAppUrl,
+  });
   const linearIssueService = createLinearIssueService({ linearAgentClient, logger });
   const statusMirrorService = createStatusMirrorService({ actionsAgentClient, logger });
   const userLookupService = createUserLookupService({

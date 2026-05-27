@@ -1,7 +1,6 @@
 import type { Logger } from '@intexuraos/common-core';
 import type { GitHubPRClient } from '../../ports/gitHubPRClient.js';
-
-const DEFAULT_WEB_URL = 'https://intexuraos.cloud';
+import { buildCodeTaskUrl } from '../../utils/taskUrls.js';
 
 export type ConflictCommentPhase =
   | 'starting'
@@ -11,8 +10,7 @@ export type ConflictCommentPhase =
   | 'resolved';
 
 export function buildTaskUrl(taskId: string): string {
-  const webUrl = process.env['INTEXURAOS_WEB_URL'] ?? DEFAULT_WEB_URL;
-  return `${webUrl}/#/code-tasks/${taskId}`;
+  return buildCodeTaskUrl(taskId);
 }
 
 export function buildConflictCommentBody(params: {

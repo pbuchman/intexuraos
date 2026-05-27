@@ -20,6 +20,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_ORCHESTRATOR_SECRET', // For HMAC signature validation from orchestrator
   'INTEXURAOS_GITHUB_WEBHOOK_SECRET', // For GitHub webhook signature verification
   'INTEXURAOS_SERVICE_URL', // Webhook callback URL — orchestrator calls this to report task status
+  'INTEXURAOS_WEB_APP_URL', // Public web app URL for user-facing links
 ];
 
 /**
@@ -29,7 +30,6 @@ const REQUIRED_ENV = [
  * - INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC: PR triage Pub/Sub topic
  * - INTEXURAOS_LINEAR_AGENT_URL, INTEXURAOS_ACTIONS_AGENT_URL: Service integrations
  * - INTEXURAOS_SERVICE_URL: Worker configuration
- * - INTEXURAOS_WEB_URL: Web app URL for generating task links (defaults to https://intexuraos.cloud)
  * - INTEXURAOS_AUTH_AUDIENCE, INTEXURAOS_AUTH_ISSUER, INTEXURAOS_AUTH_JWKS_URL: Auth0 JWT
  * - INTEXURAOS_ENABLE_METRICS: Set to 'true' to enable Cloud Monitoring metrics (requires monitoring.metricWriter IAM role)
  */
@@ -82,6 +82,7 @@ async function main(): Promise<void> {
     webhookVerifySecret: config.webhookVerifySecret,
     orchestratorSecret: config.orchestratorSecret,
     serviceUrl: config.serviceUrl,
+    webAppUrl: config.webAppUrl,
     userServiceUrl: config.userServiceUrl,
     openRouterAppApiKey: config.openRouterAppApiKey,
     openaiAppApiKey: config.openaiAppApiKey,

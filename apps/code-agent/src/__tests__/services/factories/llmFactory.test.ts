@@ -34,7 +34,7 @@ function makeConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
     gcpProjectId: '', internalAuthToken: '', firestoreProjectId: '',
     whatsappServiceUrl: '', whatsappSendTopic: '', prTriageTopic: '',
     linearAgentUrl: '', actionsAgentUrl: '', webhookVerifySecret: '',
-    orchestratorSecret: '', serviceUrl: '', userServiceUrl: '',
+    orchestratorSecret: '', serviceUrl: '', webAppUrl: 'https://dev.intexuraos.cloud', userServiceUrl: '',
     openRouterAppApiKey: '', openaiAppApiKey: '', llmUsageServiceUrl: '',
     ...overrides,
   };

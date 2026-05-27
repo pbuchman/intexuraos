@@ -564,6 +564,8 @@ export async function createWorkerOrchestration(
     // ordering: log → mkdir → spec → createContainer.
     const pnpmStorePath = volume.getPnpmStorePath();
     fs.mkdirSync(pnpmStorePath, { recursive: true });
+    fs.mkdirSync(volume.getPnpmCachePath(), { recursive: true });
+    fs.mkdirSync(volume.getCorepackCachePath(), { recursive: true });
 
     const { spec } = buildCreateContainerSpec({
       taskId,

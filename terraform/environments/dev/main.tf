@@ -1613,6 +1613,7 @@ module "code_agent" {
 
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_SERVICE_URL                = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_WEB_APP_URL                = "https://${var.web_app_domain}"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
     INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC     = "intexuraos-pr-triage-${var.environment}"
     INTEXURAOS_EXECUTION_MEMORY_ENABLED   = "true"
