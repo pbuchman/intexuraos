@@ -27,6 +27,7 @@ function makeConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
     webhookVerifySecret: '',
     orchestratorSecret: '',
     serviceUrl: '',
+    webAppUrl: 'https://dev.intexuraos.cloud',
     userServiceUrl: '',
     openRouterAppApiKey: '',
     openaiAppApiKey: '',

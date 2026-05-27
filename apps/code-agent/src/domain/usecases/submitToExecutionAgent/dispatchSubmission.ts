@@ -28,6 +28,7 @@ import {
 } from './types.js';
 import type { PreparedSubmission } from './prepareSubmission.js';
 import { announceInLinear } from './announceInLinear.js';
+import { buildCodeTaskUrl } from '../../utils/taskUrls.js';
 
 export interface DispatchSubmissionDeps {
   logger: Logger;
@@ -81,7 +82,6 @@ async function dispatchComplex(
     return err({ code: 'internal_error', message: `Fan-out failed: ${fanOutResult.error.message}` });
   }
 
-  const webUrl = process.env['INTEXURAOS_WEB_URL'] ?? 'https://intexuraos.cloud';
   const qualifyingChildren = directChildren
     .filter((child) => hasCodeTaskLabel(child.labels))
     .sort((a, b) => a.identifier.localeCompare(b.identifier));
@@ -90,7 +90,7 @@ async function dispatchComplex(
     .map((child, index) => {
       const taskId = fanOutResult.value.childTaskIds[index];
       return taskId !== undefined
-        ? `- ${child.identifier}: [${taskId}](${webUrl}/#/code-tasks/${taskId})`
+        ? `- ${child.identifier}: [${taskId}](${buildCodeTaskUrl(taskId)})`
         : `- ${child.identifier}`;
     })
     .join('\n');
@@ -104,7 +104,7 @@ async function dispatchComplex(
       commentFailureMessage: 'Failed to add complex Execution Agent start comment to parent Linear issue',
       body: `🚀 **Execution Agent implementation started for child tasks**
 
-**Design task:** [${planningTask.id}](${webUrl}/#/code-tasks/${planningTask.id})
+**Design task:** [${planningTask.id}](${buildCodeTaskUrl(planningTask.id)})
 **Child implementation tasks:**
 ${childTaskLines}`,
     },
@@ -125,8 +125,8 @@ ${childTaskLines}`,
           issueId: child.identifier,
           body: `🚀 **Execution Agent implementation started**
 
-**Design task:** [${planningTask.id}](${webUrl}/#/code-tasks/${planningTask.id})
-**Implementation task:** [${childTaskId}](${webUrl}/#/code-tasks/${childTaskId})`,
+**Design task:** [${planningTask.id}](${buildCodeTaskUrl(planningTask.id)})
+**Implementation task:** [${childTaskId}](${buildCodeTaskUrl(childTaskId)})`,
         })
         .catch(() => undefined);
     }),
@@ -197,7 +197,6 @@ async function dispatchSingle(
   );
 
   // Update Linear issue to In Progress + add comment (best-effort)
-  const webUrl = process.env['INTEXURAOS_WEB_URL'] ?? 'https://intexuraos.cloud';
   await announceInLinear(
     { logger, linearAgentClient },
     {
@@ -207,8 +206,8 @@ async function dispatchSingle(
       commentFailureMessage: 'Failed to add Execution Agent start comment to Linear issue',
       body: `🚀 **Execution Agent implementation started**
 
-**Design task:** [${planningTask.id}](${webUrl}/#/code-tasks/${planningTask.id})
-**Implementation task:** [${executionTaskId}](${webUrl}/#/code-tasks/${executionTaskId})`,
+**Design task:** [${planningTask.id}](${buildCodeTaskUrl(planningTask.id)})
+**Implementation task:** [${executionTaskId}](${buildCodeTaskUrl(executionTaskId)})`,
     },
   );
 
