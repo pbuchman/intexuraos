@@ -1,5 +1,5 @@
 variable "project_id" {
-  description = "Retained shared GCP project ID for data-plane resources."
+  description = "Retained shared GCP project ID for data-plane and async/control-plane resources."
   type        = string
   default     = "intexuraos-dev-pbuchman"
 
@@ -26,10 +26,43 @@ variable "environment" {
   }
 }
 
+variable "source_environment" {
+  description = "Existing Terraform environment suffix for retained GCP topics, service accounts, and jobs."
+  type        = string
+  default     = "dev"
+
+  validation {
+    condition     = var.source_environment == "dev"
+    error_message = "This cutover currently targets retained resources owned by terraform/environments/dev."
+  }
+}
+
 variable "domain" {
   description = "Public production domain served by the Hetzner VM."
   type        = string
   default     = "intexuraos.cloud"
+}
+
+variable "hetzner_origin" {
+  description = "Public Hetzner production origin used as push endpoint prefix."
+  type        = string
+  default     = "https://intexuraos.cloud"
+
+  validation {
+    condition     = can(regex("^https://[a-z0-9]([a-z0-9.-]*[a-z0-9])?$", var.hetzner_origin))
+    error_message = "hetzner_origin must be an HTTPS origin without a port, path, query string, or trailing slash."
+  }
+
+  validation {
+    condition     = var.hetzner_origin == "https://intexuraos.cloud"
+    error_message = "hetzner_origin is fixed to https://intexuraos.cloud for this production Hetzner cutover root."
+  }
+}
+
+variable "activate_hetzner_async_consumers" {
+  description = "When true, activates Hetzner-targeted Pub/Sub pushes and Scheduler jobs. Keep false for staging to avoid duplicate Cloud Run and Hetzner consumers."
+  type        = bool
+  default     = false
 }
 
 variable "hetzner_location" {
@@ -106,8 +139,8 @@ variable "cloudflare_dns_api_token_secret_id" {
   default     = "INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN"
 }
 
-variable "extra_labels" {
-  description = "Additional labels applied to Hetzner resources."
+variable "labels" {
+  description = "Additional labels applied to Hetzner and retained async/control-plane resources."
   type        = map(string)
   default     = {}
 }
