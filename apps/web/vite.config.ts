@@ -174,7 +174,13 @@ export default defineConfig(({ mode }) => {
           ],
           // Don't cache API requests
           navigateFallback: '/index.html',
-          navigateFallbackDenylist: [/^\/api/, /^\/health/, /^\/openapi\.json/, /^\/share\//],
+          navigateFallbackDenylist: [
+            /^\/api/,
+            /^\/health/,
+            /^\/openapi\.json/,
+            /^\/share\//,
+            /^\/images\//,
+          ],
         },
         devOptions: {
           enabled: true, // Generate manifest in dev mode
