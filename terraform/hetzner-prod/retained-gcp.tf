@@ -1,5 +1,5 @@
 locals {
-  retained_gcp_environment = "dev"
+  retained_gcp_environment = var.source_environment
 
   retained_gcp_buckets = {
     static_assets          = "intexuraos-static-assets-${local.retained_gcp_environment}"
@@ -15,7 +15,7 @@ locals {
     whatsapp_webhook_process    = "intexuraos-whatsapp-webhook-process-${local.retained_gcp_environment}"
     srt_transcription_completed = "intexuraos-srt-transcription-completed-${local.retained_gcp_environment}"
     audio_stored                = "intexuraos-audio-stored-${local.retained_gcp_environment}"
-    transcription_dlq           = "intexuraos-transcription-audio-stored-dlq-${local.retained_gcp_environment}"
+    transcription_audio_dlq     = "intexuraos-transcription-audio-stored-dlq-${local.retained_gcp_environment}"
     commands_ingest             = "intexuraos-commands-ingest-${local.retained_gcp_environment}"
     actions_queue               = "intexuraos-actions-queue-${local.retained_gcp_environment}"
     research_process            = "intexuraos-research-process-${local.retained_gcp_environment}"
@@ -31,7 +31,7 @@ locals {
     transcription_completed     = "intexuraos-transcription-completed-${local.retained_gcp_environment}"
   }
 
-  retained_gcp_cloud_functions = {
+  retained_gcp_cloud_function_names = {
     vm_start      = "intexuraos-vm-start-${local.retained_gcp_environment}"
     vm_stop       = "intexuraos-vm-stop-${local.retained_gcp_environment}"
     transcription = "intexuraos-transcription-${local.retained_gcp_environment}"
@@ -138,7 +138,7 @@ locals {
     firestore_database_id         = local.retained_gcp.firestore_database_id
     buckets                       = local.retained_gcp_buckets
     pubsub_topics                 = local.retained_gcp_pubsub_topics
-    cloud_functions               = local.retained_gcp_cloud_functions
+    cloud_functions               = local.retained_gcp_cloud_function_names
     artifact_registry             = local.retained_gcp_artifact_registry
     cloud_build_triggers          = local.retained_gcp_cloud_build_triggers
     service_accounts              = local.retained_gcp_service_accounts
