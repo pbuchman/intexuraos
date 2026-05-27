@@ -525,6 +525,120 @@ describe('sendChatMessage', () => {
     });
   });
 
+  it('repairs support-only answers when knowledge-base evidence is available', async () => {
+    const ctx = createContext({
+      chat: makeChat({ title: 'Spring Session' }),
+      updatedChat: makeChat({ title: 'Spring Session' }),
+    });
+    ctx.chatRepository.createMessage.mockReset()
+      .mockResolvedValueOnce(
+        okResult(makeMessage({ id: 'message-user', role: 'user', content: 'Need the sweet recipe' }))
+      )
+      .mockResolvedValueOnce(
+        okResult(
+          makeMessage({
+            id: 'message-assistant',
+            content: 'Use the knowledge-base sweet biscuit recipe.',
+            citations: [
+              {
+                sourceId: 'chunk-low-score',
+                sourceType: 'knowledge_page',
+                title: 'Spring Bait',
+                quote: 'The knowledge base recipe uses sweet biscuit crumb.',
+                usedFor: 'base recipe',
+                url: '/fishing-assistant/knowledge/pages/page-1',
+                pageId: 'page-1',
+              },
+            ],
+            confidence: 'high',
+          })
+        )
+      );
+    ctx.chunkRepository.findNearestByUserId.mockResolvedValue(
+      okResult([
+        makeChunk({
+          id: 'chunk-low-score',
+          text: 'The knowledge base recipe uses sweet biscuit crumb.',
+          searchableText: 'archived recipe',
+          vectorScore: 0.1,
+        }),
+      ])
+    );
+    ctx.mobileNotificationsClient.listDigestSubscriptions.mockResolvedValue(
+      okResult({ items: [{ groupKey: 'feeder', displayName: 'Feeder Team' }] })
+    );
+    ctx.mobileNotificationsClient.queryDigests.mockResolvedValue(
+      okResult({
+        items: [
+          {
+            groupKey: 'feeder',
+            date: '2026-05-07',
+            title: 'May 7 digest',
+            summaryMarkdown: 'Members discussed sweet biscuit crumb method feeder bait.',
+            messageCount: 18,
+          },
+        ],
+        truncated: false,
+      })
+    );
+    ctx.mobileNotificationsClient.queryGroupMessages.mockResolvedValue(
+      okResult({
+        messages: [],
+        totalRaw: 0,
+        totalCleaned: 0,
+        returned: 0,
+        truncated: false,
+      })
+    );
+    ctx.llmClient.generate.mockReset()
+      .mockResolvedValueOnce(
+        okResult({
+          content:
+            '{"answerMarkdown":"Use the digest method feeder notes.","citations":[{"sourceId":"S2","usedFor":"supporting report"}],"confidence":"high"}',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.01 },
+        })
+      )
+      .mockResolvedValueOnce(
+        okResult({
+          content:
+            '{"answerMarkdown":"Use the knowledge-base sweet biscuit recipe.","citations":[{"sourceId":"S1","usedFor":"base recipe"}],"confidence":"high"}',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.01 },
+        })
+      );
+
+    const result = await sendChatMessage(ctx.deps, {
+      userId: 'user-1',
+      chatId: 'chat-1',
+      message: 'How should I use sweet biscuit crumb for method feeder bait?',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(ctx.llmClient.generate).toHaveBeenCalledTimes(2);
+    expect(ctx.llmClient.generate.mock.calls[1]?.[0]).toContain(
+      'Fishing Assistant answers must cite at least one knowledge-base source.'
+    );
+    expect(ctx.chatRepository.createMessage).toHaveBeenNthCalledWith(2, {
+      id: 'message-assistant',
+      chatId: 'chat-1',
+      userId: 'user-1',
+      role: 'assistant',
+      content: 'Use the knowledge-base sweet biscuit recipe.',
+      confidence: 'high',
+      citations: [
+        {
+          sourceId: 'chunk-low-score',
+          sourceType: 'knowledge_page',
+          title: 'Spring Bait',
+          quote: 'The knowledge base recipe uses sweet biscuit crumb.',
+          usedFor: 'base recipe',
+          url: '/fishing-assistant/knowledge/pages/page-1',
+          pageId: 'page-1',
+        },
+      ],
+    });
+  });
+
   it('returns repository errors when recent messages cannot be listed', async () => {
     const ctx = createContext({
       chat: makeChat({ title: 'Spring Session' }),

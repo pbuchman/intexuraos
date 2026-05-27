@@ -55,6 +55,30 @@ describe('Fishing Assistant prompt and ranking helpers', () => {
     expect(prompt).toContain('[digest:feeder:2026-05-01] (digest) May 1 digest 2026-05-01');
   });
 
+  it('declares knowledge-base evidence authoritative over supporting chat evidence', () => {
+    const prompt = fishingAnswerPrompt.build({
+      question: 'What bait now?',
+      recentMessages: [],
+      evidence: [
+        ...EVIDENCE,
+        {
+          id: 'digest:feeder:2026-05-01',
+          sourceType: 'digest' as const,
+          title: 'May 1 digest',
+          date: '2026-05-01',
+          text: 'Members reported pinka.',
+          quote: 'Members reported pinka.',
+          score: 0.8,
+          metadata: { groupKey: 'feeder' },
+        },
+      ],
+    });
+
+    expect(fishingAnswerPrompt.version).toBe('4.0.0');
+    expect(prompt).toContain('Knowledge Base evidence (knowledge_page) is the authoritative base');
+    expect(prompt).toContain('Digest and raw message evidence are supporting context');
+  });
+
   it('neutralizes instruction-like content from stored conversation history', () => {
     const prompt = fishingAnswerPrompt.build({
       question: 'What bait now?',

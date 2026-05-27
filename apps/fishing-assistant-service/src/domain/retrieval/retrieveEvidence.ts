@@ -29,6 +29,7 @@ const HISTORICAL_DATE_FLOOR = '1970-01-01';
 const DIGEST_PAGE_LIMIT = 100;
 const RAW_MESSAGE_PAGE_LIMIT = 500;
 const FINAL_EVIDENCE_LIMIT = 16;
+const KNOWLEDGE_EVIDENCE_LIMIT = 12;
 
 function extractDateRange(question: string, now: Date): { dateFrom: string; dateTo: string } {
   const matches = [...question.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g)].map((match) => match[0]);
@@ -139,7 +140,8 @@ export async function retrieveEvidence(
   input: RetrieveEvidenceInput
 ): Promise<{ ok: true; value: EvidenceItem[] } | { ok: false; error: RetrievalError }> {
   const terms = extractSearchTerms(input.question);
-  const evidence: EvidenceItem[] = [];
+  const knowledgeEvidence: EvidenceItem[] = [];
+  const supportingEvidence: EvidenceItem[] = [];
 
   const embeddingResult = await deps.embeddingClient.embedTexts({
     userId: input.userId,
@@ -152,11 +154,10 @@ export async function retrieveEvidence(
       limit: 20,
     });
     if (chunkResult.ok) {
-      evidence.push(
+      knowledgeEvidence.push(
         ...chunkResult.value
           .filter((chunk) => chunk.userId === input.userId)
           .map((chunk) => rankKnowledgeChunk(chunk, terms))
-          .slice(0, 12)
       );
     }
   }
@@ -190,14 +191,19 @@ export async function retrieveEvidence(
         }),
       ]);
       digestEvidence.push(...groupDigestEvidence);
-      evidence.push(...rawMessageEvidence);
+      supportingEvidence.push(...rawMessageEvidence);
     }
   }
-  evidence.push(...digestEvidence);
+  supportingEvidence.push(...digestEvidence);
 
-  const ranked = evidence
+  const rankedKnowledge = knowledgeEvidence
     .sort((left, right) => right.score - left.score)
-    .slice(0, FINAL_EVIDENCE_LIMIT);
+    .slice(0, KNOWLEDGE_EVIDENCE_LIMIT);
+  const supportingSlots = Math.max(0, FINAL_EVIDENCE_LIMIT - rankedKnowledge.length);
+  const rankedSupporting = supportingEvidence
+    .sort((left, right) => right.score - left.score)
+    .slice(0, supportingSlots);
+  const ranked = [...rankedKnowledge, ...rankedSupporting];
 
   if (ranked.length === 0) {
     return {
