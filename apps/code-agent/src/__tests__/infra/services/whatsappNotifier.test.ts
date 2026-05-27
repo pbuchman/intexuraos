@@ -17,11 +17,15 @@ describe('WhatsAppNotifier', () => {
 
   let mockPublisher: WhatsAppSendPublisher;
   let linearIssueTitles: Map<string, string>;
+  let originalWebAppUrl: string | undefined;
   let mockLinearAgentClient: {
     fetchIssueForDisplay: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
+    originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+    delete process.env['INTEXURAOS_WEB_APP_URL'];
+
     mockPublisher = {
       publishSendMessage: vi.fn(),
     } as unknown as WhatsAppSendPublisher;
@@ -52,6 +56,11 @@ describe('WhatsAppNotifier', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    if (originalWebAppUrl === undefined) {
+      delete process.env['INTEXURAOS_WEB_APP_URL'];
+    } else {
+      process.env['INTEXURAOS_WEB_APP_URL'] = originalWebAppUrl;
+    }
   });
 
   const createMockTask = (overrides: MockTaskOverrides = {}): CodeTask => {
