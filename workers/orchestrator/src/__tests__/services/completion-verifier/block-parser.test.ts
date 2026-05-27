@@ -365,6 +365,30 @@ describe('locateFinalBlock', () => {
     const parsed = parseKeyValues(block ?? '');
     expect(parsed['Summary']).toBe('* Reviewed the plan-only PR.');
   });
+
+  it.each([0, 1])(
+    'stops a Claude final block before entrypoint completion line with exit code %i',
+    (exitCode) => {
+      const transcript = [
+        '[claude] REVIEW_AGENT_FINAL:',
+        '[claude] - PR: https://github.com/pbuchman/intexuraos/pull/2099',
+        '[claude] - review_id: 4372176918',
+        '[claude] - Summary: * Re-review found no new issues.',
+        '* Persistent CI failure remains unresolved.',
+        `[entrypoint] Claude attempt finished with exit code: ${String(exitCode)}`,
+      ].join('\n');
+
+      const block = locateFinalBlock(transcript, 'REVIEW_AGENT_FINAL:');
+
+      expect(block).not.toBeNull();
+      expect(block).not.toContain('Claude attempt finished');
+
+      const parsed = parseKeyValues(block ?? '');
+      expect(parsed['Summary']).toBe(
+        '* Re-review found no new issues.\n* Persistent CI failure remains unresolved.'
+      );
+    }
+  );
 });
 
 describe('verifyCompletion summary boundaries', () => {
@@ -408,6 +432,40 @@ describe('verifyCompletion summary boundaries', () => {
     expect(verdict.missingRequired).toEqual([]);
     expect(verdict.data['summary']).toBe(
       '* Reviewed the plan-only PR.\n* GH Actions are all passed.'
+    );
+  });
+
+  it('does not include Claude runtime completion footer in verified Kimi review summaries', () => {
+    const transcript = [
+      '[claude] REVIEW_AGENT_FINAL:',
+      '[claude] - PR: https://github.com/pbuchman/intexuraos/pull/2099',
+      '[claude] - review_id: 4372176918',
+      '[claude] - review_comments_posted: 0',
+      '[claude] - review_types: code_quality,security,architecture,test_quality',
+      '[claude] - requirements_tracker_updated: yes',
+      '[claude] - gh_actions_status: 1 failed',
+      '[claude] - needs_remediation: 0',
+      '[claude] - memory_ids_used: none',
+      '[claude] - memory_ids_rejected: none',
+      '[claude] - memory_usage_summary: none',
+      '[claude] - Summary: * Re-review found no new issues.',
+      '* Persistent CI failure remains unresolved.',
+      '[entrypoint] Claude attempt finished with exit code: 0',
+    ].join('\n');
+
+    const verdict = verifyCompletion({
+      transcript,
+      agentType: 'review',
+      workerType: 'kimi',
+      executionMemoryContext: undefined,
+      lastExitCode: undefined,
+    });
+
+    expect(verdict.kind).toBe('parsed');
+    if (verdict.kind !== 'parsed') return;
+    expect(verdict.missingRequired).toEqual([]);
+    expect(verdict.data['summary']).toBe(
+      '* Re-review found no new issues.\n* Persistent CI failure remains unresolved.'
     );
   });
 });

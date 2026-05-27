@@ -43,6 +43,9 @@ const KNOWN_MARKER_ALTERNATION = KNOWN_MARKERS.map((m) =>
   m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 ).join('|');
 
+const RUNTIME_ATTEMPT_FINISHED_PATTERN =
+  /^(?:Claude|Codex) attempt finished with exit code:\s*-?\d+\s*$/;
+
 /**
  * Locate the last standalone `<MARKER>` line in the transcript and return
  * everything from that line to the end of the block, stripped of log-driver
@@ -77,7 +80,7 @@ function isPostFinalRuntimeBoundary(line: string): boolean {
   const trimmed = line.trim().replace(/^\[[^\]]+\]\s+/, '');
   if (trimmed === '') return false;
 
-  if (trimmed.startsWith('Codex attempt finished with exit code:')) {
+  if (RUNTIME_ATTEMPT_FINISHED_PATTERN.test(trimmed)) {
     return true;
   }
 
@@ -119,7 +122,7 @@ function locateBlockInLines(lines: readonly string[], marker: string): string | 
   // End-of-block triggers (take the first one hit):
   //   - closing code fence ``` on its own line
   //   - another *_AGENT_FINAL: line
-  //   - Codex post-final runtime lifecycle telemetry
+  //   - runtime post-final lifecycle telemetry
   //   - EOF
   const body: string[] = [];
   // [INT-1470] Restrict end-of-block detection to the known real markers
