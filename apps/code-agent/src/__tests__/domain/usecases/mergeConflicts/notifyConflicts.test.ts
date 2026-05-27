@@ -1,6 +1,6 @@
 import { err, ok } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildConflictCommentBody,
   buildTaskUrl,
@@ -18,24 +18,38 @@ function createLogger(): Logger {
 }
 
 describe('buildTaskUrl', () => {
-  it('uses INTEXURAOS_WEB_URL when set', () => {
-    const original = process.env['INTEXURAOS_WEB_URL'];
-    process.env['INTEXURAOS_WEB_URL'] = 'https://example.com';
-    expect(buildTaskUrl('task-1')).toBe('https://example.com/#/code-tasks/task-1');
-    if (original === undefined) {
-      delete process.env['INTEXURAOS_WEB_URL'];
+  let originalWebAppUrl: string | undefined;
+
+  beforeEach(() => {
+    originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+  });
+
+  afterEach(() => {
+    if (originalWebAppUrl === undefined) {
+      delete process.env['INTEXURAOS_WEB_APP_URL'];
     } else {
-      process.env['INTEXURAOS_WEB_URL'] = original;
+      process.env['INTEXURAOS_WEB_APP_URL'] = originalWebAppUrl;
     }
   });
 
+  it('uses INTEXURAOS_WEB_APP_URL when set', () => {
+    process.env['INTEXURAOS_WEB_APP_URL'] = 'https://example.com';
+    expect(buildTaskUrl('task-1')).toBe('https://example.com/#/code-tasks/task-1');
+  });
+
   it('falls back to default web url when env var is absent', () => {
-    const original = process.env['INTEXURAOS_WEB_URL'];
-    delete process.env['INTEXURAOS_WEB_URL'];
+    delete process.env['INTEXURAOS_WEB_APP_URL'];
     expect(buildTaskUrl('task-1')).toBe('https://intexuraos.cloud/#/code-tasks/task-1');
-    if (original !== undefined) {
-      process.env['INTEXURAOS_WEB_URL'] = original;
-    }
+  });
+
+  it('falls back to default web url when INTEXURAOS_WEB_APP_URL is empty', () => {
+    process.env['INTEXURAOS_WEB_APP_URL'] = '';
+    expect(buildTaskUrl('task-1')).toBe('https://intexuraos.cloud/#/code-tasks/task-1');
+  });
+
+  it('normalizes a trailing slash in INTEXURAOS_WEB_APP_URL', () => {
+    process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';
+    expect(buildTaskUrl('task-1')).toBe('https://dev.intexuraos.cloud/#/code-tasks/task-1');
   });
 });
 
