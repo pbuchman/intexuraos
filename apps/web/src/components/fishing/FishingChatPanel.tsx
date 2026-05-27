@@ -83,7 +83,7 @@ export function FishingChatPanel({
   return (
     <div
       data-testid="fishing-chat-panel"
-      className="grid min-w-0 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]"
+      className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[260px_minmax(0,1fr)]"
     >
       <Card className="h-full min-w-0">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

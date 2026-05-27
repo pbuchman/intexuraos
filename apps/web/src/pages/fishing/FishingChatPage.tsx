@@ -48,7 +48,7 @@ export function FishingChatPage(): React.JSX.Element {
         </p>
       </div>
 
-      <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid min-w-0 max-w-full grid-cols-[minmax(0,1fr)] gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <FishingChatPanel
           chats={chat.chats}
           selectedChatId={chatId}
