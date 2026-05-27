@@ -24,13 +24,19 @@ describe('loadConfig', () => {
     process.env = originalEnv;
   });
 
+  function setRequiredWebAppUrl(): void {
+    process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud';
+  }
+
   describe('port', () => {
     it('returns default port 8128 when PORT not set', () => {
+      setRequiredWebAppUrl();
       const config = loadConfig();
       expect(config.port).toBe(8128);
     });
 
     it('parses custom PORT from env', () => {
+      setRequiredWebAppUrl();
       process.env['PORT'] = '9000';
       const config = loadConfig();
       expect(config.port).toBe(9000);
@@ -38,7 +44,7 @@ describe('loadConfig', () => {
   });
 
   describe('env vars', () => {
-    it('returns empty strings for missing env vars', () => {
+    it('returns empty strings for missing optional env vars', () => {
       const config = loadConfig();
       expect(config.gcpProjectId).toBe('');
       expect(config.internalAuthToken).toBe('');
@@ -49,6 +55,7 @@ describe('loadConfig', () => {
       expect(config.webhookVerifySecret).toBe('');
       expect(config.tokenEncryptionKey).toBe('');
       expect(config.serviceUrl).toBe('');
+      expect(config.webAppUrl).toBe('');
       expect(config.userServiceUrl).toBe('');
       expect(config.openRouterAppApiKey).toBe('');
     });
@@ -62,6 +69,7 @@ describe('loadConfig', () => {
       process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] = 'test-webhook';
       process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = 'test-encryption-key-32chars!';
       process.env['INTEXURAOS_SERVICE_URL'] = 'https://code-agent.test.local';
+      process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud';
       process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service';
       process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'or-platform-key';
 
@@ -75,6 +83,7 @@ describe('loadConfig', () => {
       expect(config.webhookVerifySecret).toBe('test-webhook');
       expect(config.tokenEncryptionKey).toBe('test-encryption-key-32chars!');
       expect(config.serviceUrl).toBe('https://code-agent.test.local');
+      expect(config.webAppUrl).toBe('https://dev.intexuraos.cloud');
       expect(config.userServiceUrl).toBe('http://user-service');
       expect(config.openRouterAppApiKey).toBe('or-platform-key');
     });

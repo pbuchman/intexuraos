@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import type { AutomationEvent } from '../../ports/automationLog.js';
 import {
   renderHeader,
@@ -14,8 +14,19 @@ function useFakeTime(): void {
   vi.setSystemTime(new Date('2026-03-14T14:35:00Z'));
 }
 
+let originalWebAppUrl: string | undefined;
+
+beforeEach(() => {
+  originalWebAppUrl = process.env['INTEXURAOS_WEB_APP_URL'];
+});
+
 afterEach(() => {
   vi.useRealTimers();
+  if (originalWebAppUrl === undefined) {
+    delete process.env['INTEXURAOS_WEB_APP_URL'];
+  } else {
+    process.env['INTEXURAOS_WEB_APP_URL'] = originalWebAppUrl;
+  }
 });
 
 describe('renderHeader', () => {
@@ -259,6 +270,22 @@ describe('renderEvent', () => {
       const result = renderEvent(event);
       expect(result).toBe(
         '**14:35 UTC** -- Implementation dispatched | opus | [View task](https://intexuraos.cloud/#/code-tasks/task_abc123)'
+      );
+    });
+
+    it('uses INTEXURAOS_WEB_APP_URL for the task link when configured', () => {
+      useFakeTime();
+      process.env['INTEXURAOS_WEB_APP_URL'] = 'https://dev.intexuraos.cloud/';
+      const event: AutomationEvent = {
+        type: 'task_dispatched',
+        taskId: 'task_abc123',
+        workerType: 'opus',
+        agentType: 'execution',
+      };
+
+      const result = renderEvent(event);
+      expect(result).toBe(
+        '**14:35 UTC** -- Implementation dispatched | opus | [View task](https://dev.intexuraos.cloud/#/code-tasks/task_abc123)'
       );
     });
 
