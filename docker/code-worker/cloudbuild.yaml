@@ -14,6 +14,6 @@ steps:
 options:
   logging: CLOUD_LOGGING_ONLY
 
-# code-worker performs a multi-arch buildx export/push and regularly runs
-# close to the default 10 minute ceiling on cold cache days.
-timeout: '900s'
+# code-worker performs a multi-arch scheduled image rebuild that installs
+# architecture-specific agent CLIs and pushes both amd64 + arm64 images.
+timeout: '3600s'

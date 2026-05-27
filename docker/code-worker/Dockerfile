@@ -51,7 +51,15 @@ RUN curl -fsSL "https://releases.hashicorp.com/terraform/1.7.0/terraform_1.7.0_l
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Install gcloud CLI (369 uses - most used tool)
-RUN curl -sSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir=/opt
+RUN case "$TARGETARCH" in \
+      amd64) GCLOUD_ARCH="x86_64" ;; \
+      arm64) GCLOUD_ARCH="arm" ;; \
+      *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-${GCLOUD_ARCH}.tar.gz" -o /tmp/google-cloud-cli.tar.gz \
+    && tar -xzf /tmp/google-cloud-cli.tar.gz -C /opt \
+    && /opt/google-cloud-sdk/install.sh --quiet \
+    && rm /tmp/google-cloud-cli.tar.gz
 ENV PATH="/opt/google-cloud-sdk/bin:${PATH}"
 
 # Cache-busting: CACHE_BUST is set to COMMIT_SHA by the build script, ensuring
