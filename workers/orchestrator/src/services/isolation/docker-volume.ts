@@ -6,6 +6,7 @@ import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
 import type { WorkerRuntime } from '../runtime/types.js';
 
 export const PNPM_STORE_DIR_NAME = 'pnpm-store';
+export const PACKAGE_MANAGER_CACHE_DIR_NAME = 'cache';
 export const CLAUDE_SESSION_DIR_PREFIX = 'claude-session';
 export const CODEX_STATE_DIR_PREFIX = 'codex-state';
 export const RUNTIME_STATE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -115,6 +116,14 @@ export class DockerVolume {
 
   getPnpmStorePath(): string {
     return path.join(path.dirname(this.config.secretsBasePath), PNPM_STORE_DIR_NAME);
+  }
+
+  getPnpmCachePath(): string {
+    return path.join(this.getPnpmStorePath(), PACKAGE_MANAGER_CACHE_DIR_NAME, 'pnpm');
+  }
+
+  getCorepackCachePath(): string {
+    return path.join(this.getPnpmStorePath(), PACKAGE_MANAGER_CACHE_DIR_NAME, 'corepack');
   }
 
   assertResumeRuntimeStateAvailable(
@@ -263,6 +272,8 @@ export class DockerVolume {
       `${worktreePath}:/repo:rw`,
       `${taskSecretsPath}:/secrets:ro`,
       `${pnpmStorePath}:/home/claude/pnpm-store:rw`,
+      `${path.join(pnpmStorePath, PACKAGE_MANAGER_CACHE_DIR_NAME, 'pnpm')}:/home/claude/.cache/pnpm:rw`,
+      `${path.join(pnpmStorePath, PACKAGE_MANAGER_CACHE_DIR_NAME, 'corepack')}:/home/claude/.cache/node/corepack:rw`,
       `${taskRuntimeHomePath}:${containerRuntimeHome}:rw`,
       ...(useSharedCreds && this.config.sharedCredsPath !== undefined
         ? [
