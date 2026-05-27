@@ -49,7 +49,19 @@ describe('Cloud Build worker configuration', () => {
   it('gives the code-worker multi-arch image rebuild enough Cloud Build time', () => {
     const codeWorkerCloudBuild = readRepoFile('docker/code-worker/cloudbuild.yaml');
 
-    expect(codeWorkerCloudBuild).toContain('timeout: "3600s"');
+    expect(codeWorkerCloudBuild).toMatch(/timeout:\s*['"]3600s['"]/);
     expect(codeWorkerCloudBuild).toContain('multi-arch scheduled image rebuild');
+  });
+
+  it('installs gcloud from architecture-specific archives without the self-updating installer', () => {
+    const codeWorkerDockerfile = readRepoFile('docker/code-worker/Dockerfile');
+
+    expect(codeWorkerDockerfile).not.toContain('curl -sSL https://sdk.cloud.google.com | bash');
+    expect(codeWorkerDockerfile).toContain('amd64) GCLOUD_ARCH="x86_64"');
+    expect(codeWorkerDockerfile).toContain('arm64) GCLOUD_ARCH="arm"');
+    expect(codeWorkerDockerfile).toContain(
+      'https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-${GCLOUD_ARCH}.tar.gz'
+    );
+    expect(codeWorkerDockerfile).toContain('/opt/google-cloud-sdk/install.sh --quiet');
   });
 });
