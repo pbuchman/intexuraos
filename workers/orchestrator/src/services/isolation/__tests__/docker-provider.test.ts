@@ -3091,6 +3091,20 @@ describe('DockerProvider', () => {
       });
     });
 
+    it('creates host cache directories used by package-manager bind mounts', async () => {
+      const fsModule = await import('node:fs');
+      (fsModule.mkdirSync as Mock).mockClear();
+
+      await provider.createWorker(createTestConfig());
+
+      expect(fsModule.mkdirSync).toHaveBeenCalledWith(expect.stringContaining('cache/pnpm'), {
+        recursive: true,
+      });
+      expect(fsModule.mkdirSync).toHaveBeenCalledWith(expect.stringContaining('cache/corepack'), {
+        recursive: true,
+      });
+    });
+
     it('sets capAdd to NET_RAW only when forensicsMode is false', async () => {
       await provider.createWorker(createTestConfig());
 
