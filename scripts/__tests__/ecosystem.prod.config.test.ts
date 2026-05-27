@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 interface ProdAppSummary {
@@ -56,6 +57,8 @@ const APP_SETTINGS_DEPENDENT_SERVICES = new Set([
   'chat-agent',
   'web-agent',
 ]);
+
+const WAIT_SCRIPT = resolve(process.cwd(), 'scripts/pm2-wait-start.mjs');
 
 function loadProdConfig(env: Record<string, string | undefined> = PROD_ENV): ProdConfigSummary {
   const stdout = execFileSync(
@@ -182,7 +185,7 @@ describe('ecosystem.config.prod.cjs', () => {
 
     for (const app of config.apps) {
       if (APP_SETTINGS_DEPENDENT_SERVICES.has(app.name)) {
-        expect(app.args, app.name).toEqual(['/repo/scripts/pm2-wait-start.mjs', 'src/index.ts']);
+        expect(app.args, app.name).toEqual([WAIT_SCRIPT, 'src/index.ts']);
         expect(app.env.WAIT_FOR_SERVICE, app.name).toBe('http://127.0.0.1:8122/health');
       } else {
         expect(app.args, app.name).toEqual(['src/index.ts']);
