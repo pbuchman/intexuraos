@@ -81,6 +81,70 @@ describe('retrieveEvidence', () => {
     expect(result.value[0]?.sourceType).toBe('knowledge_page');
   });
 
+  it('prioritizes knowledge-base evidence ahead of higher-scoring support evidence', async () => {
+    const embeddingClient = {
+      embedTexts: vi.fn().mockResolvedValue({ ok: true, value: [[0.1, 0.2, 0.3]] }),
+    };
+    const chunkRepository = makeChunkRepository({
+      ok: true,
+      value: [
+        makeChunk({
+          id: 'chunk-low-score',
+          text: 'The knowledge base recipe uses sweet biscuit crumb.',
+          searchableText: 'archived recipe',
+          vectorScore: 0.1,
+        }),
+      ],
+    });
+    const digestItems = Array.from({ length: 16 }, (_, index) => ({
+      groupKey: 'feeder',
+      date: `2026-05-${String(index + 1).padStart(2, '0')}`,
+      title: `May ${String(index + 1)} digest`,
+      summaryMarkdown: 'sweet biscuit crumb method feeder bait',
+      messageCount: 10,
+    }));
+    const mobileNotificationsClient = {
+      listDigestSubscriptions: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { items: [{ groupKey: 'feeder', displayName: 'Feeder' }] },
+      }),
+      queryDigests: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { items: digestItems, truncated: false },
+      }),
+      queryGroupMessages: vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          messages: [],
+          totalRaw: 0,
+          totalCleaned: 0,
+          returned: 0,
+          truncated: false,
+        },
+      }),
+    };
+
+    const result = await retrieveEvidence(
+      {
+        embeddingClient,
+        chunkRepository,
+        mobileNotificationsClient,
+        now: new Date('2026-05-27T12:00:00Z'),
+      },
+      {
+        userId: 'user-1',
+        question: 'sweet biscuit crumb method feeder bait',
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(16);
+    expect(result.value[0]?.id).toBe('chunk-low-score');
+    expect(result.value[0]?.sourceType).toBe('knowledge_page');
+    expect(result.value.some((item) => item.sourceType === 'digest')).toBe(true);
+  });
+
   it('uses explicit date ranges for digest lookup and degrades to kb-only on digest failure', async () => {
     const embeddingClient = {
       embedTexts: vi.fn().mockResolvedValue({ ok: true, value: [[0.1, 0.2, 0.3]] }),
