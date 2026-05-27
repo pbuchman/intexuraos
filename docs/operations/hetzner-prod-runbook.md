@@ -37,12 +37,22 @@ reuse the Browser Rendering token stored in `INTEXURAOS_CLOUDFLARE_API_TOKEN`.
 Terraform creates this DNS-token secret separately from the app-secret
 inventory and grants Secret Manager Secret Accessor to the
 `intexuraos-hetzner-provisioner-dev` service account. Use that service account
-key for `/home/deploy/sa-key.json` on the VM.
+key for `/home/deploy/provisioner-sa-key.json` on the VM.
+
+Runtime services use a separate `intexuraos-hetzner-runtime-dev` service
+account key at `/home/deploy/runtime-sa-key.json`. That runtime account has the
+retained GCP data-plane permissions needed by PM2 services: Firestore user,
+Pub/Sub publisher, Firebase Auth admin, logging writer, object admin for the
+retained writable buckets, self token creation for signing, and access to the
+explicit Hetzner runtime secret allowlist. Do not reuse the provisioner key for
+PM2 runtime.
 
 ## Secret Refresh
 
-The VM needs a readable service account key at `/home/deploy/sa-key.json` or
-`GOOGLE_APPLICATION_CREDENTIALS` pointing at an equivalent key file.
+The VM needs readable keys at `/home/deploy/provisioner-sa-key.json` and
+`/home/deploy/runtime-sa-key.json`. `load-secrets.sh` uses the provisioner key
+to read Secret Manager and writes `GOOGLE_APPLICATION_CREDENTIALS` in
+`.env.prod` to the runtime key.
 
 ```bash
 cd /opt/intexuraos
@@ -66,9 +76,10 @@ sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh
 
 `deploy-web.sh` builds `apps/web` with `/api/*` service URLs and publishes
 `apps/web/dist` to `/var/www/intexuraos/web/dist`. It clears inherited
-`INTEXURAOS_*` variables, exports only web-safe Auth0/Firebase/Sentry values,
-and temporarily replaces `apps/web/.env*` files with a sanitized production
-env file so ignored local env files cannot leak backend secrets into Vite.
+`INTEXURAOS_*` variables and temporarily replaces `apps/web/.env*` files with
+a sanitized `.env.production.local` containing only web-safe Auth0/Firebase/
+Sentry values plus generated public API paths, so ignored local env files
+cannot leak backend secrets into Vite.
 `deploy-nginx.sh` runs `nginx -t` before reload. If the VM is not available,
 validate an equivalent generated config in a container or staging VM that has
 nginx Lua/OpenResty modules installed, then record the command output in the
@@ -77,27 +88,50 @@ cutover notes.
 ## Async Edge Cutover
 
 The retained GCP Pub/Sub push subscriptions and Cloud Scheduler jobs are
-Terraform-backed through `var.hetzner_edge_origin`. Before DNS cutover, review
-the plan that changes their endpoints and OIDC audiences to the nginx edge:
+staged in the separate Hetzner production Terraform root. The existing
+`terraform/environments/dev` root remains the retained GCP source of truth and
+does not carry a Hetzner edge toggle.
+
+Before DNS cutover, create the staged Hetzner subscriptions and Scheduler jobs
+with Pub/Sub filters active and Scheduler jobs paused:
 
 ```bash
-cd terraform/environments/dev
-terraform plan -var='hetzner_edge_origin=https://intexuraos.cloud'
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+terraform -chdir=terraform/hetzner-prod plan \
+  -var-file=terraform.tfvars \
+  -var='activate_hetzner_async_consumers=false'
+
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+terraform -chdir=terraform/hetzner-prod apply \
+  -var-file=terraform.tfvars \
+  -var='activate_hetzner_async_consumers=false'
 ```
 
-After the Hetzner nginx `/internal/*` routes pass smoke tests, apply that
-Terraform plan:
+After the Hetzner nginx `/internal/*` routes pass smoke tests and the operator
+has explicitly approved async activation, first disable the old Cloud
+Run-targeted Pub/Sub push consumers and pause the old app-targeted Cloud
+Scheduler jobs in coordination with `terraform/environments/dev`. Do not touch
+the retained audio-stored -> transcription Cloud Function subscription. Then
+apply the activation gate:
 
 ```bash
-cd terraform/environments/dev
-terraform apply -var='hetzner_edge_origin=https://intexuraos.cloud'
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+terraform -chdir=terraform/hetzner-prod apply \
+  -var-file=terraform.tfvars \
+  -var='activate_hetzner_async_consumers=true'
 ```
 
-This moves Pub/Sub push endpoints and Cloud Scheduler HTTP job URIs to
-`https://intexuraos.cloud/internal/*` and changes all OIDC audiences to
-`https://intexuraos.cloud`, matching `jwt-verify.lua`. The
-`scripts/hetzner/cutover-gcp-edge.sh` helper prints the equivalent `gcloud`
-updates for audit or emergency use, but Terraform is the source of truth.
+This creates Hetzner-targeted Pub/Sub push subscriptions and Cloud Scheduler
+HTTP jobs at `https://intexuraos.cloud/internal/*` with OIDC audience
+`https://intexuraos.cloud`, matching `jwt-verify.lua`. The first apply keeps
+the new Pub/Sub subscriptions behind the staging filter and keeps new Scheduler
+jobs paused. The second apply activates them; review duplicate-processing risk
+before running it. The `scripts/hetzner/cutover-gcp-edge.sh` helper prints the
+equivalent `gcloud` updates for audit or emergency use, but Terraform is the
+source of truth.
 
 ## Pre-Cutover Smoke Test
 

@@ -4,23 +4,31 @@
  * Usage:
  *   INTEXURAOS_ENVIRONMENT=prod pm2 start ecosystem.config.prod.cjs
  */
+const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
 
 const ENV_FILE = process.env.INTEXURAOS_PROD_ENV_FILE ?? '/etc/intexuraos/.env.prod';
-dotenv.config({ path: ENV_FILE, quiet: true });
+const ENV_FILE_VALUES = fs.existsSync(ENV_FILE)
+  ? dotenv.parse(fs.readFileSync(ENV_FILE, 'utf8'))
+  : {};
+const RUNTIME_ENV = { ...process.env, ...ENV_FILE_VALUES };
 
-if (process.env.INTEXURAOS_ENVIRONMENT !== 'prod') {
+function envValue(key) {
+  return RUNTIME_ENV[key];
+}
+
+if (envValue('INTEXURAOS_ENVIRONMENT') !== 'prod') {
   throw new Error('Refusing to start PM2 without INTEXURAOS_ENVIRONMENT=prod');
 }
 
 const REPO_ROOT = __dirname;
 const TSX_CLI = path.resolve(REPO_ROOT, 'node_modules/tsx/dist/cli.mjs');
 const WAIT_SCRIPT = path.resolve(REPO_ROOT, 'scripts/pm2-wait-start.mjs');
-const PUBLIC_ORIGIN = process.env.INTEXURAOS_PUBLIC_ORIGIN ?? 'https://intexuraos.cloud';
+const PUBLIC_ORIGIN = envValue('INTEXURAOS_PUBLIC_ORIGIN') ?? 'https://intexuraos.cloud';
 const GOOGLE_APPLICATION_CREDENTIALS =
-  process.env.GOOGLE_APPLICATION_CREDENTIALS ?? '/home/deploy/sa-key.json';
-const PROJECT_ID = process.env.INTEXURAOS_GCP_PROJECT_ID ?? 'intexuraos-dev-pbuchman';
+  envValue('GOOGLE_APPLICATION_CREDENTIALS') ?? '/home/deploy/runtime-sa-key.json';
+const PROJECT_ID = envValue('INTEXURAOS_GCP_PROJECT_ID') ?? 'intexuraos-dev-pbuchman';
 const RETAINED_GCP_ENVIRONMENT = 'dev';
 
 const SERVICE_PORTS = {
@@ -178,7 +186,7 @@ function publicServiceUrl(service) {
 
 function nodeOptions() {
   const otelImport = '--import @intexuraos/infra-otel/register';
-  const existing = process.env.NODE_OPTIONS ?? '';
+  const existing = envValue('NODE_OPTIONS') ?? '';
   return existing.includes(otelImport)
     ? existing
     : [existing, otelImport].filter(Boolean).join(' ');
@@ -187,7 +195,7 @@ function nodeOptions() {
 function pickEnv(keys) {
   return Object.fromEntries(
     keys
-      .map((key) => [key, process.env[key]])
+      .map((key) => [key, envValue(key)])
       .filter(([, value]) => value !== undefined && value !== '')
   );
 }
@@ -268,122 +276,122 @@ const SERVICE_SECRET_KEYS = {
 };
 
 const COMMON_SERVICE_ENV = {
-  HOME: process.env.HOME ?? '/home/deploy',
-  PATH: process.env.PATH,
+  HOME: envValue('HOME') ?? '/home/deploy',
+  PATH: envValue('PATH'),
   ...pickEnv(COMMON_ENV_KEYS),
   GOOGLE_APPLICATION_CREDENTIALS,
   INTEXURAOS_GCP_PROJECT_ID: PROJECT_ID,
   INTEXURAOS_ENVIRONMENT: 'prod',
   INTEXURAOS_RUNTIME: 'prod',
-  INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? PUBLIC_ORIGIN,
-  INTEXURAOS_WEB_URL: process.env.INTEXURAOS_WEB_URL ?? PUBLIC_ORIGIN,
+  INTEXURAOS_WEB_APP_URL: envValue('INTEXURAOS_WEB_APP_URL') ?? PUBLIC_ORIGIN,
+  INTEXURAOS_WEB_URL: envValue('INTEXURAOS_WEB_URL') ?? PUBLIC_ORIGIN,
   INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS:
-    process.env.INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS ??
+    envValue('INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS') ??
     'or:google/gemma-4-31b-it,gemini-2.5-flash',
   ...localServiceUrls(),
 };
 
 const SERVICE_ENV_MAPPINGS = {
   'user-service': {
-    INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? PUBLIC_ORIGIN,
+    INTEXURAOS_WEB_APP_URL: envValue('INTEXURAOS_WEB_APP_URL') ?? PUBLIC_ORIGIN,
   },
   'whatsapp-service': {
     INTEXURAOS_WHATSAPP_MEDIA_BUCKET:
-      process.env.INTEXURAOS_WHATSAPP_MEDIA_BUCKET ??
+      envValue('INTEXURAOS_WHATSAPP_MEDIA_BUCKET') ??
       `intexuraos-whatsapp-media-${RETAINED_GCP_ENVIRONMENT}`,
     INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC ?? topic('whatsapp-media-cleanup'),
+      envValue('INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC') ?? topic('whatsapp-media-cleanup'),
     INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION:
-      process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION ??
+      envValue('INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION') ??
       `${topic('whatsapp-media-cleanup')}-push`,
     INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC ?? topic('commands-ingest'),
+      envValue('INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC') ?? topic('commands-ingest'),
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC ?? topic('whatsapp-webhook-process'),
+      envValue('INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC') ?? topic('whatsapp-webhook-process'),
     INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC ?? topic('audio-stored'),
+      envValue('INTEXURAOS_PUBSUB_AUDIO_STORED_TOPIC') ?? topic('audio-stored'),
     INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC ?? topic('approval-reply'),
+      envValue('INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC') ?? topic('approval-reply'),
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? topic('whatsapp-send'),
+      envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
   },
   'mobile-notifications-service': {
     INTEXURAOS_DIGEST_LLM_MODEL:
-      process.env.INTEXURAOS_DIGEST_LLM_MODEL ?? 'or:google/gemini-3-flash-preview',
+      envValue('INTEXURAOS_DIGEST_LLM_MODEL') ?? 'or:google/gemini-3-flash-preview',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? topic('whatsapp-send'),
-    INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? PUBLIC_ORIGIN,
+      envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
+    INTEXURAOS_WEB_APP_URL: envValue('INTEXURAOS_WEB_APP_URL') ?? PUBLIC_ORIGIN,
   },
   'research-agent': {
     INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC ?? topic('research-process'),
+      envValue('INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC') ?? topic('research-process'),
     INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC ?? topic('llm-analytics'),
+      envValue('INTEXURAOS_PUBSUB_LLM_ANALYTICS_TOPIC') ?? topic('llm-analytics'),
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? topic('whatsapp-send'),
+      envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
     INTEXURAOS_PUBSUB_LLM_CALL_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_LLM_CALL_TOPIC ?? topic('llm-call'),
-    INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? PUBLIC_ORIGIN,
+      envValue('INTEXURAOS_PUBSUB_LLM_CALL_TOPIC') ?? topic('llm-call'),
+    INTEXURAOS_WEB_APP_URL: envValue('INTEXURAOS_WEB_APP_URL') ?? PUBLIC_ORIGIN,
     INTEXURAOS_SHARED_CONTENT_BUCKET:
-      process.env.INTEXURAOS_SHARED_CONTENT_BUCKET ??
+      envValue('INTEXURAOS_SHARED_CONTENT_BUCKET') ??
       `intexuraos-shared-content-${RETAINED_GCP_ENVIRONMENT}`,
     INTEXURAOS_SHARE_BASE_URL:
-      process.env.INTEXURAOS_SHARE_BASE_URL ?? `${PUBLIC_ORIGIN}/share/research`,
-    INTEXURAOS_IMAGE_PUBLIC_BASE_URL: process.env.INTEXURAOS_IMAGE_PUBLIC_BASE_URL ?? PUBLIC_ORIGIN,
+      envValue('INTEXURAOS_SHARE_BASE_URL') ?? `${PUBLIC_ORIGIN}/share/research`,
+    INTEXURAOS_IMAGE_PUBLIC_BASE_URL: envValue('INTEXURAOS_IMAGE_PUBLIC_BASE_URL') ?? PUBLIC_ORIGIN,
   },
   'commands-agent': {
     INTEXURAOS_SERVICE_URL:
-      process.env.INTEXURAOS_COMMANDS_SERVICE_URL ?? publicServiceUrl('commands-agent'),
+      envValue('INTEXURAOS_COMMANDS_SERVICE_URL') ?? publicServiceUrl('commands-agent'),
     INTEXURAOS_PUBSUB_ACTIONS_QUEUE:
-      process.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE ?? topic('actions-queue'),
+      envValue('INTEXURAOS_PUBSUB_ACTIONS_QUEUE') ?? topic('actions-queue'),
   },
   'actions-agent': {
     INTEXURAOS_PUBSUB_ACTIONS_QUEUE:
-      process.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE ?? topic('actions-queue'),
+      envValue('INTEXURAOS_PUBSUB_ACTIONS_QUEUE') ?? topic('actions-queue'),
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? topic('whatsapp-send'),
+      envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
     INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC ?? topic('calendar-preview'),
-    INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? PUBLIC_ORIGIN,
+      envValue('INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC') ?? topic('calendar-preview'),
+    INTEXURAOS_WEB_APP_URL: envValue('INTEXURAOS_WEB_APP_URL') ?? PUBLIC_ORIGIN,
   },
   'image-service': {
     INTEXURAOS_IMAGE_BUCKET:
-      process.env.INTEXURAOS_IMAGE_BUCKET ?? `intexuraos-images-${RETAINED_GCP_ENVIRONMENT}`,
-    INTEXURAOS_IMAGE_PUBLIC_BASE_URL: process.env.INTEXURAOS_IMAGE_PUBLIC_BASE_URL ?? PUBLIC_ORIGIN,
+      envValue('INTEXURAOS_IMAGE_BUCKET') ?? `intexuraos-images-${RETAINED_GCP_ENVIRONMENT}`,
+    INTEXURAOS_IMAGE_PUBLIC_BASE_URL: envValue('INTEXURAOS_IMAGE_PUBLIC_BASE_URL') ?? PUBLIC_ORIGIN,
   },
   'todos-agent': {
     INTEXURAOS_TODOS_PROCESSING_TOPIC:
-      process.env.INTEXURAOS_TODOS_PROCESSING_TOPIC ?? topic('todos-processing'),
+      envValue('INTEXURAOS_TODOS_PROCESSING_TOPIC') ?? topic('todos-processing'),
   },
   'bookmarks-agent': {
     INTEXURAOS_PUBSUB_BOOKMARK_ENRICH:
-      process.env.INTEXURAOS_PUBSUB_BOOKMARK_ENRICH ?? topic('bookmark-enrich'),
+      envValue('INTEXURAOS_PUBSUB_BOOKMARK_ENRICH') ?? topic('bookmark-enrich'),
     INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE:
-      process.env.INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE ?? topic('bookmark-summarize'),
+      envValue('INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE') ?? topic('bookmark-summarize'),
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? topic('whatsapp-send'),
+      envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
   },
   'code-agent': {
-    INTEXURAOS_SERVICE_URL: process.env.INTEXURAOS_SERVICE_URL ?? publicServiceUrl('code-agent'),
+    INTEXURAOS_SERVICE_URL: envValue('INTEXURAOS_SERVICE_URL') ?? publicServiceUrl('code-agent'),
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? topic('whatsapp-send'),
+      envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
     INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC:
-      process.env.INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC ?? topic('pr-triage'),
-    INTEXURAOS_EXECUTION_MEMORY_ENABLED: process.env.INTEXURAOS_EXECUTION_MEMORY_ENABLED ?? 'true',
-    INTEXURAOS_QUEUE_MAX_SIZE: process.env.INTEXURAOS_QUEUE_MAX_SIZE ?? '50',
-    INTEXURAOS_QUEUE_TTL_MINUTES: process.env.INTEXURAOS_QUEUE_TTL_MINUTES ?? '1440',
-    INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS: process.env.INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS ?? '3',
-    INTEXURAOS_RETRY_QUEUE_TTL_MINUTES: process.env.INTEXURAOS_RETRY_QUEUE_TTL_MINUTES ?? '10',
-    INTEXURAOS_AUTO_RETRY_MAX_ATTEMPTS: process.env.INTEXURAOS_AUTO_RETRY_MAX_ATTEMPTS ?? '3',
-    INTEXURAOS_ENABLE_METRICS: process.env.INTEXURAOS_ENABLE_METRICS ?? 'true',
+      envValue('INTEXURAOS_PUBSUB_PR_TRIAGE_TOPIC') ?? topic('pr-triage'),
+    INTEXURAOS_EXECUTION_MEMORY_ENABLED: envValue('INTEXURAOS_EXECUTION_MEMORY_ENABLED') ?? 'true',
+    INTEXURAOS_QUEUE_MAX_SIZE: envValue('INTEXURAOS_QUEUE_MAX_SIZE') ?? '50',
+    INTEXURAOS_QUEUE_TTL_MINUTES: envValue('INTEXURAOS_QUEUE_TTL_MINUTES') ?? '1440',
+    INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS: envValue('INTEXURAOS_RETRY_QUEUE_MAX_ATTEMPTS') ?? '3',
+    INTEXURAOS_RETRY_QUEUE_TTL_MINUTES: envValue('INTEXURAOS_RETRY_QUEUE_TTL_MINUTES') ?? '10',
+    INTEXURAOS_AUTO_RETRY_MAX_ATTEMPTS: envValue('INTEXURAOS_AUTO_RETRY_MAX_ATTEMPTS') ?? '3',
+    INTEXURAOS_ENABLE_METRICS: envValue('INTEXURAOS_ENABLE_METRICS') ?? 'true',
   },
   'cron-agent': {
     INTEXURAOS_SERVICE_URL:
-      process.env.INTEXURAOS_CRON_SERVICE_URL ?? publicServiceUrl('cron-agent'),
+      envValue('INTEXURAOS_CRON_SERVICE_URL') ?? publicServiceUrl('cron-agent'),
   },
   'llm-usage-service': {
     INTEXURAOS_SERVICE_URL:
-      process.env.INTEXURAOS_LLM_USAGE_PUBLIC_URL ?? publicServiceUrl('llm-usage-service'),
+      envValue('INTEXURAOS_LLM_USAGE_PUBLIC_URL') ?? publicServiceUrl('llm-usage-service'),
   },
   'api-docs-hub': {
     ...API_DOCS_HUB_OPENAPI_URLS,
@@ -414,7 +422,19 @@ function createServiceConfig(name) {
     kill_timeout: 5000,
     restart_delay: 5000,
     watch: false,
-    max_memory_restart: process.env.INTEXURAOS_PM2_MAX_MEMORY_RESTART ?? '750M',
+    filter_env: [
+      'INTEXURAOS_',
+      'GOOGLE_APPLICATION_CREDENTIALS',
+      'HETZNER_PROVISIONER_GOOGLE_APPLICATION_CREDENTIALS',
+      'CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE',
+      'GOOGLE_CLOUD_PROJECT',
+      'PROJECT_ID',
+      'REGION',
+      'PUBSUB_EMULATOR_HOST',
+      'FIRESTORE_EMULATOR_HOST',
+      'STORAGE_EMULATOR_HOST',
+    ],
+    max_memory_restart: envValue('INTEXURAOS_PM2_MAX_MEMORY_RESTART') ?? '750M',
   };
 }
 

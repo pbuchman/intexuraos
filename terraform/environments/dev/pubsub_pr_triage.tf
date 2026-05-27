@@ -12,9 +12,9 @@ module "pubsub_pr_triage" {
   topic_name     = "intexuraos-pr-triage-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = local.hetzner_edge_origin == null ? "${module.code_agent.service_url}/internal/code/pubsub/pr-triage" : "${local.hetzner_edge_origin}/internal/code/pubsub/pr-triage"
+  push_endpoint              = "${module.code_agent.service_url}/internal/code/pubsub/pr-triage"
   push_service_account_email = module.iam.service_accounts["code_agent"]
-  push_audience              = local.async_edge_audience == null ? module.code_agent.service_url : local.async_edge_audience
+  push_audience              = module.code_agent.service_url
 
   # Triage runs an LLM + Linear API + Firestore writes; budget room above default 60s.
   ack_deadline_seconds = 300

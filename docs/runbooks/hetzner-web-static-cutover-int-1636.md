@@ -130,7 +130,7 @@ URLs unless a replacement alias is explicitly documented before cutover.
 | Linear webhook      | Webhook URL                          | `https://intexuraos.cloud/api/linear/linear/webhook`                                   | Or `https://intexuraos.cloud/linear/webhook` only if nginx has an explicit alias. Keep the signing secret unchanged. |
 | WhatsApp webhook    | Callback URL                         | `https://intexuraos.cloud/api/whatsapp/whatsapp/webhooks`                              | Or `https://intexuraos.cloud/webhooks/whatsapp` only if nginx rewrites that alias to `/whatsapp/webhooks`. Keep the verify token unchanged. |
 | WhatsApp webhook    | Webhook fields                       | `messages`, `message_status`                                                           | Verify WABA app subscription remains active. |
-| Cloudflare DNS      | Apex `A`/`AAAA`, optional `www`       | Hetzner public IPs; TTL `300` during cutover window                                    | Rollback value is the recorded GCP LB IP. |
+| Cloudflare DNS      | Apex `A`/`AAAA`                       | Hetzner public IPs; TTL `300` during cutover window                                    | Rollback value is the recorded GCP LB IP. Record any existing `www` values, but `www` stays out of this cutover unless a later approved change adds certificate and nginx host support. |
 
 ## Cutover
 
@@ -139,6 +139,8 @@ URLs unless a replacement alias is explicitly documented before cutover.
   direct origin test with `Host: intexuraos.cloud`.
 - [ ] Switch provider callbacks/allowlists to the values above.
 - [ ] In Cloudflare, point `intexuraos.cloud` apex records to Hetzner IPs.
+  Leave `www` unchanged for this PR unless an approved follow-up adds
+  `www.intexuraos.cloud` certificate and nginx host support.
 - [ ] Preserve the pre-recorded Cloudflare proxy mode unless the cutover owner
   intentionally changes it.
 - [ ] Purge Cloudflare cache for:
@@ -206,7 +208,9 @@ curl -fsSI https://storage.googleapis.com/intexuraos-static-assets-dev/branding/
 
 - [ ] Roll back if static delivery, auth, callbacks, `/api/*`, `/share/*`, or
   `/images/*` fails and cannot be fixed inside the window.
-- [ ] Restore Cloudflare apex records to the recorded GCP LB IP.
+- [ ] Restore Cloudflare apex records to the recorded GCP LB IP. `www` should
+  not have changed in this cutover; if it was changed by an approved follow-up,
+  restore it to the recorded pre-cutover value.
 - [ ] Restore the recorded Cloudflare proxy mode and keep TTL at `300`.
 - [ ] Purge Cloudflare cache for `/`, `/index.html`, `/sw.js`,
   `/manifest.webmanifest`, and `/assets/*`.

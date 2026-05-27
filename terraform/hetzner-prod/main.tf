@@ -33,8 +33,10 @@ locals {
   }
 
   cloud_scheduler_service_account_id = "intexuraos-scheduler-${var.source_environment}"
-  hetzner_oidc_audience              = var.hetzner_origin
-  pubsub_staging_filter              = "attributes.intexuraos_hetzner_cutover = \"active\""
+  # activate_hetzner_async_consumers is the explicit cutover gate for staged
+  # Pub/Sub push subscriptions and Scheduler jobs in this root.
+  hetzner_oidc_audience = var.hetzner_origin
+  pubsub_staging_filter = "attributes.intexuraos_hetzner_cutover = \"active\""
 
   pubsub_topics = {
     whatsapp_send              = "intexuraos-whatsapp-send-${var.source_environment}"

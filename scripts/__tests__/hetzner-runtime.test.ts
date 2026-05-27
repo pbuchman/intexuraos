@@ -11,7 +11,16 @@ const cutoverEdgePath = resolve(repoRoot, 'scripts/hetzner/cutover-gcp-edge.sh')
 const installNginxPath = resolve(repoRoot, 'scripts/hetzner/install-nginx-and-cert.sh');
 const provisionPath = resolve(repoRoot, 'scripts/hetzner/provision.sh');
 const runbookPath = resolve(repoRoot, 'docs/operations/hetzner-prod-runbook.md');
-const terraformMainPath = resolve(repoRoot, 'terraform/environments/dev/main.tf');
+const migrationPlanPath = resolve(repoRoot, 'docs/operations/hetzner-prod-migration-plan.md');
+const selfReviewPath = resolve(repoRoot, 'docs/operations/hetzner-prod-self-review.md');
+const terraformDevMainPath = resolve(repoRoot, 'terraform/environments/dev/main.tf');
+const terraformDevPrTriagePath = resolve(
+  repoRoot,
+  'terraform/environments/dev/pubsub_pr_triage.tf'
+);
+const terraformHetznerMainPath = resolve(repoRoot, 'terraform/hetzner-prod/main.tf');
+const terraformHetznerPubsubPath = resolve(repoRoot, 'terraform/hetzner-prod/pubsub.tf');
+const terraformHetznerSchedulerPath = resolve(repoRoot, 'terraform/hetzner-prod/scheduler.tf');
 const manifestPath = resolve(repoRoot, 'apps/web/service-manifest.json');
 
 interface ManifestService {
@@ -52,7 +61,12 @@ describe('Hetzner nginx runtime config', () => {
     expect(config).toContain('proxy_set_header X-Internal-Auth $edge_internal_auth_token;');
     expect(config).toContain('proxy_set_header From "";');
     expect(config).toContain('proxy_set_header Cookie "";');
+    expect(config).toContain('return 301 https://intexuraos.cloud$request_uri;');
+    expect(config).toContain('if ($host != "intexuraos.cloud") {');
+    expect(config).toContain('proxy_set_header X-Forwarded-Host intexuraos.cloud;');
     expect(publicApiSection).not.toContain('proxy_set_header Authorization "";');
+    expect(config).toContain('location /oauth/connections/ { proxy_pass http://user_service; }');
+    expect(config).toContain('api_docs_hub is intentionally local-only');
     expect(config).not.toContain('/api/mobile-notifications/');
     expect(config).not.toContain('/api/data-insights/');
     expect(config).not.toContain('/api/image/');
@@ -74,6 +88,20 @@ describe('Hetzner nginx runtime config', () => {
     );
     expect(storageSection.match(/proxy_set_header Authorization "";/g)).toHaveLength(2);
     expect(storageSection.match(/proxy_set_header Cookie "";/g)).toHaveLength(2);
+  });
+
+  it('serves PWA shell files with explicit cutover cache headers', () => {
+    const config = readRequired(nginxConfigPath);
+
+    expect(config).toContain('location = /sw.js {');
+    expect(config).toContain('location = /manifest.webmanifest {');
+    expect(config).toContain(
+      'add_header Cache-Control "no-cache, no-store, must-revalidate" always;'
+    );
+    expect(config).toContain('location ~ ^/workbox-[A-Za-z0-9._-]+\\.js$ {');
+    expect(config).toContain(
+      'add_header Cache-Control "public, max-age=31536000, immutable" always;'
+    );
   });
 
   it('fans out all async-control-plane internal routes to the owning service', () => {
@@ -117,6 +145,7 @@ describe('Hetzner nginx runtime config', () => {
   it('protects the entire internal namespace instead of falling through to the SPA', () => {
     const config = readRequired(nginxConfigPath);
 
+    expect(config).toContain('location = /internal {');
     expect(config).toContain('location /internal/ {');
     expect(config).toContain('access_by_lua_file /etc/nginx/lua/jwt-verify.lua;');
     expect(config).toContain('content_by_lua_block');
@@ -152,7 +181,7 @@ describe('Hetzner nginx runtime config', () => {
     expect(verifier).toContain('ngx.req.clear_header("Cookie")');
     expect(verifier).toContain('ngx.req.clear_header("From")');
     expect(verifier).toContain('ngx.var.edge_internal_auth_token = internal_auth_token');
-    expect(verifier).toContain('ngx.req.set_header("X-Internal-Auth"');
+    expect(verifier).not.toContain('ngx.req.set_header("X-Internal-Auth"');
     expect(verifier).toContain('/etc/intexuraos/internal-auth-token');
   });
 });
@@ -169,8 +198,9 @@ describe('Hetzner web asset deployment', () => {
     expect(script).toContain('unset "${key}"');
     expect(script).toContain('prepare_sanitized_web_env_file');
     expect(script).toContain('.env.production.local');
-    expect(script).toContain('export_web_safe_secrets');
     expect(script).toContain('read_env_value "${key}"');
+    expect(script).not.toContain('export_web_safe_secrets');
+    expect(script).not.toContain('export "${key}=${value}"');
     expect(script).not.toContain('source "${ENV_FILE}"');
     expect(script).not.toContain('set -a');
     expect(script).not.toContain('INTEXURAOS_INTERNAL_AUTH_TOKEN');
@@ -187,13 +217,20 @@ describe('Hetzner web asset deployment', () => {
 });
 
 describe('Hetzner async edge cutover', () => {
-  it('moves retained GCP Pub/Sub and Scheduler OIDC audiences to the nginx edge', () => {
+  it('stages retained GCP Pub/Sub and Scheduler consumers in the Hetzner Terraform root', () => {
     const script = readRequired(cutoverEdgePath);
     const runbook = readRequired(runbookPath);
-    const terraform = readRequired(terraformMainPath);
+    const devTerraform = readRequired(terraformDevMainPath);
+    const prTriageTerraform = readRequired(terraformDevPrTriagePath);
+    const hetznerMain = readRequired(terraformHetznerMainPath);
+    const hetznerPubsub = readRequired(terraformHetznerPubsubPath);
+    const hetznerScheduler = readRequired(terraformHetznerSchedulerPath);
 
     expect(script).toContain('PUBSUB_ROUTES=(');
     expect(script).toContain('SCHEDULER_ROUTES=(');
+    expect(script).toContain('validate_public_origin');
+    expect(script).toContain('PUBLIC_ORIGIN must be an https:// origin without a path');
+    expect(script).toContain('PUBLIC_ORIGIN must be exactly https://intexuraos.cloud');
     expect(script).toContain('gcloud pubsub subscriptions update');
     expect(script).toContain('gcloud scheduler jobs update http');
     expect(script).toContain('--push-auth-token-audience="${PUBLIC_ORIGIN}"');
@@ -201,12 +238,19 @@ describe('Hetzner async edge cutover', () => {
     expect(script).toContain('/internal/linear/sync-all');
     expect(script).toContain('/internal/drain-queue');
     expect(script).toContain('/internal/execution-memory/process');
-    expect(terraform).toContain('variable "hetzner_edge_origin"');
-    expect(terraform).toContain('local.hetzner_edge_origin == null');
-    expect(terraform).toContain('local.async_edge_audience == null');
-    expect(runbook).toContain(
-      "terraform apply -var='hetzner_edge_origin=https://intexuraos.cloud'"
+    expect(devTerraform).not.toContain('variable "hetzner_edge_origin"');
+    expect(devTerraform).not.toContain('local.hetzner_edge_origin');
+    expect(devTerraform).not.toContain('local.async_edge_audience');
+    expect(prTriageTerraform).not.toContain('local.hetzner_edge_origin');
+    expect(hetznerMain).toContain('activate_hetzner_async_consumers');
+    expect(hetznerPubsub).toContain('google_pubsub_subscription" "hetzner_push"');
+    expect(hetznerPubsub).toContain(
+      'filter  = var.activate_hetzner_async_consumers ? null : local.pubsub_staging_filter'
     );
+    expect(hetznerScheduler).toContain('paused      = !var.activate_hetzner_async_consumers');
+    expect(runbook).toContain('terraform -chdir=terraform/hetzner-prod apply');
+    expect(runbook).toContain('activate_hetzner_async_consumers=false');
+    expect(runbook).toContain('activate_hetzner_async_consumers=true');
   });
 });
 
@@ -218,6 +262,9 @@ describe('Hetzner secret loader', () => {
     expect(script).toContain('Refusing to load secrets unless INTEXURAOS_ENVIRONMENT=prod');
     expect(script).toContain('gcloud secrets versions access');
     expect(script).toContain('HETZNER_RUNTIME_SECRETS=(');
+    expect(script).toContain('PROVISIONER_SA_KEY_FILE');
+    expect(script).toContain('RUNTIME_SA_KEY_FILE');
+    expect(script).toContain('GOOGLE_APPLICATION_CREDENTIALS" "${RUNTIME_SA_KEY_FILE}"');
     expect(script).toContain('printf \'%s\\n\' "${HETZNER_RUNTIME_SECRETS[@]}"');
     expect(script).toContain('install -m 600');
     expect(script).toContain('-o "${DEPLOY_USER}" -g "${DEPLOY_USER}"');
@@ -237,16 +284,100 @@ describe('Hetzner secret loader', () => {
 
   it('keeps certbot DNS credentials separate from the Cloudflare Browser Rendering API token', () => {
     const script = readRequired(installNginxPath);
-    const terraform = readRequired(terraformMainPath);
+    const terraform = readRequired(terraformDevMainPath);
 
     expect(script).toContain('INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN');
     expect(script).toContain('CLOUDFLARE_DNS_API_TOKEN_SECRET');
     expect(script).toContain('gcloud secrets versions access latest');
     expect(script).toContain('if [[ "${SKIP_CERTBOT}" -ne 1 ]]');
+    expect(script).toContain('readFileSync(envFile, "utf8")');
+    expect(script).toContain('unquote(line.slice(index + 1))');
+    expect(script).not.toContain('sed -n "s/^${key}=//p"');
     expect(script).not.toContain('read_env_value "INTEXURAOS_CLOUDFLARE_API_TOKEN"');
     expect(terraform).not.toContain('"INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN" =');
     expect(terraform).toContain('google_secret_manager_secret" "cloudflare_dns_api_token"');
     expect(terraform).toContain('google_service_account" "hetzner_provisioner"');
+    expect(terraform).toContain('google_service_account" "hetzner_runtime"');
+    expect(terraform).toContain('hetzner_runtime_project_roles');
+    expect(terraform).toContain('roles/datastore.user');
+    expect(terraform).toContain('roles/pubsub.publisher');
+    expect(terraform).toContain('roles/firebaseauth.admin');
+    expect(terraform).toContain('roles/logging.logWriter');
+    expect(terraform).toContain('hetzner_runtime_bucket_object_admin');
+    expect(terraform).toContain('hetzner_runtime_token_creator');
     expect(terraform).toContain('hetzner_provisioner_cloudflare_dns');
+  });
+});
+
+describe('Hetzner migration readiness documentation', () => {
+  it('documents the integration PR workflow, cutover gate, endpoint changes, and rollback plan', () => {
+    const plan = readRequired(migrationPlanPath);
+
+    expect(plan).toContain('Linear: INT-1637');
+    expect(plan).toContain('Parent issue: INT-1632');
+    expect(plan).toContain('Superseded PRs');
+    expect(plan).toContain('#2095');
+    expect(plan).toContain('#2097');
+    expect(plan).toContain('#2098');
+    expect(plan).toContain('#2099');
+    expect(plan).toContain('close the superseded PRs only after the replacement PR is open');
+    expect(plan).toContain('Endpoint Changes');
+    expect(plan).toContain('Modified');
+    expect(plan).toContain('Created');
+    expect(plan).toContain('Removed');
+    expect(plan).toContain('Unchanged');
+    expect(plan).toContain('Static web `/` and `/index.html` are served by Hetzner nginx');
+    expect(plan).toContain('Retained GCS bucket routes `/share/*` and `/images/*`');
+    expect(plan).toContain('Provider callback endpoints');
+    expect(plan).toContain('api-docs-hub remains local-only on Hetzner');
+    expect(plan).toContain('Do not execute migration or DNS cutover without explicit approval');
+    expect(plan).toContain('terraform -chdir=terraform/hetzner-prod plan');
+    expect(plan).toContain('terraform -chdir=terraform/hetzner-prod apply');
+    expect(plan).toContain('activate_hetzner_async_consumers=false');
+    expect(plan).toContain('activate_hetzner_async_consumers=true');
+    expect(plan).toContain('disable the old Cloud Run-targeted Pub/Sub push consumers');
+    expect(plan).toContain('pause the old app-targeted Cloud Scheduler jobs');
+    expect(plan).toContain('restore the old Cloud Run-targeted Pub/Sub push consumers');
+    expect(plan).toContain('Cloudflare DNS');
+    expect(plan).toContain('www');
+    expect(plan).toContain('rollback');
+  });
+
+  it('records a final service and retained-resource disposition self-review', () => {
+    const review = readRequired(selfReviewPath);
+
+    for (const name of [
+      'user-service',
+      'api-docs-hub',
+      'fishing-assistant-service',
+      'llm-usage-service',
+      'web frontend',
+      'workers/transcription',
+      'workers/vm-lifecycle',
+      'workers/orchestrator',
+      'docker/code-worker',
+      'Firestore',
+      'Pub/Sub topics',
+      'Cloud Scheduler jobs',
+      'Secret Manager',
+      'GCS buckets',
+      'Cloud Functions',
+      'Artifact Registry',
+      'Cloud Build',
+      'monitoring',
+    ]) {
+      expect(review).toContain(name);
+    }
+
+    expect(review).toContain('name | type | disposition');
+    expect(review).toContain('PM2 port 8133; api-docs-hub remains local-only on Hetzner');
+    expect(review).toContain('migrated');
+    expect(review).toContain('retained');
+    expect(review).toContain('removed');
+    expect(review).toContain('INT-1633');
+    expect(review).toContain('INT-1634');
+    expect(review).toContain('INT-1635');
+    expect(review).toContain('INT-1636');
+    expect(review).toContain('INT-1637');
   });
 });

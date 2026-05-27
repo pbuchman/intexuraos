@@ -111,4 +111,3 @@ ngx.req.clear_header("X-Internal-Auth")
 ngx.req.clear_header("Cookie")
 ngx.req.clear_header("From")
 ngx.var.edge_internal_auth_token = internal_auth_token
-ngx.req.set_header("X-Internal-Auth", internal_auth_token)

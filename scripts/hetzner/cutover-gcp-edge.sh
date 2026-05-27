@@ -65,6 +65,15 @@ fail() {
   exit 1
 }
 
+validate_public_origin() {
+  if [[ ! "${PUBLIC_ORIGIN}" =~ ^https://[A-Za-z0-9.-]+$ ]]; then
+    fail "PUBLIC_ORIGIN must be an https:// origin without a path"
+  fi
+  if [[ "${PUBLIC_ORIGIN}" != "https://intexuraos.cloud" ]]; then
+    fail "PUBLIC_ORIGIN must be exactly https://intexuraos.cloud"
+  fi
+}
+
 quote_command() {
   printf '%q ' "$@"
   printf '\n'
@@ -140,6 +149,7 @@ cutover_scheduler() {
 main() {
   parse_args "$@"
   PUBLIC_ORIGIN="${PUBLIC_ORIGIN%/}"
+  validate_public_origin
 
   if [[ "${APPLY}" -eq 1 ]]; then
     command -v gcloud >/dev/null 2>&1 || fail "gcloud CLI is required"
