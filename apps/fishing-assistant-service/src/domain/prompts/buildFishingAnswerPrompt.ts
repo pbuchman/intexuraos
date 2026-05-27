@@ -31,7 +31,7 @@ function sanitizeHistoryContent(content: string): string {
 export const fishingAnswerPrompt: PromptBuilder<BuildFishingAnswerPromptInput> = {
   name: 'fishing-assistant-answer',
   description: 'Builds a grounded JSON-answer prompt for Fishing Assistant chat responses',
-  version: '3.0.0',
+  version: '4.0.0',
 
   build(input: BuildFishingAnswerPromptInput): string {
     const history = input.recentMessages
@@ -46,6 +46,10 @@ export const fishingAnswerPrompt: PromptBuilder<BuildFishingAnswerPromptInput> =
 
     return [
       'Answer the fishing question using only the evidence below.',
+      'Knowledge Base evidence (knowledge_page) is the authoritative base for the answer.',
+      'Digest and raw message evidence are supporting context for recent group signals, confirmations, conflicts, and practical adaptations.',
+      'When knowledge_page evidence is present, build the core answer from it first, then use digest/raw_message evidence to support or update it.',
+      'If supporting evidence conflicts with Knowledge Base evidence, say so explicitly instead of silently replacing the Knowledge Base.',
       'Return strict JSON with shape {"answerMarkdown": string, "citations": [{"sourceId": string, "usedFor": string}], "confidence": "high"|"medium"|"low"}.',
       'In citations[].sourceId, copy one of the evidence sourceIds exactly as written in the square brackets. Never translate, shorten, reorder, or invent a sourceId.',
       input.evidence.length > 0
