@@ -118,17 +118,6 @@ variable "service_urls" {
   default     = {}
 }
 
-variable "hetzner_edge_origin" {
-  description = "When set, retained Pub/Sub push subscriptions and Cloud Scheduler HTTP jobs target this Hetzner edge origin instead of Cloud Run."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.hetzner_edge_origin == null || can(regex("^https://", var.hetzner_edge_origin))
-    error_message = "hetzner_edge_origin must be an https:// origin when set."
-  }
-}
-
 # -----------------------------------------------------------------------------
 # Data Sources
 # -----------------------------------------------------------------------------
@@ -309,8 +298,6 @@ locals {
 
   # Cloud Run URL suffix - project-specific, determined by GCP
   cloud_run_url_suffix = "cj44trunra-lm.a.run.app"
-  hetzner_edge_origin  = var.hetzner_edge_origin == null ? null : trimsuffix(var.hetzner_edge_origin, "/")
-  async_edge_audience  = local.hetzner_edge_origin == null ? null : local.hetzner_edge_origin
   hetzner_runtime_secret_names = toset([
     "INTEXURAOS_AUTH0_CLIENT_ID",
     "INTEXURAOS_AUTH0_DOMAIN",
@@ -637,6 +624,12 @@ resource "google_service_account" "hetzner_provisioner" {
   description  = "Service account used by the Hetzner VM to load runtime secrets and certbot DNS credentials"
 }
 
+resource "google_service_account" "hetzner_runtime" {
+  account_id   = "intexuraos-hetzner-runtime-${var.environment}"
+  display_name = "IntexuraOS Hetzner Runtime (${var.environment})"
+  description  = "Union runtime service account for PM2 services on the Hetzner VM"
+}
+
 resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_runtime_secrets" {
   for_each = local.hetzner_runtime_secret_names
 
@@ -649,6 +642,45 @@ resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_cloudfla
   secret_id = google_secret_manager_secret.cloudflare_dns_api_token.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "hetzner_runtime_secrets" {
+  for_each = local.hetzner_runtime_secret_names
+
+  secret_id = module.secret_manager.secret_ids[each.value]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.hetzner_runtime.email}"
+}
+
+resource "google_project_iam_member" "hetzner_runtime_project_roles" {
+  for_each = toset([
+    "roles/datastore.user",
+    "roles/firebaseauth.admin",
+    "roles/logging.logWriter",
+    "roles/pubsub.publisher",
+  ])
+
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.hetzner_runtime.email}"
+}
+
+resource "google_service_account_iam_member" "hetzner_runtime_token_creator" {
+  service_account_id = google_service_account.hetzner_runtime.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.hetzner_runtime.email}"
+}
+
+resource "google_storage_bucket_iam_member" "hetzner_runtime_bucket_object_admin" {
+  for_each = {
+    generated_images = module.generated_images_bucket.bucket_name
+    shared_content   = module.shared_content.bucket_name
+    whatsapp_media   = module.whatsapp_media_bucket.bucket_name
+  }
+
+  bucket = each.value
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.hetzner_runtime.email}"
 }
 
 # -----------------------------------------------------------------------------
@@ -719,9 +751,9 @@ module "pubsub_media_cleanup" {
   topic_name     = "intexuraos-whatsapp-media-cleanup-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = local.hetzner_edge_origin == null ? "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/media-cleanup" : "${local.hetzner_edge_origin}/internal/whatsapp/pubsub/media-cleanup"
+  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/media-cleanup"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
-  push_audience              = local.async_edge_audience == null ? module.whatsapp_service.service_url : local.async_edge_audience
+  push_audience              = module.whatsapp_service.service_url
   ack_deadline_seconds       = 60
 
   publisher_service_accounts = {
@@ -744,9 +776,9 @@ module "pubsub_whatsapp_webhook_process" {
   topic_name     = "intexuraos-whatsapp-webhook-process-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = local.hetzner_edge_origin == null ? "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/process-webhook" : "${local.hetzner_edge_origin}/internal/whatsapp/pubsub/process-webhook"
+  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/process-webhook"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
-  push_audience              = local.async_edge_audience == null ? module.whatsapp_service.service_url : local.async_edge_audience
+  push_audience              = module.whatsapp_service.service_url
   ack_deadline_seconds       = 120
 
   publisher_service_accounts = {
@@ -769,9 +801,9 @@ module "pubsub_srt_transcription_completed" {
   topic_name     = "intexuraos-srt-transcription-completed-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = local.hetzner_edge_origin == null ? "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcription-completed" : "${local.hetzner_edge_origin}/internal/whatsapp/pubsub/transcription-completed"
+  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcription-completed"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
-  push_audience              = local.async_edge_audience == null ? module.whatsapp_service.service_url : local.async_edge_audience
+  push_audience              = module.whatsapp_service.service_url
   ack_deadline_seconds       = 120
 
   publisher_service_accounts = {}
@@ -864,9 +896,9 @@ module "pubsub_commands_ingest" {
   topic_name     = "intexuraos-commands-ingest-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = local.hetzner_edge_origin == null ? "${module.commands_agent.service_url}/internal/commands" : "${local.hetzner_edge_origin}/internal/commands"
+  push_endpoint              = "${module.commands_agent.service_url}/internal/commands"
   push_service_account_email = module.iam.service_accounts["commands_agent"]
-  push_audience              = local.async_edge_audience == null ? module.commands_agent.service_url : local.async_edge_audience
+  push_audience              = module.commands_agent.service_url
 
   publisher_service_accounts = {
     whatsapp_service = module.iam.service_accounts["whatsapp_service"]
@@ -888,9 +920,9 @@ module "pubsub_actions_queue" {
   topic_name     = "intexuraos-actions-queue-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = local.hetzner_edge_origin == null ? "${module.actions_agent.service_url}/internal/actions/process" : "${local.hetzner_edge_origin}/internal/actions/process"
+  push_endpoint              = "${module.actions_agent.service_url}/internal/actions/process"
   push_service_account_email = module.iam.service_accounts["actions_agent"]
-  push_audience              = local.async_edge_audience == null ? module.actions_agent.service_url : local.async_edge_audience
+  push_audience              = module.actions_agent.service_url
 
   publisher_service_accounts = {
     commands_agent = module.iam.service_accounts["commands_agent"]
@@ -913,9 +945,9 @@ module "pubsub_research_process" {
   topic_name     = "intexuraos-research-process-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = local.hetzner_edge_origin == null ? "${module.research_agent.service_url}/internal/llm/pubsub/process-research" : "${local.hetzner_edge_origin}/internal/llm/pubsub/process-research"
+  push_endpoint              = "${module.research_agent.service_url}/internal/llm/pubsub/process-research"
   push_service_account_email = module.iam.service_accounts["research_agent"]
-  push_audience              = local.async_edge_audience == null ? module.research_agent.service_url : local.async_edge_audience
+  push_audience              = module.research_agent.service_url
   ack_deadline_seconds       = 600 # Max allowed by GCP (research processing can take several minutes)
 
   publisher_service_accounts = {
@@ -938,9 +970,9 @@ module "pubsub_llm_analytics" {
   topic_name     = "intexuraos-llm-analytics-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = local.hetzner_edge_origin == null ? "${module.research_agent.service_url}/internal/llm/pubsub/report-analytics" : "${local.hetzner_edge_origin}/internal/llm/pubsub/report-analytics"
+  push_endpoint              = "${module.research_agent.service_url}/internal/llm/pubsub/report-analytics"
   push_service_account_email = module.iam.service_accounts["research_agent"]
-  push_audience              = local.async_edge_audience == null ? module.research_agent.service_url : local.async_edge_audience
+  push_audience              = module.research_agent.service_url
   ack_deadline_seconds       = 300
 
   publisher_service_accounts = {
@@ -963,9 +995,9 @@ module "pubsub_llm_call" {
   topic_name     = "intexuraos-llm-call-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = local.hetzner_edge_origin == null ? "${module.research_agent.service_url}/internal/llm/pubsub/process-llm-call" : "${local.hetzner_edge_origin}/internal/llm/pubsub/process-llm-call"
+  push_endpoint              = "${module.research_agent.service_url}/internal/llm/pubsub/process-llm-call"
   push_service_account_email = module.iam.service_accounts["research_agent"]
-  push_audience              = local.async_edge_audience == null ? module.research_agent.service_url : local.async_edge_audience
+  push_audience              = module.research_agent.service_url
   ack_deadline_seconds       = 600
 
   publisher_service_accounts = {
@@ -988,9 +1020,9 @@ module "pubsub_whatsapp_send" {
   topic_name     = "intexuraos-whatsapp-send-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = local.hetzner_edge_origin == null ? "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/send-message" : "${local.hetzner_edge_origin}/internal/whatsapp/pubsub/send-message"
+  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/send-message"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
-  push_audience              = local.async_edge_audience == null ? module.whatsapp_service.service_url : local.async_edge_audience
+  push_audience              = module.whatsapp_service.service_url
 
   publisher_service_accounts = {
     actions_agent   = module.iam.service_accounts["actions_agent"]
@@ -1015,9 +1047,9 @@ module "pubsub_approval_reply" {
   topic_name     = "intexuraos-approval-reply-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = local.hetzner_edge_origin == null ? "${module.actions_agent.service_url}/internal/actions/approval-reply" : "${local.hetzner_edge_origin}/internal/actions/approval-reply"
+  push_endpoint              = "${module.actions_agent.service_url}/internal/actions/approval-reply"
   push_service_account_email = module.iam.service_accounts["actions_agent"]
-  push_audience              = local.async_edge_audience == null ? module.actions_agent.service_url : local.async_edge_audience
+  push_audience              = module.actions_agent.service_url
 
   publisher_service_accounts = {
     whatsapp_service = module.iam.service_accounts["whatsapp_service"]
@@ -1230,11 +1262,11 @@ resource "google_cloud_scheduler_job" "mobile_notifications_digest_yesterday" {
 
   http_target {
     http_method = "POST"
-    uri         = local.hetzner_edge_origin == null ? "${module.mobile_notifications_service.service_url}/internal/notifications/digest/run-yesterday" : "${local.hetzner_edge_origin}/internal/notifications/digest/run-yesterday"
+    uri         = "${module.mobile_notifications_service.service_url}/internal/notifications/digest/run-yesterday"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
-      audience              = local.async_edge_audience == null ? module.mobile_notifications_service.service_url : local.async_edge_audience
+      audience              = module.mobile_notifications_service.service_url
     }
   }
 
@@ -1545,9 +1577,9 @@ module "pubsub_bookmark_enrich" {
   topic_name     = "intexuraos-bookmark-enrich-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = local.hetzner_edge_origin == null ? "${module.bookmarks_agent.service_url}/internal/bookmarks/pubsub/enrich" : "${local.hetzner_edge_origin}/internal/bookmarks/pubsub/enrich"
+  push_endpoint              = "${module.bookmarks_agent.service_url}/internal/bookmarks/pubsub/enrich"
   push_service_account_email = module.iam.service_accounts["bookmarks_agent"]
-  push_audience              = local.async_edge_audience == null ? module.bookmarks_agent.service_url : local.async_edge_audience
+  push_audience              = module.bookmarks_agent.service_url
   ack_deadline_seconds       = 60
 
   publisher_service_accounts = {
@@ -1570,9 +1602,9 @@ module "pubsub_bookmark_summarize" {
   topic_name     = "intexuraos-bookmark-summarize-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = local.hetzner_edge_origin == null ? "${module.bookmarks_agent.service_url}/internal/bookmarks/pubsub/summarize" : "${local.hetzner_edge_origin}/internal/bookmarks/pubsub/summarize"
+  push_endpoint              = "${module.bookmarks_agent.service_url}/internal/bookmarks/pubsub/summarize"
   push_service_account_email = module.iam.service_accounts["bookmarks_agent"]
-  push_audience              = local.async_edge_audience == null ? module.bookmarks_agent.service_url : local.async_edge_audience
+  push_audience              = module.bookmarks_agent.service_url
   ack_deadline_seconds       = 120
 
   # 6-hour retry window for transient Crawl4AI errors
@@ -1600,9 +1632,9 @@ module "pubsub_todos_processing" {
   topic_name     = "intexuraos-todos-processing-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = local.hetzner_edge_origin == null ? "${module.todos_agent.service_url}/internal/todos/pubsub/todos-processing" : "${local.hetzner_edge_origin}/internal/todos/pubsub/todos-processing"
+  push_endpoint              = "${module.todos_agent.service_url}/internal/todos/pubsub/todos-processing"
   push_service_account_email = module.iam.service_accounts["todos_agent"]
-  push_audience              = local.async_edge_audience == null ? module.todos_agent.service_url : local.async_edge_audience
+  push_audience              = module.todos_agent.service_url
   ack_deadline_seconds       = 60
 
   publisher_service_accounts = {
@@ -1625,9 +1657,9 @@ module "pubsub_calendar_preview" {
   topic_name     = "intexuraos-calendar-preview-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = local.hetzner_edge_origin == null ? "${module.calendar_agent.service_url}/internal/calendar/generate-preview" : "${local.hetzner_edge_origin}/internal/calendar/generate-preview"
+  push_endpoint              = "${module.calendar_agent.service_url}/internal/calendar/generate-preview"
   push_service_account_email = module.iam.service_accounts["calendar_agent"]
-  push_audience              = local.async_edge_audience == null ? module.calendar_agent.service_url : local.async_edge_audience
+  push_audience              = module.calendar_agent.service_url
   ack_deadline_seconds       = 120
 
   publisher_service_accounts = {
@@ -1788,11 +1820,11 @@ resource "google_cloud_scheduler_job" "linear_sync_hourly" {
 
   http_target {
     http_method = "POST"
-    uri         = local.hetzner_edge_origin == null ? "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}/internal/linear/sync-all" : "${local.hetzner_edge_origin}/internal/linear/sync-all"
+    uri         = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}/internal/linear/sync-all"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
-      audience              = local.async_edge_audience == null ? "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}" : local.async_edge_audience
+      audience              = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}"
     }
   }
 
@@ -1819,11 +1851,11 @@ resource "google_cloud_scheduler_job" "linear_issues_prune_hourly" {
 
   http_target {
     http_method = "POST"
-    uri         = local.hetzner_edge_origin == null ? "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}/internal/linear/prune-issues" : "${local.hetzner_edge_origin}/internal/linear/prune-issues"
+    uri         = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}/internal/linear/prune-issues"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
-      audience              = local.async_edge_audience == null ? "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}" : local.async_edge_audience
+      audience              = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}"
     }
   }
 
@@ -2003,11 +2035,11 @@ resource "google_cloud_scheduler_job" "cron_agent_tick" {
 
   http_target {
     http_method = "POST"
-    uri         = local.hetzner_edge_origin == null ? "${module.cron_agent.service_url}/internal/cron/tick" : "${local.hetzner_edge_origin}/internal/cron/tick"
+    uri         = "${module.cron_agent.service_url}/internal/cron/tick"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
-      audience              = local.async_edge_audience == null ? module.cron_agent.service_url : local.async_edge_audience
+      audience              = module.cron_agent.service_url
     }
   }
 
@@ -2117,11 +2149,11 @@ resource "google_cloud_scheduler_job" "retry_pending_commands" {
 
   http_target {
     http_method = "POST"
-    uri         = local.hetzner_edge_origin == null ? "${module.commands_agent.service_url}/internal/retry-pending" : "${local.hetzner_edge_origin}/internal/retry-pending"
+    uri         = "${module.commands_agent.service_url}/internal/retry-pending"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
-      audience              = local.async_edge_audience == null ? module.commands_agent.service_url : local.async_edge_audience
+      audience              = module.commands_agent.service_url
     }
   }
 
@@ -2162,11 +2194,11 @@ resource "google_cloud_scheduler_job" "retry_pending_actions" {
 
   http_target {
     http_method = "POST"
-    uri         = local.hetzner_edge_origin == null ? "${module.actions_agent.service_url}/internal/actions/retry-pending" : "${local.hetzner_edge_origin}/internal/actions/retry-pending"
+    uri         = "${module.actions_agent.service_url}/internal/actions/retry-pending"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
-      audience              = local.async_edge_audience == null ? module.actions_agent.service_url : local.async_edge_audience
+      audience              = module.actions_agent.service_url
     }
   }
 
@@ -2207,11 +2239,11 @@ resource "google_cloud_scheduler_job" "drain_task_queue" {
 
   http_target {
     http_method = "POST"
-    uri         = local.hetzner_edge_origin == null ? "${module.code_agent.service_url}/internal/drain-queue" : "${local.hetzner_edge_origin}/internal/drain-queue"
+    uri         = "${module.code_agent.service_url}/internal/drain-queue"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
-      audience              = local.async_edge_audience == null ? module.code_agent.service_url : local.async_edge_audience
+      audience              = module.code_agent.service_url
     }
   }
 
@@ -2235,11 +2267,11 @@ resource "google_cloud_scheduler_job" "merge_conflict_reconcile" {
 
   http_target {
     http_method = "POST"
-    uri         = local.hetzner_edge_origin == null ? "${module.code_agent.service_url}/internal/merge-conflicts/reconcile" : "${local.hetzner_edge_origin}/internal/merge-conflicts/reconcile"
+    uri         = "${module.code_agent.service_url}/internal/merge-conflicts/reconcile"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
-      audience              = local.async_edge_audience == null ? module.code_agent.service_url : local.async_edge_audience
+      audience              = module.code_agent.service_url
     }
   }
 
@@ -2265,11 +2297,11 @@ resource "google_cloud_scheduler_job" "merge_queue_tick" {
 
   http_target {
     http_method = "POST"
-    uri         = local.hetzner_edge_origin == null ? "${module.code_agent.service_url}/internal/merge-queue/tick" : "${local.hetzner_edge_origin}/internal/merge-queue/tick"
+    uri         = "${module.code_agent.service_url}/internal/merge-queue/tick"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
-      audience              = local.async_edge_audience == null ? module.code_agent.service_url : local.async_edge_audience
+      audience              = module.code_agent.service_url
     }
   }
 
@@ -2293,12 +2325,12 @@ resource "google_cloud_scheduler_job" "code_tasks_zombie_sweep" {
 
   http_target {
     http_method = "POST"
-    uri         = local.hetzner_edge_origin == null ? "${module.code_agent.service_url}/internal/code/detect-zombies" : "${local.hetzner_edge_origin}/internal/code/detect-zombies"
+    uri         = "${module.code_agent.service_url}/internal/code/detect-zombies"
     body        = base64encode("{}")
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
-      audience              = local.async_edge_audience == null ? module.code_agent.service_url : local.async_edge_audience
+      audience              = module.code_agent.service_url
     }
   }
 
@@ -2329,11 +2361,11 @@ resource "google_cloud_scheduler_job" "archive_stale_groups" {
 
   http_target {
     http_method = "POST"
-    uri         = local.hetzner_edge_origin == null ? "${module.code_agent.service_url}/internal/archive-stale-groups" : "${local.hetzner_edge_origin}/internal/archive-stale-groups"
+    uri         = "${module.code_agent.service_url}/internal/archive-stale-groups"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
-      audience              = local.async_edge_audience == null ? module.code_agent.service_url : local.async_edge_audience
+      audience              = module.code_agent.service_url
     }
   }
 
@@ -2364,11 +2396,11 @@ resource "google_cloud_scheduler_job" "auto_archive_merged_tasks" {
 
   http_target {
     http_method = "POST"
-    uri         = local.hetzner_edge_origin == null ? "${module.code_agent.service_url}/internal/auto-archive-merged-tasks" : "${local.hetzner_edge_origin}/internal/auto-archive-merged-tasks"
+    uri         = "${module.code_agent.service_url}/internal/auto-archive-merged-tasks"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
-      audience              = local.async_edge_audience == null ? module.code_agent.service_url : local.async_edge_audience
+      audience              = module.code_agent.service_url
     }
   }
 
@@ -2399,11 +2431,11 @@ resource "google_cloud_scheduler_job" "execution_memory_process" {
 
   http_target {
     http_method = "POST"
-    uri         = local.hetzner_edge_origin == null ? "${module.code_agent.service_url}/internal/execution-memory/process" : "${local.hetzner_edge_origin}/internal/execution-memory/process"
+    uri         = "${module.code_agent.service_url}/internal/execution-memory/process"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
-      audience              = local.async_edge_audience == null ? module.code_agent.service_url : local.async_edge_audience
+      audience              = module.code_agent.service_url
     }
   }
 
@@ -2434,11 +2466,11 @@ resource "google_cloud_scheduler_job" "execution_memory_sweep_errored" {
 
   http_target {
     http_method = "POST"
-    uri         = local.hetzner_edge_origin == null ? "${module.code_agent.service_url}/internal/execution-memory/sweep-errored" : "${local.hetzner_edge_origin}/internal/execution-memory/sweep-errored"
+    uri         = "${module.code_agent.service_url}/internal/execution-memory/sweep-errored"
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
-      audience              = local.async_edge_audience == null ? module.code_agent.service_url : local.async_edge_audience
+      audience              = module.code_agent.service_url
     }
   }
 
@@ -2469,7 +2501,7 @@ resource "google_cloud_scheduler_job" "execution_memory_prune_stale" {
 
   http_target {
     http_method = "POST"
-    uri         = local.hetzner_edge_origin == null ? "${module.code_agent.service_url}/internal/execution-memory/prune-stale" : "${local.hetzner_edge_origin}/internal/execution-memory/prune-stale"
+    uri         = "${module.code_agent.service_url}/internal/execution-memory/prune-stale"
 
     body = base64encode("{\"maxAgeDays\":30}")
 
@@ -2479,7 +2511,7 @@ resource "google_cloud_scheduler_job" "execution_memory_prune_stale" {
 
     oidc_token {
       service_account_email = google_service_account.cloud_scheduler.email
-      audience              = local.async_edge_audience == null ? module.code_agent.service_url : local.async_edge_audience
+      audience              = module.code_agent.service_url
     }
   }
 
@@ -2825,9 +2857,9 @@ module "pubsub_transcription_completed" {
   topic_name     = "intexuraos-transcription-completed-${var.environment}"
   labels         = local.common_labels
 
-  push_endpoint              = local.hetzner_edge_origin == null ? "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcription-completed" : "${local.hetzner_edge_origin}/internal/whatsapp/pubsub/transcription-completed"
+  push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcription-completed"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
-  push_audience              = local.async_edge_audience == null ? module.whatsapp_service.service_url : local.async_edge_audience
+  push_audience              = module.whatsapp_service.service_url
   ack_deadline_seconds       = 60
 
   publisher_service_accounts = {

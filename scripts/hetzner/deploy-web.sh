@@ -148,19 +148,6 @@ write_env_line() {
   printf '%s=%s\n' "${key}" "$(dotenv_escape "${value}")" >> "${output_path}"
 }
 
-export_web_safe_secrets() {
-  local key=""
-  local value=""
-
-  for key in "${WEB_SAFE_SECRETS[@]}"; do
-    value="$(read_env_value "${key}")"
-    [[ -n "${value}" ]] || fail "${key} is missing from ${ENV_FILE}"
-    export "${key}=${value}"
-  done
-
-  export INTEXURAOS_ENVIRONMENT=prod
-}
-
 export_web_service_urls() {
   local manifest_path="${REPO_DIR}/apps/web/service-manifest.json"
   local env_var=""
@@ -205,7 +192,8 @@ prepare_sanitized_web_env_file() {
   write_env_line "${WEB_SANITIZED_ENV_FILE}" "INTEXURAOS_ENVIRONMENT" "prod"
 
   for key in "${WEB_SAFE_SECRETS[@]}"; do
-    env_value="${!key}"
+    env_value="$(read_env_value "${key}")"
+    [[ -n "${env_value}" ]] || fail "${key} is missing from ${ENV_FILE}"
     write_env_line "${WEB_SANITIZED_ENV_FILE}" "${key}" "${env_value}"
   done
 
@@ -259,7 +247,7 @@ main() {
   require_command rsync
   trap restore_web_env_files EXIT
   clear_intexuraos_env
-  export_web_safe_secrets
+  export INTEXURAOS_ENVIRONMENT=prod
   export_web_service_urls
   build_and_publish
 

@@ -136,12 +136,13 @@ output "hetzner_edge_auth_contract" {
 output "cutover_activation_contract" {
   description = "Required activation order for the additive Hetzner-targeted async/control-plane resources."
   value = {
-    step_name = "pause-old-cloud-run-async-consumers-before-hetzner-activation"
+    step_name = "disable-old-cloud-run-async-consumers-before-hetzner-activation"
     order = [
       "apply this root with activate_hetzner_async_consumers=false to create staged Hetzner resources: Pub/Sub pushes use the staging filter and Scheduler jobs are paused",
       "verify the Hetzner edge auth/routing contract for every /internal/* path",
       "coordinate terraform/environments/dev ownership before changing the old Cloud Run consumers so later dev-root applies cannot recreate or unpause them",
-      "quiesce async publishers/traffic, then pause, detach, or remove the listed Cloud Run-targeted subscriptions and scheduler jobs",
+      "quiesce async publishers/traffic, then clear push config, detach, delete, or gate the listed Cloud Run-targeted Pub/Sub subscriptions",
+      "pause or remove the listed old app-targeted Cloud Scheduler jobs",
       "activate DNS / traffic cutover so https://intexuraos.cloud reaches the Hetzner edge while staged async consumers remain inactive",
       "apply this root with activate_hetzner_async_consumers=true; Pub/Sub subscriptions are replaced because filters are immutable, and Scheduler jobs are unpaused",
       "resume async publishers/traffic after the active apply completes",
@@ -153,7 +154,7 @@ output "cutover_old_root_ownership_contract" {
   description = "State-ownership guard for legacy Cloud Run consumers managed outside this root."
   value = {
     old_root                   = "terraform/environments/dev"
-    required_control           = "remove, gate, import-away, or operationally freeze old Cloud Run-targeted Pub/Sub/Scheduler resources in the old root before pausing, deleting, or detaching them"
+    required_control           = "coordinate old-root ownership before clearing push config, detaching, deleting, or gating old Cloud Run-targeted Pub/Sub subscriptions, and before pausing or removing old app-targeted Scheduler jobs"
     reapply_risk               = "a later apply of terraform/environments/dev can recreate or unpause old Cloud Run async consumers unless that root is coordinated first"
     retained_gcp_transcription = "do not pause or remove the retained audio-stored -> transcription Cloud Function subscription as part of the Cloud Run consumer cleanup"
   }
@@ -171,7 +172,7 @@ output "hetzner_staging_controls" {
 }
 
 output "cutover_cloud_run_subscriptions_to_pause_or_remove" {
-  description = "Existing Cloud Run-targeted push subscriptions to pause, detach, or remove during the named cutover step to prevent duplicate processing."
+  description = "Existing Cloud Run-targeted push subscriptions to clear push config, detach, delete, or gate during cutover to prevent duplicate processing. Pub/Sub subscriptions do not support pause."
   value = [
     "intexuraos-whatsapp-send-${var.source_environment}-push",
     "intexuraos-whatsapp-media-cleanup-${var.source_environment}-push",

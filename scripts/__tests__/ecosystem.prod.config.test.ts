@@ -1,4 +1,6 @@
 import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -7,6 +9,7 @@ interface ProdAppSummary {
   cwd: string;
   args: string[];
   env: Record<string, string | undefined>;
+  filter_env?: string[];
 }
 
 interface ProdConfigSummary {
@@ -73,6 +76,7 @@ function loadProdConfig(env: Record<string, string | undefined> = PROD_ENV): Pro
             cwd: app.cwd,
             args: app.args,
             env: app.env,
+            filter_env: app.filter_env,
           })),
         }));
       `,
@@ -138,13 +142,111 @@ describe('ecosystem.config.prod.cjs', () => {
       expect(app.env.INTEXURAOS_ENVIRONMENT, app.name).toBe('prod');
       expect(app.env.INTEXURAOS_RUNTIME, app.name).toBe('prod');
       expect(app.env.NODE_ENV, app.name).toBe('production');
-      expect(app.env.GOOGLE_APPLICATION_CREDENTIALS, app.name).toBe('/home/deploy/sa-key.json');
+      expect(app.env.GOOGLE_APPLICATION_CREDENTIALS, app.name).toBe(
+        '/home/deploy/runtime-sa-key.json'
+      );
+      expect(app.filter_env, app.name).toContain('INTEXURAOS_');
+      expect(app.filter_env, app.name).toContain('GOOGLE_APPLICATION_CREDENTIALS');
+      expect(app.filter_env, app.name).toContain(
+        'HETZNER_PROVISIONER_GOOGLE_APPLICATION_CREDENTIALS'
+      );
+      expect(app.filter_env, app.name).toContain('CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE');
       expect(app.env.PUBSUB_EMULATOR_HOST, app.name).toBeUndefined();
       expect(app.env.INTEXURAOS_GITHUB_APP_PRIVATE_KEY, app.name).toBeUndefined();
       expect(app.env.INTEXURAOS_LINEAR_API_KEY, app.name).toBeUndefined();
       expect(app.env.INTEXURAOS_MINIMAX_APP_API_KEY, app.name).toBeUndefined();
       expect(app.env.INTEXURAOS_SENTRY_AUTH_TOKEN, app.name).toBeUndefined();
       expect(app.env.INTEXURAOS_SSL_PRIVATE_KEY, app.name).toBeUndefined();
+    }
+  });
+
+  it('parses the prod env file without mutating the launcher process environment', () => {
+    const tempDir = mkdtempSync(resolve(tmpdir(), 'intexuraos-prod-env-'));
+    const envFile = resolve(tempDir, '.env.prod');
+
+    try {
+      writeFileSync(
+        envFile,
+        [
+          'INTEXURAOS_ENVIRONMENT="prod"',
+          'GOOGLE_APPLICATION_CREDENTIALS="/home/deploy/runtime-sa-key.json"',
+          'INTEXURAOS_INTERNAL_AUTH_TOKEN="from-env-file"',
+          'INTEXURAOS_WHATSAPP_ACCESS_TOKEN="from-env-file"',
+        ].join('\n')
+      );
+
+      const stdout = execFileSync(
+        process.execPath,
+        [
+          '-e',
+          `
+            const config = require('./ecosystem.config.prod.cjs');
+            const whatsapp = config.apps.find((app) => app.name === 'whatsapp-service');
+            process.stdout.write(JSON.stringify({
+              processSecret: process.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN ?? null,
+              appSecret: whatsapp.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN,
+            }));
+          `,
+        ],
+        {
+          cwd: process.cwd(),
+          env: {
+            HOME: '/home/deploy',
+            PATH: process.env.PATH ?? '',
+            INTEXURAOS_PROD_ENV_FILE: envFile,
+          },
+        }
+      );
+
+      expect(JSON.parse(stdout.toString())).toEqual({
+        processSecret: null,
+        appSecret: 'from-env-file',
+      });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('prefers the prod env file over launcher credential and secret overrides', () => {
+    const tempDir = mkdtempSync(resolve(tmpdir(), 'intexuraos-prod-env-'));
+    const envFile = resolve(tempDir, '.env.prod');
+
+    try {
+      writeFileSync(
+        envFile,
+        [
+          'INTEXURAOS_ENVIRONMENT="prod"',
+          'GOOGLE_APPLICATION_CREDENTIALS="/home/deploy/runtime-sa-key.json"',
+          'INTEXURAOS_INTERNAL_AUTH_TOKEN="runtime-token"',
+          'INTEXURAOS_WHATSAPP_ACCESS_TOKEN="runtime-whatsapp-token"',
+        ].join('\n')
+      );
+
+      const config = loadProdConfig({
+        HOME: '/home/deploy',
+        PATH: process.env.PATH ?? '',
+        INTEXURAOS_PROD_ENV_FILE: envFile,
+        GOOGLE_APPLICATION_CREDENTIALS: '/home/deploy/provisioner-sa-key.json',
+        HETZNER_PROVISIONER_GOOGLE_APPLICATION_CREDENTIALS: '/home/deploy/provisioner-sa-key.json',
+        CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: '/home/deploy/provisioner-sa-key.json',
+        INTEXURAOS_WHATSAPP_ACCESS_TOKEN: 'launcher-whatsapp-token',
+      });
+      const byName = new Map(config.apps.map((app) => [app.name, app]));
+
+      expect(byName.get('whatsapp-service')?.env.GOOGLE_APPLICATION_CREDENTIALS).toBe(
+        '/home/deploy/runtime-sa-key.json'
+      );
+      expect(byName.get('whatsapp-service')?.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN).toBe(
+        'runtime-whatsapp-token'
+      );
+      expect(
+        byName.get('whatsapp-service')?.env.HETZNER_PROVISIONER_GOOGLE_APPLICATION_CREDENTIALS
+      ).toBeUndefined();
+      expect(
+        byName.get('whatsapp-service')?.env.CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE
+      ).toBeUndefined();
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
     }
   });
 

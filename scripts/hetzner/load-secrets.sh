@@ -6,7 +6,8 @@ IFS=$'\n\t'
 PROJECT_ID="${PROJECT_ID:-intexuraos-dev-pbuchman}"
 REGION="${REGION:-europe-central2}"
 OUTPUT_FILE="${OUTPUT_FILE:-/etc/intexuraos/.env.prod}"
-SA_KEY_FILE="${GOOGLE_APPLICATION_CREDENTIALS:-/home/deploy/sa-key.json}"
+PROVISIONER_SA_KEY_FILE="${PROVISIONER_SA_KEY_FILE:-${GOOGLE_APPLICATION_CREDENTIALS:-/home/deploy/provisioner-sa-key.json}}"
+RUNTIME_SA_KEY_FILE="${RUNTIME_SA_KEY_FILE:-/home/deploy/runtime-sa-key.json}"
 INTERNAL_AUTH_TOKEN_FILE="${INTERNAL_AUTH_TOKEN_FILE:-/etc/intexuraos/internal-auth-token}"
 PUBLIC_ORIGIN="${PUBLIC_ORIGIN:-https://intexuraos.cloud}"
 DEPLOY_USER="${DEPLOY_USER:-deploy}"
@@ -158,7 +159,8 @@ HEADER
   write_env_line "${output_path}" "GOOGLE_CLOUD_PROJECT" "${PROJECT_ID}"
   write_env_line "${output_path}" "PROJECT_ID" "${PROJECT_ID}"
   write_env_line "${output_path}" "REGION" "${REGION}"
-  write_env_line "${output_path}" "GOOGLE_APPLICATION_CREDENTIALS" "${SA_KEY_FILE}"
+  write_env_line "${output_path}" "HETZNER_PROVISIONER_GOOGLE_APPLICATION_CREDENTIALS" "${PROVISIONER_SA_KEY_FILE}"
+  write_env_line "${output_path}" "GOOGLE_APPLICATION_CREDENTIALS" "${RUNTIME_SA_KEY_FILE}"
   write_env_line "${output_path}" "INTEXURAOS_PUBLIC_ORIGIN" "${PUBLIC_ORIGIN}"
   write_env_line "${output_path}" "INTEXURAOS_WEB_APP_URL" "${PUBLIC_ORIGIN}"
   write_env_line "${output_path}" "INTEXURAOS_WEB_URL" "${PUBLIC_ORIGIN}"
@@ -217,8 +219,8 @@ main() {
   command -v base64 >/dev/null 2>&1 || fail "base64 is required"
   id -u "${DEPLOY_USER}" >/dev/null 2>&1 || fail "Deploy user ${DEPLOY_USER} is required"
 
-  if [[ -r "${SA_KEY_FILE}" ]]; then
-    export CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${SA_KEY_FILE}"
+  if [[ -r "${PROVISIONER_SA_KEY_FILE}" ]]; then
+    export CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${PROVISIONER_SA_KEY_FILE}"
   fi
 
   umask 077

@@ -6,7 +6,7 @@ IFS=$'\n\t'
 DOMAIN="${DOMAIN:-intexuraos.cloud}"
 ENV_FILE="${ENV_FILE:-/etc/intexuraos/.env.prod}"
 PROJECT_ID="${PROJECT_ID:-intexuraos-dev-pbuchman}"
-SA_KEY_FILE="${SA_KEY_FILE:-/home/deploy/sa-key.json}"
+SA_KEY_FILE="${SA_KEY_FILE:-${GOOGLE_APPLICATION_CREDENTIALS:-/home/deploy/provisioner-sa-key.json}}"
 CLOUDFLARE_CREDENTIALS_FILE="${CLOUDFLARE_CREDENTIALS_FILE:-/etc/letsencrypt/cloudflare.ini}"
 CLOUDFLARE_DNS_API_TOKEN_SECRET="${CLOUDFLARE_DNS_API_TOKEN_SECRET:-INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN}"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
@@ -107,9 +107,35 @@ read_env_value() {
 
   [[ -f "${ENV_FILE}" ]] || fail "Env file not found: ${ENV_FILE}. Run scripts/hetzner/load-secrets.sh first."
 
-  value="$(sed -n "s/^${key}=//p" "${ENV_FILE}" | head -n 1)"
-  value="${value%\"}"
-  value="${value#\"}"
+  value="$(node -e '
+    const { readFileSync } = require("node:fs");
+    const key = process.argv[1];
+    const envFile = process.argv[2];
+    const lines = readFileSync(envFile, "utf8").split(/\r?\n/);
+
+    function unquote(value) {
+      if (value.length >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+        return value
+          .slice(1, -1)
+          .replace(/\\n/g, "\n")
+          .replace(/\\r/g, "\r")
+          .replace(/\\"/g, "\"")
+          .replace(/\\\\/g, "\\");
+      }
+      return value;
+    }
+
+    for (const line of lines) {
+      if (line === "" || line.startsWith("#")) continue;
+      const index = line.indexOf("=");
+      if (index === -1) continue;
+      if (line.slice(0, index) === key) {
+        process.stdout.write(unquote(line.slice(index + 1)));
+        process.exit(0);
+      }
+    }
+  ' "${key}" "${ENV_FILE}")"
+
   printf '%s' "${value}"
 }
 
@@ -119,7 +145,10 @@ configure_gcloud_credentials() {
 
   if [[ -f "${ENV_FILE}" ]]; then
     env_project_id="$(read_env_value "PROJECT_ID")"
-    env_sa_key_file="$(read_env_value "GOOGLE_APPLICATION_CREDENTIALS")"
+    env_sa_key_file="$(read_env_value "HETZNER_PROVISIONER_GOOGLE_APPLICATION_CREDENTIALS")"
+    if [[ -z "${env_sa_key_file}" ]]; then
+      env_sa_key_file="$(read_env_value "GOOGLE_APPLICATION_CREDENTIALS")"
+    fi
     [[ -n "${env_project_id}" ]] && PROJECT_ID="${env_project_id}"
     [[ -n "${env_sa_key_file}" ]] && SA_KEY_FILE="${env_sa_key_file}"
   fi
