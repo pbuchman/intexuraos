@@ -7,6 +7,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { FishingDigestList } from '../FishingDigestList.js';
 import { FishingChatPanel } from '../FishingChatPanel.js';
+import { FishingReferencesPanel } from '../FishingReferencesPanel.js';
 import { FishingKnowledgeTree } from '../FishingKnowledgeTree.js';
 import { FishingPageEditor } from '../FishingPageEditor.js';
 import type {
@@ -58,6 +59,9 @@ describe('Fishing responsive layout contracts', () => {
       </MemoryRouter>
     );
 
+    expect(screen.getByTestId('fishing-chat-panel')).toHaveClass(
+      'grid-cols-[minmax(0,1fr)]'
+    );
     const bubble = screen.getByTestId('fishing-chat-message-message-long');
     expect(bubble).toHaveClass('min-w-0', 'max-w-full', 'overflow-hidden');
     expect(bubble).toHaveClass('ring-2', 'ring-blue-500');
@@ -70,6 +74,35 @@ describe('Fishing responsive layout contracts', () => {
 
     bubble.click();
     expect(onSelectMessage).toHaveBeenCalledWith(assistantMessage.id);
+  });
+
+  it('contains long reference metadata inside the references panel', () => {
+    render(
+      <MemoryRouter>
+        <FishingReferencesPanel
+          citations={[
+            {
+              sourceId: 'chunk-long',
+              sourceType: 'knowledge_page',
+              title: 'VeryLongKnowledgePageTitleThatShouldStayInsideTheReferencePanel',
+              quote: 'VeryLongQuoteTextThatShouldStayInsideTheExpandedReferencePanel',
+              usedFor: 'VeryLongUsageReasonThatShouldStayInsideTheReferencePanel',
+              url: '/fishing-assistant/knowledge/pages/page-1',
+              pageId: 'page-1',
+            },
+          ]}
+        />
+      </MemoryRouter>
+    );
+
+    const card = screen.getByRole('heading', { name: /references/i }).parentElement;
+    expect(card).toHaveClass('min-w-0', 'overflow-hidden');
+
+    const button = screen.getByRole('button', {
+      name: /knowledge base verylongknowledgepagetitlethatshouldstay/i,
+    });
+    expect(button.parentElement).toHaveClass('min-w-0', 'overflow-hidden');
+    expect(button.firstElementChild).toHaveClass('min-w-0', 'flex-1');
   });
 
   it('keeps digest rows stackable on narrow screens', () => {
