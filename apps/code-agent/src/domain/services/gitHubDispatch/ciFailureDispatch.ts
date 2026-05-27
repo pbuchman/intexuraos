@@ -1,5 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { PromptBuilder } from '@intexuraos/llm-prompts';
+import type { CreateTaskInput } from '../../repositories/codeTaskRepository.js';
+import { generateWebhookSecret } from '../../utils/secrets.js';
 import type {
   CIFailureDispatchContext,
   CIFailureDispatchResult,
@@ -103,25 +106,10 @@ export async function executeCIFailureDispatch(
     });
 
     // Create follow-up task
-    const createInput: {
-      id?: string;
-      userId: string;
-      prompt: string;
-      sanitizedPrompt: string;
-      systemPromptHash: string;
-      workerType: typeof originalTask.workerType;
-      workerLocation: string;
-      repository: string;
-      baseBranch: string;
-      traceId: string;
-      parentTaskId: string;
-      followUpReason: 'ci_failure';
-      agentType: 'pull_request';
-      initialStatus: 'queued';
-      prNumber: number;
-      prBranch?: string;
-      linearIssueId?: string;
-    } = {
+    const taskId = `task_${randomUUID()}`;
+    const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, taskId);
+    const createInput: CreateTaskInput = {
+      id: taskId,
       userId: originalTask.userId,
       prompt: fixPrompt,
       sanitizedPrompt: fixPrompt,
@@ -136,6 +124,7 @@ export async function executeCIFailureDispatch(
       agentType: 'pull_request',
       initialStatus: 'queued',
       prNumber: event.pullRequestNumber,
+      webhookSecret,
       ...(event.baseBranch !== null && { prBranch: event.baseBranch }),
       ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
     };
