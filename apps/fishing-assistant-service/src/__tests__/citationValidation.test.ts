@@ -14,6 +14,18 @@ const EVIDENCE = [
   },
 ];
 
+const DIGEST_EVIDENCE = [
+  {
+    id: 'digest:feeder:2026-05-01',
+    sourceType: 'digest' as const,
+    title: 'May 1 digest',
+    text: 'Members reported pinka.',
+    quote: 'Members reported pinka.',
+    score: 0.8,
+    metadata: { groupKey: 'feeder' },
+  },
+];
+
 describe('Fishing Assistant citation validation', () => {
   it('parses fenced JSON and accepts known citation ids', () => {
     const parsed = parseFishingAnswer(
@@ -53,7 +65,42 @@ describe('Fishing Assistant citation validation', () => {
         citations: [],
         confidence: 'low',
       },
-      EVIDENCE
+      EVIDENCE,
+      { requireKnowledgeBaseCitation: true }
+    );
+
+    expect(validated.ok).toBe(true);
+  });
+
+  it('rejects support-only citations when knowledge-base evidence is available', () => {
+    const validated = validateCitations(
+      {
+        answerMarkdown: 'Use pinka.',
+        citations: [{ sourceId: 'digest:feeder:2026-05-01', usedFor: 'supporting report' }],
+        confidence: 'medium',
+      },
+      [...EVIDENCE, ...DIGEST_EVIDENCE],
+      { requireKnowledgeBaseCitation: true }
+    );
+
+    expect(validated).toEqual({
+      ok: false,
+      error: {
+        code: 'CITATION_VALIDATION_FAILED',
+        message: 'Fishing Assistant answers must cite at least one knowledge-base source.',
+      },
+    });
+  });
+
+  it('accepts support-only citations when no knowledge-base evidence is available', () => {
+    const validated = validateCitations(
+      {
+        answerMarkdown: 'Use pinka.',
+        citations: [{ sourceId: 'digest:feeder:2026-05-01', usedFor: 'supporting report' }],
+        confidence: 'medium',
+      },
+      DIGEST_EVIDENCE,
+      { requireKnowledgeBaseCitation: true }
     );
 
     expect(validated.ok).toBe(true);

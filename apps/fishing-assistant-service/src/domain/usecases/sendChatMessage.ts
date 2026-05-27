@@ -167,6 +167,9 @@ async function generateValidatedAnswer(input: {
   }
 
   const parsed = parseFishingAnswer(first.value.content);
+  const requireKnowledgeBaseCitation = input.evidence.some(
+    (item) => item.sourceType === 'knowledge_page'
+  );
   let repairReason = parsed.ok
     ? 'Fishing Assistant response failed citation validation.'
     : parsed.error.message;
@@ -176,7 +179,8 @@ async function generateValidatedAnswer(input: {
         ...parsed.value,
         citations: remapCitationAliases(parsed.value.citations, input.sourceIdAliases),
       },
-      input.evidence
+      input.evidence,
+      { requireKnowledgeBaseCitation }
     );
     if (validated.ok) {
       return ok({
@@ -218,7 +222,8 @@ async function generateValidatedAnswer(input: {
       ...reparsed.value,
       citations: remapCitationAliases(reparsed.value.citations, input.sourceIdAliases),
     },
-    input.evidence
+    input.evidence,
+    { requireKnowledgeBaseCitation }
   );
   if (!revalidated.ok) {
     return revalidated;
