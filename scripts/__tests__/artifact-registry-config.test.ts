@@ -22,7 +22,7 @@ describe('artifact registry prevention config', () => {
   it('gives the standalone code-worker Cloud Build extra time for multi-arch export and push', () => {
     const codeWorkerCloudBuild = readRepoFile('docker/code-worker/cloudbuild.yaml');
 
-    expect(codeWorkerCloudBuild).toContain("timeout: '900s'");
+    expect(codeWorkerCloudBuild).toContain('timeout: "3600s"');
   });
 
   it('defines active delete cleanup policies and aggressive env retention settings', () => {

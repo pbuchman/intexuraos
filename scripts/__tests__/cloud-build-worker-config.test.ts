@@ -45,4 +45,11 @@ describe('Cloud Build worker configuration', () => {
     expect(transcriptionCloudBuild).toContain('corepack prepare pnpm@10 --activate');
     expect(vmLifecycleCloudBuild).toContain('corepack prepare pnpm@10 --activate');
   });
+
+  it('gives the code-worker multi-arch image rebuild enough Cloud Build time', () => {
+    const codeWorkerCloudBuild = readRepoFile('docker/code-worker/cloudbuild.yaml');
+
+    expect(codeWorkerCloudBuild).toContain('timeout: "3600s"');
+    expect(codeWorkerCloudBuild).toContain('multi-arch scheduled image rebuild');
+  });
 });
