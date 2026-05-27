@@ -78,13 +78,13 @@ export function FishingReferencesPanel({
   };
 
   return (
-    <Card title="References" className="h-full">
+    <Card title="References" className="h-full min-w-0 overflow-hidden">
       {citations.length === 0 ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">
           Select an assistant answer to inspect its evidence.
         </p>
       ) : (
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
           {citations.map((citation, index) => {
             const referenceKey = `${citation.sourceId}-${citation.usedFor}-${String(index)}`;
             const isExpanded = expanded[referenceKey] === true;
@@ -92,7 +92,7 @@ export function FishingReferencesPanel({
             return (
               <div
                 key={referenceKey}
-                className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/40"
+                className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/40"
               >
                 <button
                   type="button"
@@ -102,9 +102,9 @@ export function FishingReferencesPanel({
                   }}
                   className="flex w-full min-w-0 items-center justify-between gap-3 p-3 text-left"
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    {sourceIcon(citation.sourceType)}
-                    <span className="min-w-0">
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                    <span className="shrink-0">{sourceIcon(citation.sourceType)}</span>
+                    <span className="min-w-0 flex-1">
                       <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                         {sourceLabel(citation.sourceType)}
                       </span>
