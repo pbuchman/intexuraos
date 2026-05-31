@@ -12,6 +12,8 @@ module "pubsub_pr_triage" {
   topic_name     = "intexuraos-pr-triage-${var.environment}"
   labels         = local.common_labels
 
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
+
   push_endpoint              = "${module.code_agent.service_url}/internal/code/pubsub/pr-triage"
   push_service_account_email = module.iam.service_accounts["code_agent"]
   push_audience              = module.code_agent.service_url

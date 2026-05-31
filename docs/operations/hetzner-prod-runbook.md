@@ -203,10 +203,16 @@ reported no changes.
 
 ## Async Edge Cutover
 
-The retained GCP Pub/Sub push subscriptions and Cloud Scheduler jobs are
-staged in the separate Hetzner production Terraform root. The existing
-`terraform/environments/dev` root remains the retained GCP source of truth and
-does not carry a Hetzner edge toggle.
+The retained GCP Pub/Sub topics and Hetzner-targeted Cloud Scheduler jobs are
+managed in the separate Hetzner production Terraform root. The existing
+`terraform/environments/dev` root remains the retained GCP source of truth for
+old Cloud Run consumers and does not carry a Hetzner edge toggle.
+
+After async activation, `terraform/hetzner-prod/prod.auto.tfvars.json` keeps
+`activate_hetzner_async_consumers=true`. A plain
+`terraform -chdir=terraform/hetzner-prod apply` must preserve the active
+Hetzner subscriptions and enabled Hetzner scheduler jobs. Override the variable
+to `false` only for an intentional staged rebuild or rollback.
 
 Before DNS cutover, create the staged Hetzner subscriptions and Scheduler jobs
 with Pub/Sub filters active and Scheduler jobs paused:
@@ -241,8 +247,10 @@ This creates Hetzner-targeted Pub/Sub push subscriptions and Cloud Scheduler
 HTTP jobs at `https://intexuraos.cloud/internal/*` with OIDC audience
 `https://intexuraos.cloud`, matching `jwt-verify.lua`. The first apply keeps
 the new Pub/Sub subscriptions behind the staging filter and keeps new Scheduler
-jobs paused. The second apply activates them; review duplicate-processing risk
-before running it. The `scripts/hetzner/cutover-gcp-edge.sh` helper prints the
+jobs paused. The second apply activates them; after activation, keep
+`activate_hetzner_async_consumers=true` in `prod.auto.tfvars.json` so future
+plain applies remain active. Review duplicate-processing risk before running
+the activation. The `scripts/hetzner/cutover-gcp-edge.sh` helper prints the
 equivalent `gcloud` updates for audit or emergency use, but Terraform is the
 source of truth.
 

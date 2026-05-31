@@ -81,6 +81,12 @@ variable "enable_load_balancer" {
   default     = false
 }
 
+variable "enable_legacy_cloud_run_async_consumers" {
+  description = "Keep legacy Cloud Run-targeted Pub/Sub pushes and app Scheduler jobs active. Disable after Hetzner async cutover."
+  type        = bool
+  default     = false
+}
+
 variable "web_app_domain" {
   description = "Domain name for the web app"
   type        = string
@@ -752,10 +758,11 @@ locals {
 module "pubsub_media_cleanup" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-whatsapp-media-cleanup-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-whatsapp-media-cleanup-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
   push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/media-cleanup"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
@@ -777,10 +784,11 @@ module "pubsub_media_cleanup" {
 module "pubsub_whatsapp_webhook_process" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-whatsapp-webhook-process-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-whatsapp-webhook-process-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
   push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/process-webhook"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
@@ -802,10 +810,11 @@ module "pubsub_whatsapp_webhook_process" {
 module "pubsub_srt_transcription_completed" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-srt-transcription-completed-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-srt-transcription-completed-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
   push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcription-completed"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
@@ -897,10 +906,11 @@ resource "google_pubsub_subscription" "transcription_dlq_inspect" {
 module "pubsub_commands_ingest" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-commands-ingest-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-commands-ingest-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
   push_endpoint              = "${module.commands_agent.service_url}/internal/commands"
   push_service_account_email = module.iam.service_accounts["commands_agent"]
@@ -921,10 +931,11 @@ module "pubsub_commands_ingest" {
 module "pubsub_actions_queue" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-actions-queue-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-actions-queue-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
   push_endpoint              = "${module.actions_agent.service_url}/internal/actions/process"
   push_service_account_email = module.iam.service_accounts["actions_agent"]
@@ -946,10 +957,11 @@ module "pubsub_actions_queue" {
 module "pubsub_research_process" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-research-process-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-research-process-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
   push_endpoint              = "${module.research_agent.service_url}/internal/llm/pubsub/process-research"
   push_service_account_email = module.iam.service_accounts["research_agent"]
@@ -971,10 +983,11 @@ module "pubsub_research_process" {
 module "pubsub_llm_analytics" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-llm-analytics-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-llm-analytics-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
   push_endpoint              = "${module.research_agent.service_url}/internal/llm/pubsub/report-analytics"
   push_service_account_email = module.iam.service_accounts["research_agent"]
@@ -996,10 +1009,11 @@ module "pubsub_llm_analytics" {
 module "pubsub_llm_call" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-llm-call-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-llm-call-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
   push_endpoint              = "${module.research_agent.service_url}/internal/llm/pubsub/process-llm-call"
   push_service_account_email = module.iam.service_accounts["research_agent"]
@@ -1021,10 +1035,11 @@ module "pubsub_llm_call" {
 module "pubsub_whatsapp_send" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-whatsapp-send-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-whatsapp-send-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
   push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/send-message"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
@@ -1048,10 +1063,11 @@ module "pubsub_whatsapp_send" {
 module "pubsub_approval_reply" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-approval-reply-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-approval-reply-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
   push_endpoint              = "${module.actions_agent.service_url}/internal/actions/approval-reply"
   push_service_account_email = module.iam.service_accounts["actions_agent"]
@@ -1265,6 +1281,7 @@ resource "google_cloud_scheduler_job" "mobile_notifications_digest_yesterday" {
   schedule    = "0 1 * * *"
   time_zone   = "UTC"
   region      = var.region
+  paused      = !var.enable_legacy_cloud_run_async_consumers
 
   http_target {
     http_method = "POST"
@@ -1578,10 +1595,11 @@ module "bookmarks_agent" {
 module "pubsub_bookmark_enrich" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-bookmark-enrich-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-bookmark-enrich-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
   push_endpoint              = "${module.bookmarks_agent.service_url}/internal/bookmarks/pubsub/enrich"
   push_service_account_email = module.iam.service_accounts["bookmarks_agent"]
@@ -1603,10 +1621,11 @@ module "pubsub_bookmark_enrich" {
 module "pubsub_bookmark_summarize" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-bookmark-summarize-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-bookmark-summarize-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
   push_endpoint              = "${module.bookmarks_agent.service_url}/internal/bookmarks/pubsub/summarize"
   push_service_account_email = module.iam.service_accounts["bookmarks_agent"]
@@ -1633,10 +1652,11 @@ module "pubsub_bookmark_summarize" {
 module "pubsub_todos_processing" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-todos-processing-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-todos-processing-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
   push_endpoint              = "${module.todos_agent.service_url}/internal/todos/pubsub/todos-processing"
   push_service_account_email = module.iam.service_accounts["todos_agent"]
@@ -1658,10 +1678,11 @@ module "pubsub_todos_processing" {
 module "pubsub_calendar_preview" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-calendar-preview-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-calendar-preview-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
   push_endpoint              = "${module.calendar_agent.service_url}/internal/calendar/generate-preview"
   push_service_account_email = module.iam.service_accounts["calendar_agent"]
@@ -1823,6 +1844,7 @@ resource "google_cloud_scheduler_job" "linear_sync_hourly" {
   schedule    = "0 * * * *"
   time_zone   = "UTC"
   region      = var.region
+  paused      = !var.enable_legacy_cloud_run_async_consumers
 
   http_target {
     http_method = "POST"
@@ -1854,6 +1876,7 @@ resource "google_cloud_scheduler_job" "linear_issues_prune_hourly" {
   schedule    = "30 * * * *"
   time_zone   = "UTC"
   region      = var.region
+  paused      = !var.enable_legacy_cloud_run_async_consumers
 
   http_target {
     http_method = "POST"
@@ -2038,6 +2061,7 @@ resource "google_cloud_scheduler_job" "cron_agent_tick" {
   schedule    = "*/1 * * * *"
   time_zone   = "UTC"
   region      = var.region
+  paused      = !var.enable_legacy_cloud_run_async_consumers
 
   http_target {
     http_method = "POST"
@@ -2152,6 +2176,7 @@ resource "google_cloud_scheduler_job" "retry_pending_commands" {
   schedule    = "*/5 * * * *"
   time_zone   = "UTC"
   region      = var.region
+  paused      = !var.enable_legacy_cloud_run_async_consumers
 
   http_target {
     http_method = "POST"
@@ -2197,6 +2222,7 @@ resource "google_cloud_scheduler_job" "retry_pending_actions" {
   schedule    = "*/5 * * * *"
   time_zone   = "UTC"
   region      = var.region
+  paused      = !var.enable_legacy_cloud_run_async_consumers
 
   http_target {
     http_method = "POST"
@@ -2242,6 +2268,7 @@ resource "google_cloud_scheduler_job" "drain_task_queue" {
   schedule    = "*/1 * * * *"
   time_zone   = "UTC"
   region      = var.region
+  paused      = !var.enable_legacy_cloud_run_async_consumers
 
   http_target {
     http_method = "POST"
@@ -2270,6 +2297,7 @@ resource "google_cloud_scheduler_job" "merge_conflict_reconcile" {
   schedule    = "*/1 * * * *"
   time_zone   = "UTC"
   region      = var.region
+  paused      = !var.enable_legacy_cloud_run_async_consumers
 
   http_target {
     http_method = "POST"
@@ -2300,6 +2328,7 @@ resource "google_cloud_scheduler_job" "merge_queue_tick" {
   schedule    = "*/1 * * * *"
   time_zone   = "UTC"
   region      = var.region
+  paused      = !var.enable_legacy_cloud_run_async_consumers
 
   http_target {
     http_method = "POST"
@@ -2328,6 +2357,7 @@ resource "google_cloud_scheduler_job" "code_tasks_zombie_sweep" {
   schedule    = "*/5 * * * *"
   time_zone   = "UTC"
   region      = var.region
+  paused      = !var.enable_legacy_cloud_run_async_consumers
 
   http_target {
     http_method = "POST"
@@ -2364,6 +2394,7 @@ resource "google_cloud_scheduler_job" "archive_stale_groups" {
   schedule    = "0 * * * *"
   time_zone   = "UTC"
   region      = var.region
+  paused      = !var.enable_legacy_cloud_run_async_consumers
 
   http_target {
     http_method = "POST"
@@ -2399,6 +2430,7 @@ resource "google_cloud_scheduler_job" "auto_archive_merged_tasks" {
   schedule    = "0 4 * * *"
   time_zone   = "UTC"
   region      = var.region
+  paused      = !var.enable_legacy_cloud_run_async_consumers
 
   http_target {
     http_method = "POST"
@@ -2434,6 +2466,7 @@ resource "google_cloud_scheduler_job" "execution_memory_process" {
   schedule    = "*/5 * * * *"
   time_zone   = "UTC"
   region      = var.region
+  paused      = !var.enable_legacy_cloud_run_async_consumers
 
   http_target {
     http_method = "POST"
@@ -2469,6 +2502,7 @@ resource "google_cloud_scheduler_job" "execution_memory_sweep_errored" {
   schedule    = "0 */6 * * *"
   time_zone   = "UTC"
   region      = var.region
+  paused      = !var.enable_legacy_cloud_run_async_consumers
 
   http_target {
     http_method = "POST"
@@ -2504,6 +2538,7 @@ resource "google_cloud_scheduler_job" "execution_memory_prune_stale" {
   schedule    = "0 3 * * 0"
   time_zone   = "UTC"
   region      = var.region
+  paused      = !var.enable_legacy_cloud_run_async_consumers
 
   http_target {
     http_method = "POST"
@@ -2858,10 +2893,11 @@ resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn" {
 module "pubsub_transcription_completed" {
   source = "../../modules/pubsub-push"
 
-  project_id     = var.project_id
-  project_number = local.project_number
-  topic_name     = "intexuraos-transcription-completed-${var.environment}"
-  labels         = local.common_labels
+  project_id               = var.project_id
+  project_number           = local.project_number
+  topic_name               = "intexuraos-transcription-completed-${var.environment}"
+  labels                   = local.common_labels
+  enable_push_subscription = var.enable_legacy_cloud_run_async_consumers
 
   push_endpoint              = "${module.whatsapp_service.service_url}/internal/whatsapp/pubsub/transcription-completed"
   push_service_account_email = module.iam.service_accounts["whatsapp_service"]
