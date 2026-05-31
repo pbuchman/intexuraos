@@ -7,6 +7,8 @@ Parent issue: INT-1632
 This document is the integration-level operator plan for the Hetzner migration
 PR. It consolidates INT-1633, INT-1634, INT-1635, and INT-1636 into one
 replacement pull request. Do not execute migration or DNS cutover without explicit approval from the operator.
+The operator approved the Terraform Hetzner VM rebuild verification on
+2026-05-31; DNS cutover and async activation still require explicit approval.
 
 ## Superseded PRs
 
@@ -111,32 +113,40 @@ pnpm run ci:tracked
 ```
 
 When planning real infrastructure, clear emulator variables and use an
-explicit service account credential:
+explicit service account credential. `terraform/hetzner-prod/prod.auto.tfvars.json`
+is the committed non-secret Hetzner environment file, and Terraform loads it
+automatically:
 
 ```bash
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
-terraform -chdir=terraform/hetzner-prod plan \
-  -var-file=terraform.tfvars \
-  -var='activate_hetzner_async_consumers=false'
+terraform -chdir=terraform/hetzner-prod plan
 ```
 
-Do not apply this plan during PR preparation unless the operator explicitly
-approves infrastructure changes.
+Required local inputs for this root are `HCLOUD_TOKEN`,
+`~/.ssh/intexuraos_hetzner_deploy`,
+`~/.config/intexuraos/hetzner/provisioner-sa-key.json`, and
+`~/.config/intexuraos/hetzner/runtime-sa-key.json`. Do not apply this plan
+during PR preparation unless the operator explicitly approves infrastructure
+changes.
 
 ## Migration Sequence
 
-1. Apply the Hetzner foundation root with async consumers staged:
+1. Apply the Hetzner root with async consumers staged. With
+   `hetzner_bootstrap_enabled=true`, this creates or recreates the VM and
+   bootstraps the runtime from Terraform:
 
 ```bash
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
-terraform -chdir=terraform/hetzner-prod apply \
-  -var-file=terraform.tfvars \
-  -var='activate_hetzner_async_consumers=false'
+terraform -chdir=terraform/hetzner-prod apply
 ```
 
-2. Provision the VM and load runtime secrets:
+2. Manual VM commands are for repair or emergency operation after Terraform has
+   created the host. Terraform bootstrap already copies
+   `/home/deploy/provisioner-sa-key.json` and
+   `/home/deploy/runtime-sa-key.json`, runs provisioning, loads secrets, builds
+   web assets, starts PM2, and deploys nginx:
 
 ```bash
 cd /opt/intexuraos
@@ -149,40 +159,77 @@ certbot DNS credentials, plus `/home/deploy/runtime-sa-key.json` for PM2 app
 runtime. The provisioner and runtime service accounts are intentionally
 separate.
 
-3. Deploy code, web assets, PM2 processes, and nginx:
+3. If repairing manually, deploy code, web assets, PM2 processes, and nginx:
 
 ```bash
-sudo -iu deploy bash -lc 'cd /opt/intexuraos && pnpm install --frozen-lockfile'
+sudo -iu deploy bash -lc 'cd /opt/intexuraos && CI=true pnpm install --frozen-lockfile'
 sudo -iu deploy bash -lc 'cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-web.sh'
-sudo -iu deploy bash -lc 'cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod pm2 reload ecosystem.config.prod.cjs --update-env && pm2 save'
+sudo -iu deploy bash -lc 'cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh'
 sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh
 ```
 
 4. Smoke test local PM2 ports, nginx `/healthz`, public API routes through a
    host override, retained `/share/*` and `/images/*` routes, and provider
    callbacks.
-5. Freeze app deploys and record rollback values: Cloudflare DNS records, GCP
-   load-balancer IP, provider callback URLs, and old app-targeted Pub/Sub and
-   Scheduler state.
-6. Switch Cloudflare DNS to the Hetzner IP only after approval.
-7. Before activation, disable the old Cloud Run-targeted Pub/Sub push consumers
+5. Freeze app deploys and record rollback values: Cloudflare DNS records, the
+   old GCP load-balancer IP `136.110.232.83`, provider callback URLs, and old
+   app-targeted Pub/Sub and Scheduler state.
+6. Switch Cloudflare DNS to the Hetzner IP `162.55.210.48` only after
+   approval. This production cutover changes Cloudflare DNS/proxy records, not
+   any `cloudflared` tunnel used by orchestrator workers. Set the apex
+   `A intexuraos.cloud` record to `162.55.210.48`, remove the apex `AAAA`
+   record unless IPv6 is intentionally enabled and verified, and preserve the
+   current proxied/DNS-only mode unless the cutover owner changes it. Store a
+   dedicated Cloudflare token with Zone DNS Edit and Zone Read for
+   `intexuraos.cloud` as a new version of
+   `INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN`; do not reuse
+   `INTEXURAOS_CLOUDFLARE_API_TOKEN`.
+7. After DNS is moved to Hetzner, apply `terraform/environments/dev` with
+   `enable_load_balancer=false` to remove only the legacy GCP web load-balancer
+   edge: forwarding rules, target proxies, URL maps, backend buckets, global
+   address, and load-balancer certificate. Retained GCS buckets and Firestore
+   must remain untouched.
+8. Before activation, disable the old Cloud Run-targeted Pub/Sub push consumers
    and pause the old app-targeted Cloud Scheduler jobs in coordination with
    `terraform/environments/dev`. This prevents duplicate processing when
    `activate_hetzner_async_consumers=true` is applied. Do not disable the
    retained audio-stored -> transcription Cloud Function subscription.
-8. Activate async consumers only after `/internal/*` smoke tests pass:
+9. Activate async consumers only after `/internal/*` smoke tests pass:
 
 ```bash
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform -chdir=terraform/hetzner-prod apply \
-  -var-file=terraform.tfvars \
   -var='activate_hetzner_async_consumers=true'
 ```
 
-9. Monitor Pub/Sub delivery, Scheduler executions, nginx access/error logs,
+10. Monitor Pub/Sub delivery, Scheduler executions, nginx access/error logs,
    PM2 status, app health checks, Auth0/Firebase login, GitHub OAuth, Linear
    webhooks, WhatsApp webhook delivery, and Cloudflare cache behavior.
+
+## Executed Terraform Rebuild Check
+
+On 2026-05-31, the required reproducibility check was executed with:
+
+```bash
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+terraform -chdir=terraform/hetzner-prod plan \
+  -replace=hcloud_server.prod \
+  -out=/tmp/hetzner-prod-recreate-final.tfplan
+
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+terraform -chdir=terraform/hetzner-prod apply /tmp/hetzner-prod-recreate-final.tfplan
+```
+
+The apply destroyed Hetzner server `134626820`, created server `134635829`,
+kept primary IPv4 `162.55.210.48`, completed Terraform bootstrap, and left
+`terraform -chdir=terraform/hetzner-prod plan -no-color` with no changes.
+Post-rebuild smoke checks showed 22 PM2 processes online, nginx config valid,
+local `app-settings-service` and `user-service` health checks passing, and
+origin HTTPS checks for `/healthz`, `/api/user/health`, and
+`/api/settings/health` returning HTTP 200 through `--resolve`.
 
 ## Rollback
 
@@ -194,7 +241,10 @@ GCP paths:
 2. Before moving traffic back, restore the old Cloud Run-targeted Pub/Sub push consumers
    and unpause the old app-targeted Cloud Scheduler jobs in `terraform/environments/dev`
    or the recorded operational rollback commands.
-3. Restore Cloudflare DNS records to the recorded GCP load balancer IP.
+3. Restore Cloudflare DNS records to the recorded GCP load balancer IP only if
+   the legacy GCP load balancer is recreated first with
+   `enable_load_balancer=true`; the last recorded IP before teardown was
+   `136.110.232.83`.
 4. Restore provider callbacks and allowlists to recorded rollback values.
 5. Capture nginx logs and PM2 logs from the Hetzner host.
 6. Stop or drain Hetzner PM2 processes only after GCP traffic is verified.

@@ -23,10 +23,12 @@ github_branch = "development"
 # Cloud Build GitHub connection name
 github_connection_name = "github-pbuchman"
 
-# Enable Load Balancer for web app SPA hosting
-enable_load_balancer = true
+# Enable legacy GCP Load Balancer for web app SPA hosting.
+# Keep disabled after Hetzner migration; nginx on Hetzner owns the public edge.
+enable_load_balancer = false
 
-# Domain name for the web app (requires DNS A record pointing to LB IP)
+# Domain name for the web app. After Hetzner cutover, public DNS points to
+# Hetzner instead of the legacy GCP load-balancer IP.
 web_app_domain = "intexuraos.cloud"
 
 # Enable LLM API audit logging (logs all LLM calls to Firestore)
@@ -41,4 +43,3 @@ audit_llms = true
 #   slack_channel_name — Slack channel for alerts (default "#alerts").
 # slack_auth_token   = "xoxb-REPLACE_ME"
 # slack_channel_name = "#alerts"
-
