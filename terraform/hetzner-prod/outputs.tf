@@ -81,7 +81,7 @@ output "hetzner_pubsub_subscriptions" {
       topic         = subscription.topic
       push_endpoint = subscription.push_config[0].push_endpoint
       audience      = subscription.push_config[0].oidc_token[0].audience
-      filter        = subscription.filter
+      filter        = subscription.filter == "" ? null : subscription.filter
     }
   }
 }

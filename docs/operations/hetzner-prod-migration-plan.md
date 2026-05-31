@@ -194,7 +194,12 @@ sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh
    `terraform/environments/dev`. This prevents duplicate processing when
    `activate_hetzner_async_consumers=true` is applied. Do not disable the
    retained audio-stored -> transcription Cloud Function subscription.
-9. Activate async consumers only after `/internal/*` smoke tests pass:
+9. Activate async consumers only after `/internal/*` smoke tests pass. After
+   the active apply succeeds, keep
+   `activate_hetzner_async_consumers=true` in
+   `terraform/hetzner-prod/prod.auto.tfvars.json` so a plain future
+   `terraform apply` preserves the active Hetzner subscriptions and enabled
+   scheduler jobs:
 
 ```bash
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
@@ -236,8 +241,9 @@ origin HTTPS checks for `/healthz`, `/api/user/health`, and
 Rollback keeps Hetzner Terraform state intact and restores traffic to retained
 GCP paths:
 
-1. Set `activate_hetzner_async_consumers=false` in `terraform/hetzner-prod` to
-   pause Hetzner Scheduler jobs and reinstate the Pub/Sub staging filter.
+1. Override `activate_hetzner_async_consumers=false` in `terraform/hetzner-prod`
+   only for rollback to pause Hetzner Scheduler jobs and reinstate the Pub/Sub
+   staging filter.
 2. Before moving traffic back, restore the old Cloud Run-targeted Pub/Sub push consumers
    and unpause the old app-targeted Cloud Scheduler jobs in `terraform/environments/dev`
    or the recorded operational rollback commands.

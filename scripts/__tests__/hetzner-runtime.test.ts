@@ -24,6 +24,18 @@ const terraformDevPrTriagePath = resolve(
   repoRoot,
   'terraform/environments/dev/pubsub_pr_triage.tf'
 );
+const terraformPubsubPushModuleMainPath = resolve(
+  repoRoot,
+  'terraform/modules/pubsub-push/main.tf'
+);
+const terraformPubsubPushModuleOutputsPath = resolve(
+  repoRoot,
+  'terraform/modules/pubsub-push/outputs.tf'
+);
+const terraformPubsubPushModuleVariablesPath = resolve(
+  repoRoot,
+  'terraform/modules/pubsub-push/variables.tf'
+);
 const terraformHetznerMainPath = resolve(repoRoot, 'terraform/hetzner-prod/main.tf');
 const terraformHetznerImportsPath = resolve(repoRoot, 'terraform/hetzner-prod/imports.tf');
 const terraformHetznerBootstrapPath = resolve(repoRoot, 'terraform/hetzner-prod/bootstrap.tf');
@@ -34,6 +46,7 @@ const terraformHetznerCloudInitPath = resolve(
 const terraformHetznerPubsubPath = resolve(repoRoot, 'terraform/hetzner-prod/pubsub.tf');
 const terraformHetznerSchedulerPath = resolve(repoRoot, 'terraform/hetzner-prod/scheduler.tf');
 const terraformHetznerVariablesPath = resolve(repoRoot, 'terraform/hetzner-prod/variables.tf');
+const terraformHetznerOutputsPath = resolve(repoRoot, 'terraform/hetzner-prod/outputs.tf');
 const terraformHetznerTfvarsExamplePath = resolve(
   repoRoot,
   'terraform/hetzner-prod/terraform.tfvars.example'
@@ -338,6 +351,10 @@ describe('Hetzner async edge cutover', () => {
     const hetznerMain = readRequired(terraformHetznerMainPath);
     const hetznerPubsub = readRequired(terraformHetznerPubsubPath);
     const hetznerScheduler = readRequired(terraformHetznerSchedulerPath);
+    const hetznerOutputs = readRequired(terraformHetznerOutputsPath);
+    const prodAutoTfvars = JSON.parse(readRequired(terraformHetznerProdAutoTfvarsPath)) as {
+      activate_hetzner_async_consumers?: boolean;
+    };
 
     expect(script).toContain('PUBSUB_ROUTES=(');
     expect(script).toContain('SCHEDULER_ROUTES=(');
@@ -361,9 +378,88 @@ describe('Hetzner async edge cutover', () => {
       'filter  = var.activate_hetzner_async_consumers ? null : local.pubsub_staging_filter'
     );
     expect(hetznerScheduler).toContain('paused      = !var.activate_hetzner_async_consumers');
+    expect(hetznerOutputs).toContain(
+      'filter        = subscription.filter == "" ? null : subscription.filter'
+    );
+    expect(prodAutoTfvars.activate_hetzner_async_consumers).toBe(true);
     expect(runbook).toContain('terraform -chdir=terraform/hetzner-prod apply');
     expect(runbook).toContain('activate_hetzner_async_consumers=false');
     expect(runbook).toContain('activate_hetzner_async_consumers=true');
+  });
+
+  it('disables legacy Cloud Run async consumers by default in the retained GCP root', () => {
+    const devTerraform = readRequired(terraformDevMainPath);
+    const prTriageTerraform = readRequired(terraformDevPrTriagePath);
+    const tfvarsExample = readRequired(terraformDevTfvarsExamplePath);
+    const pubsubModule = readRequired(terraformPubsubPushModuleMainPath);
+    const pubsubOutputs = readRequired(terraformPubsubPushModuleOutputsPath);
+    const pubsubVariables = readRequired(terraformPubsubPushModuleVariablesPath);
+
+    expect(devTerraform).toContain('variable "enable_legacy_cloud_run_async_consumers"');
+    expect(devTerraform).toContain('default     = false');
+    expect(tfvarsExample).toContain('enable_legacy_cloud_run_async_consumers = false');
+    expect(pubsubVariables).toContain('variable "enable_push_subscription"');
+    expect(pubsubVariables).toContain('default     = true');
+    expect(pubsubModule).toContain('count   = var.enable_push_subscription ? 1 : 0');
+    expect(pubsubOutputs).toContain('try(google_pubsub_subscription.push[0].name, null)');
+    expect(pubsubOutputs).toContain('try(google_pubsub_subscription.push[0].id, null)');
+
+    for (const moduleName of [
+      'pubsub_media_cleanup',
+      'pubsub_whatsapp_webhook_process',
+      'pubsub_srt_transcription_completed',
+      'pubsub_commands_ingest',
+      'pubsub_actions_queue',
+      'pubsub_research_process',
+      'pubsub_llm_analytics',
+      'pubsub_llm_call',
+      'pubsub_whatsapp_send',
+      'pubsub_approval_reply',
+      'pubsub_bookmark_enrich',
+      'pubsub_bookmark_summarize',
+      'pubsub_todos_processing',
+      'pubsub_calendar_preview',
+      'pubsub_transcription_completed',
+    ]) {
+      const moduleBody = devTerraform.split(`module "${moduleName}" {`)[1]?.split('\n}')[0] ?? '';
+      expect(moduleBody, moduleName).toContain(
+        'enable_push_subscription = var.enable_legacy_cloud_run_async_consumers'
+      );
+    }
+
+    expect(prTriageTerraform).toContain(
+      'enable_push_subscription = var.enable_legacy_cloud_run_async_consumers'
+    );
+    expect(devTerraform).toContain('resource "google_pubsub_subscription" "audio_stored_push"');
+    expect(devTerraform).not.toContain(
+      'resource "google_pubsub_subscription" "audio_stored_push" {\n  count'
+    );
+
+    for (const schedulerResource of [
+      'mobile_notifications_digest_yesterday',
+      'linear_sync_hourly',
+      'linear_issues_prune_hourly',
+      'cron_agent_tick',
+      'retry_pending_commands',
+      'retry_pending_actions',
+      'drain_task_queue',
+      'merge_conflict_reconcile',
+      'merge_queue_tick',
+      'code_tasks_zombie_sweep',
+      'archive_stale_groups',
+      'auto_archive_merged_tasks',
+      'execution_memory_process',
+      'execution_memory_sweep_errored',
+      'execution_memory_prune_stale',
+    ]) {
+      const resourceBody =
+        devTerraform
+          .split(`resource "google_cloud_scheduler_job" "${schedulerResource}" {`)[1]
+          ?.split('\n}')[0] ?? '';
+      expect(resourceBody, schedulerResource).toContain(
+        'paused      = !var.enable_legacy_cloud_run_async_consumers'
+      );
+    }
   });
 });
 

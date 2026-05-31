@@ -8,6 +8,8 @@ region      = "europe-central2"
 environment = "prod"
 domain      = "intexuraos.cloud"
 
+activate_hetzner_async_consumers = true
+
 hetzner_location    = "nbg1"
 hetzner_server_type = "cx33"
 hetzner_image       = "ubuntu-24.04"
