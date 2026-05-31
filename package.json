@@ -2,6 +2,7 @@
   "name": "intexuraos",
   "version": "3.6.0",
   "private": true,
+  "packageManager": "pnpm@10.29.3",
   "type": "module",
   "engines": {
     "node": ">=22.0.0",

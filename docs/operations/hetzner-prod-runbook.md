@@ -18,6 +18,43 @@ and the shared project `intexuraos-dev-pbuchman`.
 | `/etc/nginx/sites-available/intexuraos.conf` | Installed nginx site config |
 | `/etc/nginx/lua/jwt-verify.lua` | Google OIDC verifier for `/internal/*` |
 
+## Terraform Root
+
+Hetzner production infrastructure is managed from `terraform/hetzner-prod`.
+The committed non-secret environment settings are in
+`terraform/hetzner-prod/prod.auto.tfvars.json`; there is no separate
+`terraform.env` file for Hetzner. Terraform loads `*.auto.tfvars.json`
+automatically, so a normal plan/apply from that root uses the production
+Hetzner defaults.
+
+Required local operator inputs are intentionally outside the repo:
+
+| Local input | Purpose |
+| --- | --- |
+| `HCLOUD_TOKEN` | Hetzner provider token read from the environment |
+| `$HOME/.config/gcloud/sa-key.json` | Google provider credential for retained GCP resources |
+| `$HOME/.ssh/intexuraos_hetzner_deploy` | SSH private key used by Terraform bootstrap |
+| `$HOME/.config/intexuraos/hetzner/provisioner-sa-key.json` | Provisioner service account key copied to the VM |
+| `$HOME/.config/intexuraos/hetzner/runtime-sa-key.json` | Runtime service account key copied to the VM |
+
+Use this form for normal reproducible changes:
+
+```bash
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+terraform -chdir=terraform/hetzner-prod plan
+
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+terraform -chdir=terraform/hetzner-prod apply
+```
+
+With `hetzner_bootstrap_enabled=true`, Terraform creates or recreates the VM,
+copies the service account keys, syncs the repo to `/opt/intexuraos`, installs
+runtime dependencies, loads secrets, builds the web bundle, starts PM2, and
+deploys nginx. Manual provisioning commands below are for repair or emergency
+operation, not the default path.
+
 ## Provisioning
 
 Run on the VM as root:
@@ -36,16 +73,19 @@ token with Zone DNS Edit permission for the `intexuraos.cloud` zone. Do not
 reuse the Browser Rendering token stored in `INTEXURAOS_CLOUDFLARE_API_TOKEN`.
 Terraform creates this DNS-token secret separately from the app-secret
 inventory and grants Secret Manager Secret Accessor to the
-`intexuraos-hetzner-provisioner-dev` service account. Use that service account
+`ixos-hetzner-provisioner-dev` service account. Use that service account
 key for `/home/deploy/provisioner-sa-key.json` on the VM.
 
-Runtime services use a separate `intexuraos-hetzner-runtime-dev` service
+Runtime services use a separate `ixos-hetzner-runtime-dev` service
 account key at `/home/deploy/runtime-sa-key.json`. That runtime account has the
 retained GCP data-plane permissions needed by PM2 services: Firestore user,
 Pub/Sub publisher, Firebase Auth admin, logging writer, object admin for the
 retained writable buckets, self token creation for signing, and access to the
 explicit Hetzner runtime secret allowlist. Do not reuse the provisioner key for
 PM2 runtime.
+
+Terraform bootstrap copies the local keys from
+`provisioner_sa_key_path` and `runtime_sa_key_path` to these VM paths.
 
 ## Secret Refresh
 
@@ -68,9 +108,9 @@ secret allowlist and updates `/etc/intexuraos/internal-auth-token` for nginx.
 ```bash
 cd /opt/intexuraos
 sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh
-sudo -iu deploy bash -lc 'cd /opt/intexuraos && pnpm install --frozen-lockfile'
+sudo -iu deploy bash -lc 'cd /opt/intexuraos && CI=true pnpm install --frozen-lockfile'
 sudo -iu deploy bash -lc 'cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-web.sh'
-sudo -iu deploy bash -lc 'cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod pm2 reload ecosystem.config.prod.cjs --update-env && pm2 save'
+sudo -iu deploy bash -lc 'cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh'
 sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh
 ```
 
@@ -80,10 +120,86 @@ sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh
 a sanitized `.env.production.local` containing only web-safe Auth0/Firebase/
 Sentry values plus generated public API paths, so ignored local env files
 cannot leak backend secrets into Vite.
-`deploy-nginx.sh` runs `nginx -t` before reload. If the VM is not available,
+`reload-pm2.sh` renders the CommonJS ecosystem config to a private JSON file
+before starting PM2, because PM2 treats `ecosystem.config.prod.cjs` as a plain
+script on the Hetzner host. `deploy-nginx.sh` runs `nginx -t` before reload. If the VM is not available,
 validate an equivalent generated config in a container or staging VM that has
 nginx Lua/OpenResty modules installed, then record the command output in the
 cutover notes.
+
+## Cloudflare DNS Cutover
+
+This production cutover uses Cloudflare DNS/proxy records to point the public
+origin at the Hetzner IP. It does not require a `cloudflared` tunnel change.
+Do not change orchestrator worker tunnel records for this migration.
+
+At cutover, update the `intexuraos.cloud` apex records in Cloudflare:
+
+| Record | Action |
+| --- | --- |
+| `A intexuraos.cloud` | Set to `162.55.210.48` |
+| `AAAA intexuraos.cloud` | Remove unless Hetzner IPv6 is enabled and verified |
+| Proxy status | Preserve the current proxied/DNS-only mode unless the cutover owner intentionally changes it |
+
+The previous GCP load-balancer IP for rollback context was `136.110.232.83`.
+Use it only after recreating the legacy GCP load balancer with
+`enable_load_balancer=true`.
+
+For automated certbot DNS-01 issuance, store a dedicated Cloudflare token with
+Zone DNS Edit and Zone Read permissions for `intexuraos.cloud` as a new version
+of `INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN` in GCP Secret Manager. The Browser
+Rendering token in `INTEXURAOS_CLOUDFLARE_API_TOKEN` must not be reused.
+
+Until that Cloudflare record and token state is corrected, direct origin checks
+with `curl --resolve intexuraos.cloud:443:162.55.210.48 ...` are the canonical
+Hetzner-origin smoke test.
+
+## Legacy GCP Load Balancer Teardown
+
+Keep `enable_load_balancer=false` in `terraform/environments/dev`. Applying
+that root removes only the legacy web load-balancer edge: global forwarding
+rules, target HTTP/HTTPS proxies, URL maps, backend buckets, global address,
+and the load-balancer SSL certificate. It does not delete the retained GCS
+buckets or Firestore.
+
+```bash
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+terraform -chdir=terraform/environments/dev plan \
+  -var='enable_load_balancer=false'
+
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+terraform -chdir=terraform/environments/dev apply \
+  -var='enable_load_balancer=false'
+```
+
+The Hetzner Terraform root currently uses the single VM plus reserved primary
+IP. It does not create a Hetzner Load Balancer resource. If a load balancer is
+needed later, add it in `terraform/hetzner-prod`; do not recreate the paid GCP
+web load balancer unless explicitly rolling back.
+
+## Rebuild Verification
+
+The required destructive reproducibility check is a Terraform-driven VM
+replacement, not an in-place repair. Use:
+
+```bash
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+terraform -chdir=terraform/hetzner-prod plan \
+  -replace=hcloud_server.prod \
+  -out=/tmp/hetzner-prod-recreate-final.tfplan
+
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
+terraform -chdir=terraform/hetzner-prod apply /tmp/hetzner-prod-recreate-final.tfplan
+```
+
+On 2026-05-31 this check destroyed server `134626820`, created server
+`134635829`, retained primary IPv4 `162.55.210.48`, completed Terraform
+bootstrap, and a follow-up `terraform -chdir=terraform/hetzner-prod plan`
+reported no changes.
 
 ## Async Edge Cutover
 
@@ -99,13 +215,11 @@ with Pub/Sub filters active and Scheduler jobs paused:
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform -chdir=terraform/hetzner-prod plan \
-  -var-file=terraform.tfvars \
   -var='activate_hetzner_async_consumers=false'
 
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform -chdir=terraform/hetzner-prod apply \
-  -var-file=terraform.tfvars \
   -var='activate_hetzner_async_consumers=false'
 ```
 
@@ -120,7 +234,6 @@ apply the activation gate:
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform -chdir=terraform/hetzner-prod apply \
-  -var-file=terraform.tfvars \
   -var='activate_hetzner_async_consumers=true'
 ```
 

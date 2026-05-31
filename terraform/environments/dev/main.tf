@@ -78,7 +78,7 @@ variable "github_connection_name" {
 variable "enable_load_balancer" {
   description = "Enable Cloud Load Balancer with CDN for web app SPA hosting"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "web_app_domain" {
@@ -619,13 +619,13 @@ resource "google_secret_manager_secret" "cloudflare_dns_api_token" {
 }
 
 resource "google_service_account" "hetzner_provisioner" {
-  account_id   = "intexuraos-hetzner-provisioner-${var.environment}"
+  account_id   = "ixos-hetzner-provisioner-${var.environment}"
   display_name = "IntexuraOS Hetzner Provisioner (${var.environment})"
   description  = "Service account used by the Hetzner VM to load runtime secrets and certbot DNS credentials"
 }
 
 resource "google_service_account" "hetzner_runtime" {
-  account_id   = "intexuraos-hetzner-runtime-${var.environment}"
+  account_id   = "ixos-hetzner-runtime-${var.environment}"
   display_name = "IntexuraOS Hetzner Runtime (${var.environment})"
   description  = "Union runtime service account for PM2 services on the Hetzner VM"
 }
@@ -640,6 +640,12 @@ resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_runtime_
 
 resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_cloudflare_dns" {
   secret_id = google_secret_manager_secret.cloudflare_dns_api_token.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_ssl_private_key" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SSL_PRIVATE_KEY"]
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
 }
