@@ -754,35 +754,28 @@ steps:
       - |
         echo "=== Fetching config for web ==="
         REGION="${_REGION}"
+        WEB_SERVICE_URL_MODE="${_WEB_SERVICE_URL_MODE}"
+        WEB_PUBLIC_BASE_URL="${_WEB_PUBLIC_BASE_URL}"
+        echo "Service URL mode: $$WEB_SERVICE_URL_MODE"
 
-        # Cloud Run services to fetch URLs for
-        CLOUD_RUN_SERVICES=(
-          "user-service:USER_SERVICE"
-          "whatsapp-service:WHATSAPP_SERVICE"
-          "notion-service:NOTION_SERVICE"
-          "mobile-notifications-service:MOBILE_NOTIFICATIONS_SERVICE"
-          "fishing-assistant-service:FISHING_ASSISTANT_SERVICE"
-          "research-agent:RESEARCH_AGENT"
-          "commands-agent:COMMANDS_AGENT"
-          "actions-agent:ACTIONS_AGENT"
-          "notes-agent:NOTES_AGENT"
-          "todos-agent:TODOS_AGENT"
-          "bookmarks-agent:BOOKMARKS_AGENT"
-          "calendar-agent:CALENDAR_AGENT"
-          "chat-agent:CHAT_AGENT"
-          "app-settings-service:APP_SETTINGS_SERVICE"
-          "linear-agent:LINEAR_AGENT"
-          "code-agent:CODE_AGENT"
-          "cron-agent:CRON_AGENT"
-          "hellscript-agent:HELLSCRIPT_AGENT"
-        )
+        # Services to inject into the static web bundle.
+        # Source of truth: apps/web/service-manifest.json
+        # jq is pre-installed in the cloud-sdk image used by this step.
+        mapfile -t SERVICE_ROWS < <(jq -r '.services[] | [.name, .envSuffix, .apiPath] | @tsv' apps/web/service-manifest.json)
 
-        # Fetch service URLs
+        # Fetch Cloud Run URLs for the current GCP deployment, or bake the
+        # post-cutover public API paths for Hetzner/nginx routing.
         declare -A SERVICE_URLS
-        for entry in "$${CLOUD_RUN_SERVICES[@]}"; do
-          SERVICE_NAME="$${entry%%:*}"
-          ENV_SUFFIX="$${entry##*:}"
-          URL=$$(gcloud run services describe "intexuraos-$${SERVICE_NAME}" --region="$$REGION" --format='value(status.url)')
+        for row in "$${SERVICE_ROWS[@]}"; do
+          IFS=$$'\t' read -r SERVICE_NAME ENV_SUFFIX API_PATH <<< "$$row"
+          if [[ "$$WEB_SERVICE_URL_MODE" == "cloud-run" ]]; then
+            URL=$$(gcloud run services describe "intexuraos-$${SERVICE_NAME}" --region="$$REGION" --format='value(status.url)')
+          elif [[ "$$WEB_SERVICE_URL_MODE" == "public-api" ]]; then
+            URL="$${WEB_PUBLIC_BASE_URL%/}$${API_PATH}"
+          else
+            echo "Unsupported _WEB_SERVICE_URL_MODE: $$WEB_SERVICE_URL_MODE" >&2
+            exit 1
+          fi
           SERVICE_URLS["INTEXURAOS_$${ENV_SUFFIX}_URL"]="$$URL"
           echo "  $${ENV_SUFFIX}: $${URL}"
         done
@@ -847,5 +840,7 @@ options:
 
 substitutions:
   _REGION: europe-central2
+  _WEB_SERVICE_URL_MODE: cloud-run
+  _WEB_PUBLIC_BASE_URL: https://intexuraos.cloud
 
 timeout: 3600s

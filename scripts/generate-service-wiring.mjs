@@ -12,6 +12,8 @@ function parseArgs(argv) {
   const args = argv.slice(2);
   let root = resolve(import.meta.dirname, '..');
   let stdout = false;
+  let publicEnv = false;
+  let publicBaseUrl = 'https://intexuraos.cloud';
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--root') {
@@ -25,10 +27,26 @@ function parseArgs(argv) {
     }
     if (args[i] === '--stdout') {
       stdout = true;
+      continue;
+    }
+    if (args[i] === '--public-env') {
+      publicEnv = true;
+      continue;
+    }
+    if (args[i] === '--base-url') {
+      const next = args[i + 1];
+      if (typeof next !== 'string' || next.length === 0 || next.startsWith('--')) {
+        throw new Error('--base-url requires a URL argument');
+      }
+      if (!URL_REGEX.test(next)) {
+        throw new Error('--base-url requires an absolute http(s) URL');
+      }
+      publicBaseUrl = next;
+      i++;
     }
   }
 
-  return { root, stdout };
+  return { publicBaseUrl, publicEnv, root, stdout };
 }
 
 function stripTrailingSlash(value) {
@@ -158,6 +176,13 @@ function renderTerraformServiceUrls(wiring) {
   return `${JSON.stringify({ service_urls: serviceUrls }, null, 2)}\n`;
 }
 
+function renderPublicServiceEnv(wiring, baseUrl) {
+  const normalizedBaseUrl = stripTrailingSlash(baseUrl);
+  return `${wiring.configEntries
+    .map(({ envVar, apiPath }) => `${envVar}=${normalizedBaseUrl}${apiPath}`)
+    .join('\n')}\n`;
+}
+
 function writeServiceWiringArtifacts(root, wiring) {
   const outputs = [
     {
@@ -183,10 +208,14 @@ function writeServiceWiringArtifacts(root, wiring) {
 
 function main() {
   try {
-    const { root, stdout } = parseArgs(process.argv);
+    const { publicBaseUrl, publicEnv, root, stdout } = parseArgs(process.argv);
     const manifestPath = resolve(root, 'apps/web/service-manifest.json');
     const manifest = loadServiceManifest(manifestPath);
     const wiring = generateServiceWiring(manifest);
+    if (publicEnv) {
+      process.stdout.write(renderPublicServiceEnv(wiring, publicBaseUrl));
+      return;
+    }
     if (stdout) {
       process.stdout.write(`${JSON.stringify(wiring, null, 2)}\n`);
       return;
@@ -216,6 +245,7 @@ export {
   parseArgs,
   renderConfigGenerated,
   renderEcosystemGenerated,
+  renderPublicServiceEnv,
   renderTerraformServiceUrls,
   writeServiceWiringArtifacts,
 };
