@@ -12,9 +12,11 @@ const reloadPm2Path = resolve(repoRoot, 'scripts/hetzner/reload-pm2.sh');
 const cutoverEdgePath = resolve(repoRoot, 'scripts/hetzner/cutover-gcp-edge.sh');
 const installNginxPath = resolve(repoRoot, 'scripts/hetzner/install-nginx-and-cert.sh');
 const provisionPath = resolve(repoRoot, 'scripts/hetzner/provision.sh');
+const githubActionsDeployPath = resolve(repoRoot, 'scripts/hetzner/github-actions-deploy.sh');
 const runbookPath = resolve(repoRoot, 'docs/operations/hetzner-prod-runbook.md');
 const migrationPlanPath = resolve(repoRoot, 'docs/operations/hetzner-prod-migration-plan.md');
 const selfReviewPath = resolve(repoRoot, 'docs/operations/hetzner-prod-self-review.md');
+const deployWorkflowPath = resolve(repoRoot, '.github/workflows/deploy.yml');
 const terraformDevMainPath = resolve(repoRoot, 'terraform/environments/dev/main.tf');
 const terraformDevTfvarsExamplePath = resolve(
   repoRoot,
@@ -225,6 +227,46 @@ describe('Hetzner nginx runtime config', () => {
 });
 
 describe('Hetzner web asset deployment', () => {
+  it('deploys Hetzner production automatically after development receives a merge', () => {
+    const workflow = readRequired(deployWorkflowPath);
+    const script = readRequired(githubActionsDeployPath);
+
+    expect(workflow).toContain('name: Deploy');
+    expect(workflow).toContain('branches: [development]');
+    expect(workflow).toContain('hetzner-prod');
+    expect(workflow).toContain('deploy-hetzner-prod:');
+    expect(workflow).toContain("github.event_name == 'push'");
+    expect(workflow).toContain('HETZNER_DEPLOY_SSH_PRIVATE_KEY');
+    expect(workflow).toContain('HETZNER_PROD_HOST');
+    expect(workflow).toContain('scripts/hetzner/github-actions-deploy.sh');
+    expect(workflow).toContain('deploy-retained-gcp:');
+    expect(workflow).toContain("github.event_name == 'workflow_dispatch'");
+    expect(workflow).toContain('gcloud builds triggers run "$TARGET"');
+    expect(workflow).not.toContain('deploy-monolith');
+    expect(workflow).not.toContain('smart-dispatch');
+    expect(workflow).not.toContain('CLOUD_RUN_SERVICES=(');
+
+    expect(script).toContain('HETZNER_DEPLOY_SSH_PRIVATE_KEY');
+    expect(script).toContain('HETZNER_PROD_HOST');
+    expect(script).toContain('REMOTE_REPO_DIR="${REMOTE_REPO_DIR:-/opt/intexuraos}"');
+    expect(script).toContain('rsync -az --delete');
+    expect(script).toContain("--exclude '.git/'");
+    expect(script).toContain(
+      'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh'
+    );
+    expect(script).toContain('CI=true pnpm install --frozen-lockfile');
+    expect(script).toContain('pnpm --filter @intexuraos/infra-otel build');
+    expect(script).toContain('INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-web.sh');
+    expect(script).toContain('INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh');
+    expect(script).toContain(
+      'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh'
+    );
+    expect(script).toContain('--resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"');
+    expect(script).not.toContain('terraform apply');
+    expect(script).not.toContain('gcloud run deploy');
+    expect(script).not.toContain('gcloud builds triggers run');
+  });
+
   it('allowlists native dependency build scripts needed by clean production installs', () => {
     const packageJson = JSON.parse(readRequired(packageJsonPath)) as { packageManager?: string };
     const workspace = readRequired(pnpmWorkspacePath);
