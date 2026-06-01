@@ -2,25 +2,25 @@
 
 ## Overview
 
-| Environment | Domain               | Infra                                        | Machine  | Deploy Target            |
-| ----------- | -------------------- | -------------------------------------------- | -------- | ------------------------ |
-| **dev**     | dev.intexuraos.cloud | PM2                                          | home-dev | `~/deploy/intexuraos`    |
-| **prod**    | intexuraos.cloud     | Cloud Run / Cloud Functions / GCS web bucket | GCloud   | CI/CD via GitHub Actions |
+| Environment | Domain               | Infra                                       | Machine  | Deploy Target                              |
+| ----------- | -------------------- | ------------------------------------------- | -------- | ------------------------------------------ |
+| **dev**     | dev.intexuraos.cloud | PM2                                         | home-dev | `~/deploy/intexuraos`                      |
+| **prod**    | intexuraos.cloud     | Hetzner PM2/nginx + retained GCP data plane | Hetzner  | GitHub Actions deploy to `/opt/intexuraos` |
 
 **⛔ There is NO "local" environment. Only dev and prod exist. If you think about local, STOP - you are wrong.**
 
-**Single GCP project.** Both `dev.intexuraos.cloud` and `intexuraos.cloud` are served from the SAME GCP project `intexuraos-dev-pbuchman`. The `-dev-pbuchman` suffix is legacy — there is no separate prod GCP project. The dev/prod distinction is about _deployment target_ (PM2 on `home-dev` vs Cloud Run / Cloud Functions / GCS bucket in `intexuraos-dev-pbuchman`), not about project ownership. Consequently, only `terraform/environments/dev/` exists in this repo; it manages all Cloud Run services, Cloud Functions, Pub/Sub topics, secrets, and the GCS bucket that backs the prod web bundle.
+**Single GCP project.** Both `dev.intexuraos.cloud` and `intexuraos.cloud` use the SAME retained GCP project `intexuraos-dev-pbuchman` for data-plane resources. The `-dev-pbuchman` suffix is legacy — there is no separate prod GCP project. The dev/prod distinction is about _deployment target_ (PM2 on `home-dev` vs PM2/nginx on Hetzner), not about project ownership. `terraform/environments/dev/` owns retained GCP resources; `terraform/hetzner-prod/` owns the production Hetzner host and Hetzner-targeted async/control-plane resources.
 
 ## Environment Detection Signals
 
-| Signal                           | dev                                      | prod                                |
-| -------------------------------- | ---------------------------------------- | ----------------------------------- |
-| URL (public)                     | `dev.intexuraos.cloud`                   | `intexuraos.cloud` (without `dev.`) |
-| URL (internal)                   | `localhost:*` (service URLs on home-dev) | `*.run.app`                         |
-| User says                        | "dev", "dev environment"                 | "prod", "production", "cloud"       |
-| `uname -n`                       | `home-dev`                               | N/A (Cloud Run)                     |
-| Logs via                         | `pm2 logs <name>`                        | `gcloud logging read`               |
-| `INTEXURAOS_ENVIRONMENT` env var | `dev`                                    | `prod`                              |
+| Signal                           | dev                                      | prod                                   |
+| -------------------------------- | ---------------------------------------- | -------------------------------------- |
+| URL (public)                     | `dev.intexuraos.cloud`                   | `intexuraos.cloud` (without `dev.`)    |
+| URL (internal)                   | `localhost:*` (service URLs on home-dev) | `127.0.0.1:*` on the Hetzner VM        |
+| User says                        | "dev", "dev environment"                 | "prod", "production", "cloud"          |
+| `uname -n`                       | `home-dev`                               | Hetzner VM hostname                    |
+| Logs via                         | `pm2 logs <name>`                        | SSH to Hetzner, then `pm2 logs <name>` |
+| `INTEXURAOS_ENVIRONMENT` env var | `dev`                                    | `prod`                                 |
 
 **Firestore is SHARED between both environments.** Same database, same collections.
 
@@ -35,9 +35,9 @@
 
 ```
 STEP 1: Check the URL/context. Does it contain dev.intexuraos.cloud or localhost? → dev
-STEP 2: Does it contain intexuraos.cloud (no dev.) or *.run.app? → prod
+STEP 2: Does it contain intexuraos.cloud (no dev.)? → prod
 STEP 3: For code tasks: check Firestore `code_tasks` collection for workerLocation field
-STEP 4: Check service status with the right tool (pm2 for dev, gcloud for prod)
+STEP 4: Check service status with the right tool (pm2 on home-dev for dev, SSH + pm2 on Hetzner for prod)
 ```
 
 ## On home-dev (dev environment)
