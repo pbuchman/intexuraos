@@ -146,7 +146,14 @@ The service account `claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount
 
 **CI:** `.github/workflows/ci.yml` runs `pnpm run ci` on all branches (lint, typecheck, test, build)
 
-**Deploy:** `.github/workflows/deploy.yml` is manual-only and can trigger only retained GCP Cloud Build targets:
+**Deploy:** `.github/workflows/deploy.yml` automatically deploys production to Hetzner on every push to `development` and also supports manual `workflow_dispatch` target `hetzner-prod`. The Hetzner job uses `scripts/hetzner/github-actions-deploy.sh`, syncs the checked-out commit to `/opt/intexuraos`, refreshes secrets on the VM, rebuilds the web bundle, reloads PM2/nginx, and runs direct-origin health checks.
+
+Required GitHub configuration:
+
+- Secret: `HETZNER_DEPLOY_SSH_PRIVATE_KEY`
+- Optional variable: `HETZNER_PROD_HOST` (defaults to `162.55.210.48`)
+
+The same workflow can manually trigger only these retained GCP Cloud Build targets:
 
 - `firestore`
 - `vm-lifecycle`

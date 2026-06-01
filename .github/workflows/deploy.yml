@@ -1,25 +1,56 @@
-name: Deploy Retained GCP
+name: Deploy
 
 on:
+  push:
+    branches: [development]
   workflow_dispatch:
     inputs:
       target:
-        description: 'Retained GCP target to deploy'
+        description: 'Deployment target'
         required: true
+        default: hetzner-prod
         type: choice
         options:
+          - hetzner-prod
           - firestore
           - vm-lifecycle
           - transcription
           - code-worker
+      deploy_nginx:
+        description: 'Refresh and reload nginx during Hetzner deployment'
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: deploy-${{ github.event_name == 'push' && 'hetzner-prod' || inputs.target }}
+  cancel-in-progress: false
+
 jobs:
+  deploy-hetzner-prod:
+    name: Deploy Hetzner Production
+    if: ${{ github.event_name == 'push' || inputs.target == 'hetzner-prod' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      HETZNER_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.HETZNER_DEPLOY_SSH_PRIVATE_KEY }}
+      HETZNER_PROD_HOST: ${{ vars.HETZNER_PROD_HOST || '162.55.210.48' }}
+      DEPLOY_NGINX: ${{ github.event_name == 'push' && 'true' || inputs.deploy_nginx }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via Hetzner runtime scripts
+        run: bash scripts/hetzner/github-actions-deploy.sh
+
   deploy-retained-gcp:
-    name: Deploy ${{ inputs.target }}
+    name: Deploy Retained GCP ${{ inputs.target }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target != 'hetzner-prod' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
 

@@ -55,6 +55,28 @@ runtime dependencies, loads secrets, builds the web bundle, starts PM2, and
 deploys nginx. Manual provisioning commands below are for repair or emergency
 operation, not the default path.
 
+## GitHub Actions Production Deployment
+
+Merging to `development` deploys production to Hetzner through
+`.github/workflows/deploy.yml`. The workflow syncs the checked-out commit to
+`/opt/intexuraos`, refreshes GCP Secret Manager material on the VM, installs
+dependencies, rebuilds `@intexuraos/infra-otel`, builds and publishes the web
+bundle, reloads PM2, reloads nginx, and verifies the Hetzner origin with
+`curl --resolve`.
+
+Required GitHub configuration:
+
+| Name | Type | Purpose |
+| --- | --- | --- |
+| `HETZNER_DEPLOY_SSH_PRIVATE_KEY` | repository secret | Private key matching `deploy_ssh_public_key` in `terraform/hetzner-prod/prod.auto.tfvars.json` |
+| `HETZNER_PROD_HOST` | repository variable, optional | Hetzner host/IP; defaults to `162.55.210.48` |
+
+Manual dispatch target `hetzner-prod` runs the same Hetzner deploy. Manual
+dispatch targets `firestore`, `vm-lifecycle`, `transcription`, and
+`code-worker` still trigger only the retained GCP Cloud Build targets. Migrated
+app/web services must not be redeployed through GCP Cloud Run or app Cloud
+Build triggers.
+
 ## Provisioning
 
 Run on the VM as root:
