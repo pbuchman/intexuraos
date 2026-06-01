@@ -4,14 +4,12 @@ data "google_project" "retained" {
 
 locals {
   common_labels = merge(
-    var.labels,
     {
-      environment        = var.environment
-      source_environment = var.source_environment
-      managed_by         = "terraform"
-      project            = "intexuraos"
-      component          = "hetzner-prod"
-    }
+      component   = "prod-hetzner"
+      environment = var.environment
+      managed_by  = "terraform"
+    },
+    var.labels
   )
 
   retained_gcp = {

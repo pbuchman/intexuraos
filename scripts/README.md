@@ -140,22 +140,6 @@ Deploys Cloud Function workers to GCS. Builds the worker, generates a production
 ./scripts/deploy-workers.sh --all            # Deploy all workers
 ```
 
-### verify-deployment.sh
-
-Verifies that deployed Cloud Run services in GCP respond with healthy status codes.
-
-```bash
-./scripts/verify-deployment.sh
-```
-
-### detect-tf-changes.sh
-
-Detects which app services are affected by Terraform file changes between two git SHAs. Prints affected service names, one per line.
-
-```bash
-./scripts/detect-tf-changes.sh [BASE_SHA] [HEAD_SHA]
-```
-
 ### setup-worker-network.sh
 
 Creates an isolated Docker network for code-worker containers with IP-level restrictions blocking metadata server, localhost, and private IP ranges.

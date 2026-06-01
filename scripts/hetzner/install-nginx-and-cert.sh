@@ -3,12 +3,17 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 DOMAIN="${DOMAIN:-intexuraos.cloud}"
 ENV_FILE="${ENV_FILE:-/etc/intexuraos/.env.prod}"
 PROJECT_ID="${PROJECT_ID:-intexuraos-dev-pbuchman}"
 SA_KEY_FILE="${SA_KEY_FILE:-${GOOGLE_APPLICATION_CREDENTIALS:-/home/deploy/provisioner-sa-key.json}}"
 CLOUDFLARE_CREDENTIALS_FILE="${CLOUDFLARE_CREDENTIALS_FILE:-/etc/letsencrypt/cloudflare.ini}"
 CLOUDFLARE_DNS_API_TOKEN_SECRET="${CLOUDFLARE_DNS_API_TOKEN_SECRET:-INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN}"
+CUSTOM_TLS_FULLCHAIN_FILE="${CUSTOM_TLS_FULLCHAIN_FILE:-${REPO_ROOT}/terraform/certs/intexuraos.cloud/fullchain.pem}"
+SSL_PRIVATE_KEY_SECRET="${SSL_PRIVATE_KEY_SECRET:-INTEXURAOS_SSL_PRIVATE_KEY}"
+LETSENCRYPT_LIVE_DIR="${LETSENCRYPT_LIVE_DIR:-/etc/letsencrypt/live/${DOMAIN}}"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
 SKIP_CERTBOT=0
 SKIP_LUAROCKS=0
@@ -84,6 +89,7 @@ install_packages() {
     certbot \
     curl \
     liblua5.1-0-dev \
+    libnginx-mod-http-lua \
     lua5.1 \
     luarocks \
     nginx-extras \
@@ -163,9 +169,7 @@ read_secret_value() {
 
   gcloud secrets versions access latest \
     --secret="${secret_name}" \
-    --project="${PROJECT_ID}" \
-    --format='value(payload.data)' \
-    | base64 --decode
+    --project="${PROJECT_ID}"
 }
 
 write_cloudflare_credentials() {
@@ -173,18 +177,48 @@ write_cloudflare_credentials() {
   local temp_file=""
 
   command -v gcloud >/dev/null 2>&1 || fail "gcloud CLI is required"
-  command -v base64 >/dev/null 2>&1 || fail "base64 is required"
 
   token="$(read_secret_value "${CLOUDFLARE_DNS_API_TOKEN_SECRET}")"
   [[ -n "${token}" ]] || fail "${CLOUDFLARE_DNS_API_TOKEN_SECRET} returned an empty value"
 
   umask 077
   temp_file="$(mktemp "${TMPDIR:-/tmp}/cloudflare.ini.XXXXXX")"
-  trap 'rm -f "${temp_file}"' RETURN
+  trap 'rm -f "${temp_file:-}"' RETURN
 
   printf 'dns_cloudflare_api_token = %s\n' "${token}" > "${temp_file}"
   install -d -m 700 "$(dirname "${CLOUDFLARE_CREDENTIALS_FILE}")"
   install -m 600 "${temp_file}" "${CLOUDFLARE_CREDENTIALS_FILE}"
+  rm -f "${temp_file}"
+  trap - RETURN
+}
+
+install_existing_certificate() {
+  local private_key=""
+  local temp_key=""
+
+  if [[ -r "${LETSENCRYPT_LIVE_DIR}/fullchain.pem" && -r "${LETSENCRYPT_LIVE_DIR}/privkey.pem" ]]; then
+    return
+  fi
+
+  [[ -r "${CUSTOM_TLS_FULLCHAIN_FILE}" ]] \
+    || fail "Existing TLS fullchain is not readable: ${CUSTOM_TLS_FULLCHAIN_FILE}"
+
+  command -v gcloud >/dev/null 2>&1 || fail "gcloud CLI is required"
+
+  private_key="$(read_secret_value "${SSL_PRIVATE_KEY_SECRET}")"
+  [[ -n "${private_key}" ]] || fail "${SSL_PRIVATE_KEY_SECRET} returned an empty value"
+
+  umask 077
+  temp_key="$(mktemp "${TMPDIR:-/tmp}/intexuraos-tls-key.XXXXXX")"
+  trap 'rm -f "${temp_key:-}"' RETURN
+
+  printf '%s' "${private_key}" > "${temp_key}"
+
+  install -d -m 755 "${LETSENCRYPT_LIVE_DIR}"
+  install -m 644 "${CUSTOM_TLS_FULLCHAIN_FILE}" "${LETSENCRYPT_LIVE_DIR}/fullchain.pem"
+  install -m 600 "${temp_key}" "${LETSENCRYPT_LIVE_DIR}/privkey.pem"
+  rm -f "${temp_key}"
+  trap - RETURN
 }
 
 request_certificate() {
@@ -233,6 +267,9 @@ main() {
     write_cloudflare_credentials
     request_certificate
     install_renewal_hook
+  else
+    configure_gcloud_credentials
+    install_existing_certificate
   fi
 
   enable_services

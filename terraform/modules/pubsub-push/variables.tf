@@ -35,6 +35,12 @@ variable "publisher_service_accounts" {
   default     = {}
 }
 
+variable "enable_push_subscription" {
+  description = "Create the push subscription. Disable during migration cutover when another root owns active delivery."
+  type        = bool
+  default     = true
+}
+
 variable "ack_deadline_seconds" {
   description = "Acknowledgement deadline in seconds (GCP allows 10-600)"
   type        = number

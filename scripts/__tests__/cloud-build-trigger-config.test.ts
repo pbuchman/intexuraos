@@ -47,12 +47,20 @@ function listStandaloneWorkerBuildTargets(): string[] {
 }
 
 describe('Cloud Build trigger configuration', () => {
-  it('keeps Terraform docker service triggers aligned with standalone app Cloud Build configs', () => {
+  it('does not retain Cloud Build triggers or configs for migrated app/web services', () => {
     const cloudBuildModule = readRepoFile('terraform/modules/cloud-build/main.tf');
-    const dockerServices = extractTerraformStringList(cloudBuildModule, 'docker_services');
 
-    expect(dockerServices).toEqual(listStandaloneAppBuildTargets());
-    expect(dockerServices).not.toContain('promptvault-service');
+    expect(listStandaloneAppBuildTargets()).toEqual([]);
+    expect(fs.existsSync(path.join(REPO_ROOT, 'apps/web/cloudbuild.yaml'))).toBe(false);
+    expect(fs.existsSync(path.join(REPO_ROOT, 'cloudbuild/cloudbuild.yaml'))).toBe(false);
+
+    expect(cloudBuildModule).not.toContain('docker_services');
+    expect(cloudBuildModule).not.toContain('google_cloudbuild_trigger" "manual_main"');
+    expect(cloudBuildModule).not.toContain('google_cloudbuild_trigger" "service"');
+    expect(cloudBuildModule).not.toContain('google_cloudbuild_trigger" "web"');
+    expect(cloudBuildModule).not.toContain('filename = "apps/${each.key}/cloudbuild.yaml"');
+    expect(cloudBuildModule).not.toContain('filename = "apps/web/cloudbuild.yaml"');
+    expect(cloudBuildModule).not.toContain('filename = "cloudbuild/cloudbuild.yaml"');
   });
 
   it('keeps Terraform worker triggers aligned with standalone worker Cloud Build configs', () => {

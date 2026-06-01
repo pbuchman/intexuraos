@@ -3,10 +3,12 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..');
+const packageJsonPath = resolve(repoRoot, 'package.json');
 const nginxConfigPath = resolve(repoRoot, 'scripts/hetzner/nginx/intexuraos.conf');
 const jwtVerifierPath = resolve(repoRoot, 'scripts/hetzner/nginx/jwt-verify.lua');
 const loadSecretsPath = resolve(repoRoot, 'scripts/hetzner/load-secrets.sh');
 const deployWebPath = resolve(repoRoot, 'scripts/hetzner/deploy-web.sh');
+const reloadPm2Path = resolve(repoRoot, 'scripts/hetzner/reload-pm2.sh');
 const cutoverEdgePath = resolve(repoRoot, 'scripts/hetzner/cutover-gcp-edge.sh');
 const installNginxPath = resolve(repoRoot, 'scripts/hetzner/install-nginx-and-cert.sh');
 const provisionPath = resolve(repoRoot, 'scripts/hetzner/provision.sh');
@@ -14,14 +16,47 @@ const runbookPath = resolve(repoRoot, 'docs/operations/hetzner-prod-runbook.md')
 const migrationPlanPath = resolve(repoRoot, 'docs/operations/hetzner-prod-migration-plan.md');
 const selfReviewPath = resolve(repoRoot, 'docs/operations/hetzner-prod-self-review.md');
 const terraformDevMainPath = resolve(repoRoot, 'terraform/environments/dev/main.tf');
+const terraformDevTfvarsExamplePath = resolve(
+  repoRoot,
+  'terraform/environments/dev/terraform.tfvars.example'
+);
 const terraformDevPrTriagePath = resolve(
   repoRoot,
   'terraform/environments/dev/pubsub_pr_triage.tf'
 );
+const terraformPubsubPushModuleMainPath = resolve(
+  repoRoot,
+  'terraform/modules/pubsub-push/main.tf'
+);
+const terraformPubsubPushModuleOutputsPath = resolve(
+  repoRoot,
+  'terraform/modules/pubsub-push/outputs.tf'
+);
+const terraformPubsubPushModuleVariablesPath = resolve(
+  repoRoot,
+  'terraform/modules/pubsub-push/variables.tf'
+);
 const terraformHetznerMainPath = resolve(repoRoot, 'terraform/hetzner-prod/main.tf');
+const terraformHetznerImportsPath = resolve(repoRoot, 'terraform/hetzner-prod/imports.tf');
+const terraformHetznerBootstrapPath = resolve(repoRoot, 'terraform/hetzner-prod/bootstrap.tf');
+const terraformHetznerCloudInitPath = resolve(
+  repoRoot,
+  'terraform/hetzner-prod/cloud-init.yaml.tftpl'
+);
 const terraformHetznerPubsubPath = resolve(repoRoot, 'terraform/hetzner-prod/pubsub.tf');
 const terraformHetznerSchedulerPath = resolve(repoRoot, 'terraform/hetzner-prod/scheduler.tf');
+const terraformHetznerVariablesPath = resolve(repoRoot, 'terraform/hetzner-prod/variables.tf');
+const terraformHetznerOutputsPath = resolve(repoRoot, 'terraform/hetzner-prod/outputs.tf');
+const terraformHetznerTfvarsExamplePath = resolve(
+  repoRoot,
+  'terraform/hetzner-prod/terraform.tfvars.example'
+);
+const terraformHetznerProdAutoTfvarsPath = resolve(
+  repoRoot,
+  'terraform/hetzner-prod/prod.auto.tfvars.json'
+);
 const manifestPath = resolve(repoRoot, 'apps/web/service-manifest.json');
+const pnpmWorkspacePath = resolve(repoRoot, 'pnpm-workspace.yaml');
 
 interface ManifestService {
   name: string;
@@ -80,12 +115,15 @@ describe('Hetzner nginx runtime config', () => {
     const config = readRequired(nginxConfigPath);
     const storageSection = config.slice(config.indexOf('location /share/ {'));
 
+    expect(config).toContain('set $gcs_origin storage.googleapis.com;');
     expect(storageSection).toContain(
-      'proxy_pass https://storage.googleapis.com/intexuraos-shared-content-dev/;'
+      'rewrite ^/share/(.*)$ /intexuraos-shared-content-dev/$1 break;'
     );
     expect(storageSection).toContain(
-      'proxy_pass https://storage.googleapis.com/intexuraos-images-dev/images/;'
+      'rewrite ^/images/(.*)$ /intexuraos-images-dev/images/$1 break;'
     );
+    expect(storageSection.match(/proxy_pass https:\/\/\$gcs_origin;/g)).toHaveLength(2);
+    expect(storageSection).not.toContain('proxy_pass https://storage.googleapis.com/');
     expect(storageSection.match(/proxy_set_header Authorization "";/g)).toHaveLength(2);
     expect(storageSection.match(/proxy_set_header Cookie "";/g)).toHaveLength(2);
   });
@@ -187,6 +225,115 @@ describe('Hetzner nginx runtime config', () => {
 });
 
 describe('Hetzner web asset deployment', () => {
+  it('allowlists native dependency build scripts needed by clean production installs', () => {
+    const packageJson = JSON.parse(readRequired(packageJsonPath)) as { packageManager?: string };
+    const workspace = readRequired(pnpmWorkspacePath);
+
+    expect(packageJson.packageManager).toMatch(/^pnpm@10\./);
+    expect(workspace).toContain('onlyBuiltDependencies:');
+    for (const packageName of [
+      '@firebase/util',
+      'browser-tabs-lock',
+      'cpu-features',
+      'esbuild',
+      'protobufjs',
+      're2',
+      'sharp',
+      'ssh2',
+    ]) {
+      expect(workspace).toMatch(new RegExp(`  - ['"]?${packageName.replace('/', '\\/')}['"]?`));
+    }
+  });
+
+  it('renders the CJS ecosystem config to JSON before reloading PM2', () => {
+    const script = readRequired(reloadPm2Path);
+    const runbook = readRequired(runbookPath);
+    const plan = readRequired(migrationPlanPath);
+
+    expect(script).toContain('INTEXURAOS_ENVIRONMENT=prod');
+    expect(script).toContain('ecosystem.config.prod.cjs');
+    expect(script).toContain('RENDERED_CONFIG=');
+    expect(script).toContain('require(configPath)');
+    expect(script).toContain('JSON.stringify(config, null, 2)');
+    expect(script).toContain('install -m 600');
+    expect(script).toContain('pm2 delete all');
+    expect(script).toContain('pm2 start "${RENDERED_CONFIG}" --update-env');
+    expect(script).toContain('PM2_START_TIMEOUT_SECONDS');
+    expect(script).toContain('PM2_SYSTEMD_SERVICE');
+    expect(script).toContain('PM2_HEALTH_URLS');
+    expect(script).toContain('wait_for_pm2_online()');
+    expect(script).toContain('wait_for_http_health()');
+    expect(script).toContain('sync_pm2_systemd_service()');
+    expect(script).toContain('pm2 jlist');
+    expect(script).toContain('http://127.0.0.1:8122/health');
+    expect(script).toContain('http://127.0.0.1:8110/health');
+    expect(script).toContain("local IFS=' '");
+    expect(script).toContain('curl --fail --silent --show-error --max-time 5');
+    expect(script).toContain('failed to reach online state');
+    expect(script).toContain('HTTP health checks did not become ready');
+    expect(script).toContain('pm2 save');
+    expect(script).toContain('systemctl start "${PM2_SYSTEMD_SERVICE}"');
+    expect(script).toContain('systemctl is-active --quiet "${PM2_SYSTEMD_SERVICE}"');
+    const reloadFlow = script.slice(script.indexOf('pm2 delete all'));
+    expect(reloadFlow.indexOf('wait_for_pm2_online')).toBeGreaterThan(
+      reloadFlow.indexOf('pm2 start "${RENDERED_CONFIG}" --update-env')
+    );
+    expect(reloadFlow.indexOf('pm2 save')).toBeGreaterThan(
+      reloadFlow.indexOf('wait_for_http_health')
+    );
+    expect(reloadFlow.indexOf('wait_for_http_health')).toBeGreaterThan(
+      reloadFlow.indexOf('wait_for_pm2_online')
+    );
+    expect(reloadFlow.indexOf('sync_pm2_systemd_service')).toBeGreaterThan(
+      reloadFlow.indexOf('pm2 save')
+    );
+    expect(runbook).toContain('scripts/hetzner/reload-pm2.sh');
+    expect(plan).toContain('scripts/hetzner/reload-pm2.sh');
+  });
+
+  it('bootstraps Corepack when an existing Node 22 install does not provide it', () => {
+    const provision = readRequired(provisionPath);
+
+    expect(provision).toContain('ensure_corepack()');
+    expect(provision).toContain('command -v corepack >/dev/null 2>&1');
+    expect(provision).toContain('npm install -g corepack');
+    expect(provision).toContain('npm prefix -g');
+    expect(provision).toContain('ln -sfn "${corepack_bin}" /usr/local/bin/corepack');
+    expect(provision).toContain('corepack prepare "${package_manager}" --activate');
+    expect(provision).toMatch(/ensure_corepack[\s\S]*corepack enable/);
+  });
+
+  it('installs an explicit systemd unit for PM2 resurrection', () => {
+    const provision = readRequired(provisionPath);
+
+    expect(provision).toContain('write_pm2_systemd_unit()');
+    expect(provision).toContain('Type=oneshot');
+    expect(provision).toContain('RemainAfterExit=yes');
+    expect(provision).toContain('Environment=PM2_HOME=/home/${DEPLOY_USER}/.pm2');
+    expect(provision).toContain('ExecStart=${pm2_bin} resurrect');
+    expect(provision).toContain('ExecStop=${pm2_bin} kill');
+    expect(provision).toContain('systemctl enable "pm2-${DEPLOY_USER}.service"');
+    expect(provision).not.toContain('pm2 startup systemd');
+  });
+
+  it('provisions swap before runtime builds to avoid OOM during Terraform bootstrap', () => {
+    const provision = readRequired(provisionPath);
+
+    expect(provision).toContain('SWAP_FILE="${SWAP_FILE:-/swapfile}"');
+    expect(provision).toContain('SWAP_SIZE="${SWAP_SIZE:-4G}"');
+    expect(provision).toContain('ensure_swap()');
+    expect(provision).toContain('fallocate -l "${SWAP_SIZE}" "${SWAP_FILE}"');
+    expect(provision).toContain('chmod 600 "${SWAP_FILE}"');
+    expect(provision).toContain('mkswap "${SWAP_FILE}"');
+    expect(provision).toContain('swapon "${SWAP_FILE}"');
+    expect(provision).toContain('vm.swappiness=10');
+    const mainFlow = provision.slice(provision.indexOf('main() {'));
+    expect(mainFlow.indexOf('ensure_swap')).toBeGreaterThan(
+      mainFlow.indexOf('install_google_cloud_cli')
+    );
+    expect(mainFlow.indexOf('install_node_22')).toBeGreaterThan(mainFlow.indexOf('ensure_swap'));
+  });
+
   it('builds the SPA and publishes apps/web/dist into the nginx web root', () => {
     const script = readRequired(deployWebPath);
     const provision = readRequired(provisionPath);
@@ -225,6 +372,10 @@ describe('Hetzner async edge cutover', () => {
     const hetznerMain = readRequired(terraformHetznerMainPath);
     const hetznerPubsub = readRequired(terraformHetznerPubsubPath);
     const hetznerScheduler = readRequired(terraformHetznerSchedulerPath);
+    const hetznerOutputs = readRequired(terraformHetznerOutputsPath);
+    const prodAutoTfvars = JSON.parse(readRequired(terraformHetznerProdAutoTfvarsPath)) as {
+      activate_hetzner_async_consumers?: boolean;
+    };
 
     expect(script).toContain('PUBSUB_ROUTES=(');
     expect(script).toContain('SCHEDULER_ROUTES=(');
@@ -248,9 +399,89 @@ describe('Hetzner async edge cutover', () => {
       'filter  = var.activate_hetzner_async_consumers ? null : local.pubsub_staging_filter'
     );
     expect(hetznerScheduler).toContain('paused      = !var.activate_hetzner_async_consumers');
+    expect(hetznerOutputs).toContain(
+      'filter        = subscription.filter == "" ? null : subscription.filter'
+    );
+    expect(prodAutoTfvars.activate_hetzner_async_consumers).toBe(true);
     expect(runbook).toContain('terraform -chdir=terraform/hetzner-prod apply');
     expect(runbook).toContain('activate_hetzner_async_consumers=false');
     expect(runbook).toContain('activate_hetzner_async_consumers=true');
+  });
+
+  it('keeps retained Pub/Sub topics but removes legacy Cloud Run app Scheduler jobs', () => {
+    const devTerraform = readRequired(terraformDevMainPath);
+    const prTriageTerraform = readRequired(terraformDevPrTriagePath);
+    const tfvarsExample = readRequired(terraformDevTfvarsExamplePath);
+    const pubsubModule = readRequired(terraformPubsubPushModuleMainPath);
+    const pubsubOutputs = readRequired(terraformPubsubPushModuleOutputsPath);
+    const pubsubVariables = readRequired(terraformPubsubPushModuleVariablesPath);
+
+    expect(devTerraform).toContain('variable "enable_legacy_cloud_run_async_consumers"');
+    expect(devTerraform).toContain('default     = false');
+    expect(tfvarsExample).toContain('enable_legacy_cloud_run_async_consumers = false');
+    expect(pubsubVariables).toContain('variable "enable_push_subscription"');
+    expect(pubsubVariables).toContain('default     = true');
+    expect(pubsubModule).toContain('count   = var.enable_push_subscription ? 1 : 0');
+    expect(pubsubOutputs).toContain('try(google_pubsub_subscription.push[0].name, null)');
+    expect(pubsubOutputs).toContain('try(google_pubsub_subscription.push[0].id, null)');
+
+    for (const moduleName of [
+      'pubsub_media_cleanup',
+      'pubsub_whatsapp_webhook_process',
+      'pubsub_srt_transcription_completed',
+      'pubsub_commands_ingest',
+      'pubsub_actions_queue',
+      'pubsub_research_process',
+      'pubsub_llm_analytics',
+      'pubsub_llm_call',
+      'pubsub_whatsapp_send',
+      'pubsub_approval_reply',
+      'pubsub_bookmark_enrich',
+      'pubsub_bookmark_summarize',
+      'pubsub_todos_processing',
+      'pubsub_calendar_preview',
+      'pubsub_transcription_completed',
+    ]) {
+      const moduleBody = devTerraform.split(`module "${moduleName}" {`)[1]?.split('\n}')[0] ?? '';
+      expect(moduleBody, moduleName).toContain(
+        'enable_push_subscription = var.enable_legacy_cloud_run_async_consumers'
+      );
+      expect(moduleBody, moduleName).toContain('local.retired_cloud_run_push_endpoint');
+    }
+
+    expect(prTriageTerraform).toContain(
+      'enable_push_subscription = var.enable_legacy_cloud_run_async_consumers'
+    );
+    expect(prTriageTerraform).toContain('local.retired_cloud_run_push_endpoint');
+    expect(devTerraform).toContain('resource "google_pubsub_subscription" "audio_stored_push"');
+    expect(devTerraform).not.toContain(
+      'resource "google_pubsub_subscription" "audio_stored_push" {\n  count'
+    );
+
+    for (const schedulerResource of [
+      'mobile_notifications_digest_yesterday',
+      'linear_sync_hourly',
+      'linear_issues_prune_hourly',
+      'cron_agent_tick',
+      'retry_pending_commands',
+      'retry_pending_actions',
+      'drain_task_queue',
+      'merge_conflict_reconcile',
+      'merge_queue_tick',
+      'code_tasks_zombie_sweep',
+      'archive_stale_groups',
+      'auto_archive_merged_tasks',
+      'execution_memory_process',
+      'execution_memory_sweep_errored',
+      'execution_memory_prune_stale',
+    ]) {
+      expect(devTerraform, schedulerResource).not.toContain(
+        `resource "google_cloud_scheduler_job" "${schedulerResource}"`
+      );
+    }
+
+    expect(devTerraform).not.toContain('google_cloud_run_service_iam_member" "scheduler_invokes');
+    expect(devTerraform).not.toContain('source = "../../modules/cloud-run-service"');
   });
 });
 
@@ -264,6 +495,9 @@ describe('Hetzner secret loader', () => {
     expect(script).toContain('HETZNER_RUNTIME_SECRETS=(');
     expect(script).toContain('PROVISIONER_SA_KEY_FILE');
     expect(script).toContain('RUNTIME_SA_KEY_FILE');
+    expect(script).toContain('TEMP_ENV_FILE=');
+    expect(script).toContain('cleanup_temp_file()');
+    expect(script).toContain('trap cleanup_temp_file EXIT');
     expect(script).toContain('GOOGLE_APPLICATION_CREDENTIALS" "${RUNTIME_SA_KEY_FILE}"');
     expect(script).toContain('printf \'%s\\n\' "${HETZNER_RUNTIME_SECRETS[@]}"');
     expect(script).toContain('install -m 600');
@@ -272,6 +506,10 @@ describe('Hetzner secret loader', () => {
     expect(script).toContain('install -d -m 755 "$(dirname "${INTERNAL_AUTH_TOKEN_FILE}")"');
     expect(script).toContain('install -m 640 -o root -g "${NGINX_TOKEN_GROUP}"');
     expect(script).toContain('internal-auth-token');
+    expect(script).not.toContain('payload.data');
+    expect(script).not.toContain('base64 --decode');
+    expect(script).not.toContain('base64 is required');
+    expect(script).not.toContain('trap \'rm -f "${temp_file}"\' EXIT');
     expect(script).not.toMatch(/echo\s+\$[A-Z_]*SECRET/);
     expect(script).not.toMatch(/set -x/);
     expect(script).not.toContain('extract_terraform_secret_names');
@@ -284,12 +522,24 @@ describe('Hetzner secret loader', () => {
 
   it('keeps certbot DNS credentials separate from the Cloudflare Browser Rendering API token', () => {
     const script = readRequired(installNginxPath);
+    const provisionScript = readRequired(provisionPath);
     const terraform = readRequired(terraformDevMainPath);
 
     expect(script).toContain('INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN');
     expect(script).toContain('CLOUDFLARE_DNS_API_TOKEN_SECRET');
     expect(script).toContain('gcloud secrets versions access latest');
+    expect(script).not.toContain('payload.data');
+    expect(script).not.toContain('base64 --decode');
     expect(script).toContain('if [[ "${SKIP_CERTBOT}" -ne 1 ]]');
+    expect(script).toContain('INTEXURAOS_SSL_PRIVATE_KEY');
+    expect(script).toContain('terraform/certs/intexuraos.cloud/fullchain.pem');
+    expect(script).toContain('install_existing_certificate()');
+    expect(script).toContain('install -m 644');
+    expect(script).toContain('install -m 600');
+    expect(script).toContain('libnginx-mod-http-lua');
+    expect(provisionScript).toContain('libnginx-mod-http-lua');
+    expect(script).not.toContain('trap \'rm -f "${temp_key}"\' RETURN');
+    expect(script).not.toContain('trap \'rm -f "${temp_file}"\' RETURN');
     expect(script).toContain('readFileSync(envFile, "utf8")');
     expect(script).toContain('unquote(line.slice(index + 1))');
     expect(script).not.toContain('sed -n "s/^${key}=//p"');
@@ -306,6 +556,112 @@ describe('Hetzner secret loader', () => {
     expect(terraform).toContain('hetzner_runtime_bucket_object_admin');
     expect(terraform).toContain('hetzner_runtime_token_creator');
     expect(terraform).toContain('hetzner_provisioner_cloudflare_dns');
+    expect(terraform).toContain('hetzner_provisioner_ssl_private_key');
+  });
+
+  it('uses GCP-valid account IDs for Hetzner service accounts', () => {
+    const terraform = readRequired(terraformDevMainPath);
+    const gcpAccountIdPattern = /^[a-z](?:[-a-z0-9]{4,28}[a-z0-9])$/;
+    const hetznerAccountIds = [
+      ...terraform.matchAll(/account_id\s+=\s+"([^"]*hetzner[^"]*)"/g),
+    ].map((match) => match[1]?.replace('${var.environment}', 'dev'));
+
+    expect(hetznerAccountIds).toHaveLength(2);
+    for (const accountId of hetznerAccountIds) {
+      expect(accountId).toMatch(gcpAccountIdPattern);
+    }
+  });
+
+  it('removes the legacy GCP web app hosting knobs after Hetzner cutover', () => {
+    const terraform = readRequired(terraformDevMainPath);
+    const tfvarsExample = readRequired(terraformDevTfvarsExamplePath);
+
+    expect(terraform).not.toContain('variable "enable_load_balancer"');
+    expect(terraform).not.toContain('source = "../../modules/web-app"');
+    expect(terraform).not.toContain('module "web_app"');
+    expect(tfvarsExample).not.toContain('enable_load_balancer');
+    expect(tfvarsExample).not.toContain('web_app_domain');
+  });
+
+  it('makes the live Hetzner production environment reproducible from Terraform-managed state', () => {
+    const hetznerMain = readRequired(terraformHetznerMainPath);
+    const hetznerImports = readRequired(terraformHetznerImportsPath);
+    const hetznerBootstrap = readRequired(terraformHetznerBootstrapPath);
+    const hetznerCloudInit = readRequired(terraformHetznerCloudInitPath);
+    const hetznerServer = readRequired(resolve(repoRoot, 'terraform/hetzner-prod/hetzner.tf'));
+    const hetznerServerResource = hetznerServer.split('resource "hcloud_server" "prod" {')[1] ?? '';
+    const hetznerVariables = readRequired(terraformHetznerVariablesPath);
+    const hetznerTfvarsExample = readRequired(terraformHetznerTfvarsExamplePath);
+    const hetznerAutoTfvars = JSON.parse(readRequired(terraformHetznerProdAutoTfvarsPath)) as {
+      hetzner_server_type?: string;
+      deploy_ssh_public_key?: string;
+      admin_ssh_source_ips?: string[];
+    };
+
+    expect(hetznerMain).toContain('component   = "prod-hetzner"');
+    expect(hetznerMain).toContain('environment = var.environment');
+    expect(hetznerServer).toContain('user_data');
+    expect(hetznerServer).toContain('cloud-init.yaml.tftpl');
+    expect(hetznerServer).toContain('delete_protection  = false');
+    expect(hetznerServer).toContain('rebuild_protection = false');
+    expect(hetznerServerResource).not.toContain('prevent_destroy = true');
+    expect(hetznerCloudInit).toContain('name: deploy');
+    expect(hetznerCloudInit).toContain('NOPASSWD:ALL');
+    expect(hetznerCloudInit).toContain('ssh_authorized_keys');
+    expect(hetznerBootstrap).toContain('resource "terraform_data" "bootstrap_prod"');
+    expect(hetznerBootstrap).toContain('hcloud_server.prod.id');
+    expect(hetznerBootstrap).toContain('provisioner_sa_key_path');
+    expect(hetznerBootstrap).toContain('runtime_sa_key_path');
+    expect(hetznerBootstrap).toContain('rsync -az --delete');
+    expect(hetznerBootstrap).toContain('scripts/hetzner/provision.sh --skip-certbot');
+    expect(hetznerBootstrap).toContain('pnpm install --frozen-lockfile');
+    expect(hetznerBootstrap).toContain('pnpm --filter @intexuraos/infra-otel build');
+    expect(hetznerBootstrap).toContain('scripts/hetzner/deploy-web.sh');
+    expect(hetznerBootstrap).toContain('scripts/hetzner/reload-pm2.sh');
+    expect(hetznerBootstrap).toContain('scripts/hetzner/deploy-nginx.sh');
+    const bootstrapInstallFlow = hetznerBootstrap.slice(
+      hetznerBootstrap.indexOf('pnpm install --frozen-lockfile')
+    );
+    expect(
+      bootstrapInstallFlow.indexOf('pnpm --filter @intexuraos/infra-otel build')
+    ).toBeGreaterThan(bootstrapInstallFlow.indexOf('pnpm install --frozen-lockfile'));
+    expect(bootstrapInstallFlow.indexOf('pnpm --filter @intexuraos/infra-otel build')).toBeLessThan(
+      bootstrapInstallFlow.indexOf('scripts/hetzner/reload-pm2.sh')
+    );
+    expect(hetznerVariables).toContain('default     = "prod"');
+    expect(hetznerVariables).toContain('default     = "cx33"');
+    expect(hetznerVariables).toContain('deploy_ssh_private_key_path');
+    expect(hetznerVariables).toContain('provisioner_sa_key_path');
+    expect(hetznerVariables).toContain('runtime_sa_key_path');
+    expect(hetznerTfvarsExample).toContain('environment = "prod"');
+    expect(hetznerTfvarsExample).toContain('hetzner_server_type = "cx33"');
+    expect(hetznerTfvarsExample).toMatch(/hetzner_bootstrap_enabled\s+=\s+true/);
+    expect(hetznerAutoTfvars.hetzner_server_type).toBe('cx33');
+    expect(hetznerAutoTfvars.deploy_ssh_public_key).toMatch(/^ssh-ed25519 /);
+    expect(hetznerAutoTfvars.admin_ssh_source_ips).toEqual(['0.0.0.0/0', '::/0']);
+
+    for (const importId of [
+      '110595122',
+      '125976522',
+      '10824053',
+      'intexuraos-bookmark-summarize-prod-hetzner',
+      'intexuraos-whatsapp-media-cleanup-prod-hetzner',
+      'intexuraos-llm-analytics-prod-hetzner',
+      'intexuraos-whatsapp-webhook-process-prod-hetzner',
+      'intexuraos-bookmark-enrich-prod-hetzner',
+      'intexuraos-actions-queue-prod-hetzner',
+      'intexuraos-commands-ingest-prod-hetzner',
+      'intexuraos-approval-reply-prod-hetzner',
+      'intexuraos-calendar-preview-prod-hetzner',
+      'intexuraos-todos-processing-prod-hetzner',
+      'intexuraos-research-process-prod-hetzner',
+      'intexuraos-llm-call-prod-hetzner',
+      'intexuraos-srt-transcription-completed-prod-hetzner',
+    ]) {
+      expect(hetznerImports).toContain(importId);
+    }
+
+    expect(hetznerImports).not.toContain('126413082');
   });
 });
 
@@ -339,6 +695,10 @@ describe('Hetzner migration readiness documentation', () => {
     expect(plan).toContain('pause the old app-targeted Cloud Scheduler jobs');
     expect(plan).toContain('restore the old Cloud Run-targeted Pub/Sub push consumers');
     expect(plan).toContain('Cloudflare DNS');
+    expect(plan).toContain('162.55.210.48');
+    expect(plan).toContain('136.110.232.83');
+    expect(plan).toContain('enable_load_balancer=false');
+    expect(plan).toContain('cloudflared');
     expect(plan).toContain('www');
     expect(plan).toContain('rollback');
   });
