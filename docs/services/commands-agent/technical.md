@@ -2,7 +2,7 @@
 
 ## Overview
 
-Commands-agent classifies natural language input into action types using a structured 5-step LLM prompt backed by Gemini 2.5 Flash. It receives commands from WhatsApp (via Pub/Sub push) and the PWA (via REST), creates actions through actions-agent, and publishes `action.created` events for downstream processing. LLM usage is tracked via `HttpInternalAuthUsageSink` to llm-usage-service. Runs on Cloud Run with Fastify, Firestore persistence, and Dash0 OpenTelemetry for distributed tracing.
+Commands-agent classifies natural language input into action types using a structured 5-step LLM prompt backed by Gemini 2.5 Flash. It receives commands from WhatsApp (via Pub/Sub push) and the PWA (via REST), creates actions through actions-agent, and publishes `action.created` events for downstream processing. LLM usage is tracked via `HttpInternalAuthUsageSink` to llm-usage-service. Runs on Cloud Run with Fastify and Firestore persistence.
 
 ## Architecture
 
@@ -283,7 +283,6 @@ sequenceDiagram
 | `llm-contract`       | Shared `LlmModels` enum and type contracts              |
 | `internal-clients`   | Shared user-service HTTP client                         |
 | `infra-sentry`       | Sentry-enabled logger factory                           |
-| `infra-otel`         | OpenTelemetry distributed tracing via Dash0             |
 | `infra-pubsub`       | `BasePubSubPublisher` base class                        |
 | `common-http`        | `requireAuth`, `validateInternalAuth`, response helpers |
 | `common-core`        | `Result<T>`, `ok()`, `err()`, `getErrorMessage()`       |
@@ -295,7 +294,6 @@ sequenceDiagram
 | Firestore (`commands` collection)               | Command persistence                                                 |
 | Pub/Sub (via `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`) | Action creation events                                              |
 | Cloud Scheduler                                 | Triggers `/internal/retry-pending` for pending classification retry |
-| Dash0 (via OTLP/HTTP)                           | Distributed tracing and metrics                                     |
 
 ### External APIs
 
@@ -343,8 +341,6 @@ sequenceDiagram
 **Response contract** — All endpoints use `reply.ok(data)` and `reply.fail(code, message)`. Responses wrap data under `{ success: true, data: {...} }` and errors under `{ success: false, error: { code, message } }`.
 
 **Logging** — All loggers use `createAppLogger()` from `@intexuraos/infra-sentry` (not raw `pino()`), which sends errors to Sentry automatically.
-
-**OpenTelemetry** — The Dockerfile uses `--import` flag to preload the `@intexuraos/infra-otel` register module. Tracing exports to Dash0 via OTLP/HTTP when configured. No-op when unset.
 
 **Title length limit** — The Zod schema for classification responses enforces a 200-character maximum on titles. Increased from 50 in v3.3.0 to prevent valid classifications from being discarded when the LLM generates descriptive titles.
 

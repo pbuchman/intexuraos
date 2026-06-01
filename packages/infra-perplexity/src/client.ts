@@ -44,7 +44,7 @@ import {
   type GenerateResult,
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
-import { withLlmSpan, withRetry } from '@intexuraos/llm-utils';
+import { measureLlmCall, withRetry } from '@intexuraos/llm-utils';
 import type {
   PerplexityConfig,
   PerplexityError,
@@ -388,8 +388,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
   ): Promise<Result<GenerateResult, PerplexityError>> {
     const start = Date.now();
     try {
-      const { result, durationMs } = await withLlmSpan(
-        LlmProviders.Perplexity,
+      const { result, durationMs } = await measureLlmCall(
         async (): Promise<{
           content: string;
           usage: NormalizedUsage;
@@ -419,7 +418,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
             timeoutMs
           );
 
-          // Throw on HTTP error so withLlmSpan records ERROR status. The outer
+          // Throw on HTTP error so measureLlmCall rethrows errors. The outer
           // catch below maps the error and logs usage with measured duration.
           if (!response.ok) {
             const errorText = await response.text();
@@ -430,13 +429,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
           const content = data.choices[0]?.message.content ?? '';
           const usage = extractUsage(data.usage);
           return { content, usage };
-        },
-        ({ usage }) => ({
-          model,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          costUsd: usage.costUsd,
-        })
+        }
       );
 
       trackUsage(

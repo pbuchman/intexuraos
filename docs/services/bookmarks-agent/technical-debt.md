@@ -207,7 +207,6 @@ The public `POST /bookmarks` endpoint does not trigger enrichment — only the i
 | Improvement                       | Description                                                        | Date       |
 | --------------------------------- | ------------------------------------------------------------------ | ---------- |
 | v8-ignore test coverage (INT-786) | Tests added for untestable branch exemptions                       | 2026-03-13 |
-| Dash0 OpenTelemetry integration   | Distributed tracing via package-level OTel instrumentation         | 2026-02-16 |
 | Dev-mode log formatting           | Human-readable logs in PM2 via createLogStream()                   | 2026-02-16 |
 | PM2 ecosystem migration           | Switched to pnpm --filter with start:local for reliable local dev  | 2026-02-14 |
 | 100% branch coverage enforcement  | v8 ignore exemptions with valid categories for untestable branches | 2026-01-31 |

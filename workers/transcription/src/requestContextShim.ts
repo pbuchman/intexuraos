@@ -5,8 +5,6 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 export interface RequestContext {
   requestId: string;
   correlationId: string;
-  traceId?: string;
-  parentId?: string;
 }
 
 const als = new AsyncLocalStorage<RequestContext>();

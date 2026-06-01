@@ -541,7 +541,7 @@ const llmResult = await client.getLlmClient(userId);
 1. **Service Mesh** - Consider Istio/Linkerd for automatic mTLS
 2. **API Gateway** - Centralized routing and authentication
 3. **Circuit Breakers** - Automatic failover for degraded services
-4. **Distributed Tracing** - OpenTelemetry for request tracing
+4. **Request Correlation** - Preserve request and correlation identifiers across service boundaries
 5. **Rate Limiting** - Protect services from excessive internal traffic
 
 ## References

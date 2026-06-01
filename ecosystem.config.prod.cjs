@@ -184,14 +184,6 @@ function publicServiceUrl(service) {
   return apiPath === undefined ? PUBLIC_ORIGIN : `${PUBLIC_ORIGIN}${apiPath}`;
 }
 
-function nodeOptions() {
-  const otelImport = '--import @intexuraos/infra-otel/register';
-  const existing = envValue('NODE_OPTIONS') ?? '';
-  return existing.includes(otelImport)
-    ? existing
-    : [existing, otelImport].filter(Boolean).join(' ');
-}
-
 function pickEnv(keys) {
   return Object.fromEntries(
     keys
@@ -207,8 +199,6 @@ const COMMON_ENV_KEYS = [
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_JWKS_URL',
-  'INTEXURAOS_DASH0_AUTH_TOKEN',
-  'INTEXURAOS_DASH0_OTLP_ENDPOINT',
   'INTEXURAOS_PUBLIC_ORIGIN',
   'INTEXURAOS_SENTRY_DSN',
 ];
@@ -416,7 +406,6 @@ function createServiceConfig(name) {
       ...(waitForService === undefined ? {} : { WAIT_FOR_SERVICE: waitForService }),
       PORT: String(SERVICE_PORTS[name]),
       NODE_ENV: 'production',
-      NODE_OPTIONS: nodeOptions(),
     },
     autorestart: true,
     kill_timeout: 5000,

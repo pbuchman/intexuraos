@@ -156,7 +156,6 @@ To programmatically access a service's OpenAPI spec, bypass the hub entirely and
 | `@fastify/swagger-ui`         | Serves Swagger UI interface    | Service cannot start      |
 | `@intexuraos/common-http`     | Fastify plugin and logging     | Service cannot start      |
 | `@intexuraos/infra-sentry`    | Error tracking and log streams | Degrades gracefully       |
-| `@intexuraos/infra-otel`      | Dash0 log forwarding           | Optional; no-op if absent |
 
 ---
 

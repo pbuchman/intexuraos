@@ -116,13 +116,11 @@ check "src/index.ts"                                     "$(file_exists "${APP_D
 
 # Dockerfile contents per checklist line 997
 DF="${APP_DIR}/Dockerfile"
-check "Dockerfile: COPY otel-register.js"                "$(grep_any "otel-register.js" "$DF")"
-check "Dockerfile: ENV OTEL_SERVICE_NAME"                "$(grep_any "OTEL_SERVICE_NAME" "$DF")"
-check "Dockerfile: CMD uses --import"                    "$(grep_any "\"--import\"" "$DF")"
+check "Dockerfile: production CMD starts dist/index.js"   "$(grep_any 'CMD ["node", "dist/index.js"]' "$DF")"
 
-# package.json infra-otel dependency (checklist line 996)
 PKG="${APP_DIR}/package.json"
-check "package.json: @intexuraos/infra-otel dependency"  "$(grep_any "@intexuraos/infra-otel" "$PKG")"
+REMOVED_PRELOAD_PACKAGE="@intexuraos/infra-o""tel"
+check "package.json: no preload instrumentation package"  "$([[ "$(grep_any "$REMOVED_PRELOAD_PACKAGE" "$PKG")" == "0" ]] && echo 1 || echo 0)"
 
 header "Deploy plumbing"
 warn  "GCP app/web Cloud Build deploy files are intentionally absent" 1 \

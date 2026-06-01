@@ -21,50 +21,66 @@ const outputPath = join(packagesRoot, 'README.md');
 const CATEGORIES = {
   'common-core': 'common-http',
   'common-http': 'common-http',
+  'common-metrics': 'common-http',
+  'common-worker': 'common-http',
   'http-contracts': 'common-http',
   'http-server': 'common-http',
+  'calendar-pubsub-client': 'integration',
+  'code-task-domain': 'integration',
   'infra-claude': 'infrastructure',
   'infra-firestore': 'infrastructure',
   'infra-gemini': 'infrastructure',
   'infra-gpt': 'infrastructure',
   'infra-notion': 'infrastructure',
   'infra-openrouter': 'infrastructure',
-  'infra-otel': 'infrastructure',
   'infra-perplexity': 'infrastructure',
   'infra-pubsub': 'infrastructure',
   'infra-sentry': 'infrastructure',
   'infra-whatsapp': 'infrastructure',
+  'linear-domain': 'integration',
   'llm-contract': 'llm',
   'llm-factory': 'llm',
   'llm-pricing': 'llm',
   'llm-prompts': 'llm',
   'llm-utils': 'llm',
   'internal-clients': 'integration',
+  'pr-triage-pubsub-client': 'integration',
+  'service-catalog': 'integration',
+  'todos-pubsub-client': 'integration',
+  'whatsapp-pubsub-client': 'integration',
 };
 
 // Short descriptions used in the dependency-graph block and the section tables.
 const DESCRIPTIONS = {
   'common-core': 'Result types, errors, redaction',
   'common-http': 'Fastify plugins, auth, response utilities',
+  'common-metrics': 'Cloud Monitoring metric writer helpers',
+  'common-worker': 'Shared worker bootstrap utilities',
   'http-contracts': 'OpenAPI & Fastify JSON schemas',
   'http-server': 'Health checks, validation handler',
+  'calendar-pubsub-client': 'Calendar Pub/Sub message client',
+  'code-task-domain': 'Shared code task domain contracts',
   'infra-claude': 'Anthropic Claude API client',
   'infra-firestore': 'Firestore singleton & fake',
   'infra-gemini': 'Google Gemini API client',
   'infra-gpt': 'OpenAI GPT API client',
   'infra-notion': 'Notion client & connection repository',
   'infra-openrouter': 'OpenAI-compatible client for the OpenRouter aggregator',
-  'infra-otel': 'OpenTelemetry SDK bootstrap',
   'infra-perplexity': 'Perplexity AI API client',
   'infra-pubsub': 'Cloud Pub/Sub publishers',
   'infra-sentry': 'Sentry error tracking & logger factory',
   'infra-whatsapp': 'WhatsApp Cloud API client',
   'internal-clients': 'HTTP clients for internal services',
+  'linear-domain': 'Shared Linear domain contracts',
   'llm-contract': 'Shared LLM types, model names, interfaces',
   'llm-factory': 'Unified LLM client factory',
   'llm-pricing': 'LLM pricing fetch, cost tracking',
   'llm-prompts': 'Centralized LLM prompt builders',
   'llm-utils': 'Redaction utilities, LLM parse error helpers',
+  'pr-triage-pubsub-client': 'PR triage Pub/Sub message client',
+  'service-catalog': 'Service registry metadata',
+  'todos-pubsub-client': 'Todos Pub/Sub message client',
+  'whatsapp-pubsub-client': 'WhatsApp Pub/Sub message client',
 };
 
 function readPackages() {
@@ -221,7 +237,7 @@ ${buildTable(toRows(byCategory.integration))}
 
 ## Build Output
 
-All packages export from \`./src/*.ts\` (source-exports default). The single exception is \`@intexuraos/infra-otel\`, which ships a compiled \`./register\` entry because OpenTelemetry must be loaded via \`node --require\` at process bootstrap. See [\`docs/architecture/package-build-output.md\`](../docs/architecture/package-build-output.md). Enforced by \`pnpm run verify:package-exports\`.
+All packages export from \`./src/*.ts\` (source-exports default). No package emits runtime \`dist/\` artifacts. See [\`docs/architecture/package-build-output.md\`](../docs/architecture/package-build-output.md). Enforced by \`pnpm run verify:package-exports\`.
 
 ## Testing
 

@@ -49,7 +49,6 @@ graph TB
 | `549c9698` | Enforce strict v8 ignore validation with blocker keyword checks    | 2026-03-24 |
 | `93aeac4a` | Remove ZAI provider and GLM-4.7 models, finalize GLM-5             | 2026-03-12 |
 | `6063175b` | Add dev-mode log formatting for PM2 readability                    | 2026-02-16 |
-| `a52a6bbc` | Add Dash0 OpenTelemetry integration                                | 2026-02-16 |
 
 ## API Endpoints
 
@@ -122,7 +121,6 @@ The cron-agent's `config.ts` registers app-settings-service in its service catal
 | `@intexuraos/http-server`     | Health checks, env validation         |
 | `@intexuraos/infra-firestore` | Firestore client singleton            |
 | `@intexuraos/infra-sentry`    | Sentry init, app logger, log stream   |
-| `@intexuraos/infra-otel`      | OpenTelemetry distributed tracing     |
 | `@intexuraos/llm-contract`    | Unused (stale dependency)             |
 
 ## Gotchas

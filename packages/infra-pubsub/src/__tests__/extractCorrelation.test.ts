@@ -6,8 +6,6 @@ describe('extractCorrelation', () => {
     const ctx = extractCorrelation({ 'x-request-id': 'r', 'x-correlation-id': 'c' });
     expect(ctx.requestId).toBe('r');
     expect(ctx.correlationId).toBe('c');
-    expect(ctx.traceId).toBeUndefined();
-    expect(ctx.parentId).toBeUndefined();
   });
 
   it('generates a fresh UUID for requestId when missing, and mirrors it as correlationId', () => {
@@ -34,33 +32,11 @@ describe('extractCorrelation', () => {
     expect(ctx.correlationId).toBe('r');
   });
 
-  it('parses a valid traceparent', () => {
-    const traceId = 'a'.repeat(32);
-    const parentId = 'b'.repeat(16);
+  it('ignores traceparent attributes', () => {
     const ctx = extractCorrelation({
       'x-request-id': 'r',
       'x-correlation-id': 'c',
-      traceparent: `00-${traceId}-${parentId}-01`,
-    });
-    expect(ctx.traceId).toBe(traceId);
-    expect(ctx.parentId).toBe(parentId);
-  });
-
-  it('omits traceId/parentId when traceparent is malformed (garbage)', () => {
-    const ctx = extractCorrelation({
-      'x-request-id': 'r',
-      'x-correlation-id': 'c',
-      traceparent: 'garbage',
-    });
-    expect('traceId' in ctx).toBe(false);
-    expect('parentId' in ctx).toBe(false);
-  });
-
-  it('omits traceId/parentId when traceparent has wrong segment lengths', () => {
-    const ctx = extractCorrelation({
-      'x-request-id': 'r',
-      'x-correlation-id': 'c',
-      traceparent: '00-tooShort-bbbbbbbbbbbbbbbb-01',
+      traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01',
     });
     expect('traceId' in ctx).toBe(false);
     expect('parentId' in ctx).toBe(false);

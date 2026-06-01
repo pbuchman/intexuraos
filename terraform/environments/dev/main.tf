@@ -303,8 +303,6 @@ locals {
     "INTEXURAOS_AUTH_JWKS_URL",
     "INTEXURAOS_CLOUDFLARE_ACCOUNT_ID",
     "INTEXURAOS_CLOUDFLARE_API_TOKEN",
-    "INTEXURAOS_DASH0_AUTH_TOKEN",
-    "INTEXURAOS_DASH0_OTLP_ENDPOINT",
     "INTEXURAOS_ENCRYPTION_KEY",
     "INTEXURAOS_FIREBASE_API_KEY",
     "INTEXURAOS_FIREBASE_AUTH_DOMAIN",
@@ -541,9 +539,6 @@ module "secret_manager" {
     # Orchestrator repository management (INT-515)
     "INTEXURAOS_REPOSITORY_URL"        = "GitHub repository URL for orchestrator self-managed clone"
     "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation"
-    # Dash0 OpenTelemetry observability
-    "INTEXURAOS_DASH0_OTLP_ENDPOINT" = "Dash0 OTLP HTTP ingress endpoint for OpenTelemetry"
-    "INTEXURAOS_DASH0_AUTH_TOKEN"    = "Dash0 Bearer auth token for OTLP export"
   }
 
   depends_on = [google_project_service.apis]

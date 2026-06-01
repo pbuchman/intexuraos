@@ -47,7 +47,7 @@ import {
   type GenerateResult,
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
-import { withLlmSpan, withRetry } from '@intexuraos/llm-utils';
+import { measureLlmCall, withRetry } from '@intexuraos/llm-utils';
 import type { ClaudeConfig, ClaudeError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
@@ -234,37 +234,27 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   ): Promise<Result<GenerateResult, ClaudeError>> {
     const start = Date.now();
     try {
-      const { result, durationMs } = await withLlmSpan(
-        LlmProviders.Anthropic,
-        async () => {
-          const response = await client.messages.create({
-            model,
-            max_tokens: MAX_TOKENS,
-            messages: [{ role: 'user', content: prompt }],
-          });
-
-          const textBlocks = response.content.filter(
-            (block): block is Anthropic.TextBlock => block.type === 'text'
-          );
-          const text = textBlocks.map((b) => b.text).join('\n\n');
-          const usageDetails = extractUsageDetails(response.usage);
-          const usage = normalizeUsage(
-            usageDetails.inputTokens,
-            usageDetails.outputTokens,
-            usageDetails.cacheReadTokens,
-            usageDetails.cacheCreationTokens,
-            0
-          );
-          return { content: text, usage, cacheReadTokens: usageDetails.cacheReadTokens };
-        },
-        ({ usage, cacheReadTokens }) => ({
+      const { result, durationMs } = await measureLlmCall(async () => {
+        const response = await client.messages.create({
           model,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          ...(cacheReadTokens > 0 && { cachedInputTokens: cacheReadTokens }),
-          costUsd: usage.costUsd,
-        })
-      );
+          max_tokens: MAX_TOKENS,
+          messages: [{ role: 'user', content: prompt }],
+        });
+
+        const textBlocks = response.content.filter(
+          (block): block is Anthropic.TextBlock => block.type === 'text'
+        );
+        const text = textBlocks.map((b) => b.text).join('\n\n');
+        const usageDetails = extractUsageDetails(response.usage);
+        const usage = normalizeUsage(
+          usageDetails.inputTokens,
+          usageDetails.outputTokens,
+          usageDetails.cacheReadTokens,
+          usageDetails.cacheCreationTokens,
+          0
+        );
+        return { content: text, usage, cacheReadTokens: usageDetails.cacheReadTokens };
+      });
 
       trackUsage(
         'generate',

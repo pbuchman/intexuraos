@@ -2,7 +2,7 @@
 
 ## Overview
 
-Chat-agent is the in-app AI assistant for IntexuraOS. It combines Retrieval-Augmented Generation (RAG) with conversational LLM capabilities to answer documentation questions, explain APIs, and create commands on behalf of users. Runs on Cloud Run with auto-scaling, uses Firestore vector search for semantic document retrieval, and supports both authenticated and guest sessions. OpenTelemetry instrumentation via `@intexuraos/infra-otel` is loaded as a Node.js preload module (`--import ./dist/otel-register.js`), exporting traces, metrics, and logs to Dash0 when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is configured.
+Chat-agent is the in-app AI assistant for IntexuraOS. It combines Retrieval-Augmented Generation (RAG) with conversational LLM capabilities to answer documentation questions, explain APIs, and create commands on behalf of users. Runs on Cloud Run with auto-scaling, uses Firestore vector search for semantic document retrieval, and supports both authenticated and guest sessions.
 
 ## Architecture
 
@@ -253,7 +253,6 @@ Chat-agent does not publish or subscribe to any Pub/Sub topics. All communicatio
 | `@intexuraos/http-server`      | Health checks, env validation           |
 | `@intexuraos/http-contracts`   | Core API schema definitions             |
 | `@intexuraos/infra-firestore`  | Firestore singleton + vector search     |
-| `@intexuraos/infra-otel`       | Dash0 OpenTelemetry instrumentation     |
 | `@intexuraos/infra-sentry`     | Sentry logging, error handler           |
 | `@intexuraos/internal-clients` | user-service client                     |
 | `@intexuraos/llm-contract`     | LLM model enums, error types            |
@@ -277,8 +276,6 @@ Chat-agent does not publish or subscribe to any Pub/Sub topics. All communicatio
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | Yes      | Platform Gemini API key for guest sessions and user fallback  |
 | `INTEXURAOS_SENTRY_DSN`               | No       | Sentry DSN for error tracking                                 |
 | `INTEXURAOS_ENVIRONMENT`              | No       | Environment name (defaults to `development`)                  |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint for distributed tracing and metrics       |
-| `OTEL_SERVICE_NAME`                   | No       | OpenTelemetry service name (set to `chat-agent` in Docker)    |
 | `PORT`                                | No       | Server port (defaults to `8080`)                              |
 | `HOST`                                | No       | Server host (defaults to `0.0.0.0`)                           |
 | `LOG_LEVEL`                           | No       | Pino log level (defaults to `info`)                           |
@@ -293,7 +290,7 @@ The following models are validated at startup for pricing availability:
 
 ### Terraform
 
-Deployed as `intexuraos-chat-agent` via Cloud Run module. Secrets `INTEXURAOS_OPENAI_APP_API_KEY` and `INTEXURAOS_GEMINI_APP_API_KEY` injected from Secret Manager. `INTEXURAOS_DASH0_OTLP_ENDPOINT` injected for Dash0 observability. Common service env vars inherited. Scales from 0 to 1 instance. Dockerfile runs with `--import ./dist/otel-register.js` preload for transparent OpenTelemetry instrumentation.
+Deployed as `intexuraos-chat-agent` via Cloud Run module. Secrets `INTEXURAOS_OPENAI_APP_API_KEY` and `INTEXURAOS_GEMINI_APP_API_KEY` injected from Secret Manager. Common service env vars inherited. Scales from 0 to 1 instance.
 
 ### Local Development
 

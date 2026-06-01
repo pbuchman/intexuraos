@@ -1,5 +1,4 @@
 import { initSentry } from '@intexuraos/infra-sentry';
-import { assertOtelActive } from '@intexuraos/infra-otel';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { installUsageSinkShutdownHandler } from '@intexuraos/llm-pricing';
 import { buildServer } from './server.js';
@@ -19,7 +18,6 @@ const REQUIRED_ENV = [
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
-assertOtelActive({ serviceName: 'commands-agent' });
 
 initSentry({
   ...(process.env['INTEXURAOS_SENTRY_DSN'] !== undefined && {

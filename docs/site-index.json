@@ -1057,18 +1057,6 @@
       "description": "Technical debt notes for infra-notion"
     },
     {
-      "path": "packages/infra-otel/README.md",
-      "title": "@intexuraos/infra-otel",
-      "category": "packages",
-      "description": "Package documentation: infra-otel"
-    },
-    {
-      "path": "packages/infra-otel/technical-debt.md",
-      "title": "Technical Debt: @intexuraos/infra-otel",
-      "category": "packages",
-      "description": "Technical debt notes for infra-otel"
-    },
-    {
       "path": "packages/infra-perplexity/README.md",
       "title": "@intexuraos/infra-perplexity",
       "category": "packages",

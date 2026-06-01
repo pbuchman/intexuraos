@@ -21,7 +21,7 @@ describe('buildRequestContext', () => {
     return { headers };
   }
 
-  it('populates requestId, correlationId, and parentId from inbound headers', () => {
+  it('populates requestId and correlationId from inbound headers', () => {
     const ctx = buildRequestContext(
       fakeRequest({
         [X_REQUEST_ID]: 'req-abc',
@@ -31,7 +31,6 @@ describe('buildRequestContext', () => {
     expect(ctx).toEqual({
       requestId: 'req-abc',
       correlationId: 'corr-xyz',
-      parentId: 'req-abc',
     });
   });
 
@@ -42,16 +41,14 @@ describe('buildRequestContext', () => {
       >[0]
     );
     expect(ctx.correlationId).toBe('req-only');
-    expect(ctx.parentId).toBe('req-only');
   });
 
-  it('generates a UUID when no request id is supplied and omits parentId', () => {
+  it('generates a UUID when no request id is supplied', () => {
     const ctx = buildRequestContext(
       fakeRequest({}) as unknown as Parameters<typeof buildRequestContext>[0]
     );
     expect(ctx.requestId).toMatch(/^[0-9a-f-]{36}$/);
     expect(ctx.correlationId).toBe(ctx.requestId);
-    expect(ctx.parentId).toBeUndefined();
   });
 
   it('reads the first non-empty entry when the header is an array', () => {
@@ -68,7 +65,6 @@ describe('buildRequestContext', () => {
       fakeRequest({ [X_REQUEST_ID]: '' }) as unknown as Parameters<typeof buildRequestContext>[0]
     );
     expect(ctx.requestId).toMatch(/^[0-9a-f-]{36}$/);
-    expect(ctx.parentId).toBeUndefined();
   });
 
   it('falls back to a UUID when the header array is empty or contains only empty entries', () => {
@@ -148,7 +144,6 @@ describe('registerRequestContext (Fastify integration)', () => {
 
     expect(ctxObserved?.requestId).toBe('edge-req');
     expect(ctxObserved?.correlationId).toBe('edge-req');
-    expect(ctxObserved?.parentId).toBe('edge-req');
   });
 
   it('isolates contexts across concurrent requests', async () => {

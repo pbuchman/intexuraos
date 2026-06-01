@@ -118,7 +118,6 @@ None. This service does not publish or subscribe to any Pub/Sub topics.
 | `@intexuraos/common-http`    | `intexuraFastifyPlugin`, quiet health check logging |
 | `@intexuraos/http-server`    | `buildHealthResponse`, `HealthCheck` types          |
 | `@intexuraos/infra-sentry`   | Sentry error capture, `createLogStream()`           |
-| `@intexuraos/infra-otel`     | Dash0 OpenTelemetry log forwarding (optional)       |
 
 Note: `@intexuraos/common-core` is listed in `package.json` but is no longer imported in source code.
 
@@ -139,7 +138,6 @@ None. The hub does not call any internal service APIs. It only provides URLs for
 | `test`       | Logger disabled                                             |
 | `dev` (PM2)  | Human-readable formatted output                             |
 | `production` | Raw JSON + Sentry error forwarding                          |
-| Any + Dash0  | + OTLP forwarding when `INTEXURAOS_DASH0_OTLP_ENDPOINT` set |
 
 Health check routes are excluded from request logging via `registerQuietHealthCheckLogging`.
 

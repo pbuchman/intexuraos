@@ -2,21 +2,13 @@
 /**
  * Workspace clean — remove transient build artifacts.
  *
- * Source-exports policy: no `packages/<pkg>/dist` is consumed at runtime
- * EXCEPT `packages/infra-otel/dist`, which holds the compiled `register.js`
- * loaded by `node --require` at OTel bootstrap. Cleaning that would leave dev
- * shells unable to start until the next
- * `pnpm --filter @intexuraos/infra-otel run build`.
- *
- * This script preserves `infra-otel/dist`. To force a clean rebuild of OTel,
- * delete `packages/infra-otel/dist` manually and rerun the OTel build.
+ * Source-exports policy: no `packages/<pkg>/dist` is consumed at runtime.
  */
 
 import { readdirSync, rmSync, statSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
 const repoRoot = resolve(import.meta.dirname, '..');
-const PRESERVE = new Set(['infra-otel']);
 
 function rmIfExists(path) {
   if (existsSync(path)) {
@@ -31,7 +23,6 @@ function cleanWorkspace(folder) {
   for (const name of readdirSync(root)) {
     const full = join(root, name);
     if (!statSync(full).isDirectory()) continue;
-    if (folder === 'packages' && PRESERVE.has(name)) continue;
     rmIfExists(join(full, 'dist'));
     // Some packages nest a dist directory one level deeper.
     for (const inner of readdirSync(full)) {
@@ -43,7 +34,7 @@ function cleanWorkspace(folder) {
   }
 }
 
-console.log('Cleaning build artifacts (preserving packages/infra-otel/dist)...');
+console.log('Cleaning build artifacts...');
 cleanWorkspace('apps');
 cleanWorkspace('packages');
 rmIfExists(join(repoRoot, 'node_modules', '.cache'));
