@@ -8,19 +8,29 @@ steps:
       - |
         echo "=== Fetching config for web ==="
         REGION="${_REGION}"
+        WEB_SERVICE_URL_MODE="${_WEB_SERVICE_URL_MODE}"
+        WEB_PUBLIC_BASE_URL="${_WEB_PUBLIC_BASE_URL}"
+        echo "Service URL mode: $$WEB_SERVICE_URL_MODE"
 
-        # Cloud Run services to fetch URLs for (service-name:ENV_VAR_SUFFIX)
+        # Services to inject into the static web bundle.
         # Source of truth: apps/web/service-manifest.json
         # jq is pre-installed in the cloud-sdk image used by this step.
-        mapfile -t CLOUD_RUN_SERVICES < <(jq -r '.services[] | "\(.name):\(.envSuffix)"' apps/web/service-manifest.json)
+        mapfile -t SERVICE_ROWS < <(jq -r '.services[] | [.name, .envSuffix, .apiPath] | @tsv' apps/web/service-manifest.json)
 
-        # Fetch service URLs from Cloud Run API (not secrets)
+        # Fetch Cloud Run URLs for the current GCP deployment, or bake the
+        # post-cutover public API paths for Hetzner/nginx routing.
         # Note: $$ escapes $ for Cloud Build (passes literal $ to bash)
         declare -A SERVICE_URLS
-        for entry in "$${CLOUD_RUN_SERVICES[@]}"; do
-          SERVICE_NAME="$${entry%%:*}"
-          ENV_SUFFIX="$${entry##*:}"
-          URL=$$(gcloud run services describe "intexuraos-$${SERVICE_NAME}" --region="$$REGION" --format='value(status.url)')
+        for row in "$${SERVICE_ROWS[@]}"; do
+          IFS=$$'\t' read -r SERVICE_NAME ENV_SUFFIX API_PATH <<< "$$row"
+          if [[ "$$WEB_SERVICE_URL_MODE" == "cloud-run" ]]; then
+            URL=$$(gcloud run services describe "intexuraos-$${SERVICE_NAME}" --region="$$REGION" --format='value(status.url)')
+          elif [[ "$$WEB_SERVICE_URL_MODE" == "public-api" ]]; then
+            URL="$${WEB_PUBLIC_BASE_URL%/}$${API_PATH}"
+          else
+            echo "Unsupported _WEB_SERVICE_URL_MODE: $$WEB_SERVICE_URL_MODE" >&2
+            exit 1
+          fi
           SERVICE_URLS["INTEXURAOS_$${ENV_SUFFIX}_URL"]="$$URL"
           echo "  $${ENV_SUFFIX}: $${URL}"
         done
@@ -78,5 +88,8 @@ steps:
 options:
   logging: CLOUD_LOGGING_ONLY
 
-timeout: '900s'
+substitutions:
+  _WEB_SERVICE_URL_MODE: cloud-run
+  _WEB_PUBLIC_BASE_URL: https://intexuraos.cloud
 
+timeout: '900s'

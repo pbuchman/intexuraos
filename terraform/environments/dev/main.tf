@@ -298,6 +298,43 @@ locals {
 
   # Cloud Run URL suffix - project-specific, determined by GCP
   cloud_run_url_suffix = "cj44trunra-lm.a.run.app"
+  hetzner_runtime_secret_names = toset([
+    "INTEXURAOS_AUTH0_CLIENT_ID",
+    "INTEXURAOS_AUTH0_DOMAIN",
+    "INTEXURAOS_AUTH0_SPA_CLIENT_ID",
+    "INTEXURAOS_AUTH_AUDIENCE",
+    "INTEXURAOS_AUTH_ISSUER",
+    "INTEXURAOS_AUTH_JWKS_URL",
+    "INTEXURAOS_CLOUDFLARE_ACCOUNT_ID",
+    "INTEXURAOS_CLOUDFLARE_API_TOKEN",
+    "INTEXURAOS_DASH0_AUTH_TOKEN",
+    "INTEXURAOS_DASH0_OTLP_ENDPOINT",
+    "INTEXURAOS_ENCRYPTION_KEY",
+    "INTEXURAOS_FIREBASE_API_KEY",
+    "INTEXURAOS_FIREBASE_AUTH_DOMAIN",
+    "INTEXURAOS_FIREBASE_PROJECT_ID",
+    "INTEXURAOS_GEMINI_APP_API_KEY",
+    "INTEXURAOS_GITHUB_OAUTH_CLIENT_ID",
+    "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET",
+    "INTEXURAOS_GITHUB_WEBHOOK_SECRET",
+    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID",
+    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET",
+    "INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI",
+    "INTEXURAOS_GUEST_SESSION_SECRET",
+    "INTEXURAOS_INTERNAL_AUTH_TOKEN",
+    "INTEXURAOS_OPENAI_APP_API_KEY",
+    "INTEXURAOS_OPENROUTER_APP_API_KEY",
+    "INTEXURAOS_ORCHESTRATOR_SECRET",
+    "INTEXURAOS_SENTRY_DSN",
+    "INTEXURAOS_SENTRY_DSN_WEB",
+    "INTEXURAOS_TOKEN_ENCRYPTION_KEY",
+    "INTEXURAOS_WEBHOOK_VERIFY_SECRET",
+    "INTEXURAOS_WHATSAPP_ACCESS_TOKEN",
+    "INTEXURAOS_WHATSAPP_APP_SECRET",
+    "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID",
+    "INTEXURAOS_WHATSAPP_VERIFY_TOKEN",
+    "INTEXURAOS_WHATSAPP_WABA_ID",
+  ])
 
   # Common env vars for ALL services (URLs + project ID)
   # Uses computed URLs to avoid circular dependencies
@@ -568,6 +605,82 @@ module "secret_manager" {
   }
 
   depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret" "cloudflare_dns_api_token" {
+  secret_id = "INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN"
+  labels    = local.common_labels
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_service_account" "hetzner_provisioner" {
+  account_id   = "intexuraos-hetzner-provisioner-${var.environment}"
+  display_name = "IntexuraOS Hetzner Provisioner (${var.environment})"
+  description  = "Service account used by the Hetzner VM to load runtime secrets and certbot DNS credentials"
+}
+
+resource "google_service_account" "hetzner_runtime" {
+  account_id   = "intexuraos-hetzner-runtime-${var.environment}"
+  display_name = "IntexuraOS Hetzner Runtime (${var.environment})"
+  description  = "Union runtime service account for PM2 services on the Hetzner VM"
+}
+
+resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_runtime_secrets" {
+  for_each = local.hetzner_runtime_secret_names
+
+  secret_id = module.secret_manager.secret_ids[each.value]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_cloudflare_dns" {
+  secret_id = google_secret_manager_secret.cloudflare_dns_api_token.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "hetzner_runtime_secrets" {
+  for_each = local.hetzner_runtime_secret_names
+
+  secret_id = module.secret_manager.secret_ids[each.value]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.hetzner_runtime.email}"
+}
+
+resource "google_project_iam_member" "hetzner_runtime_project_roles" {
+  for_each = toset([
+    "roles/datastore.user",
+    "roles/firebaseauth.admin",
+    "roles/logging.logWriter",
+    "roles/pubsub.publisher",
+  ])
+
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.hetzner_runtime.email}"
+}
+
+resource "google_service_account_iam_member" "hetzner_runtime_token_creator" {
+  service_account_id = google_service_account.hetzner_runtime.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.hetzner_runtime.email}"
+}
+
+resource "google_storage_bucket_iam_member" "hetzner_runtime_bucket_object_admin" {
+  for_each = {
+    generated_images = module.generated_images_bucket.bucket_name
+    shared_content   = module.shared_content.bucket_name
+    whatsapp_media   = module.whatsapp_media_bucket.bucket_name
+  }
+
+  bucket = each.value
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.hetzner_runtime.email}"
 }
 
 # -----------------------------------------------------------------------------

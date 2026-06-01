@@ -1,11 +1,11 @@
 /**
  * Tests for the web service manifest single-source-of-truth contract.
  *
- * The manifest at apps/web/service-manifest.json drives CLOUD_RUN_SERVICES
- * for the cloud-build web deploy. These tests pin the contract: the manifest
+ * The manifest at apps/web/service-manifest.json drives service URL injection
+ * for Cloud Build web deploys. These tests pin the contract: the manifest
  * must exist, be well-shaped, agree with terraform module declarations, and
- * the duplicated CLOUD_RUN_SERVICES=( ... ) literal array must be gone from
- * apps/web/cloudbuild.yaml.
+ * duplicated CLOUD_RUN_SERVICES=( ... ) literal arrays must be gone from
+ * Cloud Build YAMLs that can build the web bundle.
  *
  * NOTE: A second pair of literal arrays still lives in
  * `.github/workflows/deploy.yml`. Replacing them is part of the same
@@ -24,6 +24,8 @@ const repoRoot = resolve(__dirname, '..', '..');
 
 const manifestPath = resolve(repoRoot, 'apps/web/service-manifest.json');
 const cloudbuildPath = resolve(repoRoot, 'apps/web/cloudbuild.yaml');
+const monolithCloudbuildPath = resolve(repoRoot, 'cloudbuild/cloudbuild.yaml');
+const viteConfigPath = resolve(repoRoot, 'apps/web/vite.config.ts');
 const terraformMainPath = resolve(repoRoot, 'terraform/environments/dev/main.tf');
 
 const NAME_REGEX = /^[a-z][a-z0-9-]+$/;
@@ -96,6 +98,31 @@ describe('CLOUD_RUN_SERVICES literal arrays are eliminated', () => {
   it('apps/web/cloudbuild.yaml does not contain a CLOUD_RUN_SERVICES=( literal', () => {
     const content = readFileSync(cloudbuildPath, 'utf8');
     expect(content).not.toContain('CLOUD_RUN_SERVICES=(');
+  });
+
+  it('apps/web/cloudbuild.yaml can bake public API service URLs from manifest apiPath values', () => {
+    const content = readFileSync(cloudbuildPath, 'utf8');
+    expect(content).toContain('_WEB_SERVICE_URL_MODE');
+    expect(content).toContain('_WEB_PUBLIC_BASE_URL');
+    expect(content).toContain('public-api');
+    expect(content).toContain('.services[] | [.name, .envSuffix, .apiPath] | @tsv');
+    expect(content).toContain('$${WEB_PUBLIC_BASE_URL%/}$${API_PATH}');
+  });
+
+  it('cloudbuild/cloudbuild.yaml reads web service URLs from the manifest', () => {
+    const content = readFileSync(monolithCloudbuildPath, 'utf8');
+    expect(content).not.toContain('CLOUD_RUN_SERVICES=(');
+    expect(content).toContain('_WEB_SERVICE_URL_MODE');
+    expect(content).toContain('_WEB_PUBLIC_BASE_URL');
+    expect(content).toContain('.services[] | [.name, .envSuffix, .apiPath] | @tsv');
+    expect(content).toContain('$${WEB_PUBLIC_BASE_URL%/}$${API_PATH}');
+  });
+
+  it('PWA navigation fallback excludes retained bucket routes', () => {
+    const content = readFileSync(viteConfigPath, 'utf8');
+    expect(content).toContain('navigateFallbackDenylist');
+    expect(content).toContain('/^\\/share\\//');
+    expect(content).toContain('/^\\/images\\//');
   });
 
   // NOTE: deploy.yml still contains the literal arrays — see file header for
