@@ -11,6 +11,8 @@ DEPLOY_USER="${DEPLOY_USER:-deploy}"
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/intexuraos}"
 WEB_ROOT="${WEB_ROOT:-/var/www/intexuraos/web/dist}"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
+SWAP_FILE="${SWAP_FILE:-/swapfile}"
+SWAP_SIZE="${SWAP_SIZE:-4G}"
 SKIP_CERTBOT=0
 SKIP_SECRETS=0
 
@@ -105,6 +107,29 @@ install_google_cloud_cli() {
 
   apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y google-cloud-cli
+}
+
+ensure_swap() {
+  if swapon --show=NAME --noheadings | awk '{ print $1 }' | grep -Fxq "${SWAP_FILE}"; then
+    return
+  fi
+
+  if [[ ! -f "${SWAP_FILE}" ]]; then
+    fallocate -l "${SWAP_SIZE}" "${SWAP_FILE}"
+    chmod 600 "${SWAP_FILE}"
+    mkswap "${SWAP_FILE}"
+  else
+    chmod 600 "${SWAP_FILE}"
+  fi
+
+  swapon "${SWAP_FILE}"
+
+  if ! awk -v file="${SWAP_FILE}" '$1 == file && $3 == "swap" { found = 1 } END { exit found ? 0 : 1 }' /etc/fstab; then
+    printf '%s none swap sw 0 0\n' "${SWAP_FILE}" >> /etc/fstab
+  fi
+
+  printf 'vm.swappiness=10\n' > /etc/sysctl.d/99-intexuraos-swap.conf
+  sysctl --system >/dev/null
 }
 
 ensure_corepack() {
@@ -220,6 +245,7 @@ main() {
 
   install_base_packages
   install_google_cloud_cli
+  ensure_swap
   install_node_22
   prepare_user_and_directories
   configure_firewall

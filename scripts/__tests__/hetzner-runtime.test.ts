@@ -115,12 +115,15 @@ describe('Hetzner nginx runtime config', () => {
     const config = readRequired(nginxConfigPath);
     const storageSection = config.slice(config.indexOf('location /share/ {'));
 
+    expect(config).toContain('set $gcs_origin storage.googleapis.com;');
     expect(storageSection).toContain(
-      'proxy_pass https://storage.googleapis.com/intexuraos-shared-content-dev/;'
+      'rewrite ^/share/(.*)$ /intexuraos-shared-content-dev/$1 break;'
     );
     expect(storageSection).toContain(
-      'proxy_pass https://storage.googleapis.com/intexuraos-images-dev/images/;'
+      'rewrite ^/images/(.*)$ /intexuraos-images-dev/images/$1 break;'
     );
+    expect(storageSection.match(/proxy_pass https:\/\/\$gcs_origin;/g)).toHaveLength(2);
+    expect(storageSection).not.toContain('proxy_pass https://storage.googleapis.com/');
     expect(storageSection.match(/proxy_set_header Authorization "";/g)).toHaveLength(2);
     expect(storageSection.match(/proxy_set_header Cookie "";/g)).toHaveLength(2);
   });
@@ -311,6 +314,24 @@ describe('Hetzner web asset deployment', () => {
     expect(provision).toContain('ExecStop=${pm2_bin} kill');
     expect(provision).toContain('systemctl enable "pm2-${DEPLOY_USER}.service"');
     expect(provision).not.toContain('pm2 startup systemd');
+  });
+
+  it('provisions swap before runtime builds to avoid OOM during Terraform bootstrap', () => {
+    const provision = readRequired(provisionPath);
+
+    expect(provision).toContain('SWAP_FILE="${SWAP_FILE:-/swapfile}"');
+    expect(provision).toContain('SWAP_SIZE="${SWAP_SIZE:-4G}"');
+    expect(provision).toContain('ensure_swap()');
+    expect(provision).toContain('fallocate -l "${SWAP_SIZE}" "${SWAP_FILE}"');
+    expect(provision).toContain('chmod 600 "${SWAP_FILE}"');
+    expect(provision).toContain('mkswap "${SWAP_FILE}"');
+    expect(provision).toContain('swapon "${SWAP_FILE}"');
+    expect(provision).toContain('vm.swappiness=10');
+    const mainFlow = provision.slice(provision.indexOf('main() {'));
+    expect(mainFlow.indexOf('ensure_swap')).toBeGreaterThan(
+      mainFlow.indexOf('install_google_cloud_cli')
+    );
+    expect(mainFlow.indexOf('install_node_22')).toBeGreaterThan(mainFlow.indexOf('ensure_swap'));
   });
 
   it('builds the SPA and publishes apps/web/dist into the nginx web root', () => {
