@@ -445,218 +445,18 @@ module "iam" {
 }
 ```
 
-### 8. Add Cloud Build Configuration
+### 8. Deployment Wiring
 
-Cloud Build requires 5 changes for a new service:
+Migrated app/web services do not get GCP Cloud Run or app/web Cloud Build deployment wiring. Do **not** create `apps/<service>/cloudbuild.yaml`, `cloudbuild/scripts/deploy-<service>.sh`, or Cloud Build triggers for a new app service. Runtime deployment is handled by the Hetzner infrastructure path.
 
-#### 8a. Add to Main Pipeline (`cloudbuild/cloudbuild.yaml`)
+Keep these pieces in sync instead:
 
-Add build and deploy steps using the `build-push-monitored.sh` script (copy pattern from existing service like `user-service`):
+- local/dev process wiring in `ecosystem.config.cjs` and generated service wiring
+- web-facing URL entry in `apps/web/service-manifest.json` if the web app calls the service
+- Hetzner nginx/API routing if the service exposes public `/api/*` endpoints
+- Terraform-managed retained GCP resources only when the service needs shared topics, buckets, secrets, or IAM
 
-```yaml
-# ===== <service-name> =====
-- name: 'gcr.io/cloud-builders/docker'
-  id: 'build-push-<service-name>'
-  waitFor: ['-']
-  entrypoint: 'bash'
-  args:
-    [
-      'cloudbuild/scripts/build-push-monitored.sh',
-      '<service-name>',
-      'apps/<service-name>/Dockerfile',
-    ]
-  env:
-    - 'DOCKER_BUILDKIT=1'
-    - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-    - 'COMMIT_SHA=$COMMIT_SHA'
-
-- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-  id: 'deploy-<service-name>'
-  waitFor: ['build-push-<service-name>']
-  entrypoint: 'bash'
-  args: ['-c', 'bash cloudbuild/scripts/deploy-<service-name>.sh']
-  env:
-    - 'COMMIT_SHA=$COMMIT_SHA'
-    - 'REGION=${_REGION}'
-    - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-    - 'ENVIRONMENT=${_ENVIRONMENT}'
-```
-
-**Note:** The `build-push-monitored.sh` script handles:
-
-- Cache warming (pulls `:latest` image)
-- BuildKit inline cache
-- Network telemetry logging (for Cloud Monitoring metrics)
-- Dual tagging (`$COMMIT_SHA` and `:latest`)
-
-#### 8b. Create Per-Service Pipeline (`apps/<service-name>/cloudbuild.yaml`)
-
-```yaml
-# Manual trigger: Deploy <service-name> only
-steps:
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build'
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        '<service-name>',
-        'apps/<service-name>/Dockerfile',
-      ]
-    env:
-      - 'DOCKER_BUILDKIT=1'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'COMMIT_SHA=$COMMIT_SHA'
-
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy'
-    entrypoint: 'bash'
-    args: ['-c', 'bash cloudbuild/scripts/deploy-<service-name>.sh']
-    env:
-      - 'COMMIT_SHA=$COMMIT_SHA'
-      - 'REGION=${_REGION}'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'ENVIRONMENT=${_ENVIRONMENT}'
-
-options:
-  logging: CLOUD_LOGGING_ONLY
-
-timeout: '600s'
-```
-
-#### 8c. Add to Terraform Trigger List
-
-Edit `terraform/modules/cloud-build/main.tf`, add to `docker_services` local:
-
-```hcl
-locals {
-  docker_services = [
-    # ... existing services ...
-    "<service-name>",
-  ]
-}
-```
-
-#### 8d. Terraform Change Detection (Optional)
-
-Smart dispatch (`.github/scripts/smart-dispatch.mjs`) and terraform change detection (`scripts/detect-tf-changes.sh`) **auto-discover** services from the filesystem — no manual registration needed. Your new service will be detected automatically because it has a `Dockerfile` in `apps/<service-name>/`.
-
-**Optional:** If your service uses specific terraform modules, add it to `MODULE_TO_SERVICES` mapping in `scripts/detect-tf-changes.sh`:
-
-```bash
-# Example: if your service uses a custom Pub/Sub topic
-MODULE_TO_SERVICES[<module-name>]="<service-name>"
-```
-
-Common mappings:
-
-- `pubsub-push`: For services that subscribe to Pub/Sub topics
-- `<service>-bucket`: For services with dedicated Cloud Storage buckets
-- `firestore`: Most services use Firestore (already mapped to "all-services")
-
-#### 8e. Add to GitHub Actions Deploy Workflow (`deploy.yml`)
-
-**CRITICAL:** The GitHub Actions workflow (`.github/workflows/deploy.yml`) has its own hardcoded service lists that are **separate from Cloud Build YAML files**. The `MONOLITH` strategy (Deploy All Local) uses these lists directly — it never reads `cloudbuild/cloudbuild.yaml`. You must update **4 places** in `deploy.yml`:
-
-**1. Docker build list** (in "Build and push all Docker images" step):
-
-```bash
-bash cloudbuild/scripts/build-push-monitored.sh <service-name> apps/<service-name>/Dockerfile &
-```
-
-**2. SERVICES deploy array** (in "Deploy Cloud Run services + Cloud Functions" step):
-
-```bash
-SERVICES=(
-  # ... existing services ...
-  <service-name>
-)
-```
-
-**3. CLOUD_RUN_SERVICES array in "Fetch web config" step** (monolith deploy):
-
-```bash
-CLOUD_RUN_SERVICES=(
-  # ... existing services ...
-  "<service-name>:<SERVICE_NAME>"
-)
-```
-
-**4. CLOUD_RUN_SERVICES array in individual web deploy** (in the `web)` case block):
-
-```bash
-CLOUD_RUN_SERVICES=(
-  # ... existing services ...
-  "<service-name>:<SERVICE_NAME>"
-)
-```
-
-> **Note (INT-1544/INT-1636 manifest refactor):** `apps/web/cloudbuild.yaml` and `cloudbuild/cloudbuild.yaml` no longer carry literal `CLOUD_RUN_SERVICES=( ... )` arrays — they read from `apps/web/service-manifest.json` (see Step 11). The two arrays in `.github/workflows/deploy.yml` still exist as literals pending a `workflows`-permission migration, so they MUST still be edited here. Keep the entries in sync with the manifest. CI guard: `pnpm run verify:web-service-manifest` validates the manifest and Cloud Build readers.
-
-**Why this is critical:** Without these changes, the service will be built by pnpm (workspace auto-discovery) but will NOT be docker-pushed or deployed to Cloud Run in the `MONOLITH` strategy. The web frontend will also get an undefined URL for the service.
-
-### 9. Create Cloud Build Deployment Script
-
-**CRITICAL:** Create `cloudbuild/scripts/deploy-<service-name>.sh` following this exact pattern:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=cloudbuild/scripts/lib.sh
-source "${SCRIPT_DIR}/lib.sh"
-
-SERVICE="<service-name>"
-CLOUD_RUN_SERVICE="intexuraos-<service-name>"
-
-require_env_vars REGION ARTIFACT_REGISTRY_URL COMMIT_SHA
-
-tag="$(deployment_tag)"
-image="${ARTIFACT_REGISTRY_URL}/${SERVICE}:${tag}"
-
-log "Deploying ${SERVICE} to Cloud Run"
-log "  Environment: ${ENVIRONMENT:-unset}"
-log "  Region: ${REGION}"
-log "  Image: ${image}"
-
-# Check if service exists (must be created by Terraform first)
-if ! gcloud run services describe "$CLOUD_RUN_SERVICE" --region="$REGION" &>/dev/null; then
-  log "ERROR: Service ${CLOUD_RUN_SERVICE} does not exist"
-  log "Run 'terraform apply' in terraform/environments/dev/ first to create the service with proper configuration"
-  exit 1
-fi
-
-gcloud run deploy "$CLOUD_RUN_SERVICE" \
-  --image="$image" \
-  --region="$REGION" \
-  --platform=managed \
-  --cpu-throttling \
-  --quiet
-
-log "Deployment complete for ${SERVICE}"
-```
-
-**Why this pattern is critical:**
-
-- **Service existence check:** Prevents creating misconfigured services if Terraform hasn't run
-- **No `--allow-unauthenticated` flag:** Auth settings are managed by Terraform, not deployment scripts
-- **`--cpu-throttling` flag:** Ensures request-based billing (cpu_idle=true), preventing instance-based billing charges
-- **Fail-fast:** Exits immediately with clear error if service doesn't exist
-
-**WRONG PATTERN (DO NOT USE):**
-
-```bash
-# ❌ Missing service existence check
-# ❌ Sets --allow-unauthenticated (should be Terraform-managed)
-# ❌ Missing --cpu-throttling (causes instance-based billing)
-gcloud run deploy "$CLOUD_RUN_SERVICE" \
-  --image="$image" \
-  --region="$REGION" \
-  --platform=managed \
-  --allow-unauthenticated \
-  --quiet
-```
+Retained GCP Cloud Build triggers are limited to `firestore`, `vm-lifecycle`, `transcription`, and `code-worker`.
 
 ### 10. Register in API Docs Hub
 
@@ -668,41 +468,42 @@ export const SERVICE_CONFIGS: ServiceConfig[] = [
   {
     name: '<Service Name>',
     slug: '<service-name>',
-    openapiUrl: 'https://intexuraos-<service-name>-xyz.run.app/openapi.json',
+    openapiUrl: 'https://intexuraos.cloud/api/<service-name>/openapi.json',
   },
 ];
 ```
 
-Note: Get the actual Cloud Run URL after first deployment.
+Use the public Hetzner `/api/*` route when the service is public. Keep local-only/internal services out of the public API docs unless they have a documented route.
 
-### 11. Update Cloud Build for Web App (if web needs the service URL)
+### 11. Update Web Service Manifest (if web needs the service URL)
 
-If the web app needs to call your new service, the per-build `CLOUD_RUN_SERVICES` list is sourced from a single manifest at `apps/web/service-manifest.json` (introduced in INT-1544). Add a new entry to the manifest, NOT to `apps/web/cloudbuild.yaml` (which now reads the manifest via `jq`):
+If the web app needs to call your new service, add it to `apps/web/service-manifest.json` and regenerate service wiring:
 
 ```jsonc
 // apps/web/service-manifest.json
 {
   "services": [
     // ... existing services ...
-    { "name": "<service-name>", "envSuffix": "<SERVICE_NAME>" },
+    {
+      "name": "<service-name>",
+      "envSuffix": "<SERVICE_NAME>",
+      "apiPath": "/api/<service-name>",
+      "proxyTarget": "http://localhost:81XX",
+      "serviceUrl": "http://localhost:81XX",
+    },
   ],
 }
 ```
 
-The format is `name:envSuffix` where:
+Run:
 
-- `name` matches the Cloud Run service (without `intexuraos-` prefix)
-- `envSuffix` becomes `INTEXURAOS_<envSuffix>_URL` in the web `.env` file
-
-URLs are automatically fetched from Cloud Run API at build time — no secrets needed.
-
-**Until the workflow-permission follow-up migration lands, keep the manifest in sync with the remaining legacy workflow literals:**
-
-- `.github/workflows/deploy.yml` — two `CLOUD_RUN_SERVICES=( ... )` blocks (still inline; tracked as a `workflows`-permission follow-up)
+```bash
+pnpm run generate:service-wiring
+```
 
 **CI guards:**
 
-- `pnpm run verify:web-service-manifest` (also wired into `pnpm run ci:tracked`) validates manifest shape, terraform module agreement, Cloud Build manifest readers, and retained-bucket PWA fallback exclusions.
+- `pnpm run verify:web-service-manifest` validates manifest shape, Terraform service URL tfvars, removal of obsolete GCP web Cloud Build configs, and retained-bucket PWA fallback exclusions.
 - `scripts/verify-service-scaffolding.sh` adds a soft check for the manifest entry.
 
 **Also update the web app config** (`apps/web/src/config.ts`) if needed:
@@ -716,7 +517,7 @@ export function getConfig(): AppConfig {
 }
 ```
 
-**Note:** Backend services already get all service URLs via `local.common_service_env_vars` in Terraform, so this step is only needed if the web frontend specifically needs to call your service.
+**Note:** Backend service URL wiring is managed by Hetzner runtime env generation, not GCP Cloud Run Terraform modules.
 
 ### 12. Verify tsconfig.json Coverage (automatic — nothing to edit)
 

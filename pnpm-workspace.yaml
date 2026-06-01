@@ -14,3 +14,13 @@ catalog:
   pino: ^10.1.1
   zod: ^3.24.1
   '@google-cloud/firestore': ^7.10.0
+
+onlyBuiltDependencies:
+  - '@firebase/util'
+  - browser-tabs-lock
+  - cpu-features
+  - esbuild
+  - protobufjs
+  - re2
+  - sharp
+  - ssh2

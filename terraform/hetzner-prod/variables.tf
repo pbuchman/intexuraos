@@ -18,11 +18,11 @@ variable "region" {
 variable "environment" {
   description = "Environment label for Hetzner production migration resources."
   type        = string
-  default     = "prod-hetzner"
+  default     = "prod"
 
   validation {
-    condition     = var.environment == "prod-hetzner"
-    error_message = "This root is only for the prod-hetzner environment."
+    condition     = var.environment == "prod"
+    error_message = "This root is only for the prod environment."
   }
 }
 
@@ -79,7 +79,7 @@ variable "hetzner_location" {
 variable "hetzner_server_type" {
   description = "Hetzner Cloud server type for the production VM."
   type        = string
-  default     = "cx32"
+  default     = "cx33"
 
   validation {
     condition     = length(trimspace(var.hetzner_server_type)) > 0
@@ -107,18 +107,55 @@ variable "deploy_ssh_public_key" {
   }
 }
 
+variable "deploy_ssh_private_key_path" {
+  description = "Local private SSH key path used by Terraform to bootstrap a freshly created Hetzner VM."
+  type        = string
+  default     = "~/.ssh/intexuraos_hetzner_deploy"
+
+  validation {
+    condition     = length(trimspace(var.deploy_ssh_private_key_path)) > 0
+    error_message = "deploy_ssh_private_key_path must be non-empty."
+  }
+}
+
+variable "provisioner_sa_key_path" {
+  description = "Local path to the Hetzner provisioner service account key copied to the VM during Terraform bootstrap."
+  type        = string
+  default     = "~/.config/intexuraos/hetzner/provisioner-sa-key.json"
+
+  validation {
+    condition     = length(trimspace(var.provisioner_sa_key_path)) > 0
+    error_message = "provisioner_sa_key_path must be non-empty."
+  }
+}
+
+variable "runtime_sa_key_path" {
+  description = "Local path to the Hetzner runtime service account key copied to the VM during Terraform bootstrap."
+  type        = string
+  default     = "~/.config/intexuraos/hetzner/runtime-sa-key.json"
+
+  validation {
+    condition     = length(trimspace(var.runtime_sa_key_path)) > 0
+    error_message = "runtime_sa_key_path must be non-empty."
+  }
+}
+
+variable "hetzner_bootstrap_enabled" {
+  description = "When true, Terraform bootstraps a new Hetzner VM by syncing this repo, installing secrets, provisioning nginx/PM2, and loading runtime services."
+  type        = bool
+  default     = true
+}
+
 variable "admin_ssh_source_ips" {
-  description = "CIDR ranges allowed to SSH to the Hetzner VM. Broad internet ranges are forbidden."
+  description = "CIDR ranges allowed to SSH to the Hetzner VM. Production currently allows broad SSH CIDRs and relies on hardened key-only sshd."
   type        = list(string)
 
   validation {
     condition = (
       length(var.admin_ssh_source_ips) > 0 &&
-      alltrue([for source in var.admin_ssh_source_ips : can(cidrhost(source, 0))]) &&
-      !contains(var.admin_ssh_source_ips, "0.0.0.0/0") &&
-      !contains(var.admin_ssh_source_ips, "::/0")
+      alltrue([for source in var.admin_ssh_source_ips : can(cidrhost(source, 0))])
     )
-    error_message = "admin_ssh_source_ips must contain valid CIDR ranges and must not include 0.0.0.0/0 or ::/0."
+    error_message = "admin_ssh_source_ips must contain valid CIDR ranges."
   }
 }
 

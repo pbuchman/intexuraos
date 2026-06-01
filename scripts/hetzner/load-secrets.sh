@@ -12,6 +12,7 @@ INTERNAL_AUTH_TOKEN_FILE="${INTERNAL_AUTH_TOKEN_FILE:-/etc/intexuraos/internal-a
 PUBLIC_ORIGIN="${PUBLIC_ORIGIN:-https://intexuraos.cloud}"
 DEPLOY_USER="${DEPLOY_USER:-deploy}"
 NGINX_TOKEN_GROUP="${NGINX_TOKEN_GROUP:-www-data}"
+TEMP_ENV_FILE=""
 
 declare -a REQUESTED_SECRETS=()
 HETZNER_RUNTIME_SECRETS=(
@@ -59,6 +60,12 @@ usage() {
 fail() {
   printf 'ERROR: %s\n' "$1" >&2
   exit 1
+}
+
+cleanup_temp_file() {
+  if [[ -n "${TEMP_ENV_FILE:-}" ]]; then
+    rm -f "${TEMP_ENV_FILE}"
+  fi
 }
 
 require_prod() {
@@ -172,9 +179,7 @@ read_secret() {
 
   gcloud secrets versions access latest \
     --secret="${secret_name}" \
-    --project="${PROJECT_ID}" \
-    --format='value(payload.data)' \
-    | base64 --decode
+    --project="${PROJECT_ID}"
 }
 
 install_internal_auth_token() {
@@ -216,7 +221,6 @@ main() {
   require_prod
 
   command -v gcloud >/dev/null 2>&1 || fail "gcloud CLI is required"
-  command -v base64 >/dev/null 2>&1 || fail "base64 is required"
   id -u "${DEPLOY_USER}" >/dev/null 2>&1 || fail "Deploy user ${DEPLOY_USER} is required"
 
   if [[ -r "${PROVISIONER_SA_KEY_FILE}" ]]; then
@@ -226,8 +230,9 @@ main() {
   umask 077
 
   local temp_file=""
-  temp_file="$(mktemp "${TMPDIR:-/tmp}/intexuraos-prod-env.XXXXXX")"
-  trap 'rm -f "${temp_file}"' EXIT
+  TEMP_ENV_FILE="$(mktemp "${TMPDIR:-/tmp}/intexuraos-prod-env.XXXXXX")"
+  temp_file="${TEMP_ENV_FILE}"
+  trap cleanup_temp_file EXIT
 
   mapfile -t secret_names < <(load_secret_names)
   [[ ${#secret_names[@]} -gt 0 ]] || fail "No secrets selected"

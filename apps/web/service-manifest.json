@@ -1,5 +1,5 @@
 {
-  "description": "Single source of truth for Cloud Run services whose URLs are injected into the web bundle at build time and for the matching local web/dev wiring. Consumed by apps/web/cloudbuild.yaml, .github/workflows/deploy.yml, apps/web/src/config.ts, apps/web/vite.config.ts, and ecosystem.config.cjs.",
+  "description": "Single source of truth for web-facing service URLs used by local web/dev wiring and the Hetzner web build. Consumed by scripts/generate-service-wiring.mjs, apps/web/src/config.ts, apps/web/vite.config.ts, ecosystem.config.cjs, and scripts/hetzner/deploy-web.sh.",
   "services": [
     { "name": "user-service",                 "envSuffix": "USER_SERVICE",                 "apiPath": "/api/user",              "proxyTarget": "http://localhost:8110",                    "serviceUrl": "http://localhost:8110" },
     { "name": "whatsapp-service",             "envSuffix": "WHATSAPP_SERVICE",             "apiPath": "/api/whatsapp",          "proxyTarget": "http://localhost:8113",                    "serviceUrl": "http://localhost:8113" },

@@ -195,16 +195,15 @@ You are an elite service architecture specialist for the IntexuraOS monorepo. Yo
      - Only update container image
      - NOT modify env vars or secrets (Terraform-managed)
 
-9b. **Update Web App Cloud Build** (if web frontend needs to call the new service)
+9b. **Update Web App Manifest** (if web frontend needs to call the new service)
 
 - Add a new entry to `apps/web/service-manifest.json` (single source of truth, INT-1544):
-  `{ "name": "<service-name>", "envSuffix": "<ENV_VAR_SUFFIX>" }`
-- Do **NOT** edit `apps/web/cloudbuild.yaml` or `cloudbuild/cloudbuild.yaml` directly for web URL lists — both read the manifest via `jq` at build time.
-- Until the workflow-permission follow-up lands, ALSO add `"<service-name>:<ENV_VAR_SUFFIX>"` to `.github/workflows/deploy.yml` (two CLOUD_RUN_SERVICES blocks).
+  `{ "name": "<service-name>", "envSuffix": "<ENV_VAR_SUFFIX>", "apiPath": "/api/<service-name>", "proxyTarget": "http://localhost:81XX", "serviceUrl": "http://localhost:81XX" }`
+- Run `pnpm run generate:service-wiring`.
 - Update `apps/web/src/config.ts` to read and export the new URL.
-- URLs are fetched from Cloud Run API automatically at build time — no secrets needed.
-- CI guards: `pnpm run verify:web-service-manifest` (manifest shape + Cloud Build manifest readers); `scripts/verify-service-scaffolding.sh` adds a soft check for the manifest entry.
-- Note: Backend services already get all URLs via `local.common_service_env_vars` — this is only for web frontend.
+- Production URLs are rendered by `scripts/hetzner/deploy-web.sh` from the manifest and the public Hetzner origin.
+- CI guards: `pnpm run verify:web-service-manifest`; `scripts/verify-service-scaffolding.sh` adds a soft check for the manifest entry.
+- Note: Backend service URL wiring is managed by Hetzner runtime env generation.
 
 10. **Execute Deployment Pipeline**
 

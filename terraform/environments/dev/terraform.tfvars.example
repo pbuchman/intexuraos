@@ -23,11 +23,9 @@ github_branch = "development"
 # Cloud Build GitHub connection name
 github_connection_name = "github-pbuchman"
 
-# Enable Load Balancer for web app SPA hosting
-enable_load_balancer = true
-
-# Domain name for the web app (requires DNS A record pointing to LB IP)
-web_app_domain = "intexuraos.cloud"
+# Keep retired Cloud Run-targeted Pub/Sub pushes disabled.
+# Hetzner-owned subscriptions and Scheduler jobs live in terraform/hetzner-prod.
+enable_legacy_cloud_run_async_consumers = false
 
 # Enable LLM API audit logging (logs all LLM calls to Firestore)
 audit_llms = true
@@ -41,4 +39,3 @@ audit_llms = true
 #   slack_channel_name — Slack channel for alerts (default "#alerts").
 # slack_auth_token   = "xoxb-REPLACE_ME"
 # slack_channel_name = "#alerts"
-

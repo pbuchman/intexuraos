@@ -11,6 +11,8 @@ DEPLOY_USER="${DEPLOY_USER:-deploy}"
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/intexuraos}"
 WEB_ROOT="${WEB_ROOT:-/var/www/intexuraos/web/dist}"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
+SWAP_FILE="${SWAP_FILE:-/swapfile}"
+SWAP_SIZE="${SWAP_SIZE:-4G}"
 SKIP_CERTBOT=0
 SKIP_SECRETS=0
 
@@ -86,6 +88,7 @@ install_base_packages() {
     git \
     gnupg \
     jq \
+    libnginx-mod-http-lua \
     nginx-extras \
     rsync \
     ufw
@@ -106,9 +109,65 @@ install_google_cloud_cli() {
   DEBIAN_FRONTEND=noninteractive apt-get install -y google-cloud-cli
 }
 
+ensure_swap() {
+  if swapon --show=NAME --noheadings | awk '{ print $1 }' | grep -Fxq "${SWAP_FILE}"; then
+    return
+  fi
+
+  if [[ ! -f "${SWAP_FILE}" ]]; then
+    fallocate -l "${SWAP_SIZE}" "${SWAP_FILE}"
+    chmod 600 "${SWAP_FILE}"
+    mkswap "${SWAP_FILE}"
+  else
+    chmod 600 "${SWAP_FILE}"
+  fi
+
+  swapon "${SWAP_FILE}"
+
+  if ! awk -v file="${SWAP_FILE}" '$1 == file && $3 == "swap" { found = 1 } END { exit found ? 0 : 1 }' /etc/fstab; then
+    printf '%s none swap sw 0 0\n' "${SWAP_FILE}" >> /etc/fstab
+  fi
+
+  printf 'vm.swappiness=10\n' > /etc/sysctl.d/99-intexuraos-swap.conf
+  sysctl --system >/dev/null
+}
+
+ensure_corepack() {
+  local corepack_bin=""
+  local npm_prefix=""
+
+  if command -v corepack >/dev/null 2>&1; then
+    return
+  fi
+
+  npm install -g corepack
+
+  npm_prefix="$(npm prefix -g)"
+  corepack_bin="${npm_prefix}/bin/corepack"
+  if [[ -x "${corepack_bin}" ]]; then
+    ln -sfn "${corepack_bin}" /usr/local/bin/corepack
+  fi
+
+  command -v corepack >/dev/null 2>&1 || fail "corepack is required after npm install -g corepack"
+}
+
+activate_package_manager() {
+  local package_manager=""
+
+  if [[ -f package.json ]]; then
+    package_manager="$(node -p "require('./package.json').packageManager ?? ''")"
+  fi
+
+  corepack enable
+  if [[ -n "${package_manager}" ]]; then
+    corepack prepare "${package_manager}" --activate
+  fi
+}
+
 install_node_22() {
   if command -v node >/dev/null 2>&1 && [[ "$(node --version)" == v22.* ]]; then
-    corepack enable
+    ensure_corepack
+    activate_package_manager
     npm install -g pm2
     return
   fi
@@ -121,7 +180,8 @@ install_node_22() {
 
   apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
-  corepack enable
+  ensure_corepack
+  activate_package_manager
   npm install -g pm2
 }
 
@@ -129,6 +189,10 @@ prepare_user_and_directories() {
   if ! id -u "${DEPLOY_USER}" >/dev/null 2>&1; then
     useradd --create-home --shell /bin/bash "${DEPLOY_USER}"
   fi
+
+  usermod -aG sudo "${DEPLOY_USER}"
+  printf '%s ALL=(ALL) NOPASSWD:ALL\n' "${DEPLOY_USER}" > "/etc/sudoers.d/90-intexuraos-${DEPLOY_USER}"
+  chmod 0440 "/etc/sudoers.d/90-intexuraos-${DEPLOY_USER}"
 
   install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" -m 755 "${DEPLOY_DIR}"
   install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" -m 755 "${WEB_ROOT}"
@@ -142,8 +206,36 @@ configure_firewall() {
   ufw --force enable
 }
 
-configure_pm2_startup() {
-  env PATH="/usr/local/bin:${PATH}" pm2 startup systemd -u "${DEPLOY_USER}" --hp "/home/${DEPLOY_USER}" || true
+write_pm2_systemd_unit() {
+  local pm2_bin=""
+
+  pm2_bin="$(command -v pm2)"
+  [[ -n "${pm2_bin}" ]] || fail "pm2 is required before writing the systemd unit"
+
+  cat > "/etc/systemd/system/pm2-${DEPLOY_USER}.service" <<EOF
+[Unit]
+Description=PM2 process manager for IntexuraOS
+Documentation=https://pm2.keymetrics.io/
+After=network.target
+
+[Service]
+Type=oneshot
+User=${DEPLOY_USER}
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PM2_HOME=/home/${DEPLOY_USER}/.pm2
+WorkingDirectory=${DEPLOY_DIR}
+RemainAfterExit=yes
+ExecStart=${pm2_bin} resurrect
+ExecReload=${pm2_bin} reload all
+ExecStop=${pm2_bin} kill
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  systemctl daemon-reload
+  systemctl enable "pm2-${DEPLOY_USER}.service"
 }
 
 main() {
@@ -153,10 +245,11 @@ main() {
 
   install_base_packages
   install_google_cloud_cli
+  ensure_swap
   install_node_22
   prepare_user_and_directories
   configure_firewall
-  configure_pm2_startup
+  write_pm2_systemd_unit
 
   if [[ "${SKIP_SECRETS}" -ne 1 ]]; then
     "${SCRIPT_DIR}/load-secrets.sh" --project-id "${PROJECT_ID}"

@@ -1,23 +1,34 @@
 # IntexuraOS Hetzner production Terraform variables.
-# Copy to terraform.tfvars and fill in operator-specific values.
+# Production non-secret defaults are committed in prod.auto.tfvars.json.
+# Copy this file to terraform.tfvars only for local, uncommitted overrides.
 # DO NOT commit terraform.tfvars.
 
 project_id  = "intexuraos-dev-pbuchman"
 region      = "europe-central2"
-environment = "prod-hetzner"
+environment = "prod"
 domain      = "intexuraos.cloud"
 
+activate_hetzner_async_consumers = true
+
 hetzner_location    = "nbg1"
-hetzner_server_type = "cx32"
+hetzner_server_type = "cx33"
 hetzner_image       = "ubuntu-24.04"
 
 # Generate with:
 # ssh-keygen -t ed25519 -C "intexuraos-hetzner-deploy" -f ~/.ssh/intexuraos_hetzner_deploy
 deploy_ssh_public_key = "ssh-ed25519 AAAA_REPLACE_ME intexuraos-hetzner-deploy"
 
-# Replace with the operator's current public IP as a /32.
-# Broad ranges such as 0.0.0.0/0 and ::/0 are rejected by validation.
-admin_ssh_source_ips = ["203.0.113.10/32"]
+# Terraform uses these local secret files only during VM bootstrap. They are not
+# committed; keep them in a secure operator profile.
+deploy_ssh_private_key_path = "~/.ssh/intexuraos_hetzner_deploy"
+provisioner_sa_key_path     = "~/.config/intexuraos/hetzner/provisioner-sa-key.json"
+runtime_sa_key_path         = "~/.config/intexuraos/hetzner/runtime-sa-key.json"
+hetzner_bootstrap_enabled   = true
+
+# Production currently allows broad SSH CIDRs and relies on hardened key-only
+# sshd on the VM. Narrow this list to operator /32 ranges when remote access is
+# stable through an alternate path.
+admin_ssh_source_ips = ["0.0.0.0/0", "::/0"]
 
 web_source_ips = ["0.0.0.0/0", "::/0"]
 

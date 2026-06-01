@@ -1,5 +1,5 @@
 resource "hcloud_ssh_key" "deploy" {
-  name       = "intexuraos-prod-deploy"
+  name       = "intexuraos-deploy"
   public_key = var.deploy_ssh_public_key
   labels     = local.common_labels
 }
@@ -22,24 +22,34 @@ resource "hcloud_firewall" "prod" {
   labels = local.common_labels
 
   rule {
-    direction  = "in"
-    protocol   = "tcp"
-    port       = "22"
-    source_ips = var.admin_ssh_source_ips
+    description = "ICMP (ping)"
+    direction   = "in"
+    protocol    = "icmp"
+    source_ips  = var.web_source_ips
   }
 
   rule {
-    direction  = "in"
-    protocol   = "tcp"
-    port       = "80"
-    source_ips = var.web_source_ips
+    description = "SSH (key-only, hardened sshd)"
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "22"
+    source_ips  = var.admin_ssh_source_ips
   }
 
   rule {
-    direction  = "in"
-    protocol   = "tcp"
-    port       = "443"
-    source_ips = var.web_source_ips
+    description = "HTTP (Let's Encrypt HTTP-01 + redirect to HTTPS)"
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "80"
+    source_ips  = var.web_source_ips
+  }
+
+  rule {
+    description = "HTTPS"
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "443"
+    source_ips  = var.web_source_ips
   }
 
   lifecycle {
@@ -54,18 +64,20 @@ resource "hcloud_server" "prod" {
   location           = var.hetzner_location
   ssh_keys           = [hcloud_ssh_key.deploy.id]
   firewall_ids       = [hcloud_firewall.prod.id]
-  delete_protection  = true
-  rebuild_protection = true
-  labels             = local.common_labels
+  delete_protection  = false
+  rebuild_protection = false
+  user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
+    deploy_ssh_public_key = var.deploy_ssh_public_key
+  })
+  labels = local.common_labels
 
   public_net {
     ipv4_enabled = true
     ipv4         = hcloud_primary_ip.prod_ipv4.id
-    ipv6_enabled = false
+    ipv6_enabled = true
   }
 
   lifecycle {
-    prevent_destroy = true
-    ignore_changes  = [image]
+    ignore_changes = [image]
   }
 }

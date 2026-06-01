@@ -2,18 +2,9 @@
  * Tests for the web service manifest single-source-of-truth contract.
  *
  * The manifest at apps/web/service-manifest.json drives service URL injection
- * for Cloud Build web deploys. These tests pin the contract: the manifest
- * must exist, be well-shaped, agree with terraform module declarations, and
- * duplicated CLOUD_RUN_SERVICES=( ... ) literal arrays must be gone from
- * Cloud Build YAMLs that can build the web bundle.
- *
- * NOTE: A second pair of literal arrays still lives in
- * `.github/workflows/deploy.yml`. Replacing them is part of the same
- * refactor, but the code-worker GitHub App lacks `workflows` permission and
- * cannot push edits to workflow files. The deploy.yml migration must land in
- * a separate human-authored PR. When it does, restore the deploy.yml
- * assertion below (currently disabled) and the matching check in
- * `scripts/verify-web-service-manifest.mjs`.
+ * for local development and the Hetzner web build. GCP Cloud Build no longer
+ * owns migrated app/web deployments, so these tests also pin that obsolete
+ * Cloud Build web configs and deploy.yml service arrays stay removed.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -25,8 +16,12 @@ const repoRoot = resolve(__dirname, '..', '..');
 const manifestPath = resolve(repoRoot, 'apps/web/service-manifest.json');
 const cloudbuildPath = resolve(repoRoot, 'apps/web/cloudbuild.yaml');
 const monolithCloudbuildPath = resolve(repoRoot, 'cloudbuild/cloudbuild.yaml');
+const deployWorkflowPath = resolve(repoRoot, '.github/workflows/deploy.yml');
 const viteConfigPath = resolve(repoRoot, 'apps/web/vite.config.ts');
-const terraformMainPath = resolve(repoRoot, 'terraform/environments/dev/main.tf');
+const terraformServiceUrlsPath = resolve(
+  repoRoot,
+  'terraform/environments/dev/service-urls.auto.tfvars.json'
+);
 
 const NAME_REGEX = /^[a-z][a-z0-9-]+$/;
 const ENV_SUFFIX_REGEX = /^[A-Z][A-Z0-9_]+$/;
@@ -80,42 +75,26 @@ describe('apps/web/service-manifest.json', () => {
     }
   });
 
-  it('every manifest entry has a corresponding terraform module', () => {
+  it('terraform service URL tfvars mirror manifest serviceUrl values', () => {
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-    const tf = readFileSync(terraformMainPath, 'utf8');
+    const tfvars = JSON.parse(readFileSync(terraformServiceUrlsPath, 'utf8'));
+    const expected: Record<string, string> = {};
     for (const entry of manifest.services) {
-      const moduleName = entry.name.replace(/-/g, '_');
-      const moduleRegex = new RegExp(`module\\s+"${moduleName}"\\s+\\{`);
-      expect(
-        moduleRegex.test(tf),
-        `Expected terraform module "${moduleName}" for manifest service "${entry.name}"`
-      ).toBe(true);
+      expected[`INTEXURAOS_${entry.envSuffix}_URL`] = entry.serviceUrl;
     }
+    expect(tfvars.service_urls).toEqual(expected);
   });
 });
 
-describe('CLOUD_RUN_SERVICES literal arrays are eliminated', () => {
-  it('apps/web/cloudbuild.yaml does not contain a CLOUD_RUN_SERVICES=( literal', () => {
-    const content = readFileSync(cloudbuildPath, 'utf8');
-    expect(content).not.toContain('CLOUD_RUN_SERVICES=(');
-  });
+describe('migrated web deployment is not wired to GCP Cloud Build', () => {
+  it('removes obsolete app/web Cloud Build configs and deploy workflow arrays', () => {
+    expect(existsSync(cloudbuildPath)).toBe(false);
+    expect(existsSync(monolithCloudbuildPath)).toBe(false);
 
-  it('apps/web/cloudbuild.yaml can bake public API service URLs from manifest apiPath values', () => {
-    const content = readFileSync(cloudbuildPath, 'utf8');
-    expect(content).toContain('_WEB_SERVICE_URL_MODE');
-    expect(content).toContain('_WEB_PUBLIC_BASE_URL');
-    expect(content).toContain('public-api');
-    expect(content).toContain('.services[] | [.name, .envSuffix, .apiPath] | @tsv');
-    expect(content).toContain('$${WEB_PUBLIC_BASE_URL%/}$${API_PATH}');
-  });
-
-  it('cloudbuild/cloudbuild.yaml reads web service URLs from the manifest', () => {
-    const content = readFileSync(monolithCloudbuildPath, 'utf8');
-    expect(content).not.toContain('CLOUD_RUN_SERVICES=(');
-    expect(content).toContain('_WEB_SERVICE_URL_MODE');
-    expect(content).toContain('_WEB_PUBLIC_BASE_URL');
-    expect(content).toContain('.services[] | [.name, .envSuffix, .apiPath] | @tsv');
-    expect(content).toContain('$${WEB_PUBLIC_BASE_URL%/}$${API_PATH}');
+    const deployWorkflow = readFileSync(deployWorkflowPath, 'utf8');
+    expect(deployWorkflow).not.toContain('CLOUD_RUN_SERVICES=(');
+    expect(deployWorkflow).not.toContain('apps/web/cloudbuild.yaml');
+    expect(deployWorkflow).not.toContain('cloudbuild/cloudbuild.yaml');
   });
 
   it('PWA navigation fallback excludes retained bucket routes', () => {
@@ -124,8 +103,4 @@ describe('CLOUD_RUN_SERVICES literal arrays are eliminated', () => {
     expect(content).toContain('/^\\/share\\//');
     expect(content).toContain('/^\\/images\\//');
   });
-
-  // NOTE: deploy.yml still contains the literal arrays — see file header for
-  // the workflows-permission constraint. Re-enable this assertion once the
-  // deploy.yml migration ships.
 });
