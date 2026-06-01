@@ -41,9 +41,9 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 **Env Vars (services):** Three locations required: (1) `apps/<service>/src/index.ts` `REQUIRED_ENV`, (2) `terraform/environments/dev/main.tf`, (3) `ecosystem.config.cjs`. Reference: `.claude/reference/env-vars-patterns.md`.
 
-**Env Vars (web app):** Web app is a static Vite bundle, not a Cloud Run service — env vars are **baked in at build time**, no runtime env surface exists. When a new `INTEXURAOS_*_URL` is consumed by the web app, it MUST be wired in THREE web-specific locations: (1) `apps/web/src/config.ts` `getConfig()` — add a `getServiceUrl()` entry with the dev proxy path, (2) `apps/web/cloudbuild.yaml` `CLOUD_RUN_SERVICES` array — add `"<service>:<SUFFIX>"` so the prod build fetches the URL and writes it to `/workspace/apps/web/.env`, (3) `apps/web/vite.config.ts` proxy + `ecosystem.config.cjs` — so dev shells can route `/api/<path>` to the local process. Skipping (2) produces a clean build, green tests, and a prod bundle that throws `Missing required environment variable` at module load.
+**Env Vars (web app):** Web app is a static Vite bundle, not a Cloud Run service — env vars are **baked in at build time**, no runtime env surface exists. When a new `INTEXURAOS_*_URL` is consumed by the web app, wire it through `apps/web/service-manifest.json`, regenerate service wiring, and ensure `apps/web/src/config.ts`, `apps/web/vite.config.ts`, `ecosystem.config.cjs`, and `scripts/hetzner/deploy-web.sh` consume the generated values. Reference: `.claude/reference/env-vars-patterns.md`.
 
-**Web App:** Hash routing only (`/#/path`). TailwindCSS, `@auth0/auth0-react`, `useApiClient`, SRP ~150 lines, `import.meta.env.INTEXURAOS_*`. Dev: Vite proxies `/api/*`. Prod: absolute Cloud Run URLs.
+**Web App:** Hash routing only (`/#/path`). TailwindCSS, `@auth0/auth0-react`, `useApiClient`, SRP ~150 lines, `import.meta.env.INTEXURAOS_*`. Dev: Vite proxies `/api/*`. Prod: Hetzner nginx public `/api/*` routes.
 
 # Workflow
 

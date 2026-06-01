@@ -9,7 +9,7 @@ function readRepoFile(relativePath: string): string {
 }
 
 describe('Cloud Build worker configuration', () => {
-  it('registers the actual Cloud Function workers and removes stale log-cleanup references', () => {
+  it('runs retained GCP deployments through explicit Cloud Build trigger names only', () => {
     const cloudBuildModule = readRepoFile('terraform/modules/cloud-build/main.tf');
     const deployWorkflow = readRepoFile('.github/workflows/deploy.yml');
 
@@ -17,7 +17,16 @@ describe('Cloud Build worker configuration', () => {
     expect(cloudBuildModule).toContain('"transcription"');
     expect(cloudBuildModule).not.toContain('"log-cleanup"');
 
-    expect(deployWorkflow).toContain('bash cloudbuild/scripts/deploy-function.sh transcription &');
+    expect(deployWorkflow).toContain('gcloud builds triggers run "$TARGET"');
+    expect(deployWorkflow).toContain('firestore');
+    expect(deployWorkflow).toContain('vm-lifecycle');
+    expect(deployWorkflow).toContain('transcription');
+    expect(deployWorkflow).toContain('code-worker');
+    expect(deployWorkflow).not.toContain('deploy-monolith');
+    expect(deployWorkflow).not.toContain('smart-dispatch');
+    expect(deployWorkflow).not.toContain('build-push-monitored.sh image-service');
+    expect(deployWorkflow).not.toContain('deploy-web.sh');
+    expect(deployWorkflow).not.toContain('deploy-function.sh transcription &');
     expect(deployWorkflow).not.toContain(
       'bash cloudbuild/scripts/deploy-function.sh log-cleanup &'
     );

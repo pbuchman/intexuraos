@@ -3,25 +3,15 @@
  * Web Service Manifest Verification
  *
  * Validates apps/web/service-manifest.json — the single source of truth for
- * service URLs injected into the web bundle at build time.
+ * service URLs injected into local dev and Hetzner web builds.
  *
  * Checks:
  *   1. Manifest shape:
  *      { services: Array<{ name, envSuffix, apiPath, proxyTarget, serviceUrl }> }
  *      with regex-validated values.
- *   2. Each manifest entry has a corresponding `module "<name_with_underscores>" {`
- *      declaration in terraform/environments/dev/main.tf.
- *   3. No `CLOUD_RUN_SERVICES=(` literal array remains in Cloud Build YAMLs
- *      that can build the web bundle — anywhere, including comments.
- *   4. Cloud Build YAMLs support the public API URL mode used by Hetzner.
- *   5. The PWA navigation fallback excludes retained bucket routes.
- *
- * NOTE: The plan also calls for forbidding the literal in `.github/workflows/deploy.yml`,
- *       but that file currently still contains the bash arrays. The code-worker GitHub
- *       App lacks `workflows` permission and cannot push edits to workflow files; the
- *       deploy.yml migration to manifest-based reads is tracked as a follow-up that
- *       must be applied by a human (or an actor with workflows scope). When that lands,
- *       extend `assertNoLiteralArray` to deploy.yml and remove this note.
+ *   2. Generated Terraform service URL tfvars match manifest serviceUrl values.
+ *   3. Obsolete GCP Cloud Build web configs and deploy.yml service arrays are gone.
+ *   4. The PWA navigation fallback excludes retained bucket routes.
  *
  * Exit code 1 on any failure with a clear `❌ <reason>` message.
  */
@@ -31,9 +21,13 @@ import { resolve } from 'node:path';
 
 const repoRoot = resolve(import.meta.dirname, '..');
 const manifestPath = resolve(repoRoot, 'apps/web/service-manifest.json');
-const terraformMainPath = resolve(repoRoot, 'terraform/environments/dev/main.tf');
 const cloudbuildPath = resolve(repoRoot, 'apps/web/cloudbuild.yaml');
 const monolithCloudbuildPath = resolve(repoRoot, 'cloudbuild/cloudbuild.yaml');
+const deployWorkflowPath = resolve(repoRoot, '.github/workflows/deploy.yml');
+const terraformServiceUrlsPath = resolve(
+  repoRoot,
+  'terraform/environments/dev/service-urls.auto.tfvars.json'
+);
 const viteConfigPath = resolve(repoRoot, 'apps/web/vite.config.ts');
 
 const NAME_REGEX = /^[a-z][a-z0-9-]+$/;
@@ -113,22 +107,28 @@ function validateShape(manifest) {
   });
 }
 
-function validateTerraformModules(manifest) {
-  if (!existsSync(terraformMainPath)) {
-    fail(`Terraform main.tf not found: ${terraformMainPath}`);
+function validateTerraformServiceUrls(manifest) {
+  if (!existsSync(terraformServiceUrlsPath)) {
+    fail(`Terraform service URL tfvars not found: ${terraformServiceUrlsPath}`);
   }
-  const tf = readFileSync(terraformMainPath, 'utf8');
-  const missing = [];
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(terraformServiceUrlsPath, 'utf8'));
+  } catch (err) {
+    fail(`Terraform service URL tfvars are not valid JSON: ${err.message}`);
+  }
+  const serviceUrls = parsed?.service_urls;
+  if (!serviceUrls || typeof serviceUrls !== 'object' || Array.isArray(serviceUrls)) {
+    fail('Terraform service URL tfvars must contain an object at service_urls');
+  }
+
   for (const entry of manifest.services) {
-    const moduleName = entry.name.replace(/-/g, '_');
-    const re = new RegExp(`module\\s+"${moduleName}"\\s+\\{`);
-    if (!re.test(tf)) {
-      missing.push({ service: entry.name, module: moduleName });
+    const envVar = `INTEXURAOS_${entry.envSuffix}_URL`;
+    if (serviceUrls[envVar] !== entry.serviceUrl) {
+      fail(
+        `Terraform service URL tfvars mismatch for ${envVar}: expected ${entry.serviceUrl}, got ${serviceUrls[envVar]}`
+      );
     }
-  }
-  if (missing.length > 0) {
-    const list = missing.map((m) => `module "${m.module}" (for service "${m.service}")`).join(', ');
-    fail(`Missing terraform module(s) in terraform/environments/dev/main.tf: ${list}`);
   }
 }
 
@@ -148,22 +148,9 @@ function assertNoLiteralArray(filePath, label) {
   }
 }
 
-function assertPublicApiMode(filePath, label) {
-  if (!existsSync(filePath)) {
-    fail(`${label} not found: ${filePath}`);
-  }
-  const content = readFileSync(filePath, 'utf8');
-  const requiredSnippets = [
-    '_WEB_SERVICE_URL_MODE',
-    '_WEB_PUBLIC_BASE_URL',
-    'public-api',
-    '.services[] | [.name, .envSuffix, .apiPath] | @tsv',
-    '$${WEB_PUBLIC_BASE_URL%/}$${API_PATH}',
-  ];
-  for (const snippet of requiredSnippets) {
-    if (!content.includes(snippet)) {
-      fail(`${label} is missing required public web service URL mode snippet: ${snippet}`);
-    }
+function assertMissingFile(filePath, label) {
+  if (existsSync(filePath)) {
+    fail(`${label} must be removed after app/web deployment moved off GCP Cloud Build`);
   }
 }
 
@@ -185,11 +172,10 @@ function assertViteRetainedBucketDenylist() {
 function main() {
   const manifest = loadManifest();
   validateShape(manifest);
-  validateTerraformModules(manifest);
-  assertNoLiteralArray(cloudbuildPath, 'apps/web/cloudbuild.yaml');
-  assertPublicApiMode(cloudbuildPath, 'apps/web/cloudbuild.yaml');
-  assertNoLiteralArray(monolithCloudbuildPath, 'cloudbuild/cloudbuild.yaml');
-  assertPublicApiMode(monolithCloudbuildPath, 'cloudbuild/cloudbuild.yaml');
+  validateTerraformServiceUrls(manifest);
+  assertMissingFile(cloudbuildPath, 'apps/web/cloudbuild.yaml');
+  assertMissingFile(monolithCloudbuildPath, 'cloudbuild/cloudbuild.yaml');
+  assertNoLiteralArray(deployWorkflowPath, '.github/workflows/deploy.yml');
   assertViteRetainedBucketDenylist();
 
   console.log(`✓ Web service manifest valid (${manifest.services.length} services)`);

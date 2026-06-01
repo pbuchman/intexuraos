@@ -146,39 +146,29 @@ The service account `claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount
 
 **CI:** `.github/workflows/ci.yml` runs `pnpm run ci` on all branches (lint, typecheck, test, build)
 
-**Deploy:** `.github/workflows/deploy.yml` triggers on push to `development` branch only:
+**Deploy:** `.github/workflows/deploy.yml` is manual-only and can trigger only retained GCP Cloud Build targets:
 
-1. Runs `.github/scripts/smart-dispatch.mjs` to analyze changes
-2. Triggers Cloud Build based on strategy:
-   - **MONOLITH** — Rebuild all (>3 affected OR global change) → `intexuraos-dev-deploy` trigger
-   - **INDIVIDUAL** — Rebuild affected only (≤3) → `<service>` triggers in parallel
-   - **NONE** — No deployable changes, skip
+- `firestore`
+- `vm-lifecycle`
+- `transcription`
+- `code-worker`
 
-**Manual override:** `workflow_dispatch` with `force_strategy: monolith` to rebuild all
-
-**Global Triggers** (force MONOLITH): `terraform/`, `cloudbuild/cloudbuild.yaml`, `cloudbuild/scripts/`, `pnpm-lock.yaml`, `tsconfig.base.json`
+Migrated app/web services do not deploy through GCP Cloud Build or Cloud Run. Hetzner deployment automation is owned by `terraform/hetzner-prod` and the `scripts/hetzner/` runtime scripts.
 
 ### File Locations
 
-| Purpose                  | File                                     |
-| ------------------------ | ---------------------------------------- |
-| CI workflow              | `.github/workflows/ci.yml`               |
-| Deploy workflow          | `.github/workflows/deploy.yml`           |
-| Smart dispatch           | `.github/scripts/smart-dispatch.mjs`     |
-| Main pipeline (all)      | `cloudbuild/cloudbuild.yaml`             |
-| Per-service pipeline     | `apps/<service>/cloudbuild.yaml`         |
-| Deploy scripts           | `cloudbuild/scripts/deploy-<service>.sh` |
-| Trigger definitions (TF) | `terraform/modules/cloud-build/main.tf`  |
+| Purpose                      | File                                    |
+| ---------------------------- | --------------------------------------- |
+| CI workflow                  | `.github/workflows/ci.yml`              |
+| Retained GCP deploy workflow | `.github/workflows/deploy.yml`          |
+| Firestore pipeline           | `cloudbuild/cloudbuild-firestore.yaml`  |
+| Cloud Function pipelines     | `workers/<worker>/cloudbuild.yaml`      |
+| code-worker image pipeline   | `docker/code-worker/cloudbuild.yaml`    |
+| Trigger definitions (TF)     | `terraform/modules/cloud-build/main.tf` |
 
-### Adding a New Service to Cloud Build
+### Adding a New Service Deployment
 
-1. Add build+deploy steps to `cloudbuild/cloudbuild.yaml`
-2. Create `apps/<service>/cloudbuild.yaml`
-3. Create `cloudbuild/scripts/deploy-<service>.sh`
-4. Add to `docker_services` in `terraform/modules/cloud-build/main.tf`
-5. Add to `SERVICES` array in `.github/scripts/smart-dispatch.mjs`
-
-**First deployment:** Service must exist in Terraform before Cloud Build can deploy. Run `./scripts/push-missing-images.sh` for new services.
+Do not add GCP Cloud Run or app/web Cloud Build deployment paths for migrated services. Add runtime wiring to Hetzner infrastructure/scripts instead, and keep retained GCP triggers limited to Firestore, Cloud Functions, and code-worker image rebuilds.
 
 ---
 
