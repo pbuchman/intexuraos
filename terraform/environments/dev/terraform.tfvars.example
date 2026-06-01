@@ -23,17 +23,9 @@ github_branch = "development"
 # Cloud Build GitHub connection name
 github_connection_name = "github-pbuchman"
 
-# Enable legacy GCP Load Balancer for web app SPA hosting.
-# Keep disabled after Hetzner migration; nginx on Hetzner owns the public edge.
-enable_load_balancer = false
-
-# Keep legacy Cloud Run-targeted Pub/Sub pushes and app Scheduler jobs active.
-# Keep disabled after Hetzner async cutover; retained Cloud Functions are not gated by this.
+# Keep retired Cloud Run-targeted Pub/Sub pushes disabled.
+# Hetzner-owned subscriptions and Scheduler jobs live in terraform/hetzner-prod.
 enable_legacy_cloud_run_async_consumers = false
-
-# Domain name for the web app. After Hetzner cutover, public DNS points to
-# Hetzner instead of the legacy GCP load-balancer IP.
-web_app_domain = "intexuraos.cloud"
 
 # Enable LLM API audit logging (logs all LLM calls to Firestore)
 audit_llms = true

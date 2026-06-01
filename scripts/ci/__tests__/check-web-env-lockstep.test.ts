@@ -43,24 +43,6 @@ export function getConfig() {
 }
 `;
 
-const DEPLOY_FIXTURE = `
-jobs:
-  monolith:
-    steps:
-      - run: |
-          CLOUD_RUN_SERVICES=(
-            "user-service:USER_SERVICE"
-            "image-service:IMAGE_SERVICE"
-          )
-  individual:
-    steps:
-      - run: |
-          CLOUD_RUN_SERVICES=(
-            "user-service:USER_SERVICE"
-            "image-service:IMAGE_SERVICE"
-          )
-`;
-
 describe('check-web-env-lockstep', () => {
   let dir: string;
 
@@ -85,11 +67,10 @@ describe('check-web-env-lockstep', () => {
     return p;
   }
 
-  test('passes when manifest, config, and both deploy.yml arrays agree', () => {
+  test('passes when manifest and config agree', () => {
     const r = run({
       WEB_ENV_LOCKSTEP_MANIFEST: writeFixture('service-manifest.json', MANIFEST_FIXTURE),
       WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', CONFIG_FIXTURE),
-      WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', DEPLOY_FIXTURE),
     });
     expect(r.status).toBe(0);
     expect(r.stdout).toMatch(/lockstep OK/);
@@ -103,43 +84,9 @@ describe('check-web-env-lockstep', () => {
         'config.generated.ts',
         GENERATED_CONFIG_FIXTURE
       ),
-      WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', DEPLOY_FIXTURE),
     });
     expect(r.status).toBe(0);
     expect(r.stdout).toMatch(/lockstep OK/);
-  });
-
-  test('fails when deploy.yml array is missing an entry that manifest has', () => {
-    const driftedDeploy = DEPLOY_FIXTURE.replaceAll('"image-service:IMAGE_SERVICE"\n', '');
-    const r = run({
-      WEB_ENV_LOCKSTEP_MANIFEST: writeFixture('service-manifest.json', MANIFEST_FIXTURE),
-      WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', CONFIG_FIXTURE),
-      WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', driftedDeploy),
-    });
-    expect(r.status).toBe(1);
-    expect(r.stderr).toMatch(/deploy\.yml\[0\] is missing INTEXURAOS_IMAGE_SERVICE_URL/);
-    expect(r.stderr).toMatch(/deploy\.yml\[1\] is missing INTEXURAOS_IMAGE_SERVICE_URL/);
-  });
-
-  test('fails when only one of the two deploy.yml arrays drifts', () => {
-    const partialDrift = DEPLOY_FIXTURE.replace(
-      /individual:[\s\S]*$/,
-      `individual:
-    steps:
-      - run: |
-          CLOUD_RUN_SERVICES=(
-            "user-service:USER_SERVICE"
-          )
-`
-    );
-    const r = run({
-      WEB_ENV_LOCKSTEP_MANIFEST: writeFixture('service-manifest.json', MANIFEST_FIXTURE),
-      WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', CONFIG_FIXTURE),
-      WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', partialDrift),
-    });
-    expect(r.status).toBe(1);
-    expect(r.stderr).toMatch(/deploy\.yml\[1\] is missing INTEXURAOS_IMAGE_SERVICE_URL/);
-    expect(r.stderr).not.toMatch(/deploy\.yml\[0\] is missing/);
   });
 
   test('fails when config.ts consumes an env var that the manifest does not list', () => {
@@ -150,11 +97,10 @@ describe('check-web-env-lockstep', () => {
     const r = run({
       WEB_ENV_LOCKSTEP_MANIFEST: writeFixture('service-manifest.json', MANIFEST_FIXTURE),
       WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', driftedConfig),
-      WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', DEPLOY_FIXTURE),
     });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(
-      /config\.ts consumes INTEXURAOS_NOPE_SERVICE_URL but cloudbuild does not fetch it/
+      /config\.ts consumes INTEXURAOS_NOPE_SERVICE_URL but manifest does not list it/
     );
   });
 
@@ -162,7 +108,6 @@ describe('check-web-env-lockstep', () => {
     const r = run({
       WEB_ENV_LOCKSTEP_MANIFEST: writeFixture('service-manifest.json', '{ not json'),
       WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', CONFIG_FIXTURE),
-      WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', DEPLOY_FIXTURE),
     });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/service-manifest\.json is not valid JSON/);
@@ -172,7 +117,6 @@ describe('check-web-env-lockstep', () => {
     const r = run({
       WEB_ENV_LOCKSTEP_MANIFEST: writeFixture('service-manifest.json', JSON.stringify({})),
       WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', CONFIG_FIXTURE),
-      WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', DEPLOY_FIXTURE),
     });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/service-manifest\.json must have a "services" array/);
@@ -185,7 +129,6 @@ describe('check-web-env-lockstep', () => {
     const r = run({
       WEB_ENV_LOCKSTEP_MANIFEST: writeFixture('service-manifest.json', bad),
       WEB_ENV_LOCKSTEP_CONFIG: writeFixture('config.ts', CONFIG_FIXTURE),
-      WEB_ENV_LOCKSTEP_DEPLOY_YML: writeFixture('deploy.yml', DEPLOY_FIXTURE),
     });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/services\[1\] is missing string "envSuffix"/);

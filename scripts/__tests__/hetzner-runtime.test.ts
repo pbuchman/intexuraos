@@ -408,7 +408,7 @@ describe('Hetzner async edge cutover', () => {
     expect(runbook).toContain('activate_hetzner_async_consumers=true');
   });
 
-  it('disables legacy Cloud Run async consumers by default in the retained GCP root', () => {
+  it('keeps retained Pub/Sub topics but removes legacy Cloud Run app Scheduler jobs', () => {
     const devTerraform = readRequired(terraformDevMainPath);
     const prTriageTerraform = readRequired(terraformDevPrTriagePath);
     const tfvarsExample = readRequired(terraformDevTfvarsExamplePath);
@@ -446,11 +446,13 @@ describe('Hetzner async edge cutover', () => {
       expect(moduleBody, moduleName).toContain(
         'enable_push_subscription = var.enable_legacy_cloud_run_async_consumers'
       );
+      expect(moduleBody, moduleName).toContain('local.retired_cloud_run_push_endpoint');
     }
 
     expect(prTriageTerraform).toContain(
       'enable_push_subscription = var.enable_legacy_cloud_run_async_consumers'
     );
+    expect(prTriageTerraform).toContain('local.retired_cloud_run_push_endpoint');
     expect(devTerraform).toContain('resource "google_pubsub_subscription" "audio_stored_push"');
     expect(devTerraform).not.toContain(
       'resource "google_pubsub_subscription" "audio_stored_push" {\n  count'
@@ -473,14 +475,13 @@ describe('Hetzner async edge cutover', () => {
       'execution_memory_sweep_errored',
       'execution_memory_prune_stale',
     ]) {
-      const resourceBody =
-        devTerraform
-          .split(`resource "google_cloud_scheduler_job" "${schedulerResource}" {`)[1]
-          ?.split('\n}')[0] ?? '';
-      expect(resourceBody, schedulerResource).toContain(
-        'paused      = !var.enable_legacy_cloud_run_async_consumers'
+      expect(devTerraform, schedulerResource).not.toContain(
+        `resource "google_cloud_scheduler_job" "${schedulerResource}"`
       );
     }
+
+    expect(devTerraform).not.toContain('google_cloud_run_service_iam_member" "scheduler_invokes');
+    expect(devTerraform).not.toContain('source = "../../modules/cloud-run-service"');
   });
 });
 
@@ -571,13 +572,15 @@ describe('Hetzner secret loader', () => {
     }
   });
 
-  it('keeps the legacy GCP web load balancer disabled by default after Hetzner cutover', () => {
+  it('removes the legacy GCP web app hosting knobs after Hetzner cutover', () => {
     const terraform = readRequired(terraformDevMainPath);
     const tfvarsExample = readRequired(terraformDevTfvarsExamplePath);
 
-    expect(terraform).toContain('variable "enable_load_balancer"');
-    expect(terraform).toContain('default     = false');
-    expect(tfvarsExample).toContain('enable_load_balancer = false');
+    expect(terraform).not.toContain('variable "enable_load_balancer"');
+    expect(terraform).not.toContain('source = "../../modules/web-app"');
+    expect(terraform).not.toContain('module "web_app"');
+    expect(tfvarsExample).not.toContain('enable_load_balancer');
+    expect(tfvarsExample).not.toContain('web_app_domain');
   });
 
   it('makes the live Hetzner production environment reproducible from Terraform-managed state', () => {

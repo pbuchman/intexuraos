@@ -113,8 +113,6 @@ check "Directory exists: ${APP_DIR}/"                    "$([[ -d "$APP_DIR" ]] 
 check "package.json"                                     "$(file_exists "${APP_DIR}/package.json")"
 check "Dockerfile"                                       "$(file_exists "${APP_DIR}/Dockerfile")"
 check "src/index.ts"                                     "$(file_exists "${APP_DIR}/src/index.ts")"
-# Checklist line 1003:
-check "Per-service apps/${SERVICE}/cloudbuild.yaml"      "$(file_exists "${APP_DIR}/cloudbuild.yaml")"
 
 # Dockerfile contents per checklist line 997
 DF="${APP_DIR}/Dockerfile"
@@ -127,63 +125,22 @@ PKG="${APP_DIR}/package.json"
 check "package.json: @intexuraos/infra-otel dependency"  "$(grep_any "@intexuraos/infra-otel" "$PKG")"
 
 header "Deploy plumbing"
-
-# Checklist line 1004:
-DEPLOY_SH="cloudbuild/scripts/deploy-${SERVICE}.sh"
-check "Deploy script: ${DEPLOY_SH}"                      "$(file_exists "$DEPLOY_SH")"
-if [[ -f "$DEPLOY_SH" ]]; then
-  check "  deploy.sh: has --cpu-throttling"              "$(grep_any "cpu-throttling" "$DEPLOY_SH")"
-  check "  deploy.sh: does NOT use --allow-unauthenticated" \
-        "$([[ $(grep_count "allow-unauthenticated" "$DEPLOY_SH") == 0 ]] && echo 1 || echo 0)"
-fi
+warn  "GCP app/web Cloud Build deploy files are intentionally absent" 1 \
+      "migrated app deployment belongs to the Hetzner path"
 
 header "Terraform (environments/dev/main.tf)"
 
 DEV_TF="terraform/environments/dev/main.tf"
 # Checklist line 998: Added to local.services map
 check "local.services.${SERVICE_SNAKE} defined"          "$(grep_any "${SERVICE_SNAKE} = {" "$DEV_TF")"
-# Checklist line 1000: module with common_service_secrets/env_vars
-check "module \"${SERVICE_SNAKE}\" block"                "$(grep_any "module \"${SERVICE_SNAKE}\"" "$DEV_TF")"
-# Scope this to within the service's module block (awk picks the block, grep checks for the local).
-MODULE_USES_SECRETS=0
-if grep -qF "module \"${SERVICE_SNAKE}\"" "$DEV_TF" 2>/dev/null; then
-  if awk -v mod="module \"${SERVICE_SNAKE}\"" '
-        index($0, mod) > 0 {in_block=1; brace=0}
-        in_block {
-          for (i=1;i<=length($0);i++) {
-            c=substr($0,i,1)
-            if (c=="{") brace++
-            else if (c=="}") { brace--; if (brace==0) { in_block=0; exit } }
-          }
-          print
-        }
-      ' "$DEV_TF" | grep -qF "local.common_service_secrets"; then
-    MODULE_USES_SECRETS=1
-  fi
-fi
-check "  module uses common_service_secrets"             "$MODULE_USES_SECRETS"
-# Checklist line 999: service URL in common_service_env_vars
-check "INTEXURAOS_${SERVICE_UPPER}_URL in env_vars"      "$(grep_any "INTEXURAOS_${SERVICE_UPPER}_URL" "$DEV_TF")"
-
-header "Terraform (modules/iam + modules/cloud-build)"
+header "Terraform (modules/iam)"
 
 IAM_TF="terraform/modules/iam/main.tf"
 # Checklist line 1001:
 check "IAM SA: google_service_account.${SERVICE_SNAKE}"  "$(grep_any "google_service_account\" \"${SERVICE_SNAKE}\"" "$IAM_TF")"
 
-CB_TF="terraform/modules/cloud-build/main.tf"
-# Checklist line 1005:
-check "docker_services list includes \"${SERVICE}\""     "$(grep_any "\"${SERVICE}\"" "$CB_TF")"
-
-header "cloudbuild/cloudbuild.yaml"
-
-CB_YAML="cloudbuild/cloudbuild.yaml"
-# Checklist line 1002:
-check "Build step: build-push-${SERVICE}"                "$(grep_any "build-push-${SERVICE}" "$CB_YAML")"
-check "Deploy step: deploy-${SERVICE}"                   "$(grep_any "deploy-${SERVICE}" "$CB_YAML")"
 # Web config — SOFT. apps/web/service-manifest.json is the single source of
-# truth consumed by apps/web/cloudbuild.yaml and cloudbuild/cloudbuild.yaml at
-# build time.
+# truth consumed by generated web/dev wiring and the Hetzner web build.
 WEB_MANIFEST="apps/web/service-manifest.json"
 manifest_has_service=0
 if [[ -f "$WEB_MANIFEST" ]]; then
@@ -202,17 +159,6 @@ fi
 warn  "web manifest: ${SERVICE}:${SERVICE_UPPER} in apps/web/service-manifest.json" \
       "$manifest_has_service" \
       "soft: only required if web frontend calls this service"
-
-header ".github/workflows/deploy.yml (4 required places)"
-
-# Checklist lines 1006-1011:
-DEPLOY_YML=".github/workflows/deploy.yml"
-check "1/4 Docker build line"                            "$(grep_any "build-push-monitored.sh ${SERVICE} apps/${SERVICE}" "$DEPLOY_YML")"
-check "2/4 SERVICES array contains ${SERVICE}"           "$(grep -qE "(^|[[:space:]])${SERVICE}([[:space:]]|$)" "$DEPLOY_YML" && echo 1 || echo 0)"
-# CLOUD_RUN_SERVICES appears in 2 places in deploy.yml per checklist 1009/1010
-RUN_N="$(grep_count "\"${SERVICE}:${SERVICE_UPPER}\"" "$DEPLOY_YML")"
-check "3/4 + 4/4 CLOUD_RUN_SERVICES (2 entries)"         "$([[ "$RUN_N" -ge 2 ]] && echo 1 || echo 0)" \
-      "found ${RUN_N} / 2 expected"
 
 header "Monorepo wiring"
 

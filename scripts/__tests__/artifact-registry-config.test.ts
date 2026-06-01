@@ -9,14 +9,16 @@ function readRepoFile(relativePath: string): string {
 }
 
 describe('artifact registry prevention config', () => {
-  it('does not rebuild code-worker inside monolith deploy flows', () => {
+  it('does not retain monolith app deployment flows or rebuild code-worker through them', () => {
     const deployWorkflow = readRepoFile('.github/workflows/deploy.yml');
-    const monolithCloudBuild = readRepoFile('cloudbuild/cloudbuild.yaml');
 
+    expect(fs.existsSync(path.join(REPO_ROOT, 'cloudbuild/cloudbuild.yaml'))).toBe(false);
+    expect(deployWorkflow).not.toContain('deploy-monolith');
+    expect(deployWorkflow).not.toContain('build-push-monitored.sh image-service');
+    expect(deployWorkflow).not.toContain('deploy-web.sh');
     expect(deployWorkflow).not.toContain(
       'bash cloudbuild/scripts/build-push-monitored.sh code-worker docker/code-worker/Dockerfile &'
     );
-    expect(monolithCloudBuild).not.toContain("id: 'build-push-code-worker'");
   });
 
   it('gives the standalone code-worker Cloud Build extra time for multi-arch export and push', () => {
