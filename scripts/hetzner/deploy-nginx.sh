@@ -8,6 +8,7 @@ NGINX_SOURCE_DIR="${SCRIPT_DIR}/nginx"
 SITE_TARGET="/etc/nginx/sites-available/intexuraos.conf"
 SITE_ENABLED="/etc/nginx/sites-enabled/intexuraos.conf"
 LUA_TARGET_DIR="/etc/nginx/lua"
+NGINX_HASH_CONFIG_TARGET="/etc/nginx/conf.d/intexuraos-hash.conf"
 RELOAD_NGINX=1
 
 usage() {
@@ -62,6 +63,19 @@ reload_nginx() {
   nginx -s reload
 }
 
+write_nginx_hash_config() {
+  local temp_file=""
+
+  install -d -m 755 "$(dirname "${NGINX_HASH_CONFIG_TARGET}")"
+  temp_file="$(mktemp "${TMPDIR:-/tmp}/intexuraos-nginx-hash.XXXXXX")"
+  cat > "${temp_file}" <<'EOF'
+variables_hash_max_size 2048;
+variables_hash_bucket_size 128;
+EOF
+  install -m 644 -o root -g root "${temp_file}" "${NGINX_HASH_CONFIG_TARGET}"
+  rm -f "${temp_file}"
+}
+
 main() {
   parse_args "$@"
   require_prod
@@ -74,6 +88,7 @@ main() {
   install -d -m 755 "$(dirname "${SITE_TARGET}")" "$(dirname "${SITE_ENABLED}")" "${LUA_TARGET_DIR}"
   install -m 644 -o root -g root "${NGINX_SOURCE_DIR}/intexuraos.conf" "${SITE_TARGET}"
   install -m 644 -o root -g root "${NGINX_SOURCE_DIR}/jwt-verify.lua" "${LUA_TARGET_DIR}/jwt-verify.lua"
+  write_nginx_hash_config
   ln -sfn "${SITE_TARGET}" "${SITE_ENABLED}"
   rm -f /etc/nginx/sites-enabled/default
 

@@ -48,6 +48,21 @@ clear_intexuraos_env() {
   done < <(env)
 }
 
+export_build_metadata() {
+  if [[ -n "${COMMIT_MESSAGE:-}" && -z "${COMMIT_SHA:-}" ]]; then
+    fail "COMMIT_SHA is required when COMMIT_MESSAGE is set"
+  fi
+
+  if [[ -n "${COMMIT_SHA:-}" && -z "${COMMIT_MESSAGE:-}" ]]; then
+    fail "COMMIT_MESSAGE is required when COMMIT_SHA is set"
+  fi
+
+  if [[ -n "${COMMIT_SHA:-}" ]]; then
+    export COMMIT_SHA
+    export COMMIT_MESSAGE
+  fi
+}
+
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -247,6 +262,7 @@ main() {
   require_command rsync
   trap restore_web_env_files EXIT
   clear_intexuraos_env
+  export_build_metadata
   export INTEXURAOS_ENVIRONMENT=prod
   export_web_service_urls
   build_and_publish
