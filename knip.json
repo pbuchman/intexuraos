@@ -18,7 +18,6 @@
     "nock",
     "memfs",
     "pino",
-    "pino-opentelemetry-transport",
     "pino-pretty",
     "openai",
     "fastify-server",

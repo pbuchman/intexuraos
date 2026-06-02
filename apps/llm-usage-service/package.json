@@ -25,7 +25,6 @@
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
-    "@intexuraos/infra-otel": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "fastify": "catalog:",
     "firebase-admin": "^13.0.2",

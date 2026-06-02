@@ -15,8 +15,7 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
-    "@sentry/node": "^8.42.0",
-    "pino-opentelemetry-transport": "^2.0.0"
+    "@sentry/node": "^8.42.0"
   },
   "peerDependencies": {
     "fastify": "^5.2.0",

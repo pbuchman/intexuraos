@@ -4,7 +4,7 @@
 
 Web Agent extracts web content and generates AI summaries. It uses Cloudflare Browser Rendering for headless browser content extraction (returning Markdown), Cheerio for OpenGraph parsing, and the user's configured LLM (with a platform Gemini 2.5 Flash fallback) for summarization with automatic response repair.
 
-Runs on Cloud Run with auto-scaling (0–1 instances). Port 8127 on dev (PM2). Distributed tracing via Dash0 OpenTelemetry (transparent preload).
+Runs on Cloud Run with auto-scaling (0–1 instances). Port 8127 on dev (PM2).
 
 ## Architecture
 
@@ -298,7 +298,6 @@ Fetches and parses OpenGraph metadata via direct HTTP with browser-like headers.
 | ---------------------------- | ------------------------------------------------ | ------------------- |
 | Cloudflare Browser Rendering | Web page content extraction (/markdown endpoint) | Return FETCH_FAILED |
 | User's LLM                   | Summary generation                               | Return API_ERROR    |
-| Dash0                        | OpenTelemetry sink                               | Silent (optional)   |
 
 ### Internal Services
 
@@ -325,7 +324,6 @@ Fetches and parses OpenGraph metadata via direct HTTP with browser-like headers.
 | `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Pricing lookup                                | Yes      |
 | `INTEXURAOS_SENTRY_DSN`               | Error tracking                                | Yes      |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini 2.5 Flash fallback            | Optional |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | Dash0 OpenTelemetry endpoint                  | Optional |
 
 All required vars are validated at startup via `validateRequiredEnv()`. `INTEXURAOS_SENTRY_DSN` is validated separately with a direct check. Optional keys are passed to `createUserServiceClient()` and are no-ops when unset.
 
@@ -358,8 +356,6 @@ All required vars are validated at startup via `validateRequiredEnv()`. `INTEXUR
 **Sentry logging** — Uses `createAppLogger()` from `@intexuraos/infra-sentry` for automatic error forwarding to Sentry.
 
 **Response contract** — All internal routes use `reply.ok()` / `reply.fail()` instead of raw `reply.send()` / `reply.status()`.
-
-**Dash0 OpenTelemetry** — Distributed tracing is loaded via `--import ./dist/otel-register.js` in the Dockerfile CMD. It is a no-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset, so local dev is unaffected.
 
 **No Firestore** — This service is stateless. It does not own any Firestore collections.
 
@@ -405,7 +401,6 @@ apps/web-agent/src/
 - `@intexuraos/internal-clients` — Type-safe clients for internal services (with fallback chain)
 - `@intexuraos/llm-pricing` — Pricing context for LLM cost tracking
 - `@intexuraos/llm-factory` — User's LLM client generation
-- `@intexuraos/infra-otel` — OpenTelemetry preload for Dash0 tracing
 - `@intexuraos/llm-prompts` — PromptBuilder interface with semver versioning
 - `@intexuraos/llm-utils` — `createDetailedParseErrorMessage()` for structured LLM parse error context
 - `cheerio` — HTML parsing for OpenGraph metadata extraction

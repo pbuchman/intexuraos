@@ -158,37 +158,6 @@ describe('BasePubSubPublisher', () => {
       expect(call.attributes['x-correlation-id']).toBe('r-1');
     });
 
-    it('sets traceparent when traceId and parentId are present', async () => {
-      const traceId = 't'.repeat(32);
-      const parentId = 'p'.repeat(16);
-      await runWithRequestContext(
-        { requestId: 'r-1', correlationId: 'r-1', traceId, parentId },
-        async () => {
-          await publisher.publish('test-topic', { data: 'test' }, {});
-        }
-      );
-
-      const call = mockPublishMessage.mock.calls[0]?.[0] as {
-        attributes: Record<string, string>;
-      };
-      expect(call.attributes['traceparent']).toBe(`00-${traceId}-${parentId}-01`);
-    });
-
-    it('generates a fresh non-zero parent-id when traceId is set but parentId is absent', async () => {
-      const traceId = 't'.repeat(32);
-      await runWithRequestContext({ requestId: 'r-1', correlationId: 'r-1', traceId }, async () => {
-        await publisher.publish('test-topic', { data: 'test' }, {});
-      });
-
-      const call = mockPublishMessage.mock.calls[0]?.[0] as {
-        attributes: Record<string, string>;
-      };
-      const traceparent = call.attributes['traceparent'];
-      expect(traceparent).toMatch(new RegExp(`^00-${traceId}-[0-9a-f]{16}-01$`));
-      const parentSegment = traceparent?.split('-')[2];
-      expect(parentSegment).not.toBe('0000000000000000');
-    });
-
     it('omits correlation attributes outside any request context but keeps publisher-service', async () => {
       await publisher.publish('test-topic', { data: 'test' }, {});
 
@@ -197,11 +166,10 @@ describe('BasePubSubPublisher', () => {
       };
       expect('x-request-id' in call.attributes).toBe(false);
       expect('x-correlation-id' in call.attributes).toBe(false);
-      expect('traceparent' in call.attributes).toBe(false);
       expect(call.attributes['publisher-service']).toBeDefined();
     });
 
-    it('omits traceparent when ctx has no traceId (only correlation ids)', async () => {
+    it('does not publish tracing attributes when correlation context exists', async () => {
       await runWithRequestContext({ requestId: 'r-1', correlationId: 'r-1' }, async () => {
         await publisher.publish('test-topic', { data: 'test' }, {});
       });

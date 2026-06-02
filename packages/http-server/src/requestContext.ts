@@ -37,25 +37,18 @@ function readHeader(request: FastifyRequest, name: string): string | undefined {
 
 /**
  * Build a {@link RequestContext} from inbound headers. Generates a UUID for
- * the request id when no `x-request-id` is supplied. Preserves the upstream
- * `x-request-id` as `parentId` whenever the inbound request already carries
- * one (cross-service chains).
+ * the request id when no `x-request-id` is supplied. Mirrors the request id
+ * into `correlationId` when no explicit `x-correlation-id` header is supplied.
  */
 export function buildRequestContext(request: FastifyRequest): RequestContext {
   const inboundRequestId = readHeader(request, X_REQUEST_ID);
   const requestId = inboundRequestId ?? randomUUID();
   const correlationId = readHeader(request, X_CORRELATION_ID) ?? requestId;
 
-  const ctx: RequestContext = {
+  return {
     requestId,
     correlationId,
   };
-
-  if (inboundRequestId !== undefined) {
-    ctx.parentId = inboundRequestId;
-  }
-
-  return ctx;
 }
 
 /**

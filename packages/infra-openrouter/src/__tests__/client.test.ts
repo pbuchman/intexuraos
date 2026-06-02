@@ -1,28 +1,8 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 import { LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
-import { SpanStatusCode, trace } from '@opentelemetry/api';
-import {
-  BasicTracerProvider,
-  InMemorySpanExporter,
-  SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
-
-const spanExporter = new InMemorySpanExporter();
-const tracerProvider = new BasicTracerProvider({
-  spanProcessors: [new SimpleSpanProcessor(spanExporter)],
-});
-
-beforeAll(() => {
-  trace.setGlobalTracerProvider(tracerProvider);
-});
-
-afterAll(async () => {
-  await tracerProvider.shutdown();
-  trace.disable();
-});
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -58,7 +38,6 @@ describe('createOpenRouterClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     nock.cleanAll();
-    spanExporter.reset();
     mockUsageSink.clear();
   });
 
@@ -1300,108 +1279,6 @@ describe('createOpenRouterClient', () => {
 
       const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as Record<string, unknown>;
       expect(lastCall).not.toHaveProperty('correlation');
-    });
-  });
-
-  describe('OTel span emission for generate()', () => {
-    it('emits llm.openrouter.generate span with all canonical attributes on success', async () => {
-      nock(API_BASE_URL)
-        .post('/chat/completions')
-        .reply(200, {
-          id: 'test-id',
-          model: TEST_MODEL,
-          created: Date.now(),
-          object: 'chat.completion',
-          choices: [
-            { index: 0, message: { content: 'hi', role: 'assistant' }, finish_reason: 'stop' },
-          ],
-          usage: { prompt_tokens: 4, completion_tokens: 6, total_tokens: 10 },
-        });
-
-      const client = createOpenRouterClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-      await client.generate('hi', { promptType: 'test-prompt' });
-
-      const spans = spanExporter.getFinishedSpans();
-      expect(spans).toHaveLength(1);
-      const span = spans[0];
-      if (span === undefined) throw new Error('no span');
-      expect(span.name).toBe('llm.openrouter.generate');
-      expect(span.attributes['llm.provider']).toBe('openrouter');
-      expect(span.attributes['llm.model']).toBe(TEST_MODEL);
-      expect(span.attributes['llm.input_tokens']).toBe(4);
-      expect(span.attributes['llm.output_tokens']).toBe(6);
-      expect(span.attributes['llm.cost_usd']).toBeDefined();
-      expect(span.attributes['llm.duration_ms']).toBeGreaterThanOrEqual(0);
-    });
-
-    it('passes durationMs >= 0 to usage logger on success', async () => {
-      nock(API_BASE_URL)
-        .post('/chat/completions')
-        .reply(200, {
-          id: 'test-id',
-          model: TEST_MODEL,
-          created: Date.now(),
-          object: 'chat.completion',
-          choices: [
-            { index: 0, message: { content: 'ok', role: 'assistant' }, finish_reason: 'stop' },
-          ],
-          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-        });
-      const client = createOpenRouterClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-      await client.generate('hi', { promptType: 'test-prompt' });
-      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as { durationMs?: number };
-      expect(lastCall?.durationMs).toBeGreaterThanOrEqual(0);
-    });
-
-    it('passes durationMs >= 0 to usage logger on error', async () => {
-      nock(API_BASE_URL).post('/chat/completions').reply(500, 'boom');
-      const client = createOpenRouterClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-      await client.generate('hi', { promptType: 'test-prompt' });
-      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as {
-        durationMs?: number;
-        success?: boolean;
-      };
-      expect(lastCall?.success).toBe(false);
-      expect(lastCall?.durationMs).toBeGreaterThanOrEqual(0);
-    });
-
-    it('records ERROR-status span when API returns non-OK HTTP status', async () => {
-      nock(API_BASE_URL).post('/chat/completions').times(3).reply(503, 'Service overloaded');
-      const client = createOpenRouterClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-      await client.generate('hi', { promptType: 'test-prompt' });
-
-      const spans = spanExporter.getFinishedSpans();
-      // Each retry attempt emits its own span; with 3 attempts we get 3 ERROR spans.
-      expect(spans.length).toBeGreaterThanOrEqual(1);
-      const span = spans[0];
-      if (span === undefined) throw new Error('no span');
-      expect(span.name).toBe('llm.openrouter.generate');
-      expect(span.status.code).toBe(SpanStatusCode.ERROR);
-      expect(span.attributes['llm.duration_ms']).toBeGreaterThanOrEqual(0);
     });
   });
 });

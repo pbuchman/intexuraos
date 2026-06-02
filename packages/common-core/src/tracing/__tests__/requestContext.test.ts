@@ -57,26 +57,6 @@ describe('runWithRequestContext / getRequestContext', () => {
     expect(both).toEqual(['A', 'B']);
   });
 
-  it('propagates traceId and parentId fields when provided', () => {
-    runWithRequestContext(
-      {
-        requestId: 'r-1',
-        correlationId: 'c-1',
-        traceId: 't-1',
-        parentId: 'p-1',
-      },
-      () => {
-        const ctx = getRequestContext();
-        expect(ctx).toEqual({
-          requestId: 'r-1',
-          correlationId: 'c-1',
-          traceId: 't-1',
-          parentId: 'p-1',
-        });
-      }
-    );
-  });
-
   it('returns undefined again after the runner completes', () => {
     runWithRequestContext(baseCtx, () => {
       expect(getRequestId()).toBe('req-1');

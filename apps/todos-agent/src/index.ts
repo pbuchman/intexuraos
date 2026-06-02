@@ -1,5 +1,4 @@
 import { initSentry } from '@intexuraos/infra-sentry';
-import { assertOtelActive } from '@intexuraos/infra-otel';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { installUsageSinkShutdownHandler } from '@intexuraos/llm-pricing';
@@ -18,7 +17,6 @@ const REQUIRED_ENV = [
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
-assertOtelActive({ serviceName: 'todos-agent' });
 
 const sentryConfig: {
   environment: string;

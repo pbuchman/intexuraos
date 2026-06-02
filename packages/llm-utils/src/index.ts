@@ -14,13 +14,8 @@ export {
   type LlmParseErrorDetails,
 } from './parseError.js';
 
-// OTel span wrapper for LLM provider calls
-export {
-  withLlmSpan,
-  type LlmProviderName,
-  type LlmSpanAttributes,
-  type WithLlmSpanResult,
-} from './withLlmSpan.js';
+// LLM provider call timing helper
+export { measureLlmCall, type MeasureLlmCallResult } from './measureLlmCall.js';
 
 // Retry helper for transient LLM errors
 export { withRetry, type WithRetryOptions } from './withRetry.js';

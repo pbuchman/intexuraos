@@ -1,8 +1,8 @@
 /**
  * Request context primitive backed by AsyncLocalStorage.
  *
- * Provides a per-request scope that carries the inbound request id,
- * correlation id, and (when active) the OpenTelemetry trace context.
+ * Provides a per-request scope that carries the inbound request id
+ * and correlation id.
  * Every Fastify handler MUST be wrapped in `runWithRequestContext` so
  * downstream calls (loggers, internal HTTP clients, Pub/Sub publishers)
  * can read the current `requestId` without threading it through every
@@ -21,10 +21,6 @@ export interface RequestContext {
   requestId: string;
   /** Equal to `requestId` at the HTTP edge; preserved across hops. */
   correlationId: string;
-  /** OpenTelemetry trace id when an active span exists. */
-  traceId?: string;
-  /** Upstream `x-request-id` for cross-service chains. */
-  parentId?: string;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();

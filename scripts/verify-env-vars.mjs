@@ -62,9 +62,6 @@ const COMMON_OPTIONAL_ENV = new Set([
   'INTEXURAOS_AUTH_JWKS_URL',
   // Platform-wide Gemini API key (primary fallback for services using user-service client)
   'INTEXURAOS_GEMINI_APP_API_KEY',
-  // Dash0 OpenTelemetry (optional — no-op when not configured)
-  'INTEXURAOS_DASH0_OTLP_ENDPOINT',
-  'INTEXURAOS_DASH0_AUTH_TOKEN',
   // Queue config (optional — have sensible defaults: maxSize=50, ttlMinutes=1440)
   'INTEXURAOS_QUEUE_MAX_SIZE',
   'INTEXURAOS_QUEUE_TTL_MINUTES',
@@ -334,9 +331,6 @@ function isCommonServiceVar(varName) {
     'PORT',
     'HOST',
     'NODE_ENV',
-    // Dash0 OpenTelemetry (optional — set in COMMON_SERVICE_ENV)
-    'INTEXURAOS_DASH0_OTLP_ENDPOINT',
-    'INTEXURAOS_DASH0_AUTH_TOKEN',
   ]);
 
   // From dev.mjs COMMON_SERVICE_URLS (all INTEXURAOS_*_URL vars)

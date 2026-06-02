@@ -143,9 +143,6 @@ function collectExternalDepsWithVersions(pkgName, visited = new Set()) {
 
 // Collect all external pnpm deps (including transitive from workspace packages)
 const serviceDeps = collectExternalDeps(`@intexuraos/${service}`);
-// Always include infra-otel's deps (OTel preload is built separately for all services)
-const otelDeps = collectExternalDeps('@intexuraos/infra-otel');
-otelDeps.forEach((dep) => serviceDeps.add(dep));
 const externalPackages = [...serviceDeps];
 
 // Detect service directory (apps, workers, or packages)
@@ -210,13 +207,13 @@ if (bundledNpmPackages.size > 0) {
 // For source-tree-run services, every referenced external must be hoisted
 // into the service's own `node_modules` tree. Under pnpm strict isolation,
 // only direct deps are hoisted — transitive deps from @intexuraos/infra-*
-// workspace packages (e.g. `@sentry/node`, `pino-opentelemetry-transport`)
-// are NOT symlinked, so Node throws ERR_MODULE_NOT_FOUND at startup.
+// workspace packages (e.g. `@sentry/node`, dynamic transports) are NOT
+// symlinked, so Node throws ERR_MODULE_NOT_FOUND at startup.
 //
 // We scan the bundle source for string-literal references rather than the
 // esbuild metafile because the failure mode covers both static imports and
 // dynamic targets passed as strings (e.g.
-// `pino.transport({ target: 'pino-opentelemetry-transport' })`), which
+// `pino.transport({ target: 'some-transport' })`), which
 // never appear in metafile.outputs.imports.
 
 /**
@@ -271,9 +268,6 @@ if (SOURCE_TREE_RUN_SERVICES.has(service)) {
 
 // Generate production package.json with all pnpm dependencies (including transitive)
 const depsWithVersions = collectExternalDepsWithVersions(`@intexuraos/${service}`);
-// Always include infra-otel's deps for the OTel preload module
-const otelDepsWithVersions = collectExternalDepsWithVersions('@intexuraos/infra-otel');
-otelDepsWithVersions.forEach((v, k) => depsWithVersions.set(k, v));
 const prodPackageJson = {
   name: `@intexuraos/${service}-prod`,
   version: '1.0.0',
@@ -285,25 +279,6 @@ writeFileSync(
   resolve(rootDir, `${serviceDir}/dist/package.json`),
   JSON.stringify(prodPackageJson, null, 2)
 );
-
-// Build OTel preload module (separate entry point for --import flag)
-const otelRegisterPath = resolve(rootDir, 'packages/infra-otel/src/register.ts');
-if (existsSync(otelRegisterPath)) {
-  await esbuild.build({
-    entryPoints: [otelRegisterPath],
-    bundle: true,
-    platform: 'node',
-    target: 'node22',
-    format: 'esm',
-    outfile: resolve(rootDir, `${serviceDir}/dist/otel-register.js`),
-    external: externalPackages,
-    sourcemap: true,
-    mainFields: ['module', 'main'],
-    conditions: ['import', 'node'],
-    absWorkingDir: rootDir,
-  });
-  console.log('Built OTel preload: dist/otel-register.js');
-}
 
 console.log(`Built ${service}`);
 console.log(

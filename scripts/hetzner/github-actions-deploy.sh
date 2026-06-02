@@ -93,7 +93,6 @@ sync_repo() {
 deploy_runtime() {
   run_remote 'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh'
   run_remote 'CI=true pnpm install --frozen-lockfile'
-  run_remote 'pnpm --filter @intexuraos/infra-otel build'
   run_remote 'INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-web.sh'
   run_remote 'INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh'
 

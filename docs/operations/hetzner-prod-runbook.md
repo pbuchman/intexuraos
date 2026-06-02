@@ -60,9 +60,8 @@ operation, not the default path.
 Merging to `development` deploys production to Hetzner through
 `.github/workflows/deploy.yml`. The workflow syncs the checked-out commit to
 `/opt/intexuraos`, refreshes GCP Secret Manager material on the VM, installs
-dependencies, rebuilds `@intexuraos/infra-otel`, builds and publishes the web
-bundle, reloads PM2, reloads nginx, and verifies the Hetzner origin with
-`curl --resolve`.
+dependencies, builds and publishes the web bundle, reloads PM2, reloads nginx,
+and verifies the Hetzner origin with `curl --resolve`.
 
 Required GitHub configuration:
 
