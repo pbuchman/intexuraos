@@ -3,9 +3,7 @@
  *
  * `initWorker` is the single entry point for `workers/` (Cloud Functions /
  * background workers) — it wires Sentry initialization and a Pino logger
- * (with the unified Sentry + OTel + dev streams via `createAppLogger`)
- * behind one call, and returns a `flush` that drains both before process
- * exit.
+ * behind one call, and returns a `flush` that drains both before process exit.
  *
  * @example
  * ```ts
@@ -53,7 +51,7 @@ export interface WorkerBootstrapConfig {
 }
 
 export interface WorkerBootstrap {
-  /** Pino logger wired with the unified streams (stdout + Sentry + OTel). */
+  /** Pino logger wired with the unified streams (stdout + Sentry). */
   logger: Logger;
   /**
    * Drain logger + Sentry buffers. Always resolves; never throws — both

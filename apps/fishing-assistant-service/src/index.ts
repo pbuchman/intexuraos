@@ -1,5 +1,4 @@
 import { getErrorMessage } from '@intexuraos/common-core';
-import { assertOtelActive } from '@intexuraos/infra-otel';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { initSentry } from '@intexuraos/infra-sentry';
 import { loadConfig } from './config.js';
@@ -19,7 +18,6 @@ const REQUIRED_ENV = [
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
-assertOtelActive({ serviceName: 'fishing-assistant-service' });
 
 const config = loadConfig();
 

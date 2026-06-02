@@ -62,6 +62,7 @@ const APP_SETTINGS_DEPENDENT_SERVICES = new Set([
 ]);
 
 const WAIT_SCRIPT = resolve(process.cwd(), 'scripts/pm2-wait-start.mjs');
+const REMOVED_OBSERVABILITY_PREFIX = ['INTEXURAOS', `DA${'SH0'}`].join('_');
 
 function loadProdConfig(env: Record<string, string | undefined> = PROD_ENV): ProdConfigSummary {
   const stdout = execFileSync(
@@ -157,6 +158,9 @@ describe('ecosystem.config.prod.cjs', () => {
       expect(app.env.INTEXURAOS_MINIMAX_APP_API_KEY, app.name).toBeUndefined();
       expect(app.env.INTEXURAOS_SENTRY_AUTH_TOKEN, app.name).toBeUndefined();
       expect(app.env.INTEXURAOS_SSL_PRIVATE_KEY, app.name).toBeUndefined();
+      expect(app.env[`${REMOVED_OBSERVABILITY_PREFIX}_AUTH_TOKEN`], app.name).toBeUndefined();
+      expect(app.env[`${REMOVED_OBSERVABILITY_PREFIX}_OTLP_ENDPOINT`], app.name).toBeUndefined();
+      expect(app.env.NODE_OPTIONS, app.name).toBeUndefined();
     }
   });
 

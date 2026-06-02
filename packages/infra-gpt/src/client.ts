@@ -49,7 +49,7 @@ import {
   type ImageSize,
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
-import { withLlmSpan, withRetry } from '@intexuraos/llm-utils';
+import { measureLlmCall, withRetry } from '@intexuraos/llm-utils';
 import type { GptConfig, GptError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
@@ -353,33 +353,23 @@ export function createGptClient(config: GptConfig): GptClient {
   ): Promise<Result<GenerateResult, GptError>> {
     const start = Date.now();
     try {
-      const { result, durationMs } = await withLlmSpan(
-        LlmProviders.OpenAI,
-        async () => {
-          const response = await client.chat.completions.create({
-            model,
-            max_completion_tokens: MAX_TOKENS,
-            messages: [{ role: 'user', content: prompt }],
-          });
-          const text = response.choices[0]?.message.content ?? '';
-          const usageDetails = extractUsageDetails(response.usage);
-          const usage = normalizeUsage(
-            usageDetails.inputTokens,
-            usageDetails.outputTokens,
-            usageDetails.cachedTokens,
-            0,
-            usageDetails.reasoningTokens
-          );
-          return { content: text, usage, cachedTokens: usageDetails.cachedTokens };
-        },
-        ({ usage, cachedTokens }) => ({
+      const { result, durationMs } = await measureLlmCall(async () => {
+        const response = await client.chat.completions.create({
           model,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          ...(cachedTokens > 0 && { cachedInputTokens: cachedTokens }),
-          costUsd: usage.costUsd,
-        })
-      );
+          max_completion_tokens: MAX_TOKENS,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        const text = response.choices[0]?.message.content ?? '';
+        const usageDetails = extractUsageDetails(response.usage);
+        const usage = normalizeUsage(
+          usageDetails.inputTokens,
+          usageDetails.outputTokens,
+          usageDetails.cachedTokens,
+          0,
+          usageDetails.reasoningTokens
+        );
+        return { content: text, usage, cachedTokens: usageDetails.cachedTokens };
+      });
 
       trackUsage(
         'generate',

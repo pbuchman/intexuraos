@@ -141,10 +141,6 @@ Version bump to v3.1.0 as part of the monorepo release cycle.
 
 Major version bump to v3.0.0 as part of the monorepo release cycle. Full documentation refresh completed.
 
-### Dash0 OpenTelemetry Integration (2026-02-16)
-
-Added Dash0 as an OpenTelemetry observability backend (PR #803). Provides distributed tracing alongside Sentry error reporting for full-stack visibility.
-
 ### API Key Naming Standardization (2026-02-15)
 
 Standardized all LLM API key env vars to `APP` naming convention (PR #793):
@@ -187,7 +183,6 @@ Achieved 100% branch coverage with proper v8 ignore annotations (INT-427).
 | 2026-03-07 | Version at 3.1.0                          | Released v3.2.0 (44ea683a)                                                 |
 | 2026-03-02 | UserServiceClient mock incomplete         | Added resolveGitHubUsername mock (99febe66)                                |
 | 2026-02-22 | Version at 3.0.0                          | Bumped to v3.1.0                                                           |
-| 2026-02-16 | No distributed tracing                    | Added Dash0 OpenTelemetry integration (#803)                               |
 | 2026-02-15 | Inconsistent API key naming               | Standardized to APP convention (#793)                                      |
 | 2026-02-15 | Gemini 2.5 Flash not default              | Switched default LLM + added fallback (#792)                               |
 | 2026-01-31 | Branch coverage below 100%                | v8 ignore annotations + new tests (INT-427)                                |

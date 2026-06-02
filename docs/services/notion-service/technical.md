@@ -80,7 +80,6 @@ sequenceDiagram
 | `b3f34d85`  | Release v3.1.0                                                  | 2026-02-22 |
 | `c8a42105`  | Release v3.0.0                                                  | 2026-02-19 |
 | `6063175b`  | Add dev-mode log formatting for PM2 readability                 | 2026-02-16 |
-| `a52a6bbc`  | Add Dash0 OpenTelemetry integration (#803)                      | 2026-02-16 |
 | `d5fbb354`  | Fix start:local to use tsx (not node strip-types)               | 2026-02-14 |
 | `45f001c1`  | Switch PM2 ecosystem to pnpm --filter start:local               | 2026-02-14 |
 | `5aa3e1bd`  | INT-427: Enable strict 100% coverage enforcement                | 2026-01-31 |
@@ -297,7 +296,6 @@ sequenceDiagram
 | `@intexuraos/http-server`     | Health checks, env validation                         |
 | `@intexuraos/infra-firestore` | Firestore singleton client                            |
 | `@intexuraos/infra-notion`    | Notion API client (validateToken, getPageWithPreview) |
-| `@intexuraos/infra-otel`      | Dash0 OpenTelemetry integration                       |
 | `@intexuraos/infra-sentry`    | Sentry error tracking, logger                         |
 
 ## Firestore Collection

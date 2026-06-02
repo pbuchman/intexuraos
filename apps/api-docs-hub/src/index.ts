@@ -1,7 +1,6 @@
 /**
  * API Docs Hub entry point.
  */
-import { assertOtelActive } from '@intexuraos/infra-otel';
 
 import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
@@ -10,7 +9,6 @@ import { loadConfig } from './config.js';
 import { REQUIRED_ENV } from './envValidation.js';
 
 validateRequiredEnv([...REQUIRED_ENV]);
-assertOtelActive({ serviceName: 'api-docs-hub' });
 
 const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
 initSentry({

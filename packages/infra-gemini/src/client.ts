@@ -40,7 +40,7 @@ import {
   type GenerateResult,
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
-import { withLlmSpan, withRetry } from '@intexuraos/llm-utils';
+import { measureLlmCall, withRetry } from '@intexuraos/llm-utils';
 import type { GeminiConfig, GeminiError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 import { resolveVertexRedirectUrls } from './vertexUrlResolver.js';
@@ -285,24 +285,15 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
   ): Promise<Result<GenerateResult, GeminiError>> {
     const start = Date.now();
     try {
-      const { result, durationMs } = await withLlmSpan(
-        LlmProviders.Google,
-        async () => {
-          const response = await ai.models.generateContent({ model, contents: prompt });
-          const text = response.text ?? '';
-          const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
-          const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
-          const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
-          const usage = normalizeUsage(inputTokens, outputTokens, false, thinkingTokens);
-          return { content: text, usage };
-        },
-        ({ usage }) => ({
-          model,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          costUsd: usage.costUsd,
-        })
-      );
+      const { result, durationMs } = await measureLlmCall(async () => {
+        const response = await ai.models.generateContent({ model, contents: prompt });
+        const text = response.text ?? '';
+        const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
+        const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
+        const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
+        const usage = normalizeUsage(inputTokens, outputTokens, false, thinkingTokens);
+        return { content: text, usage };
+      });
 
       trackUsage(
         'generate',

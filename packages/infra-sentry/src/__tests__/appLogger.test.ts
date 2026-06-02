@@ -3,15 +3,7 @@
  */
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { Writable } from 'node:stream';
 import { createAppLogger } from '../appLogger.js';
-
-vi.mock('../otelTransport.js', () => ({
-  getOtelTransport: vi.fn(() => undefined),
-  _resetOtelTransport: vi.fn(),
-}));
-
-import { getOtelTransport } from '../otelTransport.js';
 
 const originalEnv = process.env;
 
@@ -141,58 +133,6 @@ describe('createAppLogger', () => {
       expect(() => logger.warn({ warning: true }, 'warning message')).not.toThrow();
       expect(() => logger.error({ err: new Error('test') }, 'error message')).not.toThrow();
       expect(() => logger.debug({ debug: true }, 'debug message')).not.toThrow();
-    });
-  });
-
-  describe('with OTel transport', () => {
-    it('creates logger with OTel transport when configured', () => {
-      process.env['NODE_ENV'] = 'production';
-      delete process.env['INTEXURAOS_SENTRY_DSN'];
-
-      const mockOtelStream = new Writable({
-        write(_chunk: Buffer, _encoding: string, callback: () => void): void {
-          callback();
-        },
-      }) as unknown as NodeJS.WritableStream;
-      vi.mocked(getOtelTransport).mockReturnValue(mockOtelStream);
-
-      const logger = createAppLogger({ name: 'otel-service' });
-
-      expect(logger).toBeDefined();
-      expect(typeof logger.info).toBe('function');
-    });
-
-    it('logger with OTel transport can log without throwing', () => {
-      process.env['NODE_ENV'] = 'production';
-      delete process.env['INTEXURAOS_SENTRY_DSN'];
-
-      const mockOtelStream = new Writable({
-        write(_chunk: Buffer, _encoding: string, callback: () => void): void {
-          callback();
-        },
-      }) as unknown as NodeJS.WritableStream;
-      vi.mocked(getOtelTransport).mockReturnValue(mockOtelStream);
-
-      const logger = createAppLogger({ name: 'otel-service' });
-
-      expect(() => logger.info({ foo: 'bar' }, 'test otel message')).not.toThrow();
-    });
-
-    it('works with both OTel and Sentry configured', () => {
-      process.env['NODE_ENV'] = 'production';
-      process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
-
-      const mockOtelStream = new Writable({
-        write(_chunk: Buffer, _encoding: string, callback: () => void): void {
-          callback();
-        },
-      }) as unknown as NodeJS.WritableStream;
-      vi.mocked(getOtelTransport).mockReturnValue(mockOtelStream);
-
-      const logger = createAppLogger({ name: 'otel-sentry-service' });
-
-      expect(logger).toBeDefined();
-      expect(() => logger.info('test with both')).not.toThrow();
     });
   });
 });

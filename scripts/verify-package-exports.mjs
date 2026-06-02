@@ -3,13 +3,9 @@
  * Verify the source-exports build policy for all workspace packages.
  *
  * Policy:
- *   - Default: every package's `exports` map points at `./src/*.ts`. No `dist/`
+ *   - Every package's `exports` map points at `./src/*.ts`. No `dist/`
  *     emission, no `dist/` references in `exports`, no `outDir`/`declaration`
  *     in `tsconfig.json`.
- *   - Single exception: `@intexuraos/infra-otel` ships a compiled `./register`
- *     entry pointing at `./dist/register.js` because OpenTelemetry
- *     auto-instrumentation must be loaded via `node --require` at process
- *     bootstrap (before any TS loader is registered).
  *
  * Also enforces that:
  *   - Every package directory contains a `README.md`.
@@ -26,7 +22,6 @@ import { listPackageDirs } from './lib/package-export-utils.mjs';
 const repoRoot = resolve(import.meta.dirname, '..');
 const packagesRoot = join(repoRoot, 'packages');
 const docsPackagesRoot = join(repoRoot, 'docs', 'packages');
-const OTEL_PACKAGE_NAME = '@intexuraos/infra-otel';
 const FORBIDDEN_TSCONFIG_KEYS = ['outDir', 'declaration', 'declarationMap'];
 
 /**
@@ -105,7 +100,6 @@ for (const pkgDir of packageDirs) {
   const pkgJsonPath = join(pkgPath, 'package.json');
   const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8'));
   const pkgName = pkg.name ?? pkgDir;
-  const isOtel = pkgName === OTEL_PACKAGE_NAME;
   checkedPackages += 1;
 
   // README presence (all 21 packages must have one).
@@ -126,13 +120,12 @@ for (const pkgDir of packageDirs) {
     });
   }
 
-  // Exports check — no `./dist/` outside infra-otel.
+  // Exports check — no `./dist/`.
   if (pkg.exports !== undefined) {
     const flat = [];
     flattenExports(pkg.exports, '', flat);
     for (const { entry, value } of flat) {
       if (!value.includes('./dist/')) continue;
-      if (isOtel) continue;
       violations.push({
         package: pkgName,
         kind: 'dist-export',
@@ -141,10 +134,9 @@ for (const pkgDir of packageDirs) {
     }
   }
 
-  // tsconfig check — no `outDir`/`declaration`/`declarationMap` outside infra-otel.
-  // (infra-otel keeps its emit configuration in tsconfig.build.json, not tsconfig.json.)
+  // tsconfig check — no `outDir`/`declaration`/`declarationMap`.
   const tsconfigPath = join(pkgPath, 'tsconfig.json');
-  if (!isOtel && existsSync(tsconfigPath)) {
+  if (existsSync(tsconfigPath)) {
     let tsconfig;
     try {
       tsconfig = JSON.parse(stripJsonComments(readFileSync(tsconfigPath, 'utf8')));
@@ -179,16 +171,13 @@ if (violations.length > 0) {
   }
   console.error('');
   console.error('Policy: packages must export from ./src/*.ts (source-exports default).');
-  console.error(`Only ${OTEL_PACKAGE_NAME} may reference ./dist/ (for the ./register entry).`);
-  console.error(
-    'Non-otel packages must keep their tsconfig.json at noEmit (no outDir/declaration).'
-  );
+  console.error('Packages must keep their tsconfig.json at noEmit (no outDir/declaration).');
   console.error('See docs/architecture/package-build-output.md for the full rationale.');
   process.exit(1);
 }
 
 console.log(`✓ package-exports verification passed (${checkedPackages} packages checked)`);
-console.log('  - All non-otel packages export from ./src/*.ts');
-console.log('  - No non-otel tsconfig.json emits dist/');
+console.log('  - All packages export from ./src/*.ts');
+console.log('  - No package tsconfig.json emits dist/');
 console.log('  - All packages have README.md and matching docs/packages/<pkg>/README.md');
 process.exit(0);

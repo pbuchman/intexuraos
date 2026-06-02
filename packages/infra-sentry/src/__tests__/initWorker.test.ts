@@ -18,11 +18,6 @@ vi.mock('@sentry/node', () => ({
   ),
 }));
 
-vi.mock('../otelTransport.js', () => ({
-  getOtelTransport: vi.fn(() => undefined),
-  _resetOtelTransport: vi.fn(),
-}));
-
 const originalEnv = process.env;
 
 describe('initWorker', () => {

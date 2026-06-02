@@ -33,8 +33,6 @@ const COMMON_SERVICE_ENV = {
     'or:google/gemma-4-31b-it,gemini-2.5-flash',
   INTEXURAOS_ENVIRONMENT: process.env.INTEXURAOS_ENVIRONMENT ?? 'dev',
   INTEXURAOS_RUNTIME: 'dev',
-  INTEXURAOS_DASH0_OTLP_ENDPOINT: process.env.INTEXURAOS_DASH0_OTLP_ENDPOINT,
-  INTEXURAOS_DASH0_AUTH_TOKEN: process.env.INTEXURAOS_DASH0_AUTH_TOKEN,
 };
 
 // All service URLs - mirrors Terraform local.common_service_env_vars
@@ -228,7 +226,6 @@ function createServiceConfig(name, port, options = {}) {
       ...(SERVICE_ENV_MAPPINGS[name] ?? {}),
       PORT: String(port),
       NODE_ENV: 'development',
-      NODE_OPTIONS: '--import @intexuraos/infra-otel/register',
     },
     autorestart: true,
     kill_timeout: 5000,

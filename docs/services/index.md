@@ -295,7 +295,6 @@ Shared libraries used across apps and workers.
 | [infra-sentry](../packages/infra-sentry/README.md)       | Sentry error tracking, Pino log stream, logger factory                       |
 | [infra-whatsapp](../packages/infra-whatsapp/README.md)   | WhatsApp Cloud API client (send, media, read receipts)                       |
 | [infra-notion](../packages/infra-notion/README.md)       | Notion API client, token validation, page retrieval                          |
-| [infra-otel](../packages/infra-otel/README.md)           | OpenTelemetry SDK bootstrap, distributed tracing and metrics export to Dash0 |
 | [infra-glm](../packages/infra-glm/README.md)             | Alibaba Cloud Model Studio GLM client implementation                         |
 
 ### LLM Provider Clients
@@ -493,7 +492,7 @@ graph TD
 - **Error tracking**: [infra-sentry](../packages/infra-sentry/README.md)
 - **Database**: [infra-firestore](../packages/infra-firestore/README.md)
 - **Messaging**: [infra-pubsub](../packages/infra-pubsub/README.md) / [infra-whatsapp](../packages/infra-whatsapp/README.md)
-- **Observability**: [infra-otel](../packages/infra-otel/README.md) / [infra-sentry](../packages/infra-sentry/README.md)
+- **Observability**: [infra-sentry](../packages/infra-sentry/README.md)
 
 ---
 

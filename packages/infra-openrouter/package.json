@@ -21,8 +21,6 @@
     "@intexuraos/llm-utils": "workspace:*"
   },
   "devDependencies": {
-    "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/sdk-trace-base": "^1.30.0",
     "nock": "^14.0.0"
   }
 }

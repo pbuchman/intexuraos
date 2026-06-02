@@ -67,10 +67,9 @@ export interface UsageLogParams {
   /**
    * Wall-clock duration of the LLM call, in milliseconds.
    *
-   * REQUIRED. Captured by the provider's `withLlmSpan` wrapper or computed
-   * from a `Date.now()` checkpoint on the failure path. Forwarded into the
-   * structured log line and to the configured sink so dashboards have
-   * per-call latency without relying on OTel ingest.
+   * REQUIRED. Captured by the provider wrapper or computed from a `Date.now()`
+   * checkpoint on the failure path. Forwarded into the structured log line and
+   * to the configured sink so dashboards have per-call latency.
    */
   durationMs: number;
   /**

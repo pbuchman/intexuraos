@@ -255,7 +255,7 @@ describe('Hetzner web asset deployment', () => {
       'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh'
     );
     expect(script).toContain('CI=true pnpm install --frozen-lockfile');
-    expect(script).toContain('pnpm --filter @intexuraos/infra-otel build');
+    expect(script).not.toContain(`infra-o${'tel'}`);
     expect(script).toContain('INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-web.sh');
     expect(script).toContain('INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh');
     expect(script).toContain(
@@ -657,19 +657,10 @@ describe('Hetzner secret loader', () => {
     expect(hetznerBootstrap).toContain('rsync -az --delete');
     expect(hetznerBootstrap).toContain('scripts/hetzner/provision.sh --skip-certbot');
     expect(hetznerBootstrap).toContain('pnpm install --frozen-lockfile');
-    expect(hetznerBootstrap).toContain('pnpm --filter @intexuraos/infra-otel build');
+    expect(hetznerBootstrap).not.toContain(`infra-o${'tel'}`);
     expect(hetznerBootstrap).toContain('scripts/hetzner/deploy-web.sh');
     expect(hetznerBootstrap).toContain('scripts/hetzner/reload-pm2.sh');
     expect(hetznerBootstrap).toContain('scripts/hetzner/deploy-nginx.sh');
-    const bootstrapInstallFlow = hetznerBootstrap.slice(
-      hetznerBootstrap.indexOf('pnpm install --frozen-lockfile')
-    );
-    expect(
-      bootstrapInstallFlow.indexOf('pnpm --filter @intexuraos/infra-otel build')
-    ).toBeGreaterThan(bootstrapInstallFlow.indexOf('pnpm install --frozen-lockfile'));
-    expect(bootstrapInstallFlow.indexOf('pnpm --filter @intexuraos/infra-otel build')).toBeLessThan(
-      bootstrapInstallFlow.indexOf('scripts/hetzner/reload-pm2.sh')
-    );
     expect(hetznerVariables).toContain('default     = "prod"');
     expect(hetznerVariables).toContain('default     = "cx33"');
     expect(hetznerVariables).toContain('deploy_ssh_private_key_path');

@@ -18,24 +18,31 @@ apps/
 packages/
   common-core/      # Result/Either types, error base classes (leaf package)
   common-http/      # HTTP response helpers, redaction utilities (leaf package)
+  common-metrics/   # Cloud Monitoring metric writer helpers
+  common-worker/    # Shared worker bootstrap utilities
   http-contracts/   # Shared HTTP type definitions
   http-server/      # Fastify server factory and plugins
   infra-*/          # External service wrappers (Claude, Firestore, Gemini, etc.)
-  internal-clients/ # Typed clients for service-to-service communication
+  *-domain/         # Shared domain contracts
+  *-pubsub-client/  # Typed Pub/Sub message clients
+  internal-clients/ # Typed HTTP clients for service-to-service communication
   llm-*/            # LLM utilities: contract, factory, pricing, prompts, utils
+  service-catalog/  # Service registry metadata
 ```
 
 ## Package Catalog
 
-The monorepo contains 21 packages:
+The monorepo contains 29 packages:
 
-### Common Packages (leaf — no internal deps)
+### Common Packages
 
-| Package                      | Purpose                                                |
-| ---------------------------- | ------------------------------------------------------ |
-| `@intexuraos/common-core`    | Result/Either types, error base classes                |
-| `@intexuraos/common-http`    | HTTP response helpers, redaction utilities             |
-| `@intexuraos/http-contracts` | Shared HTTP type definitions (request/response shapes) |
+| Package                       | Purpose                                                |
+| ----------------------------- | ------------------------------------------------------ |
+| `@intexuraos/common-core`     | Result/Either types, error base classes                |
+| `@intexuraos/common-http`     | HTTP response helpers, redaction utilities             |
+| `@intexuraos/common-metrics`  | Cloud Monitoring metric writer helpers                 |
+| `@intexuraos/common-worker`   | Shared worker bootstrap utilities                      |
+| `@intexuraos/http-contracts`  | Shared HTTP type definitions (request/response shapes) |
 
 ### Server & Transport
 
@@ -53,17 +60,23 @@ The monorepo contains 21 packages:
 | `@intexuraos/infra-gpt`        | OpenAI GPT API client                                  |
 | `@intexuraos/infra-notion`     | Notion API client wrapper                              |
 | `@intexuraos/infra-openrouter` | OpenAI-compatible client for the OpenRouter aggregator |
-| `@intexuraos/infra-otel`       | OpenTelemetry instrumentation                          |
 | `@intexuraos/infra-perplexity` | Perplexity AI API client                               |
 | `@intexuraos/infra-pubsub`     | Google Cloud Pub/Sub client and publisher              |
 | `@intexuraos/infra-sentry`     | Sentry error tracking and `createAppLogger()`          |
 | `@intexuraos/infra-whatsapp`   | WhatsApp Business API client                           |
 
-### Service Communication
+### Service Communication And Domain Contracts
 
-| Package                        | Purpose                                                                     |
-| ------------------------------ | --------------------------------------------------------------------------- |
-| `@intexuraos/internal-clients` | Typed clients for service-to-service HTTP calls (e.g., user-service client) |
+| Package                                   | Purpose                                                                     |
+| ----------------------------------------- | --------------------------------------------------------------------------- |
+| `@intexuraos/calendar-pubsub-client`      | Typed Pub/Sub client for calendar messages                                  |
+| `@intexuraos/code-task-domain`            | Shared code task domain contracts                                           |
+| `@intexuraos/internal-clients`            | Typed clients for service-to-service HTTP calls (e.g., user-service client) |
+| `@intexuraos/linear-domain`               | Shared Linear domain contracts                                              |
+| `@intexuraos/pr-triage-pubsub-client`     | Typed Pub/Sub client for PR triage messages                                 |
+| `@intexuraos/service-catalog`             | Service registry metadata                                                   |
+| `@intexuraos/todos-pubsub-client`         | Typed Pub/Sub client for todos messages                                     |
+| `@intexuraos/whatsapp-pubsub-client`      | Typed Pub/Sub client for WhatsApp messages                                  |
 
 ### LLM Utilities (`llm-*`)
 

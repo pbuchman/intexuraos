@@ -94,7 +94,6 @@ resource "terraform_data" "bootstrap_prod" {
     inline = [
       "cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/provision.sh --skip-certbot",
       "sudo -iu deploy bash -lc 'cd /opt/intexuraos && CI=true pnpm install --frozen-lockfile'",
-      "sudo -iu deploy bash -lc 'cd /opt/intexuraos && pnpm --filter @intexuraos/infra-otel build'",
       "sudo -iu deploy bash -lc 'cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-web.sh'",
       "sudo -iu deploy bash -lc 'cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh'",
       "cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh",

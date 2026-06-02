@@ -35,7 +35,7 @@
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { LlmProviders, type NormalizedUsage, type GenerateResult } from '@intexuraos/llm-contract';
 import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
-import { withLlmSpan, withRetry } from '@intexuraos/llm-utils';
+import { measureLlmCall, withRetry } from '@intexuraos/llm-utils';
 import type {
   GenerateOptions,
   OpenRouterConfig,
@@ -349,8 +349,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
   ): Promise<Result<GenerateResult, OpenRouterError>> {
     const start = Date.now();
     try {
-      const { result, durationMs } = await withLlmSpan(
-        LlmProviders.OpenRouter,
+      const { result, durationMs } = await measureLlmCall(
         async (): Promise<{
           content: string;
           normalized: NormalizedUsage;
@@ -385,7 +384,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             timeoutMs
           );
 
-          // Throw on HTTP error so withLlmSpan records ERROR status. The outer
+          // Throw on HTTP error so measureLlmCall rethrows errors. The outer
           // catch below maps the error and logs usage with measured duration.
           if (!response.ok) {
             const errorText = await response.text();
@@ -407,13 +406,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           const content = firstChoice.message.content;
           const { normalized, providerReportedUsd } = extractUsage(data.usage);
           return { content, normalized, providerReportedUsd };
-        },
-        ({ normalized }) => ({
-          model,
-          inputTokens: normalized.inputTokens,
-          outputTokens: normalized.outputTokens,
-          costUsd: normalized.costUsd,
-        })
+        }
       );
 
       trackUsage(

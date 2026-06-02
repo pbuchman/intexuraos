@@ -1,7 +1,6 @@
 /**
  * WhatsApp Service entry point.
  */
-import { assertOtelActive } from '@intexuraos/infra-otel';
 
 import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
@@ -33,7 +32,6 @@ const REQUIRED_ENV = [
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
-assertOtelActive({ serviceName: 'whatsapp-service' });
 
 const sentryConfig: Parameters<typeof initSentry>[0] = {
   environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',

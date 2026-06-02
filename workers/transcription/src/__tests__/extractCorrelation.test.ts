@@ -7,8 +7,6 @@ describe('extractCorrelation', () => {
     const ctx = extractCorrelation({ 'x-request-id': 'abc' });
     expect(ctx.requestId).toBe('abc');
     expect(ctx.correlationId).toBe('abc');
-    expect(ctx.traceId).toBeUndefined();
-    expect(ctx.parentId).toBeUndefined();
   });
 
   it('falls back to generated UUID when x-request-id is missing', () => {
@@ -41,17 +39,11 @@ describe('extractCorrelation', () => {
     expect(ctx.correlationId).toBe('r1');
   });
 
-  it('parses W3C traceparent header', () => {
+  it('ignores traceparent attributes', () => {
     const traceparent = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
     const ctx = extractCorrelation({ 'x-request-id': 'r1', traceparent });
-    expect(ctx.traceId).toBe('0af7651916cd43dd8448eb211c80319c');
-    expect(ctx.parentId).toBe('b7ad6b7169203331');
-  });
-
-  it('ignores malformed traceparent', () => {
-    const ctx = extractCorrelation({ 'x-request-id': 'r1', traceparent: 'garbage' });
-    expect(ctx.traceId).toBeUndefined();
-    expect(ctx.parentId).toBeUndefined();
+    expect('traceId' in ctx).toBe(false);
+    expect('parentId' in ctx).toBe(false);
   });
 });
 

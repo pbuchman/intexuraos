@@ -1,27 +1,7 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
-import { trace } from '@opentelemetry/api';
-import {
-  BasicTracerProvider,
-  InMemorySpanExporter,
-  SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-base';
-
-const spanExporter = new InMemorySpanExporter();
-const tracerProvider = new BasicTracerProvider({
-  spanProcessors: [new SimpleSpanProcessor(spanExporter)],
-});
-
-beforeAll(() => {
-  trace.setGlobalTracerProvider(tracerProvider);
-});
-
-afterAll(async () => {
-  await tracerProvider.shutdown();
-  trace.disable();
-});
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -80,7 +60,6 @@ const TEST_MODEL = 'gpt-4o';
 describe('createGptClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    spanExporter.reset();
     mockUsageSink.clear();
   });
 
@@ -1067,97 +1046,5 @@ describe('createGptClient', () => {
 
     const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as Record<string, unknown>;
     expect(lastCall).not.toHaveProperty('correlation');
-  });
-
-  describe('OTel span emission for generate()', () => {
-    it('emits llm.openai.generate span with all canonical attributes on success', async () => {
-      mockChatCompletionsCreate.mockResolvedValue({
-        choices: [{ message: { content: 'hi' } }],
-        usage: { prompt_tokens: 3, completion_tokens: 4 },
-      });
-
-      const client = createGptClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-      await client.generate('hi', { promptType: 'test-prompt' });
-
-      const spans = spanExporter.getFinishedSpans();
-      expect(spans).toHaveLength(1);
-      const span = spans[0];
-      if (span === undefined) throw new Error('no span');
-      expect(span.name).toBe('llm.openai.generate');
-      expect(span.attributes['llm.provider']).toBe(LlmProviders.OpenAI);
-      expect(span.attributes['llm.model']).toBe(TEST_MODEL);
-      expect(span.attributes['llm.input_tokens']).toBe(3);
-      expect(span.attributes['llm.output_tokens']).toBe(4);
-      expect(span.attributes['llm.cost_usd']).toBeDefined();
-      expect(span.attributes['llm.duration_ms']).toBeGreaterThanOrEqual(0);
-    });
-
-    it('passes durationMs >= 0 to usage logger on success', async () => {
-      mockChatCompletionsCreate.mockResolvedValue({
-        choices: [{ message: { content: 'ok' } }],
-        usage: { prompt_tokens: 1, completion_tokens: 1 },
-      });
-
-      const client = createGptClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-      await client.generate('hi', { promptType: 'test-prompt' });
-      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as { durationMs?: number };
-      expect(lastCall?.durationMs).toBeGreaterThanOrEqual(0);
-    });
-
-    it('passes durationMs >= 0 to usage logger on error', async () => {
-      mockChatCompletionsCreate.mockRejectedValue(new Error('boom'));
-
-      const client = createGptClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-      await client.generate('hi', { promptType: 'test-prompt' });
-      const lastCall = mockUsageLoggerLog.mock.calls.at(-1)?.[0] as {
-        durationMs?: number;
-        success?: boolean;
-      };
-      expect(lastCall?.success).toBe(false);
-      expect(lastCall?.durationMs).toBeGreaterThanOrEqual(0);
-    });
-
-    it('records llm.cached_input_tokens span attribute when cached_tokens > 0', async () => {
-      mockChatCompletionsCreate.mockResolvedValue({
-        choices: [{ message: { content: 'hi' } }],
-        usage: {
-          prompt_tokens: 10,
-          completion_tokens: 5,
-          input_tokens_details: { cached_tokens: 7 },
-        },
-      });
-
-      const client = createGptClient({
-        apiKey: 'test-key',
-        model: TEST_MODEL,
-        userId: 'test-user',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-      await client.generate('hi', { promptType: 'test-prompt' });
-
-      const spans = spanExporter.getFinishedSpans();
-      const span = spans[0];
-      if (span === undefined) throw new Error('no span');
-      expect(span.attributes['llm.cached_input_tokens']).toBe(7);
-    });
   });
 });

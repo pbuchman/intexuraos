@@ -6,75 +6,91 @@ Shared libraries organized by layer. **Source of truth:** this file is regenerat
 
 ```
 apps/*
-  ├── @intexuraos/common-core       (Result types, errors, redaction)
-  ├── @intexuraos/common-http       (Fastify plugins, auth, response utilities)
-  ├── @intexuraos/http-contracts    (OpenAPI & Fastify JSON schemas)
-  ├── @intexuraos/http-server       (Health checks, validation handler)
-  ├── @intexuraos/infra-claude      (Anthropic Claude API client)
-  ├── @intexuraos/infra-firestore   (Firestore singleton & fake)
-  ├── @intexuraos/infra-gemini      (Google Gemini API client)
-  ├── @intexuraos/infra-gpt         (OpenAI GPT API client)
-  ├── @intexuraos/infra-notion      (Notion client & connection repository)
-  ├── @intexuraos/infra-openrouter  (OpenAI-compatible client for the OpenRouter aggregator)
-  ├── @intexuraos/infra-otel        (OpenTelemetry SDK bootstrap)
-  ├── @intexuraos/infra-perplexity  (Perplexity AI API client)
-  ├── @intexuraos/infra-pubsub      (Cloud Pub/Sub publishers)
-  ├── @intexuraos/infra-sentry      (Sentry error tracking & logger factory)
-  ├── @intexuraos/infra-whatsapp    (WhatsApp Cloud API client)
-  ├── @intexuraos/internal-clients  (HTTP clients for internal services)
-  ├── @intexuraos/llm-contract      (Shared LLM types, model names, interfaces)
-  ├── @intexuraos/llm-factory       (Unified LLM client factory)
-  ├── @intexuraos/llm-pricing       (LLM pricing fetch, cost tracking)
-  ├── @intexuraos/llm-prompts       (Centralized LLM prompt builders)
-  └── @intexuraos/llm-utils         (Redaction utilities, LLM parse error helpers)
+  ├── @intexuraos/calendar-pubsub-client   (Calendar Pub/Sub message client)
+  ├── @intexuraos/code-task-domain         (Shared code task domain contracts)
+  ├── @intexuraos/common-core              (Result types, errors, redaction)
+  ├── @intexuraos/common-http              (Fastify plugins, auth, response utilities)
+  ├── @intexuraos/common-metrics           (Cloud Monitoring metric writer helpers)
+  ├── @intexuraos/common-worker            (Shared worker bootstrap utilities)
+  ├── @intexuraos/http-contracts           (OpenAPI & Fastify JSON schemas)
+  ├── @intexuraos/http-server              (Health checks, validation handler)
+  ├── @intexuraos/infra-claude             (Anthropic Claude API client)
+  ├── @intexuraos/infra-firestore          (Firestore singleton & fake)
+  ├── @intexuraos/infra-gemini             (Google Gemini API client)
+  ├── @intexuraos/infra-gpt                (OpenAI GPT API client)
+  ├── @intexuraos/infra-notion             (Notion client & connection repository)
+  ├── @intexuraos/infra-openrouter         (OpenAI-compatible client for the OpenRouter aggregator)
+  ├── @intexuraos/infra-perplexity         (Perplexity AI API client)
+  ├── @intexuraos/infra-pubsub             (Cloud Pub/Sub publishers)
+  ├── @intexuraos/infra-sentry             (Sentry error tracking & logger factory)
+  ├── @intexuraos/infra-whatsapp           (WhatsApp Cloud API client)
+  ├── @intexuraos/internal-clients         (HTTP clients for internal services)
+  ├── @intexuraos/linear-domain            (Shared Linear domain contracts)
+  ├── @intexuraos/llm-contract             (Shared LLM types, model names, interfaces)
+  ├── @intexuraos/llm-factory              (Unified LLM client factory)
+  ├── @intexuraos/llm-pricing              (LLM pricing fetch, cost tracking)
+  ├── @intexuraos/llm-prompts              (Centralized LLM prompt builders)
+  ├── @intexuraos/llm-utils                (Redaction utilities, LLM parse error helpers)
+  ├── @intexuraos/pr-triage-pubsub-client  (PR triage Pub/Sub message client)
+  ├── @intexuraos/service-catalog          (Service registry metadata)
+  ├── @intexuraos/todos-pubsub-client      (Todos Pub/Sub message client)
+  └── @intexuraos/whatsapp-pubsub-client   (WhatsApp Pub/Sub message client)
 ```
 
 ## Package Structure
 
 ### Common + HTTP
 
-| Package                                                       | Description                               | Dependencies                                    |
-| ------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------- |
-| [`common-core`](../docs/packages/common-core/README.md)       | Result types, errors, redaction           | None (leaf)                                     |
-| [`common-http`](../docs/packages/common-http/README.md)       | Fastify plugins, auth, response utilities | `common-core`, `llm-utils`                      |
-| [`http-contracts`](../docs/packages/http-contracts/README.md) | OpenAPI & Fastify JSON schemas            | None (leaf)                                     |
-| [`http-server`](../docs/packages/http-server/README.md)       | Health checks, validation handler         | `common-core`, `common-http`, `infra-firestore` |
+| Package                                                       | Description                               | Dependencies                                                                  |
+| ------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------- |
+| [`common-core`](../docs/packages/common-core/README.md)       | Result types, errors, redaction           | None (leaf)                                                                   |
+| [`common-http`](../docs/packages/common-http/README.md)       | Fastify plugins, auth, response utilities | `common-core`                                                                 |
+| [`common-metrics`](../docs/packages/common-metrics/README.md) | Cloud Monitoring metric writer helpers    | None (leaf)                                                                   |
+| [`common-worker`](../docs/packages/common-worker/README.md)   | Shared worker bootstrap utilities         | `common-core`                                                                 |
+| [`http-contracts`](../docs/packages/http-contracts/README.md) | OpenAPI & Fastify JSON schemas            | `llm-contract`                                                                |
+| [`http-server`](../docs/packages/http-server/README.md)       | Health checks, validation handler         | `common-core`, `common-http`, `http-contracts`, `infra-sentry`, `llm-pricing` |
 
 ### Infrastructure
 
-| Package                                                           | Description                                            | Dependencies                                                |
-| ----------------------------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------- |
-| [`infra-claude`](../docs/packages/infra-claude/README.md)         | Anthropic Claude API client                            | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts` |
-| [`infra-firestore`](../docs/packages/infra-firestore/README.md)   | Firestore singleton & fake                             | `common-core`                                               |
-| [`infra-gemini`](../docs/packages/infra-gemini/README.md)         | Google Gemini API client                               | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts` |
-| [`infra-gpt`](../docs/packages/infra-gpt/README.md)               | OpenAI GPT API client                                  | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts` |
-| [`infra-notion`](../docs/packages/infra-notion/README.md)         | Notion client & connection repository                  | `common-core`                                               |
-| [`infra-openrouter`](../docs/packages/infra-openrouter/README.md) | OpenAI-compatible client for the OpenRouter aggregator | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts` |
-| [`infra-otel`](../docs/packages/infra-otel/README.md)             | OpenTelemetry SDK bootstrap                            | None (leaf)                                                 |
-| [`infra-perplexity`](../docs/packages/infra-perplexity/README.md) | Perplexity AI API client                               | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts` |
-| [`infra-pubsub`](../docs/packages/infra-pubsub/README.md)         | Cloud Pub/Sub publishers                               | `common-core`                                               |
-| [`infra-sentry`](../docs/packages/infra-sentry/README.md)         | Sentry error tracking & logger factory                 | `common-core`                                               |
-| [`infra-whatsapp`](../docs/packages/infra-whatsapp/README.md)     | WhatsApp Cloud API client                              | `common-core`                                               |
+| Package                                                           | Description                                            | Dependencies                                                             |
+| ----------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------ |
+| [`infra-claude`](../docs/packages/infra-claude/README.md)         | Anthropic Claude API client                            | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils` |
+| [`infra-firestore`](../docs/packages/infra-firestore/README.md)   | Firestore singleton & fake                             | `common-core`                                                            |
+| [`infra-gemini`](../docs/packages/infra-gemini/README.md)         | Google Gemini API client                               | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils` |
+| [`infra-gpt`](../docs/packages/infra-gpt/README.md)               | OpenAI GPT API client                                  | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils` |
+| [`infra-notion`](../docs/packages/infra-notion/README.md)         | Notion client & connection repository                  | `common-core`                                                            |
+| [`infra-openrouter`](../docs/packages/infra-openrouter/README.md) | OpenAI-compatible client for the OpenRouter aggregator | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils` |
+| [`infra-perplexity`](../docs/packages/infra-perplexity/README.md) | Perplexity AI API client                               | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils` |
+| [`infra-pubsub`](../docs/packages/infra-pubsub/README.md)         | Cloud Pub/Sub publishers                               | `common-core`                                                            |
+| [`infra-sentry`](../docs/packages/infra-sentry/README.md)         | Sentry error tracking & logger factory                 | `common-core`                                                            |
+| [`infra-whatsapp`](../docs/packages/infra-whatsapp/README.md)     | WhatsApp Cloud API client                              | `common-core`                                                            |
 
 ### LLM
 
-| Package                                                   | Description                                  | Dependencies                                                                     |
-| --------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------- |
-| [`llm-contract`](../docs/packages/llm-contract/README.md) | Shared LLM types, model names, interfaces    | `common-core`                                                                    |
-| [`llm-factory`](../docs/packages/llm-factory/README.md)   | Unified LLM client factory                   | `common-core`, `infra-gemini`, `infra-openrouter`, `llm-contract`, `llm-pricing` |
-| [`llm-pricing`](../docs/packages/llm-pricing/README.md)   | LLM pricing fetch, cost tracking             | `common-core`, `infra-firestore`, `llm-contract`                                 |
-| [`llm-prompts`](../docs/packages/llm-prompts/README.md)   | Centralized LLM prompt builders              | `common-core`, `llm-contract`, `llm-utils`                                       |
-| [`llm-utils`](../docs/packages/llm-utils/README.md)       | Redaction utilities, LLM parse error helpers | `common-core`                                                                    |
+| Package                                                   | Description                                  | Dependencies                                                                                                                      |
+| --------------------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| [`llm-contract`](../docs/packages/llm-contract/README.md) | Shared LLM types, model names, interfaces    | `common-core`                                                                                                                     |
+| [`llm-factory`](../docs/packages/llm-factory/README.md)   | Unified LLM client factory                   | `common-core`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-openrouter`, `infra-perplexity`, `llm-contract`, `llm-pricing` |
+| [`llm-pricing`](../docs/packages/llm-pricing/README.md)   | LLM pricing fetch, cost tracking             | `common-core`, `llm-contract`                                                                                                     |
+| [`llm-prompts`](../docs/packages/llm-prompts/README.md)   | Centralized LLM prompt builders              | `common-core`, `llm-contract`, `llm-utils`                                                                                        |
+| [`llm-utils`](../docs/packages/llm-utils/README.md)       | Redaction utilities, LLM parse error helpers | `common-core`, `llm-contract`                                                                                                     |
 
 ### Integration
 
-| Package                                                           | Description                        | Dependencies                                                                    |
-| ----------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------- |
-| [`internal-clients`](../docs/packages/internal-clients/README.md) | HTTP clients for internal services | `common-core`, `infra-openrouter`, `llm-contract`, `llm-factory`, `llm-pricing` |
+| Package                                                                         | Description                        | Dependencies                                                                                                     |
+| ------------------------------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| [`calendar-pubsub-client`](../docs/packages/calendar-pubsub-client/README.md)   | Calendar Pub/Sub message client    | `common-core`, `infra-pubsub`                                                                                    |
+| [`code-task-domain`](../docs/packages/code-task-domain/README.md)               | Shared code task domain contracts  | None (leaf)                                                                                                      |
+| [`internal-clients`](../docs/packages/internal-clients/README.md)               | HTTP clients for internal services | `common-core`, `common-http`, `http-contracts`, `infra-openrouter`, `llm-contract`, `llm-factory`, `llm-pricing` |
+| [`linear-domain`](../docs/packages/linear-domain/README.md)                     | Shared Linear domain contracts     | None (leaf)                                                                                                      |
+| [`pr-triage-pubsub-client`](../docs/packages/pr-triage-pubsub-client/README.md) | PR triage Pub/Sub message client   | `common-core`, `infra-pubsub`                                                                                    |
+| [`service-catalog`](../docs/packages/service-catalog/README.md)                 | Service registry metadata          | None (leaf)                                                                                                      |
+| [`todos-pubsub-client`](../docs/packages/todos-pubsub-client/README.md)         | Todos Pub/Sub message client       | `common-core`, `infra-pubsub`                                                                                    |
+| [`whatsapp-pubsub-client`](../docs/packages/whatsapp-pubsub-client/README.md)   | WhatsApp Pub/Sub message client    | `common-core`, `infra-pubsub`                                                                                    |
 
 ## Build Output
 
-All packages export from `./src/*.ts` (source-exports default). The single exception is `@intexuraos/infra-otel`, which ships a compiled `./register` entry because OpenTelemetry must be loaded via `node --require` at process bootstrap. See [`docs/architecture/package-build-output.md`](../docs/architecture/package-build-output.md). Enforced by `pnpm run verify:package-exports`.
+All packages export from `./src/*.ts` (source-exports default). No package emits runtime `dist/` artifacts. See [`docs/architecture/package-build-output.md`](../docs/architecture/package-build-output.md). Enforced by `pnpm run verify:package-exports`.
 
 ## Testing
 
@@ -110,27 +126,35 @@ All packages are subject to the repo-wide coverage thresholds defined in `vitest
 
 Enforced by `pnpm run verify:boundaries`:
 
+- `calendar-pubsub-client` → imports from `common-core`, `infra-pubsub`
+- `code-task-domain` → imports nothing
 - `common-core` → imports nothing
-- `common-http` → imports from `common-core`, `llm-utils`
-- `http-contracts` → imports nothing
-- `http-server` → imports from `common-core`, `common-http`, `infra-firestore`
-- `infra-claude` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`
+- `common-http` → imports from `common-core`
+- `common-metrics` → imports nothing
+- `common-worker` → imports from `common-core`
+- `http-contracts` → imports from `llm-contract`
+- `http-server` → imports from `common-core`, `common-http`, `http-contracts`, `infra-sentry`, `llm-pricing`
+- `infra-claude` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils`
 - `infra-firestore` → imports from `common-core`
-- `infra-gemini` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`
-- `infra-gpt` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`
+- `infra-gemini` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils`
+- `infra-gpt` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils`
 - `infra-notion` → imports from `common-core`
-- `infra-openrouter` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`
-- `infra-otel` → imports nothing
-- `infra-perplexity` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`
+- `infra-openrouter` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils`
+- `infra-perplexity` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils`
 - `infra-pubsub` → imports from `common-core`
 - `infra-sentry` → imports from `common-core`
 - `infra-whatsapp` → imports from `common-core`
-- `internal-clients` → imports from `common-core`, `infra-openrouter`, `llm-contract`, `llm-factory`, `llm-pricing`
+- `internal-clients` → imports from `common-core`, `common-http`, `http-contracts`, `infra-openrouter`, `llm-contract`, `llm-factory`, `llm-pricing`
+- `linear-domain` → imports nothing
 - `llm-contract` → imports from `common-core`
-- `llm-factory` → imports from `common-core`, `infra-gemini`, `infra-openrouter`, `llm-contract`, `llm-pricing`
-- `llm-pricing` → imports from `common-core`, `infra-firestore`, `llm-contract`
+- `llm-factory` → imports from `common-core`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-openrouter`, `infra-perplexity`, `llm-contract`, `llm-pricing`
+- `llm-pricing` → imports from `common-core`, `llm-contract`
 - `llm-prompts` → imports from `common-core`, `llm-contract`, `llm-utils`
-- `llm-utils` → imports from `common-core`
+- `llm-utils` → imports from `common-core`, `llm-contract`
+- `pr-triage-pubsub-client` → imports from `common-core`, `infra-pubsub`
+- `service-catalog` → imports nothing
+- `todos-pubsub-client` → imports from `common-core`, `infra-pubsub`
+- `whatsapp-pubsub-client` → imports from `common-core`, `infra-pubsub`
 - `apps/*` → imports from any package, but NOT from other apps
 
 See [docs](../docs/README.md) for full architecture details.

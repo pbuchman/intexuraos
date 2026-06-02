@@ -300,7 +300,6 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 | `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | LLM usage service URL for usage reporting     |
 | `INTEXURAOS_SENTRY_DSN`               | No       | Sentry error tracking DSN                     |
 | `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key for user fallback     |
-| `INTEXURAOS_DASH0_OTLP_ENDPOINT`      | No       | Dash0 OTLP endpoint for OpenTelemetry tracing |
 
 ## Gotchas
 
@@ -429,12 +428,6 @@ apps/image-service/src/
 - `server.ts` uses `createLogStream()` from `@intexuraos/infra-sentry` for colorized PM2 output
 - Format: `service-name | HH:mm:ss | LEVEL | message | {extras}`
 - No behavior change in production or test environments
-
-### Dash0 OpenTelemetry Integration (2026-02-16)
-
-- Distributed tracing, metrics, and log export via OTLP/HTTP to Dash0
-- Loaded via Node `--import` preload in Dockerfile (`packages/infra-otel`)
-- No-op when `INTEXURAOS_DASH0_OTLP_ENDPOINT` is unset
 
 ### API Key Naming Standardization (2026-02-15)
 

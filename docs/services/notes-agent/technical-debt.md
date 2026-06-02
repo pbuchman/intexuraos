@@ -146,7 +146,6 @@ No deprecated APIs or dependencies in use.
 
 | Date       | Issue                               | Resolution                                             |
 | ---------- | ----------------------------------- | ------------------------------------------------------ |
-| 2026-02-16 | Dash0 OpenTelemetry integration     | Added distributed tracing via `@intexuraos/infra-otel` |
 | 2026-02-16 | Dev-mode log formatting for PM2     | Improved local log readability in PM2 output           |
 | 2026-02-14 | PM2 ecosystem uses pnpm --filter    | Unified local start script across all services         |
 | 2026-01-30 | Raw reply.send() in internal routes | Migrated to reply.fail() for auth errors               |
